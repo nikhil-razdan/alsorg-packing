@@ -1,0 +1,43 @@
+# ======================
+# OS
+# ======================
+.DS_Store
+Thumbs.db
+
+# ======================
+# IDEs
+# ======================
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.metadata/
+
+# ======================
+# Backend (Spring Boot)
+# ======================
+packing/target/
+packing/.classpath
+packing/.project
+packing/.settings/
+packing/.metadata/
+
+# ======================
+# Frontend (Vite / React)
+# ======================
+packing-ui/node_modules/
+packing-ui/dist/
+packing-ui/.env
+
+# ======================
+# Generated / Runtime files
+# ======================
+packing/stickers/
+*.pdf
+
+# ======================
+# Logs & temp
+# ======================
+*.log

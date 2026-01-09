@@ -1,0 +1,29 @@
+zoho:
+    inventory:
+      enabled: true
+      base-url: https://www.zohoapis.in
+      organization-id: 60059178154
+      client-id: 1000.3TWJVLYKTHPFLVZ3XHRM5C97MWD4BV
+      client-secret: e05d933812b7350fb434374f706703315f8c2dc4b4
+      refresh-token: 1000.fc1997015ebbdb6a70741cc73bc95a2d.a003bdebd71d0c518894af2e47c6b0d0 	  
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/packing_platform
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  sql:
+    init:
+      mode: never
+
+ 
