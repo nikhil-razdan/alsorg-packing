@@ -61,8 +61,13 @@ function Sidebar() {
 
       <Link to="/zoho-items" style={linkStyle("/zoho-items")}>
         <span style={icon}>📦</span>
-        {!collapsed && "Zoho Items"}
+        {!collapsed && "Inventory Items"}
       </Link>
+	  
+	  <Link to="/zoho-items" style={linkStyle("/zoho-items")}>
+	          <span style={icon}>📦</span>
+	          {!collapsed && "Dispatched Items"}
+	        </Link>
 
       {/* Spacer */}
       <div style={{ flexGrow: 1 }} />

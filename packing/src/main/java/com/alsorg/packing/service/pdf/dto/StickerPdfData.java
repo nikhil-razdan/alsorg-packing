@@ -22,6 +22,9 @@ public class StickerPdfData {
     private String pdNo;
     private String drawingNo;
     private String remarks;
+    private String sku;
+    private String zohoItemId;
+    
     
     //getters & setters
     public String getStickerNumber() {
@@ -102,6 +105,18 @@ public class StickerPdfData {
     public void setRemarks(String remarks) {
         this.remarks = remarks;
     }
+	public String getSku() {
+		return sku;
+	}
+	public void setSku(String sku) {
+		this.sku = sku;
+	}
+	public String getZohoItemId() {
+		return zohoItemId;
+	}
+	public void setZohoItemId(String zohoItemId) {
+		this.zohoItemId = zohoItemId;
+	}
 
     // getters & setters
 }

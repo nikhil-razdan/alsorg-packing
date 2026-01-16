@@ -57,7 +57,7 @@ function DashboardPage() {
 
         {/* Stats */}
         <div style={statsRow}>
-          <StatCard title="Total Zoho Items" value={totalItems} />
+          <StatCard title="Total Dispatch Warehouse Inventory" value={totalItems} />
           <StatCard title="Stickers Generated" value={packedItems} />
           <StatCard title="Pending Stickers" value={pendingItems} />
         </div>

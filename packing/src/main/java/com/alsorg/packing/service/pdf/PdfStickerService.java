@@ -4,10 +4,6 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 import javax.imageio.ImageIO;
 
@@ -19,9 +15,9 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.service.barcode.BarcodePayloadBuilder;
 import com.alsorg.packing.service.barcode.BarcodeService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
@@ -29,213 +25,142 @@ import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 public class PdfStickerService {
 
     private final BarcodeService barcodeService;
-
-    public PdfStickerService(BarcodeService barcodeService) {
-        this.barcodeService = barcodeService;
-    }
+    private final BarcodePayloadBuilder barcodePayloadBuilder;
 
     private static final float PAGE_WIDTH = 600;
     private static final float PAGE_HEIGHT = 350;
 
-    @Value("${sticker.logo.path}")
-    private String logoPath;
+    // 🔒 FOOTER ZONE (DO NOT RANDOMLY CHANGE)
+    private static final float FOOTER_TEXT_Y = 95;
+    private static final float BARCODE_Y = 15;
+
+    public PdfStickerService(
+            BarcodeService barcodeService,
+            BarcodePayloadBuilder barcodePayloadBuilder
+    ) {
+        this.barcodeService = barcodeService;
+        this.barcodePayloadBuilder = barcodePayloadBuilder;
+    }
 
     public byte[] generateSticker(StickerPdfData data) {
 
-        System.out.println(">>> ENTERED PdfStickerService.generateSticker()");
-
-        PDFont fontRegular = PDType1Font.HELVETICA;
-        PDFont fontBold = PDType1Font.HELVETICA_BOLD;
-        float fontSize = 10;
-
-        float yPosition = 240;
+        PDFont regular = PDType1Font.HELVETICA;
+        PDFont bold = PDType1Font.HELVETICA_BOLD;
 
         try (PDDocument document = new PDDocument()) {
 
             PDPage page = new PDPage(new PDRectangle(PAGE_WIDTH, PAGE_HEIGHT));
             document.addPage(page);
 
-            try (PDPageContentStream content =
-                     new PDPageContentStream(document, page, AppendMode.OVERWRITE, true, true)) {
+            try (PDPageContentStream cs =
+                         new PDPageContentStream(document, page, AppendMode.OVERWRITE, true, true)) {
 
                 /* ================= BACKGROUND ================= */
-                content.setNonStrokingColor(new Color(255, 221, 89));
-                content.addRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-                content.fill();
+                cs.setNonStrokingColor(Color.WHITE);
+                cs.addRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+                cs.fill();
 
-                /* ================= BORDER ================= */
-                content.setStrokingColor(Color.BLACK);
-                content.setLineWidth(3);
-                content.addRect(8, 8, PAGE_WIDTH - 16, PAGE_HEIGHT - 16);
-                content.stroke();
+                cs.setNonStrokingColor(Color.BLACK);
+                
+                /* ================= OUTER BORDER ================= */
+                cs.setStrokingColor(Color.BLACK);
+                cs.setLineWidth(3);
+                cs.addRect(10, 6, PAGE_WIDTH - 18, PAGE_HEIGHT - 14);
+                cs.stroke();
 
                 /* ================= HEADER ================= */
-                content.beginText();
-                content.setFont(fontBold, 20);
-                content.setNonStrokingColor(Color.BLACK);
-                content.newLineAtOffset(110, 305);
-                content.showText("ALSORG INTERIORS INDIA PVT. LTD.");
-                content.endText();
+                cs.beginText();
+                cs.setFont(bold, 20);
+                cs.newLineAtOffset(110, 310);
+                cs.showText("ALSORG INTERIORS INDIA PVT. LTD.");
+                cs.endText();
 
-                content.moveTo(50, 290);
-                content.lineTo(550, 290);
-                content.stroke();
+                cs.moveTo(50, 295);
+                cs.lineTo(550, 295);
+                cs.stroke();
 
-                /* ================= LOGO ================= */
-                if (logoPath != null && Files.exists(Path.of(logoPath))) {
-                    PDImageXObject logo =
-                            PDImageXObject.createFromFile(logoPath, document);
-                    content.drawImage(logo, 15, 295, 70, 40);
-                }
+                cs.setFont(regular, 12);
+                drawText(cs, 50, 275, "PD No: " + safe(data.getPdNo()));
+                drawText(cs, 175, 275, "SNo: " + safe(data.getStickerNumber()));
+                drawText(cs, 355, 275, "Dwg No: " + safe(data.getDrawingNo()));
+                drawText(cs, 465, 275, "Date: " + safe(data.getDate()));
 
-                content.setFont(fontRegular, 12);
+                cs.moveTo(45, 265);
+                cs.lineTo(555, 265);
+                cs.stroke();
 
-                drawText(content, 50, 270, "PD No: " + safe(data.getPdNo()));
-                drawText(content, 175, 270, "SNo: " + safe(data.getStickerNumber()));
-                drawText(content, 355, 270, "Dwg No: " + safe(data.getDrawingNo()));
-                drawText(content, 465, 270, "Date: " + safe(data.getDate()));
+                drawText(cs, 45, 245,
+                        "Client Name & Address: " +
+                                safe(data.getClientName()) + " " +
+                                safe(data.getClientAddress()));
 
-                content.moveTo(45, 260);
-                content.lineTo(555, 260);
-                content.stroke();
+                cs.moveTo(45, 220);
+                cs.lineTo(555, 220);
+                cs.stroke();
 
-                /* ================= CLIENT NAME & ADDRESS (HANGING INDENT) ================= */
-                String heading = "Client Name & Address:";
-                float headingX = 45;
+                drawText(cs, 50, 195, "Qty: " + data.getQuantity());
+                drawText(cs, 180, 195, "Item Name: " + safe(data.getItemName()));
 
-                drawText(content, headingX, yPosition, heading);
+                cs.moveTo(45, 180);
+                cs.lineTo(555, 180);
+                cs.stroke();
 
-                float headingWidth =
-                        fontRegular.getStringWidth(heading) / 1000 * fontSize;
+                drawText(cs, 50, 160, "Description: " + safe(data.getDescription()));
 
-                String clientText =
-                        safe(data.getClientName()) + " " + safe(data.getClientAddress());
-                
-                float paddingAfterHeading = 23;
-                
-                drawWrappedText(
-                        content,
-                        fontRegular,
-                        fontSize,
-                        clientText,
-                        headingX + headingWidth + paddingAfterHeading,
-                        yPosition,
-                        470 - headingWidth - paddingAfterHeading,
-                        14
-                );
+                cs.moveTo(45, 140);
+                cs.lineTo(555, 140);
+                cs.stroke();
 
-                yPosition -= 30;
-                content.moveTo(45, yPosition);
-                content.lineTo(555, yPosition);
-                content.stroke();
+                drawText(cs, 50, 125, "Remarks: " + safe(data.getRemarks()));
+                drawText(cs, 420, 125, "Floor: " + safe(data.getFloor()));
 
-                /* ================= ITEM INFO ================= */
-                drawText(content, 50, 190, "Qty: " + data.getQuantity());
-                drawText(content, 180, 190, "Item Name: " + safe(data.getItemName()));
+                cs.moveTo(45, 115);
+                cs.lineTo(555, 115);
+                cs.stroke();
 
-                content.moveTo(45, 175);
-                content.lineTo(555, 175);
-                content.stroke();
+                /* ================= FOOTER TEXT ================= */
+                drawText(cs, 55, FOOTER_TEXT_Y, "Delivered By:");
+                drawText(cs, 245, FOOTER_TEXT_Y, "Prepared By:");
+                drawText(cs, 425, FOOTER_TEXT_Y, "Checked By:");
+                // ❌ intentionally NO line below this
 
-                drawText(content, 50, 155, "Description: " + safe(data.getDescription()));
-
-                content.moveTo(45, 135);
-                content.lineTo(555, 135);
-                content.stroke();
-
-                drawText(content, 50, 110, "Remarks: " + safe(data.getRemarks()));
-                drawText(content, 420, 110, "Floor: " + safe(data.getFloor()));
-
-                content.moveTo(45, 90);
-                content.lineTo(555, 90);
-                content.stroke();
-
-                drawText(content, 50, 60, "Delivered By:");
-                drawText(content, 240, 60, "Prepared By:");
-                drawText(content, 420, 60, "Checked By:");
-
-                content.moveTo(45, 45);
-                content.lineTo(555, 45);
-                content.stroke();
-
-                /* ================= BARCODE ================= */
-                BufferedImage barcodeImage =
+                /* ================= BARCODE (FINAL POSITION) ================= */
+                BufferedImage barcodeImg =
                         barcodeService.generateCode128Barcode(
-                                safe(data.getBarcodeText()),
-                                200,
-                                60
+                                barcodePayloadBuilder.build(data)
                         );
 
                 PDImageXObject barcode =
                         PDImageXObject.createFromByteArray(
                                 document,
-                                imageToBytes(barcodeImage),
+                                imageToBytes(barcodeImg),
                                 "barcode"
                         );
 
-                content.drawImage(barcode, 490, 295, 95, 40);
+                float bw = 420;
+                float bh = 70;
+                float bx = (PAGE_WIDTH - bw) / 2;
+
+                cs.drawImage(barcode, bx, BARCODE_Y, bw, bh);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             document.save(out);
-
-            System.out.println(">>> PDF GENERATED, size = " + out.size());
             return out.toByteArray();
 
         } catch (IOException e) {
-            throw new RuntimeException("Failed to generate sticker PDF", e);
+            throw new RuntimeException(e);
         }
     }
 
-    /* ================= UTIL METHODS ================= */
+    /* ================= UTIL ================= */
 
-    private void drawText(PDPageContentStream content, float x, float y, String text)
+    private void drawText(PDPageContentStream cs, float x, float y, String text)
             throws IOException {
-        content.beginText();
-        content.newLineAtOffset(x, y);
-        content.showText(text);
-        content.endText();
-    }
-
-    private void drawWrappedText(
-            PDPageContentStream cs,
-            PDFont font,
-            float fontSize,
-            String text,
-            float startX,
-            float startY,
-            float maxWidth,
-            float leading
-    ) throws IOException {
-
-        List<String> lines = new ArrayList<>();
-        StringBuilder currentLine = new StringBuilder();
-
-        for (String word : text.split("\\s+")) {
-            String testLine = currentLine + word + " ";
-            float width = font.getStringWidth(testLine) / 1000 * fontSize;
-
-            if (width > maxWidth) {
-                lines.add(currentLine.toString());
-                currentLine = new StringBuilder(word).append(" ");
-            } else {
-                currentLine.append(word).append(" ");
-            }
-        }
-
-        if (!currentLine.isEmpty()) {
-            lines.add(currentLine.toString());
-        }
-
-        float y = startY;
-        for (String line : lines) {
-            cs.beginText();
-            cs.setFont(font, fontSize);
-            cs.newLineAtOffset(startX, y);
-            cs.showText(line.trim());
-            cs.endText();
-            y -= leading;
-        }
+        cs.beginText();
+        cs.newLineAtOffset(x, y);
+        cs.showText(text);
+        cs.endText();
     }
 
     private byte[] imageToBytes(BufferedImage image) throws IOException {
@@ -244,7 +169,7 @@ public class PdfStickerService {
         return baos.toByteArray();
     }
 
-    private String safe(Object value) {
-        return value == null ? "-" : value.toString();
+    private String safe(Object v) {
+        return v == null ? "-" : v.toString();
     }
 }
