@@ -1,7 +1,6 @@
 package com.alsorg.packing.domain.item;
 
 import java.util.UUID;
-
 import jakarta.persistence.*;
 
 import com.alsorg.packing.domain.packet.Packet;
@@ -14,17 +13,12 @@ public class PacketItem {
     private UUID id;
 
     private String itemName;
-
     private String sku;
-
     private String zohoItemId;
-
     private Integer quantity;
-
     private String description;
-    
     private String location;
-    
+
     @Column(name = "floor")
     private String floor;
 
@@ -39,7 +33,6 @@ public class PacketItem {
 
     @Column(name = "client_address")
     private String clientAddress;
-  
 
     @ManyToOne
     @JoinColumn(name = "packet_id", nullable = false)
@@ -102,6 +95,7 @@ public class PacketItem {
     public void setPacket(Packet packet) {
         this.packet = packet;
     }
+
     public String getLocation() {
         return location;
     }
@@ -109,43 +103,43 @@ public class PacketItem {
     public void setLocation(String location) {
         this.location = location;
     }
-    
+
     public String getFloor() {
         return floor;
     }
-    
+
     public void setFloor(String floor) {
         this.floor = floor;
     }
-    
+
     public String getPdNo() {
         return pdNo;
     }
-    
+
     public void setPdNo(String pdNo) {
         this.pdNo = pdNo;
     }
-    
+
     public String getDrawingNo() {
         return drawingNo;
     }
-    
+
     public void setDrawingNo(String drawingNo) {
         this.drawingNo = drawingNo;
     }
-    
+
     public String getClientName() {
         return clientName;
     }
-    
+
     public void setClientName(String clientName) {
         this.clientName = clientName;
     }
-    
+
     public String getClientAddress() {
         return clientAddress;
     }
-    
+
     public void setClientAddress(String clientAddress) {
         this.clientAddress = clientAddress;
     }

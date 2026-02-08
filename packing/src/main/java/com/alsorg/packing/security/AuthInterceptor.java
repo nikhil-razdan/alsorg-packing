@@ -2,6 +2,7 @@ package com.alsorg.packing.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -13,11 +14,16 @@ public class AuthInterceptor implements HandlerInterceptor {
             HttpServletRequest request,
             HttpServletResponse response,
             Object handler
-    ) throws Exception {
+    ) {
+
+        // ✅ Allow preflight CORS requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
 
         String path = request.getRequestURI();
 
-        // allow login endpoint
+        // ✅ Allow auth endpoints
         if (path.startsWith("/api/auth")) {
             return true;
         }
@@ -25,7 +31,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         Object user = request.getSession().getAttribute("USER");
 
         if (user == null) {
-            response.setStatus(401);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return false;
         }
 

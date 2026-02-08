@@ -18,8 +18,6 @@ public class BarcodeService {
     public BufferedImage generateCode128Barcode(String text) {
         try {
             Map<EncodeHintType, Object> hints = new HashMap<>();
-
-       
             hints.put(EncodeHintType.MARGIN, 20); // quiet zone (MANDATORY)
 
             BitMatrix bitMatrix = new MultiFormatWriter()

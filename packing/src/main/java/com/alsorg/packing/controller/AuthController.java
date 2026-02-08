@@ -10,23 +10,35 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @PostMapping("/login")
-    public ResponseEntity<?> login(
-            @RequestBody Map<String, String> body,
-            HttpSession session
-    ) {
-        String username = body.get("username");
-        String password = body.get("password");
+	@PostMapping("/login")
+	public ResponseEntity<?> login(
+	        @RequestBody Map<String, String> body,
+	        HttpSession session
+	) {
+	    String username = body.get("username");
+	    String password = body.get("password");
 
-        // 🔒 TEMP HARD-CODED (SAFE FOR NOW)
-        if ("admin".equals(username) && "admin123".equals(password)) {
-            session.setAttribute("USER", username);
-            return ResponseEntity.ok(Map.of("success", true));
-        }
+	    if ("admin".equals(username) && "admin123".equals(password)) {
+	        session.setAttribute("USER", username);
+	        session.setAttribute("ROLE", "ADMIN");
+	        return ResponseEntity.ok(Map.of("role", "ADMIN"));
+	    }
 
-        return ResponseEntity.status(401)
-                .body(Map.of("message", "Invalid credentials"));
-    }
+	    if ("dispatch".equals(username) && "dispatch123".equals(password)) {
+	        session.setAttribute("USER", username);
+	        session.setAttribute("ROLE", "DISPATCH");
+	        return ResponseEntity.ok(Map.of("role", "DISPATCH"));
+	    }
+
+	    if ("user".equals(username) && "user123".equals(password)) {
+	        session.setAttribute("USER", username);
+	        session.setAttribute("ROLE", "USER");
+	        return ResponseEntity.ok(Map.of("role", "USER"));
+	    }
+
+	    return ResponseEntity.status(401)
+	            .body(Map.of("message", "Invalid credentials"));
+	}
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpSession session) {
@@ -36,10 +48,19 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me(HttpSession session) {
+
         Object user = session.getAttribute("USER");
+        Object role = session.getAttribute("ROLE");
+
         if (user == null) {
             return ResponseEntity.status(401).build();
         }
-        return ResponseEntity.ok(Map.of("username", user));
+
+        return ResponseEntity.ok(
+            Map.of(
+                "username", user,
+                "role", role
+            )
+        );
     }
 }

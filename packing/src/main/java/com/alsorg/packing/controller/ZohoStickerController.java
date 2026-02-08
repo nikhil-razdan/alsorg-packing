@@ -25,18 +25,23 @@ public class ZohoStickerController {
         this.zohoStickerService = zohoStickerService;
     }
 
+    // ✅ ONLY RETURNS PDF (NO GENERATION)
     @GetMapping("/zoho/{zohoItemId}")
-    public ResponseEntity<byte[]> generateSticker(@PathVariable String zohoItemId) throws IOException {
+    public ResponseEntity<byte[]> getSticker(@PathVariable String zohoItemId) {
 
         System.out.println("📄 FETCHING PDF FOR ZOHO ITEM: " + zohoItemId);
 
-        byte[] pdf = zohoStickerService.generateStickerForZohoItem(zohoItemId);
+        byte[] pdf = zohoStickerService.getStickerPdfForZohoItem(zohoItemId);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=STICKER_" + zohoItemId + ".pdf")
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=STICKER_" + zohoItemId + ".pdf"
+                )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
 }
+
+
 

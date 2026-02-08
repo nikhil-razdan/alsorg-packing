@@ -1,7 +1,6 @@
 package com.alsorg.packing.service.barcode;
 
 import org.springframework.stereotype.Service;
-
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
 @Service
@@ -12,7 +11,6 @@ public class BarcodePayloadBuilder {
      * Format: KEY=VALUE|KEY=VALUE|...
      */
     public String build(StickerPdfData data) {
-
         return safe(data.getItemName());
     }
 

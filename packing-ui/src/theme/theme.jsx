@@ -3,7 +3,7 @@ import { createTheme } from "@mui/material/styles";
 const theme = createTheme({
   palette: {
     primary: {
-      main: "#2F4F4F", // Alsorg charcoal
+      main: "#2F4F4F",
     },
     secondary: {
       main: "#A9A9A9",
@@ -18,7 +18,7 @@ const theme = createTheme({
     },
   },
   typography: {
-    fontFamily: `"Roboto", "Helvetica", "Arial", sans-serif`,
+    fontFamily: ["Roboto", "Helvetica", "Arial", "sans-serif"].join(","),
     h2: {
       fontWeight: 600,
       color: "#2F4F4F",

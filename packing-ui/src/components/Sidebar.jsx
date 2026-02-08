@@ -64,8 +64,8 @@ function Sidebar() {
         {!collapsed && "Inventory Items"}
       </Link>
 	  
-	  <Link to="/zoho-items" style={linkStyle("/zoho-items")}>
-	          <span style={icon}>📦</span>
+	  <Link to="/dispatched-items" style={linkStyle("/dispatched-items")}>
+	          <span style={icon}>🚚</span>
 	          {!collapsed && "Dispatched Items"}
 	        </Link>
 

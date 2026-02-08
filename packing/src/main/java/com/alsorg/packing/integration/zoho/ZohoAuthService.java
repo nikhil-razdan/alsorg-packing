@@ -30,11 +30,12 @@ public class ZohoAuthService {
         }
 
         // ❗ Only here we call Zoho
-        String url = "https://accounts.zoho.in/oauth/v2/token"
-                + "?refresh_token=" + config.getRefreshToken()
-                + "&client_id=" + config.getClientId()
-                + "&client_secret=" + config.getClientSecret()
-                + "&grant_type=refresh_token";
+        String url =
+                "https://accounts.zoho.in/oauth/v2/token"
+                        + "?refresh_token=" + config.getRefreshToken()
+                        + "&client_id=" + config.getClientId()
+                        + "&client_secret=" + config.getClientSecret()
+                        + "&grant_type=refresh_token";
 
         ResponseEntity<Map> response =
                 restTemplate.postForEntity(url, null, Map.class);
@@ -42,11 +43,11 @@ public class ZohoAuthService {
         Map body = response.getBody();
 
         cachedAccessToken = (String) body.get("access_token");
-
         Integer expiresIn = (Integer) body.get("expires_in");
-        tokenExpiryTime = Instant.now().plusSeconds(expiresIn - 60); // buffer
+
+        // buffer
+        tokenExpiryTime = Instant.now().plusSeconds(expiresIn - 60);
 
         return cachedAccessToken;
     }
 }
-

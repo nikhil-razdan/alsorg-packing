@@ -5,6 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.UUID;
 
-public interface StickerAuditRepository
-        extends JpaRepository<StickerAudit, UUID> {
+public interface StickerAuditRepository extends JpaRepository<StickerAudit, UUID> {
 }

@@ -11,7 +11,6 @@ function ZohoItemsPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
-
   const [generating, setGenerating] = useState(false);
 
   const [paginationModel, setPaginationModel] = useState({
@@ -26,130 +25,70 @@ function ZohoItemsPage() {
       headerName: "",
       width: 150,
       sortable: false,
-      renderCell: (params) => {
-        const isPacked = params.row.packed;
-
-        return (
-          <Button
-            size="small"
-            disabled={isPacked || generating}
-            onClick={async () => {
-              try {
-                setGenerating(true);
-
-                const res = await fetch(
-                  `/api/packets/zoho/items/${params.row.zohoItemId}`,
-                  { credentials: "include" }
-                );
-
-                if (!res.ok) throw new Error("Failed to load item details");
-
-                const fullItem = await res.json();
-                setSelectedItem(fullItem);
-                setPdfUrl(null);
-                setDrawerOpen(true);
-              } catch (e) {
-                alert(e.message);
-              } finally {
-                setGenerating(false);
-              }
-            }}
-            sx={{
-              px: 2,
-              py: 0.6,
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: "999px",
-              textTransform: "none",
-              color: "rgba(255,255,255,0.9)",
-              background: isPacked
-                ? "rgba(156,163,175,0.9)"
-                : "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              boxShadow: isPacked
-                ? "none"
-                : "0 8px 25px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              "&:hover": {
-                background: isPacked
-                  ? "rgba(156,163,175,0.9)"
-                  : "linear-gradient(180deg, rgba(17,24,39,0.95), rgba(2,6,23,0.95))",
-                boxShadow:
-                  "0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18)",
-              },
-              "&:disabled": {
-                background: "rgba(156,163,175,0.85)",
-                color: "#f3f4f6",
-              },
-            }}
-          >
-            {isPacked ? "Packed" : "Generate"}
-          </Button>
-        );
-      },
-    },
-    {
-      field: "name",
-      headerName: "Item Name",
-      flex: 1,
-      minWidth: 320,
-    },
-    {
-      field: "sku",
-      headerName: "SKU",
-      minWidth: 260,
       renderCell: (params) => (
-        <span
-          title={params.value}
-          style={{
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "block",
-            width: "100%",
-            color: "#374151",
-            fontSize: 13,
+        <Button
+          size="small"
+          disabled={generating}
+          onClick={async () => {
+            try {
+              setGenerating(true);
+
+              const res = await fetch(
+                `/api/packets/zoho/items/${params.row.zohoItemId}`,
+                { credentials: "include" }
+              );
+
+              if (!res.ok) throw new Error("Failed to load item details");
+
+              const fullItem = await res.json();
+              setSelectedItem(fullItem);
+              setPdfUrl(null);
+              setDrawerOpen(true);
+            } catch (e) {
+              alert(e.message);
+            } finally {
+              setGenerating(false);
+            }
+          }}
+          sx={{
+            px: 2,
+            py: 0.6,
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: "999px",
+            textTransform: "none",
+            color: "rgba(255,255,255,0.9)",
+            background:
+              "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
           }}
         >
-          {params.value || "—"}
-        </span>
+          Generate
+        </Button>
       ),
     },
+    { field: "name", headerName: "Item Name", flex: 1, minWidth: 320 },
+    { field: "sku", headerName: "SKU", minWidth: 260 },
   ];
 
-  /* ===================== DATA ===================== */
+  /* ===================== RELOAD FROM BACKEND ===================== */
+  const reloadPage = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchZohoItemsPaged(
+        paginationModel.page + 1,
+        paginationModel.pageSize
+      );
+      setRows(data.items);
+      setRowCount(data.total);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ===================== DATA LOAD ===================== */
   useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchZohoItemsPaged(
-          paginationModel.page + 1,
-          paginationModel.pageSize
-        );
-
-        if (!active) return;
-
-        setRows(
-          data.items.map((item) => ({
-            id: item.zohoItemId,
-            ...item,
-            packed: false, // UI-only
-          }))
-        );
-        setRowCount(data.total);
-      } catch {
-        setRows([]);
-        setRowCount(0);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    load();
-    return () => (active = false);
+    reloadPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paginationModel]);
 
   /* ===================== RENDER ===================== */
@@ -180,55 +119,62 @@ function ZohoItemsPage() {
       </div>
 
       {/* ===================== DRAWER ===================== */}
-      <Drawer
-        anchor="right"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      >
-        <div style={drawer}>
-          <div style={drawerHighlight} />
-
+      <Drawer anchor="right"
+	          open={drawerOpen}
+	          onClose={() => setDrawerOpen(false)}
+	        >
+	          <div style={drawer}>
+	            <div style={drawerHighlight} />
           <h3 style={drawerTitle}>{selectedItem?.name}</h3>
 
           <Divider sx={{ my: 2 }} />
 
           <p><b>SKU:</b><br />{selectedItem?.sku || "—"}</p>
           <p><b>Location:</b> {selectedItem?.location ?? "—"}</p>
-          <p><b>Client:</b> {selectedItem?.clientName ?? "—"}</p>
-          <p><b>Address:</b> {selectedItem?.clientAddress ?? "—"}</p>
 
           <Divider sx={{ my: 2 }} />
 
           <Button
             disabled={generating}
-            onClick={async () => {
-              try {
-                setGenerating(true);
+			onClick={async () => {
+			  try {
+			    setGenerating(true);
 
-                await fetch(
-                  `/api/packets/zoho/items/${selectedItem.zohoItemId}/generate-sticker`,
-                  { method: "POST", credentials: "include" }
-                );
+			    // 1️⃣ Generate (or reuse)
+			    const genRes = await fetch(
+			      `/api/packets/zoho/items/${selectedItem.zohoItemId}/generate-sticker`,
+			      { method: "POST", credentials: "include" }
+			    );
 
-                const pdfRes = await fetch(
-                  `/api/stickers/zoho/${selectedItem.zohoItemId}`,
-                  { credentials: "include" }
-                );
+			    if (!genRes.ok && genRes.status !== 409) {
+			      throw new Error("Sticker generation failed");
+			    }
 
-                const blob = await pdfRes.blob();
-                setPdfUrl(URL.createObjectURL(blob));
+			    // 2️⃣ Always fetch PDF
+			    const pdfRes = await fetch(
+			      `/api/stickers/zoho/${selectedItem.zohoItemId}`,
+			      { credentials: "include" }
+			    );
 
-                setRows((prev) =>
-                  prev.map((r) =>
-                    r.zohoItemId === selectedItem.zohoItemId
-                      ? { ...r, packed: true }
-                      : r
-                  )
-                );
-              } finally {
-                setGenerating(false);
-              }
-            }}
+			    if (!pdfRes.ok) {
+			      throw new Error("Failed to load sticker PDF");
+			    }
+
+			    const blob = await pdfRes.blob();
+			    setPdfUrl(URL.createObjectURL(blob));
+
+			    // 3️⃣ REMOVE FROM ZOHO LIST
+			    setRows((prev) =>
+			      prev.filter((r) => r.zohoItemId !== selectedItem.zohoItemId)
+			    );
+
+			  } catch (e) {
+			    console.error(e);
+			    alert("Failed to generate or load sticker");
+			  } finally {
+			    setGenerating(false);
+			  }
+			}}
             sx={drawerButton}
           >
             Generate Sticker
@@ -241,11 +187,7 @@ function ZohoItemsPage() {
                 src={pdfUrl}
                 width="100%"
                 height="480"
-                style={{
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.25)",
-                  background: "#fff",
-                }}
+                style={{ borderRadius: 12, border: "1px solid #ddd" }}
                 title="Sticker Preview"
               />
             </>

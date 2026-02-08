@@ -7,10 +7,7 @@ function Header() {
 
   return (
     <div style={header}>
-      {/* Glass reflection */}
       <div style={topHighlight} />
-
-      {/* Subtle bottom glow */}
       <div style={bottomGlow} />
 
       <h2 style={title}>Alsorg Inventory Platform</h2>
@@ -48,7 +45,6 @@ const header = {
   zIndex: 10,
 };
 
-/* Top glass shine */
 const topHighlight = {
   position: "absolute",
   top: 0,
@@ -60,7 +56,6 @@ const topHighlight = {
   pointerEvents: "none",
 };
 
-/* Elegant bottom separator */
 const bottomGlow = {
   position: "absolute",
   bottom: 0,
@@ -73,7 +68,6 @@ const bottomGlow = {
   opacity: 0.85,
 };
 
-/* Title – clean, authoritative */
 const title = {
   margin: 0,
   fontSize: 23,
@@ -84,47 +78,36 @@ const title = {
     "0 2px 4px rgba(0,0,0,0.35), 0 0 12px rgba(255,255,255,0.25)",
 };
 
-/* Logout Button – premium glass */
+/* 🔥 MATCHES ZohoItemsPage BUTTON THEME */
 const logoutButton = {
-  display: "flex",
-  alignItems: "center",
-  gap: 1,
-  px: 3.2,
-  py: 1.15,
-  borderRadius: "16px",
+  px: 3,
+  py: 0.9,
+  fontSize: 13,
+  fontWeight: 600,
+  borderRadius: "999px",
   textTransform: "none",
-  fontWeight: 700,
-  fontSize: 14,
-  letterSpacing: "0.4px",
-  color: "rgba(255,255,255,0.95)",
+  color: "rgba(255,255,255,0.9)",
   background:
-    "linear-gradient(180deg, rgba(31,41,55,0.92), rgba(17,24,39,0.92))",
-  backdropFilter: "blur(14px)",
-  WebkitBackdropFilter: "blur(14px)",
-  border: "1px solid rgba(255,255,255,0.12)",
+    "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
+  backdropFilter: "blur(10px)",
+  WebkitBackdropFilter: "blur(10px)",
   boxShadow:
-    "0 12px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22)",
-  cursor: "pointer",
-  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    "0 8px 25px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  transition: "all 0.25s ease",
 
   "&:hover": {
-    transform: "translateY(-2px)",
     background:
-      "linear-gradient(180deg, rgba(17,24,39,0.98), rgba(2,6,23,0.98))",
+      "linear-gradient(180deg, rgba(17,24,39,0.95), rgba(2,6,23,0.95))",
     boxShadow:
-      "0 18px 42px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.28)",
+      "0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18)",
+    transform: "translateY(-1px)",
   },
 
   "&:active": {
     transform: "translateY(0)",
     boxShadow:
-      "0 8px 18px rgba(0,0,0,0.5), inset 0 2px 6px rgba(0,0,0,0.45)",
-  },
-
-  "&:focus-visible": {
-    outline: "none",
-    boxShadow:
-      "0 0 0 3px rgba(246,200,55,0.5), 0 12px 30px rgba(0,0,0,0.5)",
+      "0 6px 18px rgba(0,0,0,0.4), inset 0 2px 6px rgba(0,0,0,0.4)",
   },
 };
 

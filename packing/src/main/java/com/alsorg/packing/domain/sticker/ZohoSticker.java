@@ -2,6 +2,7 @@ package com.alsorg.packing.domain.sticker;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -11,13 +12,20 @@ import jakarta.persistence.Table;
 public class ZohoSticker {
 
     @Id
+    @Column(name = "zoho_item_id", nullable = false)
     private String zohoItemId;
 
+    @Column(name = "sticker_number", nullable = false)
     private String stickerNumber;
 
+    @Column(name = "generated_at", nullable = false)
     private LocalDateTime generatedAt;
 
-    // ---------- getters & setters ----------
+    // ✅ REQUIRED for re-download & history
+    @Column(name = "file_path", nullable = false)
+    private String filePath;
+
+    public ZohoSticker() {}
 
     public String getZohoItemId() {
         return zohoItemId;
@@ -41,5 +49,13 @@ public class ZohoSticker {
 
     public void setGeneratedAt(LocalDateTime generatedAt) {
         this.generatedAt = generatedAt;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
     }
 }

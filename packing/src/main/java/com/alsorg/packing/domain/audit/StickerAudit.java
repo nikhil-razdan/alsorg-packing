@@ -2,7 +2,6 @@ package com.alsorg.packing.domain.audit;
 
 import com.alsorg.packing.domain.packet.Packet;
 import jakarta.persistence.*;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -20,7 +19,6 @@ public class StickerAudit {
     private Packet packet;
 
     private String printedBy;
-
     private LocalDateTime printedAt;
 
     @PrePersist
@@ -51,6 +49,4 @@ public class StickerAudit {
     public void setPrintedAt(LocalDateTime printedAt) {
         this.printedAt = printedAt;
     }
-
-    // getters & setters
 }

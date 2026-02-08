@@ -2,12 +2,10 @@ package com.alsorg.packing.domain.packet;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-
 import jakarta.persistence.*;
 
 import com.alsorg.packing.domain.common.Company;
 import com.alsorg.packing.domain.common.PacketStatus;
-
 import java.util.ArrayList;
 import java.util.List;
 import com.alsorg.packing.domain.item.PacketItem;
@@ -31,15 +29,15 @@ public class Packet {
     private PacketStatus status;
 
     private String createdBy;
-
     private LocalDateTime createdAt;
+
     @OneToMany(
-    	    mappedBy = "packet",
-    	    cascade = CascadeType.ALL,
-    	    orphanRemoval = true,
-    	    fetch = FetchType.LAZY
-    	)
-    	private List<PacketItem> items = new ArrayList<>();
+        mappedBy = "packet",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true,
+        fetch = FetchType.LAZY
+    )
+    private List<PacketItem> items = new ArrayList<>();
 
     @Column(nullable = false)
     private Boolean stickerGenerated = false;
@@ -96,6 +94,7 @@ public class Packet {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
     public List<PacketItem> getItems() {
         return items;
     }
@@ -103,11 +102,13 @@ public class Packet {
     public void setItems(List<PacketItem> items) {
         this.items = items;
     }
+
     public int getTotalQuantity() {
-        return  items.stream()
-        		.mapToInt(PacketItem::getQuantity)
-        		.sum();
+        return items.stream()
+                .mapToInt(PacketItem::getQuantity)
+                .sum();
     }
+
     public Boolean getStickerGenerated() {
         return stickerGenerated;
     }
@@ -123,6 +124,4 @@ public class Packet {
     public void setStickerPath(String stickerPath) {
         this.stickerPath = stickerPath;
     }
-
-
 }

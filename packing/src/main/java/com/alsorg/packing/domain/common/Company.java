@@ -13,7 +13,7 @@ public class Company {
     private UUID id;
 
     @Column(nullable = false, unique = true)
-    private String code;     // ALSORG
+    private String code; // ALSORG
 
     @Column(nullable = false)
     private String name;
@@ -22,10 +22,11 @@ public class Company {
 
     @PrePersist
     void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        this.setCreatedAt(LocalDateTime.now());
     }
 
     // getters & setters
+
     public UUID getId() {
         return id;
     }
@@ -50,4 +51,11 @@ public class Company {
         this.name = name;
     }
 
+	public LocalDateTime getCreatedAt() {
+		return createdAt;
+	}
+
+	public void setCreatedAt(LocalDateTime createdAt) {
+		this.createdAt = createdAt;
+	}
 }

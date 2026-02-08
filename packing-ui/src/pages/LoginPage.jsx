@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../services/api";
 
 function LoginPage() {
   const [username, setUsername] = useState("");
@@ -14,22 +15,19 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ username, password }),
+      const res = await API.post("/auth/login", {
+        username,
+        password,
       });
 
-      if (!res.ok) {
-        setError("Invalid username or password");
-        return;
-      }
+      // ✅ STEP 2.2 FIX — STORE ROLE FOR UI PERMISSIONS
+      localStorage.setItem("role", res.data.role);
 
-      localStorage.setItem("auth", "true");
+      // session cookie is now set
       navigate("/");
-    } catch {
-      setError("Login failed. Try again.");
+    // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      setError("Invalid username or password");
     } finally {
       setLoading(false);
     }
@@ -65,7 +63,7 @@ function LoginPage() {
 
           <div style={divider} />
 
-          <h2 style={subtitle}>What’s new </h2>
+          <h2 style={subtitle}>What’s new</h2>
 
           <p style={descriptionMuted}>
             Advanced analytics powered by historical trends help organizations
@@ -152,9 +150,7 @@ const leftPanel = {
   alignItems: "center",
 };
 
-const contentBlock = {
-  maxWidth: 520,
-};
+const contentBlock = { maxWidth: 520 };
 
 const logoStyle = {
   height: 48,

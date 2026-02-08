@@ -12,52 +12,69 @@ public class PacketDetailResponse {
     private String createdBy;
     private LocalDateTime createdAt;
     private boolean stickerGenerated;
+
     // ✅ REQUIRED: No-args constructor
     public PacketDetailResponse() {
     }
+
     // ✅ Getters & Setters (ALL of them)
+
     public UUID getPacketId() {
         return packetId;
     }
+
     public void setPacketId(UUID packetId) {
         this.packetId = packetId;
     }
+
     public String getStickerNumber() {
         return stickerNumber;
     }
+
     public void setStickerNumber(String stickerNumber) {
         this.stickerNumber = stickerNumber;
     }
+
     public String getCompanyName() {
         return companyName;
     }
+
     public void setCompanyName(String companyName) {
         this.companyName = companyName;
     }
+
     public String getStatus() {
         return status;
     }
+
     public void setStatus(String status) {
         this.status = status;
     }
+
     public String getCreatedBy() {
         return createdBy;
     }
+
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
     }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
     public boolean isStickerGenerated() {
         return stickerGenerated;
     }
+
     public void setStickerGenerated(boolean stickerGenerated) {
         this.stickerGenerated = stickerGenerated;
     }
+
     // ✅ Mapper
     public static PacketDetailResponse from(com.alsorg.packing.domain.packet.Packet packet) {
         PacketDetailResponse dto = new PacketDetailResponse();

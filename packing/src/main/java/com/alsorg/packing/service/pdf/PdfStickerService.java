@@ -44,6 +44,9 @@ public class PdfStickerService {
 
     public byte[] generateSticker(StickerPdfData data) {
 
+        int FONT_SIZE = 12;
+
+        PDFont dateFont = PDType1Font.HELVETICA_BOLD;
         PDFont regular = PDType1Font.HELVETICA;
         PDFont bold = PDType1Font.HELVETICA_BOLD;
 
@@ -53,15 +56,20 @@ public class PdfStickerService {
             document.addPage(page);
 
             try (PDPageContentStream cs =
-                         new PDPageContentStream(document, page, AppendMode.OVERWRITE, true, true)) {
+                         new PDPageContentStream(
+                                 document,
+                                 page,
+                                 AppendMode.OVERWRITE,
+                                 true,
+                                 true
+                         )) {
 
                 /* ================= BACKGROUND ================= */
                 cs.setNonStrokingColor(Color.WHITE);
                 cs.addRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
                 cs.fill();
-
                 cs.setNonStrokingColor(Color.BLACK);
-                
+
                 /* ================= OUTER BORDER ================= */
                 cs.setStrokingColor(Color.BLACK);
                 cs.setLineWidth(3);
@@ -75,40 +83,51 @@ public class PdfStickerService {
                 cs.showText("ALSORG INTERIORS INDIA PVT. LTD.");
                 cs.endText();
 
+                // Date at top-right
+                cs.setFont(regular, 8);
+                drawText(cs, 482, 312, "Date of Packing: " + safe(data.getDate()));
+
                 cs.moveTo(50, 295);
                 cs.lineTo(550, 295);
                 cs.stroke();
 
-                cs.setFont(regular, 12);
-                drawText(cs, 50, 275, "PD No: " + safe(data.getPdNo()));
-                drawText(cs, 175, 275, "SNo: " + safe(data.getStickerNumber()));
-                drawText(cs, 355, 275, "Dwg No: " + safe(data.getDrawingNo()));
-                drawText(cs, 465, 275, "Date: " + safe(data.getDate()));
+                /* ================= CLIENT INFO ================= */
+                cs.setFont(regular, FONT_SIZE);
+                drawText(
+                        cs,
+                        45,
+                        275,
+                        "Client Name & Address: "
+                                + safe(data.getClientName())
+                                + " "
+                                + safe(data.getClientAddress())
+                );
 
-                cs.moveTo(45, 265);
-                cs.lineTo(555, 265);
+                cs.moveTo(45, 260);
+                cs.lineTo(555, 260);
                 cs.stroke();
 
-                drawText(cs, 45, 245,
-                        "Client Name & Address: " +
-                                safe(data.getClientName()) + " " +
-                                safe(data.getClientAddress()));
+                /* ================= PD / SNo / DWG ================= */
+                drawText(cs, 50, 240, "PD No: " + safe(data.getPdNo()));
+                drawText(cs, 175, 240, "SNo: " + safe(data.getStickerNumber()));
+                drawText(cs, 355, 240, "Dwg No: " + safe(data.getDrawingNo()));
 
-                cs.moveTo(45, 220);
-                cs.lineTo(555, 220);
+                cs.moveTo(45, 225);
+                cs.lineTo(555, 225);
                 cs.stroke();
 
-                drawText(cs, 50, 195, "Qty: " + data.getQuantity());
-                drawText(cs, 180, 195, "Item Name: " + safe(data.getItemName()));
+                /* ================= ITEM & QTY ================= */
+                drawText(cs, 50, 200, "Item Name: " + safe(data.getItemName()));
+                drawText(cs, 420, 200, "Qty: " + data.getQuantity());
 
-                cs.moveTo(45, 180);
-                cs.lineTo(555, 180);
+                cs.moveTo(45, 185);
+                cs.lineTo(555, 185);
                 cs.stroke();
 
-                drawText(cs, 50, 160, "Description: " + safe(data.getDescription()));
+                drawText(cs, 50, 165, "Description: " + safe(data.getDescription()));
 
-                cs.moveTo(45, 140);
-                cs.lineTo(555, 140);
+                cs.moveTo(45, 145);
+                cs.lineTo(555, 145);
                 cs.stroke();
 
                 drawText(cs, 50, 125, "Remarks: " + safe(data.getRemarks()));
@@ -118,13 +137,12 @@ public class PdfStickerService {
                 cs.lineTo(555, 115);
                 cs.stroke();
 
-                /* ================= FOOTER TEXT ================= */
+                /* ================= FOOTER ================= */
                 drawText(cs, 55, FOOTER_TEXT_Y, "Delivered By:");
                 drawText(cs, 245, FOOTER_TEXT_Y, "Prepared By:");
                 drawText(cs, 425, FOOTER_TEXT_Y, "Checked By:");
-                // ❌ intentionally NO line below this
 
-                /* ================= BARCODE (FINAL POSITION) ================= */
+                /* ================= BARCODE ================= */
                 BufferedImage barcodeImg =
                         barcodeService.generateCode128Barcode(
                                 barcodePayloadBuilder.build(data)

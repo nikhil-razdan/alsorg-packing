@@ -75,6 +75,7 @@ public class ZohoInventoryClient {
                 throw new RuntimeException("Failed during Zoho pagination", e);
             }
         }
+
         return allItems;
     }
 
@@ -103,7 +104,6 @@ public class ZohoInventoryClient {
             dto.setPdNo(textOrDash(cf, "cf_pd_no"));
             dto.setDrawingNo(textOrDash(cf, "cf_dwg_no"));
             dto.setRemarks(textOrDash(cf, "cf_remarks"));
-
             dto.setQuantity(parseQuantity(cf));
 
             items.add(dto);
@@ -152,7 +152,6 @@ public class ZohoInventoryClient {
             dto.setPdNo(textOrDash(cf, "cf_pd_no"));
             dto.setDrawingNo(textOrDash(cf, "cf_dwg_no"));
             dto.setRemarks(textOrDash(cf, "cf_remarks"));
-
             dto.setQuantity(parseQuantity(cf));
 
             return dto;
@@ -165,13 +164,15 @@ public class ZohoInventoryClient {
     /* ---------------- HELPERS ---------------- */
 
     private String textOrNull(JsonNode node, String key) {
-        return node.hasNonNull(key) && !node.path(key).asText().isBlank()
+        return node.hasNonNull(key)
+                && !node.path(key).asText().isBlank()
                 ? node.path(key).asText()
                 : null;
     }
 
     private String textOrDash(JsonNode node, String key) {
-        return node.hasNonNull(key) && !node.path(key).asText().isBlank()
+        return node.hasNonNull(key)
+                && !node.path(key).asText().isBlank()
                 ? node.path(key).asText()
                 : "-";
     }
@@ -180,8 +181,36 @@ public class ZohoInventoryClient {
         if (cf.hasNonNull("cf_quantity")) {
             try {
                 return Integer.parseInt(cf.path("cf_quantity").asText("1"));
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
         return 1;
+    }
+
+    public void updateStock(String zohoItemId, int quantity) {
+
+        String url = config.getBaseUrl()
+                + "/inventory/v1/items/" + zohoItemId
+                + "?organization_id=" + config.getOrganizationId();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(
+                "Authorization",
+                "Zoho-oauthtoken " + zohoAuthService.getAccessToken()
+        );
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String body = """
+                {
+                  "initial_stock": %d
+                }
+                """.formatted(quantity);
+
+        restTemplate.exchange(
+                url,
+                HttpMethod.PUT,
+                new HttpEntity<>(body, headers),
+                String.class
+        );
     }
 }

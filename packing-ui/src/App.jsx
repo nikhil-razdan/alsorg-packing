@@ -3,31 +3,31 @@ import Layout from "./components/Layout";
 import DashboardPage from "./pages/Dashboard";
 import ZohoItemsPage from "./pages/ZohoItemsPage";
 import LoginPage from "./pages/LoginPage";
-import ProtectedRoute from "./components/ProtectedRoute";
+import RequireAuth from "./auth/RequireAuth";
+import DispatchedItemsPage from "./pages/DispatchedItemsPage";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-
-        {/* 🔓 PUBLIC */}
+        {/* PUBLIC */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* 🔐 PROTECTED APP */}
+        {/* PROTECTED */}
         <Route
           element={
-            <ProtectedRoute>
+            <RequireAuth>
               <Layout />
-            </ProtectedRoute>
+            </RequireAuth>
           }
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/zoho-items" element={<ZohoItemsPage />} />
+          <Route path="/dispatched-items" element={<DispatchedItemsPage />} />
         </Route>
 
-        {/* ❌ FALLBACK */}
+        {/* FALLBACK */}
         <Route path="*" element={<Navigate to="/" />} />
-
       </Routes>
     </BrowserRouter>
   );

@@ -23,15 +23,13 @@ public class ZohoItemMappingService {
         for (ZohoItemDTO zoho : zohoItems) {
 
             Optional<PacketItem> optional =
-                packetItemRepository.findBySku(zoho.getSku());
+                    packetItemRepository.findBySku(zoho.getSku());
 
             if (optional.isPresent()) {
                 PacketItem item = optional.get();
-
                 item.setZohoItemId(zoho.getZohoItemId());
                 item.setDescription(zoho.getDescription());
                 item.setLocation(zoho.getLocation());
-
                 packetItemRepository.save(item);
             }
         }

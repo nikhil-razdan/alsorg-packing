@@ -17,10 +17,10 @@ public class DataInitializer {
     @PostConstruct
     public void init() {
         repository.findById(1)
-            .orElseGet(() -> {
-                StickerSequence seq = new StickerSequence();
-                seq.setCurrentValue(0L);
-                return repository.save(seq);
-            });
+                .orElseGet(() -> {
+                    StickerSequence seq = new StickerSequence();
+                    seq.setCurrentValue(0L);
+                    return repository.save(seq);
+                });
     }
 }
