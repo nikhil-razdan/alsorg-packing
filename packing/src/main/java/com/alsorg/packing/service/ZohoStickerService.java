@@ -5,6 +5,7 @@ import java.nio.file.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -14,10 +15,12 @@ import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.sticker.ZohoSticker;
+import com.alsorg.packing.domain.sticker.ZohoStickerHistory;
 import com.alsorg.packing.integration.zoho.ZohoInventoryClient;
 import com.alsorg.packing.integration.zoho.dto.ZohoItemDTO;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.repository.ZohoStickerRepository;
+import com.alsorg.packing.repository.ZohoStickerHistoryRepository;
 import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
@@ -26,52 +29,70 @@ import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 public class ZohoStickerService {
 
     private final ZohoStickerRepository stickerRepo;
+    private final ZohoStickerHistoryRepository historyRepo;
     private final DispatchedItemRepository dispatchedRepo;
     private final PdfStickerService pdfService;
     private final ZohoInventoryClient zohoClient;
     private final StickerSequenceService sequenceService;
+    private final ZohoStickerHistoryRepository stickerHistoryRepo;
+
 
     @Value("${sticker.storage.path}")
     private String stickerPath;
 
     public ZohoStickerService(
             ZohoStickerRepository stickerRepo,
+            ZohoStickerHistoryRepository historyRepo,
             DispatchedItemRepository dispatchedRepo,
             PdfStickerService pdfService,
             ZohoInventoryClient zohoClient,
-            StickerSequenceService sequenceService
+            StickerSequenceService sequenceService,
+            ZohoStickerHistoryRepository stickerHistoryRepo
     ) {
         this.stickerRepo = stickerRepo;
+        this.historyRepo = historyRepo;
         this.dispatchedRepo = dispatchedRepo;
         this.pdfService = pdfService;
         this.zohoClient = zohoClient;
         this.sequenceService = sequenceService;
+        this.stickerHistoryRepo = stickerHistoryRepo;
     }
 
     // ===============================
-    // STEP 1: GENERATE (ONLY ONCE)
+    // STEP 1 + 2.4: GENERATE OR REUSE
     // ===============================
     public byte[] generateStickerForZohoItem(String zohoItemId) throws IOException {
 
-        System.out.println("🟢 STEP 1: generateStickerForZohoItem called");
+        System.out.println("🟢 generateStickerForZohoItem called");
         System.out.println("🟢 Zoho Item ID = " + zohoItemId);
 
         byte[] pdfBytes;
+        String stickerNumber;
+        String filePath;
+        String reason;
 
         ZohoSticker existingSticker = stickerRepo.findById(zohoItemId).orElse(null);
 
         if (existingSticker != null) {
-            // ✅ Reuse existing PDF
+            // ===============================
+            // REUSE EXISTING STICKER
+            // ===============================
             System.out.println("🟡 Sticker already exists, reusing PDF");
+
             pdfBytes = Files.readAllBytes(Paths.get(existingSticker.getFilePath()));
+            stickerNumber = existingSticker.getStickerNumber();
+            filePath = existingSticker.getFilePath();
+            reason = "REUSED";
         } else {
-            // ✅ Generate new sticker
+            // ===============================
+            // GENERATE NEW STICKER
+            // ===============================
             ZohoItemDTO item = zohoClient.fetchItemDetails(zohoItemId);
             if (item == null) {
                 throw new IllegalStateException("Zoho item not found: " + zohoItemId);
             }
 
-            String stickerNumber = sequenceService.generateNextStickerNumber();
+            stickerNumber = sequenceService.generateNextStickerNumber();
 
             StickerPdfData pdf = new StickerPdfData();
             pdf.setStickerNumber(stickerNumber);
@@ -95,11 +116,14 @@ public class ZohoStickerService {
             Files.createDirectories(path.getParent());
             Files.write(path, pdfBytes, StandardOpenOption.CREATE_NEW);
 
+            filePath = path.toString();
+            reason = "GENERATED";
+
             ZohoSticker sticker = new ZohoSticker();
             sticker.setZohoItemId(zohoItemId);
             sticker.setStickerNumber(stickerNumber);
             sticker.setGeneratedAt(LocalDateTime.now());
-            sticker.setFilePath(path.toString());
+            sticker.setFilePath(filePath);
 
             stickerRepo.save(sticker);
 
@@ -107,15 +131,27 @@ public class ZohoStickerService {
         }
 
         // ===============================
-        // STEP 7: ENSURE DISPATCHED ITEM
+        // STEP 2.4: WRITE HISTORY
         // ===============================
-        System.out.println("🟢 STEP 7: Ensuring dispatched item exists");
+        ZohoStickerHistory history = new ZohoStickerHistory();
+        history.setZohoItemId(zohoItemId);
+        history.setStickerNumber(stickerNumber);
+        history.setFilePath(filePath);
+        history.setGeneratedAt(LocalDateTime.now());
+        history.setGeneratedBy("SYSTEM");   // later from session
+        history.setGeneratedRole("SYSTEM"); // later from session
+        history.setReason(reason);
 
+        historyRepo.save(history);
+
+        System.out.println("🟢 Sticker history recorded: " + reason);
+
+        // ===============================
+        // ENSURE DISPATCHED ITEM EXISTS
+        // ===============================
         DispatchedItem di = dispatchedRepo.findById(zohoItemId).orElse(null);
 
         if (di == null) {
-            System.out.println("🟢 Creating dispatched item");
-
             ZohoItemDTO item = zohoClient.fetchItemDetails(zohoItemId);
             if (item == null) {
                 throw new IllegalStateException("Zoho item not found: " + zohoItemId);
@@ -132,17 +168,13 @@ public class ZohoStickerService {
             di.setApprovalStatus(ApprovalStatus.NONE);
 
             dispatchedRepo.save(di);
-
-            System.out.println("🟢 Dispatched item SAVED");
-        } else {
-            System.out.println("🟡 Dispatched item already exists");
         }
 
         return pdfBytes;
     }
 
     // ===============================
-    // STEP 2: FETCH ONLY (NO GENERATE)
+    // STEP 2: FETCH ONLY
     // ===============================
     public byte[] getStickerPdfForZohoItem(String zohoItemId) {
 
@@ -154,6 +186,40 @@ public class ZohoStickerService {
             return Files.readAllBytes(Paths.get(sticker.getFilePath()));
         } catch (IOException e) {
             throw new RuntimeException("Failed to read sticker PDF", e);
+        }
+    }
+    
+ // ===============================
+ // STEP 2.7: DOWNLOAD OLD STICKER
+ // ===============================
+    public byte[] downloadStickerFromHistory(String historyId) {
+
+        UUID id;
+        try {
+            id = UUID.fromString(historyId);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Invalid history ID: " + historyId);
+        }
+
+        ZohoStickerHistory history = stickerHistoryRepo.findById(id)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Sticker history not found for id: " + historyId
+                        )
+                );
+
+        Path path = Paths.get(history.getFilePath());
+
+        if (!Files.exists(path)) {
+            throw new IllegalStateException(
+                    "Sticker file not found on disk: " + history.getFilePath()
+            );
+        }
+
+        try {
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read sticker file", e);
         }
     }
 }

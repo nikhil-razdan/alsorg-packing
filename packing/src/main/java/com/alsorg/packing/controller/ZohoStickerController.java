@@ -41,6 +41,22 @@ public class ZohoStickerController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
+    
+    @GetMapping("/history/{historyId}/download")
+    public ResponseEntity<byte[]> downloadStickerFromHistory(
+            @PathVariable String historyId
+    ) {
+        byte[] pdf = zohoStickerService.downloadStickerFromHistory(historyId);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=STICKER_HISTORY_" + historyId + ".pdf"
+                )
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+
 }
 
 

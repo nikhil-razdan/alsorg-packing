@@ -27,9 +27,10 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.ALWAYS)
             )
 
-            // ✅ Allow all requests (AuthInterceptor handles auth)
-            .authorizeHttpRequests(auth ->
-                auth.anyRequest().permitAll()
+            // ✅ Explicitly allow sticker downloads (IMPORTANT)
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/stickers/history/*/download").permitAll()
+                .anyRequest().permitAll()
             );
 
         return http.build();

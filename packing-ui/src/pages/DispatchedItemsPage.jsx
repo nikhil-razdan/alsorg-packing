@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DataGrid } from "@mui/x-data-grid";
-import { Chip, Box, Button } from "@mui/material";
+import { Chip, Box, Button, IconButton } from "@mui/material";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 
 /**
  * Dispatched Items Page
@@ -89,10 +90,77 @@ function DispatchedItemsPage() {
     }
   };
 
+  /* ===================== DOWNLOAD ===================== */
+
+  const openStickerHistory = async (zohoItemId) => {
+      try {
+        // ✅ CORRECT ENDPOINT
+        const res = await fetch(
+          `/api/stickers/${zohoItemId}/history`,
+          { credentials: "include" }
+        );
+
+        if (!res.ok) throw new Error("History fetch failed");
+
+        const history = await res.json();
+
+        if (!history || history.length === 0) {
+          alert("No sticker history found");
+          return;
+        }
+
+        // Latest sticker
+        const latest = history[0]; // already ordered DESC by backend
+
+        // ✅ CORRECT DOWNLOAD ENDPOINT
+        window.open(
+          `/api/stickers/history/${latest.id}/download`,
+          "_blank"
+        );
+      } catch (err) {
+        console.error(err);
+        alert("Failed to download sticker");
+      }
+    };
+
   /* ===================== COLUMNS ===================== */
 
   const columns = [
-    { field: "name", headerName: "Item Name", flex: 1, minWidth: 300 },
+    {
+      field: "name",
+      headerName: "Item Name",
+      flex: 1,
+      minWidth: 300,
+      renderCell: (params) => {
+        const row = params.row;
+
+        return (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <IconButton
+              onClick={() => openStickerHistory(row.zohoItemId)}
+              size="small"
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: "8px",
+                backgroundColor: "#f9fafb",
+                border: "1px solid #d1d5db",
+                color: "#374151",
+                "&:hover": {
+                  backgroundColor: "#eef2ff",
+                  borderColor: "#6366f1",
+                  color: "#4338ca",
+                },
+              }}
+            >
+              <DownloadOutlinedIcon fontSize="small" />
+            </IconButton>
+
+            <span>{row.name}</span>
+          </Box>
+        );
+      },
+    },
     { field: "clientName", headerName: "Client", minWidth: 180 },
     {
       field: "packedAt",
@@ -224,7 +292,6 @@ function DispatchedItemsPage() {
       <div style={content}>
         <h2 style={pageTitle}>Dispatched Items</h2>
 
-        {/* LEGEND */}
         <Box sx={legend}>
           <Chip label="PACKED" size="small" sx={statusPacked} />
           <Chip label="DISPATCHED" size="small" sx={statusDispatched} />
@@ -252,6 +319,7 @@ function DispatchedItemsPage() {
 }
 
 /* ===================== STYLES ===================== */
+/* (UNCHANGED — EXACTLY AS YOU PROVIDED) */
 
 const page = {
   height: "100vh",
