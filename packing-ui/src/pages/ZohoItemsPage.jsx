@@ -113,18 +113,20 @@ function ZohoItemsPage() {
             disableRowSelectionOnClick
             density="compact"
             getRowId={(row) => row.zohoItemId}
+            getRowClassName={() => "row-packed"}
             sx={dataGridStyles}
           />
         </div>
       </div>
 
       {/* ===================== DRAWER ===================== */}
-      <Drawer anchor="right"
-	          open={drawerOpen}
-	          onClose={() => setDrawerOpen(false)}
-	        >
-	          <div style={drawer}>
-	            <div style={drawerHighlight} />
+      <Drawer
+        anchor="right"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      >
+        <div style={drawer}>
+          <div style={drawerHighlight} />
           <h3 style={drawerTitle}>{selectedItem?.name}</h3>
 
           <Divider sx={{ my: 2 }} />
@@ -136,45 +138,41 @@ function ZohoItemsPage() {
 
           <Button
             disabled={generating}
-			onClick={async () => {
-			  try {
-			    setGenerating(true);
+            onClick={async () => {
+              try {
+                setGenerating(true);
 
-			    // 1️⃣ Generate (or reuse)
-			    const genRes = await fetch(
-			      `/api/packets/zoho/items/${selectedItem.zohoItemId}/generate-sticker`,
-			      { method: "POST", credentials: "include" }
-			    );
+                const genRes = await fetch(
+                  `/api/packets/zoho/items/${selectedItem.zohoItemId}/generate-sticker`,
+                  { method: "POST", credentials: "include" }
+                );
 
-			    if (!genRes.ok && genRes.status !== 409) {
-			      throw new Error("Sticker generation failed");
-			    }
+                if (!genRes.ok && genRes.status !== 409) {
+                  throw new Error("Sticker generation failed");
+                }
 
-			    // 2️⃣ Always fetch PDF
-			    const pdfRes = await fetch(
-			      `/api/stickers/zoho/${selectedItem.zohoItemId}`,
-			      { credentials: "include" }
-			    );
+                const pdfRes = await fetch(
+                  `/api/stickers/zoho/${selectedItem.zohoItemId}`,
+                  { credentials: "include" }
+                );
 
-			    if (!pdfRes.ok) {
-			      throw new Error("Failed to load sticker PDF");
-			    }
+                if (!pdfRes.ok) {
+                  throw new Error("Failed to load sticker PDF");
+                }
 
-			    const blob = await pdfRes.blob();
-			    setPdfUrl(URL.createObjectURL(blob));
+                const blob = await pdfRes.blob();
+                setPdfUrl(URL.createObjectURL(blob));
 
-			    // 3️⃣ REMOVE FROM ZOHO LIST
-			    setRows((prev) =>
-			      prev.filter((r) => r.zohoItemId !== selectedItem.zohoItemId)
-			    );
-
-			  } catch (e) {
-			    console.error(e);
-			    alert("Failed to generate or load sticker");
-			  } finally {
-			    setGenerating(false);
-			  }
-			}}
+                setRows((prev) =>
+                  prev.filter((r) => r.zohoItemId !== selectedItem.zohoItemId)
+                );
+              } catch (e) {
+                console.error(e);
+                alert("Failed to generate or load sticker");
+              } finally {
+                setGenerating(false);
+              }
+            }}
             sx={drawerButton}
           >
             Generate Sticker
@@ -226,14 +224,14 @@ const content = {
 };
 
 const pageTitle = {
-  marginBottom: 18,
+  marginBottom: 12,
   fontSize: 28,
   fontWeight: 700,
   color: "#fff",
 };
 
 const tableWrapper = {
-  height: "calc(100vh - 140px)",
+  height: "calc(100vh - 170px)",
   borderRadius: 18,
   background:
     "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
@@ -248,22 +246,31 @@ const dataGridStyles = {
   background: "#fff",
   borderRadius: 12,
   border: "none",
+
   "& .MuiDataGrid-columnHeaders": {
     background: "#f9fafb",
     borderBottom: "1px solid #e5e7eb",
     fontWeight: 600,
   },
+
   "& .MuiDataGrid-row": {
     borderBottom: "1px solid #f1f5f9",
   },
+
   "& .MuiDataGrid-row:hover": {
-    backgroundColor: "#f8fafc",
+    filter: "brightness(0.97)",
   },
+
   "& .MuiDataGrid-cell": {
     fontSize: 13,
   },
+
   "& .MuiDataGrid-footerContainer": {
     borderTop: "1px solid #e5e7eb",
+  },
+
+  "& .row-packed": {
+    backgroundColor: "rgba(219,234,254,0.55)",
   },
 };
 
@@ -310,21 +317,6 @@ const drawerButton = {
   color: "rgba(255,255,255,0.9)",
   background:
     "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
-  backdropFilter: "blur(10px)",
-  WebkitBackdropFilter: "blur(10px)",
-  boxShadow:
-    "0 8px 25px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  "&:hover": {
-    background:
-      "linear-gradient(180deg, rgba(17,24,39,0.95), rgba(2,6,23,0.95))",
-    boxShadow:
-      "0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18)",
-  },
-  "&:disabled": {
-    background: "rgba(156,163,175,0.85)",
-    color: "#f3f4f6",
-  },
 };
 
 export default ZohoItemsPage;

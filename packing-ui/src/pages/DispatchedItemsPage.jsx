@@ -154,7 +154,6 @@ function DispatchedItemsPage() {
 
         return (
           <Box sx={actionContainer}>
-            {/* ADMIN APPROVAL */}
             {isAdmin && row.approvalStatus === "PENDING" && (
               <>
                 <Button
@@ -174,7 +173,6 @@ function DispatchedItemsPage() {
               </>
             )}
 
-            {/* ADMIN REQUEST */}
             {canAdminRequest && (
               <Button
                 size="small"
@@ -185,7 +183,6 @@ function DispatchedItemsPage() {
               </Button>
             )}
 
-            {/* PACKING USER */}
             {canUserRequest && (
               <Button
                 size="small"
@@ -196,7 +193,6 @@ function DispatchedItemsPage() {
               </Button>
             )}
 
-            {/* DISPATCH (DISABLED) */}
             {isDispatch && (
               <Button size="small" disabled sx={actionSecondary}>
                 Request Restore
@@ -204,11 +200,7 @@ function DispatchedItemsPage() {
             )}
 
             {row.approvalStatus === "PENDING" && (
-              <Chip
-                label="REQUESTED"
-                size="small"
-                sx={pendingChip}
-              />
+              <Chip label="REQUESTED" size="small" sx={pendingChip} />
             )}
           </Box>
         );
@@ -231,6 +223,14 @@ function DispatchedItemsPage() {
       <div style={backgroundText}>Alsorg</div>
       <div style={content}>
         <h2 style={pageTitle}>Dispatched Items</h2>
+
+        {/* LEGEND */}
+        <Box sx={legend}>
+          <Chip label="PACKED" size="small" sx={statusPacked} />
+          <Chip label="DISPATCHED" size="small" sx={statusDispatched} />
+          <Chip label="REQUESTED" size="small" sx={pendingChip} />
+        </Box>
+
         <div style={tableWrapper}>
           <DataGrid
             rows={rows}
@@ -238,6 +238,11 @@ function DispatchedItemsPage() {
             loading={loading}
             disableRowSelectionOnClick
             density="compact"
+            getRowClassName={(params) => {
+              if (params.row.approvalStatus === "PENDING") return "row-pending";
+              if (params.row.status === "DISPATCHED") return "row-dispatched";
+              return "row-packed";
+            }}
             sx={dataGridStyles}
           />
         </div>
@@ -270,14 +275,22 @@ const backgroundText = {
 const content = { position: "relative", zIndex: 1 };
 
 const pageTitle = {
-  marginBottom: 18,
+  marginBottom: 12,
   fontSize: 28,
   fontWeight: 700,
   color: "#fff",
 };
 
+const legend = {
+  display: "flex",
+  gap: 1.5,
+  mb: 1.5,
+};
+
+/* ===== TABLE ===== */
+
 const tableWrapper = {
-  height: "calc(100vh - 140px)",
+  height: "calc(100vh - 170px)",
   borderRadius: 18,
   background:
     "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
@@ -292,9 +305,22 @@ const dataGridStyles = {
   background: "#fff",
   borderRadius: 4,
   border: "none",
+
+  "& .row-packed": {
+    backgroundColor: "rgba(219,234,254,0.55)",
+  },
+  "& .row-dispatched": {
+    backgroundColor: "rgba(209,250,229,0.55)",
+  },
+  "& .row-pending": {
+    backgroundColor: "rgba(254,243,199,0.6)",
+  },
+  "& .MuiDataGrid-row:hover": {
+    filter: "brightness(0.97)",
+  },
 };
 
-/* ===== STATUS STYLES ===== */
+/* ===== STATUS ===== */
 
 const statusPacked = {
   fontSize: 11,
@@ -304,7 +330,6 @@ const statusPacked = {
   color: "#1e40af",
   background:
     "linear-gradient(180deg, rgba(191,219,254,0.95), rgba(147,197,253,0.95))",
-  boxShadow: "0 2px 6px rgba(59,130,246,0.35)",
 };
 
 const statusDispatched = {
@@ -315,7 +340,6 @@ const statusDispatched = {
   color: "#065f46",
   background:
     "linear-gradient(180deg, rgba(167,243,208,0.95), rgba(110,231,183,0.95))",
-  boxShadow: "0 2px 6px rgba(16,185,129,0.35)",
 };
 
 const pendingChip = {
@@ -326,7 +350,6 @@ const pendingChip = {
   color: "#92400e",
   background:
     "linear-gradient(180deg, rgba(254,215,170,0.95), rgba(253,186,116,0.95))",
-  boxShadow: "0 2px 6px rgba(245,158,11,0.35)",
 };
 
 const statusSelect = {
@@ -335,19 +358,14 @@ const statusSelect = {
   border: "1px solid #d1d5db",
   fontSize: 11,
   fontWeight: 700,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(243,244,246,0.95))",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
-  cursor: "pointer",
 };
 
-/* ===== ACTION STYLES ===== */
+/* ===== ACTIONS ===== */
 
 const actionContainer = {
   display: "flex",
   gap: 1,
   flexWrap: "wrap",
-  alignItems: "center",
 };
 
 const actionPrimary = {
@@ -356,15 +374,8 @@ const actionPrimary = {
   fontSize: 12,
   fontWeight: 600,
   color: "#fff",
-  textTransform: "none",
   background:
     "linear-gradient(180deg, rgba(16,185,129,0.95), rgba(5,150,105,0.95))",
-  boxShadow: "0 4px 10px rgba(5,150,105,0.35)",
-  transition: "all 0.25s ease",
-  "&:hover": {
-    transform: "translateY(-1px)",
-    boxShadow: "0 8px 18px rgba(5,150,105,0.45)",
-  },
 };
 
 const actionSecondary = {
@@ -372,19 +383,8 @@ const actionSecondary = {
   borderRadius: "999px",
   fontSize: 12,
   fontWeight: 600,
-  textTransform: "none",
-  color: "#1f2937",
-  background: "rgba(255,255,255,0.9)",
+  background: "#fff",
   border: "1px solid #d1d5db",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-  transition: "all 0.25s ease",
-  "&:hover": {
-    transform: "translateY(-1px)",
-    boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
-  },
-  "&.Mui-disabled": {
-    opacity: 0.55,
-  },
 };
 
 const actionDanger = {
@@ -393,15 +393,8 @@ const actionDanger = {
   fontSize: 12,
   fontWeight: 600,
   color: "#fff",
-  textTransform: "none",
   background:
     "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(185,28,28,0.95))",
-  boxShadow: "0 4px 10px rgba(185,28,28,0.35)",
-  transition: "all 0.25s ease",
-  "&:hover": {
-    transform: "translateY(-1px)",
-    boxShadow: "0 8px 18px rgba(185,28,28,0.45)",
-  },
 };
 
 export default DispatchedItemsPage;
