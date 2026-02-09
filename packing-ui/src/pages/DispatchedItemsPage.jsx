@@ -4,23 +4,19 @@ import { Chip, Box, Button } from "@mui/material";
 
 /**
  * Dispatched Items Page
- * Phase 3 + 3.5
- * - Dispatch from PACKED → DISPATCHED
- * - Restore workflow
- * - Admin approve / reject
- * - Download sticker (history)
+ * FINAL RULESET IMPLEMENTED
  */
 
 function DispatchedItemsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [processingId, setProcessingId] = useState(null);
 
   const role = localStorage.getItem("role");
   const isAdmin = role === "ADMIN";
   const isDispatch = role === "DISPATCH";
+  const isPacking = role === "USER";
 
-  /* ===================== ACTION HANDLERS ===================== */
+  /* ===================== ACTIONS ===================== */
 
   const requestRestore = async (zohoItemId) => {
     try {
@@ -28,7 +24,6 @@ function DispatchedItemsPage() {
         `/api/dispatched/${zohoItemId}/request-restore`,
         { method: "POST", credentials: "include" }
       );
-
       if (!res.ok) throw new Error();
 
       setRows(prev =>
@@ -45,21 +40,14 @@ function DispatchedItemsPage() {
 
   const approveRestore = async (zohoItemId) => {
     try {
-      setProcessingId(zohoItemId);
-
       const res = await fetch(
         `/api/dispatched/${zohoItemId}/approve-restore`,
         { method: "POST", credentials: "include" }
       );
-
       if (!res.ok) throw new Error();
-
-      // item moves back to inventory → remove from this page
       setRows(prev => prev.filter(r => r.zohoItemId !== zohoItemId));
     } catch {
       alert("Approval failed");
-    } finally {
-      setProcessingId(null);
     }
   };
 
@@ -69,7 +57,6 @@ function DispatchedItemsPage() {
         `/api/dispatched/${zohoItemId}/reject-restore`,
         { method: "POST", credentials: "include" }
       );
-
       if (!res.ok) throw new Error();
 
       setRows(prev =>
@@ -84,70 +71,51 @@ function DispatchedItemsPage() {
     }
   };
 
-  const dispatchItem = async (zohoItemId) => {
+  const updateStatus = async (zohoItemId, status) => {
     try {
       const res = await fetch(
-        `/api/dispatched/${zohoItemId}/dispatch`,
+        `/api/dispatched/${zohoItemId}/dispatch?status=${status}`,
         { method: "POST", credentials: "include" }
       );
-
       if (!res.ok) throw new Error();
 
       setRows(prev =>
         prev.map(r =>
-          r.zohoItemId === zohoItemId
-            ? { ...r, status: "DISPATCHED" }
-            : r
+          r.zohoItemId === zohoItemId ? { ...r, status } : r
         )
       );
     } catch {
-      alert("Dispatch failed");
+      alert("Status update failed");
     }
   };
 
   /* ===================== COLUMNS ===================== */
 
   const columns = [
-    {
-      field: "name",
-      headerName: "Item Name",
-      flex: 1,
-      minWidth: 300,
-    },
-    {
-      field: "clientName",
-      headerName: "Client",
-      minWidth: 180,
-    },
+    { field: "name", headerName: "Item Name", flex: 1, minWidth: 300 },
+    { field: "clientName", headerName: "Client", minWidth: 180 },
     {
       field: "packedAt",
       headerName: "Packed On",
       width: 160,
-      valueGetter: (params) =>
-        params.value
-          ? new Date(params.value).toLocaleDateString()
-          : "—",
+      valueGetter: p =>
+        p.value ? new Date(p.value).toLocaleDateString() : "—",
     },
     {
       field: "status",
       headerName: "Status",
-      width: 200,
+      width: 220,
       renderCell: (params) => {
         const row = params.row;
 
-        // DISPATCH dropdown
-        if (isDispatch && row.status === "PACKED") {
+        if (isDispatch) {
           return (
             <select
-              defaultValue="PACKED"
-              onChange={() => dispatchItem(row.zohoItemId)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 6,
-                border: "1px solid #d1d5db",
-                fontSize: 12,
-                fontWeight: 600,
-              }}
+              value={row.status}
+              onChange={e =>
+                updateStatus(row.zohoItemId, e.target.value)
+              }
+              style={statusSelect}
             >
               <option value="PACKED">PACKED</option>
               <option value="DISPATCHED">DISPATCHED</option>
@@ -159,17 +127,11 @@ function DispatchedItemsPage() {
           <Chip
             label={row.status}
             size="small"
-            sx={{
-              fontWeight: 600,
-              background:
-                row.status === "DISPATCHED"
-                  ? "rgba(59,130,246,0.15)"
-                  : "rgba(16,185,129,0.15)",
-              color:
-                row.status === "DISPATCHED"
-                  ? "#1e40af"
-                  : "#065f46",
-            }}
+            sx={
+              row.status === "DISPATCHED"
+                ? statusDispatched
+                : statusPacked
+            }
           />
         );
       },
@@ -177,28 +139,33 @@ function DispatchedItemsPage() {
     {
       field: "action",
       headerName: "",
-      width: 320,
+      width: 380,
       sortable: false,
       renderCell: (params) => {
         const row = params.row;
 
+        const canAdminRequest =
+          isAdmin && row.approvalStatus !== "PENDING";
+
+        const canUserRequest =
+          isPacking &&
+          row.status === "PACKED" &&
+          row.approvalStatus !== "PENDING";
+
         return (
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Box sx={actionContainer}>
             {/* ADMIN APPROVAL */}
             {isAdmin && row.approvalStatus === "PENDING" && (
               <>
                 <Button
                   size="small"
-                  disabled={processingId === row.zohoItemId}
                   onClick={() => approveRestore(row.zohoItemId)}
                   sx={actionPrimary}
                 >
                   Approve
                 </Button>
-
                 <Button
                   size="small"
-                  disabled={processingId === row.zohoItemId}
                   onClick={() => rejectRestore(row.zohoItemId)}
                   sx={actionDanger}
                 >
@@ -207,24 +174,8 @@ function DispatchedItemsPage() {
               </>
             )}
 
-            {/* DOWNLOAD STICKER */}
-            {row.stickerNumber && (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() =>
-                  window.open(
-                    `/api/stickers/zoho/${row.zohoItemId}/download`,
-                    "_blank"
-                  )
-                }
-              >
-                Download Sticker
-              </Button>
-            )}
-
-            {/* USER RESTORE */}
-            {!isAdmin && row.approvalStatus !== "PENDING" && (
+            {/* ADMIN REQUEST */}
+            {canAdminRequest && (
               <Button
                 size="small"
                 onClick={() => requestRestore(row.zohoItemId)}
@@ -234,16 +185,29 @@ function DispatchedItemsPage() {
               </Button>
             )}
 
-            {/* REQUESTED TAG */}
-            {row.approvalStatus === "PENDING" && !isAdmin && (
+            {/* PACKING USER */}
+            {canUserRequest && (
+              <Button
+                size="small"
+                onClick={() => requestRestore(row.zohoItemId)}
+                sx={actionSecondary}
+              >
+                Request Restore
+              </Button>
+            )}
+
+            {/* DISPATCH (DISABLED) */}
+            {isDispatch && (
+              <Button size="small" disabled sx={actionSecondary}>
+                Request Restore
+              </Button>
+            )}
+
+            {row.approvalStatus === "PENDING" && (
               <Chip
                 label="REQUESTED"
                 size="small"
-                sx={{
-                  fontWeight: 600,
-                  background: "rgba(245,158,11,0.15)",
-                  color: "#92400e",
-                }}
+                sx={pendingChip}
               />
             )}
           </Box>
@@ -252,49 +216,21 @@ function DispatchedItemsPage() {
     },
   ];
 
-  /* ===================== DATA ===================== */
-
   useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/dispatched", {
-          credentials: "include",
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
-        if (!active) return;
-
-        setRows(
-          data.map(item => ({
-            id: item.zohoItemId,
-            ...item,
-          }))
-        );
-      } catch {
-        setRows([]);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    load();
-    return () => (active = false);
+    setLoading(true);
+    fetch("/api/dispatched", { credentials: "include" })
+      .then(res => res.json())
+      .then(data =>
+        setRows(data.map(d => ({ id: d.zohoItemId, ...d })))
+      )
+      .finally(() => setLoading(false));
   }, []);
-
-  /* ===================== RENDER ===================== */
 
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
-
       <div style={content}>
         <h2 style={pageTitle}>Dispatched Items</h2>
-
         <div style={tableWrapper}>
           <DataGrid
             rows={rows}
@@ -302,7 +238,6 @@ function DispatchedItemsPage() {
             loading={loading}
             disableRowSelectionOnClick
             density="compact"
-            getRowId={(row) => row.id}
             sx={dataGridStyles}
           />
         </div>
@@ -359,35 +294,114 @@ const dataGridStyles = {
   border: "none",
 };
 
-/* ---------- Buttons ---------- */
+/* ===== STATUS STYLES ===== */
+
+const statusPacked = {
+  fontSize: 11,
+  fontWeight: 700,
+  px: 1.6,
+  borderRadius: "999px",
+  color: "#1e40af",
+  background:
+    "linear-gradient(180deg, rgba(191,219,254,0.95), rgba(147,197,253,0.95))",
+  boxShadow: "0 2px 6px rgba(59,130,246,0.35)",
+};
+
+const statusDispatched = {
+  fontSize: 11,
+  fontWeight: 700,
+  px: 1.6,
+  borderRadius: "999px",
+  color: "#065f46",
+  background:
+    "linear-gradient(180deg, rgba(167,243,208,0.95), rgba(110,231,183,0.95))",
+  boxShadow: "0 2px 6px rgba(16,185,129,0.35)",
+};
+
+const pendingChip = {
+  fontSize: 11,
+  fontWeight: 700,
+  px: 1.6,
+  borderRadius: "999px",
+  color: "#92400e",
+  background:
+    "linear-gradient(180deg, rgba(254,215,170,0.95), rgba(253,186,116,0.95))",
+  boxShadow: "0 2px 6px rgba(245,158,11,0.35)",
+};
+
+const statusSelect = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  fontSize: 11,
+  fontWeight: 700,
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(243,244,246,0.95))",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+  cursor: "pointer",
+};
+
+/* ===== ACTION STYLES ===== */
+
+const actionContainer = {
+  display: "flex",
+  gap: 1,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
 
 const actionPrimary = {
-  px: 2,
+  px: 2.2,
   borderRadius: "999px",
   fontSize: 12,
   fontWeight: 600,
   color: "#fff",
+  textTransform: "none",
   background:
-    "linear-gradient(180deg, rgba(16,185,129,0.9), rgba(5,150,105,0.9))",
+    "linear-gradient(180deg, rgba(16,185,129,0.95), rgba(5,150,105,0.95))",
+  boxShadow: "0 4px 10px rgba(5,150,105,0.35)",
+  transition: "all 0.25s ease",
+  "&:hover": {
+    transform: "translateY(-1px)",
+    boxShadow: "0 8px 18px rgba(5,150,105,0.45)",
+  },
 };
 
 const actionSecondary = {
-  px: 2,
+  px: 2.2,
   borderRadius: "999px",
   fontSize: 12,
   fontWeight: 600,
+  textTransform: "none",
   color: "#1f2937",
+  background: "rgba(255,255,255,0.9)",
   border: "1px solid #d1d5db",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+  transition: "all 0.25s ease",
+  "&:hover": {
+    transform: "translateY(-1px)",
+    boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
+  },
+  "&.Mui-disabled": {
+    opacity: 0.55,
+  },
 };
 
 const actionDanger = {
-  px: 2,
+  px: 2.2,
   borderRadius: "999px",
   fontSize: 12,
   fontWeight: 600,
   color: "#fff",
+  textTransform: "none",
   background:
-    "linear-gradient(180deg, rgba(239,68,68,0.9), rgba(185,28,28,0.9))",
+    "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(185,28,28,0.95))",
+  boxShadow: "0 4px 10px rgba(185,28,28,0.35)",
+  transition: "all 0.25s ease",
+  "&:hover": {
+    transform: "translateY(-1px)",
+    boxShadow: "0 8px 18px rgba(185,28,28,0.45)",
+  },
 };
 
 export default DispatchedItemsPage;

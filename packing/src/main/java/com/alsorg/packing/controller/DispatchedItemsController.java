@@ -26,55 +26,38 @@ public class DispatchedItemsController {
         this.dispatchedItemService = dispatchedItemService;
     }
 
-    /* ===================== READ ===================== */
-
-    /**
-     * Phase 2:
-     * - Show PACKED + DISPATCHED items
-     */
     @GetMapping
     public List<DispatchedItem> getDispatchedItems() {
         return repository.findByStatusIn(
-            List.of(
-                ItemDispatchStatus.PACKED,
-                ItemDispatchStatus.DISPATCHED
-            )
+            List.of(ItemDispatchStatus.PACKED, ItemDispatchStatus.DISPATCHED)
         );
     }
-
-    /* ===================== USER ===================== */
 
     @PostMapping("/{zohoItemId}/request-restore")
     public ResponseEntity<?> requestRestore(
             @PathVariable String zohoItemId,
             HttpSession session
     ) {
-        String role = (String) session.getAttribute("ROLE");
-        String user = (String) session.getAttribute("USER");
-
-        if (!"USER".equals(role)) {
-            return ResponseEntity.status(403).build();
-        }
-
-        dispatchedItemService.requestRestore(zohoItemId, user);
+        dispatchedItemService.requestRestore(
+            zohoItemId,
+            (String) session.getAttribute("USER"),
+            (String) session.getAttribute("ROLE")
+        );
         return ResponseEntity.ok().build();
     }
-
-    /* ===================== ADMIN ===================== */
 
     @PostMapping("/{zohoItemId}/approve-restore")
     public ResponseEntity<?> approveRestore(
             @PathVariable String zohoItemId,
             HttpSession session
     ) {
-        String role = (String) session.getAttribute("ROLE");
-        String admin = (String) session.getAttribute("USER");
-
-        if (!"ADMIN".equals(role)) {
+        if (!"ADMIN".equals(session.getAttribute("ROLE"))) {
             return ResponseEntity.status(403).build();
         }
-
-        dispatchedItemService.approveRestore(zohoItemId, admin);
+        dispatchedItemService.approveRestore(
+            zohoItemId,
+            (String) session.getAttribute("USER")
+        );
         return ResponseEntity.ok().build();
     }
 
@@ -83,32 +66,31 @@ public class DispatchedItemsController {
             @PathVariable String zohoItemId,
             HttpSession session
     ) {
-        String role = (String) session.getAttribute("ROLE");
-        String admin = (String) session.getAttribute("USER");
-
-        if (!"ADMIN".equals(role)) {
+        if (!"ADMIN".equals(session.getAttribute("ROLE"))) {
             return ResponseEntity.status(403).build();
         }
-
-        dispatchedItemService.rejectRestore(zohoItemId, admin);
+        dispatchedItemService.rejectRestore(
+            zohoItemId,
+            (String) session.getAttribute("USER")
+        );
         return ResponseEntity.ok().build();
     }
 
-    /* ===================== DISPATCH ===================== */
-
     @PostMapping("/{zohoItemId}/dispatch")
-    public ResponseEntity<?> dispatchItem(
+    public ResponseEntity<?> updateDispatchStatus(
             @PathVariable String zohoItemId,
+            @RequestParam ItemDispatchStatus status,
             HttpSession session
     ) {
-        String role = (String) session.getAttribute("ROLE");
-        String user = (String) session.getAttribute("USER");
-
-        if (!"DISPATCH".equals(role)) {
+        if (!"DISPATCH".equals(session.getAttribute("ROLE"))) {
             return ResponseEntity.status(403).build();
         }
 
-        dispatchedItemService.markAsDispatched(zohoItemId, user);
+        dispatchedItemService.updateDispatchStatus(
+            zohoItemId,
+            status,
+            (String) session.getAttribute("USER")
+        );
         return ResponseEntity.ok().build();
     }
 }

@@ -2,7 +2,9 @@ package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
@@ -21,20 +23,25 @@ public class DispatchedItemService {
         this.dispatchedRepo = dispatchedRepo;
     }
 
-    /* ================= USER ACTION ================= */
+    public void requestRestore(String zohoItemId, String username, String role) {
 
-    public void requestRestore(String zohoItemId, String username) {
+        if ("DISPATCH".equals(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Dispatch cannot request restore"
+            );
+        }
 
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        // ✅ Only PACKED / DISPATCHED items can be restored
-        if (item.getStatus() != ItemDispatchStatus.PACKED &&
-            item.getStatus() != ItemDispatchStatus.DISPATCHED) {
-            throw new IllegalStateException("Item cannot be restored in current state");
+        if ("USER".equals(role) && item.getStatus() != ItemDispatchStatus.PACKED) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "User can request restore only when PACKED"
+            );
         }
 
-        // ✅ Prevent duplicate requests
         if (item.getApprovalStatus() == ApprovalStatus.PENDING) {
             throw new IllegalStateException("Restore already requested");
         }
@@ -42,11 +49,8 @@ public class DispatchedItemService {
         item.setApprovalStatus(ApprovalStatus.PENDING);
         item.setApprovalRequestedBy(username);
         item.setApprovalRequestedAt(LocalDateTime.now());
-
         dispatchedRepo.save(item);
     }
-
-    /* ================= ADMIN ACTION ================= */
 
     public void approveRestore(String zohoItemId, String admin) {
 
@@ -60,12 +64,9 @@ public class DispatchedItemService {
         item.setApprovalStatus(ApprovalStatus.APPROVED);
         item.setApprovedBy(admin);
         item.setApprovedAt(LocalDateTime.now());
-
-        // ✅ Restore back to inventory
-        item.setStock(1);               // IMPORTANT: never null
         item.setStatus(ItemDispatchStatus.AVAILABLE);
+        item.setStock(1);
 
-        // Remove from dispatched list entirely
         dispatchedRepo.delete(item);
     }
 
@@ -74,10 +75,6 @@ public class DispatchedItemService {
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        if (item.getApprovalStatus() != ApprovalStatus.PENDING) {
-            throw new IllegalStateException("No pending restore request");
-        }
-
         item.setApprovalStatus(ApprovalStatus.REJECTED);
         item.setApprovedBy(admin);
         item.setApprovedAt(LocalDateTime.now());
@@ -85,24 +82,34 @@ public class DispatchedItemService {
         dispatchedRepo.save(item);
     }
 
-    /* ================= DISPATCH ACTION ================= */
-
-    public void markAsDispatched(String zohoItemId, String username) {
+    public void updateDispatchStatus(
+            String zohoItemId,
+            ItemDispatchStatus newStatus,
+            String username
+    ) {
 
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        // ✅ Only PACKED items can be dispatched
-        if (item.getStatus() != ItemDispatchStatus.PACKED) {
-            throw new IllegalStateException("Only PACKED items can be dispatched");
+        if (newStatus == ItemDispatchStatus.DISPATCHED &&
+            item.getStatus() == ItemDispatchStatus.PACKED) {
+
+            item.setStatus(ItemDispatchStatus.DISPATCHED);
+            item.setDispatchedBy(username);
+            item.setDispatchedAt(LocalDateTime.now());
+            item.setStock(0);
+
+        } else if (newStatus == ItemDispatchStatus.PACKED &&
+                   item.getStatus() == ItemDispatchStatus.DISPATCHED) {
+
+            item.setStatus(ItemDispatchStatus.PACKED);
+            item.setDispatchedBy(null);
+            item.setDispatchedAt(null);
+            item.setStock(1);
+
+        } else {
+            throw new IllegalStateException("Invalid status transition");
         }
-
-        item.setStatus(ItemDispatchStatus.DISPATCHED);
-        item.setDispatchedBy(username);
-        item.setDispatchedAt(LocalDateTime.now());
-
-        // Stock is now logically zero
-        item.setStock(0);
 
         dispatchedRepo.save(item);
     }
