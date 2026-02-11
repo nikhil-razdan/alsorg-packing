@@ -35,6 +35,8 @@ public class ZohoStickerService {
     private final ZohoInventoryClient zohoClient;
     private final StickerSequenceService sequenceService;
     private final ZohoStickerHistoryRepository stickerHistoryRepo;
+    private final AuditLogService auditLogService;
+
 
 
     @Value("${sticker.storage.path}")
@@ -47,7 +49,8 @@ public class ZohoStickerService {
             PdfStickerService pdfService,
             ZohoInventoryClient zohoClient,
             StickerSequenceService sequenceService,
-            ZohoStickerHistoryRepository stickerHistoryRepo
+            ZohoStickerHistoryRepository stickerHistoryRepo,
+            AuditLogService auditLogService
     ) {
         this.stickerRepo = stickerRepo;
         this.historyRepo = historyRepo;
@@ -56,6 +59,7 @@ public class ZohoStickerService {
         this.zohoClient = zohoClient;
         this.sequenceService = sequenceService;
         this.stickerHistoryRepo = stickerHistoryRepo;
+        this.auditLogService = auditLogService;
     }
 
     // ===============================
@@ -83,6 +87,14 @@ public class ZohoStickerService {
             stickerNumber = existingSticker.getStickerNumber();
             filePath = existingSticker.getFilePath();
             reason = "REUSED";
+
+            auditLogService.log(
+                    zohoItemId,
+                    "Sticker reused",
+                    "SYSTEM",
+                    "SYSTEM"
+            );
+
         } else {
             // ===============================
             // GENERATE NEW STICKER
@@ -127,19 +139,26 @@ public class ZohoStickerService {
 
             stickerRepo.save(sticker);
 
+            auditLogService.log(
+                    zohoItemId,
+                    "Sticker generated",
+                    "SYSTEM",
+                    "SYSTEM"
+            );
+
             System.out.println("🟢 Sticker generated & saved");
         }
 
         // ===============================
-        // STEP 2.4: WRITE HISTORY
+        // WRITE STICKER HISTORY
         // ===============================
         ZohoStickerHistory history = new ZohoStickerHistory();
         history.setZohoItemId(zohoItemId);
         history.setStickerNumber(stickerNumber);
         history.setFilePath(filePath);
         history.setGeneratedAt(LocalDateTime.now());
-        history.setGeneratedBy("SYSTEM");   // later from session
-        history.setGeneratedRole("SYSTEM"); // later from session
+        history.setGeneratedBy("SYSTEM");
+        history.setGeneratedRole("SYSTEM");
         history.setReason(reason);
 
         historyRepo.save(history);
@@ -172,7 +191,6 @@ public class ZohoStickerService {
 
         return pdfBytes;
     }
-
     // ===============================
     // STEP 2: FETCH ONLY
     // ===============================

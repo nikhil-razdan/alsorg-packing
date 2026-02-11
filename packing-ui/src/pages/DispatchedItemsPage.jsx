@@ -16,6 +16,17 @@ function DispatchedItemsPage() {
   const isAdmin = role === "ADMIN";
   const isDispatch = role === "DISPATCH";
   const isPacking = role === "USER";
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [, setHistoryItem] = useState(null);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRows, setAuditRows] = useState([]);
+  const [actionFilter, setActionFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+
+
 
   /* ===================== ACTIONS ===================== */
 
@@ -93,35 +104,52 @@ function DispatchedItemsPage() {
   /* ===================== DOWNLOAD ===================== */
 
   const openStickerHistory = async (zohoItemId) => {
-      try {
-        // ✅ CORRECT ENDPOINT
-        const res = await fetch(
-          `/api/stickers/${zohoItemId}/history`,
-          { credentials: "include" }
-        );
+    try {
+      setHistoryOpen(true);
+      setHistoryLoading(true);
+      setHistoryRows([]);
+      setHistoryItem(zohoItemId);
 
-        if (!res.ok) throw new Error("History fetch failed");
+      const res = await fetch(
+        `/api/stickers/${zohoItemId}/history`,
+        { credentials: "include" }
+      );
 
-        const history = await res.json();
+      if (!res.ok) throw new Error("History fetch failed");
 
-        if (!history || history.length === 0) {
-          alert("No sticker history found");
-          return;
-        }
+      const data = await res.json();
+      setHistoryRows(data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load sticker history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  
+  const openAuditLogs = async (zohoItemId) => {
+    try {
+      setAuditOpen(true);
+      setAuditLoading(true);
+      setAuditRows([]);
 
-        // Latest sticker
-        const latest = history[0]; // already ordered DESC by backend
+      const res = await fetch(
+        `/api/audit/${zohoItemId}`,
+        { credentials: "include" }
+      );
 
-        // ✅ CORRECT DOWNLOAD ENDPOINT
-        window.open(
-          `/api/stickers/history/${latest.id}/download`,
-          "_blank"
-        );
-      } catch (err) {
-        console.error(err);
-        alert("Failed to download sticker");
-      }
-    };
+      if (!res.ok) throw new Error("Audit fetch failed");
+
+      const data = await res.json();
+      setAuditRows(data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load activity logs");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
 
   /* ===================== COLUMNS ===================== */
 
@@ -155,7 +183,20 @@ function DispatchedItemsPage() {
             >
               <DownloadOutlinedIcon fontSize="small" />
             </IconButton>
-
+			<IconButton
+			  onClick={() => openAuditLogs(row.zohoItemId)}
+			  size="small"
+			  sx={{
+			    width: 32,
+			    height: 32,
+			    borderRadius: "8px",
+			    backgroundColor: "#f9fafb",
+			    border: "1px solid #d1d5db",
+			    color: "#374151",
+			  }}
+			>
+			  📜
+			</IconButton>
             <span>{row.name}</span>
           </Box>
         );
@@ -286,6 +327,66 @@ function DispatchedItemsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const getActionStyle = (action = "") => {
+    const a = action.toLowerCase();
+
+    if (a.includes("approved"))
+      return { bg: "rgba(209,250,229,0.9)", color: "#065f46" };
+
+    if (a.includes("rejected"))
+      return { bg: "rgba(254,226,226,0.9)", color: "#7f1d1d" };
+
+    if (a.includes("requested"))
+      return { bg: "rgba(254,243,199,0.9)", color: "#92400e" };
+
+    if (a.includes("dispatched"))
+      return { bg: "rgba(209,250,229,0.6)", color: "#065f46" };
+
+    if (a.includes("packed"))
+      return { bg: "rgba(219,234,254,0.6)", color: "#1e40af" };
+
+    if (a.includes("sticker"))
+      return { bg: "rgba(224,231,255,0.9)", color: "#3730a3" };
+
+    return { bg: "rgba(243,244,246,0.9)", color: "#374151" };
+  };
+
+  const getRoleChipStyle = (role) => {
+    if (role === "ADMIN")
+      return { bg: "#111827", color: "#fff" };
+
+    if (role === "DISPATCH")
+      return { bg: "#065f46", color: "#ecfdf5" };
+
+    if (role === "USER")
+      return { bg: "#1e40af", color: "#eff6ff" };
+
+    return { bg: "#374151", color: "#f9fafb" };
+  };
+  
+  const getDateGroupLabel = (dateStr) => {
+    const d = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date();
+
+    yesterday.setDate(today.getDate() - 1);
+
+    const sameDay = (a, b) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    if (sameDay(d, today)) return "Today";
+    if (sameDay(d, yesterday)) return "Yesterday";
+
+    return d.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
@@ -314,6 +415,253 @@ function DispatchedItemsPage() {
           />
         </div>
       </div>
+	  {historyOpen && (
+	    <div
+	      style={{
+	        position: "fixed",
+	        inset: 0,
+	        background: "rgba(0,0,0,0.45)",
+	        display: "flex",
+	        alignItems: "center",
+	        justifyContent: "center",
+	        zIndex: 2000,
+	      }}
+	      onClick={() => setHistoryOpen(false)}
+	    >
+	      <div
+	        style={{
+	          width: 560,
+	          maxHeight: "80vh",
+	          background: "#fff",
+	          borderRadius: 14,
+	          padding: 18,
+	          boxShadow: "0 25px 60px rgba(0,0,0,0.4)",
+	          overflow: "auto",
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <h3 style={{ marginBottom: 12 }}>
+	          Sticker History
+	        </h3>
+
+	        {historyLoading && <p>Loading…</p>}
+
+	        {!historyLoading && historyRows.length === 0 && (
+	          <p>No sticker history found.</p>
+	        )}
+
+	        {!historyLoading && historyRows.map((h, idx) => (
+	          <Box
+	            key={h.id}
+	            sx={{
+	              display: "flex",
+	              alignItems: "center",
+	              justifyContent: "space-between",
+	              mb: 1,
+	              p: 1.2,
+	              borderRadius: 8,
+	              background:
+	                idx === 0
+	                  ? "rgba(209,250,229,0.6)"
+	                  : "rgba(243,244,246,0.8)",
+	            }}
+	          >
+	            <Box>
+	              <div style={{ fontWeight: 600 }}>
+	                {h.stickerNumber}
+	              </div>
+	              <div style={{ fontSize: 12, opacity: 0.75 }}>
+	                {new Date(h.generatedAt).toLocaleString()}
+	                {" • "}
+	                {h.reason}
+	              </div>
+	            </Box>
+
+	            <IconButton
+	              onClick={() =>
+	                window.open(
+	                  `/api/stickers/history/${h.id}/download`,
+	                  "_blank"
+	                )
+	              }
+	              size="small"
+	            >
+	              <DownloadOutlinedIcon />
+	            </IconButton>
+	          </Box>
+	        ))}
+
+	        <Box sx={{ textAlign: "right", mt: 2 }}>
+	          <Button onClick={() => setHistoryOpen(false)}>
+	            Close
+	          </Button>
+	        </Box>
+	      </div>
+	    </div>
+	  )}
+	  {auditOpen && (
+	    <div
+	      style={{
+	        position: "fixed",
+	        inset: 0,
+	        background: "rgba(0,0,0,0.45)",
+	        display: "flex",
+	        alignItems: "center",
+	        justifyContent: "center",
+	        zIndex: 2100,
+	      }}
+	      onClick={() => setAuditOpen(false)}
+	    >
+	      <div
+	        style={{
+	          width: 600,
+	          maxHeight: "80vh",
+	          background: "#fff",
+	          borderRadius: 14,
+	          padding: 18,
+	          boxShadow: "0 25px 60px rgba(0,0,0,0.4)",
+	          overflow: "auto",
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <h3 style={{ marginBottom: 12 }}>
+	          Activity Log
+	        </h3>
+			<Box
+			  sx={{
+			    display: "flex",
+			    gap: 1.5,
+			    mb: 2,
+			    flexWrap: "wrap",
+			  }}
+			>
+			  {/* ACTION FILTER */}
+			  <select
+			    value={actionFilter}
+			    onChange={(e) => setActionFilter(e.target.value)}
+			    style={{
+			      padding: "6px 10px",
+			      borderRadius: 8,
+			      border: "1px solid #d1d5db",
+			      fontSize: 12,
+			      fontWeight: 600,
+			    }}
+			  >
+			    <option value="ALL">All Actions</option>
+			    <option value="REQUEST">Requests</option>
+			    <option value="APPROVE">Approvals</option>
+			    <option value="REJECT">Rejections</option>
+			    <option value="DISPATCH">Dispatch</option>
+			    <option value="PACK">Pack</option>
+			    <option value="STICKER">Sticker</option>
+			  </select>
+
+			  {/* ROLE FILTER */}
+			  <select
+			    value={roleFilter}
+			    onChange={(e) => setRoleFilter(e.target.value)}
+			    style={{
+			      padding: "6px 10px",
+			      borderRadius: 8,
+			      border: "1px solid #d1d5db",
+			      fontSize: 12,
+			      fontWeight: 600,
+			    }}
+			  >
+			    <option value="ALL">All Roles</option>
+			    <option value="ADMIN">Admin</option>
+			    <option value="DISPATCH">Dispatch</option>
+			    <option value="USER">Packing</option>
+			  </select>
+			</Box>
+
+	        {auditLoading && <p>Loading…</p>}
+
+	        {!auditLoading && auditRows.length === 0 && (
+	          <p>No activity recorded.</p>
+	        )}
+
+			{!auditLoading &&
+				Object.entries(
+				  auditRows
+				    .filter((log) => {
+				      if (actionFilter !== "ALL") {
+				        if (!log.action?.toUpperCase().includes(actionFilter)) return false;
+				      }
+				      if (roleFilter !== "ALL" && log.role !== roleFilter) return false;
+				      return true;
+				    })
+				    .reduce((groups, log) => {
+				      const label = getDateGroupLabel(log.performedAt);
+				      if (!groups[label]) groups[label] = [];
+				      groups[label].push(log);
+				      return groups;
+				    }, {})
+				).map(([group, logs]) => (
+				  <Box key={group} sx={{ mb: 2 }}>
+				    {/* DATE HEADER */}
+				    <div
+				      style={{
+				        fontWeight: 700,
+				        fontSize: 13,
+				        marginBottom: 6,
+				        opacity: 0.7,
+				      }}
+				    >
+				      {group}
+				    </div>
+
+				    {logs.map((log) => {
+				      const actionStyle = getActionStyle(log.action);
+				      const roleStyle = getRoleChipStyle(log.role);
+
+				      return (
+				        <Box
+				          key={log.id}
+				          sx={{
+				            mb: 1.2,
+				            p: 1.4,
+				            borderRadius: 10,
+				            background: actionStyle.bg,
+				            display: "flex",
+				            justifyContent: "space-between",
+				            alignItems: "center",
+				          }}
+				        >
+				          <Box>
+				            <div style={{ fontWeight: 700, color: actionStyle.color }}>
+				              {log.action}
+				            </div>
+				            <div style={{ fontSize: 12, opacity: 0.75 }}>
+				              {new Date(log.performedAt).toLocaleString()}
+				            </div>
+				          </Box>
+
+				          <Box sx={{ display: "flex", gap: 1 }}>
+				            <Chip label={log.performedBy} size="small" />
+				            <Chip
+				              label={log.role}
+				              size="small"
+				              sx={{
+				                background: roleStyle.bg,
+				                color: roleStyle.color,
+				              }}
+				            />
+				          </Box>
+				        </Box>
+				      );
+				    })}
+				  </Box>
+				))}
+
+	        <Box sx={{ textAlign: "right", mt: 2 }}>
+	          <Button onClick={() => setAuditOpen(false)}>
+	            Close
+	          </Button>
+	        </Box>
+	      </div>
+	    </div>
+	  )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +19,7 @@ public class ZohoItemCacheService {
     private final ZohoInventoryClient zohoInventoryClient;
     private List<ZohoItemDTO> cachedItems = new ArrayList<>();
     private final DispatchedItemRepository dispatchedItemRepository;
+    private LocalDate cacheLoadedDate;
 
     public ZohoItemCacheService(
             ZohoInventoryClient zohoInventoryClient,
@@ -29,8 +31,9 @@ public class ZohoItemCacheService {
 
     /** Load items once (after Zoho sync) */
     public void load(List<ZohoItemDTO> items) {
-        this.cachedItems = items;
-        System.out.println(">>> CACHE LOADED WITH " + items.size() + " ITEMS");
+    	this.cachedItems = items;
+    	this.cacheLoadedDate = LocalDate.now();
+    	System.out.println(">>> CACHE LOADED WITH " + items.size() + " ITEMS");
     }
 
     /** Server-side pagination */
@@ -125,4 +128,8 @@ public class ZohoItemCacheService {
                                 )
                 );
     }
+
+	public LocalDate getCacheLoadedDate() {
+		return cacheLoadedDate;
+	}
 }

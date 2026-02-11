@@ -18,6 +18,8 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
 
     List<DispatchedItem> findByStatusIn(List<ItemDispatchStatus> statuses);
 
+    long countByStatus(ItemDispatchStatus status);   // ✅ ADD THIS
+
     // ===================== APPROVAL =====================
 
     List<DispatchedItem> findByApprovalStatus(ApprovalStatus status);

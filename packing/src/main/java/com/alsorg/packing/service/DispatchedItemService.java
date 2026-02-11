@@ -18,9 +18,17 @@ import jakarta.transaction.Transactional;
 public class DispatchedItemService {
 
     private final DispatchedItemRepository dispatchedRepo;
+    private final AuditLogService auditLogService;
+    private final ActivityLogService activityLogService;
 
-    public DispatchedItemService(DispatchedItemRepository dispatchedRepo) {
+    public DispatchedItemService(
+            DispatchedItemRepository dispatchedRepo,
+            AuditLogService auditLogService,
+            ActivityLogService activityLogService
+    ) {
         this.dispatchedRepo = dispatchedRepo;
+        this.auditLogService = auditLogService;
+        this.activityLogService = activityLogService;
     }
 
     public void requestRestore(String zohoItemId, String username, String role) {
@@ -49,7 +57,26 @@ public class DispatchedItemService {
         item.setApprovalStatus(ApprovalStatus.PENDING);
         item.setApprovalRequestedBy(username);
         item.setApprovalRequestedAt(LocalDateTime.now());
+
         dispatchedRepo.save(item);
+
+        auditLogService.log(
+                zohoItemId,
+                "Restore requested",
+                username,
+                role
+        );
+
+        activityLogService.log(
+                zohoItemId,
+                "RESTORE REQUESTED",
+                username,
+                role,
+                item.getStatus().name(),
+                item.getStatus().name(),
+                null
+        );
+
     }
 
     public void approveRestore(String zohoItemId, String admin) {
@@ -68,6 +95,23 @@ public class DispatchedItemService {
         item.setStock(1);
 
         dispatchedRepo.delete(item);
+
+        auditLogService.log(
+                zohoItemId,
+                "Restore approved",
+                admin,
+                "ADMIN"
+        );
+        
+        activityLogService.log(
+                zohoItemId,
+                "RESTORE APPROVED",
+                admin,
+                "ADMIN",
+                "PENDING",
+                "AVAILABLE",
+                null
+        );
     }
 
     public void rejectRestore(String zohoItemId, String admin) {
@@ -80,6 +124,24 @@ public class DispatchedItemService {
         item.setApprovedAt(LocalDateTime.now());
 
         dispatchedRepo.save(item);
+
+        auditLogService.log(
+                zohoItemId,
+                "Restore rejected",
+                admin,
+                "ADMIN"
+        );
+        
+        activityLogService.log(
+                zohoItemId,
+                "RESTORE REJECTED",
+                admin,
+                "ADMIN",
+                "PENDING",
+                "REJECTED",
+                null
+        );
+
     }
 
     public void updateDispatchStatus(
@@ -99,6 +161,24 @@ public class DispatchedItemService {
             item.setDispatchedAt(LocalDateTime.now());
             item.setStock(0);
 
+            auditLogService.log(
+                    zohoItemId,
+                    "Status changed to DISPATCHED",
+                    username,
+                    "DISPATCH"
+            );
+            
+            activityLogService.log(
+                    zohoItemId,
+                    "DISPATCHED",
+                    username,
+                    "DISPATCH",
+                    "PACKED",
+                    "DISPATCHED",
+                    null
+            );
+
+
         } else if (newStatus == ItemDispatchStatus.PACKED &&
                    item.getStatus() == ItemDispatchStatus.DISPATCHED) {
 
@@ -106,6 +186,24 @@ public class DispatchedItemService {
             item.setDispatchedBy(null);
             item.setDispatchedAt(null);
             item.setStock(1);
+
+            auditLogService.log(
+                    zohoItemId,
+                    "Status reverted to PACKED",
+                    username,
+                    "DISPATCH"
+            );
+            
+            activityLogService.log(
+                    zohoItemId,
+                    "REVERTED TO PACKED",
+                    username,
+                    "DISPATCH",
+                    "DISPATCHED",
+                    "PACKED",
+                    null
+            );
+
 
         } else {
             throw new IllegalStateException("Invalid status transition");
