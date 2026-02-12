@@ -239,7 +239,8 @@ const content = {
 };
 
 const pageTitle = {
-  fontSize: 22,
+  marginTop: 0,
+  fontSize: 28,
   fontWeight: 700,
   color: "#fff",
   marginBottom: 12,

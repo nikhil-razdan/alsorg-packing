@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo  } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 import { fetchZohoItemsPaged } from "../api/zohoApi";
-import { Drawer, Button, Divider } from "@mui/material";
+import { Drawer, Button, Divider, TextField, MenuItem, Box } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
 
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
@@ -17,6 +18,10 @@ function ZohoItemsPage() {
     page: 0,
     pageSize: 50,
   });
+  
+  /* ===== SEARCH + FILTER ===== */
+  const [search, setSearch] = useState("");
+  const [groupBy, setGroupBy] = useState("NONE");
 
   /* ===================== COLUMNS ===================== */
   const columns = [
@@ -91,6 +96,16 @@ function ZohoItemsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paginationModel]);
 
+  /* ===== FILTERED ROWS ===== */
+  const filteredRows = useMemo(() => {
+    if (!search) return rows;
+
+    return rows.filter((r) =>
+      r.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.sku?.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [rows, search]);
+  
   /* ===================== RENDER ===================== */
   return (
     <div style={page}>
@@ -98,10 +113,34 @@ function ZohoItemsPage() {
 
       <div style={content}>
         <h2 style={pageTitle}>Packed Items</h2>
+		
+		<Box sx={searchPanel}>
+		  <SearchIcon sx={{ opacity: 0.6 }} />
 
+		  <TextField
+		    variant="standard"
+		    placeholder="Search by Item Name or SKU..."
+		    value={search}
+		    onChange={(e) => setSearch(e.target.value)}
+		    InputProps={{ disableUnderline: true }}
+		    sx={{ flex: 1, minWidth: 150 }}
+		  />
+
+		  <TextField
+		    select
+		    size="small"
+		    value={groupBy}
+		    onChange={(e) => setGroupBy(e.target.value)}
+		    sx={{ flex: 1, minWidth: 150 }}
+		  >
+		    <MenuItem value="NONE">No Group</MenuItem>
+		    <MenuItem value="SKU">Group by SKU</MenuItem>
+		    <MenuItem value="NAME">Group by Name</MenuItem>
+		  </TextField>
+		</Box>
         <div style={tableWrapper}>
           <DataGrid
-            rows={rows}
+		    rows={filteredRows}
             columns={columns}
             loading={loading}
             pagination
@@ -200,7 +239,7 @@ function ZohoItemsPage() {
 
 const page = {
   height: "100vh",
-  padding: 28,
+  padding: 20,
   boxSizing: "border-box",
   background: "linear-gradient(135deg, #f5c542, #b8860b)",
   position: "relative",
@@ -224,6 +263,7 @@ const content = {
 };
 
 const pageTitle = {
+  marginTop: 0,
   marginBottom: 12,
   fontSize: 28,
   fontWeight: 700,
@@ -317,6 +357,19 @@ const drawerButton = {
   color: "rgba(255,255,255,0.9)",
   background:
     "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
+};
+
+const searchPanel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 4,
+  padding: "5px 18px",
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.35)",
+  backdropFilter: "blur(16px)",
+  boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+  maxWidth: "100%",
 };
 
 export default ZohoItemsPage;

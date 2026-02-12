@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo  } from "react";
 import { DataGrid } from "@mui/x-data-grid";
-import { Chip, Box, Button, IconButton } from "@mui/material";
+import { Chip, Box, Button, IconButton, TextField, MenuItem  } from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 
 /**
  * Dispatched Items Page
@@ -11,6 +12,10 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 function DispatchedItemsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  /* ===== SEARCH + FILTER ===== */
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [groupBy, setGroupBy] = useState("NONE");
 
   const role = localStorage.getItem("role");
   const isAdmin = role === "ADMIN";
@@ -25,8 +30,6 @@ function DispatchedItemsPage() {
   const [auditRows, setAuditRows] = useState([]);
   const [actionFilter, setActionFilter] = useState("ALL");
   const [roleFilter, setRoleFilter] = useState("ALL");
-
-
 
   /* ===================== ACTIONS ===================== */
 
@@ -386,13 +389,65 @@ function DispatchedItemsPage() {
     });
   };
 
+  /* ===== FILTERED ROWS ===== */
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (
+        search &&
+        !r.name?.toLowerCase().includes(search.toLowerCase()) &&
+        !r.clientName?.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+
+      if (statusFilter !== "ALL" && r.status !== statusFilter)
+        return false;
+
+      return true;
+    });
+  }, [rows, search, statusFilter]);
 
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
       <div style={content}>
         <h2 style={pageTitle}>Dispatched Items</h2>
+		
+		<Box sx={searchPanel}>
+		  <SearchIcon sx={{ opacity: 0.6 }} />
 
+		  <TextField
+		    variant="standard"
+		    placeholder="Search by Item or Client..."
+		    value={search}
+		    onChange={(e) => setSearch(e.target.value)}
+		    InputProps={{ disableUnderline: true }}
+		    sx={{ flex: 1 }}
+		  />
+
+		  <TextField
+		    select
+		    size="small"
+		    value={statusFilter}
+		    onChange={(e) => setStatusFilter(e.target.value)}
+		    sx={{ flex: 1, minWidth: 150 }}
+		  >
+		    <MenuItem value="ALL">All Status</MenuItem>
+		    <MenuItem value="PACKED">Packed</MenuItem>
+		    <MenuItem value="DISPATCHED">Dispatched</MenuItem>
+		  </TextField>
+
+		  <TextField
+		    select
+		    size="small"
+		    value={groupBy}
+		    onChange={(e) => setGroupBy(e.target.value)}
+		    sx={{ flex: 1, minWidth: 150 }}
+		  >
+		    <MenuItem value="NONE">No Group</MenuItem>
+		    <MenuItem value="STATUS">Group by Status</MenuItem>
+		    <MenuItem value="CLIENT">Group by Client</MenuItem>
+		  </TextField>
+		</Box>
         <Box sx={legend}>
           <Chip label="PACKED" size="small" sx={statusPacked} />
           <Chip label="DISPATCHED" size="small" sx={statusDispatched} />
@@ -401,7 +456,7 @@ function DispatchedItemsPage() {
 
         <div style={tableWrapper}>
           <DataGrid
-            rows={rows}
+            rows={filteredRows}
             columns={columns}
             loading={loading}
             disableRowSelectionOnClick
@@ -671,7 +726,7 @@ function DispatchedItemsPage() {
 
 const page = {
   height: "100vh",
-  padding: 28,
+  padding: 20,
   background: "linear-gradient(135deg, #f5c542, #b8860b)",
   position: "relative",
   overflow: "hidden",
@@ -691,6 +746,7 @@ const backgroundText = {
 const content = { position: "relative", zIndex: 1 };
 
 const pageTitle = {
+  marginTop: 0,
   marginBottom: 12,
   fontSize: 28,
   fontWeight: 700,
@@ -706,7 +762,7 @@ const legend = {
 /* ===== TABLE ===== */
 
 const tableWrapper = {
-  height: "calc(100vh - 170px)",
+  height: "calc(100vh - 150px)",
   borderRadius: 18,
   background:
     "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
@@ -811,6 +867,19 @@ const actionDanger = {
   color: "#fff",
   background:
     "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(185,28,28,0.95))",
+};
+
+const searchPanel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 4,
+  padding: "5px 18px",
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.35)",
+  backdropFilter: "blur(16px)",
+  boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+  maxWidth: "100%",
 };
 
 export default DispatchedItemsPage;
