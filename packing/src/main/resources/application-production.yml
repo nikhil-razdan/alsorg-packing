@@ -1,0 +1,46 @@
+# =====================
+# PRODUCTION ENVIRONMENT
+# =====================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/alsorg_production
+    username: alsorg_prod
+    password: STRONG_PRODUCTION_PASSWORD
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+# =====================
+# STICKER STORAGE
+# =====================
+sticker:
+  storage:
+    path: /data/alsorg/production/stickers
+
+# =====================
+# SESSION
+# =====================
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+
+# =====================
+# LOGGING (QUIET)
+# =====================
+logging:
+  level:
+    root: WARN
+    com.alsorg: INFO
+
+# =====================
+# ZOHO
+# =====================
+zoho:
+  environment: production

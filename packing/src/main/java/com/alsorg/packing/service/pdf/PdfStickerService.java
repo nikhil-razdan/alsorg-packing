@@ -76,6 +76,10 @@ public class PdfStickerService {
                 cs.addRect(10, 6, PAGE_WIDTH - 18, PAGE_HEIGHT - 14);
                 cs.stroke();
 
+             // ================= PRINT ITERATION (TOP LEFT) =================
+                cs.setFont(PDType1Font.HELVETICA_BOLD, 16);
+                drawText(cs, 20, 315, String.valueOf(data.getPrintIteration()));
+                
                 /* ================= HEADER ================= */
                 cs.beginText();
                 cs.setFont(bold, 20);

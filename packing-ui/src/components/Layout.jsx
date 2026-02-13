@@ -31,7 +31,7 @@ function Layout() {
         <div
           style={{
             flex: 1,
-            padding: 24,
+            padding: 22,
             overflow: "auto",
             background:
               "linear-gradient(180deg, #fffdf7 0%, #f3efe4 100%)",
@@ -42,7 +42,7 @@ function Layout() {
             style={{
               maxWidth: 1600,
               margin: "0 auto",
-              height: "100%",
+              height: 100,
             }}
           >
             <Outlet />

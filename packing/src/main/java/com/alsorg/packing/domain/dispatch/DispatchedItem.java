@@ -44,6 +44,8 @@ public class DispatchedItem {
 
     @Column(name = "approval_requested_at")
     private LocalDateTime approvalRequestedAt;
+    
+    private String packedBy;
 
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
@@ -219,4 +221,12 @@ public class DispatchedItem {
     public void setDispatchedAt(LocalDateTime dispatchedAt) {
         this.dispatchedAt = dispatchedAt;
     }
+
+	public String getPackedBy() {
+		return packedBy;
+	}
+
+	public void setPackedBy(String packedBy) {
+		this.packedBy = packedBy;
+	}
 }

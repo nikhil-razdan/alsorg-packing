@@ -25,6 +25,15 @@ public class StickerPdfData {
     private String remarks;
     private String sku;
     private String zohoItemId;
+    private long printIteration;
+
+    public long getPrintIteration() {
+        return printIteration;
+    }
+
+    public void setPrintIteration(long printIteration) {
+        this.printIteration = printIteration;
+    }
 
     public static StickerPdfData fromZohoItem(
             ZohoItemDTO item,

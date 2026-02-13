@@ -205,14 +205,22 @@ function DispatchedItemsPage() {
         );
       },
     },
+	{
+		  field: "stock",
+		  headerName: "Stock",
+		  width: 100,
+		  renderCell: (params) => (
+		    <span
+		      style={{
+		        fontWeight: 700,
+		        color: params.value === 0 ? "#ff6b6b" : "#4caf50",
+		      }}
+		    >
+		      {params.value}
+		    </span>
+		  ),
+		},
     { field: "clientName", headerName: "Client", minWidth: 180 },
-    {
-      field: "packedAt",
-      headerName: "Packed On",
-      width: 160,
-      valueGetter: p =>
-        p.value ? new Date(p.value).toLocaleDateString() : "—",
-    },
     {
       field: "status",
       headerName: "Status",

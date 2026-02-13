@@ -72,25 +72,31 @@ public class ZohoItemCacheService {
 
         return pageItems.stream()
                 .map(item -> {
+
                     ZohoItemUIResponse ui = new ZohoItemUIResponse();
+
                     ui.setZohoItemId(item.getZohoItemId());
                     ui.setName(item.getName());
                     ui.setSku(item.getSku());
+
                     ui.setLocation(
                             item.getLocation() != null && !item.getLocation().isBlank()
                                     ? item.getLocation()
                                     : "-"
                     );
+
                     ui.setClientName(
                             item.getClientName() != null && !item.getClientName().isBlank()
                                     ? item.getClientName()
                                     : "-"
                     );
+
                     ui.setClientAddress(
                             item.getClientAddress() != null && !item.getClientAddress().isBlank()
                                     ? item.getClientAddress()
                                     : "-"
                     );
+                    ui.setStock(1);
                     ui.setPacked(false);
                     return ui;
                 })

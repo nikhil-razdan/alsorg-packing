@@ -7,6 +7,8 @@ public class ZohoItemUIResponse {
     private String clientName;
     private String clientAddress;
     private boolean packed;
+    private Integer stock;
+
     public ZohoItemUIResponse() {
     }
     public ZohoItemUIResponse(
@@ -67,5 +69,11 @@ public class ZohoItemUIResponse {
     }
     public void setPacked(boolean packed) {
         this.packed = packed;
+    }
+    public Integer getStock() {
+        return stock;
+    }
+    public void setStock(Integer stock) {
+        this.stock = stock;
     }
 }

@@ -1,0 +1,38 @@
+# =====================
+# STAGING ENVIRONMENT
+# =====================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/alsorg_staging
+    username: alsorg_staging
+    password: staging_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+# =====================
+# STICKER STORAGE
+# =====================
+sticker:
+  storage:
+    path: /data/alsorg/staging/stickers
+
+# =====================
+# SESSION
+# =====================
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+        http-only: true
+
+# =====================
+# ZOHO (OPTIONAL DIFFERENT TOKEN)
+# =====================
+zoho:
+  environment: staging

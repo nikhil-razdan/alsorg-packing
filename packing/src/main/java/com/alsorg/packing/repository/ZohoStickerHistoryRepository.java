@@ -13,4 +13,6 @@ public interface ZohoStickerHistoryRepository
     List<ZohoStickerHistory> findByZohoItemIdOrderByGeneratedAtDesc(
             String zohoItemId
     );
+    
+    long countByZohoItemId(String zohoItemId);
 }

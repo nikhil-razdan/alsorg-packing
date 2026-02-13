@@ -30,10 +30,10 @@ public class AuthController {
 	        return ResponseEntity.ok(Map.of("role", "DISPATCH"));
 	    }
 
-	    if ("user".equals(username) && "user123".equals(password)) {
+	    if ("packing".equals(username) && "packing123".equals(password)) {
 	        session.setAttribute("USER", username);
-	        session.setAttribute("ROLE", "USER");
-	        return ResponseEntity.ok(Map.of("role", "USER"));
+	        session.setAttribute("ROLE", "PACKING");
+	        return ResponseEntity.ok(Map.of("role", "PACKING"));
 	    }
 
 	    return ResponseEntity.status(401)

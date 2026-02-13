@@ -67,130 +67,117 @@ public class ZohoStickerService {
     // ===============================
     public byte[] generateStickerForZohoItem(String zohoItemId) throws IOException {
 
-        System.out.println("🟢 generateStickerForZohoItem called");
-        System.out.println("🟢 Zoho Item ID = " + zohoItemId);
+    System.out.println("🟢 generateStickerForZohoItem called");
+    System.out.println("🟢 Zoho Item ID = " + zohoItemId);
 
-        byte[] pdfBytes;
-        String stickerNumber;
-        String filePath;
-        String reason;
+    // 🔢 Print iteration (per item)
+    long iteration = historyRepo.countByZohoItemId(zohoItemId) + 1;
 
-        ZohoSticker existingSticker = stickerRepo.findById(zohoItemId).orElse(null);
+    byte[] pdfBytes;
+    String stickerNumber;
+    String filePath;
+    String reason;
 
-        if (existingSticker != null) {
-            // ===============================
-            // REUSE EXISTING STICKER
-            // ===============================
-            System.out.println("🟡 Sticker already exists, reusing PDF");
+    // ===============================
+    // ALWAYS GENERATE NEW STICKER
+    // ===============================
 
-            pdfBytes = Files.readAllBytes(Paths.get(existingSticker.getFilePath()));
-            stickerNumber = existingSticker.getStickerNumber();
-            filePath = existingSticker.getFilePath();
-            reason = "REUSED";
-
-            auditLogService.log(
-                    zohoItemId,
-                    "Sticker reused",
-                    "SYSTEM",
-                    "SYSTEM"
-            );
-
-        } else {
-            // ===============================
-            // GENERATE NEW STICKER
-            // ===============================
-            ZohoItemDTO item = zohoClient.fetchItemDetails(zohoItemId);
-            if (item == null) {
-                throw new IllegalStateException("Zoho item not found: " + zohoItemId);
-            }
-
-            stickerNumber = sequenceService.generateNextStickerNumber();
-
-            StickerPdfData pdf = new StickerPdfData();
-            pdf.setStickerNumber(stickerNumber);
-            pdf.setBarcodeText(stickerNumber);
-            pdf.setItemName(item.getName());
-            pdf.setDescription(item.getDescription());
-            pdf.setLocation(item.getLocation());
-            pdf.setFloor(item.getFloor());
-            pdf.setClientName(item.getClientName());
-            pdf.setClientAddress(item.getClientAddress());
-            pdf.setPdNo(item.getPdNo());
-            pdf.setDrawingNo(item.getDrawingNo());
-            pdf.setRemarks(item.getRemarks());
-            pdf.setQuantity(1);
-            pdf.setDate(LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
-
-            pdfBytes = pdfService.generateSticker(pdf);
-
-            String filename = "STICKER_" + stickerNumber + ".pdf";
-            Path path = Paths.get(stickerPath, filename);
-            Files.createDirectories(path.getParent());
-            Files.write(path, pdfBytes, StandardOpenOption.CREATE_NEW);
-
-            filePath = path.toString();
-            reason = "GENERATED";
-
-            ZohoSticker sticker = new ZohoSticker();
-            sticker.setZohoItemId(zohoItemId);
-            sticker.setStickerNumber(stickerNumber);
-            sticker.setGeneratedAt(LocalDateTime.now());
-            sticker.setFilePath(filePath);
-
-            stickerRepo.save(sticker);
-
-            auditLogService.log(
-                    zohoItemId,
-                    "Sticker generated",
-                    "SYSTEM",
-                    "SYSTEM"
-            );
-
-            System.out.println("🟢 Sticker generated & saved");
-        }
-
-        // ===============================
-        // WRITE STICKER HISTORY
-        // ===============================
-        ZohoStickerHistory history = new ZohoStickerHistory();
-        history.setZohoItemId(zohoItemId);
-        history.setStickerNumber(stickerNumber);
-        history.setFilePath(filePath);
-        history.setGeneratedAt(LocalDateTime.now());
-        history.setGeneratedBy("SYSTEM");
-        history.setGeneratedRole("SYSTEM");
-        history.setReason(reason);
-
-        historyRepo.save(history);
-
-        System.out.println("🟢 Sticker history recorded: " + reason);
-
-        // ===============================
-        // ENSURE DISPATCHED ITEM EXISTS
-        // ===============================
-        DispatchedItem di = dispatchedRepo.findById(zohoItemId).orElse(null);
-
-        if (di == null) {
-            ZohoItemDTO item = zohoClient.fetchItemDetails(zohoItemId);
-            if (item == null) {
-                throw new IllegalStateException("Zoho item not found: " + zohoItemId);
-            }
-
-            di = new DispatchedItem();
-            di.setZohoItemId(zohoItemId);
-            di.setName(item.getName());
-            di.setSku(item.getSku());
-            di.setClientName(item.getClientName());
-            di.setPackedAt(LocalDateTime.now());
-            di.setStatus(ItemDispatchStatus.PACKED);
-            di.setStock(1);
-            di.setApprovalStatus(ApprovalStatus.NONE);
-
-            dispatchedRepo.save(di);
-        }
-
-        return pdfBytes;
+    ZohoItemDTO item = zohoClient.fetchItemDetails(zohoItemId);
+    if (item == null) {
+        throw new IllegalStateException("Zoho item not found: " + zohoItemId);
     }
+
+    // 🔢 Global unique sticker number
+    stickerNumber = sequenceService.generateNextStickerNumber();
+
+    StickerPdfData pdf = new StickerPdfData();
+    pdf.setPrintIteration(iteration);                 // 🔴 iteration number (①②③)
+    pdf.setStickerNumber(stickerNumber);
+    pdf.setBarcodeText(stickerNumber);
+    pdf.setItemName(item.getName());
+    pdf.setDescription(item.getDescription());
+    pdf.setLocation(item.getLocation());
+    pdf.setFloor(item.getFloor());
+    pdf.setClientName(item.getClientName());
+    pdf.setClientAddress(item.getClientAddress());
+    pdf.setPdNo(item.getPdNo());
+    pdf.setDrawingNo(item.getDrawingNo());
+    pdf.setRemarks(item.getRemarks());
+    pdf.setQuantity(1);
+    pdf.setDate(
+            LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+    );
+
+    pdfBytes = pdfService.generateSticker(pdf);
+
+    String filename = "STICKER_" + stickerNumber + ".pdf";
+    Path path = Paths.get(stickerPath, filename);
+    Files.createDirectories(path.getParent());
+    Files.write(path, pdfBytes, StandardOpenOption.CREATE_NEW);
+
+    filePath = path.toString();
+    reason = "GENERATED";
+
+    // ===============================
+    // UPSERT LATEST STICKER POINTER
+    // ===============================
+    ZohoSticker sticker =
+            stickerRepo.findById(zohoItemId).orElse(new ZohoSticker());
+
+    sticker.setZohoItemId(zohoItemId);
+    sticker.setStickerNumber(stickerNumber);
+    sticker.setGeneratedAt(LocalDateTime.now());
+    sticker.setFilePath(filePath);
+
+    stickerRepo.save(sticker);
+
+    auditLogService.log(
+            zohoItemId,
+            "Sticker generated (Iteration " + iteration + ")",
+            "SYSTEM",
+            "SYSTEM"
+    );
+
+    System.out.println("🟢 Sticker generated & saved");
+
+    // ===============================
+    // WRITE STICKER HISTORY
+    // ===============================
+    ZohoStickerHistory history = new ZohoStickerHistory();
+    history.setZohoItemId(zohoItemId);
+    history.setStickerNumber(stickerNumber);
+    history.setFilePath(filePath);
+    history.setGeneratedAt(LocalDateTime.now());
+    history.setGeneratedBy("SYSTEM");
+    history.setGeneratedRole("SYSTEM");
+    history.setReason(reason);
+
+    historyRepo.save(history);
+
+    System.out.println("🟢 Sticker history recorded: " + reason);
+
+    // ===============================
+    // ENSURE DISPATCHED ITEM EXISTS
+    // ===============================
+    DispatchedItem di = dispatchedRepo.findById(zohoItemId).orElse(null);
+
+    if (di == null) {
+        di = new DispatchedItem();
+        di.setZohoItemId(zohoItemId);
+        di.setName(item.getName());
+        di.setSku(item.getSku());
+        di.setClientName(item.getClientName());
+        di.setPackedAt(LocalDateTime.now());
+        di.setStatus(ItemDispatchStatus.PACKED);
+        di.setStock(1);
+        di.setApprovalStatus(ApprovalStatus.NONE);
+
+        dispatchedRepo.save(di);
+    }
+
+    return pdfBytes;
+}
+
     // ===============================
     // STEP 2: FETCH ONLY
     // ===============================

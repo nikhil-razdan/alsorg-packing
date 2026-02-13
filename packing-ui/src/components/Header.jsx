@@ -30,7 +30,7 @@ function Header() {
 
 const header = {
   position: "relative",
-  padding: "20px 34px",
+  padding: "15px 20px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -50,7 +50,7 @@ const topHighlight = {
   top: 0,
   left: 0,
   right: 0,
-  height: 80,
+  height: 65,
   background:
     "linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0.18), transparent)",
   pointerEvents: "none",
@@ -83,7 +83,7 @@ const logoutButton = {
   px: 3,
   py: 0.9,
   fontSize: 13,
-  fontWeight: 600,
+  fontWeight: 800,
   borderRadius: "999px",
   textTransform: "none",
   color: "rgba(255,255,255,0.9)",

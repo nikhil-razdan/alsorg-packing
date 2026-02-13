@@ -153,8 +153,28 @@ public class DispatchedItemService {
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        if (newStatus == ItemDispatchStatus.DISPATCHED &&
-            item.getStatus() == ItemDispatchStatus.PACKED) {
+        // ================= PACKING =================
+
+        if (newStatus == ItemDispatchStatus.PACKED &&
+            item.getStatus() == ItemDispatchStatus.AVAILABLE) {
+
+            item.setStatus(ItemDispatchStatus.PACKED);
+            item.setPackedAt(LocalDateTime.now());
+            item.setPackedBy(username);
+            item.setStock(1);
+
+            auditLogService.log(
+                    zohoItemId,
+                    "Status changed to PACKED",
+                    username,
+                    "PACKING"
+            );
+        }
+
+        // ================= DISPATCH =================
+
+        else if (newStatus == ItemDispatchStatus.DISPATCHED &&
+                 item.getStatus() == ItemDispatchStatus.PACKED) {
 
             item.setStatus(ItemDispatchStatus.DISPATCHED);
             item.setDispatchedBy(username);
@@ -167,20 +187,12 @@ public class DispatchedItemService {
                     username,
                     "DISPATCH"
             );
-            
-            activityLogService.log(
-                    zohoItemId,
-                    "DISPATCHED",
-                    username,
-                    "DISPATCH",
-                    "PACKED",
-                    "DISPATCHED",
-                    null
-            );
+        }
 
+        // ================= REVERT TO PACKED =================
 
-        } else if (newStatus == ItemDispatchStatus.PACKED &&
-                   item.getStatus() == ItemDispatchStatus.DISPATCHED) {
+        else if (newStatus == ItemDispatchStatus.PACKED &&
+                 item.getStatus() == ItemDispatchStatus.DISPATCHED) {
 
             item.setStatus(ItemDispatchStatus.PACKED);
             item.setDispatchedBy(null);
@@ -193,19 +205,9 @@ public class DispatchedItemService {
                     username,
                     "DISPATCH"
             );
-            
-            activityLogService.log(
-                    zohoItemId,
-                    "REVERTED TO PACKED",
-                    username,
-                    "DISPATCH",
-                    "DISPATCHED",
-                    "PACKED",
-                    null
-            );
+        }
 
-
-        } else {
+        else {
             throw new IllegalStateException("Invalid status transition");
         }
 

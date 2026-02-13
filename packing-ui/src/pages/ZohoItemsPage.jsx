@@ -72,6 +72,21 @@ function ZohoItemsPage() {
       ),
     },
     { field: "name", headerName: "Item Name", flex: 1, minWidth: 320 },
+	{
+	  field: "stock",
+	  headerName: "Stock",
+	  width: 100,
+	  renderCell: (params) => (
+	    <span
+	      style={{
+	        fontWeight: 700,
+	        color: params.value === 0 ? "#ff6b6b" : "#4caf50",
+	      }}
+	    >
+	      {params.value}
+	    </span>
+	  ),
+	},
     { field: "sku", headerName: "SKU", minWidth: 260 },
   ];
 
