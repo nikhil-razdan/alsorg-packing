@@ -186,6 +186,7 @@ public class PacketService {
         master.setClientName(req.clientName);
         master.setAddress(req.clientAddress);
         master.setTotalPackets(req.numberOfPackets);
+        master.setFloor(req.floor);
 
         master = masterItemRepository.save(master);
         
@@ -395,7 +396,7 @@ public class PacketService {
             item.setDrawingNo(master.getDrawingName());
             item.setClientName(master.getClientName());
             item.setClientAddress(master.getAddress());
-            item.setFloor(req.floor != null ? req.floor : master.getFloor());
+            item.setFloor(master.getFloor());
             item.setPacketNumber("Pkt-" + packetNo);
 
             String cleanDwg = master.getDrawingName().replace("/", "-");
