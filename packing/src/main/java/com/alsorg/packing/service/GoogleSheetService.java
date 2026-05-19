@@ -23,46 +23,80 @@ public class GoogleSheetService {
 
     private static final String APPLICATION_NAME = "Driver Dashboard";
     private static final String SHEET_ID = "1OB8whJWPSVzIoEcOR5ZnWJpSb1JkYBRd6edVxjaEaN8";
-    private static final String RANGE = "Sheet1!A:D";
-
-    // 🔥 IMPORTANT → put your downloaded JSON key path here
-    private static final String CREDENTIALS_PATH = "D:/Nikhil/2025/alsorg-packing/idyllic-kiln-496808-s0-2025c20a3acc.json";
 
     public GoogleSheetService(DriverLogRepository repo) {
         this.repo = repo;
     }
 
-    @Scheduled(fixedRate = 300000) // every 5 min
+    @Scheduled(fixedRate = 300000)
     public void syncGoogleSheet() {
 
         try {
-
             Sheets service = getSheetsService();
 
             ValueRange response = service.spreadsheets().values()
-                    .get(SHEET_ID, RANGE)
+                    .get(SHEET_ID, "Sheet1")
                     .execute();
 
             List<List<Object>> rows = response.getValues();
 
-            if (rows == null || rows.size() <= 1) return;
+            if (rows == null || rows.size() < 3) return;
 
-            for (int i = 1; i < rows.size(); i++) {
+            List<Object> headers = rows.get(0);
+
+            repo.deleteAll(); // clear old
+
+            for (int i = 2; i < rows.size(); i++) {
 
                 List<Object> row = rows.get(i);
 
-                DriverLog log = new DriverLog();
+                if (row.isEmpty()) continue;
 
-                log.setDriverName(getString(row, 0));
-                log.setTrips(getInt(row, 1));
-                log.setLoaders(getInt(row, 2));
-                log.setLocation(getString(row, 3));
+                for (int j = 1; j < headers.size(); j++) {
 
-                log.setCreatedAt(LocalDateTime.now());
-                log.setSource("GOOGLE_SHEET");
+                    if (j >= row.size()) continue;
 
-                repo.save(log);
+                    String driverName = headers.get(j).toString();
+                    String cell = row.get(j).toString();
+
+                    if (cell == null || cell.trim().isEmpty()) continue;
+
+                    if (cell.toLowerCase().contains("off") || cell.toLowerCase().contains("leave")) {
+                        continue;
+                    }
+
+                    DriverLog log = new DriverLog();
+                    log.setDriverName(driverName);
+                    log.setTrips(1);
+
+                    // loaders extract
+                    int loaders = 0;
+                    try {
+                        if (cell.contains("Loaders")) {
+                            String num = cell.replaceAll("[^0-9]", "");
+                            loaders = Integer.parseInt(num);
+                        }
+                    } catch (Exception ignored) {}
+
+                    log.setLoaders(loaders);
+
+                    // location (next row)
+                    String location = "UNKNOWN";
+                    if (i + 1 < rows.size()) {
+                        List<Object> locRow = rows.get(i + 1);
+                        if (j < locRow.size()) {
+                            location = locRow.get(j).toString();
+                        }
+                    }
+
+                    log.setLocation(location);
+                    log.setCreatedAt(LocalDateTime.now());
+
+                    repo.save(log);
+                }
             }
+
+            System.out.println("✅ Google Sheet Synced Successfully");
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -71,8 +105,14 @@ public class GoogleSheetService {
 
     private Sheets getSheetsService() throws Exception {
 
+        String credentialsJson = System.getenv("GOOGLE_CREDS");
+
+        if (credentialsJson == null) {
+            throw new RuntimeException("GOOGLE_CREDS env variable not set");
+        }
+
         GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream(CREDENTIALS_PATH))
+                .fromStream(new java.io.ByteArrayInputStream(credentialsJson.getBytes()))
                 .createScoped(List.of("https://www.googleapis.com/auth/spreadsheets.readonly"));
 
         return new Sheets.Builder(

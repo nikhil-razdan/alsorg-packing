@@ -87,6 +87,7 @@ function DashboardPage() {
     combined: 2,
     aging: 3,
   }[activeReport];
+  const [mode, setMode] = useState("inventory");
 
   useEffect(() => {
     fetchLogisticsStats()
@@ -126,22 +127,42 @@ function DashboardPage() {
 
       <div style={content}>
         <h2 style={pageTitle}>Dashboard</h2>
+		<div style={{
+		  display: "flex",
+		  gap: 10,
+		  marginBottom: 15
+		}}>
+		  <button onClick={() => setMode("inventory")} style={modeBtn(mode === "inventory")}>
+		    📦 Inventory
+		  </button>
 
-        <div style={statsRow}>
-          <StatCard title="Total Items In Inventory" value={Number(stats.totalItems || 0)} subtle="Ready for packing" />
-          <StatCard title="Stickers Generated" value={Number(stats.stickersGenerated || 0)} subtle={`${Number(stats.packedItems || 0)} packed`} />
-          <StatCard title="Packed Items" value={Number(stats.packedItems || 0)} subtle="Ready to dispatch" />
-          <StatCard title="Dispatched" value={Number(stats.dispatchedItems || 0)} subtle="Out of warehouse" />
-        </div>
-		{logistics && (
-		  <div style={statsRow}>
-		  <StatCard title="Working Trips" value={logistics.totalTrips} subtle="Live operations" />
-		  <StatCard title="Total Loaders" value={logistics.totalLoaders} subtle="Across trips" />
-		  <StatCard title="Efficiency" value={logistics.efficiency.toFixed(2)} subtle="Loaders / trip" />
-		  <StatCard title="Active Drivers" value={Object.keys(logistics.drivers).length} subtle="Engaged workforce" />
-		  </div>
+		  <button onClick={() => setMode("logistics")} style={modeBtn(mode === "logistics")}>
+		    🚚 Logistics
+		  </button>
+		</div>
+		{mode === "inventory" && (
+		  <>
+		    <div style={statsRow}>
+		      <StatCard title="Total Items In Inventory" value={Number(stats.totalItems || 0)} subtle="Ready for packing" />
+		      <StatCard title="Stickers Generated" value={Number(stats.stickersGenerated || 0)} subtle={`${Number(stats.packedItems || 0)} packed`} />
+		      <StatCard title="Packed Items" value={Number(stats.packedItems || 0)} subtle="Ready to dispatch" />
+		      <StatCard title="Dispatched" value={Number(stats.dispatchedItems || 0)} subtle="Out of warehouse" />
+		    </div>
+		  </>
 		)}
-		{logistics && <AnalyticsGrid data={logistics} />}
+
+		{mode === "logistics" && logistics && (
+		  <>
+		    <div style={statsRow}>
+		      <StatCard title="Working Trips" value={logistics.totalTrips} />
+		      <StatCard title="Total Loaders" value={logistics.totalLoaders} />
+		      <StatCard title="Efficiency" value={logistics.efficiency?.toFixed(2) || 0} />
+		      <StatCard title="Active Drivers" value={Object.keys(logistics.drivers || {}).length} />
+		    </div>
+
+		    <AnalyticsGrid data={logistics} />
+		  </>
+		)}
 
         <div style={mainGrid}>
           {/* LEFT PANEL */}
@@ -428,5 +449,15 @@ const statSubtle = {
   fontWeight: 500,
   opacity: 0.75,
 };
+
+const modeBtn = (active) => ({
+  padding: "8px 16px",
+  borderRadius: 20,
+  border: "none",
+  cursor: "pointer",
+  background: active ? "#fff" : "rgba(255,255,255,0.3)",
+  color: active ? "#111" : "#fff",
+  fontWeight: 600
+});
 
 export default DashboardPage;
