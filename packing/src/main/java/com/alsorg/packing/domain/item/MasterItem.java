@@ -20,7 +20,7 @@ public class MasterItem {
     private String drawingName;
     private String clientName;
     private String address;
-
+    private String floor;
     private Integer totalPackets;
 
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -87,5 +87,13 @@ public class MasterItem {
 
 	public void setCreatedAt(LocalDateTime createdAt) {
 		this.createdAt = createdAt;
+	}
+
+	public String getFloor() {
+		return floor;
+	}
+
+	public void setFloor(String floor) {
+		this.floor = floor;
 	}
 }
