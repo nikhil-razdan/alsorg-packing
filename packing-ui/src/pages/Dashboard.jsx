@@ -143,10 +143,44 @@ function DashboardPage() {
 		{mode === "inventory" && (
 		  <>
 		    <div style={statsRow}>
-		      <StatCard title="Total Items In Inventory" value={Number(stats.totalItems || 0)} subtle="Ready for packing" />
-		      <StatCard title="Stickers Generated" value={Number(stats.stickersGenerated || 0)} subtle={`${Number(stats.packedItems || 0)} packed`} />
-		      <StatCard title="Packed Items" value={Number(stats.packedItems || 0)} subtle="Ready to dispatch" />
-		      <StatCard title="Dispatched" value={Number(stats.dispatchedItems || 0)} subtle="Out of warehouse" />
+		      <StatCard title="Total Items In Inventory" value={Number(stats.totalItems || 0)} />
+		      <StatCard title="Stickers Generated" value={Number(stats.stickersGenerated || 0)} />
+		      <StatCard title="Packed Items" value={Number(stats.packedItems || 0)} />
+		      <StatCard title="Dispatched" value={Number(stats.dispatchedItems || 0)} />
+		    </div>
+
+		    <div style={mainGrid}>
+		      {/* INVENTORY CHART */}
+		      <div style={panel}>
+		        <div style={toggleWrap}>
+		          <div
+		            style={{
+		              ...toggleSlider,
+		              transform: `translateX(${chartIndex * 40}px)`
+		            }}
+		          />
+		          <button style={toggleBtn} onClick={() => setChartType("donut")}><DonutIcon /></button>
+		          <button style={toggleBtn} onClick={() => setChartType("line")}><LineIcon /></button>
+		          <button style={toggleBtn} onClick={() => setChartType("bar")}><BarIcon /></button>
+		        </div>
+
+		        <div style={panelBody}>
+		          {chartType === "donut" && (
+		            <StatusDonutChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		          {chartType === "line" && (
+		            <StatusLineChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		          {chartType === "bar" && (
+		            <StatusBarChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		        </div>
+		      </div>
+
+		      {/* INVENTORY ACTIVITY */}
+		      <div style={panel}>
+		        <ActivityFeed logs={activityLogs} />
+		      </div>
 		    </div>
 		  </>
 		)}
@@ -160,69 +194,23 @@ function DashboardPage() {
 		      <StatCard title="Active Drivers" value={Object.keys(logistics.drivers || {}).length} />
 		    </div>
 
-		    <AnalyticsGrid data={logistics} />
+		    <div style={mainGrid}>
+		      {/* LOGISTICS ANALYTICS */}
+		      <div style={panel}>
+		        <AnalyticsGrid data={logistics} />
+		      </div>
+
+		      {/* FUTURE LOGISTICS ACTIVITY */}
+		      <div style={panel}>
+		        <div style={{ color: "#fff", fontWeight: 600 }}>
+		          🚚 Logistics activity coming soon
+		        </div>
+		      </div>
+		    </div>
 		  </>
 		)}
 
-        <div style={mainGrid}>
-          {/* LEFT PANEL */}
-          <div style={panel}>
-            <div style={toggleWrap}>
-              <div
-                style={{
-                  ...toggleSlider,
-                  transform: `translateX(${chartIndex * 40}px)`,
-                }}
-              />
-              <button style={toggleBtn} onClick={() => setChartType("donut")}><DonutIcon /></button>
-              <button style={toggleBtn} onClick={() => setChartType("line")}><LineIcon /></button>
-              <button style={toggleBtn} onClick={() => setChartType("bar")}><BarIcon /></button>
-            </div>
-
-            <div style={panelBody}>
-              {chartType === "donut" && (
-                <StatusDonutChart packed={Number(stats.packedItems)} dispatched={Number(stats.dispatchedItems)} pending={pending} />
-              )}
-              {chartType === "line" && (
-                <StatusLineChart packed={Number(stats.packedItems)} dispatched={Number(stats.dispatchedItems)} pending={pending} />
-              )}
-              {chartType === "bar" && (
-                <StatusBarChart packed={Number(stats.packedItems)} dispatched={Number(stats.dispatchedItems)} pending={pending} />
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT PANEL */}
-          <div style={panel}>
-            <div style={toggleWrap}>
-              <div
-                style={{
-                  ...reportSliderIndicator,
-                  transform: activeReport ? `translateX(${reportIndex * 120}px)` : "translateX(0px)",
-                  opacity: activeReport ? 1 : 0,
-                }}
-              />
-              {[
-                { key: "packing", label: "Packing Report" },
-                { key: "dispatch", label: "Dispatch Report" },
-                { key: "combined", label: "Combined Report" },
-                { key: "aging", label: "Aging Report" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => setActiveReport(item.key)}
-                  style={reportToggleBtn}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-			<div style={panelBody}>
-			  <ActivityFeed logs={activityLogs} />
-			</div>
-          </div>
-        </div>
+        
 		{localStorage.getItem("role") === "ADMIN" && (
 		  <div style={adminPanel}>
 		    <h3 style={{ color: "#fff", marginBottom: 10 }}>

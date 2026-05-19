@@ -46,18 +46,22 @@ public class GoogleSheetService {
 
             repo.deleteAll(); // clear old
 
-            for (int i = 2; i < rows.size(); i++) {
+            for (int i = 2; i < rows.size(); i += 2) { // 🔥 jump in pairs
 
-                List<Object> row = rows.get(i);
+                List<Object> dateRow = rows.get(i);
 
-                if (row.isEmpty()) continue;
+                if (dateRow.isEmpty()) continue;
+
+                String date = dateRow.get(0).toString();
+
+                List<Object> locationRow = (i + 1 < rows.size()) ? rows.get(i + 1) : null;
 
                 for (int j = 1; j < headers.size(); j++) {
 
-                    if (j >= row.size()) continue;
+                    if (j >= dateRow.size()) continue;
 
                     String driverName = headers.get(j).toString();
-                    String cell = row.get(j).toString();
+                    String cell = dateRow.get(j).toString();
 
                     if (cell == null || cell.trim().isEmpty()) continue;
 
@@ -67,35 +71,38 @@ public class GoogleSheetService {
 
                     DriverLog log = new DriverLog();
                     log.setDriverName(driverName);
+
+                    // ✅ Trips
                     log.setTrips(1);
 
-                    // loaders extract
+                    // ✅ Loaders extraction FIXED
                     int loaders = 0;
                     try {
-                        if (cell.contains("Loaders")) {
-                            String num = cell.replaceAll("[^0-9]", "");
-                            loaders = Integer.parseInt(num);
+                        java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("(\\d+)\\s*Loaders?")
+                            .matcher(cell);
+
+                        if (m.find()) {
+                            loaders = Integer.parseInt(m.group(1));
                         }
                     } catch (Exception ignored) {}
 
                     log.setLoaders(loaders);
 
-                    // location (next row)
+                    // ✅ Location FIX
                     String location = "UNKNOWN";
-                    if (i + 1 < rows.size()) {
-                        List<Object> locRow = rows.get(i + 1);
-                        if (j < locRow.size()) {
-                            location = locRow.get(j).toString();
-                        }
+                    if (locationRow != null && j < locationRow.size()) {
+                        location = locationRow.get(j).toString();
                     }
 
                     log.setLocation(location);
-                    log.setCreatedAt(LocalDateTime.now());
+
+                    // ✅ VERY IMPORTANT: use actual date (not now)
+                    log.setCreatedAt(java.time.LocalDate.parse(date, java.time.format.DateTimeFormatter.ofPattern("MM-dd-yyyy")).atStartOfDay());
 
                     repo.save(log);
                 }
             }
-
             System.out.println("✅ Google Sheet Synced Successfully");
 
         } catch (Exception e) {
