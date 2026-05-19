@@ -1,0 +1,50 @@
+# =====================
+# RENDER ENVIRONMENT
+# =====================
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+# =====================
+# SERVER
+# =====================
+
+server:
+  forward-headers-strategy: framework
+  address: 0.0.0.0
+  port: ${PORT:8080}
+
+  servlet:
+    session:
+      cookie:
+        name: ALSORG_SESSION
+        secure: true
+        http-only: true
+        same-site: none
+
+# =====================
+# STICKER STORAGE
+# =====================
+
+sticker:
+  storage:
+    path: /data/stickers
+
+# =====================
+# ZOHO (OPTIONAL – ENABLE LATER)
+# =====================
+
+zoho:
+  inventory:
+    base-url: https://www.zohoapis.in
+    organization-id: ${ZOHO_ORG_ID}
+    client-id: ${ZOHO_CLIENT_ID}
+    client-secret: ${ZOHO_CLIENT_SECRET}
+    refresh-token: ${ZOHO_REFRESH_TOKEN}

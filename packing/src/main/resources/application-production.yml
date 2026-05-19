@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/alsorg_production
+    username: alsorg_prod
+    password: prod123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+sticker:
+  storage:
+    path: /data/alsorg/production/stickers
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+
+logging:
+  level:
+    root: WARN
+    com.alsorg: INFO
+
+zoho:
+  inventory:
+    enabled: true
+    base-url: https://www.zohoapis.in
+    organization-id: 60059178154
+    client-id: 1000.RUC8TS1I1XFY8N8AABZ4B22UB98L8P
+    client-secret: 173d57b4e89c55d00b05799419b36cce277cf9922d
+    refresh-token: 1000.a0c4b262cc7f55b8a98f7cd9f4e3c77f.a80c38669c4059b92604398ba1971504

@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: alsorg-packing
+
+
+server:
+  port: 8080
+  servlet:
+     session:
+       cookie:
+         same-site: none
+         secure: true
+# =====================
+# COMMON JPA SETTINGS
+# =====================
+spring.jpa:
+  open-in-view: false
+  properties:
+    hibernate:
+      format_sql: true
+
+# =====================
+# LOGGING
+# =====================
+logging:
+  level:
+    root: INFO
+    com.alsorg: DEBUG
