@@ -211,7 +211,7 @@ function DashboardPage() {
 		)}
 
         
-		{localStorage.getItem("role") === "ADMIN" && (
+		{mode === "inventory" && localStorage.getItem("role") === "ADMIN" && (
 		  <div style={adminPanel}>
 		    <h3 style={{ color: "#fff", marginBottom: 10 }}>
 		      Scheduled Reports
