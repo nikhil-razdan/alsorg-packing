@@ -1420,15 +1420,13 @@ const legend = {
 };
 
 const searchPanel = {
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-
-  marginBottom: 8,
-
-  padding: "10px 18px",
-
-  borderRadius: 24,
+	display: "flex",
+	  alignItems: "center",
+	  gap: 16,
+	  marginBottom: 4, 
+	  padding: "5px 18px", 
+	  borderRadius: 16, 
+	  maxWidth: "100%",
 
   background: `
     linear-gradient(

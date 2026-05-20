@@ -168,12 +168,26 @@ const dataGridStyles = (darkMode) => ({
   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode ? "#161616" : "#f9fafb",
-    color: darkMode ? "#FFD700" : "#111",
+    background: darkMode
+      ? "linear-gradient(180deg,#111111,#1a1a1a)"
+      : "#f8fafc",
+
+    color: darkMode ? "#cbd5e1" : "#475569",
+
     borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.15)"
-      : "1px solid #e5e7eb",
-    fontWeight: 600,
+      ? "1px solid rgba(255,215,0,0.08)"
+      : "1px solid #e2e8f0",
+
+    fontWeight: 700,
+
+    fontSize: 13,
+
+    letterSpacing: "0.3px",
+  },
+  
+  "& .MuiDataGrid-columnHeaderTitle": {
+    fontWeight: 700,
+    color: darkMode ? "#d1d5db" : "#475569",
   },
 
   "& .MuiDataGrid-cell": {
@@ -354,15 +368,13 @@ const actionDanger = {
 };
 
 const searchPanel = (darkMode) => ({
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-
-  marginBottom: 16,
-
-  padding: "16px 18px",
-
-  borderRadius: 26,
+	display: "flex",
+	  alignItems: "center",
+	  gap: 16,
+	  marginBottom: 4, 
+	  padding: "5px 18px", 
+	  borderRadius: 16, 
+	  maxWidth: "100%",
 
   background: darkMode
     ? `
