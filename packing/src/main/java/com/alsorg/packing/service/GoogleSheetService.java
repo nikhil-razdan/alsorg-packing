@@ -35,7 +35,7 @@ public class GoogleSheetService {
             Sheets service = getSheetsService();
 
             ValueRange response = service.spreadsheets().values()
-                    .get(SHEET_ID, "Sheet1")
+            		.get(SHEET_ID, "Sheet1!A1:Z100")
                     .execute();
 
             List<List<Object>> rows = response.getValues();
@@ -44,8 +44,9 @@ public class GoogleSheetService {
 
             List<Object> headers = rows.get(0);
             
-            if (headers.size() < 2) {
-                throw new RuntimeException("Invalid header row in sheet");
+            if (headers == null || headers.size() < 2) {
+                System.out.println("❌ Header row invalid or empty");
+                return;
             }
 
             // repo.deleteAll(); 
@@ -69,7 +70,14 @@ public class GoogleSheetService {
 
                     if (j >= dateRow.size()) continue;
 
-                    String driverName = headers.get(j).toString();
+                    String driverName = headers.get(j).toString().trim();
+
+                    if (driverName.equalsIgnoreCase("Name") || driverName.isEmpty()) {
+                        continue;
+                    }
+                    
+                    System.out.println("HEADERS: " + headers);
+                    
                     String cell = dateRow.get(j).toString();
 
                     if (cell == null || cell.trim().isEmpty()) continue;
