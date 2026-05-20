@@ -10,21 +10,27 @@ import { API_BASE_URL } from "../config";
 /* ===================== STYLES ===================== */
 /* (UNCHANGED — EXACTLY AS YOU PROVIDED) */
 
-const page = {
+const page = (darkMode) => ({
   minHeight: "100vh",
   padding: 20,
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
 
-  background: `
-    radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-    radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-    linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
-  `,
+  background: darkMode
+    ? `
+      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
+      linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)
+    `
+    : `
+      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
+      linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
+    `,
 
   backgroundAttachment: "fixed",
-};
+});
 
 
 const statusCard = {
@@ -71,13 +77,14 @@ const premiumButton = {
   },
 };
 
-const backgroundText = {
+const backgroundText = (darkMode) => ({
   position: "absolute",
   fontSize: 220,
   fontWeight: 900,
 
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
 
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
@@ -90,7 +97,7 @@ const backgroundText = {
   letterSpacing: 8,
 
   filter: "blur(1px)",
-};
+});
 
 const content = { position: "relative", zIndex: 1 };
 
@@ -131,68 +138,91 @@ const modalGloss = {
 };
 /* ===== TABLE ===== */
 
-const tableWrapper = {
+const tableWrapper = (darkMode) => ({
   height: "calc(100vh - 170px)",
   borderRadius: 18,
 
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
 
   backdropFilter: "blur(16px)",
   WebkitBackdropFilter: "blur(16px)",
 
-  boxShadow:
-    "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+  boxShadow: darkMode
+    ? "0 22px 55px rgba(0,0,0,0.65)"
+    : "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.15)"
+    : "none",
 
   padding: 12,
   overflowX: "auto",
-};
+});
 
-const dataGridStyles = {
-  background: "#fff",
+const dataGridStyles = (darkMode) => ({
+  background: darkMode ? "#0f0f0f" : "#fff",
+  color: darkMode ? "#fff" : "#111",
   borderRadius: 12,
   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#f9fafb",
-    borderBottom: "1px solid #e5e7eb",
+    background: darkMode ? "#161616" : "#f9fafb",
+    color: darkMode ? "#FFD700" : "#111",
+    borderBottom: darkMode
+      ? "1px solid rgba(255,215,0,0.15)"
+      : "1px solid #e5e7eb",
     fontWeight: 600,
   },
 
-  "& .MuiDataGrid-row": {
-    borderBottom: "1px solid #f1f5f9",
-    transition: "all 0.2s ease",
+  "& .MuiDataGrid-cell": {
+    borderBottom: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #f1f5f9",
+    fontSize: 13,
+    color: darkMode ? "#f5f5f5" : "#111",
   },
 
   "& .MuiDataGrid-row:hover": {
-    filter: "brightness(0.97)",
-  },
-
-  "& .MuiDataGrid-cell": {
-    fontSize: 13,
+    background: darkMode
+      ? "rgba(255,215,0,0.05)"
+      : "#f9fafb",
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: "1px solid #e5e7eb",
+    borderTop: darkMode
+      ? "1px solid rgba(255,215,0,0.12)"
+      : "1px solid #e5e7eb",
+    color: darkMode ? "#fff" : "#111",
   },
 
-  /* KEEP EXISTING ROW COLORS */
+  "& .MuiCheckbox-root": {
+    color: darkMode ? "#FFD700" : undefined,
+  },
+
+  "& .MuiTablePagination-root": {
+    color: darkMode ? "#fff" : "#111",
+  },
 
   "& .row-floor": {
-    background:
-      "linear-gradient(135deg, rgba(219,234,254,0.55), rgba(191,219,254,0.35))",
+    background: darkMode
+      ? "rgba(30,41,59,0.45)"
+      : "linear-gradient(135deg, rgba(219,234,254,0.55), rgba(191,219,254,0.35))",
   },
 
   "& .row-warehouse": {
-    background:
-      "linear-gradient(135deg, rgba(209,250,229,0.55), rgba(167,243,208,0.35))",
+    background: darkMode
+      ? "rgba(6,78,59,0.45)"
+      : "linear-gradient(135deg, rgba(209,250,229,0.55), rgba(167,243,208,0.35))",
   },
 
   "& .row-pending": {
-    background:
-      "linear-gradient(135deg, rgba(254,243,199,0.55), rgba(253,230,138,0.35))",
+    background: darkMode
+      ? "rgba(120,53,15,0.45)"
+      : "linear-gradient(135deg, rgba(254,243,199,0.55), rgba(253,230,138,0.35))",
   },
-};
+});
 /* ===== STATUS ===== */
 
 const statusPacked = {
@@ -323,7 +353,7 @@ const actionDanger = {
   },
 };
 
-const searchPanel = {
+const searchPanel = (darkMode) => ({
   display: "flex",
   alignItems: "center",
   gap: 14,
@@ -334,24 +364,36 @@ const searchPanel = {
 
   borderRadius: 24,
 
-  background: `
-    linear-gradient(
-      135deg,
-      rgba(255,255,255,0.55),
-      rgba(255,255,255,0.28)
-    )
-  `,
+  background: darkMode
+    ? `
+      linear-gradient(
+        135deg,
+        rgba(20,20,20,0.95),
+        rgba(10,10,10,0.92)
+      )
+    `
+    : `
+      linear-gradient(
+        135deg,
+        rgba(255,255,255,0.55),
+        rgba(255,255,255,0.28)
+      )
+    `,
 
   backdropFilter: "blur(24px) saturate(180%)",
   WebkitBackdropFilter: "blur(24px) saturate(180%)",
 
-  border: "1px solid rgba(255,255,255,0.35)",
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.15)"
+    : "1px solid rgba(255,255,255,0.35)",
 
-  boxShadow: `
-    0 14px 35px rgba(0,0,0,0.18),
-    inset 0 1px 0 rgba(255,255,255,0.45)
-  `,
-};
+  boxShadow: darkMode
+    ? "0 14px 35px rgba(0,0,0,0.55)"
+    : `
+      0 14px 35px rgba(0,0,0,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.45)
+    `,
+});
 
 const popupOverlay = {
   position: "fixed",
@@ -389,6 +431,36 @@ const popupBox = {
     inset 0 1px 0 rgba(255,255,255,0.7)
   `,
 };
+
+const themeBtn = (darkMode) => ({
+  px: 2.6,
+  py: 1,
+  borderRadius: "999px",
+  fontSize: 12,
+  fontWeight: 700,
+  letterSpacing: 0.4,
+  textTransform: "none",
+
+  background: darkMode
+    ? "linear-gradient(135deg,#111,#222)"
+    : "#111",
+
+  color: darkMode ? "#FFD700" : "#fff",
+
+  backdropFilter: "blur(12px)",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.25)"
+    : "1px solid rgba(255,255,255,0.25)",
+
+  boxShadow: darkMode
+    ? "0 0 18px rgba(255,215,0,0.15)"
+    : "0 10px 25px rgba(0,0,0,0.25)",
+
+  "&:hover": {
+    transform: "translateY(-3px) scale(1.04)",
+  },
+});
 /**
  * Dispatched Items Page
  * FINAL RULESET IMPLEMENTED
@@ -424,6 +496,7 @@ function DispatchedItemsPage() {
   const [statusModal, setStatusModal] = useState(null);
   const [chalaanPreview, setChalaanPreview] = useState(null);
   const [chalaanModal, setChalaanModal] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
@@ -1278,8 +1351,8 @@ function DispatchedItemsPage() {
   );
   
   return (
-    <div style={page}>
-      <div style={backgroundText}>Alsorg</div>
+    <div style={page(darkMode)}>
+      <div style={backgroundText(darkMode)}>Alsorg</div>
       <div style={content}>
 	  <Box
 	    sx={{
@@ -1314,7 +1387,7 @@ function DispatchedItemsPage() {
 	          style={{
 	            fontSize: 28,
 	            fontWeight: 700,
-	            color: "#ffffff",
+	            color: darkMode ? "#FFD700" : "#ffffff",
 	            letterSpacing: 0.4,
 	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
 	          }}
@@ -1325,7 +1398,9 @@ function DispatchedItemsPage() {
 	        <div
 	          style={{
 	            fontSize: 13,
-	            color: "rgba(255,255,255,0.85)",
+				color: darkMode
+				  ? "rgba(255,215,0,0.8)"
+				  : "rgba(255,255,255,0.85)",
 	          }}
 	        >
 	          Track, manage and dispatch inventory
@@ -1333,6 +1408,13 @@ function DispatchedItemsPage() {
 	      </Box>
 	    </Box>
 
+		<Button
+		  onClick={() => setDarkMode(!darkMode)}
+		  sx={themeBtn(darkMode)}
+		>
+		  {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
+		</Button>
+		
 	    {/* ITEMS CHIP */}
 	    <Chip
 	      label={`${rows.length} Items`}
@@ -1347,7 +1429,7 @@ function DispatchedItemsPage() {
 	    />
 	  </Box>
 		
-		<Box sx={searchPanel}>
+		<Box sx={searchPanel(darkMode)}>
 		  <SearchIcon sx={{ opacity: 0.6 }} />
 
 		  <TextField
@@ -1432,7 +1514,9 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-		    background: "rgba(219,234,254,0.9)",
+			background: darkMode
+			  ? "rgba(30,30,30,0.95)"
+			  : "rgba(219,234,254,0.9)",
 		    color: "#2563eb",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1444,7 +1528,9 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-		    background: "rgba(209,250,229,0.9)",
+			background: darkMode
+			  ? "rgba(30,30,30,0.95)"
+			  : "rgba(209,250,229,0.9)",
 		    color: "#059669",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1456,7 +1542,9 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-		    background: "rgba(254,243,199,0.9)",
+			background: darkMode
+			  ? "rgba(30,30,30,0.95)"
+			  : "rgba(254,243,199,0.9)",
 		    color: "#d97706",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1466,7 +1554,7 @@ function DispatchedItemsPage() {
 
 		</Box>
 
-        <div style={tableWrapper}> 
+        <div style={tableWrapper(darkMode)}> 
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
@@ -1474,7 +1562,7 @@ function DispatchedItemsPage() {
 		  columns={columns}
 		  loading={loading}
 		  density="compact"
-		  sx={dataGridStyles}
+		  sx={dataGridStyles(darkMode)}
 		  onRowClick={(params) => {
 		    setAnimatingId(params.id);
 		    setTimeout(() => setAnimatingId(null), 200);
@@ -1500,7 +1588,9 @@ function DispatchedItemsPage() {
 		    gap: 20,
 		    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
 		    zIndex: 3000,
-			background: "rgba(17,24,39,0.85)",
+			background: darkMode
+			  ? "rgba(0,0,0,0.92)"
+			  : "rgba(17,24,39,0.85)",
 			backdropFilter: "blur(18px)",
 			border: "1px solid rgba(255,255,255,0.1)",
 		  }}

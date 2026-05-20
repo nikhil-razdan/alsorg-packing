@@ -143,7 +143,7 @@ function DashboardPage() {
 		    onClick={() => setDarkMode(!darkMode)}
 		    style={themeBtn(darkMode)}
 		  >
-		    {darkMode ? "☀ Classic" : "🌙 Dark Gold"}
+		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
 		  </button>
 
 		  <button onClick={() => setMode("inventory")} style={modeBtn(mode === "inventory", darkMode)}>
