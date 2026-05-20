@@ -168,9 +168,7 @@ const dataGridStyles = (darkMode) => ({
   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111111,#1a1a1a)"
-      : "#f8fafc",
+    backgroundColor: darkMode ? "#111111 !important" : "#f8fafc !important",
 
     color: darkMode ? "#cbd5e1" : "#475569",
 
@@ -178,16 +176,33 @@ const dataGridStyles = (darkMode) => ({
       ? "1px solid rgba(255,215,0,0.08)"
       : "1px solid #e2e8f0",
 
-    fontWeight: 700,
-
-    fontSize: 13,
-
-    letterSpacing: "0.3px",
+    minHeight: "52px !important",
+    maxHeight: "52px !important",
   },
-  
+
+  "& .MuiDataGrid-columnHeader": {
+    backgroundColor: darkMode ? "#111111 !important" : "#f8fafc !important",
+
+    color: darkMode ? "#d1d5db" : "#475569",
+
+    fontWeight: 700,
+    fontSize: 13,
+    letterSpacing: "0.3px",
+
+    borderRight: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #e5e7eb",
+  },
+
   "& .MuiDataGrid-columnHeaderTitle": {
     fontWeight: 700,
-    color: darkMode ? "#d1d5db" : "#475569",
+    color: darkMode ? "#d1d5db !important" : "#475569 !important",
+  },
+  
+  "& .MuiDataGrid-iconSeparator": {
+    color: darkMode
+      ? "rgba(255,255,255,0.08)"
+      : "#cbd5e1",
   },
 
   "& .MuiDataGrid-cell": {
@@ -1476,11 +1491,11 @@ function DispatchedItemsPage() {
 			  flex: 1,
 
 			  "& .MuiInputBase-root": {
-			    height: 52,
+			    height: 40,
 
 			    borderRadius: "18px",
 
-			    padding: "0 14px",
+			    padding: "0 8px",
 
 			    background: darkMode
 			      ? "rgba(255,255,255,0.03)"
@@ -1532,10 +1547,10 @@ function DispatchedItemsPage() {
 		    value={statusFilter}
 		    onChange={(e) => setStatusFilter(e.target.value)}
 			sx={{
-			  minWidth: 190,
+			  minWidth: 150,
 
 			  "& .MuiInputBase-root": {
-			    height: 52,
+			    height: 40,
 
 			    borderRadius: "18px",
 
@@ -1593,10 +1608,10 @@ function DispatchedItemsPage() {
 		    value={groupBy}
 		    onChange={(e) => setGroupBy(e.target.value)}
 			sx={{
-			  minWidth: 190,
+			  minWidth: 150,
 
 			  "& .MuiInputBase-root": {
-			    height: 52,
+			    height: 40,
 
 			    borderRadius: "18px",
 
