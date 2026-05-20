@@ -356,39 +356,42 @@ const actionDanger = {
 const searchPanel = (darkMode) => ({
   display: "flex",
   alignItems: "center",
-  gap: 14,
+  gap: 16,
 
-  marginBottom: 8,
+  marginBottom: 16,
 
-  padding: "10px 18px",
+  padding: "16px 18px",
 
-  borderRadius: 24,
+  borderRadius: 26,
 
   background: darkMode
     ? `
       linear-gradient(
-        135deg,
-        rgba(20,20,20,0.95),
-        rgba(10,10,10,0.92)
+        145deg,
+        rgba(12,12,12,0.96),
+        rgba(18,18,18,0.92)
       )
     `
     : `
       linear-gradient(
-        135deg,
-        rgba(255,255,255,0.55),
-        rgba(255,255,255,0.28)
+        145deg,
+        rgba(255,255,255,0.72),
+        rgba(255,255,255,0.42)
       )
     `,
 
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  backdropFilter: "blur(30px)",
+  WebkitBackdropFilter: "blur(30px)",
 
   border: darkMode
-    ? "1px solid rgba(255,215,0,0.15)"
-    : "1px solid rgba(255,255,255,0.35)",
+    ? "1px solid rgba(255,215,0,0.12)"
+    : "1px solid rgba(255,255,255,0.4)",
 
   boxShadow: darkMode
-    ? "0 14px 35px rgba(0,0,0,0.55)"
+    ? `
+      0 10px 40px rgba(0,0,0,0.65),
+      inset 0 1px 0 rgba(255,215,0,0.05)
+    `
     : `
       0 14px 35px rgba(0,0,0,0.18),
       inset 0 1px 0 rgba(255,255,255,0.45)
@@ -1407,30 +1410,49 @@ function DispatchedItemsPage() {
 	        </div>
 	      </Box>
 	    </Box>
-
-		<Button
-		  onClick={() => setDarkMode(!darkMode)}
-		  sx={themeBtn(darkMode)}
-		>
-		  {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-		</Button>
 		
 	    {/* ITEMS CHIP */}
-	    <Chip
-	      label={`${rows.length} Items`}
-	      sx={{
-	        background: "rgba(255,255,255,0.25)",
-	        backdropFilter: "blur(10px)",
-	        color: "#fff",
-	        fontWeight: 600,
-	        border: "1px solid rgba(255,255,255,0.3)",
-	        px: 1.2,
-	      }}
-	    />
+		<Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+
+		  <Button
+		    onClick={() => setDarkMode(!darkMode)}
+		    sx={themeBtn(darkMode)}
+		  >
+		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
+		  </Button>
+
+		  <Chip
+		    label={`${rows.length} Items`}
+		    sx={{
+		      background: darkMode
+		        ? "rgba(255,215,0,0.12)"
+		        : "rgba(255,255,255,0.25)",
+
+		      backdropFilter: "blur(12px)",
+
+		      color: darkMode ? "#FFD700" : "#fff",
+
+		      fontWeight: 700,
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.2)"
+		        : "1px solid rgba(255,255,255,0.3)",
+
+		      px: 1.5,
+		      height: 32,
+		    }}
+		  />
+		</Box>
 	  </Box>
 		
 		<Box sx={searchPanel(darkMode)}>
-		  <SearchIcon sx={{ opacity: 0.6 }} />
+		<SearchIcon
+		  sx={{
+		    opacity: 0.9,
+		    color: darkMode ? "#FFD700" : "#111",
+		    fontSize: 22,
+		  }}
+		/>
 
 		  <TextField
 		    variant="standard"
@@ -1440,17 +1462,55 @@ function DispatchedItemsPage() {
 		    InputProps={{ disableUnderline: true }}
 			sx={{
 			  flex: 1,
+
 			  "& .MuiInputBase-root": {
-			    padding: "4px 8px",
-			    transition: "all 0.2s ease",
+			    height: 52,
+
+			    borderRadius: "18px",
+
+			    padding: "0 14px",
+
+			    background: darkMode
+			      ? "rgba(255,255,255,0.03)"
+			      : "rgba(255,255,255,0.55)",
+
+			    color: darkMode ? "#fff" : "#111",
+
+			    border: darkMode
+			      ? "1px solid rgba(255,215,0,0.08)"
+			      : "1px solid rgba(255,255,255,0.35)",
+
+			    transition: "all 0.25s ease",
 			  },
-			  "&:hover": {
-			    background: "rgba(255,255,255,0.6)"
+
+			  "& input": {
+			    color: darkMode ? "#fff" : "#111",
+			    fontSize: 14,
+			    fontWeight: 500,
 			  },
+
+			  "& input::placeholder": {
+			    color: darkMode
+			      ? "rgba(255,255,255,0.45)"
+			      : "rgba(0,0,0,0.45)",
+			    opacity: 1,
+			  },
+
+			  "& .MuiInputBase-root:hover": {
+			    background: darkMode
+			      ? "rgba(255,255,255,0.05)"
+			      : "#fff",
+			  },
+
 			  "& .Mui-focused": {
-			    background: "#fff",
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)"
-			  }
+			    background: darkMode
+			      ? "rgba(255,255,255,0.06)"
+			      : "#fff",
+
+			    boxShadow: darkMode
+			      ? "0 0 0 2px rgba(255,215,0,0.22)"
+			      : "0 0 0 2px rgba(59,130,246,0.3)",
+			  },
 			}}
 		  />
 
@@ -1460,19 +1520,52 @@ function DispatchedItemsPage() {
 		    value={statusFilter}
 		    onChange={(e) => setStatusFilter(e.target.value)}
 			sx={{
-			  flex: 1,
+			  minWidth: 190,
+
 			  "& .MuiInputBase-root": {
-			    borderRadius: 10,
-			    padding: "4px 8px",
-			    transition: "all 0.2s ease",
+			    height: 52,
+
+			    borderRadius: "18px",
+
+			    background: darkMode
+			      ? "rgba(255,255,255,0.03)"
+			      : "rgba(255,255,255,0.55)",
+
+			    color: darkMode ? "#fff" : "#111",
+
+			    border: darkMode
+			      ? "1px solid rgba(255,215,0,0.08)"
+			      : "1px solid rgba(255,255,255,0.35)",
+
+			    transition: "all 0.25s ease",
 			  },
-			  "&:hover": {
-			    background: "rgba(255,255,255,0.6)"
+
+			  "& .MuiSelect-select": {
+			    display: "flex",
+			    alignItems: "center",
+			    color: darkMode ? "#fff" : "#111",
+			    fontWeight: 500,
 			  },
+
+			  "& .MuiSvgIcon-root": {
+			    color: darkMode ? "#FFD700" : "#111",
+			  },
+
+			  "& .MuiInputBase-root:hover": {
+			    background: darkMode
+			      ? "rgba(255,255,255,0.05)"
+			      : "#fff",
+			  },
+
 			  "& .Mui-focused": {
-			    background: "#fff",
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)"
-			  }
+			    background: darkMode
+			      ? "rgba(255,255,255,0.06)"
+			      : "#fff",
+
+			    boxShadow: darkMode
+			      ? "0 0 0 2px rgba(255,215,0,0.22)"
+			      : "0 0 0 2px rgba(59,130,246,0.3)",
+			  },
 			}}
 		  >
 		    <MenuItem value="ALL">All Status</MenuItem>
@@ -1488,19 +1581,52 @@ function DispatchedItemsPage() {
 		    value={groupBy}
 		    onChange={(e) => setGroupBy(e.target.value)}
 			sx={{
-			  flex: 1,
+			  minWidth: 190,
+
 			  "& .MuiInputBase-root": {
-			    borderRadius: 10,
-			    padding: "4px 8px",
-			    transition: "all 0.2s ease",
+			    height: 52,
+
+			    borderRadius: "18px",
+
+			    background: darkMode
+			      ? "rgba(255,255,255,0.03)"
+			      : "rgba(255,255,255,0.55)",
+
+			    color: darkMode ? "#fff" : "#111",
+
+			    border: darkMode
+			      ? "1px solid rgba(255,215,0,0.08)"
+			      : "1px solid rgba(255,255,255,0.35)",
+
+			    transition: "all 0.25s ease",
 			  },
-			  "&:hover": {
-			    background: "rgba(255,255,255,0.6)"
+
+			  "& .MuiSelect-select": {
+			    display: "flex",
+			    alignItems: "center",
+			    color: darkMode ? "#fff" : "#111",
+			    fontWeight: 500,
 			  },
+
+			  "& .MuiSvgIcon-root": {
+			    color: darkMode ? "#FFD700" : "#111",
+			  },
+
+			  "& .MuiInputBase-root:hover": {
+			    background: darkMode
+			      ? "rgba(255,255,255,0.05)"
+			      : "#fff",
+			  },
+
 			  "& .Mui-focused": {
-			    background: "#fff",
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)"
-			  }
+			    background: darkMode
+			      ? "rgba(255,255,255,0.06)"
+			      : "#fff",
+
+			    boxShadow: darkMode
+			      ? "0 0 0 2px rgba(255,215,0,0.22)"
+			      : "0 0 0 2px rgba(59,130,246,0.3)",
+			  },
 			}}
 		  >
 		    <MenuItem value="NONE">No Group</MenuItem>

@@ -132,12 +132,30 @@ function DashboardPage() {
 
       <div style={content}>
         <h2 style={pageTitle(darkMode)}>Dashboard</h2>
-		<div style={{
-		  display: "flex",
-		  gap: 10,
-		  marginBottom: 15,
-		  alignItems: "center"
-		}}>
+		<div
+		  style={{
+		    display: "flex",
+		    justifyContent: "space-between",
+		    alignItems: "center",
+		    marginBottom: 15,
+		  }}
+		>
+
+		  <div style={{ display: "flex", gap: 10 }}>
+		    <button
+		      onClick={() => setMode("inventory")}
+		      style={modeBtn(mode === "inventory", darkMode)}
+		    >
+		      📦 Inventory
+		    </button>
+
+		    <button
+		      onClick={() => setMode("logistics")}
+		      style={modeBtn(mode === "logistics", darkMode)}
+		    >
+		      🚚 Logistics
+		    </button>
+		  </div>
 
 		  <button
 		    onClick={() => setDarkMode(!darkMode)}
@@ -146,13 +164,6 @@ function DashboardPage() {
 		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
 		  </button>
 
-		  <button onClick={() => setMode("inventory")} style={modeBtn(mode === "inventory", darkMode)}>
-		    📦 Inventory
-		  </button>
-
-		  <button onClick={() => setMode("logistics")} style={modeBtn(mode === "logistics", darkMode)}>
-		    🚚 Logistics
-		  </button>
 		</div>
 		{mode === "inventory" && (
 		  <>
