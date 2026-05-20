@@ -843,14 +843,20 @@ function WarehousePage() {
 
   /* ===================== FILTER ===================== */
 
+  /* ===================== FILTER ===================== */
+
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
+      const searchValue = search.toLowerCase();
+
       if (
         search &&
-        !r.name?.toLowerCase().includes(search.toLowerCase()) &&
-        !r.status?.toLowerCase().includes(search.toLowerCase())
-      )
+        !r.name?.toLowerCase().includes(searchValue) &&
+        !r.status?.toLowerCase().includes(searchValue) &&
+        !r.clientName?.toLowerCase().includes(searchValue)
+      ) {
         return false;
+      }
 
       return true;
     });
@@ -947,7 +953,7 @@ function WarehousePage() {
           <SearchIcon sx={{ opacity: 0.6 }} />
           <TextField
             variant="standard"
-            placeholder="Search items..."
+            placeholder="Search by Item, Status or Client..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             InputProps={{ disableUnderline: true }}

@@ -918,7 +918,9 @@ function DispatchedItemsPage() {
 	  renderCell: (params) => {
 	    const row = params.row;
 
-	    const canEdit = isDispatch && ["READY", "IN_WAREHOUSE"].includes(row.status);
+		const canEdit =
+		  isDispatch &&
+		  ["READY", "READY_TO_STORE"].includes(row.status);
 
 		if (!canEdit) {
 		  const getStatusStyle = (status) => {
