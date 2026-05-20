@@ -43,8 +43,12 @@ public class GoogleSheetService {
             if (rows == null || rows.size() < 3) return;
 
             List<Object> headers = rows.get(0);
+            
+            if (headers.size() < 2) {
+                throw new RuntimeException("Invalid header row in sheet");
+            }
 
-            repo.deleteAll(); // clear old
+            // repo.deleteAll(); 
 
             for (int i = 2; i < rows.size(); i += 2) { // 🔥 jump in pairs
 
@@ -53,6 +57,11 @@ public class GoogleSheetService {
                 if (dateRow.isEmpty()) continue;
 
                 String date = dateRow.get(0).toString();
+                
+                if (!date.matches("\\d{2}-\\d{2}-\\d{4}")) {
+                    System.out.println("Skipping invalid date row: " + date);
+                    continue;
+                }
 
                 List<Object> locationRow = (i + 1 < rows.size()) ? rows.get(i + 1) : null;
 
@@ -97,9 +106,19 @@ public class GoogleSheetService {
 
                     log.setLocation(location);
 
-                    // ✅ VERY IMPORTANT: use actual date (not now)
-                    log.setCreatedAt(java.time.LocalDate.parse(date, java.time.format.DateTimeFormatter.ofPattern("MM-dd-yyyy")).atStartOfDay());
+                    try {
+                        java.time.format.DateTimeFormatter formatter =
+                            java.time.format.DateTimeFormatter.ofPattern("M-d-yyyy");
 
+                        log.setCreatedAt(
+                            java.time.LocalDate.parse(date.trim(), formatter).atStartOfDay()
+                        );
+                    } catch (Exception e) {
+                        System.out.println("❌ Date parse failed: " + date);
+                        log.setCreatedAt(java.time.LocalDateTime.now());
+                    }
+                    
+                    System.out.println("Saving -> " + driverName + " | " + loaders + " | " + location);
                     repo.save(log);
                 }
             }
