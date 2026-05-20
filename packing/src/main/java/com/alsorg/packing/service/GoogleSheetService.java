@@ -44,10 +44,7 @@ public class GoogleSheetService {
 
             List<Object> headers = rows.get(0);
             
-            if (headers == null || headers.size() < 2) {
-                System.out.println("❌ Header row invalid or empty");
-                return;
-            }
+            System.out.println("HEADERS: " + headers);
 
             // repo.deleteAll(); 
 
@@ -65,7 +62,7 @@ public class GoogleSheetService {
                 }
 
                 List<Object> locationRow = (i + 1 < rows.size()) ? rows.get(i + 1) : null;
-
+                System.out.println("ROWS SIZE: " + (rows == null ? "NULL" : rows.size()));
                 for (int j = 1; j < headers.size(); j++) {
 
                     if (j >= dateRow.size()) continue;
