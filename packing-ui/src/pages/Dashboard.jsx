@@ -92,7 +92,10 @@ function DashboardPage() {
 
   useEffect(() => {
     fetchLogisticsStats()
-      .then(setLogistics)
+      .then(data => {
+        console.log("🔥 LOGISTICS API:", data);
+        setLogistics(data);
+      })
       .catch(console.error);
   }, []);
   
@@ -199,10 +202,29 @@ function DashboardPage() {
 		{mode === "logistics" && logistics && (
 		  <>
 		    <div style={statsRow}>
-		      <StatCard darkMode={darkMode} title="Working Trips" value={logistics.totalTrips} />
-		      <StatCard darkMode={darkMode}  title="Total Loaders" value={logistics.totalLoaders} />
-		      <StatCard darkMode={darkMode} title="Efficiency" value={logistics.efficiency?.toFixed(2) || 0} />
-		      <StatCard darkMode={darkMode} title="Active Drivers" value={Object.keys(logistics.drivers || {}).length} />
+			<StatCard
+			  darkMode={darkMode}
+			  title="Working Trips"
+			  value={Number(logistics?.totalTrips || 0)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Total Loaders"
+			  value={Number(logistics?.totalLoaders || 0)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Efficiency"
+			  value={Number(logistics?.efficiency || 0).toFixed(2)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Active Drivers"
+			  value={Object.keys(logistics?.drivers || {}).length}
+			/>
 		    </div>
 
 		    <div style={mainGrid}>

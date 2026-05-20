@@ -59,7 +59,7 @@ public class GoogleSheetService {
 
          System.out.println("✅ FOUND HEADERS: " + headers);
             
-            // repo.deleteAll(); 
+           repo.deleteAll(); 
 
          int headerIndex = rows.indexOf(headers);
 

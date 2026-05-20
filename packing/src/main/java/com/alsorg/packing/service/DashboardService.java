@@ -22,10 +22,18 @@ public class DashboardService {
     public DashboardResponse getDashboard() {
 
         List<DriverLog> data = repo.findAll();
+        int totalTrips = data.stream()
+                .mapToInt(d -> d.getTrips() == 0 ? 0 : d.getTrips())
+                .sum();
 
-        int totalTrips = data.stream().mapToInt(DriverLog::getTrips).sum();
-        int totalLoaders = data.stream().mapToInt(DriverLog::getLoaders).sum();
-
+        int totalLoaders = data.stream()
+                .mapToInt(d -> d.getLoaders() == 0 ? 0 : d.getLoaders())
+                .sum();
+        
+        System.out.println("TOTAL LOGS: " + data.size());
+        System.out.println("TOTAL TRIPS: " + totalTrips);
+        System.out.println("TOTAL LOADERS: " + totalLoaders);
+        
         double efficiency = totalTrips == 0 ? 0 : (double) totalLoaders / totalTrips;
 
         Map<String, Long> byDriver =
