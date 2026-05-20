@@ -42,13 +42,29 @@ public class GoogleSheetService {
 
             if (rows == null || rows.size() < 3) return;
 
-            List<Object> headers = rows.get(0);
-            
-            System.out.println("HEADERS: " + headers);
+            List<Object> headers = null;
 
+         // find header row dynamically
+         for (List<Object> row : rows) {
+             if (row.size() > 2 && row.get(0).toString().toLowerCase().contains("name")) {
+                 headers = row;
+                 break;
+             }
+         }
+
+         if (headers == null) {
+             System.out.println("❌ Could not find header row");
+             return;
+         }
+
+         System.out.println("✅ FOUND HEADERS: " + headers);
+            
             // repo.deleteAll(); 
 
-            for (int i = 2; i < rows.size(); i += 2) { // 🔥 jump in pairs
+         int headerIndex = rows.indexOf(headers);
+
+      // data starts AFTER vehicle row → header + 2
+      for (int i = headerIndex + 2; i < rows.size(); i += 2) {
 
                 List<Object> dateRow = rows.get(i);
 
@@ -127,6 +143,10 @@ public class GoogleSheetService {
                     repo.save(log);
                 }
             }
+      System.out.println("ALL ROWS:");
+      for (List<Object> r : rows) {
+          System.out.println(r);
+      }
             System.out.println("✅ Google Sheet Synced Successfully");
 
         } catch (Exception e) {
