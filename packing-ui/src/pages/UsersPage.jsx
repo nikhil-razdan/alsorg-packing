@@ -560,45 +560,55 @@ function UsersPage() {
           onChange={(e)=>setSearch(e.target.value)}
           InputProps={{disableUnderline:true}}
 		  sx={{
-		    minWidth: 140,
+		    flex: 1,
 
 		    "& .MuiInputBase-root": {
-		      borderRadius: "14px",
+		      height: 40,
+
+		      borderRadius: "18px",
+
+		      padding: "0 10px",
 
 		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
-		        : "#fff",
+		        ? "rgba(255,255,255,0.03)"
+		        : "rgba(255,255,255,0.55)",
 
 		      color: darkMode ? "#fff" : "#111",
 
 		      border: darkMode
 		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(0,0,0,0.08)",
+		        : "1px solid rgba(255,255,255,0.35)",
+
+		      transition: "all 0.25s ease",
 		    },
 
 		    "& input": {
 		      color: darkMode ? "#fff" : "#111",
+		      fontSize: 14,
+		      fontWeight: 500,
 		    },
 
 		    "& input::placeholder": {
 		      color: darkMode
-		        ? "rgba(255,255,255,0.4)"
-		        : "rgba(0,0,0,0.4)",
+		        ? "rgba(255,255,255,0.45)"
+		        : "rgba(0,0,0,0.45)",
 		      opacity: 1,
 		    },
 
-		    "& .MuiSvgIcon-root": {
-		      color: darkMode ? "#FFD700" : "#111",
+		    "& .MuiInputBase-root:hover": {
+		      background: darkMode
+		        ? "rgba(255,255,255,0.05)"
+		        : "#fff",
 		    },
 
-		    "& .MuiSelect-select": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
+		    "& .Mui-focused": {
+		      background: darkMode
+		        ? "rgba(255,255,255,0.06)"
+		        : "#fff",
 
-		    "& label": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.65)"
-		        : "#475569",
+		      boxShadow: darkMode
+		        ? "0 0 0 2px rgba(255,215,0,0.22)"
+		        : "0 0 0 2px rgba(59,130,246,0.3)",
 		    },
 		  }}
         />
@@ -609,11 +619,11 @@ function UsersPage() {
           value={username}
           onChange={(e)=>setUsername(e.target.value)}
 		  sx={{
-		    minWidth: 140,
+		    minWidth: 170,
 
 		    "& .MuiInputBase-root": {
-		      borderRadius: "14px",
-
+		      borderRadius: "18px",
+			  height: 40,
 		      background: darkMode
 		        ? "rgba(255,255,255,0.04)"
 		        : "#fff",
@@ -659,11 +669,11 @@ function UsersPage() {
           value={password}
           onChange={(e)=>setPassword(e.target.value)}
 		  sx={{
-		    minWidth: 140,
+		    minWidth: 170,
 
 		    "& .MuiInputBase-root": {
-		      borderRadius: "14px",
-
+		      borderRadius: "18px",
+			  height: 40,
 		      background: darkMode
 		        ? "rgba(255,255,255,0.04)"
 		        : "#fff",
@@ -708,11 +718,11 @@ function UsersPage() {
           value={role}
           onChange={(e)=>setRole(e.target.value)}
 		  sx={{
-		    minWidth: 140,
+		    minWidth: 170,
 
 		    "& .MuiInputBase-root": {
-		      borderRadius: "14px",
-
+		      borderRadius: "18px",
+			  height: 40,
 		      background: darkMode
 		        ? "rgba(255,255,255,0.04)"
 		        : "#fff",
@@ -755,7 +765,20 @@ function UsersPage() {
           <MenuItem value="DISPATCH">DISPATCH</MenuItem>
         </TextField>
 
-        <Button sx={actionPrimary} onClick={createUser}>
+		<Button
+		  onClick={createUser}
+		  sx={{
+		    ...actionPrimary,
+
+		    height: 40,
+
+		    px: 3,
+
+		    whiteSpace: "nowrap",
+
+		    borderRadius: "18px",
+		  }}
+		>
           Create User
         </Button>
 
@@ -996,6 +1019,22 @@ const dataGridStyles = (darkMode) => ({
     minHeight:"52px !important",
     maxHeight:"52px !important",
   },
+  
+  "& .MuiDataGrid-filler": {
+      backgroundColor: darkMode
+        ? "#111111 !important"
+        : "#f8fafc !important",
+
+      borderBottom: darkMode
+        ? "1px solid rgba(255,215,0,0.08)"
+        : "1px solid #e2e8f0",
+    },
+
+    "& .MuiDataGrid-scrollbarFiller": {
+      backgroundColor: darkMode
+        ? "#111111 !important"
+        : "#f8fafc !important",
+    },
 
   "& .MuiDataGrid-columnHeader": {
     background: darkMode
@@ -1217,12 +1256,20 @@ const actionDanger = {
 };
 
 const searchPanel = (darkMode) => ({
-  display:"flex",
-  alignItems:"center",
-  gap:16,
-  marginBottom:4,
-  padding:"5px 18px",
-  borderRadius:16,
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+
+  marginBottom: 4,
+
+  padding: "5px 18px",
+
+  borderRadius: 16,
+
+  width: "100%",
+  maxWidth: "100%",
+
+  flexWrap: "wrap",
 
   background: darkMode
     ? `
@@ -1240,16 +1287,22 @@ const searchPanel = (darkMode) => ({
       )
     `,
 
-  backdropFilter:"blur(30px)",
-  WebkitBackdropFilter:"blur(30px)",
+  backdropFilter: "blur(30px)",
+  WebkitBackdropFilter: "blur(30px)",
 
   border: darkMode
     ? "1px solid rgba(255,215,0,0.12)"
     : "1px solid rgba(255,255,255,0.4)",
 
   boxShadow: darkMode
-    ? "0 10px 40px rgba(0,0,0,0.65)"
-    : "0 14px 35px rgba(0,0,0,0.18)",
+    ? `
+      0 10px 40px rgba(0,0,0,0.65),
+      inset 0 1px 0 rgba(255,215,0,0.05)
+    `
+    : `
+      0 14px 35px rgba(0,0,0,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.45)
+    `,
 });
 
 const themeBtn = (darkMode) => ({
