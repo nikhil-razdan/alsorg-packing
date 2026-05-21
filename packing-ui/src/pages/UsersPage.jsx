@@ -560,8 +560,9 @@ function UsersPage() {
           onChange={(e)=>setSearch(e.target.value)}
           InputProps={{disableUnderline:true}}
 		  sx={{
-			minWidth: 220,
-			width: 260,
+			flex: "1 1 180px",
+			minWidth: 140,
+			maxWidth: 260,
 
 		    "& .MuiInputBase-root": {
 		      height: 40,
@@ -620,7 +621,9 @@ function UsersPage() {
           value={username}
           onChange={(e)=>setUsername(e.target.value)}
 		  sx={{
-		    minWidth: 170,
+			flex: "1 1 160px",
+			minWidth: 140,
+			maxWidth: 220,
 
 		    "& .MuiInputBase-root": {
 		      borderRadius: "18px",
@@ -670,7 +673,9 @@ function UsersPage() {
           value={password}
           onChange={(e)=>setPassword(e.target.value)}
 		  sx={{
-		    minWidth: 170,
+			flex: "1 1 160px",
+			minWidth: 140,
+			maxWidth: 220,
 
 		    "& .MuiInputBase-root": {
 		      borderRadius: "18px",
@@ -719,7 +724,9 @@ function UsersPage() {
           value={role}
           onChange={(e)=>setRole(e.target.value)}
 		  sx={{
-		    minWidth: 170,
+			flex: "0 1 170px",
+			minWidth: 140,
+			maxWidth: 180,
 
 		    "& .MuiInputBase-root": {
 		      borderRadius: "18px",
@@ -772,7 +779,7 @@ function UsersPage() {
 		    ...actionPrimary,
 
 		    height: 40,
-
+			flexShrink: 0,
 		    px: 3,
 
 		    whiteSpace: "nowrap",
@@ -1270,9 +1277,8 @@ const searchPanel = (darkMode) => ({
   width: "100%",
   maxWidth: "100%",
 
-  overflowX: "auto",
-  overflowY: "hidden",
-  whiteSpace: "nowrap",
+  flexWrap: "nowrap",
+  minWidth: 0,
 
   background: darkMode
     ? `
