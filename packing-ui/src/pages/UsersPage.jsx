@@ -726,12 +726,15 @@ function UsersPage() {
 	        Create User
 	      </Box>
 
-	      <Box
-	        sx={{
-	          fontSize: 13,
-	          opacity: 0.7,
-	        }}
-	      >
+		  <Box
+		    sx={{
+		      fontSize: 13,
+
+		      color: darkMode
+		        ? "rgba(255,255,255,0.72)"
+		        : "#6b7280",
+		    }}
+		  >
 	        Add new system user and permissions
 	      </Box>
 	    </Box>
@@ -749,6 +752,7 @@ function UsersPage() {
 	        value={username}
 	        onChange={(e)=>setUsername(e.target.value)}
 	        fullWidth
+			sx={formFieldSx(darkMode)}
 	      />
 
 	      <TextField
@@ -757,37 +761,114 @@ function UsersPage() {
 	        value={password}
 	        onChange={(e)=>setPassword(e.target.value)}
 	        fullWidth
+			sx={formFieldSx(darkMode)}
 	      />
 
-	      <TextField
-	        select
-	        label="Role"
-	        value={role}
-	        onChange={(e)=>setRole(e.target.value)}
-	        fullWidth
-	      >
-	        <MenuItem value="ADMIN">ADMIN</MenuItem>
-	        <MenuItem value="PACKING">PACKING</MenuItem>
-	        <MenuItem value="DISPATCH">DISPATCH</MenuItem>
-	      </TextField>
+		  <TextField
+		    select
+		    label="Role"
+		    value={role}
+		    onChange={(e)=>setRole(e.target.value)}
+		    fullWidth
+		    sx={formFieldSx(darkMode)}
+		    slotProps={{
+		      select: {
+		        MenuProps: {
+		          PaperProps: {
+		            sx: {
+		              mt: 1,
+		              borderRadius: "18px",
+
+		              background: darkMode
+		                ? "rgba(15,15,15,0.98)"
+		                : "#ffffff",
+
+		              color: darkMode
+		                ? "#fff"
+		                : "#111",
+
+		              border: darkMode
+		                ? "1px solid rgba(255,215,0,0.12)"
+		                : "1px solid rgba(0,0,0,0.08)",
+
+		              backdropFilter: "blur(20px)",
+
+		              "& .MuiMenuItem-root": {
+		                color: darkMode
+		                  ? "#fff"
+		                  : "#111",
+		              },
+
+		              "& .Mui-selected": {
+		                background: darkMode
+		                  ? "rgba(255,215,0,0.14) !important"
+		                  : "rgba(59,130,246,0.12) !important",
+
+		                color: darkMode
+		                  ? "#FFD700"
+		                  : "#2563eb",
+		              },
+		            },
+		          },
+		        },
+		      },
+		    }}
+		  >
+		    <MenuItem value="ADMIN">ADMIN</MenuItem>
+		    <MenuItem value="PACKING">PACKING</MenuItem>
+		    <MenuItem value="DISPATCH">DISPATCH</MenuItem>
+		  </TextField>
 
 	    </Box>
 
 	    <Box sx={{ flex: 1 }} />
 
-	    <Box
-	      sx={{
-	        display: "flex",
-	        gap: 1.5,
-	        mt: 4,
-	      }}
-	    >
+		<Box
+		  sx={{
+		    display: "flex",
+		    gap: 1.5,
 
-	      <Button
-	        fullWidth
-	        variant="outlined"
-	        onClick={() => setCreateOpen(false)}
-	      >
+		    mt: 4,
+		    pt: 2,
+
+		    borderTop: darkMode
+		      ? "1px solid rgba(255,215,0,0.08)"
+		      : "1px solid rgba(0,0,0,0.06)",
+		  }}
+		>
+
+		<Button
+		  fullWidth
+		  variant="outlined"
+		  onClick={() => setCreateOpen(false)}
+		  sx={{
+		    borderRadius: "14px",
+
+		    fontWeight: 700,
+
+		    color: darkMode
+		      ? "#fff"
+		      : "#374151",
+
+		    borderColor: darkMode
+		      ? "rgba(255,215,0,0.18)"
+		      : "rgba(0,0,0,0.12)",
+
+		    background: darkMode
+		      ? "rgba(255,255,255,0.02)"
+		      : "#fff",
+
+		    "&:hover": {
+		      borderColor: darkMode
+		        ? "#FFD700"
+		        : "#111827",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#f9fafb",
+		    },
+		  }}
+		>
 	        Cancel
 	      </Button>
 
@@ -1337,6 +1418,124 @@ const themeBtn = (darkMode) => ({
 
   "&:hover": {
     transform:"translateY(-3px) scale(1.04)",
+  },
+});
+
+const formFieldSx = (darkMode) => ({
+  "& .MuiFormLabel-root": {
+    color: darkMode
+      ? "rgba(255,215,0,0.72)"
+      : "#475569",
+
+    fontWeight: 500,
+
+    transition: "all 0.2s ease",
+  },
+
+  "& .MuiFormLabel-root.Mui-focused": {
+    color: darkMode
+      ? "#FFD700"
+      : "#111827",
+  },
+
+  "& .MuiFormLabel-root.Mui-error": {
+    color: "#ef4444",
+  },
+
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "16px",
+
+    background: darkMode
+      ? "rgba(255,255,255,0.04)"
+      : "rgba(255,255,255,0.92)",
+
+    color: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    transition: "all 0.25s ease",
+
+    "& fieldset": {
+      borderColor: darkMode
+        ? "rgba(255,215,0,0.14)"
+        : "rgba(0,0,0,0.12)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: darkMode
+        ? "rgba(255,215,0,0.35)"
+        : "#111827",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: darkMode
+        ? "#FFD700"
+        : "#111827",
+
+      boxShadow: darkMode
+        ? "0 0 0 3px rgba(255,215,0,0.14)"
+        : "0 0 0 3px rgba(17,24,39,0.08)",
+    },
+
+    "&.Mui-error fieldset": {
+      borderColor: "#ef4444",
+    },
+  },
+
+  "& .MuiInputBase-input": {
+    color: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    fontWeight: 500,
+  },
+
+  "& .MuiInputBase-input::placeholder": {
+    color: darkMode
+      ? "rgba(255,255,255,0.42)"
+      : "rgba(0,0,0,0.42)",
+
+    opacity: 1,
+  },
+
+  "& textarea": {
+    color: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: darkMode
+      ? "#FFD700"
+      : "#374151",
+  },
+
+  "& .MuiFormHelperText-root": {
+    color: darkMode
+      ? "rgba(255,255,255,0.65)"
+      : "#6b7280",
+  },
+
+  "& input:-webkit-autofill": {
+    WebkitBoxShadow: darkMode
+      ? "0 0 0 100px rgba(18,18,18,1) inset"
+      : "0 0 0 100px #fff inset",
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    borderRadius: "16px",
+
+    transition: "background-color 9999s ease-in-out 0s",
   },
 });
 
