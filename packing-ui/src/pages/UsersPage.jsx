@@ -560,7 +560,8 @@ function UsersPage() {
           onChange={(e)=>setSearch(e.target.value)}
           InputProps={{disableUnderline:true}}
 		  sx={{
-		    flex: 1,
+			minWidth: 220,
+			width: 260,
 
 		    "& .MuiInputBase-root": {
 		      height: 40,
@@ -1269,7 +1270,9 @@ const searchPanel = (darkMode) => ({
   width: "100%",
   maxWidth: "100%",
 
-  flexWrap: "wrap",
+  overflowX: "auto",
+  overflowY: "hidden",
+  whiteSpace: "nowrap",
 
   background: darkMode
     ? `
