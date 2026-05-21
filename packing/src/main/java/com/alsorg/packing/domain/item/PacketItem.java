@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.item;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
@@ -20,7 +21,8 @@ public class PacketItem {
     private Integer quantity;
     private String description;
     private String location;
-
+    @Column(name = "packed_at")
+    private LocalDateTime packedAt;
     @Column(name = "floor")
     private String floor;
 
@@ -262,5 +264,13 @@ public class PacketItem {
 
 	public void setRemarks(String remarks) {
 		this.remarks = remarks;
+	}
+
+	public LocalDateTime getPackedAt() {
+		return packedAt;
+	}
+
+	public void setPackedAt(LocalDateTime packedAt) {
+		this.packedAt = packedAt;
 	}
 }

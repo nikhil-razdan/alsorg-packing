@@ -16,22 +16,21 @@ public class DashboardReportService {
 
     public DashboardStatsDTO getDashboardStats() {
 
-        long inventoryItems = repo.countInventoryItems();   // ✅ ZOHO CACHE
-        long packedItems = repo.countPackedItems();         // ✅ PACKED
-        long dispatchedItems = repo.countDispatchedItems(); // ✅ DISPATCHED
-        long stickersGenerated = repo.countStickersGenerated();
-        long readyForPacking = inventoryItems - packedItems;
-        
-        System.out.println("Zoho Inventory Total: " + inventoryItems);
-        System.out.println("Packed Items: " + packedItems);
-        System.out.println("Ready For Packing: " + readyForPacking);
+        long totalItems = repo.countTotalItems();
 
+        long packedItems = repo.countPackedItems();
+
+        long dispatchedItems = repo.countDispatchedItems();
+
+        long pendingItems = repo.countPendingItems();
+
+        long stickersGenerated = repo.countStickersGenerated();
 
         return new DashboardStatsDTO(
-                readyForPacking,        // <-- THIS WAS WRONG EARLIER
+                totalItems,
                 packedItems,
                 dispatchedItems,
-                inventoryItems - packedItems, // optional, if needed later
+                pendingItems,
                 stickersGenerated
         );
     }

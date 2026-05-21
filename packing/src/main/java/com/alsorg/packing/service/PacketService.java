@@ -288,6 +288,7 @@ public class PacketService {
 
         // ✅ MOVE TO FLOOR
         item.setStatus("READY");
+        item.setPackedAt(LocalDateTime.now());
 
         packetItemRepository.save(item);
 
@@ -298,6 +299,8 @@ public class PacketService {
         DispatchedItem d = dispatchedRepo.findById(item.getId().toString())
         	    .orElseThrow();
         d.setStatus(ItemDispatchStatus.READY);
+        d.setPackedAt(LocalDateTime.now());
+        d.setCreatedAt(LocalDateTime.now());
         dispatchedRepo.save(d);
 
         StickerPdfData pdf = new StickerPdfData();

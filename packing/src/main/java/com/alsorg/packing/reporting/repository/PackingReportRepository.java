@@ -9,7 +9,6 @@ import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Repository;
 
 import com.alsorg.packing.reporting.dto.PackingReportRow;
-import com.alsorg.packing.domain.common.ItemDispatchStatus;
 
 @Repository
 public class PackingReportRepository {
@@ -27,14 +26,13 @@ public class PackingReportRepository {
                 d.name,
                 d.clientName,
                 d.packedAt,
-                'SYSTEM'
+                coalesce(d.createdBy, 'SYSTEM')
             )
             from DispatchedItem d
-            where d.status = :status
+            where d.packedAt is not null
               and d.packedAt between :from and :to
             order by d.packedAt desc
         """, PackingReportRow.class)
-        .setParameter("status", ItemDispatchStatus.ON_FLOOR)
         .setParameter("from", from)
         .setParameter("to", to)
         .getResultList();

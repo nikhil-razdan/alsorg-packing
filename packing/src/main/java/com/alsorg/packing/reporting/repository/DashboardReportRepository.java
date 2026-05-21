@@ -1,46 +1,59 @@
 package com.alsorg.packing.reporting.repository;
 
+import java.util.List;
+
 import org.springframework.stereotype.Repository;
 
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
-import com.alsorg.packing.repository.ZohoStickerHistoryRepository;
-import com.alsorg.packing.service.ZohoItemCacheService;
+import com.alsorg.packing.repository.PacketItemRepository;
 
 @Repository
 public class DashboardReportRepository {
 
-    private final ZohoItemCacheService zohoItemCacheService;
+    private final PacketItemRepository packetItemRepo;
     private final DispatchedItemRepository dispatchedRepo;
-    private final ZohoStickerHistoryRepository stickerHistoryRepo;
 
     public DashboardReportRepository(
-            ZohoItemCacheService zohoItemCacheService,
-            DispatchedItemRepository dispatchedRepo,
-            ZohoStickerHistoryRepository stickerHistoryRepo
+            PacketItemRepository packetItemRepo,
+            DispatchedItemRepository dispatchedRepo
     ) {
-        this.zohoItemCacheService = zohoItemCacheService;
+        this.packetItemRepo = packetItemRepo;
         this.dispatchedRepo = dispatchedRepo;
-        this.stickerHistoryRepo = stickerHistoryRepo;
     }
 
-    /** Total Zoho inventory items (≈800) */
-    public long countInventoryItems() {
-        return zohoItemCacheService.totalCount();
+    public long countTotalItems() {
+        return packetItemRepo.count();
     }
 
-    /** Items currently packed (but not dispatched) */
     public long countPackedItems() {
-        return dispatchedRepo.countByStatus(ItemDispatchStatus.ON_FLOOR);
+        return dispatchedRepo.countByStatusIn(
+                List.of(
+                        ItemDispatchStatus.READY,
+                        ItemDispatchStatus.READY_TO_STORE,
+                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                        ItemDispatchStatus.IN_WAREHOUSE,
+                        ItemDispatchStatus.READY_TO_DISPATCH
+                )
+        );
     }
 
-    /** Items already dispatched */
     public long countDispatchedItems() {
-        return dispatchedRepo.countByStatus(ItemDispatchStatus.DISPATCHED);
+        return dispatchedRepo.countByStatus(
+                ItemDispatchStatus.DISPATCHED
+        );
     }
 
-    /** Total stickers ever generated */
+    public long countPendingItems() {
+
+        long total = packetItemRepo.count();
+
+        long packed = countPackedItems();
+
+        return Math.max(total - packed, 0);
+    }
+
     public long countStickersGenerated() {
-        return stickerHistoryRepo.count();
+        return dispatchedRepo.count();
     }
 }

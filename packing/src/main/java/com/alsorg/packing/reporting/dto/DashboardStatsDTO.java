@@ -5,7 +5,7 @@ public class DashboardStatsDTO {
     private long totalItems;
     private long packedItems;
     private long dispatchedItems;
-    private long inventoryItems;   // ✅ NEW
+    private long pendingItems;   // ✅ NEW
     private long stickersGenerated;
 
     public DashboardStatsDTO() {}
@@ -14,13 +14,13 @@ public class DashboardStatsDTO {
             long totalItems,
             long packedItems,
             long dispatchedItems,
-            long inventoryItems,
+            long pendingItems,
             long stickersGenerated
     ) {
         this.totalItems = totalItems;
         this.packedItems = packedItems;
         this.dispatchedItems = dispatchedItems;
-        this.inventoryItems = inventoryItems;
+        this.pendingItems = pendingItems;
         this.stickersGenerated = stickersGenerated;
     }
 
@@ -36,8 +36,8 @@ public class DashboardStatsDTO {
         return dispatchedItems;
     }
 
-    public long getInventoryItems() {
-        return inventoryItems;
+    public long getPendingItems(){
+        return pendingItems;
     }
 
     public long getStickersGenerated() {

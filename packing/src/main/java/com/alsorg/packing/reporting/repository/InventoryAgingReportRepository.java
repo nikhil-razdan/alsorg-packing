@@ -1,55 +1,61 @@
 package com.alsorg.packing.reporting.repository;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.springframework.stereotype.Repository;
 
+import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.reporting.dto.InventoryAgingRow;
-import com.alsorg.packing.service.ZohoItemCacheService;
+import com.alsorg.packing.repository.DispatchedItemRepository;
 
 @Repository
 public class InventoryAgingReportRepository {
 
-    private final ZohoItemCacheService cacheService;
+    private final DispatchedItemRepository repo;
 
     public InventoryAgingReportRepository(
-            ZohoItemCacheService cacheService
+            DispatchedItemRepository repo
     ) {
-        this.cacheService = cacheService;
+        this.repo = repo;
     }
 
-    /**
-     * Inventory Aging = Days since items were loaded into cache
-     * (i.e. waiting to be packed)
-     */
     public List<InventoryAgingRow> fetchInventoryAging() {
 
-        LocalDate today = LocalDate.now();
-        LocalDate cacheLoadedDate = cacheService.getCacheLoadedDate();
-
-        return cacheService
-                .getPage(1, Integer.MAX_VALUE)
-                .stream()
-                .map(item ->
-                        new InventoryAgingRow(
-                                item.getZohoItemId(),
-                                item.getName(),
-                                item.getClientName(),
-                                calculateDays(cacheLoadedDate, today)
-                        )
+        List<DispatchedItem> items = repo.findByStatusIn(
+                List.of(
+                        ItemDispatchStatus.IN_WAREHOUSE,
+                        ItemDispatchStatus.READY_TO_STORE,
+                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                        ItemDispatchStatus.READY_TO_DISPATCH
                 )
-                .toList();
-    }
+        );
 
-    private long calculateDays(
-            LocalDate start,
-            LocalDate end
-    ) {
-        if (start == null) {
-            return 0;
-        }
-        return ChronoUnit.DAYS.between(start, end);
+        LocalDateTime now = LocalDateTime.now();
+
+        return items.stream()
+                .map(item -> {
+
+                    LocalDateTime start =
+                            item.getStoredAt() != null
+                                    ? item.getStoredAt()
+                                    : item.getPackedAt();
+
+                    long days = 0;
+
+                    if (start != null) {
+                        days = ChronoUnit.DAYS.between(start, now);
+                    }
+
+                    return new InventoryAgingRow(
+                            item.getZohoItemId(),
+                            item.getName(),
+                            item.getClientName(),
+                            days
+                    );
+                })
+                .toList();
     }
 }

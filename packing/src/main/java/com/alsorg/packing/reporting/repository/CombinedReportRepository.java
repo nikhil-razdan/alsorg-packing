@@ -20,25 +20,38 @@ public class CombinedReportRepository {
             LocalDateTime from,
             LocalDateTime to
     ) {
-        return em.createQuery("""
-            select new com.alsorg.packing.reporting.dto.CombinedReportRow(
-                d.zohoItemId,
-                d.name,
-                d.clientName,
-                case
-                    when d.dispatchedAt is not null then 'DISPATCHED'
-                    else 'PACKED'
-                end,
-                coalesce(d.dispatchedAt, d.packedAt),
-                coalesce(d.dispatchedBy, 'SYSTEM')
-            )
-            from DispatchedItem d
-            where (d.packedAt between :from and :to)
-               or (d.dispatchedAt between :from and :to)
-            order by coalesce(d.dispatchedAt, d.packedAt) desc
-        """, CombinedReportRow.class)
-        .setParameter("from", from)
-        .setParameter("to", to)
-        .getResultList();
+    	return em.createQuery("""
+    		    select new com.alsorg.packing.reporting.dto.CombinedReportRow(
+    		        d.zohoItemId,
+    		        d.name,
+    		        d.clientName,
+    		        case
+    		            when d.dispatchedAt is not null then 'DISPATCHED'
+    		            else 'PACKED'
+    		        end,
+    		        case
+    		            when d.dispatchedAt is not null then d.dispatchedAt
+    		            else d.packedAt
+    		        end,
+    		        coalesce(d.dispatchedBy, d.createdBy, 'SYSTEM')
+    		    )
+    		    from DispatchedItem d
+    		    where (
+    		        d.packedAt is not null
+    		        and d.packedAt between :from and :to
+    		    )
+    		    or (
+    		        d.dispatchedAt is not null
+    		        and d.dispatchedAt between :from and :to
+    		    )
+    		    order by
+    		    case
+    		        when d.dispatchedAt is not null then d.dispatchedAt
+    		        else d.packedAt
+    		    end desc
+    		""", CombinedReportRow.class)
+    		.setParameter("from", from)
+    		.setParameter("to", to)
+    		.getResultList();
     }
 }
