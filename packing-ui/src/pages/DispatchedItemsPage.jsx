@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo  } from "react";
 import { DataGrid } from "@mui/x-data-grid";
-import { Chip, Box, Button, IconButton, TextField, Select} from "@mui/material";
+import { Chip, Box, Button, IconButton, TextField} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
@@ -1546,6 +1546,62 @@ function DispatchedItemsPage() {
 		    size="small"
 		    value={statusFilter}
 		    onChange={(e) => setStatusFilter(e.target.value)}
+
+			slotProps={{
+			  select: {
+		      MenuProps: {
+		        PaperProps: {
+		          sx: {
+		            mt: 1,
+
+		            borderRadius: "18px",
+
+		            overflow: "hidden",
+
+		            backdropFilter: "blur(18px)",
+
+		            background: darkMode
+		              ? "rgba(15,15,15,0.96)"
+		              : "rgba(255,255,255,0.96)",
+
+		            color: darkMode ? "#fff" : "#111",
+
+		            border: darkMode
+		              ? "1px solid rgba(255,215,0,0.12)"
+		              : "1px solid rgba(0,0,0,0.06)",
+
+		            boxShadow: darkMode
+		              ? "0 20px 45px rgba(0,0,0,0.7)"
+		              : "0 20px 45px rgba(0,0,0,0.18)",
+
+		            "& .MuiMenuItem-root": {
+		              fontSize: 14,
+		              fontWeight: 500,
+		              color: darkMode ? "#fff" : "#111",
+		              transition: "all 0.2s ease",
+		            },
+
+		            "& .MuiMenuItem-root:hover": {
+		              background: darkMode
+		                ? "rgba(255,215,0,0.08)"
+		                : "rgba(59,130,246,0.08)",
+		            },
+
+		            "& .Mui-selected": {
+		              background: darkMode
+		                ? "rgba(255,215,0,0.14) !important"
+		                : "rgba(59,130,246,0.12) !important",
+
+		              color: darkMode
+		                ? "#FFD700"
+		                : "#2563eb",
+
+		              fontWeight: 700,
+		            },
+		          },
+		        },
+		      },
+		    }}}
 			sx={{
 			  minWidth: 150,
 
