@@ -33,6 +33,7 @@ function ZohoItemsPage() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   const [weights, setWeights] = useState([]);
   const [dimensionsList, setDimensionsList] = useState([]);
@@ -434,8 +435,8 @@ function ZohoItemsPage() {
   }, [form.numberOfPackets]);
   /* ===================== RENDER ===================== */
   return (
-    <div style={page}>
-      <div style={backgroundText}>Alsorg</div>
+    <div style={page(darkMode)}>
+      <div style={backgroundText(darkMode)}>Alsorg</div>
 
       <div style={content}>
 	  <Box
@@ -471,7 +472,7 @@ function ZohoItemsPage() {
 	          style={{
 	            fontSize: 28, // KEEP INVENTORY SIZE
 	            fontWeight: 700,
-	            color: "#ffffff",
+	            color: darkMode ? "#FFD700" : "#ffffff",
 	            letterSpacing: 0.4,
 	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
 	          }}
@@ -482,7 +483,9 @@ function ZohoItemsPage() {
 	        <div
 	          style={{
 	            fontSize: 13,
-	            color: "rgba(255,255,255,0.85)",
+				color: darkMode
+				  ? "rgba(255,215,0,0.82)"
+				  : "rgba(255,255,255,0.85)",
 	          }}
 	        >
 	          Create, manage and generate item stickers
@@ -491,21 +494,42 @@ function ZohoItemsPage() {
 	    </Box>
 
 	    {/* ITEMS CHIP */}
-	    <Box
-	      sx={{
-	        px: 2,
-	        py: 0.8,
-	        borderRadius: "999px",
-	        background: "rgba(255,255,255,0.25)",
-	        backdropFilter: "blur(10px)",
-	        color: "#fff",
-	        fontWeight: 600,
-	        border: "1px solid rgba(255,255,255,0.3)",
-	        fontSize: 13,
-	      }}
-	    >
-	      {rowCount} Items
-	    </Box>
+		<Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+
+		  <Button
+		    onClick={() => setDarkMode(!darkMode)}
+		    sx={themeBtn(darkMode)}
+		  >
+		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
+		  </Button>
+
+		  <Box
+		    sx={{
+		      px: 2,
+		      py: 0.8,
+		      borderRadius: "999px",
+
+		      background: darkMode
+		        ? "rgba(255,215,0,0.12)"
+		        : "rgba(255,255,255,0.25)",
+
+		      backdropFilter: "blur(10px)",
+
+		      color: darkMode ? "#FFD700" : "#fff",
+
+		      fontWeight: 600,
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.2)"
+		        : "1px solid rgba(255,255,255,0.3)",
+
+		      fontSize: 13,
+		    }}
+		  >
+		    {rowCount} Items
+		  </Box>
+
+		</Box>
 	  </Box>
 		<Button
 		  variant="contained"
@@ -513,12 +537,42 @@ function ZohoItemsPage() {
 		    setActiveStep(0);
 		    setCreateOpen(true);
 		  }}
-		  sx={{ mb: 2 }}
+		  sx={{
+		    mb: 2,
+
+		    px: 3,
+		    py: 1,
+
+		    borderRadius: "999px",
+
+		    fontWeight: 700,
+
+		    background: darkMode
+		      ? "linear-gradient(180deg,#facc15,#d97706)"
+		      : "linear-gradient(180deg,#111827,#1f2937)",
+
+		    color: darkMode ? "#111" : "#fff",
+
+		    boxShadow: darkMode
+		      ? "0 10px 30px rgba(255,215,0,0.28)"
+		      : "0 10px 30px rgba(0,0,0,0.25)",
+
+		    "&:hover": {
+		      transform: "translateY(-2px)",
+		    },
+		  }}
 		>
 		  Create Item
 		</Button>
-		<Box sx={searchPanel}>
-		  <SearchIcon sx={{ opacity: 0.6 }} />
+		<Box sx={searchPanel(darkMode)}>
+		<SearchIcon
+		  sx={{
+		    opacity: 0.75,
+		    color: darkMode
+		      ? "#FFD700"
+		      : "rgba(0,0,0,0.55)",
+		  }}
+		/>
 
 		  <TextField
 		    variant="standard"
@@ -526,14 +580,140 @@ function ZohoItemsPage() {
 		    value={search}
 		    onChange={(e) => setSearch(e.target.value)}
 		    InputProps={{ disableUnderline: true }}
-		    sx={{ flex: 1, minWidth: 150 }}
+			sx={{
+			  flex: 1,
+			  minWidth: 150,
+
+			  "& .MuiInputBase-root": {
+			    height: 40,
+
+			    borderRadius: "18px",
+
+			    padding: "0 10px",
+
+			    background: darkMode
+			      ? "rgba(255,255,255,0.03)"
+			      : "rgba(255,255,255,0.55)",
+
+			    color: darkMode ? "#fff" : "#111",
+
+			    border: darkMode
+			      ? "1px solid rgba(255,215,0,0.08)"
+			      : "1px solid rgba(255,255,255,0.35)",
+
+			    transition: "all 0.25s ease",
+			  },
+
+			  "& input": {
+			    color: darkMode ? "#fff" : "#111",
+			    fontWeight: 500,
+			  },
+
+			  "& input::placeholder": {
+			    color: darkMode
+			      ? "rgba(255,255,255,0.45)"
+			      : "rgba(0,0,0,0.45)",
+			    opacity: 1,
+			  },
+
+			  "& .MuiSvgIcon-root": {
+			    color: darkMode ? "#FFD700" : "#111",
+			  },
+
+			  "& .MuiSelect-select": {
+			    color: darkMode ? "#fff" : "#111",
+			    display: "flex",
+			    alignItems: "center",
+			  },
+			}}
 		  />
 		  <TextField
 		    select
 		    size="small"
 		    value={groupBy}
 		    onChange={(e) => setGroupBy(e.target.value)}
-		    sx={{ flex: 1, minWidth: 150 }}
+			sx={{
+			  flex: 1,
+			  minWidth: 150,
+
+			  "& .MuiInputBase-root": {
+			    height: 40,
+
+			    borderRadius: "18px",
+
+			    padding: "0 10px",
+
+			    background: darkMode
+			      ? "rgba(255,255,255,0.03)"
+			      : "rgba(255,255,255,0.55)",
+
+			    color: darkMode ? "#fff" : "#111",
+
+			    border: darkMode
+			      ? "1px solid rgba(255,215,0,0.08)"
+			      : "1px solid rgba(255,255,255,0.35)",
+
+			    transition: "all 0.25s ease",
+			  },
+
+			  "& input": {
+			    color: darkMode ? "#fff" : "#111",
+			    fontWeight: 500,
+			  },
+
+			  "& input::placeholder": {
+			    color: darkMode
+			      ? "rgba(255,255,255,0.45)"
+			      : "rgba(0,0,0,0.45)",
+			    opacity: 1,
+			  },
+
+			  "& .MuiSvgIcon-root": {
+			    color: darkMode ? "#FFD700" : "#111",
+			  },
+
+			  "& .MuiSelect-select": {
+			    color: darkMode ? "#fff" : "#111",
+			    display: "flex",
+			    alignItems: "center",
+			  },
+			}}
+			slotProps={{
+			  select: {
+			    MenuProps: {
+			      PaperProps: {
+			        sx: {
+			          mt: 1,
+			          borderRadius: "18px",
+
+			          background: darkMode
+			            ? "rgba(15,15,15,0.96)"
+			            : "rgba(255,255,255,0.96)",
+
+			          color: darkMode ? "#fff" : "#111",
+
+			          border: darkMode
+			            ? "1px solid rgba(255,215,0,0.12)"
+			            : "1px solid rgba(0,0,0,0.06)",
+
+			          backdropFilter: "blur(18px)",
+
+			          "& .MuiMenuItem-root": {
+			            color: darkMode ? "#fff" : "#111",
+			          },
+
+			          "& .Mui-selected": {
+			            background: darkMode
+			              ? "rgba(255,215,0,0.14) !important"
+			              : "rgba(59,130,246,0.12) !important",
+
+			            color: darkMode ? "#FFD700" : "#2563eb",
+			          },
+			        },
+			      },
+			    },
+			  },
+			}}
 		  >
 		    <MenuItem value="NONE">No Group</MenuItem>
 		    <MenuItem value="SKU">Group by SKU</MenuItem>
@@ -541,7 +721,7 @@ function ZohoItemsPage() {
 		  </TextField>
 		</Box>
 		
-        <div style={tableWrapper}>
+        <div style={tableWrapper(darkMode)}>
           <DataGrid
 		    rows={rows}
 			rowCount={rowCount}
@@ -550,7 +730,7 @@ function ZohoItemsPage() {
             density="compact"
             getRowId={(row) => row.itemId}
             getRowClassName={() => "row-packed"}
-            sx={dataGridStyles}
+            sx={dataGridStyles(darkMode)}
           />
         </div>
       </div>
@@ -561,9 +741,9 @@ function ZohoItemsPage() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       >
-        <div style={drawer}>
+        <div style={drawer(darkMode)}>
           <div style={drawerHighlight} />
-          <h3 style={drawerTitle}>{selectedItem?.itemName}</h3>
+          <h3 style={drawerTitle(darkMode)}>{selectedItem?.itemName}</h3>
 
           <Divider sx={{ my: 2 }} />
 
@@ -602,7 +782,7 @@ function ZohoItemsPage() {
 		        factoryFloor: e.target.value,
 		      }))
 		    }
-		    sx={{ mb: 2 }}
+		    sx={formFieldSx(darkMode)}
 		  />
 		  <Button
 		    disabled={generating}
@@ -644,7 +824,7 @@ function ZohoItemsPage() {
 			    setGenerating(false);
 			  }
 			}}
-		    sx={drawerButton}
+		    sx={drawerButton(darkMode)}
 		  >
 		    Generate Sticker
 		  </Button>
@@ -669,7 +849,7 @@ function ZohoItemsPage() {
 	    open={createOpen}
 	    onClose={() => setCreateOpen(false)}
 	  >
-	    <div style={drawer}>
+	    <div style={drawer(darkMode)}>
 		<Stepper activeStep={activeStep} sx={{ mb: 3 }}>
 		    <Step><StepLabel>Item Info</StepLabel></Step>
 		    <Step><StepLabel>Packet Details</StepLabel></Step>
@@ -720,9 +900,28 @@ function ZohoItemsPage() {
 	  </Drawer>
 	  <Dialog
 	    open={detailsPopup}
-		onClose={() => setDetailsPopup(false)}
+	    onClose={() => setDetailsPopup(false)}
 	    fullWidth
 	    maxWidth="sm"
+	    PaperProps={{
+	      sx: {
+	        borderRadius: "24px",
+
+	        background: darkMode
+	          ? "linear-gradient(180deg,#111,#0b0b0b)"
+	          : "#ffffff",
+
+	        color: darkMode ? "#fff" : "#111",
+
+	        border: darkMode
+	          ? "1px solid rgba(255,215,0,0.12)"
+	          : "none",
+
+	        boxShadow: darkMode
+	          ? "0 30px 80px rgba(0,0,0,0.8)"
+	          : "0 20px 50px rgba(0,0,0,0.2)",
+	      },
+	    }}
 	  >
 	    <DialogTitle sx={{ fontWeight: 700 }}>
 	      Packet Details
@@ -741,8 +940,13 @@ function ZohoItemsPage() {
 			        mb: 2,
 			        p: 2,
 			        borderRadius: 3,
-			        background: "rgba(0,0,0,0.03)",
-			        border: "1px solid rgba(0,0,0,0.05)",
+					background: darkMode
+					  ? "rgba(255,255,255,0.03)"
+					  : "rgba(0,0,0,0.03)",
+
+					border: darkMode
+					  ? "1px solid rgba(255,215,0,0.08)"
+					  : "1px solid rgba(0,0,0,0.05)",
 			      }}
 	        >
 	          <b style={{ display: "block", marginBottom: 8 }}>
@@ -758,7 +962,10 @@ function ZohoItemsPage() {
 	              copy[i] = e.target.value;
 	              setDescriptions(copy);
 	            }}
-	            sx={{ mb: 1 }}
+				sx={{
+				  ...formFieldSx(darkMode),
+				  mb: 1,
+				}}
 	          />
 
 	          <TextField
@@ -772,7 +979,10 @@ function ZohoItemsPage() {
 	            }}
 				error={!!errors[`weight-${i}`]}          
 				helperText={errors[`weight-${i}`]}
-	            sx={{ mb: 1 }}
+				sx={{
+				  ...formFieldSx(darkMode),
+				  mb: 1,
+				}}
 	          />
 
 			  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
@@ -785,7 +995,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], l: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>x</span>
@@ -799,7 +1013,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], b: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>x</span>
@@ -813,7 +1031,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], h: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>inches</span>
@@ -877,7 +1099,29 @@ function ZohoItemsPage() {
 		  </Button>
 	    </DialogActions>
 	  </Dialog>
-	  <Dialog open={addMoreOpen} onClose={() => setAddMoreOpen(false)}>
+	  <Dialog
+	    open={addMoreOpen}
+	    onClose={() => setAddMoreOpen(false)}
+	    PaperProps={{
+	      sx: {
+	        borderRadius: "24px",
+
+	        background: darkMode
+	          ? "linear-gradient(180deg,#111,#0b0b0b)"
+	          : "#ffffff",
+
+	        color: darkMode ? "#fff" : "#111",
+
+	        border: darkMode
+	          ? "1px solid rgba(255,215,0,0.12)"
+	          : "none",
+
+	        boxShadow: darkMode
+	          ? "0 30px 80px rgba(0,0,0,0.8)"
+	          : "0 20px 50px rgba(0,0,0,0.2)",
+	      },
+	    }}
+	  >
 	    <DialogTitle>Add More Packets</DialogTitle>
 
 		<DialogContent dividers>
@@ -888,7 +1132,10 @@ function ZohoItemsPage() {
 		    value={addCount}
 		    onChange={(e) => setAddCount(Number(e.target.value))}
 		    fullWidth
-		    sx={{ mb: 2 }}
+			sx={{
+			  ...formFieldSx(darkMode),
+			  mb: 1,
+			}}
 		  />
 
 		  {[...Array(addCount)].map((_, i) => (
@@ -904,7 +1151,10 @@ function ZohoItemsPage() {
 		          copy[i] = e.target.value;
 		          setDescriptions(copy);
 		        }}
-		        sx={{ mb: 1 }}
+				sx={{
+				  ...formFieldSx(darkMode),
+				  mb: 1,
+				}}
 		      />
 
 		      <TextField
@@ -916,7 +1166,10 @@ function ZohoItemsPage() {
 		          copy[i] = e.target.value;
 		          setWeights(copy);
 		        }}
-		        sx={{ mb: 1 }}
+				sx={{
+				  ...formFieldSx(darkMode),
+				  mb: 1,
+				}}
 		      />
 
 			  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
@@ -929,7 +1182,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], l: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>x</span>
@@ -943,7 +1200,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], b: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>x</span>
@@ -957,7 +1218,11 @@ function ZohoItemsPage() {
 			        copy[i] = { ...copy[i], h: e.target.value };
 			        setDimensionsList(copy);
 			      }}
-			      sx={{ width: 80 }}
+				  sx={{
+				    ...formFieldSx(darkMode),
+				    width: 80,
+				    mb: 0,
+				  }}
 			    />
 
 			    <span>inches</span>
@@ -1021,26 +1286,47 @@ function ZohoItemsPage() {
 
 /* ===================== STYLES ===================== */
 
-const page = {
+const page = (darkMode) => ({
   minHeight: "100vh",
   padding: 20,
   boxSizing: "border-box",
-  background: "linear-gradient(135deg, #f5c542, #b8860b)",
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
-};
 
-const backgroundText = {
+  background: darkMode
+    ? `
+      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
+      linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)
+    `
+    : `
+      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
+      linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
+    `,
+
+  backgroundAttachment: "fixed",
+});
+
+const backgroundText = (darkMode) => ({
   position: "absolute",
   fontSize: 180,
   fontWeight: 900,
-  color: "rgba(255,255,255,0.12)",
+
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(255,215,0,0.12), rgba(255,215,0,0.03))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
+
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+
   top: "50%",
   left: "50%",
   transform: "translate(-50%, -50%)",
+
   pointerEvents: "none",
-};
+});
 
 const content = {
   position: "relative",
@@ -1055,67 +1341,101 @@ const pageTitle = {
   color: "#fff",
 };
 
-const tableWrapper = {
+const tableWrapper = (darkMode) => ({
   height: "calc(100vh - 170px)",
   borderRadius: 18,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+
   backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
-  boxShadow:
-    "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.12)"
+    : "none",
+
+  boxShadow: darkMode
+    ? "0 22px 55px rgba(0,0,0,0.65)"
+    : "0 22px 55px rgba(0,0,0,0.35)",
+
   padding: 12,
   overflowX: "auto",
-};
+});
 
-const dataGridStyles = {
-  background: "#fff",
+const dataGridStyles = (darkMode) => ({
+  background: darkMode ? "#0f0f0f" : "#fff",
+
+  color: darkMode ? "#fff" : "#111",
+
   borderRadius: 12,
+
   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#f9fafb",
-    borderBottom: "1px solid #e5e7eb",
-    fontWeight: 600,
-  },
+    backgroundColor: darkMode
+      ? "#111111 !important"
+      : "#f9fafb !important",
 
-  "& .MuiDataGrid-row": {
-    borderBottom: "1px solid #f1f5f9",
-  },
+    color: darkMode ? "#d1d5db" : "#475569",
 
-  "& .MuiDataGrid-row:hover": {
-    filter: "brightness(0.97)",
+    borderBottom: darkMode
+      ? "1px solid rgba(255,215,0,0.08)"
+      : "1px solid #e5e7eb",
   },
 
   "& .MuiDataGrid-cell": {
-    fontSize: 13,
+    color: darkMode ? "#f3f4f6" : "#111",
+
+    borderBottom: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #f1f5f9",
   },
 
-  "& .MuiDataGrid-footerContainer": {
-    borderTop: "1px solid #e5e7eb",
+  "& .MuiDataGrid-row:hover": {
+    background: darkMode
+      ? "rgba(255,215,0,0.05)"
+      : "#f9fafb",
   },
 
   "& .row-packed": {
-    backgroundColor: "rgba(219,234,254,0.55)",
+    background: darkMode
+      ? "rgba(30,41,59,0.42)"
+      : "rgba(219,234,254,0.55)",
   },
-};
+
+  "& .MuiDataGrid-footerContainer": {
+    borderTop: darkMode
+      ? "1px solid rgba(255,215,0,0.12)"
+      : "1px solid #e5e7eb",
+  },
+});
 
 /* ---------- Drawer ---------- */
 
-const drawer = {
+const drawer = (darkMode) => ({
   width: 520,
   height: "100%",
   padding: 30,
   boxSizing: "border-box",
   position: "relative",
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.35))",
+
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(12,12,12,0.98), rgba(18,18,18,0.95))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.35))",
+
+  color: darkMode ? "#fff" : "#1f2937",
+
   backdropFilter: "blur(18px)",
-  WebkitBackdropFilter: "blur(18px)",
-  boxShadow:
-    "-20px 0 50px rgba(0,0,0,0.35), inset 1px 0 0 rgba(255,255,255,0.4)",
-  color: "#1f2937",
-};
+
+  borderLeft: darkMode
+    ? "1px solid rgba(255,215,0,0.12)"
+    : "none",
+
+  boxShadow: darkMode
+    ? "-20px 0 50px rgba(0,0,0,0.75)"
+    : "-20px 0 50px rgba(0,0,0,0.35)",
+});
 
 const drawerHighlight = {
   position: "absolute",
@@ -1128,34 +1448,137 @@ const drawerHighlight = {
   pointerEvents: "none",
 };
 
-const drawerTitle = {
+const drawerTitle = (darkMode) => ({
   marginBottom: 4,
   fontSize: 22,
   fontWeight: 700,
-};
+  color: darkMode ? "#FFD700" : "#111",
+});
 
-const drawerButton = {
+const drawerButton = (darkMode) => ({
   mt: 1,
   px: 3,
-  fontWeight: 600,
+  fontWeight: 700,
   borderRadius: "999px",
-  textTransform: "none",
-  color: "rgba(255,255,255,0.9)",
-  background:
-    "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
-};
 
-const searchPanel = {
+  textTransform: "none",
+
+  background: darkMode
+    ? "linear-gradient(180deg,#facc15,#d97706)"
+    : "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
+
+  color: darkMode ? "#111" : "#fff",
+
+  boxShadow: darkMode
+    ? "0 10px 30px rgba(255,215,0,0.25)"
+    : undefined,
+});
+
+const formFieldSx = (darkMode) => ({
+  mb: 2,
+
+  "& .MuiInputBase-root": {
+    borderRadius: "14px",
+
+    background: darkMode
+      ? "rgba(255,255,255,0.03)"
+      : "#fff",
+
+    color: darkMode ? "#fff" : "#111",
+
+    transition: "all 0.25s ease",
+  },
+
+  "& .MuiInputLabel-root": {
+    color: darkMode
+      ? "rgba(255,255,255,0.7)"
+      : "#374151",
+  },
+
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: darkMode
+      ? "rgba(255,215,0,0.12)"
+      : "rgba(0,0,0,0.12)",
+  },
+
+  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: darkMode
+      ? "rgba(255,215,0,0.35)"
+      : "#111827",
+  },
+
+  "& .Mui-focused .MuiOutlinedInput-notchedOutline": {
+    borderColor: darkMode
+      ? "#FFD700 !important"
+      : "#111827 !important",
+
+    boxShadow: darkMode
+      ? "0 0 0 3px rgba(255,215,0,0.15)"
+      : "0 0 0 3px rgba(17,24,39,0.08)",
+  },
+
+  "& input": {
+    color: darkMode ? "#fff" : "#111",
+  },
+
+  "& textarea": {
+    color: darkMode ? "#fff" : "#111",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: darkMode ? "#FFD700" : "#111",
+  },
+});
+
+const searchPanel = (darkMode) => ({
   display: "flex",
   alignItems: "center",
   gap: 16,
   marginBottom: 4,
   padding: "5px 18px",
   borderRadius: 16,
-  background: "rgba(255,255,255,0.35)",
+
+  background: darkMode
+    ? "linear-gradient(145deg, rgba(12,12,12,0.96), rgba(18,18,18,0.92))"
+    : "rgba(255,255,255,0.35)",
+
   backdropFilter: "blur(16px)",
-  boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.12)"
+    : "none",
+
+  boxShadow: darkMode
+    ? "0 10px 40px rgba(0,0,0,0.65)"
+    : "0 10px 25px rgba(0,0,0,0.2)",
+
   maxWidth: "100%",
-};
+});
+
+const themeBtn = (darkMode) => ({
+  px: 2.6,
+  py: 1,
+  borderRadius: "999px",
+  fontSize: 12,
+  fontWeight: 700,
+
+  background: darkMode
+    ? "linear-gradient(135deg,#111,#222)"
+    : "#111",
+
+  color: darkMode ? "#FFD700" : "#fff",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.25)"
+    : "1px solid rgba(255,255,255,0.25)",
+
+  boxShadow: darkMode
+    ? "0 0 18px rgba(255,215,0,0.15)"
+    : "0 10px 25px rgba(0,0,0,0.25)",
+
+  "&:hover": {
+    transform: "translateY(-3px) scale(1.04)",
+  },
+});
 
 export default ZohoItemsPage;
