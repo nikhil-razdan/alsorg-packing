@@ -86,7 +86,7 @@ function DashboardPage() {
     dispatch: 1,
     combined: 2,
     aging: 3,
-  }[activeReport];
+  }[activeReport] ?? 0;
   const [mode, setMode] = useState("inventory");
   const [darkMode, setDarkMode] = useState(false);
 
@@ -173,7 +173,151 @@ function DashboardPage() {
 		      <StatCard darkMode={darkMode} title="Packed Items" value={Number(stats.packedItems || 0)} />
 		      <StatCard darkMode={darkMode} title="Dispatched" value={Number(stats.dispatchedItems || 0)} />
 		    </div>
+			<div
+			  style={{
+			    marginBottom: 14,
 
+			    display: "flex",
+			    alignItems: "center",
+			    justifyContent: "space-between",
+
+			    gap: 14,
+
+			    flexWrap: "wrap",
+			  }}
+			>
+
+			  {/* LEFT SIDE */}
+			  <div
+			    style={{
+			      display: "flex",
+			      flexDirection: "column",
+			      gap: 4,
+			    }}
+			  >
+			    <div
+			      style={{
+			        fontSize: 22,
+			        fontWeight: 800,
+			        color: darkMode ? "#FFD700" : "#fff",
+			      }}
+			    >
+			      Reports Center
+			    </div>
+
+			    <div
+			      style={{
+			        fontSize: 13,
+			        color: darkMode
+			          ? "rgba(255,255,255,0.72)"
+			          : "rgba(255,255,255,0.88)",
+			      }}
+			    >
+			      View, export and analyze inventory reports
+			    </div>
+			  </div>
+
+			  {/* REPORT TOGGLE */}
+			  <div
+			    style={{
+			      position: "relative",
+
+			      display: "inline-flex",
+
+			      gap: 8,
+
+			      padding: 5,
+
+			      borderRadius: 999,
+
+			      background: darkMode
+			        ? "rgba(15,15,15,0.92)"
+			        : "rgba(255,255,255,0.18)",
+
+			      backdropFilter: "blur(14px)",
+
+			      border: darkMode
+			        ? "1px solid rgba(255,215,0,0.12)"
+			        : "1px solid rgba(255,255,255,0.2)",
+
+			      overflow: "hidden",
+			    }}
+			  >
+
+			    <div
+			      style={{
+			        ...reportSliderIndicator,
+
+			        transform: `translateX(${reportIndex * 118}px)`,
+
+			        background: darkMode
+			          ? "linear-gradient(180deg,#FFD700,#d4a017)"
+			          : "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))",
+			      }}
+			    />
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "packing"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("packing")}
+			    >
+			      📦 Packing
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "dispatch"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("dispatch")}
+			    >
+			      🚚 Dispatch
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "combined"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("combined")}
+			    >
+			      📊 Combined
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "aging"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("aging")}
+			    >
+			      ⏳ Aging
+			    </button>
+
+			  </div>
+			</div>
 		    <div style={mainGrid}>
 		      {/* INVENTORY CHART */}
 		      <div style={panel(darkMode)}>
