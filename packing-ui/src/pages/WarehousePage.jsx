@@ -1658,31 +1658,74 @@ const dataGridStyles = (darkMode) => ({
   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    backgroundColor: darkMode ? "#111111 !important" : "#f8fafc !important",
-
-    color: darkMode ? "#cbd5e1" : "#475569",
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
+      : "#f8fafc !important",
 
     borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.08)"
+      ? "1px solid rgba(255,215,0,0.12)"
       : "1px solid #e2e8f0",
+
+    minHeight: "52px !important",
+    maxHeight: "52px !important",
+
+    boxShadow: darkMode
+      ? "inset 0 -1px 0 rgba(255,215,0,0.08)"
+      : "none",
   },
 
   "& .MuiDataGrid-columnHeader": {
-    backgroundColor: darkMode ? "#111111 !important" : "#f8fafc !important",
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
+      : "#f8fafc !important",
 
-    color: darkMode ? "#d1d5db" : "#475569",
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569",
 
     fontWeight: 700,
+
     fontSize: 13,
+
+    letterSpacing: "0.4px",
+
+    textTransform: "uppercase",
 
     borderRight: darkMode
       ? "1px solid rgba(255,255,255,0.05)"
       : "1px solid #e5e7eb",
+
+    textShadow: darkMode
+      ? "0 0 10px rgba(255,215,0,0.18)"
+      : "none",
   },
 
   "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight: 700,
-    color: darkMode ? "#d1d5db !important" : "#475569 !important",
+    fontWeight: 800,
+
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569 !important",
+
+    letterSpacing: "0.4px",
+  },
+  
+  "& .MuiDataGrid-iconSeparator": {
+    color: darkMode
+      ? "rgba(255,215,0,0.12)"
+      : "#cbd5e1",
+  },
+
+  "& .MuiDataGrid-sortIcon": {
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: darkMode
+      ? "#FFD700"
+      : "#475569",
   },
 
   "& .MuiDataGrid-cell": {
