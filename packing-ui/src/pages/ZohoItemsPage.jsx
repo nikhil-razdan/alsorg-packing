@@ -1372,42 +1372,102 @@ const dataGridStyles = (darkMode) => ({
 
   border: "none",
 
+  /* ================= HEADER ROW ================= */
+
   "& .MuiDataGrid-columnHeaders": {
-    backgroundColor: darkMode
-      ? "#111111 !important"
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
       : "#f9fafb !important",
 
-    color: darkMode ? "#d1d5db" : "#475569",
-
     borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.08)"
+      ? "1px solid rgba(255,215,0,0.12)"
       : "1px solid #e5e7eb",
   },
 
-  "& .MuiDataGrid-cell": {
-    color: darkMode ? "#f3f4f6" : "#111",
+  /* ================= INDIVIDUAL HEADER ================= */
 
+  "& .MuiDataGrid-columnHeader": {
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
+      : "#f9fafb !important",
+
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#374151 !important",
+
+    fontWeight: 700,
+
+    fontSize: 13,
+
+    borderRight: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #e5e7eb",
+  },
+
+  /* ================= HEADER TITLE ================= */
+
+  "& .MuiDataGrid-columnHeaderTitle": {
+    fontWeight: 700,
+
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#374151 !important",
+  },
+
+  /* ================= CELLS ================= */
+
+  "& .MuiDataGrid-cell": {
     borderBottom: darkMode
       ? "1px solid rgba(255,255,255,0.05)"
       : "1px solid #f1f5f9",
+
+    color: darkMode ? "#f5f5f5" : "#111",
+
+    fontSize: 13,
+  },
+
+  /* ================= ROW ================= */
+
+  "& .MuiDataGrid-row": {
+    background: darkMode
+      ? "rgba(17,17,17,0.75)"
+      : "rgba(219,234,254,0.55)",
   },
 
   "& .MuiDataGrid-row:hover": {
     background: darkMode
-      ? "rgba(255,215,0,0.05)"
+      ? "rgba(255,215,0,0.06)"
       : "#f9fafb",
   },
 
-  "& .row-packed": {
-    background: darkMode
-      ? "rgba(30,41,59,0.42)"
-      : "rgba(219,234,254,0.55)",
-  },
+  /* ================= FOOTER ================= */
 
   "& .MuiDataGrid-footerContainer": {
     borderTop: darkMode
       ? "1px solid rgba(255,215,0,0.12)"
       : "1px solid #e5e7eb",
+
+    color: darkMode ? "#fff" : "#111",
+
+    background: darkMode ? "#0b0b0b" : "#fff",
+  },
+
+  /* ================= PAGINATION ================= */
+
+  "& .MuiTablePagination-root": {
+    color: darkMode ? "#fff" : "#111",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: darkMode ? "#FFD700" : "#374151",
+  },
+
+  /* ================= PACKED ROW ================= */
+
+  "& .row-packed": {
+    background: darkMode
+      ? "rgba(120,53,15,0.35)"
+      : "rgba(219,234,254,0.55)",
   },
 });
 
