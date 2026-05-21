@@ -514,8 +514,6 @@ function UsersPage() {
 	  <Button
 	    onClick={() => setCreateOpen(true)}
 	    sx={{
-	      ...actionPrimary,
-
 	      height: 42,
 	      px: 3.2,
 
@@ -526,14 +524,38 @@ function UsersPage() {
 
 	      whiteSpace: "nowrap",
 
-	      background:
-	        "linear-gradient(135deg,#3b82f6,#2563eb)",
+	      color: "#fff",
 
-	      boxShadow:
-	        "0 10px 25px rgba(37,99,235,0.35)",
+	      background: darkMode
+	        ? "linear-gradient(135deg,#1f1f1f,#0f0f0f)"
+	        : "linear-gradient(135deg,#374151,#1f2937)",
+
+	      border: darkMode
+	        ? "1px solid rgba(255,215,0,0.12)"
+	        : "1px solid rgba(255,255,255,0.08)",
+
+	      boxShadow: darkMode
+	        ? `
+	          0 10px 25px rgba(0,0,0,0.55),
+	          inset 0 1px 0 rgba(255,215,0,0.05)
+	        `
+	        : `
+	          0 10px 25px rgba(17,24,39,0.28),
+	          inset 0 1px 0 rgba(255,255,255,0.08)
+	        `,
+
+	      transition: "all 0.22s ease",
 
 	      "&:hover": {
+	        background: darkMode
+	          ? "linear-gradient(135deg,#2b2b2b,#141414)"
+	          : "linear-gradient(135deg,#4b5563,#374151)",
+
 	        transform: "translateY(-2px)",
+
+	        boxShadow: darkMode
+	          ? "0 14px 30px rgba(0,0,0,0.65)"
+	          : "0 14px 30px rgba(17,24,39,0.38)",
 	      },
 	    }}
 	  >
