@@ -779,12 +779,15 @@ function UsersPage() {
 		    ...actionPrimary,
 
 		    height: 40,
-			flexShrink: 0,
 		    px: 3,
+
+		    flexShrink: 0,
 
 		    whiteSpace: "nowrap",
 
 		    borderRadius: "18px",
+
+		    marginLeft: "auto",
 		  }}
 		>
           Create User
@@ -1267,7 +1270,7 @@ const searchPanel = (darkMode) => ({
   display: "flex",
   alignItems: "center",
   gap: 16,
-
+  rowGap: 12,
   marginBottom: 4,
 
   padding: "5px 18px",
@@ -1277,7 +1280,7 @@ const searchPanel = (darkMode) => ({
   width: "100%",
   maxWidth: "100%",
 
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
   minWidth: 0,
 
   background: darkMode
