@@ -46,6 +46,7 @@ function UsersPage() {
   const [snackType,setSnackType] = useState("success");
   const [deleteOpen,setDeleteOpen] = useState(false);
   const [deleteUserId,setDeleteUserId] = useState(null);
+  const [darkMode,setDarkMode] = useState(false);
 
   useEffect(() => {
 
@@ -208,7 +209,48 @@ function UsersPage() {
 	          value={editUsername}
 	          size="small"
 	          onChange={(e)=>setEditUsername(e.target.value)}
-	          sx={{ width:"100%" }}
+			  sx={{
+			    minWidth: 140,
+
+			    "& .MuiInputBase-root": {
+			      borderRadius: "14px",
+
+			      background: darkMode
+			        ? "rgba(255,255,255,0.04)"
+			        : "#fff",
+
+			      color: darkMode ? "#fff" : "#111",
+
+			      border: darkMode
+			        ? "1px solid rgba(255,215,0,0.08)"
+			        : "1px solid rgba(0,0,0,0.08)",
+			    },
+
+			    "& input": {
+			      color: darkMode ? "#fff" : "#111",
+			    },
+
+			    "& input::placeholder": {
+			      color: darkMode
+			        ? "rgba(255,255,255,0.4)"
+			        : "rgba(0,0,0,0.4)",
+			      opacity: 1,
+			    },
+
+			    "& .MuiSvgIcon-root": {
+			      color: darkMode ? "#FFD700" : "#111",
+			    },
+
+			    "& .MuiSelect-select": {
+			      color: darkMode ? "#fff" : "#111",
+			    },
+
+			    "& label": {
+			      color: darkMode
+			        ? "rgba(255,255,255,0.65)"
+			        : "#475569",
+			    },
+			  }}
 	        />
 	      );
 	    }
@@ -265,6 +307,48 @@ function UsersPage() {
               size="small"
               value={editRole}
               onChange={(e)=>setEditRole(e.target.value)}
+			  sx={{
+			    minWidth: 140,
+
+			    "& .MuiInputBase-root": {
+			      borderRadius: "14px",
+
+			      background: darkMode
+			        ? "rgba(255,255,255,0.04)"
+			        : "#fff",
+
+			      color: darkMode ? "#fff" : "#111",
+
+			      border: darkMode
+			        ? "1px solid rgba(255,215,0,0.08)"
+			        : "1px solid rgba(0,0,0,0.08)",
+			    },
+
+			    "& input": {
+			      color: darkMode ? "#fff" : "#111",
+			    },
+
+			    "& input::placeholder": {
+			      color: darkMode
+			        ? "rgba(255,255,255,0.4)"
+			        : "rgba(0,0,0,0.4)",
+			      opacity: 1,
+			    },
+
+			    "& .MuiSvgIcon-root": {
+			      color: darkMode ? "#FFD700" : "#111",
+			    },
+
+			    "& .MuiSelect-select": {
+			      color: darkMode ? "#fff" : "#111",
+			    },
+
+			    "& label": {
+			      color: darkMode
+			        ? "rgba(255,255,255,0.65)"
+			        : "#475569",
+			    },
+			  }}
             >
               <MenuItem value="ADMIN">ADMIN</MenuItem>
               <MenuItem value="PACKING">PACKING</MenuItem>
@@ -356,9 +440,9 @@ function UsersPage() {
 
   return(
 
-  <div style={page}>
+  <div style={page(darkMode)}>
 
-    <div style={backgroundText}>Alsorg</div>
+    <div style={backgroundText(darkMode)}>Alsorg</div>
 
     <div style={content}>
 
@@ -389,49 +473,85 @@ function UsersPage() {
 	    </Box>
 
 	    <Box>
-	      <div
-	        style={{
-	          fontSize: 28,
-	          fontWeight: 700,
-	          color: "#ffffff",
-	          letterSpacing: 0.4,
-	          textShadow: "0 3px 10px rgba(0,0,0,0.25)",
-	        }}
-	      >
-	        User Management
-	      </div>
+		<div
+		  style={{
+		    fontSize: 28,
+		    fontWeight: 700,
 
-	      <div
-	        style={{
-	          fontSize: 13,
-	          color: "rgba(255,255,255,0.85)",
-	        }}
-	      >
-	        Manage roles, passwords and access permissions
-	      </div>
+		    color: darkMode
+		      ? "#FFD700"
+		      : "#ffffff",
+
+		    letterSpacing: 0.4,
+
+		    textShadow: darkMode
+		      ? "0 0 18px rgba(255,215,0,0.25)"
+		      : "0 3px 10px rgba(0,0,0,0.25)",
+		  }}
+		>
+		  User Management
+		</div>
+
+		<div
+		  style={{
+		    fontSize: 13,
+
+		    color: darkMode
+		      ? "rgba(255,215,0,0.78)"
+		      : "rgba(255,255,255,0.85)",
+		  }}
+		>
+		  Manage roles, passwords and access permissions
+		</div>
 	    </Box>
 	  </Box>
 
-	  <Box
-	    sx={{
-	      px: 2,
-	      py: 0.8,
-	      borderRadius: "999px",
-	      background: "rgba(255,255,255,0.25)",
-	      backdropFilter: "blur(10px)",
-	      color: "#fff",
-	      fontWeight: 600,
-	      border: "1px solid rgba(255,255,255,0.3)",
-	      fontSize: 13,
-	    }}
-	  >
-	    {users.length} Users
+	  <Box sx={{ display:"flex", alignItems:"center", gap:1.5 }}>
+
+	    <Button
+	      onClick={() => setDarkMode(!darkMode)}
+	      sx={themeBtn(darkMode)}
+	    >
+	      {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
+	    </Button>
+
+	    <Box
+	      sx={{
+	        px: 2,
+	        py: 0.8,
+	        borderRadius: "999px",
+
+	        background: darkMode
+	          ? "rgba(255,215,0,0.12)"
+	          : "rgba(255,255,255,0.25)",
+
+	        backdropFilter: "blur(10px)",
+
+	        color: darkMode ? "#FFD700" : "#fff",
+
+	        fontWeight: 600,
+
+	        border: darkMode
+	          ? "1px solid rgba(255,215,0,0.2)"
+	          : "1px solid rgba(255,255,255,0.3)",
+
+	        fontSize: 13,
+	      }}
+	    >
+	      {users.length} Users
+	    </Box>
+
 	  </Box>
 	</Box>
 
-      <Box sx={searchPanel}>
+      <Box sx={searchPanel(darkMode)}>
 
-        <SearchIcon sx={{opacity:0.7}}/>
+	  <SearchIcon
+	    sx={{
+	      opacity: 0.7,
+	      color: darkMode ? "#FFD700" : "#475569",
+	    }}
+	  />
 
         <TextField
           variant="standard"
@@ -439,7 +559,48 @@ function UsersPage() {
           value={search}
           onChange={(e)=>setSearch(e.target.value)}
           InputProps={{disableUnderline:true}}
-          sx={{flex:1}}
+		  sx={{
+		    minWidth: 140,
+
+		    "& .MuiInputBase-root": {
+		      borderRadius: "14px",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#fff",
+
+		      color: darkMode ? "#fff" : "#111",
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.08)"
+		        : "1px solid rgba(0,0,0,0.08)",
+		    },
+
+		    "& input": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.4)"
+		        : "rgba(0,0,0,0.4)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: darkMode ? "#FFD700" : "#111",
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& label": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.65)"
+		        : "#475569",
+		    },
+		  }}
         />
 
         <TextField
@@ -447,6 +608,48 @@ function UsersPage() {
           placeholder="Username"
           value={username}
           onChange={(e)=>setUsername(e.target.value)}
+		  sx={{
+		    minWidth: 140,
+
+		    "& .MuiInputBase-root": {
+		      borderRadius: "14px",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#fff",
+
+		      color: darkMode ? "#fff" : "#111",
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.08)"
+		        : "1px solid rgba(0,0,0,0.08)",
+		    },
+
+		    "& input": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.4)"
+		        : "rgba(0,0,0,0.4)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: darkMode ? "#FFD700" : "#111",
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& label": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.65)"
+		        : "#475569",
+		    },
+		  }}
         />
 
         <TextField
@@ -455,6 +658,48 @@ function UsersPage() {
           placeholder="Password"
           value={password}
           onChange={(e)=>setPassword(e.target.value)}
+		  sx={{
+		    minWidth: 140,
+
+		    "& .MuiInputBase-root": {
+		      borderRadius: "14px",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#fff",
+
+		      color: darkMode ? "#fff" : "#111",
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.08)"
+		        : "1px solid rgba(0,0,0,0.08)",
+		    },
+
+		    "& input": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.4)"
+		        : "rgba(0,0,0,0.4)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: darkMode ? "#FFD700" : "#111",
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& label": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.65)"
+		        : "#475569",
+		    },
+		  }}
         />
 
         <TextField
@@ -462,6 +707,48 @@ function UsersPage() {
           size="small"
           value={role}
           onChange={(e)=>setRole(e.target.value)}
+		  sx={{
+		    minWidth: 140,
+
+		    "& .MuiInputBase-root": {
+		      borderRadius: "14px",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#fff",
+
+		      color: darkMode ? "#fff" : "#111",
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.08)"
+		        : "1px solid rgba(0,0,0,0.08)",
+		    },
+
+		    "& input": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.4)"
+		        : "rgba(0,0,0,0.4)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: darkMode ? "#FFD700" : "#111",
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& label": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.65)"
+		        : "#475569",
+		    },
+		  }}
         >
           <MenuItem value="ADMIN">ADMIN</MenuItem>
           <MenuItem value="PACKING">PACKING</MenuItem>
@@ -474,7 +761,7 @@ function UsersPage() {
 
       </Box>
 
-      <div style={tableWrapper}>
+      <div style={tableWrapper(darkMode)}>
 
         <DataGrid
           rows={filteredRows}
@@ -482,7 +769,7 @@ function UsersPage() {
           loading={loading}
           disableRowSelectionOnClick
           density="compact"
-          sx={dataGridStyles}
+          sx={dataGridStyles(darkMode)}
         />
 
       </div>
@@ -500,6 +787,48 @@ function UsersPage() {
           value={newPassword}
           onChange={(e)=>setNewPassword(e.target.value)}
           fullWidth
+		  sx={{
+		    minWidth: 140,
+
+		    "& .MuiInputBase-root": {
+		      borderRadius: "14px",
+
+		      background: darkMode
+		        ? "rgba(255,255,255,0.04)"
+		        : "#fff",
+
+		      color: darkMode ? "#fff" : "#111",
+
+		      border: darkMode
+		        ? "1px solid rgba(255,215,0,0.08)"
+		        : "1px solid rgba(0,0,0,0.08)",
+		    },
+
+		    "& input": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.4)"
+		        : "rgba(0,0,0,0.4)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: darkMode ? "#FFD700" : "#111",
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: darkMode ? "#fff" : "#111",
+		    },
+
+		    "& label": {
+		      color: darkMode
+		        ? "rgba(255,255,255,0.65)"
+		        : "#475569",
+		    },
+		  }}
         />
 
       </DialogContent>
@@ -567,23 +896,49 @@ function UsersPage() {
 
 /* ===== ENHANCED GLASS STYLE ===== */
 
-const page={
+const page = (darkMode) => ({
   minHeight:"100vh",
   padding:20,
-  background:"linear-gradient(135deg,#f5c542,#b8860b)",
-  position:"relative"
-};
+  position:"relative",
+  overflowX:"hidden",
+  overflowY:"auto",
 
-const backgroundText={
+  background: darkMode
+    ? `
+      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
+      linear-gradient(135deg,#000 0%,#111 45%,#1a1a1a 100%)
+    `
+    : `
+      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
+      linear-gradient(135deg,#f5c542 0%,#d4a017 45%,#8b5e00 100%)
+    `,
+
+  backgroundAttachment:"fixed",
+});
+
+const backgroundText = (darkMode) => ({
   position:"absolute",
-  fontSize:180,
+  fontSize:220,
   fontWeight:900,
-  color:"rgba(255,255,255,0.10)",
+
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
+
+  WebkitBackgroundClip:"text",
+  WebkitTextFillColor:"transparent",
+
   top:"50%",
   left:"50%",
   transform:"translate(-50%,-50%)",
-  letterSpacing:10
-};
+
+  pointerEvents:"none",
+  letterSpacing:10,
+
+  filter:"blur(1px)",
+});
 
 const content={position:"relative", zIndex:1};
 
@@ -596,53 +951,122 @@ const pageTitle={
   letterSpacing:1
 };
 
-const tableWrapper = {
-  height: "calc(100vh - 170px)",
-  borderRadius: 18,
+const tableWrapper = (darkMode) => ({
+  height:"calc(100vh - 170px)",
+  borderRadius:18,
 
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+  background: darkMode
+    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
 
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
+  backdropFilter:"blur(16px)",
+  WebkitBackdropFilter:"blur(16px)",
 
-  boxShadow:
-    "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+  boxShadow: darkMode
+    ? "0 22px 55px rgba(0,0,0,0.65)"
+    : "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
 
-  padding: 12,
-  overflowX: "auto",
-};
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.15)"
+    : "none",
 
-const dataGridStyles = {
-  background: "#fff",
-  borderRadius: 12,
-  border: "none",
+  padding:12,
+  overflowX:"auto",
+});
+
+const dataGridStyles = (darkMode) => ({
+
+  background: darkMode ? "#0f0f0f" : "#fff",
+
+  color: darkMode ? "#fff" : "#111",
+
+  borderRadius:12,
+
+  border:"none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#f9fafb",
-    borderBottom: "1px solid #e5e7eb",
-    fontWeight: 600,
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
+      : "#f8fafc !important",
+
+    borderBottom: darkMode
+      ? "1px solid rgba(255,215,0,0.12)"
+      : "1px solid #e2e8f0",
+
+    minHeight:"52px !important",
+    maxHeight:"52px !important",
+  },
+
+  "& .MuiDataGrid-columnHeader": {
+    background: darkMode
+      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
+      : "#f8fafc !important",
+
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569",
+
+    fontWeight:700,
+    fontSize:13,
+    letterSpacing:"0.4px",
+
+    textTransform:"uppercase",
+
+    borderRight: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #e5e7eb",
+  },
+
+  "& .MuiDataGrid-columnHeaderTitle": {
+    fontWeight:800,
+
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569 !important",
+  },
+
+  "& .MuiDataGrid-sortIcon": {
+    color: darkMode
+      ? "#FFD700 !important"
+      : "#475569",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: darkMode
+      ? "#FFD700"
+      : "#475569",
   },
 
   "& .MuiDataGrid-row": {
-    borderBottom: "1px solid #f1f5f9",
-    transition: "all 0.2s ease",
+    borderBottom: darkMode
+      ? "1px solid rgba(255,255,255,0.05)"
+      : "1px solid #f1f5f9",
+
+    transition:"all 0.2s ease",
   },
 
   "& .MuiDataGrid-row:hover": {
-    filter: "brightness(0.97)",
+    background: darkMode
+      ? "rgba(255,215,0,0.05)"
+      : "#f9fafb",
   },
 
   "& .MuiDataGrid-cell": {
-    fontSize: 13,
-    display: "flex",
-    alignItems: "center",
+    fontSize:13,
+    display:"flex",
+    alignItems:"center",
+
+    color: darkMode ? "#f5f5f5" : "#111",
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: "1px solid #e5e7eb",
+    borderTop: darkMode
+      ? "1px solid rgba(255,215,0,0.12)"
+      : "1px solid #e5e7eb",
+
+    color: darkMode ? "#fff" : "#111",
   },
-};
+});
 
 const avatar={
   width:30,
@@ -792,17 +1216,70 @@ const actionDanger = {
   },
 };
 
-const searchPanel={
+const searchPanel = (darkMode) => ({
   display:"flex",
   alignItems:"center",
   gap:16,
   marginBottom:4,
   padding:"5px 18px",
   borderRadius:16,
-  background:"rgba(255,255,255,0.35)",
-  backdropFilter:"blur(18px)",
-  border:"1px solid rgba(255,255,255,0.25)",
-  boxShadow:"0 10px 25px rgba(0,0,0,0.22)"
-};
+
+  background: darkMode
+    ? `
+      linear-gradient(
+        145deg,
+        rgba(12,12,12,0.96),
+        rgba(18,18,18,0.92)
+      )
+    `
+    : `
+      linear-gradient(
+        145deg,
+        rgba(255,255,255,0.72),
+        rgba(255,255,255,0.42)
+      )
+    `,
+
+  backdropFilter:"blur(30px)",
+  WebkitBackdropFilter:"blur(30px)",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.12)"
+    : "1px solid rgba(255,255,255,0.4)",
+
+  boxShadow: darkMode
+    ? "0 10px 40px rgba(0,0,0,0.65)"
+    : "0 14px 35px rgba(0,0,0,0.18)",
+});
+
+const themeBtn = (darkMode) => ({
+  px:2.6,
+  py:1,
+
+  borderRadius:"999px",
+
+  fontSize:12,
+  fontWeight:700,
+
+  background: darkMode
+    ? "linear-gradient(135deg,#111,#222)"
+    : "#111",
+
+  color: darkMode
+    ? "#FFD700"
+    : "#fff",
+
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.25)"
+    : "1px solid rgba(255,255,255,0.25)",
+
+  boxShadow: darkMode
+    ? "0 0 18px rgba(255,215,0,0.15)"
+    : "0 10px 25px rgba(0,0,0,0.25)",
+
+  "&:hover": {
+    transform:"translateY(-3px) scale(1.04)",
+  },
+});
 
 export default UsersPage;
