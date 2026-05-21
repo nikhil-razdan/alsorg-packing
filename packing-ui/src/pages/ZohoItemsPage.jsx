@@ -883,7 +883,7 @@ function ZohoItemsPage() {
 			  }
 			  error={!!errors[field]}                // ✅ ADD
 			  helperText={errors[field]}  
-	          sx={{ mb: 2 }}
+	          sx={formFieldSx(darkMode)}
 	        />
 	      ))}
 		  <Button
@@ -927,7 +927,14 @@ function ZohoItemsPage() {
 	      Packet Details
 	    </DialogTitle>
 
-	    <DialogContent dividers>
+		<DialogContent
+		  dividers
+		  sx={{
+		    borderColor: darkMode
+		      ? "rgba(255,215,0,0.08)"
+		      : "rgba(0,0,0,0.08)",
+		  }}
+		>
 	      {descriptions.map((_, i) => (
 			<motion.div
 			    key={i}
@@ -1050,13 +1057,23 @@ function ZohoItemsPage() {
 	              copy[i] = e.target.value;
 	              setRemarksList(copy);
 	            }}
+				sx={formFieldSx(darkMode)}
 	          />
 			  </Box>
 			  </motion.div>
 	      ))}
 	    </DialogContent>
 
-	    <DialogActions>
+	    <DialogActions 		
+		sx={{
+		  borderTop: darkMode
+		    ? "1px solid rgba(255,215,0,0.08)"
+		    : "1px solid rgba(0,0,0,0.06)",
+
+		  background: darkMode
+		    ? "#0b0b0b"
+		    : "#fff",
+		}}>
 	      <Button onClick={() => setDetailsPopup(false)}>
 	        Cancel
 	      </Button>
@@ -1124,7 +1141,14 @@ function ZohoItemsPage() {
 	  >
 	    <DialogTitle>Add More Packets</DialogTitle>
 
-		<DialogContent dividers>
+		<DialogContent
+		  dividers
+		  sx={{
+		    borderColor: darkMode
+		      ? "rgba(255,215,0,0.08)"
+		      : "rgba(0,0,0,0.08)",
+		  }}
+		>
 
 		  <TextField
 		    label="Number of packets"
@@ -1237,13 +1261,23 @@ function ZohoItemsPage() {
 		          copy[i] = e.target.value;
 		          setRemarksList(copy);
 		        }}
+				sx={formFieldSx(darkMode)}
 		      />
 		    </Box>
 		  ))}
 
 		</DialogContent>
 
-	    <DialogActions>
+	    <DialogActions 		
+		sx={{
+		  borderTop: darkMode
+		    ? "1px solid rgba(255,215,0,0.08)"
+		    : "1px solid rgba(0,0,0,0.06)",
+
+		  background: darkMode
+		    ? "#0b0b0b"
+		    : "#fff",
+		}}>
 	      <Button onClick={() => setAddMoreOpen(false)}>Cancel</Button>
 
 		  <Button
@@ -1537,56 +1571,137 @@ const drawerButton = (darkMode) => ({
 const formFieldSx = (darkMode) => ({
   mb: 2,
 
-  "& .MuiInputBase-root": {
-    borderRadius: "14px",
+  /* ================= LABEL ================= */
 
-    background: darkMode
-      ? "rgba(255,255,255,0.03)"
-      : "#fff",
-
-    color: darkMode ? "#fff" : "#111",
-
-    transition: "all 0.25s ease",
-  },
-
-  "& .MuiInputLabel-root": {
+  "& .MuiFormLabel-root": {
     color: darkMode
-      ? "rgba(255,255,255,0.7)"
+      ? "rgba(255,215,0,0.72)"
       : "#374151",
+
+    fontWeight: 500,
+
+    transition: "all 0.2s ease",
   },
 
-  "& .MuiOutlinedInput-notchedOutline": {
-    borderColor: darkMode
-      ? "rgba(255,215,0,0.12)"
-      : "rgba(0,0,0,0.12)",
-  },
-
-  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: darkMode
-      ? "rgba(255,215,0,0.35)"
+  "& .MuiFormLabel-root.Mui-focused": {
+    color: darkMode
+      ? "#FFD700"
       : "#111827",
   },
 
-  "& .Mui-focused .MuiOutlinedInput-notchedOutline": {
-    borderColor: darkMode
-      ? "#FFD700 !important"
-      : "#111827 !important",
-
-    boxShadow: darkMode
-      ? "0 0 0 3px rgba(255,215,0,0.15)"
-      : "0 0 0 3px rgba(17,24,39,0.08)",
+  "& .MuiFormLabel-root.Mui-error": {
+    color: "#ef4444",
   },
 
-  "& input": {
-    color: darkMode ? "#fff" : "#111",
+  /* ================= INPUT ROOT ================= */
+
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "16px",
+
+    background: darkMode
+      ? "rgba(255,255,255,0.04)"
+      : "rgba(255,255,255,0.92)",
+
+    color: darkMode ? "#ffffff" : "#111827",
+
+    transition: "all 0.25s ease",
+
+    /* BORDER */
+    "& fieldset": {
+      borderColor: darkMode
+        ? "rgba(255,215,0,0.14)"
+        : "rgba(0,0,0,0.12)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: darkMode
+        ? "rgba(255,215,0,0.38)"
+        : "#111827",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: darkMode
+        ? "#FFD700"
+        : "#111827",
+
+      boxShadow: darkMode
+        ? "0 0 0 3px rgba(255,215,0,0.16)"
+        : "0 0 0 3px rgba(17,24,39,0.08)",
+    },
+
+    "&.Mui-error fieldset": {
+      borderColor: "#ef4444",
+    },
   },
+
+  /* ================= INPUT TEXT ================= */
+
+  "& .MuiInputBase-input": {
+    color: darkMode ? "#ffffff" : "#111827",
+
+    fontWeight: 500,
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
+  },
+
+  /* ================= PLACEHOLDER ================= */
+
+  "& .MuiInputBase-input::placeholder": {
+    color: darkMode
+      ? "rgba(255,255,255,0.42)"
+      : "rgba(0,0,0,0.42)",
+
+    opacity: 1,
+  },
+
+  /* ================= MULTILINE ================= */
 
   "& textarea": {
-    color: darkMode ? "#fff" : "#111",
+    color: darkMode ? "#ffffff" : "#111827",
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
   },
 
+  /* ================= HELPER TEXT ================= */
+
+  "& .MuiFormHelperText-root": {
+    color: darkMode
+      ? "rgba(255,255,255,0.65)"
+      : "#6b7280",
+
+    marginLeft: "4px",
+  },
+
+  "& .MuiFormHelperText-root.Mui-error": {
+    color: "#ef4444",
+  },
+
+  /* ================= ICONS ================= */
+
   "& .MuiSvgIcon-root": {
-    color: darkMode ? "#FFD700" : "#111",
+    color: darkMode
+      ? "#FFD700"
+      : "#374151",
+  },
+
+  /* ================= AUTOFILL FIX ================= */
+
+  "& input:-webkit-autofill": {
+    WebkitBoxShadow: darkMode
+      ? "0 0 0 100px rgba(22,22,22,1) inset"
+      : "0 0 0 100px #ffffff inset",
+
+    WebkitTextFillColor: darkMode
+      ? "#ffffff"
+      : "#111827",
+
+    borderRadius: "16px",
+
+    transition: "background-color 9999s ease-in-out 0s",
   },
 });
 
