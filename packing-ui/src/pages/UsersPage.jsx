@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogActions
 } from "@mui/material";
+import Drawer from "@mui/material/Drawer";
 
 import SearchIcon from "@mui/icons-material/Search";
 import LockResetIcon from "@mui/icons-material/LockReset";
@@ -47,6 +48,7 @@ function UsersPage() {
   const [deleteOpen,setDeleteOpen] = useState(false);
   const [deleteUserId,setDeleteUserId] = useState(null);
   const [darkMode,setDarkMode] = useState(false);
+  const [createOpen,setCreateOpen] = useState(false);
 
   useEffect(() => {
 
@@ -78,6 +80,7 @@ function UsersPage() {
     setSnackMsg("User creation failed");
     setSnackType("error");
     setSnackOpen(true);
+	setCreateOpen(false);
   }
   };
 
@@ -190,7 +193,7 @@ function UsersPage() {
 	  field:"username",
 	  headerName:"Username",
 
-	  flex: 1,              // allow natural growth
+	  flex: 1,              
 	  minWidth: 260,
 	  maxWidth: 340,
 
@@ -508,6 +511,35 @@ function UsersPage() {
 
 	  <Box sx={{ display:"flex", alignItems:"center", gap:1.5 }}>
 
+	  <Button
+	    onClick={() => setCreateOpen(true)}
+	    sx={{
+	      ...actionPrimary,
+
+	      height: 42,
+	      px: 3.2,
+
+	      borderRadius: "14px",
+
+	      fontSize: 12,
+	      fontWeight: 800,
+
+	      whiteSpace: "nowrap",
+
+	      background:
+	        "linear-gradient(135deg,#3b82f6,#2563eb)",
+
+	      boxShadow:
+	        "0 10px 25px rgba(37,99,235,0.35)",
+
+	      "&:hover": {
+	        transform: "translateY(-2px)",
+	      },
+	    }}
+	  >
+	    + Create User
+	  </Button>
+	  
 	    <Button
 	      onClick={() => setDarkMode(!darkMode)}
 	      sx={themeBtn(darkMode)}
@@ -615,184 +647,7 @@ function UsersPage() {
 		  }}
         />
 
-        <TextField
-          size="small"
-          placeholder="Username"
-          value={username}
-          onChange={(e)=>setUsername(e.target.value)}
-		  sx={{
-			flex: "1 1 160px",
-			minWidth: 140,
-			maxWidth: 220,
-
-		    "& .MuiInputBase-root": {
-		      borderRadius: "18px",
-			  height: 40,
-		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
-		        : "#fff",
-
-		      color: darkMode ? "#fff" : "#111",
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(0,0,0,0.08)",
-		    },
-
-		    "& input": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& input::placeholder": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.4)"
-		        : "rgba(0,0,0,0.4)",
-		      opacity: 1,
-		    },
-
-		    "& .MuiSvgIcon-root": {
-		      color: darkMode ? "#FFD700" : "#111",
-		    },
-
-		    "& .MuiSelect-select": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& label": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.65)"
-		        : "#475569",
-		    },
-		  }}
-        />
-
-        <TextField
-          size="small"
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e)=>setPassword(e.target.value)}
-		  sx={{
-			flex: "1 1 160px",
-			minWidth: 140,
-			maxWidth: 220,
-
-		    "& .MuiInputBase-root": {
-		      borderRadius: "18px",
-			  height: 40,
-		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
-		        : "#fff",
-
-		      color: darkMode ? "#fff" : "#111",
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(0,0,0,0.08)",
-		    },
-
-		    "& input": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& input::placeholder": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.4)"
-		        : "rgba(0,0,0,0.4)",
-		      opacity: 1,
-		    },
-
-		    "& .MuiSvgIcon-root": {
-		      color: darkMode ? "#FFD700" : "#111",
-		    },
-
-		    "& .MuiSelect-select": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& label": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.65)"
-		        : "#475569",
-		    },
-		  }}
-        />
-
-        <TextField
-          select
-          size="small"
-          value={role}
-          onChange={(e)=>setRole(e.target.value)}
-		  sx={{
-			flex: "0 1 170px",
-			minWidth: 140,
-			maxWidth: 180,
-
-		    "& .MuiInputBase-root": {
-		      borderRadius: "18px",
-			  height: 40,
-		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
-		        : "#fff",
-
-		      color: darkMode ? "#fff" : "#111",
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(0,0,0,0.08)",
-		    },
-
-		    "& input": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& input::placeholder": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.4)"
-		        : "rgba(0,0,0,0.4)",
-		      opacity: 1,
-		    },
-
-		    "& .MuiSvgIcon-root": {
-		      color: darkMode ? "#FFD700" : "#111",
-		    },
-
-		    "& .MuiSelect-select": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& label": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.65)"
-		        : "#475569",
-		    },
-		  }}
-        >
-          <MenuItem value="ADMIN">ADMIN</MenuItem>
-          <MenuItem value="PACKING">PACKING</MenuItem>
-          <MenuItem value="DISPATCH">DISPATCH</MenuItem>
-        </TextField>
-
-		<Button
-		  onClick={createUser}
-		  sx={{
-		    ...actionPrimary,
-
-		    height: 40,
-		    px: 3,
-
-		    flexShrink: 0,
-
-		    whiteSpace: "nowrap",
-
-		    borderRadius: "18px",
-
-		    marginLeft: "auto",
-		  }}
-		>
-          Create User
-        </Button>
-
+        
       </Box>
 
       <div style={tableWrapper(darkMode)}>
@@ -809,7 +664,123 @@ function UsersPage() {
       </div>
 
     </div>
+	<Drawer
+	  anchor="right"
+	  open={createOpen}
+	  onClose={() => setCreateOpen(false)}
+	  PaperProps={{
+	    sx: {
+	      width: 380,
 
+	      background: darkMode
+	        ? "linear-gradient(180deg,#0f0f0f,#111)"
+	        : "linear-gradient(180deg,#ffffff,#f8fafc)",
+
+	      color: darkMode ? "#fff" : "#111",
+
+	      borderTopLeftRadius: 24,
+	      borderBottomLeftRadius: 24,
+
+	      p: 3,
+	    },
+	  }}
+	>
+	  <Box
+	    sx={{
+	      display: "flex",
+	      flexDirection: "column",
+	      height: "100%",
+	    }}
+	  >
+
+	    <Box sx={{ mb: 3 }}>
+	      <Box
+	        sx={{
+	          fontSize: 24,
+	          fontWeight: 800,
+	          mb: 0.5,
+	        }}
+	      >
+	        Create User
+	      </Box>
+
+	      <Box
+	        sx={{
+	          fontSize: 13,
+	          opacity: 0.7,
+	        }}
+	      >
+	        Add new system user and permissions
+	      </Box>
+	    </Box>
+
+	    <Box
+	      sx={{
+	        display: "flex",
+	        flexDirection: "column",
+	        gap: 2,
+	      }}
+	    >
+
+	      <TextField
+	        label="Username"
+	        value={username}
+	        onChange={(e)=>setUsername(e.target.value)}
+	        fullWidth
+	      />
+
+	      <TextField
+	        label="Password"
+	        type="password"
+	        value={password}
+	        onChange={(e)=>setPassword(e.target.value)}
+	        fullWidth
+	      />
+
+	      <TextField
+	        select
+	        label="Role"
+	        value={role}
+	        onChange={(e)=>setRole(e.target.value)}
+	        fullWidth
+	      >
+	        <MenuItem value="ADMIN">ADMIN</MenuItem>
+	        <MenuItem value="PACKING">PACKING</MenuItem>
+	        <MenuItem value="DISPATCH">DISPATCH</MenuItem>
+	      </TextField>
+
+	    </Box>
+
+	    <Box sx={{ flex: 1 }} />
+
+	    <Box
+	      sx={{
+	        display: "flex",
+	        gap: 1.5,
+	        mt: 4,
+	      }}
+	    >
+
+	      <Button
+	        fullWidth
+	        variant="outlined"
+	        onClick={() => setCreateOpen(false)}
+	      >
+	        Cancel
+	      </Button>
+
+	      <Button
+	        fullWidth
+	        onClick={createUser}
+	        sx={actionPrimary}
+	      >
+	        Create
+	      </Button>
+
+	    </Box>
+
+	  </Box>
+	</Drawer>
     <Dialog open={resetOpen} onClose={()=>setResetOpen(false)}>
       <DialogTitle>Reset Password</DialogTitle>
 
