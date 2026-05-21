@@ -486,7 +486,7 @@ function WarehousePage() {
 	    <span
 	      style={{
 	        fontWeight: 600,
-	        color: "#374151",
+	        color: darkMode ? "#f9fafb" : "#374151",
 	      }}
 	    >
 	      {params.value || "—"}
@@ -937,9 +937,9 @@ function WarehousePage() {
 	      <Box>
 	        <div
 	          style={{
-	            fontSize: 28, // KEEP EXISTING SIZE
+	            fontSize: 28, 
 	            fontWeight: 700,
-	            color: "#ffffff",
+	            color: darkMode ? "#FFD700" : "#ffffff",
 	            letterSpacing: 0.4,
 	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
 	          }}
@@ -950,7 +950,9 @@ function WarehousePage() {
 	        <div
 	          style={{
 	            fontSize: 13,
-	            color: "rgba(255,255,255,0.85)",
+				color: darkMode
+				  ? "rgba(255,215,0,0.82)"
+				  : "rgba(255,255,255,0.85)",
 	          }}
 	        >
 	          Track warehouse movement and storage requests
@@ -997,7 +999,14 @@ function WarehousePage() {
 		</Box>
 		</Box>
         <Box sx={searchPanel(darkMode)}>
-          <SearchIcon sx={{ opacity: 0.6 }} />
+		<SearchIcon
+		  sx={{
+		    opacity: 0.75,
+		    color: darkMode
+		      ? "#FFD700"
+		      : "rgba(0,0,0,0.55)",
+		  }}
+		/>
           <TextField
             variant="standard"
             placeholder="Search by Item, Status or Client..."
@@ -1165,6 +1174,61 @@ function WarehousePage() {
 			      : "0 0 0 2px rgba(59,130,246,0.3)",
 			  },
 			}}
+			slotProps={{
+			  select: {
+			    MenuProps: {
+			      PaperProps: {
+			        sx: {
+			          mt: 1,
+
+			          borderRadius: "18px",
+
+			          overflow: "hidden",
+
+			          backdropFilter: "blur(18px)",
+
+			          background: darkMode
+			            ? "rgba(15,15,15,0.96)"
+			            : "rgba(255,255,255,0.96)",
+
+			          color: darkMode ? "#fff" : "#111",
+
+			          border: darkMode
+			            ? "1px solid rgba(255,215,0,0.12)"
+			            : "1px solid rgba(0,0,0,0.06)",
+
+			          boxShadow: darkMode
+			            ? "0 20px 45px rgba(0,0,0,0.7)"
+			            : "0 20px 45px rgba(0,0,0,0.18)",
+
+			          "& .MuiMenuItem-root": {
+			            fontSize: 14,
+			            fontWeight: 500,
+			            color: darkMode ? "#fff" : "#111",
+			          },
+
+			          "& .MuiMenuItem-root:hover": {
+			            background: darkMode
+			              ? "rgba(255,215,0,0.08)"
+			              : "rgba(59,130,246,0.08)",
+			          },
+
+			          "& .Mui-selected": {
+			            background: darkMode
+			              ? "rgba(255,215,0,0.14) !important"
+			              : "rgba(59,130,246,0.12) !important",
+
+			            color: darkMode
+			              ? "#FFD700"
+			              : "#2563eb",
+
+			            fontWeight: 700,
+			          },
+			        },
+			      },
+			    },
+			  },
+			}}
 		  >
 		    <MenuItem value="CREATE">Create Inventory</MenuItem>
 		  </TextField>
@@ -1173,7 +1237,36 @@ function WarehousePage() {
 		    component="label"
 		    variant="contained"
 			disabled={!importMode}
-		    sx={{ background: "#16a34a" }}
+			sx={{
+			  background: darkMode
+			    ? "linear-gradient(180deg,#16a34a,#15803d)"
+			    : "#16a34a",
+
+			  color: "#fff",
+
+			  border: darkMode
+			    ? "1px solid rgba(255,255,255,0.08)"
+			    : "none",
+
+			  boxShadow: darkMode
+			    ? "0 10px 25px rgba(22,163,74,0.28)"
+			    : "none",
+
+			  "&:hover": {
+			    background: darkMode
+			      ? "linear-gradient(180deg,#22c55e,#16a34a)"
+			      : "#15803d",
+			  },
+			  "&.Mui-disabled": {
+			    background: darkMode
+			      ? "rgba(255,255,255,0.08)"
+			      : "rgba(0,0,0,0.12)",
+
+			    color: darkMode
+			      ? "rgba(255,255,255,0.35)"
+			      : "rgba(0,0,0,0.35)",
+			  },
+			}}
 		  >
 		    Upload Excel
 		    <input
@@ -1202,6 +1295,31 @@ function WarehousePage() {
 		    a.href = url;
 		    a.download = "warehouse_import_template.csv";
 		    a.click();
+		  }}
+		  sx={{
+		    mt: 1,
+
+		    color: darkMode ? "#FFD700" : "#111827",
+
+		    borderColor: darkMode
+		      ? "rgba(255,215,0,0.35)"
+		      : "rgba(17,24,39,0.25)",
+
+		    background: darkMode
+		      ? "rgba(255,215,0,0.04)"
+		      : "rgba(255,255,255,0.4)",
+
+		    backdropFilter: "blur(12px)",
+
+		    "&:hover": {
+		      borderColor: darkMode
+		        ? "#FFD700"
+		        : "#111827",
+
+		      background: darkMode
+		        ? "rgba(255,215,0,0.08)"
+		        : "rgba(255,255,255,0.7)",
+		    },
 		  }}
 		>
 		  Download Template
