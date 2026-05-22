@@ -24,7 +24,7 @@ const shell = {
   display: "flex",
   width: "100%",
   minHeight: "100vh",
-  background: "#f1f5f9",
+  background: "#dbeafe",
   overflow: "hidden",
 };
 
@@ -37,8 +37,10 @@ const main = {
 
 const contentShell = {
   flex: 1,
- padding: "16px 20px",
- background: "#f1f5f9",
+  padding: 20,
+  overflow: "auto",
+  background:
+    "linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%)",
 };
 
 const contentInner = {
