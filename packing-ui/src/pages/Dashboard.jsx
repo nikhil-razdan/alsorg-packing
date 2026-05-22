@@ -12,16 +12,20 @@ import {
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 
-function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
+/* ===================== SMALL COMPONENT ===================== */
+
+function StatCard({ title, value, subtle, darkMode }) {
   return (
-    <div style={statCard(darkMode, accent)}>
-      <div style={cardAccent(accent)} />
+    <div style={statCard(darkMode)}>
+      <div style={cardHighlight} />
       <p style={statTitle(darkMode)}>{title}</p>
       <h2 style={statValue(darkMode)}>{value}</h2>
-      {subtle && <div style={statSubtle(darkMode)}>{subtle}</div>}
+      {subtle && <div style={statSubtle}>{subtle}</div>}
     </div>
   );
 }
+
+/* ===================== ORIGINAL ICONS ===================== */
 
 const DonutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -49,62 +53,64 @@ const BarIcon = () => (
   </svg>
 );
 
+/* ===================== DASHBOARD ===================== */
+
 function DashboardPage() {
   const [stats, setStats] = useState({
-    totalItems: 0,
+    totalItems: "—",
     packedItems: 0,
     dispatchedItems: 0,
-    stickersGenerated: 0,
+    stickersGenerated: "—",
   });
 
   const [activityLogs, setActivityLogs] = useState([]);
   const [logistics, setLogistics] = useState(null);
   const [chartType, setChartType] = useState("donut");
+  const pending =
+    Number(stats.totalItems || 0) -
+    Number(stats.packedItems || 0) -
+    Number(stats.dispatchedItems || 0);
+	
+	const normalizeStats = (data) => ({
+	  totalItems: Number(data?.totalItems ?? data?.total ?? 0),
+	  packedItems: Number(data?.packedItems ?? data?.packed ?? 0),
+	  dispatchedItems: Number(data?.dispatchedItems ?? data?.dispatched ?? 0),
+	  stickersGenerated: Number(data?.stickersGenerated ?? data?.stickers ?? 0),
+	});
+	
   const [activeReport, setActiveReport] = useState(null);
+
+  const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
+  const reportIndex = {
+    packing: 0,
+    dispatch: 1,
+    combined: 2,
+    aging: 3,
+  }[activeReport] ?? 0;
   const [mode, setMode] = useState("inventory");
   const [darkMode, setDarkMode] = useState(false);
 
-  const pending = Math.max(
-    Number(stats.totalItems || 0) -
-      Number(stats.packedItems || 0) -
-      Number(stats.dispatchedItems || 0),
-    0
-  );
-
-  const normalizeStats = (data) => ({
-    totalItems: Number(data?.totalItems ?? data?.total ?? 0),
-    packedItems: Number(data?.packedItems ?? data?.packed ?? 0),
-    dispatchedItems: Number(data?.dispatchedItems ?? data?.dispatched ?? 0),
-    stickersGenerated: Number(data?.stickersGenerated ?? data?.stickers ?? 0),
-  });
-
-  const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
-  const reportIndex =
-    {
-      packing: 0,
-      dispatch: 1,
-      combined: 2,
-      aging: 3,
-    }[activeReport] ?? 0;
-
   useEffect(() => {
     fetchLogisticsStats()
-      .then((data) => {
+      .then(data => {
+        console.log("🔥 LOGISTICS API:", data);
         setLogistics(data);
       })
       .catch(console.error);
   }, []);
-
+  
   useEffect(() => {
     let active = true;
 
     fetchDashboardStats()
       .then((data) => {
         if (!active || !data) return;
-        setStats(normalizeStats(data));
+		console.log("DASHBOARD API:", data); 
+		setStats(normalizeStats(data));
       })
       .catch(console.error);
 
+	  
     fetchDashboardActivity(10)
       .then((logs) => {
         if (!active) return;
@@ -116,264 +122,294 @@ function DashboardPage() {
       active = false;
     };
   }, []);
-
+  
+  
+  
+  
   return (
-    <div style={page(mode, darkMode)}>
+    <div style={page(darkMode)}>
+      <div style={backgroundText(darkMode)}>Alsorg</div>
 
       <div style={content}>
-        <div style={heroRow}>
-          <div>
-            <h2 style={heroTitle(mode, darkMode)}>Dashboard</h2>
-            <div style={heroSubtitle(mode, darkMode)}>
-              Inventory and logistics overview in one workspace
-            </div>
-          </div>
+        <h2 style={pageTitle(darkMode)}>Dashboard</h2>
+		<div
+		  style={{
+		    display: "flex",
+		    justifyContent: "space-between",
+		    alignItems: "center",
+		    marginBottom: 15,
+		  }}
+		>
 
-          <div style={heroActions}>
-            <button
-              onClick={() => setMode("inventory")}
-              style={modeBtn(mode === "inventory", darkMode)}
-            >
-              📦 Inventory
-            </button>
+		  <div style={{ display: "flex", gap: 10 }}>
+		    <button
+		      onClick={() => setMode("inventory")}
+		      style={modeBtn(mode === "inventory", darkMode)}
+		    >
+		      📦 Inventory
+		    </button>
 
-            <button
-              onClick={() => setMode("logistics")}
-              style={modeBtn(mode === "logistics", darkMode)}
-            >
-              🚚 Logistics
-            </button>
+		    <button
+		      onClick={() => setMode("logistics")}
+		      style={modeBtn(mode === "logistics", darkMode)}
+		    >
+		      🚚 Logistics
+		    </button>
+		  </div>
 
-            <button
-              onClick={() => setDarkMode((v) => !v)}
-              style={themeBtn(darkMode)}
-            >
-              {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-            </button>
-          </div>
-        </div>
+		  <button
+		    onClick={() => setDarkMode(!darkMode)}
+		    style={themeBtn(darkMode)}
+		  >
+		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
+		  </button>
 
-        {mode === "inventory" && (
-          <>
-            <div style={kpiGrid}>
-              <StatCard
-                darkMode={darkMode}
-                accent="#60a5fa"
-                title="Total Items In Inventory"
-                value={Number(stats.totalItems || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f472b6"
-                title="Stickers Generated"
-                value={Number(stats.stickersGenerated || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#34d399"
-                title="Packed Items"
-                value={Number(stats.packedItems || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f59e0b"
-                title="Pending Items"
-                value={pending}
-              />
-            </div>
+		</div>
+		{mode === "inventory" && (
+		  <>
+		    <div style={statsRow}>
+		      <StatCard darkMode={darkMode} title="Total Items In Inventory" value={Number(stats.totalItems || 0)} />
+		      <StatCard darkMode={darkMode} title="Stickers Generated" value={Number(stats.stickersGenerated || 0)} />
+		      <StatCard darkMode={darkMode} title="Packed Items" value={Number(stats.packedItems || 0)} />
+		      <StatCard darkMode={darkMode} title="Dispatched" value={Number(stats.dispatchedItems || 0)} />
+		    </div>
+			<div
+			  style={{
+			    marginBottom: 14,
 
-            <div style={reportHeaderRow}>
-              <div>
-                <div style={sectionTitle(mode, darkMode)}>Reports Center</div>
-                <div style={sectionSubtitle(mode, darkMode)}>
-                  View, export and analyze inventory reports
-                </div>
-              </div>
+			    display: "flex",
+			    alignItems: "center",
+			    justifyContent: "space-between",
 
-              <div style={reportToggleGroup(darkMode)}>
-                <div
-                  style={{
-                    ...reportSliderIndicator(darkMode),
-                    transform: `translateX(${reportIndex * 118}px)`,
-                  }}
-                />
+			    gap: 14,
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-                    color:
-                      activeReport === "packing"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
-                  }}
-                  onClick={() => setActiveReport("packing")}
-                >
-                  📦 Packing
-                </button>
+			    flexWrap: "wrap",
+			  }}
+			>
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-                    color:
-                      activeReport === "dispatch"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
-                  }}
-                  onClick={() => setActiveReport("dispatch")}
-                >
-                  🚚 Dispatch
-                </button>
+			  {/* LEFT SIDE */}
+			  <div
+			    style={{
+			      display: "flex",
+			      flexDirection: "column",
+			      gap: 4,
+			    }}
+			  >
+			    <div
+			      style={{
+			        fontSize: 22,
+			        fontWeight: 800,
+			        color: darkMode ? "#FFD700" : "#fff",
+			      }}
+			    >
+			      Reports Center
+			    </div>
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-                    color:
-                      activeReport === "combined"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
-                  }}
-                  onClick={() => setActiveReport("combined")}
-                >
-                  📊 Combined
-                </button>
+			    <div
+			      style={{
+			        fontSize: 13,
+			        color: darkMode
+			          ? "rgba(255,255,255,0.72)"
+			          : "rgba(255,255,255,0.88)",
+			      }}
+			    >
+			      View, export and analyze inventory reports
+			    </div>
+			  </div>
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-                    color:
-                      activeReport === "aging"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
-                  }}
-                  onClick={() => setActiveReport("aging")}
-                >
-                  ⏳ Aging
-                </button>
-              </div>
-            </div>
+			  {/* REPORT TOGGLE */}
+			  <div
+			    style={{
+			      position: "relative",
 
-            <div style={workspaceGrid}>
-              <div style={panelSurface(darkMode)}>
-                <div style={chartToggleWrap(darkMode)}>
-                  <div
-                    style={{
-                      ...chartSlider(darkMode),
-                      transform: `translateX(${chartIndex * 40}px)`,
-                    }}
-                  />
-                  <button
-                    style={chartToggleBtn(darkMode)}
-                    onClick={() => setChartType("donut")}
-                  >
-                    <DonutIcon />
-                  </button>
-                  <button
-                    style={chartToggleBtn(darkMode)}
-                    onClick={() => setChartType("line")}
-                  >
-                    <LineIcon />
-                  </button>
-                  <button
-                    style={chartToggleBtn(darkMode)}
-                    onClick={() => setChartType("bar")}
-                  >
-                    <BarIcon />
-                  </button>
-                </div>
+			      display: "inline-flex",
 
-                <div style={panelBody}>
-                  {chartType === "donut" && (
-                    <StatusDonutChart
-                      darkMode={darkMode}
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                  {chartType === "line" && (
-                    <StatusLineChart
-                      darkMode={darkMode}
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                  {chartType === "bar" && (
-                    <StatusBarChart
-                      darkMode={darkMode}
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                </div>
-              </div>
+			      gap: 8,
 
-              <div style={panelSurface(darkMode)}>
-                <ActivityFeed logs={activityLogs} darkMode={darkMode} />
-              </div>
-            </div>
+			      padding: 5,
 
-            {localStorage.getItem("role") === "ADMIN" && (
-              <div style={adminPanel(darkMode)}>
-                <h3 style={adminPanelTitle(darkMode)}>Scheduled Reports</h3>
-                <ScheduledReports darkMode={darkMode} />
-              </div>
-            )}
-          </>
-        )}
+			      borderRadius: 999,
 
-        {mode === "logistics" && logistics && (
-          <>
-            <div style={logisticsKpiGrid}>
-              <StatCard
-                darkMode={darkMode}
-                accent="#60a5fa"
-                title="Working Trips"
-                value={Number(logistics?.totalTrips || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#34d399"
-                title="Total Loaders"
-                value={Number(logistics?.totalLoaders || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f59e0b"
-                title="Efficiency"
-                value={Number(logistics?.efficiency || 0).toFixed(2)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f472b6"
-                title="Active Drivers"
-                value={Object.keys(logistics?.drivers || {}).length}
-              />
-            </div>
+			      background: darkMode
+			        ? "rgba(15,15,15,0.92)"
+			        : "rgba(255,255,255,0.18)",
 
-            <div style={logisticsGrid}>
-              <div style={panelSurface(darkMode)}>
-                <AnalyticsGrid data={logistics} />
-              </div>
+			      backdropFilter: "blur(14px)",
 
-              <div style={panelSurface(darkMode)}>
-                <div style={comingSoon(darkMode)}>
-                  🚚 Logistics activity coming soon
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+			      border: darkMode
+			        ? "1px solid rgba(255,215,0,0.12)"
+			        : "1px solid rgba(255,255,255,0.2)",
 
+			      overflow: "hidden",
+			    }}
+			  >
+
+			    <div
+			      style={{
+			        ...reportSliderIndicator,
+
+			        transform: `translateX(${reportIndex * 118}px)`,
+
+			        background: darkMode
+			          ? "linear-gradient(180deg,#FFD700,#d4a017)"
+			          : "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))",
+			      }}
+			    />
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "packing"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("packing")}
+			    >
+			      📦 Packing
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "dispatch"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("dispatch")}
+			    >
+			      🚚 Dispatch
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "combined"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("combined")}
+			    >
+			      📊 Combined
+			    </button>
+
+			    <button
+			      style={{
+			        ...reportToggleBtn,
+			        color:
+			          activeReport === "aging"
+			            ? "#111"
+			            : darkMode
+			              ? "#fff"
+			              : "#fff",
+			      }}
+			      onClick={() => setActiveReport("aging")}
+			    >
+			      ⏳ Aging
+			    </button>
+
+			  </div>
+			</div>
+		    <div style={mainGrid}>
+		      {/* INVENTORY CHART */}
+		      <div style={panel(darkMode)}>
+		        <div style={toggleWrap}>
+		          <div
+		            style={{
+		              ...toggleSlider,
+		              transform: `translateX(${chartIndex * 40}px)`
+		            }}
+		          />
+		          <button style={toggleBtn} onClick={() => setChartType("donut")}><DonutIcon /></button>
+		          <button style={toggleBtn} onClick={() => setChartType("line")}><LineIcon /></button>
+		          <button style={toggleBtn} onClick={() => setChartType("bar")}><BarIcon /></button>
+		        </div>
+
+		        <div style={panelBody}>
+		          {chartType === "donut" && (
+		            <StatusDonutChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		          {chartType === "line" && (
+		            <StatusLineChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		          {chartType === "bar" && (
+		            <StatusBarChart packed={stats.packedItems} dispatched={stats.dispatchedItems} pending={pending} />
+		          )}
+		        </div>
+		      </div>
+
+		      {/* INVENTORY ACTIVITY */}
+		      <div style={panel(darkMode)}>
+		        <ActivityFeed logs={activityLogs} />
+		      </div>
+		    </div>
+		  </>
+		)}
+
+		{mode === "logistics" && logistics && (
+		  <>
+		    <div style={statsRow}>
+			<StatCard
+			  darkMode={darkMode}
+			  title="Working Trips"
+			  value={Number(logistics?.totalTrips || 0)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Total Loaders"
+			  value={Number(logistics?.totalLoaders || 0)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Efficiency"
+			  value={Number(logistics?.efficiency || 0).toFixed(2)}
+			/>
+
+			<StatCard
+			  darkMode={darkMode}
+			  title="Active Drivers"
+			  value={Object.keys(logistics?.drivers || {}).length}
+			/>
+		    </div>
+
+		    <div style={mainGrid}>
+		      {/* LOGISTICS ANALYTICS */}
+		      <div style={panel(darkMode)}>
+		        <AnalyticsGrid data={logistics} />
+		      </div>
+
+		      {/* FUTURE LOGISTICS ACTIVITY */}
+		      <div style={panel(darkMode)}>
+		        <div style={{ color: "#fff", fontWeight: 600 }}>
+		          🚚 Logistics activity coming soon
+		        </div>
+		      </div>
+		    </div>
+		  </>
+		)}
+
+        
+		{mode === "inventory" && localStorage.getItem("role") === "ADMIN" && (
+		  <div style={adminPanel(darkMode)}>
+		    <h3 style={{ color: "#fff", marginBottom: 10 }}>
+		      Scheduled Reports
+		    </h3>
+		    <ScheduledReports />
+		  </div>
+		)}
+		
+
+        {/* MODALS */}
         <ReportViewerModal
           open={activeReport === "packing"}
           onClose={() => setActiveReport(null)}
@@ -411,31 +447,44 @@ function DashboardPage() {
   );
 }
 
-const page = (mode, darkMode) => ({
+/* ===================== STYLES (unchanged from your working version) ===================== */
+
+const page = (darkMode) => ({
   minHeight: "100vh",
-  padding: 18,
-  position: "relative",
+  padding: 16,
+  background: darkMode
+    ? "linear-gradient(135deg, #000000, #111111)"
+    : "linear-gradient(135deg, #f5c542, #b8860b)",
   overflowX: "hidden",
   overflowY: "auto",
-  background:
-    mode === "inventory"
-      ? darkMode
-        ? "linear-gradient(135deg, #0b1020 0%, #111827 45%, #0f172a 100%)"
-        : `
-          radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
-          radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
-          linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
-        `
-      : darkMode
-      ? "linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)"
-      : `
-          radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-          radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-          linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
-        `,
-  backgroundAttachment: "fixed",
+  position: "relative",
 });
 
+const adminPanel = (darkMode) => ({
+  marginTop: 20,
+  background: darkMode
+    ? "rgba(15,15,15,0.92)"
+    : "rgba(255,255,255,0.15)",
+  backdropFilter: "blur(10px)",
+  borderRadius: 18,
+  padding: 14,
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.25)"
+    : "none",
+});
+
+const backgroundText = (darkMode) => ({
+  position: "absolute",
+  fontSize: 130,
+  fontWeight: 900,
+  color: darkMode
+    ? "rgba(255,215,0,0.08)"
+    : "rgba(255,255,255,0.07)",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)",
+  pointerEvents: "none",
+});
 
 const content = {
   position: "relative",
@@ -443,222 +492,92 @@ const content = {
   height: "100%",
   display: "flex",
   flexDirection: "column",
-  gap: 16,
 };
 
-const heroRow = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 16,
-  flexWrap: "wrap",
-  marginBottom: 4,
-};
-
-const heroTitle = (mode, darkMode) => ({
-  margin: 0,
+const pageTitle = (darkMode) => ({
+  marginTop: 0,
   fontSize: 28,
-  fontWeight: 800,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "#e2e8f0"
-        : "#0f172a"
-      : darkMode
-      ? "#FFD700"
-      : "#fff",
-  letterSpacing: 0.2,
-});
-
-const heroSubtitle = (mode, darkMode) => ({
-  marginTop: 6,
-  fontSize: 13,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "rgba(226,232,240,0.72)"
-        : "#475569"
-      : darkMode
-      ? "rgba(255,255,255,0.72)"
-      : "rgba(255,255,255,0.88)",
-});
-
-const heroActions = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const modeBtn = (active, darkMode) => ({
-  padding: "8px 16px",
-  borderRadius: 999,
-  border: darkMode
-    ? "1px solid rgba(255,255,255,0.12)"
-    : "1px solid rgba(96,165,250,0.22)",
-  cursor: "pointer",
-  background: active
-    ? darkMode
-      ? "linear-gradient(180deg, #e2e8f0, #cbd5e1)"
-      : "linear-gradient(180deg, #ffffff, #e2e8f0)"
-    : darkMode
-    ? "rgba(15,23,42,0.9)"
-    : "rgba(255,255,255,0.75)",
-  color: active ? "#0f172a" : darkMode ? "#fff" : "#0f172a",
   fontWeight: 700,
-  boxShadow: darkMode
-    ? "0 8px 20px rgba(0,0,0,0.22)"
-    : "0 8px 20px rgba(15,23,42,0.08)",
+  color: darkMode ? "#FFD700" : "#fff",
+  marginBottom: 12,
+  textShadow: darkMode
+    ? "0 0 10px rgba(255,215,0,0.7)"
+    : "none",
 });
 
-const themeBtn = (darkMode) => ({
-  padding: "8px 16px",
-  borderRadius: 999,
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.28)"
-    : "1px solid rgba(96,165,250,0.20)",
-  cursor: "pointer",
-  background: darkMode
-    ? "linear-gradient(135deg, #111, #222)"
-    : "linear-gradient(180deg, #ffffff, #dbeafe)",
-  color: darkMode ? "#FFD700" : "#0f172a",
-  fontWeight: 800,
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 8px 20px rgba(15,23,42,0.10)",
-});
-
-const kpiGrid = {
+const statsRow = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 14,
-};
-
-const logisticsKpiGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(4, 1fr)",
   gap: 10,
   marginBottom: 12,
 };
 
-const workspaceGrid = {
+const mainGrid = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 0.85fr)",
-  gap: 14,
-  alignItems: "stretch",
-};
-
-const logisticsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gridAutoRows: "300px",
   gap: 14,
   flex: 1,
 };
 
-const panelSurface = {
-  padding: 16,
-  borderRadius: 16,
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-};
+const panel = (darkMode) => ({
+  display: "flex",
+  flexDirection: "column",
+  height: "100%",
+  background: darkMode
+    ? "rgba(15,15,15,0.92)"
+    : "rgba(255,255,255,0.15)",
+  borderRadius: 18,
+  backdropFilter: "blur(10px)",
+  padding: 12,
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.25)"
+    : "none",
+  boxShadow: darkMode
+    ? "0 0 18px rgba(255,215,0,0.12)"
+    : "none",
+});
 
 const panelBody = {
   flex: 1,
-  overflow: "hidden",
-  marginTop: 8,
+  overflowY: "auto",
 };
 
-const chartToggleWrap = (darkMode) => ({
+const toggleWrap = {
   position: "relative",
   display: "inline-flex",
   gap: 8,
   padding: 5,
+  marginBottom: 10,
   borderRadius: 999,
-  background: darkMode ? "rgba(15,23,42,0.9)" : "rgba(219,234,254,0.75)",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.14)"
-    : "1px solid rgba(148,163,184,0.15)",
-  width: "fit-content",
-});
+  background: "rgba(255,255,255,0.2)",
+};
 
-const chartToggleBtn = (darkMode) => ({
+const toggleBtn = {
   width: 32,
   height: 32,
   borderRadius: "50%",
   border: "none",
   background: "transparent",
-  color: darkMode ? "#fff" : "#0f172a",
+  color: "#fff",
   cursor: "pointer",
   zIndex: 1,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-});
+};
 
-const chartSlider = (darkMode) => ({
+const toggleSlider = {
   position: "absolute",
   top: 5,
   left: 5,
   width: 32,
   height: 32,
   borderRadius: "50%",
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(219,234,254,0.75))",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))",
   transition: "transform 0.35s cubic-bezier(.4,0,.2,1)",
-});
-
-const reportHeaderRow = {
-  marginBottom: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 14,
-  flexWrap: "wrap",
 };
-
-const sectionTitle = (mode, darkMode) => ({
-  fontSize: 22,
-  fontWeight: 800,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "#e2e8f0"
-        : "#0f172a"
-      : darkMode
-      ? "#FFD700"
-      : "#fff",
-});
-
-const sectionSubtitle = (mode, darkMode) => ({
-  fontSize: 13,
-  marginTop: 4,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "rgba(226,232,240,0.72)"
-        : "#64748b"
-      : darkMode
-      ? "rgba(255,255,255,0.72)"
-      : "rgba(255,255,255,0.88)",
-});
-
-const reportToggleGroup = (darkMode) => ({
-  position: "relative",
-  display: "inline-flex",
-  gap: 8,
-  padding: 5,
-  borderRadius: 999,
-  background: darkMode ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.78)",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.14)"
-    : "1px solid rgba(148,163,184,0.15)",
-  overflow: "hidden",
-  boxShadow: darkMode
-    ? "0 12px 30px rgba(2,6,23,0.22)"
-    : "0 12px 30px rgba(15,23,42,0.08)",
-});
 
 const reportToggleBtn = {
   width: 110,
@@ -666,101 +585,119 @@ const reportToggleBtn = {
   borderRadius: 999,
   border: "none",
   background: "transparent",
+  color: "#fff",
   fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 600,
   cursor: "pointer",
   zIndex: 1,
 };
 
-const reportSliderIndicator = (darkMode) => ({
+const reportSliderIndicator = {
   position: "absolute",
   top: 5,
   left: 5,
   width: 110,
   height: 32,
   borderRadius: 999,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,255,255,0.80), rgba(255,255,255,0.45))"
-    : "linear-gradient(180deg, #e2e8f0, #cbd5e1)",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))",
   transition: "transform 0.35s cubic-bezier(.4,0,.2,1)",
-});
+};
 
-const statCard = (darkMode, accent) => ({
+const statCard = (darkMode) => ({
   position: "relative",
-  padding: "20px 20px 18px",
-  borderRadius: 22,
+  padding: 12,
+  borderRadius: 14,
   background: darkMode
-    ? "linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.88))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.92))",
+    ? "linear-gradient(180deg, rgba(35,35,35,0.95), rgba(10,10,10,0.95))"
+    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.15))",
+  backdropFilter: "blur(10px)",
+  color: darkMode ? "#FFD700" : "#fff",
   border: darkMode
-    ? "1px solid rgba(148,163,184,0.16)"
-    : "1px solid rgba(148,163,184,0.18)",
+    ? "1px solid rgba(255,215,0,0.2)"
+    : "none",
   boxShadow: darkMode
-    ? "0 18px 35px rgba(2,6,23,0.24)"
-    : "0 18px 35px rgba(15,23,42,0.08)",
-  overflow: "hidden",
-  minHeight: 118,
+    ? "0 0 14px rgba(255,215,0,0.12)"
+    : "none",
 });
 
-const cardAccent = (accent) => ({
+const cardHighlight = {
   position: "absolute",
   top: 0,
   left: 0,
   right: 0,
-  height: 4,
-  background: accent,
-});
+  height: 30,
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.25), transparent)",
+};
 
 const statTitle = (darkMode) => ({
-  color: darkMode ? "#cbd5e1" : "#64748b",
-  marginBottom: 10,
   fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: "0.08em",
+  fontWeight: 600,
+  letterSpacing: "0.5px",
   textTransform: "uppercase",
+  opacity: 0.9,
+  color: darkMode ? "#ffffff" : "#fff",
 });
 
 const statValue = (darkMode) => ({
-  margin: 0,
-  fontSize: 30,
+  fontSize: 26,
   fontWeight: 900,
+  marginTop: 6,
+  marginBottom: 4,
   lineHeight: 1,
-  color: darkMode ? "#f8fafc" : "#0f172a",
+  color: darkMode ? "#FFD700" : "#fff",
+  textShadow: darkMode
+    ? "0 0 12px rgba(255,215,0,0.6)"
+    : "none",
 });
 
-const statSubtle = (darkMode) => ({
-  marginTop: 8,
+const statSubtle = {
   fontSize: 11,
-  fontWeight: 600,
-  color: darkMode ? "#94a3b8" : "#64748b",
-});
+  fontWeight: 500,
+  opacity: 0.75,
+};
 
-const adminPanel = (darkMode) => ({
-  marginTop: 2,
-  borderRadius: 24,
-  padding: 18,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.88))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))",
+const modeBtn = (active, darkMode) => ({
+  padding: "8px 16px",
+  borderRadius: 20,
   border: darkMode
-    ? "1px solid rgba(148,163,184,0.16)"
-    : "1px solid rgba(148,163,184,0.18)",
+    ? "1px solid rgba(255,215,0,0.3)"
+    : "none",
+  cursor: "pointer",
+  background: active
+    ? darkMode
+      ? "#FFD700"
+      : "#fff"
+    : darkMode
+      ? "rgba(30,30,30,0.9)"
+      : "rgba(255,255,255,0.3)",
+  color: active
+    ? "#111"
+    : darkMode
+      ? "#fff"
+      : "#fff",
+  fontWeight: 600,
   boxShadow: darkMode
-    ? "0 18px 35px rgba(2,6,23,0.24)"
-    : "0 18px 35px rgba(15,23,42,0.08)",
+    ? "0 0 12px rgba(255,215,0,0.15)"
+    : "none",
 });
 
-const adminPanelTitle = (darkMode) => ({
-  color: darkMode ? "#f8fafc" : "#0f172a",
-  marginBottom: 12,
-  fontSize: 16,
-  fontWeight: 800,
-});
-
-const comingSoon = (darkMode) => ({
-  color: darkMode ? "#f8fafc" : "#0f172a",
+const themeBtn = (darkMode) => ({
+  padding: "8px 16px",
+  borderRadius: 20,
+  border: darkMode
+    ? "1px solid rgba(255,215,0,0.4)"
+    : "none",
+  cursor: "pointer",
+  background: darkMode
+    ? "linear-gradient(135deg, #111, #222)"
+    : "#111",
+  color: darkMode ? "#FFD700" : "#fff",
   fontWeight: 700,
-  fontSize: 14,
+  boxShadow: darkMode
+    ? "0 0 18px rgba(255,215,0,0.25)"
+    : "0 0 10px rgba(0,0,0,0.2)",
 });
 
 export default DashboardPage;
