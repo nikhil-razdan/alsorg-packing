@@ -31,12 +31,11 @@ const overlay = {
 const modal = {
   maxWidth: 1000,
   margin: "6vh auto",
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
-  borderRadius: 22,
-  padding: 28,
-  color: "#fff",
-  boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+  background: "#ffffff",
+  borderRadius: 16,
+  padding: 20,
+  color: "#111827",
+  boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
 };
 
 const header = {
@@ -52,11 +51,13 @@ const titleStyle = {
 };
 
 const closeBtn = {
-  background: "transparent",
+  background: "#f3f4f6",
   border: "none",
-  color: "#fff",
-  fontSize: 22,
+  color: "#111",
+  fontSize: 18,
   cursor: "pointer",
+  borderRadius: 6,
+  padding: "4px 8px",
 };
 
 export default ReportsModal;

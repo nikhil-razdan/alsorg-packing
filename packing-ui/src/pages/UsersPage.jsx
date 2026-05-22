@@ -1010,19 +1010,7 @@ const page = (darkMode) => ({
   position:"relative",
   overflowX:"hidden",
   overflowY:"auto",
-
-  background: darkMode
-    ? `
-      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
-      linear-gradient(135deg,#000 0%,#111 45%,#1a1a1a 100%)
-    `
-    : `
-      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-      linear-gradient(135deg,#f5c542 0%,#d4a017 45%,#8b5e00 100%)
-    `,
-
+  background: "#f1f5f9",
   backgroundAttachment:"fixed",
 });
 

@@ -36,18 +36,11 @@ const statsRow = {
 };
 
 const statCard = {
-  position: "relative",
-  flex: 1,
-  padding: "26px 28px",
-  borderRadius: 18,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0.18))",
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
-  boxShadow:
-    "0 22px 55px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.45)",
-  color: "#fff",
-  overflow: "hidden",
+  padding: "18px 20px",
+  borderRadius: 16,
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
 };
 
 const cardHighlight = {
@@ -62,16 +55,15 @@ const cardHighlight = {
 };
 
 const statTitle = {
-  color: "rgba(255,255,255,0.78)",
-  marginBottom: 10,
-  fontSize: 14,
+  fontSize: 12,
+  color: "#64748b",
   fontWeight: 600,
 };
 
 const statValue = {
-  margin: 0,
-  fontSize: 32,
-  fontWeight: 800,
+  fontSize: 22,
+  fontWeight: 700,
+  color: "#0f172a",
 };
 
 export default StatsCards;

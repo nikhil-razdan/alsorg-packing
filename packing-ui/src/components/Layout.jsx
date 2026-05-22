@@ -4,47 +4,14 @@ import { Outlet } from "react-router-dom";
 
 function Layout() {
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: "#f6f5f2", // warm neutral base
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont",
-      }}
-    >
-      {/* Sidebar */}
+    <div style={shell}>
       <Sidebar />
 
-      {/* Main Area */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minWidth: 0, // prevents flex overflow
-        }}
-      >
-        {/* Header */}
+      <div style={main}>
         <Header />
 
-        {/* Page Content */}
-        <div
-          style={{
-            flex: 1,
-            padding: 22,
-            overflow: "auto",
-            background:
-              "linear-gradient(180deg, #fffdf7 0%, #f3efe4 100%)",
-          }}
-        >
-          {/* Content container */}
-          <div
-            style={{
-              maxWidth: 1600,
-              margin: "0 auto",
-              height: 100,
-            }}
-          >
+        <div style={contentShell}>
+          <div style={contentInner}>
             <Outlet />
           </div>
         </div>
@@ -52,5 +19,32 @@ function Layout() {
     </div>
   );
 }
+
+const shell = {
+  display: "flex",
+  width: "100%",
+  minHeight: "100vh",
+  background: "#f1f5f9",
+  overflow: "hidden",
+};
+
+const main = {
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+};
+
+const contentShell = {
+  flex: 1,
+ padding: "16px 20px",
+ background: "#f1f5f9",
+};
+
+const contentInner = {
+  width: "100%",
+  minHeight: "100%",
+  maxWidth: "100%",
+};
 
 export default Layout;

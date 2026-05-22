@@ -41,7 +41,8 @@ const card = {
   backdropFilter: "blur(18px)",
   boxShadow:
     "0 24px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
-  color: "#fff",
+	stroke: "#6366f1",
+	  fill: "#6366f1",
 };
 
 const title = {
