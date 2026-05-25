@@ -269,13 +269,26 @@ const actionDanger = {
 const searchPanel = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  padding: 14,
-  borderRadius: 20,
-  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-  border: "1px solid rgba(148,163,184,0.18)",
-  boxShadow: "0 10px 30px rgba(15,23,42,0.08)",
-  marginBottom: 12
+  gap: 16,
+  marginBottom: 4,
+  padding: "5px 18px", 
+  borderRadius: 16,
+
+  background: `
+    linear-gradient(
+      145deg,
+      rgba(255,255,255,0.72),
+      rgba(255,255,255,0.42)
+    )
+  `,
+
+  backdropFilter: "blur(30px)",
+  border: "1px solid rgba(255,255,255,0.4)",
+
+  boxShadow: `
+    0 14px 35px rgba(0,0,0,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.45)
+  `,
 };
 
 const popupOverlay = {
@@ -1270,32 +1283,53 @@ function DispatchedItemsPage() {
 		
 	  <Box sx={searchPanel}>
 	    <SearchIcon
-	      sx={{
-	        opacity: 0.9,
-	        color: "#111",
-	        fontSize: 22,
-	      }}
+		sx={{
+		    opacity: 0.75,
+		    color: "rgba(0,0,0,0.55)",
+		  }}
 	    />
 
-	    <TextField
-	      variant="standard"
-	      placeholder="Search by Item or Client..."
-	      value={search}
-	      onChange={(e) => setSearch(e.target.value)}
-	      InputProps={{ disableUnderline: true }}
-	      sx={{
-	        "& .MuiInputBase-root": {
-	          height: 40,
-	          borderRadius: 10,
-	          background: "#fff",
-	          border: "1px solid #e2e8f0",
-	        },
-	        "& input": {
-	          fontSize: 14,
-	          color: "#0f172a",
-	        }
-	      }}
-	    />
+		<TextField
+		  variant="standard"
+		  placeholder="Search by Item or Client..."
+		  value={search}
+		  onChange={(e) => setSearch(e.target.value)}
+		  InputProps={{ disableUnderline: true }}
+		  sx={{
+		    flex: 1,  // 🔥 IMPORTANT (fix width)
+
+		    "& .MuiInputBase-root": {
+		      height: 40,                // ✅ MATCH warehouse
+		      borderRadius: "18px",
+		      padding: "0 8px",
+
+		      background: "rgba(255,255,255,0.55)",
+		      border: "1px solid rgba(255,255,255,0.35)",
+
+		      transition: "all 0.25s ease",
+		    },
+
+		    "& input": {
+		      fontSize: 14,
+		      fontWeight: 500,
+		      color: "#111",
+		    },
+
+		    "& input::placeholder": {
+		      color: "rgba(0,0,0,0.45)",
+		      opacity: 1,
+		    },
+
+		    "& .MuiInputBase-root:hover": {
+		      background: "#fff",
+		    },
+
+		    "& .Mui-focused": {
+		      background: "#fff",
+		      boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
+		    },
+		  }}
+		/>
 
 	    <TextField
 	      select
