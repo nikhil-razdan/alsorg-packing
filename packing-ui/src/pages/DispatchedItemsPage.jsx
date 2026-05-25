@@ -10,26 +10,18 @@ import { API_BASE_URL } from "../config";
 /* ===================== STYLES ===================== */
 /* (UNCHANGED — EXACTLY AS YOU PROVIDED) */
 
-const page = (darkMode) => ({
+const page = () => ({
   minHeight: "100vh",
-  padding: 20,
+  padding: 18,
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
 
-  background: darkMode
-    ? `
-      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
-      linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)
-    `
-    : `
-      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-      linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
-    `,
-
-  backgroundAttachment: "fixed",
+  background: `
+    radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
+    radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
+    linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
+  `,
 });
 
 
@@ -138,153 +130,37 @@ const modalGloss = {
 };
 /* ===== TABLE ===== */
 
-const tableWrapper = (darkMode) => ({
-  height: "calc(100vh - 170px)",
-  borderRadius: 18,
+const tableWrapper = {
+  height: "calc(100vh - 220px)",
+  borderRadius: 24,
+  padding: 16,
+  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+  border: "1px solid rgba(148,163,184,0.18)",
+  boxShadow: "0 18px 40px rgba(15,23,42,0.10)",
+};
 
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
-
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
-
-  boxShadow: darkMode
-    ? "0 22px 55px rgba(0,0,0,0.65)"
-    : "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.15)"
-    : "none",
-
-  padding: 12,
-  overflowX: "auto",
-});
-
-const dataGridStyles = (darkMode) => ({
-  background: darkMode ? "#0f0f0f" : "#fff",
-  color: darkMode ? "#fff" : "#111",
-  borderRadius: 12,
+const dataGridStyles = {
   border: "none",
+  fontSize: 13,
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
-
-    borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e2e8f0",
-
-    minHeight: "52px !important",
-    maxHeight: "52px !important",
-
-    boxShadow: darkMode
-      ? "inset 0 -1px 0 rgba(255,215,0,0.08)"
-      : "none",
-  },
-
-  "& .MuiDataGrid-columnHeader": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
-
+    background: "#f1f5f9",
+    borderBottom: "1px solid #e2e8f0",
     fontWeight: 700,
-
-    fontSize: 13,
-
-    letterSpacing: "0.4px",
-
-    textTransform: "uppercase",
-
-    borderRight: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #e5e7eb",
-
-    textShadow: darkMode
-      ? "0 0 10px rgba(255,215,0,0.18)"
-      : "none",
-  },
-
-  "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight: 800,
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569 !important",
-
-    letterSpacing: "0.4px",
-  },
-  
-  "& .MuiDataGrid-iconSeparator": {
-    color: darkMode
-      ? "rgba(255,215,0,0.12)"
-      : "#cbd5e1",
-  },
-  
-  "& .MuiDataGrid-sortIcon": {
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
-  },
-
-  "& .MuiSvgIcon-root": {
-    color: darkMode
-      ? "#FFD700"
-      : "#475569",
   },
 
   "& .MuiDataGrid-cell": {
-    borderBottom: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #f1f5f9",
-    fontSize: 13,
-    color: darkMode ? "#f5f5f5" : "#111",
+    borderBottom: "1px solid #f1f5f9",
   },
 
   "& .MuiDataGrid-row:hover": {
-    background: darkMode
-      ? "rgba(255,215,0,0.05)"
-      : "#f9fafb",
+    background: "#f8fafc",
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e5e7eb",
-    color: darkMode ? "#fff" : "#111",
+    borderTop: "1px solid #e5e7eb",
   },
-
-  "& .MuiCheckbox-root": {
-    color: darkMode ? "#FFD700" : undefined,
-  },
-
-  "& .MuiTablePagination-root": {
-    color: darkMode ? "#fff" : "#111",
-  },
-
-  "& .row-floor": {
-    background: darkMode
-      ? "rgba(30,41,59,0.45)"
-      : "linear-gradient(135deg, rgba(219,234,254,0.55), rgba(191,219,254,0.35))",
-  },
-
-  "& .row-warehouse": {
-    background: darkMode
-      ? "rgba(6,78,59,0.45)"
-      : "linear-gradient(135deg, rgba(209,250,229,0.55), rgba(167,243,208,0.35))",
-  },
-
-  "& .row-pending": {
-    background: darkMode
-      ? "rgba(120,53,15,0.45)"
-      : "linear-gradient(135deg, rgba(254,243,199,0.55), rgba(253,230,138,0.35))",
-  },
-});
+};
 /* ===== STATUS ===== */
 
 const statusPacked = {
@@ -341,6 +217,27 @@ const pendingChip = {
   `,
 };
 
+const bulkBar = {
+  position: "fixed",
+  bottom: 24,
+  left: "50%",
+  transform: "translateX(-50%)",
+
+  display: "flex",
+  alignItems: "center",
+  gap: 20,
+
+  padding: "14px 22px",
+
+  background: "#1e293b", // 🔥 solid slate (dashboard match)
+  color: "#fff",
+
+  borderRadius: 16,
+
+  boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+
+  zIndex: 3000,
+};
 /* ===== ACTIONS ===== */
 
 const actionContainer = {
@@ -350,113 +247,36 @@ const actionContainer = {
 };
 
 const actionPrimary = {
-  px: 2.6,
-  py: 0.8,
-
-  borderRadius: "999px",
-
-  fontSize: 12,
-  fontWeight: 700,
-
+  borderRadius: 999,
+  fontWeight: 600,
+  background: "#4f46e5",
   color: "#fff",
-
-  background:
-    "linear-gradient(135deg,#10b981,#059669)",
-
-  border: "1px solid rgba(255,255,255,0.2)",
-
-  boxShadow: `
-    0 10px 25px rgba(16,185,129,0.38),
-    inset 0 1px 0 rgba(255,255,255,0.28)
-  `,
-
-  backdropFilter: "blur(12px)",
-
-  transition: "all 0.25s ease",
-
-  "&:hover": {
-    transform: "translateY(-3px) scale(1.03)",
-
-    boxShadow: `
-      0 16px 35px rgba(16,185,129,0.48),
-      0 0 18px rgba(16,185,129,0.35)
-    `,
-  },
+  "&:hover": { background: "#4338ca" }
 };
 
 const actionSecondary = {
-  px: 2.4,
-  borderRadius: "999px",
-  fontSize: 12,
-  fontWeight: 600,
-  background: "rgba(255,255,255,0.7)",
-  backdropFilter: "blur(10px)",
-  border: "1px solid rgba(0,0,0,0.1)",
-
-  "&:hover": {
-    background: "#fff",
-    transform: "translateY(-1px)",
-  },
+  borderRadius: 999,
+  background: "#f1f5f9",
+  color: "#0f172a",
 };
 
 const actionDanger = {
-  px: 2.4,
-  borderRadius: "999px",
-  fontSize: 12,
-  fontWeight: 600,
+  borderRadius: 999,
+  background: "#ef4444",
   color: "#fff",
-  background:
-    "linear-gradient(135deg,#ef4444,#b91c1c)",
-  boxShadow: "0 8px 20px rgba(239,68,68,0.35)",
-
-  "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow: "0 12px 28px rgba(239,68,68,0.5)",
-  },
 };
 
-const searchPanel = (darkMode) => ({
-	display: "flex",
-	  alignItems: "center",
-	  gap: 16,
-	  marginBottom: 4, 
-	  padding: "5px 18px", 
-	  borderRadius: 16, 
-	  maxWidth: "100%",
-
-  background: darkMode
-    ? `
-      linear-gradient(
-        145deg,
-        rgba(12,12,12,0.96),
-        rgba(18,18,18,0.92)
-      )
-    `
-    : `
-      linear-gradient(
-        145deg,
-        rgba(255,255,255,0.72),
-        rgba(255,255,255,0.42)
-      )
-    `,
-
-  backdropFilter: "blur(30px)",
-  WebkitBackdropFilter: "blur(30px)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "1px solid rgba(255,255,255,0.4)",
-
-  boxShadow: darkMode
-    ? `
-      0 10px 40px rgba(0,0,0,0.65),
-      inset 0 1px 0 rgba(255,215,0,0.05)
-    `
-    : `
-      0 14px 35px rgba(0,0,0,0.18),
-      inset 0 1px 0 rgba(255,255,255,0.45)
-    `,
-});
+const searchPanel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: 14,
+  borderRadius: 20,
+  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+  border: "1px solid rgba(148,163,184,0.18)",
+  boxShadow: "0 10px 30px rgba(15,23,42,0.08)",
+  marginBottom: 12
+};
 
 const popupOverlay = {
   position: "fixed",
@@ -472,27 +292,11 @@ const popupOverlay = {
 
 const popupBox = {
   width: 500,
-  borderRadius: 28,
-  padding: 24,
-  position: "relative",
-  overflow: "hidden",
-  background: `
-    linear-gradient(
-      145deg,
-      rgba(255,255,255,0.9),
-      rgba(255,255,255,0.72)
-    )
-  `,
-
-  backdropFilter: "blur(30px) saturate(180%)",
-  WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-  border: "1px solid rgba(255,255,255,0.38)",
-
-  boxShadow: `
-    0 35px 90px rgba(0,0,0,0.38),
-    inset 0 1px 0 rgba(255,255,255,0.7)
-  `,
+  borderRadius: 20,
+  padding: 20,
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
 };
 
 const themeBtn = (darkMode) => ({
@@ -559,7 +363,6 @@ function DispatchedItemsPage() {
   const [statusModal, setStatusModal] = useState(null);
   const [chalaanPreview, setChalaanPreview] = useState(null);
   const [chalaanModal, setChalaanModal] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
@@ -1414,8 +1217,8 @@ function DispatchedItemsPage() {
   );
   
   return (
-    <div style={page(darkMode)}>
-      <div style={backgroundText(darkMode)}>Alsorg</div>
+    <div style={page}>
+      <div style={backgroundText}>Alsorg</div>
       <div style={content}>
 	  <Box
 	    sx={{
@@ -1428,262 +1231,127 @@ function DispatchedItemsPage() {
 	    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
 	      
 	      {/* ICON BADGE */}
-	      <Box
-	        sx={{
-	          width: 52,
-	          height: 52,
-	          borderRadius: 3,
-	          background: "linear-gradient(135deg,#facc15,#f59e0b)",
-	          display: "flex",
-	          alignItems: "center",
-	          justifyContent: "center",
-	          boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
-	          fontSize: 22,
-	        }}
-	      >
-	        🚚
-	      </Box>
+		  <Box style={{
+		    display: "flex",
+		    alignItems: "center",
+		    justifyContent: "space-between",
+		    marginBottom: 10
+		  }}>
+		    <div>
+		      <h2 style={{
+		        margin: 0,
+		        fontSize: 28,
+		        fontWeight: 800,
+		        color: "#0f172a"
+		      }}>
+		        Dispatched Items
+		      </h2>
 
-	      {/* TEXT */}
-	      <Box>
-	        <div
-	          style={{
-	            fontSize: 28,
-	            fontWeight: 700,
-	            color: darkMode ? "#FFD700" : "#ffffff",
-	            letterSpacing: 0.4,
-	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
-	          }}
-	        >
-	          Dispatched Items
-	        </div>
+		      <div style={{
+		        fontSize: 13,
+		        color: "#64748b",
+		        marginTop: 4
+		      }}>
+		        Track, manage and dispatch inventory
+		      </div>
+		    </div>
 
-	        <div
-	          style={{
-	            fontSize: 13,
-				color: darkMode
-				  ? "rgba(255,215,0,0.8)"
-				  : "rgba(255,255,255,0.85)",
-	          }}
-	        >
-	          Track, manage and dispatch inventory
-	        </div>
-	      </Box>
+		    <Chip
+		      label={`${rows.length} Items`}
+		      sx={{
+		        background: "#e0f2fe",
+		        color: "#0369a1",
+		        fontWeight: 700
+		      }}
+		    />
+		  </Box>
 	    </Box>
-		
-	    {/* ITEMS CHIP */}
-		<Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-
-		  <Button
-		    onClick={() => setDarkMode(!darkMode)}
-		    sx={themeBtn(darkMode)}
-		  >
-		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-		  </Button>
-
-		  <Chip
-		    label={`${rows.length} Items`}
-		    sx={{
-		      background: darkMode
-		        ? "rgba(255,215,0,0.12)"
-		        : "rgba(255,255,255,0.25)",
-
-		      backdropFilter: "blur(12px)",
-
-		      color: darkMode ? "#FFD700" : "#fff",
-
-		      fontWeight: 700,
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.2)"
-		        : "1px solid rgba(255,255,255,0.3)",
-
-		      px: 1.5,
-		      height: 32,
-		    }}
-		  />
-		</Box>
 	  </Box>
 		
-		<Box sx={searchPanel(darkMode)}>
-		<SearchIcon
-		  sx={{
-		    opacity: 0.9,
-		    color: darkMode ? "#FFD700" : "#111",
-		    fontSize: 22,
-		  }}
-		/>
+	  <Box sx={searchPanel}>
+	    <SearchIcon
+	      sx={{
+	        opacity: 0.9,
+	        color: "#111",
+	        fontSize: 22,
+	      }}
+	    />
 
-		  <TextField
-		    variant="standard"
-		    placeholder="Search by Item or Client..."
-		    value={search}
-		    onChange={(e) => setSearch(e.target.value)}
-		    InputProps={{ disableUnderline: true }}
-			sx={{
-			  flex: 1,
+	    <TextField
+	      variant="standard"
+	      placeholder="Search by Item or Client..."
+	      value={search}
+	      onChange={(e) => setSearch(e.target.value)}
+	      InputProps={{ disableUnderline: true }}
+	      sx={{
+	        "& .MuiInputBase-root": {
+	          height: 40,
+	          borderRadius: 10,
+	          background: "#fff",
+	          border: "1px solid #e2e8f0",
+	        },
+	        "& input": {
+	          fontSize: 14,
+	          color: "#0f172a",
+	        }
+	      }}
+	    />
 
-			  "& .MuiInputBase-root": {
-			    height: 40,
+	    <TextField
+	      select
+	      size="small"
+	      value={statusFilter}
+	      onChange={(e) => setStatusFilter(e.target.value)}
+	      slotProps={{
+	        select: {
+	          MenuProps: {
+	            PaperProps: {
+	              sx: {
+	                mt: 1,
+	                borderRadius: "18px",
+	                overflow: "hidden",
 
-			    borderRadius: "18px",
+	                // ❌ removed blur (not in dashboard)
+	                background: "#ffffff",
+	                color: "#111",
 
-			    padding: "0 8px",
+	                border: "1px solid rgba(0,0,0,0.06)",
+	                boxShadow: "0 20px 45px rgba(0,0,0,0.18)",
 
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
+	                "& .MuiMenuItem-root": {
+	                  fontSize: 14,
+	                  fontWeight: 500,
+	                  color: "#111",
+	                  transition: "all 0.2s ease",
+	                },
 
-			    color: darkMode ? "#fff" : "#111",
+	                "& .MuiMenuItem-root:hover": {
+	                  background: "rgba(59,130,246,0.08)",
+	                },
 
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& input": {
-			    color: darkMode ? "#fff" : "#111",
-			    fontSize: 14,
-			    fontWeight: 500,
-			  },
-
-			  "& input::placeholder": {
-			    color: darkMode
-			      ? "rgba(255,255,255,0.45)"
-			      : "rgba(0,0,0,0.45)",
-			    opacity: 1,
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.05)"
-			      : "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.06)"
-			      : "#fff",
-
-			    boxShadow: darkMode
-			      ? "0 0 0 2px rgba(255,215,0,0.22)"
-			      : "0 0 0 2px rgba(59,130,246,0.3)",
-			  },
-			}}
-		  />
-
-		  <TextField
-		    select
-		    size="small"
-		    value={statusFilter}
-		    onChange={(e) => setStatusFilter(e.target.value)}
-
-			slotProps={{
-			  select: {
-		      MenuProps: {
-		        PaperProps: {
-		          sx: {
-		            mt: 1,
-
-		            borderRadius: "18px",
-
-		            overflow: "hidden",
-
-		            backdropFilter: "blur(18px)",
-
-		            background: darkMode
-		              ? "rgba(15,15,15,0.96)"
-		              : "rgba(255,255,255,0.96)",
-
-		            color: darkMode ? "#fff" : "#111",
-
-		            border: darkMode
-		              ? "1px solid rgba(255,215,0,0.12)"
-		              : "1px solid rgba(0,0,0,0.06)",
-
-		            boxShadow: darkMode
-		              ? "0 20px 45px rgba(0,0,0,0.7)"
-		              : "0 20px 45px rgba(0,0,0,0.18)",
-
-		            "& .MuiMenuItem-root": {
-		              fontSize: 14,
-		              fontWeight: 500,
-		              color: darkMode ? "#fff" : "#111",
-		              transition: "all 0.2s ease",
-		            },
-
-		            "& .MuiMenuItem-root:hover": {
-		              background: darkMode
-		                ? "rgba(255,215,0,0.08)"
-		                : "rgba(59,130,246,0.08)",
-		            },
-
-		            "& .Mui-selected": {
-		              background: darkMode
-		                ? "rgba(255,215,0,0.14) !important"
-		                : "rgba(59,130,246,0.12) !important",
-
-		              color: darkMode
-		                ? "#FFD700"
-		                : "#2563eb",
-
-		              fontWeight: 700,
-		            },
-		          },
-		        },
-		      },
-		    }}}
-			sx={{
-			  minWidth: 150,
-
-			  "& .MuiInputBase-root": {
-			    height: 40,
-
-			    borderRadius: "18px",
-
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
-
-			    color: darkMode ? "#fff" : "#111",
-
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& .MuiSelect-select": {
-			    display: "flex",
-			    alignItems: "center",
-			    color: darkMode ? "#fff" : "#111",
-			    fontWeight: 500,
-			  },
-
-			  "& .MuiSvgIcon-root": {
-			    color: darkMode ? "#FFD700" : "#111",
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.05)"
-			      : "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.06)"
-			      : "#fff",
-
-			    boxShadow: darkMode
-			      ? "0 0 0 2px rgba(255,215,0,0.22)"
-			      : "0 0 0 2px rgba(59,130,246,0.3)",
-			  },
-			}}
-		  >
+	                "& .Mui-selected": {
+	                  background: "rgba(59,130,246,0.12) !important",
+	                  color: "#2563eb",
+	                  fontWeight: 700,
+	                },
+	              },
+	            },
+	          },
+	        }
+	      }}
+	      sx={{
+	        "& .MuiInputBase-root": {
+	          height: 40,
+	          borderRadius: 10,
+	          background: "#fff",
+	          border: "1px solid #e2e8f0",
+	        },
+	        "& input": {
+	          fontSize: 14,
+	          color: "#0f172a",
+	        }
+	      }}
+	    >
 		    <MenuItem value="ALL">All Status</MenuItem>
 			<MenuItem value="READY">🟡 Ready (Decision Pending)</MenuItem>
 			<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
@@ -1697,52 +1365,16 @@ function DispatchedItemsPage() {
 		    value={groupBy}
 		    onChange={(e) => setGroupBy(e.target.value)}
 			sx={{
-			  minWidth: 150,
-
 			  "& .MuiInputBase-root": {
 			    height: 40,
-
-			    borderRadius: "18px",
-
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
-
-			    color: darkMode ? "#fff" : "#111",
-
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
+			    borderRadius: 10,
+			    background: "#fff",
+			    border: "1px solid #e2e8f0",
 			  },
-
-			  "& .MuiSelect-select": {
-			    display: "flex",
-			    alignItems: "center",
-			    color: darkMode ? "#fff" : "#111",
-			    fontWeight: 500,
-			  },
-
-			  "& .MuiSvgIcon-root": {
-			    color: darkMode ? "#FFD700" : "#111",
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.05)"
-			      : "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.06)"
-			      : "#fff",
-
-			    boxShadow: darkMode
-			      ? "0 0 0 2px rgba(255,215,0,0.22)"
-			      : "0 0 0 2px rgba(59,130,246,0.3)",
-			  },
+			  "& input": {
+			    fontSize: 14,
+			    color: "#0f172a",
+			  }
 			}}
 		  >
 		    <MenuItem value="NONE">No Group</MenuItem>
@@ -1756,9 +1388,7 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-			background: darkMode
-			  ? "rgba(30,30,30,0.95)"
-			  : "rgba(219,234,254,0.9)",
+			background: "#e0f2fe",
 		    color: "#2563eb",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1770,9 +1400,7 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-			background: darkMode
-			  ? "rgba(30,30,30,0.95)"
-			  : "rgba(209,250,229,0.9)",
+			background: "#dcfce7",
 		    color: "#059669",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1784,9 +1412,7 @@ function DispatchedItemsPage() {
 		    px: 2,
 		    py: 0.6,
 		    borderRadius: "999px",
-			background: darkMode
-			  ? "rgba(30,30,30,0.95)"
-			  : "rgba(254,243,199,0.9)",
+			background: "#fef3c7",
 		    color: "#d97706",
 		    fontWeight: 600,
 		    fontSize: 12
@@ -1796,7 +1422,7 @@ function DispatchedItemsPage() {
 
 		</Box>
 
-        <div style={tableWrapper(darkMode)}> 
+        <div style={tableWrapper}> 
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
@@ -1804,7 +1430,7 @@ function DispatchedItemsPage() {
 		  columns={columns}
 		  loading={loading}
 		  density="compact"
-		  sx={dataGridStyles(darkMode)}
+		  sx={dataGridStyles}
 		  onRowClick={(params) => {
 		    setAnimatingId(params.id);
 		    setTimeout(() => setAnimatingId(null), 200);
@@ -1817,25 +1443,7 @@ function DispatchedItemsPage() {
       </div>
 	  {Array.isArray(selectionModel) && selectionModel.length > 0 && isDispatch && (
 		<div
-		  style={{
-		    position: "fixed",
-		    bottom: 24,
-		    left: "50%",
-		    transform: "translateX(-50%)",
-		    color: "#fff",
-		    padding: "14px 22px",
-		    borderRadius: 999,
-		    display: "flex",
-		    alignItems: "center",
-		    gap: 20,
-		    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-		    zIndex: 3000,
-			background: darkMode
-			  ? "rgba(0,0,0,0.92)"
-			  : "rgba(17,24,39,0.85)",
-			backdropFilter: "blur(18px)",
-			border: "1px solid rgba(255,255,255,0.1)",
-		  }}
+		  style={bulkBar}
 		>
 		  {/* TEXT */}
 		  <span style={{ fontWeight: 600 }}>
@@ -1848,9 +1456,9 @@ function DispatchedItemsPage() {
 		    disabled={!allReadyToDispatch}
 		    onClick={() => setBulkDrawerOpen(true)}
 		    sx={{
-		      px: 2.8,
-		      borderRadius: "999px",
-		      fontWeight: 600,
+			  px: 2.4,
+			  borderRadius: 10,
+			  fontWeight: 600,
 		      background: allReadyToDispatch
 		        ? "linear-gradient(180deg,#3b82f6,#2563eb)"
 		        : "#9ca3af",
@@ -1865,9 +1473,9 @@ function DispatchedItemsPage() {
 		      size="small"
 		      onClick={() => setBulkStatusModal(true)}
 		      sx={{
-		        px: 2.8,
-		        borderRadius: "999px",
-		        fontWeight: 600,
+				px: 2.4,
+				  borderRadius: 10,
+				  fontWeight: 600,
 		        background: "linear-gradient(180deg,#f59e0b,#d97706)",
 		        color: "#fff",
 		      }}
@@ -1882,9 +1490,9 @@ function DispatchedItemsPage() {
 		    disabled={!allReadyToStore}
 		    onClick={() => setBulkGatePassOpen(true)}
 		    sx={{
-		      px: 2.8,
-		      borderRadius: "999px",
-		      fontWeight: 600,
+				px: 2.4,
+				  borderRadius: 10,
+				  fontWeight: 600,
 		      background: allReadyToStore
 		        ? "linear-gradient(180deg,#10b981,#059669)"
 		        : "#9ca3af",
@@ -1898,10 +1506,15 @@ function DispatchedItemsPage() {
 		  <Button
 		    size="small"
 		    onClick={() => setSelectionModel([])}
-		    sx={{
-		      color: "#9ca3af",
-		      "&:hover": { color: "#fff" },
-		    }}
+			sx={{
+			  px: 2,
+			  borderRadius: 10,
+			  background: "rgba(255,255,255,0.1)",
+			  color: "#fff",
+			  "&:hover": {
+			    background: "rgba(255,255,255,0.2)",
+			  },
+			}}
 		  >
 		    Clear
 		  </Button>
@@ -2515,18 +2128,15 @@ function DispatchedItemsPage() {
 	          value={warehouseCode}
 	          onChange={(e) => setWarehouseCode(e.target.value)}
 			  sx={{
-			    flex: 1,
 			    "& .MuiInputBase-root": {
+			      height: 40,
 			      borderRadius: 10,
-			      padding: "4px 8px",
-			      transition: "all 0.2s ease",
-			    },
-			    "&:hover": {
-			      background: "rgba(255,255,255,0.6)"
-			    },
-			    "& .Mui-focused": {
 			      background: "#fff",
-			      boxShadow: "0 0 0 2px rgba(59,130,246,0.3)"
+			      border: "1px solid #e2e8f0",
+			    },
+			    "& input": {
+			      fontSize: 14,
+			      color: "#0f172a",
 			    }
 			  }}
 	        />

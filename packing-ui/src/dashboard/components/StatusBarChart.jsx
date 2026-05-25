@@ -5,7 +5,7 @@ function StatusBarChart({ packed, dispatched, pending, darkMode = false }) {
 
   return (
     <div style={card(darkMode)}>
-      <h3 style={title(darkMode)}>Warehouse Status</h3>
+      <h3 style={title(darkMode)}>Inventory Status</h3>
 
       <svg width="220" height="160">
         <rect
