@@ -1405,58 +1405,110 @@ function ZohoItemsPage() {
 	      </Button>
 	    </DialogActions>
 	  </Dialog>
-	  <DialogContent>
+	  <Dialog
+	    open={customAddOpen}
+	    onClose={() => setCustomAddOpen(false)}
+	    fullWidth
+	    maxWidth="sm"
+	  >
+	    <DialogTitle>Add Custom Packet</DialogTitle>
 
-	    <TextField
-	      label="Custom Packet Number"
-	      type="number"
-	      fullWidth
-	      value={customPacketNo}
-	      onChange={(e) => setCustomPacketNo(e.target.value)}
-	      sx={formFieldSx(darkMode)}
-	    />
+	    <DialogContent>
 
-	    <TextField
-	      label="Description"
-	      fullWidth
-	      value={descriptions[0] || ""}
-	      onChange={(e) => setDescriptions([e.target.value])}
-	      sx={formFieldSx(darkMode)}
-	    />
+	      <TextField
+	        label="Custom Packet Number"
+	        type="number"
+	        fullWidth
+	        value={customPacketNo}
+	        onChange={(e) => setCustomPacketNo(e.target.value)}
+	        sx={formFieldSx(darkMode)}
+	      />
 
-	    <TextField
-	      label="Weight"
-	      fullWidth
-	      value={weights[0] || ""}
-	      onChange={(e) => setWeights([e.target.value])}
-	      sx={formFieldSx(darkMode)}
-	    />
+	      <TextField
+	        label="Description"
+	        fullWidth
+	        value={descriptions[0] || ""}
+	        onChange={(e) => setDescriptions([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
 
-	    <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-	      {["l", "b", "h"].map((key) => (
-	        <TextField
-	          key={key}
-	          label={key.toUpperCase()}
-	          type="number"
-	          value={dimensionsList[0]?.[key] || ""}
-	          onChange={(e) => {
-	            const copy = [...dimensionsList];
-	            copy[0] = { ...copy[0], [key]: e.target.value };
-	            setDimensionsList(copy);
-	          }}
-	          sx={{ width: 90 }}
-	        />
-	      ))}
-	    </Box>
+	      <TextField
+	        label="Weight"
+	        fullWidth
+	        value={weights[0] || ""}
+	        onChange={(e) => setWeights([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
 
-	    <TextField
-	      label="Remarks"
-	      fullWidth
-	      value={remarksList[0] || ""}
-	      onChange={(e) => setRemarksList([e.target.value])}
-	      sx={formFieldSx(darkMode)}
-	    />
-	  </DialogContent>
+	      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+	        {["l", "b", "h"].map((key) => (
+	          <TextField
+	            key={key}
+	            label={key.toUpperCase()}
+	            type="number"
+	            value={dimensionsList[0]?.[key] || ""}
+	            onChange={(e) => {
+	              const copy = [...dimensionsList];
+	              copy[0] = { ...copy[0], [key]: e.target.value };
+	              setDimensionsList(copy);
+	            }}
+	            sx={{ width: 90 }}
+	          />
+	        ))}
+	      </Box>
+
+	      <TextField
+	        label="Remarks"
+	        fullWidth
+	        value={remarksList[0] || ""}
+	        onChange={(e) => setRemarksList([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
+
+	    </DialogContent>
+
+	    <DialogActions>
+	      <Button onClick={() => setCustomAddOpen(false)}>Cancel</Button>
+
+	      <Button
+	        variant="contained"
+	        disabled={!customPacketNo}
+	        onClick={async () => {
+	          try {
+	            await fetch(
+	              `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+	              {
+	                method: "POST",
+	                headers: {
+	                  "Content-Type": "application/json",
+	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+	                },
+	                body: JSON.stringify({
+	                  customPacketNumber: Number(customPacketNo),
+	                  descriptions,
+	                  weights,
+	                  dimensionsList: dimensionsList.map((d) =>
+	                    d?.l && d?.b && d?.h
+	                      ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+	                      : ""
+	                  ),
+	                  remarksList,
+	                }),
+	              }
+	            );
+
+	            setCustomAddOpen(false);
+	            fetchItems();
+
+	          } catch (e) {
+	            alert("Failed to add custom packet");
+	          }
+	        }}
+	      >
+	        Add
+	      </Button>
+	    </DialogActions>
+	  </Dialog>
     </div>
   );
 }
