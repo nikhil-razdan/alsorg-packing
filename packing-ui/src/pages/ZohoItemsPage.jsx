@@ -435,7 +435,7 @@ function ZohoItemsPage() {
   }, [form.numberOfPackets]);
   /* ===================== RENDER ===================== */
   return (
-    <div style={page(darkMode)}>
+    <div style={page()}>
       <div style={backgroundText(darkMode)}>Alsorg</div>
 
       <div style={content}>
@@ -447,89 +447,50 @@ function ZohoItemsPage() {
 	      mb: 2,
 	    }}
 	  >
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-
-	      {/* ICON BADGE */}
-	      <Box
-	        sx={{
-	          width: 52,
-	          height: 52,
-	          borderRadius: 3,
-	          background: "linear-gradient(135deg,#facc15,#f59e0b)",
-	          display: "flex",
-	          alignItems: "center",
-	          justifyContent: "center",
-	          boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
-	          fontSize: 22,
+	    <Box>
+	      <h2
+	        style={{
+	          margin: 0,
+	          fontSize: 28,
+	          fontWeight: 800,
+	          color: darkMode ? "#FFD700" : "#0f172a",
 	        }}
 	      >
-	        📦
-	      </Box>
+	        Inventory Items
+	      </h2>
 
-	      {/* TEXT */}
-	      <Box>
-	        <div
-	          style={{
-	            fontSize: 28, // KEEP INVENTORY SIZE
-	            fontWeight: 700,
-	            color: darkMode ? "#FFD700" : "#ffffff",
-	            letterSpacing: 0.4,
-	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
-	          }}
-	        >
-	          Packed Items
-	        </div>
-
-	        <div
-	          style={{
-	            fontSize: 13,
-				color: darkMode
-				  ? "rgba(255,215,0,0.82)"
-				  : "rgba(255,255,255,0.85)",
-	          }}
-	        >
-	          Create, manage and generate item stickers
-	        </div>
-	      </Box>
+	      <div
+	        style={{
+	          fontSize: 13,
+	          color: darkMode
+	            ? "rgba(255,215,0,0.75)"
+	            : "#64748b",
+	          marginTop: 4,
+	        }}
+	      >
+	        Manage packed inventory and stickers
+	      </div>
 	    </Box>
 
-	    {/* ITEMS CHIP */}
-		<Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+	    <Box sx={{ display: "flex", gap: 1.5 }}>
+	      <Button onClick={() => setDarkMode(!darkMode)} sx={themeBtn(darkMode)}>
+	        {darkMode ? "☀ Classic" : "🌙 Dark"}
+	      </Button>
 
-		  <Button
-		    onClick={() => setDarkMode(!darkMode)}
-		    sx={themeBtn(darkMode)}
-		  >
-		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-		  </Button>
-
-		  <Box
-		    sx={{
-		      px: 2,
-		      py: 0.8,
-		      borderRadius: "999px",
-
-		      background: darkMode
-		        ? "rgba(255,215,0,0.12)"
-		        : "rgba(255,255,255,0.25)",
-
-		      backdropFilter: "blur(10px)",
-
-		      color: darkMode ? "#FFD700" : "#fff",
-
-		      fontWeight: 600,
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.2)"
-		        : "1px solid rgba(255,255,255,0.3)",
-
-		      fontSize: 13,
-		    }}
-		  >
-		    {rowCount} Items
-		  </Box>
-
-		</Box>
+	      <Box
+	        sx={{
+	          px: 2,
+	          py: 0.6,
+	          borderRadius: "999px",
+	          background: darkMode ? "#111" : "#e0f2fe",
+	          color: darkMode ? "#FFD700" : "#0369a1",
+	          fontWeight: 700,
+	          fontSize: 12,
+	        }}
+	      >
+	        {rowCount} Items
+	      </Box>
+	    </Box>
 	  </Box>
 		<Button
 		  variant="contained"
@@ -538,28 +499,13 @@ function ZohoItemsPage() {
 		    setCreateOpen(true);
 		  }}
 		  sx={{
-		    mb: 2,
-
-		    px: 3,
+		    px: 2.6,
 		    py: 1,
-
 		    borderRadius: "999px",
-
-		    fontWeight: 700,
-
-		    background: darkMode
-		      ? "linear-gradient(180deg,#facc15,#d97706)"
-		      : "linear-gradient(180deg,#111827,#1f2937)",
-
-		    color: darkMode ? "#111" : "#fff",
-
-		    boxShadow: darkMode
-		      ? "0 10px 30px rgba(255,215,0,0.28)"
-		      : "0 10px 30px rgba(0,0,0,0.25)",
-
-		    "&:hover": {
-		      transform: "translateY(-2px)",
-		    },
+		    fontWeight: 600,
+		    background: "#4f46e5",
+		    color: "#fff",
+		    "&:hover": { background: "#4338ca" }
 		  }}
 		>
 		  Create Item
@@ -582,48 +528,33 @@ function ZohoItemsPage() {
 		    InputProps={{ disableUnderline: true }}
 			sx={{
 			  flex: 1,
-			  minWidth: 150,
 
 			  "& .MuiInputBase-root": {
 			    height: 40,
-
 			    borderRadius: "18px",
-
-			    padding: "0 10px",
-
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
-
-			    color: darkMode ? "#fff" : "#111",
-
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
-
+			    padding: "0 8px",
+			    background: "rgba(255,255,255,0.55)",
+			    border: "1px solid rgba(255,255,255,0.35)",
 			    transition: "all 0.25s ease",
 			  },
 
 			  "& input": {
-			    color: darkMode ? "#fff" : "#111",
+			    fontSize: 14,
 			    fontWeight: 500,
+			    color: "#111",
 			  },
 
 			  "& input::placeholder": {
-			    color: darkMode
-			      ? "rgba(255,255,255,0.45)"
-			      : "rgba(0,0,0,0.45)",
-			    opacity: 1,
+			    color: "rgba(0,0,0,0.45)",
 			  },
 
-			  "& .MuiSvgIcon-root": {
-			    color: darkMode ? "#FFD700" : "#111",
+			  "& .MuiInputBase-root:hover": {
+			    background: "#fff",
 			  },
 
-			  "& .MuiSelect-select": {
-			    color: darkMode ? "#fff" : "#111",
-			    display: "flex",
-			    alignItems: "center",
+			  "& .Mui-focused": {
+			    background: "#fff",
+			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
 			  },
 			}}
 		  />
@@ -1320,27 +1251,18 @@ function ZohoItemsPage() {
 
 /* ===================== STYLES ===================== */
 
-const page = (darkMode) => ({
+const page = () => ({
   minHeight: "100vh",
-  padding: 20,
-  boxSizing: "border-box",
+  padding: 18,
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
 
-  background: darkMode
-    ? `
-      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
-      linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)
-    `
-    : `
-      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-      linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
-    `,
-
-  backgroundAttachment: "fixed",
+  background: `
+    radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
+    radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
+    linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
+  `,
 });
 
 const backgroundText = (darkMode) => ({
@@ -1375,135 +1297,37 @@ const pageTitle = {
   color: "#fff",
 };
 
-const tableWrapper = (darkMode) => ({
-  height: "calc(100vh - 170px)",
-  borderRadius: 18,
+const tableWrapper = {
+  height: "calc(100vh - 220px)",
+  borderRadius: 24,
+  padding: 16,
+  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+  border: "1px solid rgba(148,163,184,0.18)",
+  boxShadow: "0 18px 40px rgba(15,23,42,0.10)",
+};
 
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
-
-  backdropFilter: "blur(16px)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "none",
-
-  boxShadow: darkMode
-    ? "0 22px 55px rgba(0,0,0,0.65)"
-    : "0 22px 55px rgba(0,0,0,0.35)",
-
-  padding: 12,
-  overflowX: "auto",
-});
-
-const dataGridStyles = (darkMode) => ({
-  background: darkMode ? "#0f0f0f" : "#fff",
-
-  color: darkMode ? "#fff" : "#111",
-
-  borderRadius: 12,
-
+const dataGridStyles = {
   border: "none",
-
-  /* ================= HEADER ROW ================= */
+  fontSize: 13,
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f9fafb !important",
-
-    borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e5e7eb",
-  },
-
-  /* ================= INDIVIDUAL HEADER ================= */
-
-  "& .MuiDataGrid-columnHeader": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f9fafb !important",
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#374151 !important",
-
+    background: "#f1f5f9",
+    borderBottom: "1px solid #e2e8f0",
     fontWeight: 700,
-
-    fontSize: 13,
-
-    borderRight: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #e5e7eb",
   },
-
-  /* ================= HEADER TITLE ================= */
-
-  "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight: 700,
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#374151 !important",
-  },
-
-  /* ================= CELLS ================= */
 
   "& .MuiDataGrid-cell": {
-    borderBottom: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #f1f5f9",
-
-    color: darkMode ? "#f5f5f5" : "#111",
-
-    fontSize: 13,
-  },
-
-  /* ================= ROW ================= */
-
-  "& .MuiDataGrid-row": {
-    background: darkMode
-      ? "rgba(17,17,17,0.75)"
-      : "rgba(219,234,254,0.55)",
+    borderBottom: "1px solid #f1f5f9",
   },
 
   "& .MuiDataGrid-row:hover": {
-    background: darkMode
-      ? "rgba(255,215,0,0.06)"
-      : "#f9fafb",
+    background: "#f8fafc",
   },
-
-  /* ================= FOOTER ================= */
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e5e7eb",
-
-    color: darkMode ? "#fff" : "#111",
-
-    background: darkMode ? "#0b0b0b" : "#fff",
+    borderTop: "1px solid #e5e7eb",
   },
-
-  /* ================= PAGINATION ================= */
-
-  "& .MuiTablePagination-root": {
-    color: darkMode ? "#fff" : "#111",
-  },
-
-  "& .MuiSvgIcon-root": {
-    color: darkMode ? "#FFD700" : "#374151",
-  },
-
-  /* ================= PACKED ROW ================= */
-
-  "& .row-packed": {
-    background: darkMode
-      ? "rgba(120,53,15,0.35)"
-      : "rgba(219,234,254,0.55)",
-  },
-});
+};
 
 /* ---------- Drawer ---------- */
 
@@ -1705,30 +1529,30 @@ const formFieldSx = (darkMode) => ({
   },
 });
 
-const searchPanel = (darkMode) => ({
+const searchPanel = {
   display: "flex",
   alignItems: "center",
   gap: 16,
-  marginBottom: 4,
+  marginBottom: 8,
   padding: "5px 18px",
   borderRadius: 16,
 
-  background: darkMode
-    ? "linear-gradient(145deg, rgba(12,12,12,0.96), rgba(18,18,18,0.92))"
-    : "rgba(255,255,255,0.35)",
+  background: `
+    linear-gradient(
+      145deg,
+      rgba(255,255,255,0.72),
+      rgba(255,255,255,0.42)
+    )
+  `,
 
-  backdropFilter: "blur(16px)",
+  backdropFilter: "blur(30px)",
+  border: "1px solid rgba(255,255,255,0.4)",
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "none",
-
-  boxShadow: darkMode
-    ? "0 10px 40px rgba(0,0,0,0.65)"
-    : "0 10px 25px rgba(0,0,0,0.2)",
-
-  maxWidth: "100%",
-});
+  boxShadow: `
+    0 14px 35px rgba(0,0,0,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.45)
+  `,
+};
 
 const themeBtn = (darkMode) => ({
   px: 2.6,
