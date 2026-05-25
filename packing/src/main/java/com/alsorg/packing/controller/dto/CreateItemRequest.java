@@ -19,6 +19,7 @@ public class CreateItemRequest {
     private List<String> weights;
     private List<String> dimensionsList;
     private List<String> remarksList;
+    private Integer customPacketNumber;
 
     // Getters and Setters
 
@@ -132,5 +133,13 @@ public class CreateItemRequest {
 
 	public void setRemarksList(List<String> remarksList) {
 		this.remarksList = remarksList;
+	}
+
+	public Integer getCustomPacketNumber() {
+		return customPacketNumber;
+	}
+
+	public void setCustomPacketNumber(Integer customPacketNumber) {
+		this.customPacketNumber = customPacketNumber;
 	}
 }

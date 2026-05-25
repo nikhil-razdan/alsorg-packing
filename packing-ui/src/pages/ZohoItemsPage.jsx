@@ -34,7 +34,9 @@ function ZohoItemsPage() {
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-
+  const [customPacketNo, setCustomPacketNo] = useState("");
+  const [customCreateOpen, setCustomCreateOpen] = useState(false);
+  const [customAddOpen, setCustomAddOpen] = useState(false);
   const [weights, setWeights] = useState([]);
   const [dimensionsList, setDimensionsList] = useState([]);
   const [remarksList, setRemarksList] = useState([]);
@@ -144,47 +146,60 @@ function ZohoItemsPage() {
 	    // ❌ NOT LAST → NO BUTTON
 	    if (!isLast) return null;
 
-	    return (
-	      <Button
-	        size="small"
-	        disabled={isLimitReached}
-	        onClick={() => {
-	          setSelectedItem(params.row);
-	          setAddCount(1);
+		return (
+		  <Box sx={{ display: "flex", gap: 1 }}>
+		    {/* NORMAL ADD */}
+		    <Button
+		      size="small"
+		      disabled={isLimitReached}
+		      onClick={() => {
+		        setSelectedItem(params.row);
+		        setAddCount(1);
 
-	          // 🔥 RESET STATE
-	          setDescriptions([]);
-	          setWeights([]);
-	          setDimensionsList([]);
-	          setRemarksList([]);
+		        setDescriptions([]);
+		        setWeights([]);
+		        setDimensionsList([]);
+		        setRemarksList([]);
 
-	          setAddMoreOpen(true);
-	        }}
-	        sx={{
-	          px: 2,
-	          py: 0.6,
-	          fontSize: 12,
-	          fontWeight: 600,
-	          borderRadius: "999px",
-	          textTransform: "none",
-	          color: "#fff",
-	          background: isLimitReached
-	            ? "linear-gradient(180deg, #6b7280, #374151)"
-	            : "linear-gradient(180deg, #2563eb, #1e3a8a)",
-	          boxShadow: isLimitReached
-	            ? "none"
-	            : "0 4px 12px rgba(37,99,235,0.35)",
-	          cursor: isLimitReached ? "not-allowed" : "pointer",
+		        setAddMoreOpen(true);
+		      }}
+		      sx={{
+		        px: 2,
+		        py: 0.6,
+		        fontSize: 12,
+		        fontWeight: 600,
+		        borderRadius: "999px",
+		        textTransform: "none",
+		        color: "#fff",
+		        background: "linear-gradient(180deg, #2563eb, #1e3a8a)",
+		      }}
+		    >
+		      + Add
+		    </Button>
 
-	          "&:hover": {
-	            filter: isLimitReached ? "none" : "brightness(1.08)",
-	            transform: isLimitReached ? "none" : "translateY(-1px)",
-	          },
-	        }}
-	      >
-	        + Add
-	      </Button>
-	    );
+		    {/* 🔥 NEW CUSTOM BUTTON */}
+		    <Button
+		      size="small"
+		      onClick={() => {
+		        setSelectedItem(params.row);
+		        setCustomPacketNo("");
+		        setCustomAddOpen(true);
+		      }}
+		      sx={{
+		        px: 2,
+		        py: 0.6,
+		        fontSize: 12,
+		        fontWeight: 600,
+		        borderRadius: "999px",
+		        textTransform: "none",
+		        color: "#fff",
+		        background: "linear-gradient(180deg, #059669, #065f46)",
+		      }}
+		    >
+		      + Custom
+		    </Button>
+		  </Box>
+		);
 	  }
 	},
 	{
@@ -492,24 +507,40 @@ function ZohoItemsPage() {
 	      </Box>
 	    </Box>
 	  </Box>
-		<Button
-		  variant="contained"
-		  onClick={() => {
-		    setActiveStep(0);
-		    setCreateOpen(true);
-		  }}
-		  sx={{
-		    px: 2.6,
-		    py: 1,
-		    borderRadius: "999px",
-		    fontWeight: 600,
-		    background: "#4f46e5",
-		    color: "#fff",
-		    "&:hover": { background: "#4338ca" }
-		  }}
-		>
-		  Create Item
-		</Button>
+	  <Box sx={{ display: "flex", gap: 1.5, mb: 1 }}>
+	    <Button
+	      variant="contained"
+	      onClick={() => {
+	        setActiveStep(0);
+	        setCreateOpen(true);
+	      }}
+	      sx={{
+	        px: 2.6,
+	        py: 1,
+	        borderRadius: "999px",
+	        fontWeight: 600,
+	        background: "#4f46e5",
+	        color: "#fff",
+	        "&:hover": { background: "#4338ca" }
+	      }}
+	    >
+	      Create Item
+	    </Button>
+
+	    <Button
+	      variant="outlined"
+	      onClick={() => {
+	        setCustomPacketNo("");
+	        setCustomCreateOpen(true);
+	      }}
+	      sx={{
+	        borderRadius: "999px",
+	        fontWeight: 600
+	      }}
+	    >
+	      + Custom Packet
+	    </Button>
+	  </Box>
 		<Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
@@ -1048,6 +1079,60 @@ function ZohoItemsPage() {
 	    </DialogActions>
 	  </Dialog>
 	  <Dialog
+	    open={customCreateOpen}
+	    onClose={() => setCustomCreateOpen(false)}
+	    fullWidth
+	    maxWidth="xs"
+	  >
+	    <DialogTitle>Create Custom Packet</DialogTitle>
+
+	    <DialogContent>
+	      <TextField
+	        label="Packet Number"
+	        type="number"
+	        fullWidth
+	        value={customPacketNo}
+	        onChange={(e) => setCustomPacketNo(e.target.value)}
+	        sx={{ mt: 1 }}
+	      />
+	    </DialogContent>
+
+	    <DialogActions>
+	      <Button onClick={() => setCustomCreateOpen(false)}>
+	        Cancel
+	      </Button>
+
+	      <Button
+	        variant="contained"
+	        disabled={!customPacketNo}
+	        onClick={async () => {
+	          try {
+	            await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
+	              method: "POST",
+	              headers: {
+	                "Content-Type": "application/json",
+	                Authorization: `Bearer ${localStorage.getItem("token")}`,
+	              },
+	              body: JSON.stringify({
+	                ...form,
+	                customPacketNumber: Number(customPacketNo),
+	              }),
+	            });
+
+	            setCustomCreateOpen(false);
+	            setCustomPacketNo("");
+	            fetchItems();
+
+	          } catch (e) {
+	            alert("Failed to create custom packet");
+	          }
+	        }}
+	      >
+	        Create
+	      </Button>
+	    </DialogActions>
+	  </Dialog>
+	  <Dialog
 	    open={addMoreOpen}
 	    onClose={() => setAddMoreOpen(false)}
 	    PaperProps={{
@@ -1239,6 +1324,62 @@ function ZohoItemsPage() {
 
 	          setAddMoreOpen(false);
 	          fetchItems();
+	        }}
+	      >
+	        Add
+	      </Button>
+	    </DialogActions>
+	  </Dialog>
+	  <Dialog
+	    open={customAddOpen}
+	    onClose={() => setCustomAddOpen(false)}
+	    fullWidth
+	    maxWidth="xs"
+	  >
+	    <DialogTitle>Add Custom Packet</DialogTitle>
+
+	    <DialogContent>
+	      <TextField
+	        label="Packet Number"
+	        type="number"
+	        fullWidth
+	        value={customPacketNo}
+	        onChange={(e) => setCustomPacketNo(e.target.value)}
+	        sx={{ mt: 1 }}
+	      />
+	    </DialogContent>
+
+	    <DialogActions>
+	      <Button onClick={() => setCustomAddOpen(false)}>
+	        Cancel
+	      </Button>
+
+	      <Button
+	        variant="contained"
+	        disabled={!customPacketNo}
+	        onClick={async () => {
+	          try {
+	            await fetch(
+	              `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+	              {
+	                method: "POST",
+	                headers: {
+	                  "Content-Type": "application/json",
+	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+	                },
+	                body: JSON.stringify({
+	                  customPacketNumber: Number(customPacketNo),
+	                }),
+	              }
+	            );
+
+	            setCustomAddOpen(false);
+	            setCustomPacketNo("");
+	            fetchItems();
+
+	          } catch (e) {
+	            alert("Failed to add custom packet");
+	          }
 	        }}
 	      >
 	        Add

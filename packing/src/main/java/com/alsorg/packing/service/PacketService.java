@@ -434,6 +434,122 @@ public class PacketService {
         return packetItemRepository.saveAll(items);
     }
     
+    @Transactional
+    public PacketItem createCustomPacket(CreateItemRequest req) {
+
+        Company company = companyRepository.findAll()
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No company found"));
+
+        // 🔥 CREATE MASTER ITEM (same as existing)
+        MasterItem master = new MasterItem();
+        master.setItemName(req.itemName);
+        master.setPdNo(req.pdNo);
+        master.setDrawingName(req.drawingNo);
+        master.setClientName(req.clientName);
+        master.setAddress(req.clientAddress);
+        master.setTotalPackets(1);
+        master.setFloor(req.floor);
+
+        master = masterItemRepository.save(master);
+
+        // 🔥 CREATE PACKET
+        Packet packet = new Packet();
+        packet.setId(UUID.randomUUID());
+        packet.setCompany(company);
+        packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+        packet.setStatus(PacketStatus.CREATED);
+        packet.setCreatedBy("SYSTEM");
+        packet.setCreatedAt(LocalDateTime.now());
+        packet.setStickerGenerated(false);
+
+        packet = packetRepository.save(packet);
+
+        int packetNo = req.getCustomPacketNumber();
+
+        // 🔥 DUPLICATE CHECK
+        if (packetItemRepository.existsByMasterItemIdAndPacketNumber(
+                master.getId(), "Pkt-" + packetNo)) {
+            throw new RuntimeException("Packet number already exists");
+        }
+
+        PacketItem item = new PacketItem();
+
+        item.setId(UUID.randomUUID());
+        item.setPacket(packet);
+        item.setMasterItem(master);
+
+        item.setItemName(req.itemName);
+        item.setPdNo(req.pdNo);
+        item.setDrawingNo(req.drawingNo);
+        item.setClientName(req.clientName);
+        item.setClientAddress(req.clientAddress);
+        item.setFloor(req.floor);
+
+        item.setPacketNumber("Pkt-" + packetNo);
+
+        String cleanDwg = req.drawingNo.replace("/", "-");
+        item.setSku(req.pdNo + "/" + cleanDwg + "/Pkt-" + packetNo);
+
+        item.setStatus("CREATED");
+
+        return packetItemRepository.save(item);
+    }
+    
+    @Transactional
+    public PacketItem addCustomPacket(UUID masterItemId, CreateItemRequest req) {
+
+        MasterItem master = masterItemRepository.findById(masterItemId)
+                .orElseThrow(() -> new RuntimeException("Master item not found"));
+
+        Company company = companyRepository.findAll()
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No company found"));
+
+        Packet packet = new Packet();
+        packet.setId(UUID.randomUUID());
+        packet.setCompany(company);
+        packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+        packet.setStatus(PacketStatus.CREATED);
+        packet.setCreatedBy("SYSTEM");
+        packet.setCreatedAt(LocalDateTime.now());
+        packet.setStickerGenerated(false);
+
+        packet = packetRepository.save(packet);
+
+        int packetNo = req.getCustomPacketNumber();
+
+        // 🔥 DUPLICATE CHECK
+        if (packetItemRepository.existsByMasterItemIdAndPacketNumber(
+                masterItemId, "Pkt-" + packetNo)) {
+            throw new RuntimeException("Packet number already exists");
+        }
+
+        PacketItem item = new PacketItem();
+
+        item.setId(UUID.randomUUID());
+        item.setPacket(packet);
+        item.setMasterItem(master);
+
+        item.setItemName(master.getItemName());
+        item.setPdNo(master.getPdNo());
+        item.setDrawingNo(master.getDrawingName());
+        item.setClientName(master.getClientName());
+        item.setClientAddress(master.getAddress());
+        item.setFloor(master.getFloor());
+
+        item.setPacketNumber("Pkt-" + packetNo);
+
+        String cleanDwg = master.getDrawingName().replace("/", "-");
+        item.setSku(master.getPdNo() + "/" + cleanDwg + "/Pkt-" + packetNo);
+
+        item.setStatus("CREATED");
+
+        return packetItemRepository.save(item);
+    }
+    
     private String formatDimensionWithVolume(String dim) {
 
         try {
