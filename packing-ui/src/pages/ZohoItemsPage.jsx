@@ -510,7 +510,7 @@ function ZohoItemsPage() {
 		>
 		  Create Item
 		</Button>
-		<Box sx={searchPanel(darkMode)}>
+		<Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
 		    opacity: 0.75,
@@ -652,7 +652,7 @@ function ZohoItemsPage() {
 		  </TextField>
 		</Box>
 		
-        <div style={tableWrapper(darkMode)}>
+        <div style={tableWrapper}>
           <DataGrid
 		    rows={rows}
 			rowCount={rowCount}
@@ -661,7 +661,7 @@ function ZohoItemsPage() {
             density="compact"
             getRowId={(row) => row.itemId}
             getRowClassName={() => "row-packed"}
-            sx={dataGridStyles(darkMode)}
+            sx={dataGridStyles}
           />
         </div>
       </div>
