@@ -479,7 +479,10 @@ public class PacketService {
         item.setId(UUID.randomUUID());
         item.setPacket(packet);
         item.setMasterItem(master);
-
+        item.setDescription(req.getDescriptions().get(0));
+        item.setWeight(req.getWeights().get(0));
+        item.setDimensions(req.getDimensionsList().get(0));
+        item.setRemarks(req.getRemarksList().get(0));
         item.setItemName(req.itemName);
         item.setPdNo(req.pdNo);
         item.setDrawingNo(req.drawingNo);
@@ -539,7 +542,10 @@ public class PacketService {
         item.setClientName(master.getClientName());
         item.setClientAddress(master.getAddress());
         item.setFloor(master.getFloor());
-
+        item.setDescription(req.getDescriptions().get(0));
+        item.setWeight(req.getWeights().get(0));
+        item.setDimensions(req.getDimensionsList().get(0));
+        item.setRemarks(req.getRemarksList().get(0));
         item.setPacketNumber("Pkt-" + packetNo);
 
         String cleanDwg = master.getDrawingName().replace("/", "-");

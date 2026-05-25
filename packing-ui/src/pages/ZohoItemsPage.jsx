@@ -1082,25 +1082,93 @@ function ZohoItemsPage() {
 	    open={customCreateOpen}
 	    onClose={() => setCustomCreateOpen(false)}
 	    fullWidth
-	    maxWidth="xs"
+	    maxWidth="sm"
 	  >
 	    <DialogTitle>Create Custom Packet</DialogTitle>
 
 	    <DialogContent>
+
+	      {/* 🔥 STEP 1: ITEM DETAILS */}
+	      {[
+	        "itemName",
+	        "pdNo",
+	        "drawingNo",
+	        "clientName",
+	        "clientAddress",
+	        "floor",
+	      ].map((field) => (
+	        <TextField
+	          key={field}
+	          label={field}
+	          fullWidth
+	          value={form[field]}
+	          onChange={(e) =>
+	            setForm((prev) => ({
+	              ...prev,
+	              [field]: e.target.value,
+	            }))
+	          }
+	          sx={formFieldSx(darkMode)}
+	        />
+	      ))}
+
+	      {/* 🔥 CUSTOM PACKET NUMBER */}
 	      <TextField
-	        label="Packet Number"
+	        label="Custom Packet Number"
 	        type="number"
 	        fullWidth
 	        value={customPacketNo}
 	        onChange={(e) => setCustomPacketNo(e.target.value)}
-	        sx={{ mt: 1 }}
+	        sx={formFieldSx(darkMode)}
 	      />
+
+	      {/* 🔥 PACKET DETAILS (SINGLE ONLY) */}
+	      <TextField
+	        label="Description"
+	        fullWidth
+	        value={descriptions[0] || ""}
+	        onChange={(e) => setDescriptions([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
+
+	      <TextField
+	        label="Weight"
+	        fullWidth
+	        value={weights[0] || ""}
+	        onChange={(e) => setWeights([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
+
+	      {/* DIMENSIONS */}
+	      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+	        {["l", "b", "h"].map((key, idx) => (
+	          <TextField
+	            key={key}
+	            label={key.toUpperCase()}
+	            type="number"
+	            value={dimensionsList[0]?.[key] || ""}
+	            onChange={(e) => {
+	              const copy = [...dimensionsList];
+	              copy[0] = { ...copy[0], [key]: e.target.value };
+	              setDimensionsList(copy);
+	            }}
+	            sx={{ width: 90 }}
+	          />
+	        ))}
+	      </Box>
+
+	      <TextField
+	        label="Remarks"
+	        fullWidth
+	        value={remarksList[0] || ""}
+	        onChange={(e) => setRemarksList([e.target.value])}
+	        sx={formFieldSx(darkMode)}
+	      />
+
 	    </DialogContent>
 
 	    <DialogActions>
-	      <Button onClick={() => setCustomCreateOpen(false)}>
-	        Cancel
-	      </Button>
+	      <Button onClick={() => setCustomCreateOpen(false)}>Cancel</Button>
 
 	      <Button
 	        variant="contained"
@@ -1116,11 +1184,18 @@ function ZohoItemsPage() {
 	              body: JSON.stringify({
 	                ...form,
 	                customPacketNumber: Number(customPacketNo),
+	                descriptions,
+	                weights,
+	                dimensionsList: dimensionsList.map((d) =>
+	                  d?.l && d?.b && d?.h
+	                    ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+	                    : ""
+	                ),
+	                remarksList,
 	              }),
 	            });
 
 	            setCustomCreateOpen(false);
-	            setCustomPacketNo("");
 	            fetchItems();
 
 	          } catch (e) {
@@ -1330,62 +1405,58 @@ function ZohoItemsPage() {
 	      </Button>
 	    </DialogActions>
 	  </Dialog>
-	  <Dialog
-	    open={customAddOpen}
-	    onClose={() => setCustomAddOpen(false)}
-	    fullWidth
-	    maxWidth="xs"
-	  >
-	    <DialogTitle>Add Custom Packet</DialogTitle>
+	  <DialogContent>
 
-	    <DialogContent>
-	      <TextField
-	        label="Packet Number"
-	        type="number"
-	        fullWidth
-	        value={customPacketNo}
-	        onChange={(e) => setCustomPacketNo(e.target.value)}
-	        sx={{ mt: 1 }}
-	      />
-	    </DialogContent>
+	    <TextField
+	      label="Custom Packet Number"
+	      type="number"
+	      fullWidth
+	      value={customPacketNo}
+	      onChange={(e) => setCustomPacketNo(e.target.value)}
+	      sx={formFieldSx(darkMode)}
+	    />
 
-	    <DialogActions>
-	      <Button onClick={() => setCustomAddOpen(false)}>
-	        Cancel
-	      </Button>
+	    <TextField
+	      label="Description"
+	      fullWidth
+	      value={descriptions[0] || ""}
+	      onChange={(e) => setDescriptions([e.target.value])}
+	      sx={formFieldSx(darkMode)}
+	    />
 
-	      <Button
-	        variant="contained"
-	        disabled={!customPacketNo}
-	        onClick={async () => {
-	          try {
-	            await fetch(
-	              `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
-	              {
-	                method: "POST",
-	                headers: {
-	                  "Content-Type": "application/json",
-	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                },
-	                body: JSON.stringify({
-	                  customPacketNumber: Number(customPacketNo),
-	                }),
-	              }
-	            );
+	    <TextField
+	      label="Weight"
+	      fullWidth
+	      value={weights[0] || ""}
+	      onChange={(e) => setWeights([e.target.value])}
+	      sx={formFieldSx(darkMode)}
+	    />
 
-	            setCustomAddOpen(false);
-	            setCustomPacketNo("");
-	            fetchItems();
+	    <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+	      {["l", "b", "h"].map((key) => (
+	        <TextField
+	          key={key}
+	          label={key.toUpperCase()}
+	          type="number"
+	          value={dimensionsList[0]?.[key] || ""}
+	          onChange={(e) => {
+	            const copy = [...dimensionsList];
+	            copy[0] = { ...copy[0], [key]: e.target.value };
+	            setDimensionsList(copy);
+	          }}
+	          sx={{ width: 90 }}
+	        />
+	      ))}
+	    </Box>
 
-	          } catch (e) {
-	            alert("Failed to add custom packet");
-	          }
-	        }}
-	      >
-	        Add
-	      </Button>
-	    </DialogActions>
-	  </Dialog>
+	    <TextField
+	      label="Remarks"
+	      fullWidth
+	      value={remarksList[0] || ""}
+	      onChange={(e) => setRemarksList([e.target.value])}
+	      sx={formFieldSx(darkMode)}
+	    />
+	  </DialogContent>
     </div>
   );
 }
