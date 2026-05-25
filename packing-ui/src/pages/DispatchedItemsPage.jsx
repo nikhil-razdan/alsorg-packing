@@ -1217,8 +1217,8 @@ function DispatchedItemsPage() {
   );
   
   return (
-    <div style={page}>
-      <div style={backgroundText}>Alsorg</div>
+    <div style={page()}>
+      <div style={backgroundText(false)}>Alsorg</div>
       <div style={content}>
 	  <Box
 	    sx={{
