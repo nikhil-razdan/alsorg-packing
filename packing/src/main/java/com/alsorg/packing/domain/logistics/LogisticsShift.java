@@ -3,7 +3,7 @@ package com.alsorg.packing.domain.logistics;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import org.springframework.data.annotation.Id;
+import jakarta.persistence.Id;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
