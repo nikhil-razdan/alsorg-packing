@@ -335,18 +335,7 @@ function DashboardPage() {
 		{mode === "logistics" && logistics && (
 		  <>
 		    <div style={logisticsHero}>
-		      <div>
-		        <div style={logisticsHeading}>
-		          Driver & Vehicle Operations
-		        </div>
-
-		        <div style={logisticsSubheading}>
-		          Real-time fleet intelligence,
-		          driver analytics and route
-		          monitoring
-		        </div>
-		      </div>
-
+		     
 		      <div style={logisticsFilters}>
 		        <input
 		          type="date"
