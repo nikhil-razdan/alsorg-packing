@@ -60,7 +60,7 @@ public class StickerHistoryController {
                 .toList();
     }
 
-    @GetMapping("/history/{historyId}/download")
+    @GetMapping("/history/{historyId}/download-pdf")
     public ResponseEntity<byte[]> download(
             @PathVariable UUID historyId
     ) {
