@@ -738,7 +738,7 @@ function DispatchedItemsPage() {
 
 		  <IconButton
 		    size="small"
-		    onClick={() => openStickerHistory(row.zohoItemId)}  
+		    onClick={() => openStickerHistory(row.packetItemId)}  
 		    sx={{
 		      width: 34,
 		      height: 34,

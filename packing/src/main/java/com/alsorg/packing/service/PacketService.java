@@ -32,6 +32,8 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
 import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
+import com.alsorg.packing.domain.sticker.StickerHistory;
+import com.alsorg.packing.repository.StickerHistoryRepository;
 
 @Service
 public class PacketService {
@@ -44,7 +46,8 @@ public class PacketService {
     private final DispatchedItemService dispatchedItemService;
     private final DispatchedItemRepository dispatchedRepo;
     private final MasterItemRepository masterItemRepository;
-
+    private final StickerHistoryRepository stickerHistoryRepository;
+    
     @Value("${sticker.storage.path}")
     private String stickerStoragePath;
 
@@ -56,7 +59,8 @@ public class PacketService {
             PdfStickerService pdfService,
             DispatchedItemService dispatchedItemService,
             DispatchedItemRepository dispatchedRepo,
-            MasterItemRepository masterItemRepository   
+            MasterItemRepository masterItemRepository,
+            StickerHistoryRepository stickerHistoryRepository
     ) {
         this.packetRepository = packetRepository;
         this.packetItemRepository = packetItemRepository;
@@ -66,6 +70,7 @@ public class PacketService {
         this.dispatchedItemService = dispatchedItemService;
         this.dispatchedRepo = dispatchedRepo;
         this.masterItemRepository = masterItemRepository;
+        this.stickerHistoryRepository = stickerHistoryRepository;;
     }
 
     // =====================================================
@@ -323,7 +328,29 @@ public class PacketService {
         pdf.setWeight(formatWeight(item.getWeight()));
         pdf.setRemarks(item.getRemarks());
 
-        return pdfService.generateSticker(pdf);
+        byte[] pdfBytes = pdfService.generateSticker(pdf);
+
+        StickerHistory history = new StickerHistory();
+
+        history.setPacketItem(item);
+        history.setStickerNumber(stickerNumber);
+        history.setPdfData(pdfBytes);
+
+        history.setPrintIteration(iteration);
+
+        history.setGeneratedBy("SYSTEM");
+
+        history.setReason(
+                iteration > 1
+                        ? "REPRINT"
+                        : "INITIAL"
+        );
+
+        history.setGeneratedAt(LocalDateTime.now());
+
+        stickerHistoryRepository.save(history);
+
+        return pdfBytes;
     }
     
     @Transactional
