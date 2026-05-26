@@ -24,7 +24,6 @@ public class UpdatePacketItemRequest {
 
     private String location;
 
-    private String packetNumber;
 
 	public String getItemName() {
 		return itemName;
@@ -113,14 +112,4 @@ public class UpdatePacketItemRequest {
 	public void setLocation(String location) {
 		this.location = location;
 	}
-
-	public String getPacketNumber() {
-		return packetNumber;
-	}
-
-	public void setPacketNumber(String packetNumber) {
-		this.packetNumber = packetNumber;
-	}
-
-    // getters setters
 }

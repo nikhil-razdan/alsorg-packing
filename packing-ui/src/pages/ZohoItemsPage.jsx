@@ -74,7 +74,6 @@ function ZohoItemsPage() {
     dimensions: "",
     remarks: "",
     location: "",
-    packetNumber: "",
   });
 
   /* ===================== COLUMNS ===================== */
@@ -250,7 +249,6 @@ function ZohoItemsPage() {
 	          dimensions: params.row.dimensions || "",
 	          remarks: params.row.remarks || "",
 	          location: params.row.location || "",
-	          packetNumber: params.row.packetNumber || "",
 	          stickerNumber: params.row.stickerNumber,
 	        });
 
@@ -1601,7 +1599,6 @@ function ZohoItemsPage() {
 	        "dimensions",
 	        "remarks",
 	        "location",
-	        "packetNumber",
 	      ].map((field) => {
 
 	        const locked =
@@ -1610,7 +1607,6 @@ function ZohoItemsPage() {
 	            "itemName",
 	            "pdNo",
 	            "drawingNo",
-	            "packetNumber",
 	            "clientName",
 	          ].includes(field);
 

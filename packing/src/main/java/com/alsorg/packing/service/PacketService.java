@@ -597,7 +597,7 @@ public class PacketService {
                 item.getStickerNumber() != null;
 
         /*
-         * SAFE FIELDS
+         * ALWAYS EDITABLE FIELDS
          */
 
         item.setDescription(req.getDescription());
@@ -610,6 +610,7 @@ public class PacketService {
 
         /*
          * RESTRICTED FIELDS
+         * ONLY BEFORE STICKER GENERATION
          */
 
         if (!stickerGenerated) {
@@ -620,26 +621,21 @@ public class PacketService {
             item.setClientName(req.getClientName());
 
             /*
-             * PACKET NUMBER + SKU
+             * REBUILD SKU
+             * PACKET NUMBER IS IMMUTABLE
              */
 
-            if (req.getPacketNumber() != null
-                    && !req.getPacketNumber().isBlank()) {
+            String cleanDwg =
+                    req.getDrawingNo().replace("/", "-");
 
-                item.setPacketNumber(req.getPacketNumber());
+            String sku =
+                    req.getPdNo()
+                    + "/"
+                    + cleanDwg
+                    + "/"
+                    + item.getPacketNumber();
 
-                String cleanDwg =
-                        req.getDrawingNo().replace("/", "-");
-
-                String sku =
-                        req.getPdNo()
-                        + "/"
-                        + cleanDwg
-                        + "/"
-                        + req.getPacketNumber();
-
-                item.setSku(sku);
-            }
+            item.setSku(sku);
         }
 
         return packetItemRepository.save(item);
