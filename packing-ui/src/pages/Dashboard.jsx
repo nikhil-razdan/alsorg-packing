@@ -332,48 +332,110 @@ function DashboardPage() {
           </>
         )}
 
-        {mode === "logistics" && logistics && (
-          <>
-            <div style={logisticsKpiGrid}>
-              <StatCard
-                darkMode={darkMode}
-                accent="#60a5fa"
-                title="Working Trips"
-                value={Number(logistics?.totalTrips || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#34d399"
-                title="Total Loaders"
-                value={Number(logistics?.totalLoaders || 0)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f59e0b"
-                title="Efficiency"
-                value={Number(logistics?.efficiency || 0).toFixed(2)}
-              />
-              <StatCard
-                darkMode={darkMode}
-                accent="#f472b6"
-                title="Active Drivers"
-                value={Object.keys(logistics?.drivers || {}).length}
-              />
-            </div>
+		{mode === "logistics" && logistics && (
+		  <>
+		    <div style={logisticsHero}>
+		      <div>
+		        <div style={logisticsHeading}>
+		          Driver & Vehicle Operations
+		        </div>
 
-            <div style={logisticsGrid}>
-              <div style={panelSurface(darkMode)}>
-                <AnalyticsGrid data={logistics} />
-              </div>
+		        <div style={logisticsSubheading}>
+		          Real-time fleet intelligence,
+		          driver analytics and route
+		          monitoring
+		        </div>
+		      </div>
 
-              <div style={panelSurface(darkMode)}>
-                <div style={comingSoon(darkMode)}>
-                  🚚 Logistics activity coming soon
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+		      <div style={logisticsFilters}>
+		        <input
+		          type="date"
+		          style={logisticsInput}
+		        />
+
+		        <select style={logisticsInput}>
+		          <option>All Drivers</option>
+		        </select>
+
+		        <select style={logisticsInput}>
+		          <option>All Vehicles</option>
+		        </select>
+		      </div>
+		    </div>
+
+		    <div style={logisticsKpiGrid}>
+		      <StatCard
+		        darkMode={true}
+		        accent="#3b82f6"
+		        title="Working Trips"
+		        value={logistics.totalTrips}
+		        subtle="Trips Completed"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#22c55e"
+		        title="Total Loaders"
+		        value={logistics.totalLoaders}
+		        subtle="Loaders Utilized"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#f59e0b"
+		        title="Fleet Efficiency"
+		        value={`${Number(
+		          logistics.efficiency || 0
+		        ).toFixed(1)}%`}
+		        subtle="Loaders / Trip"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#8b5cf6"
+		        title="Active Drivers"
+		        value={logistics.activeDrivers}
+		        subtle="Drivers Available"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#ec4899"
+		        title="Active Vehicles"
+		        value={logistics.activeVehicles}
+		        subtle="Fleet Running"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#06b6d4"
+		        title="Trips / Driver"
+		        value={Number(
+		          logistics.averageTripsPerDriver || 0
+		        ).toFixed(1)}
+		        subtle="Average Productivity"
+		      />
+
+		      <StatCard
+		        darkMode={true}
+		        accent="#f97316"
+		        title="Trips / Vehicle"
+		        value={Number(
+		          logistics.averageTripsPerVehicle || 0
+		        ).toFixed(1)}
+		        subtle="Fleet Utilization"
+		      />
+		    </div>
+
+		    <div style={logisticsMainGrid}>
+		      <div style={logisticsMainPanel}>
+		        <AnalyticsGrid
+		          data={logistics}
+		        />
+		      </div>
+		    </div>
+		  </>
+		)}
 
         <ReportViewerModal
           open={activeReport === "packing"}
@@ -418,6 +480,7 @@ const page = (mode, darkMode) => ({
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
+
   background:
     mode === "inventory"
       ? darkMode
@@ -427,13 +490,12 @@ const page = (mode, darkMode) => ({
           radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
           linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
         `
-      : darkMode
-      ? "linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)"
       : `
-          radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-          radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-          linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
+          radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%),
+          radial-gradient(circle at bottom right, rgba(14,165,233,0.12), transparent 24%),
+          linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%)
         `,
+
   backgroundAttachment: "fixed",
 });
 
@@ -569,13 +631,6 @@ const workspaceGrid = {
   gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 0.85fr)",
   gap: 14,
   alignItems: "stretch",
-};
-
-const logisticsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 14,
-  flex: 1,
 };
 
 const panelSurface = (darkMode) => ({
@@ -790,10 +845,58 @@ const adminPanelTitle = (darkMode) => ({
   fontWeight: 800,
 });
 
-const comingSoon = (darkMode) => ({
-  color: darkMode ? "#f8fafc" : "#0f172a",
-  fontWeight: 700,
-  fontSize: 14,
-});
+const logisticsHero = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 18,
+  flexWrap: "wrap",
+};
+
+const logisticsHeading = {
+  fontSize: 28,
+  fontWeight: 900,
+  color: "#f8fafc",
+};
+
+const logisticsSubheading = {
+  color: "#94a3b8",
+  marginTop: 6,
+  fontSize: 13,
+};
+
+const logisticsFilters = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const logisticsInput = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border:
+    "1px solid rgba(255,255,255,0.08)",
+  background: "#0f172a",
+  color: "#fff",
+  outline: "none",
+};
+
+const logisticsMainGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 16,
+};
+
+const logisticsMainPanel = {
+  background:
+    "linear-gradient(180deg,#020617,#0f172a)",
+  borderRadius: 26,
+  padding: 18,
+  border:
+    "1px solid rgba(255,255,255,0.08)",
+  boxShadow:
+    "0 20px 50px rgba(0,0,0,0.45)",
+};
 
 export default DashboardPage;

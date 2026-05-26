@@ -1,50 +1,36 @@
 import React from "react";
 
-/* ====================== BAR ====================== */
+/*
+========================================
+HELPERS
+========================================
+*/
 
-function SimpleBar({ data = {} }) {
-  const entries = Object.entries(data);
-
-  const max = Math.max(
-    ...entries.map((e) => e[1]),
-    1
-  );
-
-  return (
-    <div style={barWrap}>
-      {entries.map(([key, value], i) => (
-        <div key={i} style={barCol}>
-          <div
-            style={{
-              ...bar,
-              height: `${(value / max) * 100}%`,
-            }}
-          />
-
-          <div style={barLabel}>{key}</div>
-        </div>
-      ))}
-    </div>
-  );
+function formatMap(data = {}) {
+  return Object.entries(data || {}).slice(0, 10);
 }
 
-/* ====================== LINE ====================== */
+/*
+========================================
+LINE CHART
+========================================
+*/
 
-function SimpleLine({ data = {} }) {
-  const entries = Object.entries(data);
+function TripsLineChart({ data = {} }) {
+  const entries = formatMap(data);
 
   const max = Math.max(
-    ...entries.map((e) => e[1]),
+    ...entries.map((e) => Number(e[1] || 0)),
     1
   );
 
   const points = entries
-    .map(([, value], i) => {
+    .map(([_, value], i) => {
       const x =
-        (i / (entries.length - 1 || 1)) * 280;
+        (i / Math.max(entries.length - 1, 1)) * 540;
 
       const y =
-        140 - (value / max) * 100;
+        180 - ((value || 0) / max) * 140;
 
       return `${x},${y}`;
     })
@@ -53,109 +39,398 @@ function SimpleLine({ data = {} }) {
   return (
     <svg
       width="100%"
-      height="170"
-      viewBox="0 0 300 170"
+      height="220"
+      viewBox="0 0 560 220"
     >
       <polyline
         fill="none"
-        stroke="rgba(255,255,255,0.95)"
+        stroke="#3b82f6"
         strokeWidth="4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
         points={points}
+        strokeLinecap="round"
       />
     </svg>
   );
 }
 
-/* ====================== MAIN ====================== */
+/*
+========================================
+HORIZONTAL BAR
+========================================
+*/
+
+function HorizontalBars({
+  data = {},
+  color = "#3b82f6",
+}) {
+  const entries = formatMap(data);
+
+  const max = Math.max(
+    ...entries.map((e) => Number(e[1] || 0)),
+    1
+  );
+
+  return (
+    <div style={barsWrap}>
+      {entries.map(([key, value]) => (
+        <div key={key} style={barRow}>
+          <div style={barLabel}>
+            {key}
+          </div>
+
+          <div style={barTrack}>
+            <div
+              style={{
+                ...barFill(color),
+                width: `${(value / max) * 100}%`,
+              }}
+            />
+          </div>
+
+          <div style={barValue}>
+            {Number(value || 0)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/*
+========================================
+DONUT
+========================================
+*/
+
+function RouteDistribution({ data = {} }) {
+  const entries = formatMap(data);
+
+  const total =
+    entries.reduce(
+      (acc, [, value]) => acc + Number(value || 0),
+      0
+    ) || 1;
+
+  const colors = [
+    "#3b82f6",
+    "#8b5cf6",
+    "#f59e0b",
+    "#22c55e",
+    "#ef4444",
+  ];
+
+
+  return (
+    <div style={donutWrap}>
+      <svg width="220" height="220">
+	  {entries.map(([key, value], index) => {
+	    const percentage =
+	      Number(value || 0) / total;
+
+	    const dash =
+	      percentage * 565;
+
+	    const offset = entries
+	      .slice(0, index)
+	      .reduce((acc, [, val]) => {
+	        return (
+	          acc +
+	          (Number(val || 0) / total) * 565
+	        );
+	      }, 0);
+
+	    return (
+	      <circle
+	        key={key}
+	        r="90"
+	        cx="110"
+	        cy="110"
+	        fill="transparent"
+	        stroke={colors[index % colors.length]}
+	        strokeWidth="22"
+	        strokeDasharray={`${dash} ${565 - dash}`}
+	        strokeDashoffset={-offset}
+	        transform="rotate(-90 110 110)"
+	      />
+	    );
+	  })}
+      </svg>
+
+      <div style={legendWrap}>
+        {entries.map(([key], index) => (
+          <div key={key} style={legendRow}>
+            <div
+              style={{
+                ...legendDot,
+                background:
+                  colors[index % colors.length],
+              }}
+            />
+            <span>{key}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/*
+========================================
+ALERTS
+========================================
+*/
+
+function AlertsPanel({ data }) {
+  const alerts = [];
+
+  if (data?.efficiency < 70) {
+    alerts.push(
+      "Average loaders per trip is low"
+    );
+  }
+
+  if (
+    Number(data?.averageTripsPerDriver || 0) >
+    20
+  ) {
+    alerts.push(
+      "Driver workload is high"
+    );
+  }
+
+  if (
+    Number(data?.activeVehicles || 0) < 2
+  ) {
+    alerts.push(
+      "Low active fleet count"
+    );
+  }
+
+  return (
+    <div style={alertsWrap}>
+      {alerts.length === 0 && (
+        <div style={goodAlert}>
+          ✅ Operations running normally
+        </div>
+      )}
+
+      {alerts.map((a, i) => (
+        <div key={i} style={alertItem}>
+          ⚠ {a}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/*
+========================================
+MAIN
+========================================
+*/
 
 function AnalyticsGrid({ data }) {
   if (!data) return null;
 
   return (
     <div style={grid}>
-      <div style={card}>
-        <div style={title}>Trips Over Time</div>
-        <SimpleLine data={data.tripsOverTime} />
-      </div>
-
-      <div style={card}>
-        <div style={title}>Top Drivers</div>
-        <SimpleBar data={data.drivers} />
-      </div>
-
-      <div style={card}>
-        <div style={title}>Trips By Location</div>
-        <SimpleBar data={data.tripsByLocation} />
-      </div>
-
-      <div style={card}>
-        <div style={title}>Efficiency</div>
-
-        <div style={efficiency}>
-          {Number(data.efficiency || 0).toFixed(2)}%
+      <div style={wideCard}>
+        <div style={title}>
+          Trips Over Time
         </div>
+
+        <TripsLineChart
+          data={data.tripsOverTime}
+        />
+      </div>
+
+      <div style={card}>
+        <div style={title}>
+          Driver Performance
+        </div>
+
+        <HorizontalBars
+          data={data.driverPerformance}
+          color="#22c55e"
+        />
+      </div>
+
+      <div style={card}>
+        <div style={title}>
+          Vehicle Utilization
+        </div>
+
+        <HorizontalBars
+          data={data.vehicleUtilization}
+          color="#f59e0b"
+        />
+      </div>
+
+      <div style={card}>
+        <div style={title}>
+          Trips By Route
+        </div>
+
+        <RouteDistribution
+          data={data.tripsByLocation}
+        />
+      </div>
+
+      <div style={card}>
+        <div style={title}>
+          Shift Performance
+        </div>
+
+        <HorizontalBars
+          data={data.shiftPerformance}
+          color="#8b5cf6"
+        />
+      </div>
+
+      <div style={card}>
+        <div style={title}>
+          Alerts & Insights
+        </div>
+
+        <AlertsPanel data={data} />
       </div>
     </div>
   );
 }
 
-/* ====================== STYLES ====================== */
+/*
+========================================
+STYLES
+========================================
+*/
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: 14,
-  height: "100%",
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
+  gap: 16,
 };
 
 const card = {
-  borderRadius: 16,
-  padding: 16,
-  background: "#ffffff",
-  boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
-  border: "1px solid rgba(0,0,0,0.05)",
-  color: "#111827",
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+  borderRadius: 22,
+  padding: 18,
+  border:
+    "1px solid rgba(255,255,255,0.08)",
+  boxShadow:
+    "0 10px 30px rgba(0,0,0,0.35)",
+};
+
+const wideCard = {
+  ...card,
+  gridColumn: "span 2",
 };
 
 const title = {
-  fontSize: 14,
-  fontWeight: 600,
-  marginBottom: 12,
-  color: "#374151",
+  color: "#f8fafc",
+  fontSize: 15,
+  fontWeight: 800,
+  marginBottom: 18,
 };
 
-const barWrap = {
-  display: "flex",
-  alignItems: "flex-end",
-  gap: 10,
-  height: 140,
-};
-
-const barCol = {
-  flex: 1,
+const barsWrap = {
   display: "flex",
   flexDirection: "column",
+  gap: 12,
+};
+
+const barRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "120px 1fr 40px",
+  gap: 12,
   alignItems: "center",
 };
 
-const bar = {
-  width: "100%",
-  borderRadius: 6,
-  background: "#6366f1",
-};
-
 const barLabel = {
-  marginTop: 8,
-  fontSize: 10,
-  opacity: 0.75,
+  color: "#cbd5e1",
+  fontSize: 12,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const efficiency = {
-  fontSize: 46,
-  fontWeight: 900,
-  marginTop: "auto",
+const barTrack = {
+  height: 10,
+  borderRadius: 999,
+  background:
+    "rgba(255,255,255,0.08)",
+  overflow: "hidden",
+};
+
+const barFill = (color) => ({
+  height: "100%",
+  borderRadius: 999,
+  background: color,
+});
+
+const barValue = {
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const donutWrap = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 20,
+};
+
+const legendWrap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const legendRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#cbd5e1",
+  fontSize: 12,
+};
+
+const legendDot = {
+  width: 12,
+  height: 12,
+  borderRadius: 999,
+};
+
+const alertsWrap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const alertItem = {
+  padding: 12,
+  borderRadius: 12,
+  background:
+    "rgba(239,68,68,0.15)",
+  border:
+    "1px solid rgba(239,68,68,0.3)",
+  color: "#fecaca",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const goodAlert = {
+  padding: 12,
+  borderRadius: 12,
+  background:
+    "rgba(34,197,94,0.15)",
+  border:
+    "1px solid rgba(34,197,94,0.3)",
+  color: "#bbf7d0",
+  fontSize: 13,
+  fontWeight: 700,
 };
 
 export default AnalyticsGrid;

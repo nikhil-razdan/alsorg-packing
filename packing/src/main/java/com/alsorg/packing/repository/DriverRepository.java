@@ -8,4 +8,6 @@ import com.alsorg.packing.domain.logistics.Driver;
 
 public interface DriverRepository
         extends JpaRepository<Driver, UUID> {
+
+    boolean existsByNameIgnoreCase(String name);
 }

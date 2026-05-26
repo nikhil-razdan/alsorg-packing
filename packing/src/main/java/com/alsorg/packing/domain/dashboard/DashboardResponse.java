@@ -4,33 +4,46 @@ import java.util.Map;
 
 public class DashboardResponse {
 
-    private int totalTrips;
-    private int totalLoaders;
-    private double efficiency;
-    private Map<String, Long> drivers;
-    public Map<String, Integer> tripsOverTime;
-    public Map<String, Integer> tripsByLocation;
-    public Map<String, Integer> shiftPerformance;
-    public Map<String, Integer> vehicleUtilization;
+    /*
+     * CORE KPIs
+     */
 
-    public DashboardResponse(
-            int totalTrips,
-            int totalLoaders,
-            double efficiency,
-            Map<String, Long> drivers,
-            Map<String, Integer> tripsOverTime,
-            Map<String, Integer> tripsByLocation
-    ) {
-        this.totalTrips = totalTrips;
-        this.totalLoaders = totalLoaders;
-        this.efficiency = efficiency;
-        this.drivers = drivers;
-        this.tripsOverTime = tripsOverTime;
-        this.tripsByLocation = tripsByLocation;
-    }
-    
-    public DashboardResponse() {}
-    
+    private int totalTrips;
+
+    private int totalLoaders;
+
+    private double efficiency;
+
+    private int activeDrivers;
+
+    private int activeVehicles;
+
+    private double averageTripsPerDriver;
+
+    private double averageTripsPerVehicle;
+
+    /*
+     * ANALYTICS
+     */
+
+    private Map<String, Integer> tripsOverTime;
+
+    private Map<String, Integer> tripsByLocation;
+
+    private Map<String, Integer> shiftPerformance;
+
+    private Map<String, Integer> vehicleUtilization;
+
+    private Map<String, Integer> driverTrips;
+
+    private Map<String, Double> driverPerformance;
+
+    private Map<String, Double> overtimeAnalytics;
+
+    /*
+     * GETTERS & SETTERS
+     */
+
     public int getTotalTrips() {
         return totalTrips;
     }
@@ -55,14 +68,38 @@ public class DashboardResponse {
         this.efficiency = efficiency;
     }
 
-    public Map<String, Long> getDrivers() {
-        return drivers;
+    public int getActiveDrivers() {
+        return activeDrivers;
     }
 
-    public void setDrivers(Map<String, Long> drivers) {
-        this.drivers = drivers;
+    public void setActiveDrivers(int activeDrivers) {
+        this.activeDrivers = activeDrivers;
     }
-    
+
+    public int getActiveVehicles() {
+        return activeVehicles;
+    }
+
+    public void setActiveVehicles(int activeVehicles) {
+        this.activeVehicles = activeVehicles;
+    }
+
+    public double getAverageTripsPerDriver() {
+        return averageTripsPerDriver;
+    }
+
+    public void setAverageTripsPerDriver(double averageTripsPerDriver) {
+        this.averageTripsPerDriver = averageTripsPerDriver;
+    }
+
+    public double getAverageTripsPerVehicle() {
+        return averageTripsPerVehicle;
+    }
+
+    public void setAverageTripsPerVehicle(double averageTripsPerVehicle) {
+        this.averageTripsPerVehicle = averageTripsPerVehicle;
+    }
+
     public Map<String, Integer> getTripsOverTime() {
         return tripsOverTime;
     }
@@ -93,5 +130,29 @@ public class DashboardResponse {
 
     public void setVehicleUtilization(Map<String, Integer> vehicleUtilization) {
         this.vehicleUtilization = vehicleUtilization;
+    }
+
+    public Map<String, Integer> getDriverTrips() {
+        return driverTrips;
+    }
+
+    public void setDriverTrips(Map<String, Integer> driverTrips) {
+        this.driverTrips = driverTrips;
+    }
+
+    public Map<String, Double> getDriverPerformance() {
+        return driverPerformance;
+    }
+
+    public void setDriverPerformance(Map<String, Double> driverPerformance) {
+        this.driverPerformance = driverPerformance;
+    }
+
+    public Map<String, Double> getOvertimeAnalytics() {
+        return overtimeAnalytics;
+    }
+
+    public void setOvertimeAnalytics(Map<String, Double> overtimeAnalytics) {
+        this.overtimeAnalytics = overtimeAnalytics;
     }
 }
