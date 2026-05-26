@@ -1648,39 +1648,62 @@ function DispatchedItemsPage() {
 	            </Box>
 
 				<Box sx={{ display: "flex", gap: 1 }}>
-				  {/* 👁 VIEW */}
-				  <IconButton
-				    onClick={async () => {
-				      try {
-				        const res = await fetch(
-				          `${API_BASE_URL}/api/stickers/history/${h.id}/download`,
-				          {
-				            method: "GET",
-				            headers: getAuthHeaders(),
-				          }
-				        );
+				{/* 👁 VIEW */}
+				<IconButton
+				  onClick={async () => {
+				    try {
+				      const res = await fetch(
+				        `${API_BASE_URL}/api/stickers/history/${h.id}/download`,
+				        {
+				          method: "GET",
+				          headers: getAuthHeaders(),
+				        }
+				      );
 
+				      if (!res.ok) {
+				        const text = await res.text();
 
-						if (!res.ok) {
-						  const text = await res.text();
-						  console.error("❌ Chalaan failed:", text);
-						  alert(text || "Failed to generate chalaan");
-						  return;
-						}
-				        const blob = await res.blob();
-				        const url = window.URL.createObjectURL(blob);
+				        console.error("❌ Sticker preview failed:", text);
 
-				        window.open(url); // 👁 preview in new tab
+				        alert(text || "Preview failed");
 
-				      } catch (err) {
-				        console.error(err);
-				        alert("Preview failed");
+				        return;
 				      }
-				    }}
-				    size="small"
-				  >
-				    👁
-				  </IconButton>
+
+				      const blob = await res.blob();
+
+				      // 🔥 IMPORTANT
+				      if (blob.size === 0) {
+				        alert("Empty PDF received");
+				        return;
+				      }
+
+				      const blobUrl = URL.createObjectURL(blob);
+
+				      // 🔥 OPEN SECURELY
+				      const newTab = window.open();
+
+				      if (!newTab) {
+				        alert("Popup blocked");
+				        return;
+				      }
+
+				      newTab.location.href = blobUrl;
+
+				      // 🔥 DO NOT revoke immediately
+				      setTimeout(() => {
+				        URL.revokeObjectURL(blobUrl);
+				      }, 10000);
+
+				    } catch (err) {
+				      console.error(err);
+				      alert("Preview failed");
+				    }
+				  }}
+				  size="small"
+				>
+				  👁
+				</IconButton>
 
 				  {/* ⬇ DOWNLOAD */}
 				  <IconButton
@@ -1704,7 +1727,9 @@ function DispatchedItemsPage() {
 				        a.download = `STICKER_${h.stickerNumber}.pdf`;
 				        a.click();
 
-				        window.URL.revokeObjectURL(url);
+						setTimeout(() => {
+						  window.URL.revokeObjectURL(url);
+						}, 10000);
 
 				      } catch (err) {
 				        console.error(err);
