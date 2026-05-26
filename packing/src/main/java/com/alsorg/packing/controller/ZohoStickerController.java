@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.alsorg.packing.service.ZohoStickerService;
 
 @RestController
-@RequestMapping("/api/stickers")
+@RequestMapping("/api/zoho-stickers")
 public class ZohoStickerController {
 
     private final ZohoStickerService zohoStickerService;

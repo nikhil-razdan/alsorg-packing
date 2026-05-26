@@ -11,7 +11,7 @@ import com.alsorg.packing.domain.sticker.ZohoStickerHistory;
 import com.alsorg.packing.repository.ZohoStickerHistoryRepository;
 
 @RestController
-@RequestMapping("/api/stickers")
+@RequestMapping("/api/zoho-stickers")
 public class ZohoStickerHistoryController {
 
     private final ZohoStickerHistoryRepository historyRepo;

@@ -698,66 +698,90 @@ function DispatchedItemsPage() {
 		
 	  },
 	},
-    {
-      field: "name",
-      headerName: "Item Name",
+	{
+	  field: "name",
+	  headerName: "Item Name",
 	  flex: 1,
-	    minWidth: 300,
-	    renderHeader: () => (
+	  minWidth: 300,
+
+	  renderHeader: () => (
+	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+	      🔖 <span>Item Name</span>
+	    </Box>
+	  ),
+
+	  renderCell: (params) => {
+
+	    const row = params.row;
+
+	    return (
 	      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	        🔖 <span>Item Name</span>
+
+	        {/* ⬇ STICKER HISTORY */}
+	        <IconButton
+	          size="small"
+	          sx={{
+	            width: 34,
+	            height: 34,
+	            borderRadius: "10px",
+	            background: "rgba(59,130,246,0.1)",
+	            color: "#2563eb",
+
+	            "&:hover": {
+	              background: "#2563eb",
+	              color: "#fff",
+	            },
+	          }}
+
+	          onClick={() => {
+
+	            if (!row.packetItemId) {
+	              alert("Packet Item ID missing");
+	              return;
+	            }
+
+	            openStickerHistory(row.packetItemId);
+	          }}
+	        >
+	          <DownloadOutlinedIcon fontSize="small" />
+	        </IconButton>
+
+	        {/* 📄 AUDIT LOGS */}
+	        <IconButton
+	          size="small"
+
+	          onClick={() => {
+
+	            if (!row.zohoItemId) {
+	              alert("Zoho Item ID missing");
+	              return;
+	            }
+
+	            openAuditLogs(row.zohoItemId);
+	          }}
+
+	          sx={{
+	            width: 34,
+	            height: 34,
+	            borderRadius: "10px",
+	            background: "rgba(249,115,22,0.1)",
+	            color: "#ea580c",
+
+	            "&:hover": {
+	              background: "#ea580c",
+	              color: "#fff",
+	            },
+	          }}
+	        >
+	          📄
+	        </IconButton>
+
+	        <span>{row.name}</span>
+
 	      </Box>
-	    ),
-      renderCell: (params) => {
-        const row = params.row;
-
-        return (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-		  <IconButton
-		    size="small"
-		    sx={{
-		      width: 34,
-		      height: 34,
-		      borderRadius: "10px",
-		      background: "rgba(59,130,246,0.1)",
-		      color: "#2563eb",
-		      "&:hover": {
-		        background: "#2563eb",
-		        color: "#fff",
-		      },
-		    }}
-			onClick={() => {
-				window.open(
-				  `${API_BASE_URL}/api/stickers/zoho/${row.zohoItemId}`,
-				  "_blank"
-				);
-			  }}
-		  >
-		    <DownloadOutlinedIcon fontSize="small" />
-		  </IconButton>
-
-		  <IconButton
-		    size="small"
-		    onClick={() => openStickerHistory(row.packetItemId)}  
-		    sx={{
-		      width: 34,
-		      height: 34,
-		      borderRadius: "10px",
-		      background: "rgba(249,115,22,0.1)",
-		      color: "#ea580c",
-		      "&:hover": {
-		        background: "#ea580c",
-		        color: "#fff",
-		      },
-		    }}
-		  >
-		    📄
-		  </IconButton>
-            <span>{row.name}</span>
-          </Box>
-        );
-      },
-    },
+	    );
+	  },
+	},
 	{
 	  field: "pdNo",
 	  headerName: "PD No",
@@ -1653,7 +1677,7 @@ function DispatchedItemsPage() {
 				  onClick={async () => {
 				    try {
 				      const res = await fetch(
-				        `${API_BASE_URL}/api/stickers/history/${h.id}/download`,
+				        `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 				        {
 				          method: "GET",
 				          headers: getAuthHeaders(),
@@ -1710,7 +1734,7 @@ function DispatchedItemsPage() {
 				    onClick={async () => {
 				      try {
 				        const res = await fetch(
-				          `${API_BASE_URL}/api/stickers/history/${h.id}/download`,
+				          `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 				          {
 				            method: "GET",
 				            headers: getAuthHeaders(),
