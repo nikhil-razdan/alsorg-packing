@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.alsorg.packing.service.WarehouseService;
-import com.alsorg.packing.domain.Import.ImportPreviewRow;
+import com.alsorg.packing.domain.imports.ImportPreviewRow;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.DispatchedItemService;

@@ -1,4 +1,4 @@
-package com.alsorg.packing.domain.Import;
+package com.alsorg.packing.domain.imports;
 
 public class ImportRow {
 

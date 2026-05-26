@@ -1,6 +1,5 @@
 package com.alsorg.packing.service;
 
-import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -11,8 +10,8 @@ import com.opencsv.CSVReader;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.alsorg.packing.domain.Import.ImportPreviewRow;
-import com.alsorg.packing.domain.Import.ImportRow;
+import com.alsorg.packing.domain.imports.ImportPreviewRow;
+import com.alsorg.packing.domain.imports.ImportRow;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.repository.DispatchedItemRepository;
