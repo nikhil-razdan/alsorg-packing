@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 
 import com.alsorg.packing.controller.dto.CreateItemRequest;
 import com.alsorg.packing.controller.dto.PacketItemResponse;
+import com.alsorg.packing.controller.dto.UpdatePacketItemRequest;
 import com.alsorg.packing.domain.common.Company;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.common.PacketStatus;
@@ -579,6 +580,67 @@ public class PacketService {
         item.setSku(master.getPdNo() + "/" + cleanDwg + "/Pkt-" + packetNo);
 
         item.setStatus("CREATED");
+
+        return packetItemRepository.save(item);
+    }
+    
+    @Transactional
+    public PacketItem updatePacketItem(
+            UUID itemId,
+            UpdatePacketItemRequest req
+    ) {
+
+        PacketItem item = packetItemRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+        boolean stickerGenerated =
+                item.getStickerNumber() != null;
+
+        /*
+         * SAFE FIELDS
+         */
+
+        item.setDescription(req.getDescription());
+        item.setWeight(req.getWeight());
+        item.setDimensions(req.getDimensions());
+        item.setRemarks(req.getRemarks());
+        item.setFloor(req.getFloor());
+        item.setLocation(req.getLocation());
+        item.setClientAddress(req.getClientAddress());
+
+        /*
+         * RESTRICTED FIELDS
+         */
+
+        if (!stickerGenerated) {
+
+            item.setItemName(req.getItemName());
+            item.setPdNo(req.getPdNo());
+            item.setDrawingNo(req.getDrawingNo());
+            item.setClientName(req.getClientName());
+
+            /*
+             * PACKET NUMBER + SKU
+             */
+
+            if (req.getPacketNumber() != null
+                    && !req.getPacketNumber().isBlank()) {
+
+                item.setPacketNumber(req.getPacketNumber());
+
+                String cleanDwg =
+                        req.getDrawingNo().replace("/", "-");
+
+                String sku =
+                        req.getPdNo()
+                        + "/"
+                        + cleanDwg
+                        + "/"
+                        + req.getPacketNumber();
+
+                item.setSku(sku);
+            }
+        }
 
         return packetItemRepository.save(item);
     }

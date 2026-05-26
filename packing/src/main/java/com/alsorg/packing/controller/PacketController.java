@@ -250,6 +250,15 @@ public class PacketController {
                 .body(pdf);
     }
     
+    @PutMapping("/items/{itemId}")
+    public PacketItem updateItem(
+            @PathVariable UUID itemId,
+            @RequestBody UpdatePacketItemRequest req
+    ) {
+
+        return packetService.updatePacketItem(itemId, req);
+    }
+    
     @PostMapping("/create-custom")
     public ResponseEntity<?> createCustom(@RequestBody CreateItemRequest req) {
         return ResponseEntity.ok(packetService.createCustomPacket(req));

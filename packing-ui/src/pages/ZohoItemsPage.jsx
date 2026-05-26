@@ -59,6 +59,23 @@ function ZohoItemsPage() {
     numberOfPackets: 1,
 	showCompanyHeader: true,
   });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+
+  const [editForm, setEditForm] = useState({
+    itemName: "",
+    pdNo: "",
+    drawingNo: "",
+    clientName: "",
+    clientAddress: "",
+    floor: "",
+    description: "",
+    weight: "",
+    dimensions: "",
+    remarks: "",
+    location: "",
+    packetNumber: "",
+  });
 
   /* ===================== COLUMNS ===================== */
   const columns = [
@@ -201,6 +218,59 @@ function ZohoItemsPage() {
 		  </Box>
 		);
 	  }
+	},
+	{
+	  field: "edit",
+	  headerName: "Edit",
+	  width: 120,
+
+	  renderHeader: () => (
+	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
+	      ✏️ <span style={{ fontWeight: 700 }}>Edit</span>
+	    </Box>
+	  ),
+
+	  sortable: false,
+
+	  renderCell: (params) => (
+	    <Button
+	      size="small"
+	      onClick={() => {
+	        setEditItem(params.row);
+
+	        setEditForm({
+	          itemName: params.row.itemName || "",
+	          pdNo: params.row.pdNo || "",
+	          drawingNo: params.row.drawingNo || "",
+	          clientName: params.row.clientName || "",
+	          clientAddress: params.row.clientAddress || "",
+	          floor: params.row.floor || "",
+	          description: params.row.description || "",
+	          weight: params.row.weight || "",
+	          dimensions: params.row.dimensions || "",
+	          remarks: params.row.remarks || "",
+	          location: params.row.location || "",
+	          packetNumber: params.row.packetNumber || "",
+	          stickerNumber: params.row.stickerNumber,
+	        });
+
+	        setEditOpen(true);
+	      }}
+	      sx={{
+	        px: 2,
+	        py: 0.6,
+	        fontSize: 12,
+	        fontWeight: 600,
+	        borderRadius: "999px",
+	        textTransform: "none",
+	        color: "#fff",
+	        background:
+	          "linear-gradient(180deg, #f59e0b, #b45309)",
+	      }}
+	    >
+	      Edit
+	    </Button>
+	  ),
 	},
 	{
 	  field: "delete",
@@ -1507,6 +1577,105 @@ function ZohoItemsPage() {
 	      >
 	        Add
 	      </Button>
+	    </DialogActions>
+	  </Dialog>
+	  <Dialog
+	    open={editOpen}
+	    onClose={() => setEditOpen(false)}
+	    fullWidth
+	    maxWidth="sm"
+	  >
+	    <DialogTitle>Edit Packet Item</DialogTitle>
+
+	    <DialogContent>
+
+	      {[
+	        "itemName",
+	        "pdNo",
+	        "drawingNo",
+	        "clientName",
+	        "clientAddress",
+	        "floor",
+	        "description",
+	        "weight",
+	        "dimensions",
+	        "remarks",
+	        "location",
+	        "packetNumber",
+	      ].map((field) => {
+
+	        const locked =
+	          editForm.stickerNumber &&
+	          [
+	            "itemName",
+	            "pdNo",
+	            "drawingNo",
+	            "packetNumber",
+	            "clientName",
+	          ].includes(field);
+
+	        return (
+	          <TextField
+	            key={field}
+	            label={field}
+	            fullWidth
+	            disabled={locked}
+	            value={editForm[field] || ""}
+	            onChange={(e) =>
+	              setEditForm((prev) => ({
+	                ...prev,
+	                [field]: e.target.value,
+	              }))
+	            }
+	            sx={{ mb: 2 }}
+	          />
+	        );
+	      })}
+
+	    </DialogContent>
+
+	    <DialogActions>
+
+	      <Button onClick={() => setEditOpen(false)}>
+	        Cancel
+	      </Button>
+
+	      <Button
+	        variant="contained"
+	        onClick={async () => {
+
+	          try {
+
+	            const res = await fetch(
+	              `${API_BASE_URL}/api/packets/items/${editItem.itemId}`,
+	              {
+	                method: "PUT",
+	                headers: {
+	                  "Content-Type": "application/json",
+	                  Authorization:
+	                    `Bearer ${localStorage.getItem("token")}`,
+	                },
+	                body: JSON.stringify(editForm),
+	              }
+	            );
+
+	            if (!res.ok) {
+	              throw new Error();
+	            }
+
+	            setEditOpen(false);
+
+	            fetchItems();
+
+	          } catch (e) {
+
+	            alert("Update failed");
+	          }
+	        }}
+	      >
+	        Save
+	      </Button>
+
 	    </DialogActions>
 	  </Dialog>
     </div>
