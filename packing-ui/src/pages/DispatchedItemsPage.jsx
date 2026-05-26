@@ -726,12 +726,19 @@ function DispatchedItemsPage() {
 		        color: "#fff",
 		      },
 		    }}
+			onClick={() => {
+				window.open(
+				  `${API_BASE_URL}/api/stickers/zoho/${row.zohoItemId}`,
+				  "_blank"
+				);
+			  }}
 		  >
 		    <DownloadOutlinedIcon fontSize="small" />
 		  </IconButton>
 
 		  <IconButton
 		    size="small"
+		    onClick={() => openStickerHistory(row.zohoItemId)}  
 		    sx={{
 		      width: 34,
 		      height: 34,
