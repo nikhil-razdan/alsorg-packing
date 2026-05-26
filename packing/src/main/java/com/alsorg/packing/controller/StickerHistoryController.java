@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import com.alsorg.packing.controller.dto.StickerHistoryResponse;
@@ -29,37 +30,10 @@ public class StickerHistoryController {
             @PathVariable UUID itemId
     ) {
 
-        return repository
-                .findByPacketItem_IdOrderByGeneratedAtDesc(itemId)
-                .stream()
-                .map(h -> {
-
-                    StickerHistoryResponse dto =
-                            new StickerHistoryResponse();
-
-                    dto.setId(h.getId());
-
-                    dto.setStickerNumber(
-                            h.getStickerNumber()
-                    );
-
-                    dto.setPrintIteration(
-                            h.getPrintIteration()
-                    );
-
-                    dto.setReason(
-                            h.getReason()
-                    );
-
-                    dto.setGeneratedAt(
-                            h.getGeneratedAt()
-                    );
-
-                    return dto;
-                })
-                .toList();
+        return repository.findHistoryByItemId(itemId);
     }
 
+    @Transactional(readOnly = true)
     @GetMapping("/history/{historyId}/download-pdf")
     public ResponseEntity<byte[]> download(
             @PathVariable UUID historyId

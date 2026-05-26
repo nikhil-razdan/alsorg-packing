@@ -34,6 +34,8 @@ public class StickerHistory {
     private String stickerNumber;
 
     @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "pdf_data")
     private byte[] pdfData;
 
     private Long printIteration;

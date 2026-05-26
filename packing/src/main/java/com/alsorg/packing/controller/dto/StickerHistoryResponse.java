@@ -15,45 +15,60 @@ public class StickerHistoryResponse {
 
     private LocalDateTime generatedAt;
 
-	public UUID getId() {
-		return id;
-	}
+    public StickerHistoryResponse(
+            UUID id,
+            String stickerNumber,
+            Long printIteration,
+            String reason,
+            LocalDateTime generatedAt
+    ) {
+        this.id = id;
+        this.stickerNumber = stickerNumber;
+        this.printIteration = printIteration;
+        this.reason = reason;
+        this.generatedAt = generatedAt;
+    }
 
-	public void setId(UUID id) {
-		this.id = id;
-	}
+    public StickerHistoryResponse() {
+    }
 
-	public String getStickerNumber() {
-		return stickerNumber;
-	}
+    public UUID getId() {
+        return id;
+    }
 
-	public void setStickerNumber(String stickerNumber) {
-		this.stickerNumber = stickerNumber;
-	}
+    public void setId(UUID id) {
+        this.id = id;
+    }
 
-	public Long getPrintIteration() {
-		return printIteration;
-	}
+    public String getStickerNumber() {
+        return stickerNumber;
+    }
 
-	public void setPrintIteration(Long printIteration) {
-		this.printIteration = printIteration;
-	}
+    public void setStickerNumber(String stickerNumber) {
+        this.stickerNumber = stickerNumber;
+    }
 
-	public String getReason() {
-		return reason;
-	}
+    public Long getPrintIteration() {
+        return printIteration;
+    }
 
-	public void setReason(String reason) {
-		this.reason = reason;
-	}
+    public void setPrintIteration(Long printIteration) {
+        this.printIteration = printIteration;
+    }
 
-	public LocalDateTime getGeneratedAt() {
-		return generatedAt;
-	}
+    public String getReason() {
+        return reason;
+    }
 
-	public void setGeneratedAt(LocalDateTime generatedAt) {
-		this.generatedAt = generatedAt;
-	}
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
 
-    // getters setters
+    public LocalDateTime getGeneratedAt() {
+        return generatedAt;
+    }
+
+    public void setGeneratedAt(LocalDateTime generatedAt) {
+        this.generatedAt = generatedAt;
+    }
 }

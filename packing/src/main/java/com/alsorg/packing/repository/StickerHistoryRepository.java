@@ -4,12 +4,26 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
+import com.alsorg.packing.controller.dto.StickerHistoryResponse;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 
 public interface StickerHistoryRepository
         extends JpaRepository<StickerHistory, UUID> {
 
-    List<StickerHistory>
-    findByPacketItem_IdOrderByGeneratedAtDesc(UUID itemId);
+    @Query("""
+        SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
+            h.id,
+            h.stickerNumber,
+            h.printIteration,
+            h.reason,
+            h.generatedAt
+        )
+        FROM StickerHistory h
+        WHERE h.packetItem.id = :itemId
+        ORDER BY h.generatedAt DESC
+    """)
+    List<StickerHistoryResponse>
+    findHistoryByItemId(UUID itemId);
 }
