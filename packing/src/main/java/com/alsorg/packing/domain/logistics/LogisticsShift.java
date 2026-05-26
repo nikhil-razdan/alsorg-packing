@@ -15,9 +15,9 @@ import jakarta.persistence.Table;
 @Table(name = "logistics_shift")
 public class LogisticsShift {
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+	@Id
+	@GeneratedValue
+	private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     private Driver driver;
