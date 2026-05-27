@@ -12,7 +12,7 @@ import {
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/LogisticsShiftModal";
-import LogisticsDashboard from "../dashboard/components/LogisticsDashboard";\
+import LogisticsDashboard from "../dashboard/components/LogisticsDashboard";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
   return (
