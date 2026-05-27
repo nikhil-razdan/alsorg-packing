@@ -19,10 +19,10 @@ public class LogisticsShift {
 	@GeneratedValue
 	private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+	@ManyToOne(fetch = FetchType.EAGER)
     private Driver driver;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     private Vehicle vehicle;
 
     private LocalDateTime shiftStart;
