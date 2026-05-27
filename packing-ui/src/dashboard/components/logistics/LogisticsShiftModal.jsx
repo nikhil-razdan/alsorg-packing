@@ -7,7 +7,7 @@ import {
   fetchDrivers,
   fetchVehicles,
   createShift,
-} from "../api/logisticsApi";
+} from "../../api/logisticsApi";
 
 
 function LogisticsShiftModal({

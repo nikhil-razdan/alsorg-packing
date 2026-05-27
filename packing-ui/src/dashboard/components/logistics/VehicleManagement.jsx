@@ -5,7 +5,7 @@ import {
 
 import {
   fetchVehicles,
-} from "../api/logisticsApi";
+} from "../../api/logisticsApi";
 
 import CreateVehicleModal from "./logistics/modals/CreateVehicleModal";
 

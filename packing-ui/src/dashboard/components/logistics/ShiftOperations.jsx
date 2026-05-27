@@ -8,7 +8,7 @@ import LogisticsShiftModal from "./LogisticsShiftModal";
 import {
   fetchShifts,
   deleteShift,
-} from "../api/logisticsApi";
+} from "../../api/logisticsApi";
 
 function ShiftOperations() {
 	
