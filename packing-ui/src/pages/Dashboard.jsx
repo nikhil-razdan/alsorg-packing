@@ -124,14 +124,14 @@ function DashboardPage() {
   }, []);
 
   return (
-    <div style={page(mode)}>
-      <div style={backgroundText(mode)}>Alsorg</div>
+    <div style={page}>
+      <div style={backgroundText}>Alsorg</div>
 
       <div style={content}>
         <div style={heroRow}>
           <div>
-            <h2 style={heroTitle(mode)}>Dashboard</h2>
-            <div style={heroSubtitle(mode)}>
+            <h2 style={heroTitle}>Dashboard</h2>
+            <div style={heroSubtitle}>
               Inventory and logistics overview in one workspace
             </div>
           </div>
@@ -683,23 +683,6 @@ const reportSliderIndicator = {
     "transform .35s cubic-bezier(.4,0,.2,1)",
 };
 
-const statCard = (darkMode, accent) => ({
-  position: "relative",
-  padding: "20px 20px 18px",
-  borderRadius: 22,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.88))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.92))",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.16)"
-    : "1px solid rgba(148,163,184,0.18)",
-  boxShadow: darkMode
-    ? "0 18px 35px rgba(2,6,23,0.24)"
-    : "0 18px 35px rgba(15,23,42,0.08)",
-  overflow: "hidden",
-  minHeight: 118,
-});
-
 const cardAccent = (accent) => ({
   position: "absolute",
   top: 0,
@@ -708,30 +691,64 @@ const cardAccent = (accent) => ({
   height: 4,
   background: accent,
 });
+const statCard = (accent) => ({
+  position: "relative",
 
-const statTitle = (darkMode) => ({
-  color: darkMode ? "#cbd5e1" : "#64748b",
+  padding: "20px 20px 18px",
+
+  borderRadius: 22,
+
+  background:
+    "rgba(15,23,42,.78)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 18px 35px rgba(2,6,23,.32)",
+
+  overflow: "hidden",
+
+  minHeight: 118,
+
+  backdropFilter: "blur(18px)",
+});
+
+const statTitle = {
+  color: "rgba(255,255,255,.62)",
+
   marginBottom: 10,
+
   fontSize: 12,
+
   fontWeight: 700,
+
   letterSpacing: "0.08em",
+
   textTransform: "uppercase",
-});
+};
 
-const statValue = (darkMode) => ({
+const statValue = {
   margin: 0,
-  fontSize: 30,
-  fontWeight: 900,
-  lineHeight: 1,
-  color: darkMode ? "#f8fafc" : "#0f172a",
-});
 
-const statSubtle = (darkMode) => ({
+  fontSize: 30,
+
+  fontWeight: 900,
+
+  lineHeight: 1,
+
+  color: "#fff",
+};
+
+const statSubtle = {
   marginTop: 8,
+
   fontSize: 11,
+
   fontWeight: 600,
-  color: darkMode ? "#94a3b8" : "#64748b",
-});
+
+  color: "rgba(255,255,255,.52)",
+};
 
 const adminPanel = {
   marginTop: 2,

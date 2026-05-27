@@ -446,7 +446,6 @@ function LogisticsDashboard({
             (card) => (
               <StatCard
                 key={card.title}
-                darkMode={true}
                 accent={card.accent}
                 title={card.title}
                 value={card.value}
