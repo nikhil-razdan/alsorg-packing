@@ -101,14 +101,15 @@ function DriverManagement() {
           >
             <div>{d.name}</div>
 
-            <div>{d.phone}</div>
-
-            <div>
-              {d.licenseNumber}
-            </div>
-
-            <div>{d.status}</div>
-
+			<div>{d.phoneNumber}</div>
+			<div>
+			             {d.licenseNumber}
+			           </div>
+			<div>
+			  {d.active
+			    ? "ACTIVE"
+			    : "INACTIVE"}
+			</div>
             <div>
               <button
                 style={deleteBtn}
