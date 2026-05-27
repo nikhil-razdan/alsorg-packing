@@ -8,6 +8,8 @@ import DispatchedItemsPage from "./pages/DispatchedItemsPage";
 import useViewportHeight from "./useViewportHeight";
 import UsersPage from "./pages/UsersPage";
 import WarehousePage from "./pages/WarehousePage";
+import LogisticsPortalPage from "./pages/LogisticsPortalPage";
+import RequireRole from "./auth/RequireRole";
 
 function App() {
   useViewportHeight();
@@ -26,10 +28,58 @@ function App() {
           }
         >
           <Route path="/" element={<DashboardPage />} />
-		  <Route path="/users" element={<UsersPage />} />
+		  <Route
+		    path="/users"
+		    element={
+		      <RequireRole allowed={["ADMIN"]}>
+		        <UsersPage />
+		      </RequireRole>
+		    }
+		  />
           <Route path="/zoho-items" element={<ZohoItemsPage />} />
-		  <Route path="/warehouse" element={<WarehousePage />} />
-          <Route path="/dispatched-items" element={<DispatchedItemsPage />} />
+		  <Route
+		    path="/warehouse"
+		    element={
+		      <RequireRole
+		        allowed={[
+		          "ADMIN",
+		          "PACKING",
+		          "DISPATCH",
+		          "WAREHOUSE",
+		        ]}
+		      >
+		        <WarehousePage />
+		      </RequireRole>
+		    }
+		  />
+		  <Route
+		    path="/dispatched-items"
+		    element={
+		      <RequireRole
+		        allowed={[
+		          "ADMIN",
+		          "PACKING",
+		          "DISPATCH",
+		          "WAREHOUSE",
+		        ]}
+		      >
+		        <DispatchedItemsPage />
+		      </RequireRole>
+		    }
+		  />
+		  <Route
+		    path="/logistics"
+		    element={
+		      <RequireRole
+		        allowed={[
+		          "ADMIN",
+		          "LOGISTICS",
+		        ]}
+		      >
+		        <LogisticsPortalPage />
+		      </RequireRole>
+		    }
+		  />
         </Route>
 
         {/* FALLBACK */}

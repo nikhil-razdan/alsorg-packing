@@ -41,7 +41,24 @@ function RequireAuth({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "#0f172a",
+          color: "#fff",
+          fontWeight: 700,
+        }}
+      >
+        Loading...
+      </div>
+    );
+  }
 
   return ok ? children : <Navigate to="/login" replace />;
 }

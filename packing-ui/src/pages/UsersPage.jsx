@@ -175,15 +175,41 @@ function UsersPage() {
     );
   },[users,search]);
 
-  const roleIcon = (role)=>{
-    if(role==="ADMIN") return <AdminPanelSettingsIcon fontSize="small"/>;
-    if(role==="DISPATCH") return <LocalShippingIcon fontSize="small"/>;
-    return <InventoryIcon fontSize="small"/>;
+  const roleIcon = (role) => {
+    if (role === "ADMIN") {
+      return (
+        <AdminPanelSettingsIcon fontSize="small" />
+      );
+    }
+
+    if (role === "DISPATCH") {
+      return (
+        <LocalShippingIcon fontSize="small" />
+      );
+    }
+
+    if (role === "WAREHOUSE") {
+      return (
+        <InventoryIcon fontSize="small" />
+      );
+    }
+
+    return (
+      <InventoryIcon fontSize="small" />
+    );
   };
 
-  const roleChip = (role)=>{
-    if(role==="ADMIN") return adminChip;
-    if(role==="DISPATCH") return dispatchChip;
+  const roleChip = (role) => {
+    if (role === "ADMIN") return adminChip;
+
+    if (role === "DISPATCH") {
+      return dispatchChip;
+    }
+
+    if (role === "WAREHOUSE") {
+      return warehouseChip;
+    }
+
     return packingChip;
   };
 
@@ -353,9 +379,11 @@ function UsersPage() {
 			    },
 			  }}
             >
-              <MenuItem value="ADMIN">ADMIN</MenuItem>
-              <MenuItem value="PACKING">PACKING</MenuItem>
-              <MenuItem value="DISPATCH">DISPATCH</MenuItem>
+			<MenuItem value="ADMIN">ADMIN</MenuItem>
+			<MenuItem value="PACKING">PACKING</MenuItem>
+			<MenuItem value="WAREHOUSE">WAREHOUSE </MenuItem>
+			<MenuItem value="DISPATCH">DISPATCH</MenuItem>
+			<MenuItem value="LOGISTICS">LOGISTICS</MenuItem>
             </TextField>
           );
         }
@@ -814,9 +842,11 @@ function UsersPage() {
 		      },
 		    }}
 		  >
-		    <MenuItem value="ADMIN">ADMIN</MenuItem>
-		    <MenuItem value="PACKING">PACKING</MenuItem>
-		    <MenuItem value="DISPATCH">DISPATCH</MenuItem>
+		  <MenuItem value="ADMIN">ADMIN</MenuItem>
+		  <MenuItem value="PACKING">PACKING</MenuItem>
+		  <MenuItem value="WAREHOUSE">WAREHOUSE</MenuItem>
+		  <MenuItem value="DISPATCH">DISPATCH</MenuItem>
+		  <MenuItem value="LOGISTICS">LOGISTICS</MenuItem>
 		  </TextField>
 
 	    </Box>
@@ -1224,6 +1254,24 @@ const dispatchChip = {
 
   "& .MuiChip-icon": {
     color: "#ecfdf5",
+  },
+};
+
+const warehouseChip = {
+  fontWeight: 700,
+  color: "#fff7ed",
+
+  background:
+    "linear-gradient(135deg,#ea580c,#c2410c)",
+
+  border:
+    "1px solid rgba(255,255,255,0.15)",
+
+  boxShadow:
+    "0 6px 18px rgba(234,88,12,0.25)",
+
+  "& .MuiChip-icon": {
+    color: "#fff7ed",
   },
 };
 

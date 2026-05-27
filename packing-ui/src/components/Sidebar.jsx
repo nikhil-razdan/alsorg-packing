@@ -7,20 +7,66 @@ function Sidebar() {
   const role = localStorage.getItem("role");
 
   const links = [
-    { path: "/", label: "Dashboard", roles: ["ADMIN", "DISPATCH", "PACKING"], icon: "📊" },
+    {
+      path: "/",
+      label: "Dashboard",
+      roles: [
+        "ADMIN",
+        "DISPATCH",
+        "PACKING",
+        "WAREHOUSE",
+        "LOGISTICS",
+      ],
+      icon: "📊",
+    },
 
-    { path: "/zoho-items", label: "Inventory Items", roles: ["ADMIN", "PACKING"], icon: "📦" },
-	
-	{
-	  path: "/warehouse",
-	  label: "Warehouse",
-	  roles: ["ADMIN", "PACKING", "DISPATCH"],
-	  icon: "🏭"
-	},
-	
-    { path: "/dispatched-items", label: "Dispatched Items", roles: ["ADMIN", "PACKING", "DISPATCH"], icon: "🚚" },
+    {
+      path: "/zoho-items",
+      label: "Inventory Items",
+      roles: ["ADMIN", "PACKING"],
+      icon: "📦",
+    },
 
-    { path: "/users", label: "User Management", roles: ["ADMIN"], icon: "👤" }
+    {
+      path: "/warehouse",
+      label: "Warehouse",
+      roles: [
+        "ADMIN",
+        "PACKING",
+        "DISPATCH",
+        "WAREHOUSE",
+      ],
+      icon: "🏭",
+    },
+
+    {
+      path: "/dispatched-items",
+      label: "Dispatched Items",
+      roles: [
+        "ADMIN",
+        "PACKING",
+        "DISPATCH",
+        "WAREHOUSE",
+      ],
+      icon: "🚚",
+    },
+
+    {
+      path: "/logistics",
+      label: "Logistics ERP",
+      roles: [
+        "ADMIN",
+        "LOGISTICS",
+      ],
+      icon: "🚛",
+    },
+
+    {
+      path: "/users",
+      label: "User Management",
+      roles: ["ADMIN"],
+      icon: "👤",
+    },
   ];
 
   const visibleLinks = links.filter(link =>
