@@ -339,9 +339,9 @@ function DashboardPage() {
           </>
         )}
 
-		{mode === "logistics" && logistics && (
+		{mode === "logistics" && (
 		  <LogisticsDashboard
-		    logistics={logistics}
+		    logistics={logistics ?? emptyLogistics}
 		    setShiftModal={setShiftModal}
 		    StatCard={StatCard}
 		    AnalyticsGrid={AnalyticsGrid}
@@ -443,6 +443,23 @@ const backgroundText = (mode, darkMode) => ({
   opacity: 0.55,
 });
 
+const emptyLogistics = {
+  totalTrips: 0,
+  totalLoaders: 0,
+  efficiency: 0,
+  activeDrivers: 0,
+  activeVehicles: 0,
+  averageTripsPerDriver: 0,
+  averageTripsPerVehicle: 0,
+  tripsOverTime: {},
+  shiftPerformance: {},
+  vehicleUtilization: {},
+  driverTrips: {},
+  driverPerformance: {},
+  overtimeAnalytics: {},
+  tripsByLocation: {},
+};
+
 const content = {
   position: "relative",
   zIndex: 1,
@@ -540,13 +557,6 @@ const kpiGrid = {
   gap: 14,
 };
 
-const logisticsKpiGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 10,
-  marginBottom: 12,
-};
-
 const workspaceGrid = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 0.85fr)",
@@ -576,20 +586,6 @@ const panelBody = {
   flex: 1,
   overflow: "hidden",
   marginTop: 8,
-};
-
-const createShiftBtn = {
-  height: 44,
-  padding: "0 18px",
-  borderRadius: 12,
-  border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-  color: "#fff",
-  fontWeight: 800,
-  cursor: "pointer",
-  boxShadow:
-    "0 10px 25px rgba(37,99,235,0.35)",
 };
 
 const chartToggleWrap = (darkMode) => ({
@@ -779,59 +775,5 @@ const adminPanelTitle = (darkMode) => ({
   fontSize: 16,
   fontWeight: 800,
 });
-
-const logisticsHero = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 16,
-  marginBottom: 18,
-  flexWrap: "wrap",
-};
-
-const logisticsHeading = {
-  fontSize: 28,
-  fontWeight: 900,
-  color: "#f8fafc",
-};
-
-const logisticsSubheading = {
-  color: "#94a3b8",
-  marginTop: 6,
-  fontSize: 13,
-};
-
-const logisticsFilters = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const logisticsInput = {
-  padding: "10px 14px",
-  borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  background: "#0f172a",
-  color: "#fff",
-  outline: "none",
-};
-
-const logisticsMainGrid = {
-  display: "grid",
-  gridTemplateColumns: "1fr",
-  gap: 16,
-};
-
-const logisticsMainPanel = {
-  background:
-    "linear-gradient(180deg,#020617,#0f172a)",
-  borderRadius: 26,
-  padding: 18,
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  boxShadow:
-    "0 20px 50px rgba(0,0,0,0.45)",
-};
 
 export default DashboardPage;
