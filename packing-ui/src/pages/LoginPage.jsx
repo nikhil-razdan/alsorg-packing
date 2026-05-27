@@ -70,25 +70,57 @@ function LoginPage() {
       <div style={rightPanel}>
         <div style={glassCard}>
           <div style={cardHighlight} />
+		  <div style={topBar}>
+		    <div style={statusDot} />
 
+		    <span style={topBarText}>
+		      ENTERPRISE ACCESS PORTAL
+		    </span>
+		  </div>
           <h3 style={cardTitle}>Welcome back</h3>
           <p style={cardSubtitle}>Log in to continue</p>
 
           <form onSubmit={submit}>
-            <input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              style={glassInput}
-            />
+		  <input
+		    placeholder="Username"
+		    value={username}
+		    onChange={(e) =>
+		      setUsername(e.target.value)
+		    }
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={glassInput}
-            />
+		    onFocus={(e) => {
+		      e.target.style.border =
+		        "1px solid rgba(59,130,246,.55)";
+		    }}
+
+		    onBlur={(e) => {
+		      e.target.style.border =
+		        "1px solid rgba(255,255,255,.08)";
+		    }}
+
+		    style={glassInput}
+		  />
+
+		  <input
+		    type="password"
+		    placeholder="Password"
+		    value={password}
+		    onChange={(e) =>
+		      setPassword(e.target.value)
+		    }
+
+		    onFocus={(e) => {
+		      e.target.style.border =
+		        "1px solid rgba(59,130,246,.55)";
+		    }}
+
+		    onBlur={(e) => {
+		      e.target.style.border =
+		        "1px solid rgba(255,255,255,.08)";
+		    }}
+
+		    style={glassInput}
+		  />
 
             {error && <p style={errorText}>{error}</p>}
 
@@ -112,67 +144,126 @@ function LoginPage() {
 
 const pageStyle = {
   minHeight: "100vh",
+
   display: "flex",
+
   flexWrap: "wrap",
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-  background:
-    "radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 24%), radial-gradient(circle at bottom right, rgba(255,255,255,0.10), transparent 22%), linear-gradient(135deg, #cfe5ff 0%, #f4f8ff 45%, #d7e7ff 100%)",
+
   position: "relative",
-  overflowX: "hidden",
-  overflowY: "auto",
+
+  overflow: "hidden",
+
+  fontFamily:
+    "Inter, system-ui, sans-serif",
+
+  background: `
+    radial-gradient(
+      circle at top left,
+      rgba(59,130,246,0.14),
+      transparent 22%
+    ),
+
+    radial-gradient(
+      circle at bottom right,
+      rgba(14,165,233,0.10),
+      transparent 24%
+    ),
+
+    linear-gradient(
+      135deg,
+      #020617 0%,
+      #0f172a 45%,
+      #111827 100%
+    )
+  `,
 };
 
 const ambientGlowOne = {
   position: "absolute",
-  top: "-10%",
-  left: "-8%",
+
+  top: -120,
+  left: -120,
+
   width: 420,
   height: 420,
+
   borderRadius: "50%",
-  background: "rgba(96,165,250,0.18)",
-  filter: "blur(60px)",
+
+  background:
+    "rgba(37,99,235,.18)",
+
+  filter: "blur(100px)",
+
   pointerEvents: "none",
 };
 
 const ambientGlowTwo = {
   position: "absolute",
-  right: "-6%",
-  bottom: "-10%",
+
+  right: -120,
+  bottom: -120,
+
   width: 460,
   height: 460,
+
   borderRadius: "50%",
-  background: "rgba(59,130,246,0.16)",
-  filter: "blur(70px)",
+
+  background:
+    "rgba(14,165,233,.14)",
+
+  filter: "blur(110px)",
+
   pointerEvents: "none",
 };
 
 const backgroundText = {
   position: "absolute",
-  fontSize: 220,
+
+  fontSize: 240,
+
   fontWeight: 900,
-  color: "rgba(15,23,42,0.06)",
+
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015))",
+
+  WebkitBackgroundClip: "text",
+
+  WebkitTextFillColor: "transparent",
+
   top: "50%",
   left: "50%",
-  transform: "translate(-50%, -50%)",
-  letterSpacing: "-6px",
+
+  transform:
+    "translate(-50%, -50%)",
+
+  letterSpacing: 8,
+
   pointerEvents: "none",
+
   userSelect: "none",
 };
 
 const leftPanel = {
-  flex: 1.15,
-  padding: "64px 80px",
-  color: "#0f172a",
+  flex: 1.1,
+
+  padding: "72px 90px",
+
+  color: "#fff",
+
   zIndex: 1,
+
   display: "flex",
+
   alignItems: "center",
-  minWidth: 320,
+
+  minWidth: 340,
 };
 
 const brandRow = {
   position: "absolute",
-  top: 26,
-  left: 26,
+
+  top: 32,
+  left: 36,
 };
 
 const contentBlock = {
@@ -181,145 +272,275 @@ const contentBlock = {
 };
 
 const logoStyle = {
-  height: 54,
+  height: 56,
+
   display: "block",
+
+  filter:
+    "drop-shadow(0 10px 20px rgba(37,99,235,.25))",
 };
 
 const badge = {
-  display: "inline-block",
-  padding: "8px 14px",
+  display: "inline-flex",
+
+  alignItems: "center",
+
+  height: 38,
+
+  padding: "0 18px",
+
   borderRadius: 999,
-  background: "rgba(255,255,255,0.7)",
-  backdropFilter: "blur(12px)",
-  fontSize: 14,
+
+  background:
+    "rgba(37,99,235,.14)",
+
+  border:
+    "1px solid rgba(59,130,246,.22)",
+
+  color: "#60a5fa",
+
+  fontSize: 12,
+
   fontWeight: 800,
-  letterSpacing: 0.4,
-  marginBottom: 18,
-  border: "1px solid rgba(148,163,184,0.18)",
-  color: "#1d4ed8",
+
+  letterSpacing: 1.2,
+
+  marginBottom: 26,
 };
 
 const title = {
-  fontSize: 44,
+  fontSize: 58,
+
   fontWeight: 900,
-  lineHeight: 1.08,
-  marginBottom: 22,
-  color: "#0f172a",
+
+  lineHeight: 1.02,
+
+  marginBottom: 26,
+
+  color: "#fff",
+
+  letterSpacing: -2,
 };
 
 const titleAccent = {
-  color: "#1d4ed8",
-  fontWeight: 900,
+  background:
+    "linear-gradient(135deg,#60a5fa,#93c5fd)",
+
+  WebkitBackgroundClip: "text",
+
+  WebkitTextFillColor: "transparent",
 };
 
 const subtitle = {
   fontSize: 22,
+
   fontWeight: 800,
-  marginBottom: 12,
-  color: "#0f172a",
+
+  marginBottom: 14,
+
+  color: "#fff",
 };
 
 const description = {
-  lineHeight: 1.75,
-  fontSize: 15.5,
-  opacity: 0.9,
-  color: "#334155",
+  lineHeight: 1.9,
+
+  fontSize: 16,
+
+  color: "rgba(255,255,255,.72)",
+
+  maxWidth: 580,
 };
 
 const descriptionMuted = {
   ...description,
-  opacity: 0.82,
+
+  color: "rgba(255,255,255,.58)",
 };
 
 const divider = {
   height: 1,
-  width: 120,
-  background: "linear-gradient(90deg, rgba(29,78,216,0.5), transparent)",
-  margin: "34px 0",
+
+  width: 180,
+
+  background:
+    "linear-gradient(90deg, rgba(59,130,246,.55), transparent)",
+
+  margin: "40px 0",
 };
 
 const rightPanel = {
-  flex: 0.95,
+  flex: 0.9,
+
   display: "flex",
+
   alignItems: "center",
+
   justifyContent: "center",
+
   zIndex: 1,
-  minWidth: 320,
-  padding: 24,
+
+  minWidth: 340,
+
+  padding: 32,
 };
 
 const glassCard = {
   position: "relative",
+
   width: "100%",
-  maxWidth: 430,
+
+  maxWidth: 460,
+
   padding: 42,
-  borderRadius: 28,
+
+  borderRadius: 30,
+
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.48))",
-  backdropFilter: "blur(22px)",
-  WebkitBackdropFilter: "blur(22px)",
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.84))",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
   boxShadow:
-    "0 30px 70px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.62)",
+    "0 30px 80px rgba(2,6,23,.55)",
+
+  backdropFilter: "blur(18px)",
+
   overflow: "hidden",
-  border: "1px solid rgba(255,255,255,0.45)",
 };
 
 const cardHighlight = {
   position: "absolute",
+
   top: 0,
   left: 0,
   right: 0,
-  height: 100,
+
+  height: 120,
+
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.16), transparent)",
+    "linear-gradient(180deg, rgba(59,130,246,.18), transparent)",
+
   pointerEvents: "none",
 };
 
 const cardTitle = {
-  color: "#0f172a",
-  marginBottom: 6,
-  fontSize: 26,
+  color: "#fff",
+
+  marginBottom: 8,
+
+  fontSize: 30,
+
   fontWeight: 900,
 };
 
 const cardSubtitle = {
-  color: "#64748b",
-  marginBottom: 26,
+  color: "rgba(255,255,255,.55)",
+
+  marginBottom: 30,
+
   fontWeight: 600,
 };
 
 const glassInput = {
   width: "100%",
-  padding: "13px 15px",
-  marginBottom: 16,
-  borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.24)",
+
+  padding: "15px 18px",
+
+  marginBottom: 18,
+
+  borderRadius: 16,
+  
+  boxShadow:
+    "inset 0 1px 1px rgba(255,255,255,.04)",
+	
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
   outline: "none",
+
   fontSize: 14,
-  background: "rgba(255,255,255,0.96)",
-  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)",
-  color: "#0f172a",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "#fff",
+
+  transition: "all .2s ease",
+
+  boxSizing: "border-box",
 };
 
 const buttonStyle = {
   width: "100%",
-  marginTop: 22,
-  padding: "14px",
-  borderRadius: 14,
+
+  marginTop: 24,
+
+  padding: "16px",
+
+  borderRadius: 16,
+
   border: "none",
-  background: "linear-gradient(180deg, #1d4ed8, #0f172a)",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
   color: "#fff",
+
   fontWeight: 800,
+
   fontSize: 15,
+
+  letterSpacing: 0.3,
+
   boxShadow:
-    "0 10px 25px rgba(29,78,216,0.24), inset 0 1px 0 rgba(255,255,255,0.12)",
+    "0 18px 40px rgba(37,99,235,.35)",
+
+  transition: "all .25s ease",
 };
 
 const errorText = {
-  color: "#dc2626",
-  fontSize: 14,
-  marginTop: 4,
-  fontWeight: 600,
+  color: "#f87171",
+
+  fontSize: 13,
+
+  marginTop: 2,
+
+  marginBottom: 8,
+
+  fontWeight: 700,
+};
+
+const topBar = {
+  display: "flex",
+
+  alignItems: "center",
+
+  gap: 10,
+
+  marginBottom: 28,
+};
+
+const statusDot = {
+  width: 10,
+  height: 10,
+
+  borderRadius: "50%",
+
+  background: "#22c55e",
+
+  boxShadow:
+    "0 0 14px rgba(34,197,94,.85)",
+};
+
+const topBarText = {
+  color: "rgba(255,255,255,.55)",
+
+  fontSize: 11,
+
+  fontWeight: 800,
+
+  letterSpacing: 1.5,
 };
 
 export default LoginPage;
