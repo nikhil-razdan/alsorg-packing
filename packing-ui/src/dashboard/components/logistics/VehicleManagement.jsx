@@ -7,7 +7,7 @@ import {
   fetchVehicles,
 } from "../../api/logisticsApi";
 
-import CreateVehicleModal from "./logistics/modals/CreateVehicleModal";
+import CreateVehicleModal from "./modals/CreateVehicleModal";
 
 function VehicleManagement() {
 	const [vehicles, setVehicles] =
