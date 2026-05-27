@@ -15,39 +15,56 @@ function StatusDonutChart({ packed, dispatched, pending }) {
 
       <svg width="200" height="200" viewBox="0 0 200 200">
         <g transform="rotate(-90 100 100)">
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            strokeWidth={stroke}
-            strokeDasharray={`${pendingLen} ${circumference}`}
-            strokeDashoffset={0}
-          />
+		<circle
+		  cx="100"
+		  cy="100"
+		  r={radius}
+		  fill="none"
+		  stroke="rgba(251,191,36,0.95)"
+		  strokeWidth={stroke}
+		  strokeDasharray={`${pendingLen} ${circumference}`}
+		  strokeDashoffset={0}
+		/>
 
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            strokeWidth={stroke}
-            strokeDasharray={`${packedLen} ${circumference}`}
-            strokeDashoffset={-pendingLen}
-          />
+		<circle
+		  cx="100"
+		  cy="100"
+		  r={radius}
+		  fill="none"
+		  stroke="rgba(96,165,250,0.95)"
+		  strokeWidth={stroke}
+		  strokeDasharray={`${packedLen} ${circumference}`}
+		  strokeDashoffset={-pendingLen}
+		/>
 
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            strokeWidth={stroke}
-            strokeDasharray={`${dispatchedLen} ${circumference}`}
-            strokeDashoffset={-(pendingLen + packedLen)}
-          />
+		<circle
+		  cx="100"
+		  cy="100"
+		  r={radius}
+		  fill="none"
+		  stroke="rgba(52,211,153,0.95)"
+		  strokeWidth={stroke}
+		  strokeDasharray={`${dispatchedLen} ${circumference}`}
+		  strokeDashoffset={-(pendingLen + packedLen)}
+		/>
         </g>
       </svg>
 
-      <div style={legend}>
-        <Legend color= "rgba(255,255,255,.72)" label={`Packed (${packed})`} />
-        <Legend color= "rgba(255,255,255,.72)" label={`Dispatched (${dispatched})`} />
-        <Legend color= "rgba(255,255,255,.72)" label={`Pending (${pending})`} />
+      <div style={legend}>	 
+	   <Legend
+	    color="rgba(96,165,250,0.95)"
+	    label={`Packed (${packed})`}
+	  />
+
+	  <Legend
+	    color="rgba(52,211,153,0.95)"
+	    label={`Dispatched (${dispatched})`}
+	  />
+
+	  <Legend
+	    color="rgba(251,191,36,0.95)"
+	    label={`Pending (${pending})`}
+	  />
       </div>
     </div>
   );

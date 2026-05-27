@@ -13,6 +13,8 @@ import {
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShiftModal";
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
+import InventorySidebar from
+  "../dashboard/components/inventory/InventorySidebar";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa"}) {
   return (
@@ -65,7 +67,9 @@ function DashboardPage() {
   const [chartType, setChartType] = useState("donut");
   const [activeReport, setActiveReport] = useState(null);
   const [mode, setMode] = useState("inventory");
-  
+  const [inventorySection, setInventorySection] =
+    useState("summary");
+	
   const [shiftModal, setShiftModal] =
     useState(false);
 	
@@ -152,9 +156,16 @@ function DashboardPage() {
           </div>
         </div>
 
-        {mode === "inventory" && (
-          <>
-		  <div style={kpiGrid}>
+		{mode === "inventory" && (
+		  <div style={inventoryLayout}>
+		    <InventorySidebar
+		      section={inventorySection}
+		      setSection={setInventorySection}
+		    />
+
+		    <div style={inventoryMain}>
+			{inventorySection === "summary" && (
+			<div style={kpiGrid}>
 		    <StatCard
 		      accent="#60a5fa"
 		      title="Total Items In Inventory"
@@ -211,7 +222,8 @@ function DashboardPage() {
 		      subtle="AI Optimized"
 		    />
 		  </div>
-
+	  )}
+	  
             <div style={reportHeaderRow}>
               <div>
                 <div style={sectionTitle}>Reports Center</div>
@@ -282,6 +294,7 @@ function DashboardPage() {
               </div>
             </div>
 
+			{inventorySection === "warehouse" && (
             <div style={workspaceGrid}>
               <div style={panelSurface}>
                 <div style={chartToggleWrap}>
@@ -340,6 +353,9 @@ function DashboardPage() {
                 <ActivityFeed logs={activityLogs}  />
               </div>
             </div>
+			)}
+			
+			{inventorySection === "analytics" && (
 			<div style={analyticsSection}>
 			  <div style={analyticsHeader}>
 			    <div>
@@ -449,14 +465,43 @@ function DashboardPage() {
 			    </div>
 			  </div>
 			</div>
+			)}
+			
+			{inventorySection === "alerts" && (
+			  <div style={analyticsCard}>
+			    <div style={analyticsCardTitle}>
+			      Live Inventory Alerts
+			    </div>
 
+			    <div style={insightsList}>
+			      <div style={insightItem}>
+			        ⚠ Warehouse Zone B near capacity
+			      </div>
+
+			      <div style={insightItem}>
+			        ⚠ Dispatch delays detected
+			      </div>
+
+			      <div style={insightItem}>
+			        ⚠ Sticker printer maintenance due
+			      </div>
+
+			      <div style={insightItem}>
+			        ⚠ Packing queue exceeding threshold
+			      </div>
+			    </div>
+			  </div>
+			)}
+			
+			
             {localStorage.getItem("role") === "ADMIN" && (
               <div style={adminPanel}>
                 <h3 style={adminPanelTitle}>Scheduled Reports</h3>
                 <ScheduledReports />
               </div>
             )}
-          </>
+			  </div>
+			</div>
         )}
 
 		{mode === "logistics" && (
@@ -1039,6 +1084,24 @@ const analyticsGridLayout = {
     "repeat(auto-fit,minmax(260px,1fr))",
 
   gap: 16,
+};
+
+const inventoryLayout = {
+  display: "flex",
+
+  gap: 20,
+
+  alignItems: "flex-start",
+};
+
+const inventoryMain = {
+  flex: 1,
+
+  display: "flex",
+
+  flexDirection: "column",
+
+  gap: 18,
 };
 
 export default DashboardPage;

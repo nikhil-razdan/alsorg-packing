@@ -8,36 +8,40 @@ function StatusBarChart({ packed, dispatched, pending}) {
       <h3 style={title}>Inventory Status</h3>
 
       <svg width="220" height="160">
-        <rect
-          x="40"
-          y={140 - scaleH(packed)}
-          width="30"
-          height={scaleH(packed)}
-          rx="6"
-        />
+	  <rect
+	    x="40"
+	    y={140 - scaleH(packed)}
+	    width="30"
+	    height={scaleH(packed)}
+	    rx="6"
+	    fill="rgba(96,165,250,0.95)"
+	  />
 
-        <rect
-          x="95"
-          y={140 - scaleH(dispatched)}
-          width="30"
-          height={scaleH(dispatched)}
-          rx="6"
-        />
+	  <rect
+	    x="95"
+	    y={140 - scaleH(dispatched)}
+	    width="30"
+	    height={scaleH(dispatched)}
+	    rx="6"
+	    fill="rgba(52,211,153,0.95)"
+	  />
 
-        <rect
-          x="150"
-          y={140 - scaleH(pending)}
-          width="30"
-          height={scaleH(pending)}
-          rx="6"
-        />
+	  <rect
+	    x="150"
+	    y={140 - scaleH(pending)}
+	    width="30"
+	    height={scaleH(pending)}
+	    rx="6"
+	    fill="rgba(251,191,36,0.95)"
+	  />
 
-        <line
-          x1="30"
-          y1="140"
-          x2="190"
-          y2="140"
-        />
+	  <line
+	    x1="30"
+	    y1="140"
+	    x2="190"
+	    y2="140"
+	    stroke="rgba(148,163,184,0.25)"
+	  />
       </svg>
 
       <div style={legend}>

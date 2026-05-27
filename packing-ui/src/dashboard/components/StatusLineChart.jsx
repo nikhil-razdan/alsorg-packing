@@ -11,8 +11,10 @@ function StatusLineChart({ packed, dispatched, pending }) {
         <line x1="30" y1="140" x2="190" y2="140" stroke="rgba(148,163,184,0.25)" />
         <line x1="30" y1="40" x2="190" y2="40" stroke="rgba(148,163,184,0.16)" />
 
-        <polyline
-          strokeWidth="3"
+		<polyline
+		  stroke="rgba(96,165,250,0.95)"
+		  fill="none"
+		  strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
           points={`
