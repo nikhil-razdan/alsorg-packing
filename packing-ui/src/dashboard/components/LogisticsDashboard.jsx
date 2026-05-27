@@ -11,18 +11,6 @@ function LogisticsDashboard({
       ======================================== */}
 
       <div style={logisticsHero}>
-        <div>
-          <div style={heroTitle}>
-            Logistics Command Center
-          </div>
-
-          <div style={heroSubtitle}>
-            Monitor fleet operations,
-            drivers, trips and shift
-            performance
-          </div>
-        </div>
-
         <div style={logisticsFilters}>
           <button
             style={createShiftBtn}
