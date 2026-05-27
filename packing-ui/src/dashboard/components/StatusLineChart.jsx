@@ -1,11 +1,11 @@
-function StatusLineChart({ packed, dispatched, pending, darkMode = false }) {
+function StatusLineChart({ packed, dispatched, pending }) {
   const max = Math.max(packed, dispatched, pending, 1);
 
   const scaleY = (value) => 140 - (value / max) * 100;
 
   return (
-    <div style={card(darkMode)}>
-      <h3 style={title(darkMode)}>Warehouse Status</h3>
+    <div style={card}>
+      <h3 style={title}>Warehouse Status</h3>
 
       <svg width="220" height="160">
         <line x1="30" y1="140" x2="190" y2="140" stroke="rgba(148,163,184,0.25)" />

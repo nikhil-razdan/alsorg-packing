@@ -1,4 +1,4 @@
-function StatusBarChart({ packed, dispatched, pending, darkMode = false }) {
+function StatusBarChart({ packed, dispatched, pending}) {
   const max = Math.max(packed, dispatched, pending, 1);
 
   const scaleH = (value) => (value / max) * 90;

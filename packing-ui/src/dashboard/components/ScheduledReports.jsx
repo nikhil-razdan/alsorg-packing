@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import API from "../../services/api";
 
-function ScheduledReports({ darkMode = false }) {
+function ScheduledReports() {
   const [rows, setRows] = useState([]);
   const [email, setEmail] = useState("");
   const [type, setType] = useState("packing");
@@ -42,21 +42,21 @@ function ScheduledReports({ darkMode = false }) {
   };
 
   return (
-    <div style={wrap(darkMode)}>
-      <h3 style={title(darkMode)}>Scheduled Reports</h3>
+    <div style={wrap}>
+      <h3 style={title}>Scheduled Reports</h3>
 
       <div style={form}>
         <input
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={input(darkMode)}
+          style={input}
         />
 
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          style={input(darkMode)}
+          style={input}
         >
           <option value="packing">Packing</option>
           <option value="dispatch">Dispatch</option>
@@ -67,17 +67,17 @@ function ScheduledReports({ darkMode = false }) {
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          style={input(darkMode)}
+          style={input}
         />
 
-        <button onClick={create} style={btn(darkMode)}>
+        <button onClick={create} style={btn}>
           Add
         </button>
       </div>
 
       <div style={list}>
         {rows.map((r) => (
-          <div key={r.id} style={row(darkMode)}>
+          <div key={r.id} style={row}>
             <span>{r.email}</span>
             <span>{r.reportType}</span>
             <span>{r.sendTime}</span>
@@ -162,19 +162,26 @@ const list = {
   gap: 8,
 };
 
-const row = (darkMode) => ({
+const row = {
   display: "flex",
+
   justifyContent: "space-between",
+
   gap: 12,
+
   alignItems: "center",
+
   fontSize: 13,
-  color: darkMode ? "#e2e8f0" : "#334155",
+
+  color: "#e2e8f0",
+
   padding: "10px 0",
-  borderBottom: darkMode
-    ? "1px solid rgba(148,163,184,0.14)"
-    : "1px solid rgba(148,163,184,0.18)",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.08)",
+
   flexWrap: "wrap",
-});
+};
 
 const deleteBtn = {
   border: "none",

@@ -1,4 +1,4 @@
-function StatusDonutChart({ packed, dispatched, pending, darkMode = false }) {
+function StatusDonutChart({ packed, dispatched, pending }) {
   const total = packed + dispatched + pending || 1;
 
   const radius = 70;
