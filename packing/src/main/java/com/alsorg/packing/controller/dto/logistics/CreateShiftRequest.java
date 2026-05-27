@@ -13,6 +13,8 @@ public class CreateShiftRequest {
 
     private LocalDateTime shiftEnd;
 
+    private Double overtimeHours;
+
     private Integer totalTrips;
 
     private Integer totalLoaders;
@@ -25,85 +27,103 @@ public class CreateShiftRequest {
 
     private String remarks;
 
-	public UUID getDriverId() {
-		return driverId;
-	}
+    private String status;
 
-	public void setDriverId(UUID driverId) {
-		this.driverId = driverId;
-	}
+    // GETTERS & SETTERS
 
-	public UUID getVehicleId() {
-		return vehicleId;
-	}
+    public UUID getDriverId() {
+        return driverId;
+    }
 
-	public void setVehicleId(UUID vehicleId) {
-		this.vehicleId = vehicleId;
-	}
+    public void setDriverId(UUID driverId) {
+        this.driverId = driverId;
+    }
 
-	public LocalDateTime getShiftStart() {
-		return shiftStart;
-	}
+    public UUID getVehicleId() {
+        return vehicleId;
+    }
 
-	public void setShiftStart(LocalDateTime shiftStart) {
-		this.shiftStart = shiftStart;
-	}
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
+    }
 
-	public LocalDateTime getShiftEnd() {
-		return shiftEnd;
-	}
+    public LocalDateTime getShiftStart() {
+        return shiftStart;
+    }
 
-	public void setShiftEnd(LocalDateTime shiftEnd) {
-		this.shiftEnd = shiftEnd;
-	}
+    public void setShiftStart(LocalDateTime shiftStart) {
+        this.shiftStart = shiftStart;
+    }
 
-	public Integer getTotalTrips() {
-		return totalTrips;
-	}
+    public LocalDateTime getShiftEnd() {
+        return shiftEnd;
+    }
 
-	public void setTotalTrips(Integer totalTrips) {
-		this.totalTrips = totalTrips;
-	}
+    public void setShiftEnd(LocalDateTime shiftEnd) {
+        this.shiftEnd = shiftEnd;
+    }
 
-	public Integer getTotalLoaders() {
-		return totalLoaders;
-	}
+    public Double getOvertimeHours() {
+        return overtimeHours;
+    }
 
-	public void setTotalLoaders(Integer totalLoaders) {
-		this.totalLoaders = totalLoaders;
-	}
+    public void setOvertimeHours(Double overtimeHours) {
+        this.overtimeHours = overtimeHours;
+    }
 
-	public Double getFuelUsed() {
-		return fuelUsed;
-	}
+    public Integer getTotalTrips() {
+        return totalTrips;
+    }
 
-	public void setFuelUsed(Double fuelUsed) {
-		this.fuelUsed = fuelUsed;
-	}
+    public void setTotalTrips(Integer totalTrips) {
+        this.totalTrips = totalTrips;
+    }
 
-	public Double getTotalDistance() {
-		return totalDistance;
-	}
+    public Integer getTotalLoaders() {
+        return totalLoaders;
+    }
 
-	public void setTotalDistance(Double totalDistance) {
-		this.totalDistance = totalDistance;
-	}
+    public void setTotalLoaders(Integer totalLoaders) {
+        this.totalLoaders = totalLoaders;
+    }
 
-	public String getRouteCategory() {
-		return routeCategory;
-	}
+    public Double getFuelUsed() {
+        return fuelUsed;
+    }
 
-	public void setRouteCategory(String routeCategory) {
-		this.routeCategory = routeCategory;
-	}
+    public void setFuelUsed(Double fuelUsed) {
+        this.fuelUsed = fuelUsed;
+    }
 
-	public String getRemarks() {
-		return remarks;
-	}
+    public Double getTotalDistance() {
+        return totalDistance;
+    }
 
-	public void setRemarks(String remarks) {
-		this.remarks = remarks;
-	}
+    public void setTotalDistance(Double totalDistance) {
+        this.totalDistance = totalDistance;
+    }
 
-    // getters setters
+    public String getRouteCategory() {
+        return routeCategory;
+    }
+
+    public void setRouteCategory(String routeCategory) {
+        this.routeCategory = routeCategory;
+    }
+
+    public String getRemarks() {
+        return remarks;
+    }
+
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
 }

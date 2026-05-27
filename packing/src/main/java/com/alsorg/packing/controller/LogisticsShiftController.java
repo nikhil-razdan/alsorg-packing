@@ -1,14 +1,14 @@
 package com.alsorg.packing.controller;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.*;
 
 import com.alsorg.packing.domain.logistics.LogisticsShift;
+import com.alsorg.packing.controller.dto.logistics.CreateShiftRequest;
 import com.alsorg.packing.service.LogisticsShiftService;
 
 @RestController
 @RequestMapping("/api/logistics/shifts")
+@CrossOrigin("*")
 public class LogisticsShiftController {
 
     private final LogisticsShiftService service;
@@ -19,23 +19,10 @@ public class LogisticsShiftController {
         this.service = service;
     }
 
-    /*
-     * CREATE SHIFT
-     */
-
     @PostMapping
-    public LogisticsShift create(
-            @RequestBody LogisticsShift shift
+    public LogisticsShift createShift(
+            @RequestBody CreateShiftRequest request
     ) {
-        return service.createShift(shift);
-    }
-
-    /*
-     * GET ALL
-     */
-
-    @GetMapping
-    public List<LogisticsShift> getAll() {
-        return service.getAll();
+        return service.createShift(request);
     }
 }

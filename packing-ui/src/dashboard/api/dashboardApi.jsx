@@ -68,4 +68,41 @@ export async function fetchLogisticsStats() {
   return res.json();
 }
 
+export async function fetchDrivers() {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/master/drivers`
+  );
+
+  return res.json();
+}
+
+export async function fetchVehicles() {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/master/vehicles`
+  );
+
+  return res.json();
+}
+
+export async function createShift(payload) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/shifts`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      "Failed to create shift"
+    );
+  }
+
+  return res.json();
+}
 

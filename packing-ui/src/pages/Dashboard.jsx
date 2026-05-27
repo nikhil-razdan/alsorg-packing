@@ -11,6 +11,7 @@ import {
   fetchLogisticsStats,
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
+import LogisticsShiftModal from "../dashboard/components/LogisticsShiftModal";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
   return (
@@ -49,6 +50,7 @@ const BarIcon = () => (
   </svg>
 );
 
+
 function DashboardPage() {
   const [stats, setStats] = useState({
     totalItems: 0,
@@ -63,7 +65,10 @@ function DashboardPage() {
   const [activeReport, setActiveReport] = useState(null);
   const [mode, setMode] = useState("inventory");
   const [darkMode, setDarkMode] = useState(false);
-
+  
+  const [shiftModal, setShiftModal] =
+    useState(false);
+	
   const pending = Math.max(
     Number(stats.totalItems || 0) -
       Number(stats.packedItems || 0) -
@@ -337,6 +342,14 @@ function DashboardPage() {
 		    <div style={logisticsHero}>
 		     
 		      <div style={logisticsFilters}>
+			  <button
+			    style={createShiftBtn}
+			    onClick={() =>
+			      setShiftModal(true)
+			    }
+			  >
+			    + Create Shift
+			  </button>
 		        <input
 		          type="date"
 		          style={logisticsInput}
@@ -459,6 +472,16 @@ function DashboardPage() {
           exportExcelUrl="/api/reports/export/inventory-aging/excel"
         />
       </div>
+	  <LogisticsShiftModal
+	    open={shiftModal}
+	    onClose={() =>
+	      setShiftModal(false)
+	    }
+	    onCreated={() => {
+	      fetchLogisticsStats()
+	        .then(setLogistics);
+	    }}
+	  />
     </div>
   );
 }
@@ -644,6 +667,20 @@ const panelBody = {
   flex: 1,
   overflow: "hidden",
   marginTop: 8,
+};
+
+const createShiftBtn = {
+  height: 44,
+  padding: "0 18px",
+  borderRadius: 12,
+  border: "none",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow:
+    "0 10px 25px rgba(37,99,235,0.35)",
 };
 
 const chartToggleWrap = (darkMode) => ({
