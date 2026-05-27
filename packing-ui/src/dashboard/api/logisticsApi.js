@@ -6,7 +6,10 @@ const authHeaders = () => ({
 
 export async function fetchDrivers() {
   const res = await fetch(
-    "/api/logistics/drivers"
+    `${API_BASE_URL}/api/logistics/drivers`,
+    {
+      headers: authHeaders(),
+    }
   );
 
   if (!res.ok) {
@@ -22,25 +25,24 @@ export async function createDriver(
   payload
 ) {
   const res = await fetch(
-    "/api/logistics/drivers",
+    `${API_BASE_URL}/api/logistics/drivers`,
     {
       method: "POST",
 
       headers: {
+        ...authHeaders(),
         "Content-Type":
           "application/json",
       },
 
-      body: JSON.stringify(
-        payload
-      ),
+      body: JSON.stringify(payload),
     }
   );
 
   if (!res.ok) {
-    throw new Error(
-      "Failed to create driver"
-    );
+    const text = await res.text();
+
+    throw new Error(text);
   }
 
   return res.json();
@@ -50,16 +52,18 @@ export async function deleteDriver(
   id
 ) {
   const res = await fetch(
-    `/api/logistics/drivers/${id}`,
+    `${API_BASE_URL}/api/logistics/drivers/${id}`,
     {
       method: "DELETE",
+
+      headers: authHeaders(),
     }
   );
 
   if (!res.ok) {
-    throw new Error(
-      "Failed to delete driver"
-    );
+    const text = await res.text();
+
+    throw new Error(text);
   }
 }
 
