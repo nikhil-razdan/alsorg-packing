@@ -10,6 +10,7 @@ import com.alsorg.packing.service.DriverService;
 
 @RestController
 @RequestMapping("/api/logistics/drivers")
+@CrossOrigin("*")
 public class DriverController {
 
     private final DriverService service;
@@ -20,9 +21,10 @@ public class DriverController {
         this.service = service;
     }
 
-    /*
-     * CREATE
-     */
+    @GetMapping
+    public List<Driver> getAll() {
+        return service.getAll();
+    }
 
     @PostMapping
     public Driver create(
@@ -30,19 +32,6 @@ public class DriverController {
     ) {
         return service.create(driver);
     }
-
-    /*
-     * GET ALL
-     */
-
-    @GetMapping
-    public List<Driver> getAll() {
-        return service.getAll();
-    }
-
-    /*
-     * DELETE
-     */
 
     @DeleteMapping("/{id}")
     public void delete(

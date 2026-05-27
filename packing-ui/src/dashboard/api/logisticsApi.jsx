@@ -6,17 +6,61 @@ const authHeaders = () => ({
 
 export async function fetchDrivers() {
   const res = await fetch(
-    `${API_BASE_URL}/api/logistics/drivers`,
+    "/api/logistics/drivers"
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      "Failed to fetch drivers"
+    );
+  }
+
+  return res.json();
+}
+
+export async function createDriver(
+  payload
+) {
+  const res = await fetch(
+    "/api/logistics/drivers",
     {
-      headers: authHeaders(),
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify(
+        payload
+      ),
     }
   );
 
   if (!res.ok) {
-    throw new Error("Failed drivers");
+    throw new Error(
+      "Failed to create driver"
+    );
   }
 
   return res.json();
+}
+
+export async function deleteDriver(
+  id
+) {
+  const res = await fetch(
+    `/api/logistics/drivers/${id}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      "Failed to delete driver"
+    );
+  }
 }
 
 export async function fetchVehicles() {
