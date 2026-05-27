@@ -13,7 +13,6 @@ import {
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShiftModal";
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
-import FleetOverview from "../dashboard/components/logistics/FleetOverview";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa"}) {
   return (
@@ -155,28 +154,63 @@ function DashboardPage() {
 
         {mode === "inventory" && (
           <>
-            <div style={kpiGrid}>
-              <StatCard
-                accent="#60a5fa"
-                title="Total Items In Inventory"
-                value={Number(stats.totalItems || 0)}
-              />
-              <StatCard
-                accent="#f472b6"
-                title="Stickers Generated"
-                value={Number(stats.stickersGenerated || 0)}
-              />
-              <StatCard
-                accent="#34d399"
-                title="Packed Items"
-                value={Number(stats.packedItems || 0)}
-              />
-              <StatCard
-                accent="#f59e0b"
-                title="Pending Items"
-                value={pending}
-              />
-            </div>
+		  <div style={kpiGrid}>
+		    <StatCard
+		      accent="#60a5fa"
+		      title="Total Items In Inventory"
+		      value={Number(stats.totalItems || 0)}
+		      subtle="Warehouse Stock"
+		    />
+
+		    <StatCard
+		      accent="#f472b6"
+		      title="Stickers Generated"
+		      value={Number(stats.stickersGenerated || 0)}
+		      subtle="Labels Printed"
+		    />
+
+		    <StatCard
+		      accent="#34d399"
+		      title="Packed Items"
+		      value={Number(stats.packedItems || 0)}
+		      subtle="Ready For Dispatch"
+		    />
+
+		    <StatCard
+		      accent="#f59e0b"
+		      title="Pending Items"
+		      value={pending}
+		      subtle="Awaiting Processing"
+		    />
+
+		    <StatCard
+		      accent="#8b5cf6"
+		      title="Inventory Accuracy"
+		      value="98.4%"
+		      subtle="Warehouse Precision"
+		    />
+
+		    <StatCard
+		      accent="#06b6d4"
+		      title="Daily Throughput"
+		      value="1,284"
+		      subtle="Items Processed"
+		    />
+
+		    <StatCard
+		      accent="#ef4444"
+		      title="Delayed Dispatches"
+		      value="12"
+		      subtle="Needs Attention"
+		    />
+
+		    <StatCard
+		      accent="#22c55e"
+		      title="Operational Efficiency"
+		      value="94%"
+		      subtle="AI Optimized"
+		    />
+		  </div>
 
             <div style={reportHeaderRow}>
               <div>
@@ -306,6 +340,115 @@ function DashboardPage() {
                 <ActivityFeed logs={activityLogs}  />
               </div>
             </div>
+			<div style={analyticsSection}>
+			  <div style={analyticsHeader}>
+			    <div>
+			      <div style={sectionTitle}>
+			        Inventory Intelligence
+			      </div>
+
+			      <div style={sectionSubtitle}>
+			        Advanced warehouse analytics and operational insights
+			      </div>
+			    </div>
+			  </div>
+
+			  <div style={analyticsGridLayout}>
+			    <div style={analyticsCardLarge}>
+			      <div style={analyticsCardTitle}>
+			        Inventory Aging Analysis
+			      </div>
+
+			      <div style={agingGrid}>
+			        <div style={agingItem("#22c55e")}>
+			          <h2>62%</h2>
+			          <span>0-7 Days</span>
+			        </div>
+
+			        <div style={agingItem("#3b82f6")}>
+			          <h2>24%</h2>
+			          <span>7-30 Days</span>
+			        </div>
+
+			        <div style={agingItem("#f59e0b")}>
+			          <h2>11%</h2>
+			          <span>30-90 Days</span>
+			        </div>
+
+			        <div style={agingItem("#ef4444")}>
+			          <h2>3%</h2>
+			          <span>90+ Days</span>
+			        </div>
+			      </div>
+			    </div>
+
+			    <div style={analyticsCard}>
+			      <div style={analyticsCardTitle}>
+			        Warehouse Utilization
+			      </div>
+
+			      <div style={metricValue}>
+			        86%
+			      </div>
+
+			      <div style={metricSubtle}>
+			        Rack occupancy across all zones
+			      </div>
+			    </div>
+
+			    <div style={analyticsCard}>
+			      <div style={analyticsCardTitle}>
+			        Average Packing Time
+			      </div>
+
+			      <div style={metricValue}>
+			        2.4m
+			      </div>
+
+			      <div style={metricSubtle}>
+			        Per inventory item
+			      </div>
+			    </div>
+
+			    <div style={analyticsCard}>
+			      <div style={analyticsCardTitle}>
+			        Sticker Failure Rate
+			      </div>
+
+			      <div style={metricValue}>
+			        0.8%
+			      </div>
+
+			      <div style={metricSubtle}>
+			        Printer & scan errors
+			      </div>
+			    </div>
+
+			    <div style={analyticsCardWide}>
+			      <div style={analyticsCardTitle}>
+			        AI Operational Insights
+			      </div>
+
+			      <div style={insightsList}>
+			        <div style={insightItem}>
+			          Dispatch volume increased by 14%
+			        </div>
+
+			        <div style={insightItem}>
+			          Packing efficiency improved this week
+			        </div>
+
+			        <div style={insightItem}>
+			          Warehouse Zone B nearing capacity
+			        </div>
+
+			        <div style={insightItem}>
+			          Sticker print failures reduced significantly
+			        </div>
+			      </div>
+			    </div>
+			  </div>
+			</div>
 
             {localStorage.getItem("role") === "ADMIN" && (
               <div style={adminPanel}>
@@ -510,7 +653,8 @@ const modeBtn = (active) => ({
 
 const kpiGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(220px,1fr))",
   gap: 14,
 };
 
@@ -769,11 +913,132 @@ const adminPanel = {
   backdropFilter: "blur(18px)",
 };
 
+const analyticsCardTitle = {
+  fontSize: 16,
+
+  fontWeight: 800,
+
+  color: "#fff",
+
+  marginBottom: 18,
+};
+
+const metricValue = {
+  fontSize: 38,
+
+  fontWeight: 900,
+
+  color: "#fff",
+};
+
+const metricSubtle = {
+  marginTop: 8,
+
+  color: "rgba(255,255,255,.58)",
+
+  fontSize: 13,
+};
+
+const agingGrid = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "repeat(4,minmax(0,1fr))",
+
+  gap: 14,
+};
+
+const agingItem = (color) => ({
+  padding: 18,
+
+  borderRadius: 18,
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  border:
+    `1px solid ${color}33`,
+
+  textAlign: "center",
+});
+
+const insightsList = {
+  display: "flex",
+
+  flexDirection: "column",
+
+  gap: 12,
+};
+
+const insightItem = {
+  padding: "14px 16px",
+
+  borderRadius: 16,
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "rgba(255,255,255,.82)",
+
+  fontSize: 14,
+
+  fontWeight: 600,
+
+  border:
+    "1px solid rgba(255,255,255,.05)",
+};
+
+const analyticsCard = {
+  padding: 22,
+
+  borderRadius: 24,
+
+  background:
+    "rgba(15,23,42,.78)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 18px 40px rgba(2,6,23,.34)",
+
+  backdropFilter: "blur(18px)",
+};
+
+const analyticsCardLarge = {
+  ...analyticsCard,
+
+  gridColumn: "span 2",
+};
+
+const analyticsCardWide = {
+  ...analyticsCard,
+
+  gridColumn: "span 2",
+};
+
 const adminPanelTitle = {
   color: "#fff",
   marginBottom: 12,
   fontSize: 16,
   fontWeight: 800,
+};
+
+const analyticsSection = {
+  marginTop: 4,
+};
+
+const analyticsHeader = {
+  marginBottom: 16,
+};
+
+const analyticsGridLayout = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(260px,1fr))",
+
+  gap: 16,
 };
 
 export default DashboardPage;

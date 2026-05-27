@@ -346,9 +346,11 @@ const table = {
 const th = {
   position: "sticky",
   top: 0,
-  zIndex: 1,
-  background: "#f8fafc",
-  color: "#334155",
+  zIndex: 1,  
+  background:
+    "rgba(255,255,255,.05)",
+
+  color: "#fff",
   borderBottom: "1px solid rgba(148,163,184,0.18)",
   padding: "12px 10px",
   textAlign: "left",
@@ -360,14 +362,20 @@ const th = {
 
 const td = {
   padding: "10px 10px",
-  borderBottom: "1px solid rgba(148,163,184,0.14)",
-  color: "#0f172a",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.05)",
+
+  color: "rgba(255,255,255,.82)",
+
   whiteSpace: "nowrap",
 };
 
 const statusText = {
-  padding: 16,
-  color: "#64748b",
+  padding: 18,
+
+  color: "rgba(255,255,255,.72)",
+
   fontWeight: 600,
 };
 

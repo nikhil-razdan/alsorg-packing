@@ -19,8 +19,6 @@ function StatusDonutChart({ packed, dispatched, pending }) {
             cx="100"
             cy="100"
             r={radius}
-            fill="none"
-            stroke="rgba(251,191,36,0.9)"
             strokeWidth={stroke}
             strokeDasharray={`${pendingLen} ${circumference}`}
             strokeDashoffset={0}
@@ -30,8 +28,6 @@ function StatusDonutChart({ packed, dispatched, pending }) {
             cx="100"
             cy="100"
             r={radius}
-            fill="none"
-            stroke="rgba(96,165,250,0.95)"
             strokeWidth={stroke}
             strokeDasharray={`${packedLen} ${circumference}`}
             strokeDashoffset={-pendingLen}
@@ -41,8 +37,6 @@ function StatusDonutChart({ packed, dispatched, pending }) {
             cx="100"
             cy="100"
             r={radius}
-            fill="none"
-            stroke="rgba(52,211,153,0.95)"
             strokeWidth={stroke}
             strokeDasharray={`${dispatchedLen} ${circumference}`}
             strokeDashoffset={-(pendingLen + packedLen)}
@@ -71,21 +65,28 @@ function Legend({ color, label}) {
 const card = {
   width: "100%",
   height: "100%",
+
   display: "flex",
   flexDirection: "column",
+
   alignItems: "center",
   justifyContent: "center",
-  stroke: "#6366f1",
-   fill: "#6366f1",
+
   textAlign: "center",
+
+  color: "#fff",
 };
 
 const title = {
-  marginBottom: 18,
-  fontSize: 20,
-  fontWeight: 800,
-  stroke: "#6366f1",
-     fill: "#6366f1",
+  marginBottom: 20,
+
+  fontSize: 22,
+
+  fontWeight: 900,
+
+  color: "#fff",
+
+  letterSpacing: 0.3,
 };
 
 const legend = {

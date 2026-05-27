@@ -30,12 +30,25 @@ const overlay = {
 
 const modal = {
   maxWidth: 1000,
+
   margin: "6vh auto",
-  background: "#ffffff",
-  borderRadius: 16,
-  padding: 20,
-  color: "#111827",
-  boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+
+  borderRadius: 24,
+
+  padding: 24,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92))",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 35px 90px rgba(0,0,0,.45)",
+
+  backdropFilter: "blur(20px)",
 };
 
 const header = {
@@ -51,13 +64,20 @@ const titleStyle = {
 };
 
 const closeBtn = {
-  background: "#f3f4f6",
+  background:
+    "rgba(255,255,255,.06)",
+
   border: "none",
-  color: "#111",
+
+  color: "#fff",
+
   fontSize: 18,
+
   cursor: "pointer",
-  borderRadius: 6,
-  padding: "4px 8px",
+
+  borderRadius: 10,
+
+  padding: "6px 10px",
 };
 
 export default ReportsModal;

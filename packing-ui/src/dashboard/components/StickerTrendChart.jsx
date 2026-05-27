@@ -34,21 +34,30 @@ function StickerTrendChart({ data = [] }) {
 /* ===================== STYLES ===================== */
 
 const card = {
-  padding: 26,
-  borderRadius: 22,
+  padding: 24,
+
+  borderRadius: 24,
+
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.34), rgba(255,255,255,0.16))",
-  backdropFilter: "blur(18px)",
+    "rgba(15,23,42,.78)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
   boxShadow:
-    "0 24px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
-	stroke: "#6366f1",
-	  fill: "#6366f1",
+    "0 18px 40px rgba(2,6,23,.34)",
+
+  backdropFilter: "blur(18px)",
 };
 
 const title = {
   marginBottom: 18,
-  fontSize: 20,
-  fontWeight: 700,
+
+  fontSize: 22,
+
+  fontWeight: 900,
+
+  color: "#fff",
 };
 
 const chart = {
@@ -73,9 +82,11 @@ const bar = {
 };
 
 const label = {
-  marginTop: 6,
+  marginTop: 8,
+
   fontSize: 11,
-  opacity: 0.8,
+
+  color: "rgba(255,255,255,.65)",
 };
 
 export default StickerTrendChart;

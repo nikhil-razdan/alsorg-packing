@@ -22,14 +22,26 @@ const bar = {
 };
 
 const btn = {
-  padding: "8px 14px",
-  borderRadius: 999,
-  border: "1px solid rgba(148,163,184,0.22)",
+  padding: "10px 16px",
+
+  borderRadius: 14,
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
   cursor: "pointer",
-  background: "linear-gradient(180deg, #ffffff, #e2e8f0)",
-  color: "#0f172a",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
   fontWeight: 800,
-  boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.28)",
+
+  transition: "all .25s ease",
 };
 
 export default ReportToolbar;

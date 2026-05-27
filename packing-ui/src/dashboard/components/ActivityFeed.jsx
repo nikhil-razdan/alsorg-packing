@@ -173,22 +173,23 @@ const feedArea = {
 const card = {
   display: "flex",
 
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
 
-  padding: "14px 16px",
+  padding: "16px 18px",
 
-  borderRadius: 18,
+  borderRadius: 20,
 
   marginBottom: 12,
 
   background:
-    "rgba(255,255,255,.03)",
+    "linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))",
 
   border:
     "1px solid rgba(255,255,255,.06)",
 
-  backdropFilter: "blur(10px)",
+  backdropFilter: "blur(14px)",
+
+  transition: "all .25s ease",
 };
 
 const left = {
@@ -198,13 +199,17 @@ const left = {
 };
 
 const action = {
-  fontWeight: 700,
+  fontWeight: 800,
+
   fontSize: 14,
+
+  color: "#fff",
 };
 
 const itemName = {
   fontSize: 13,
-  opacity: 0.85,
+
+  color: "rgba(255,255,255,.72)",
 };
 
 const time = {

@@ -14,7 +14,6 @@ function StatusBarChart({ packed, dispatched, pending}) {
           width="30"
           height={scaleH(packed)}
           rx="6"
-          fill="rgba(96,165,250,0.95)"
         />
 
         <rect
@@ -23,7 +22,6 @@ function StatusBarChart({ packed, dispatched, pending}) {
           width="30"
           height={scaleH(dispatched)}
           rx="6"
-          fill="rgba(52,211,153,0.95)"
         />
 
         <rect
@@ -32,7 +30,6 @@ function StatusBarChart({ packed, dispatched, pending}) {
           width="30"
           height={scaleH(pending)}
           rx="6"
-          fill="rgba(251,191,36,0.95)"
         />
 
         <line
@@ -40,14 +37,24 @@ function StatusBarChart({ packed, dispatched, pending}) {
           y1="140"
           x2="190"
           y2="140"
-          stroke= "rgba(148,163,184,0.25)"
         />
       </svg>
 
       <div style={legend}>
-        <Legend color= "rgba(255,255,255,.72)" label={`Packed (${packed})`} />
-        <Legend color= "rgba(255,255,255,.72)" label={`Dispatched (${dispatched})`} />
-        <Legend color= "rgba(255,255,255,.72)" label={`Pending (${pending})`} />
+	  <Legend
+	    color="rgba(96,165,250,0.95)"
+	    label={`Packed (${packed})`}
+	  />
+
+	  <Legend
+	    color="rgba(52,211,153,0.95)"
+	    label={`Dispatched (${dispatched})`}
+	  />
+
+	  <Legend
+	    color="rgba(251,191,36,0.95)"
+	    label={`Pending (${pending})`}
+	  />
       </div>
     </div>
   );
@@ -65,21 +72,28 @@ function Legend({ color, label }) {
 const card = {
   width: "100%",
   height: "100%",
+
   display: "flex",
   flexDirection: "column",
+
   alignItems: "center",
   justifyContent: "center",
-  stroke: "#6366f1",
-  fill: "#6366f1",
+
   textAlign: "center",
+
+  color: "#fff",
 };
 
-const title ={
-  marginBottom: 18,
-  fontSize: 20,
-  fontWeight: 800,
-  stroke: "#6366f1",
-  fill: "#6366f1"
+const title = {
+  marginBottom: 20,
+
+  fontSize: 22,
+
+  fontWeight: 900,
+
+  color: "#fff",
+
+  letterSpacing: 0.3,
 };
 
 const legend = {
