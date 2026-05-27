@@ -195,21 +195,33 @@ const overlay = {
 
 const modal = {
   width: "min(1180px, 94vw)",
+
   maxHeight: "88vh",
+
   position: "relative",
+
   overflow: "hidden",
+
   display: "flex",
+
   flexDirection: "column",
+
   borderRadius: 28,
+
   padding: 24,
-  color: "#0f172a",
+
+  color: "#fff",
+
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,252,0.82))",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid rgba(255,255,255,0.38)",
+    "linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92))",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
   boxShadow:
-    "0 35px 90px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.7)",
+    "0 35px 90px rgba(0,0,0,.45)",
+
+  backdropFilter: "blur(22px)",
 };
 
 const modalGlow = {
@@ -235,27 +247,34 @@ const header = {
 
 const titleStyle = {
   margin: 0,
-  fontSize: 22,
+  fontSize: 24,
   fontWeight: 900,
-  color: "#0f172a",
+  color: "#fff",
 };
 
 const subtitle = {
   marginTop: 6,
   fontSize: 13,
-  color: "#64748b",
-  fontWeight: 500,
+  color: "rgba(255,255,255,.58)",
 };
 
 const closeBtn = {
-  background: "rgba(15,23,42,0.06)",
+  background:
+    "rgba(255,255,255,.06)",
+
   border: "none",
-  color: "#0f172a",
+
+  color: "#fff",
+
   fontSize: 18,
+
   fontWeight: 800,
+
   cursor: "pointer",
-  width: 36,
-  height: 36,
+
+  width: 38,
+  height: 38,
+
   borderRadius: 999,
 };
 
@@ -270,31 +289,52 @@ const controls = {
 
 const input = {
   padding: "10px 12px",
+
   borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.28)",
-  background: "#fff",
-  color: "#0f172a",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "#fff",
+
   outline: "none",
-  boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)",
 };
 
 const actionBtn = {
   padding: "10px 16px",
+
   borderRadius: 14,
+
   border: "none",
+
   cursor: "pointer",
-  background: "linear-gradient(180deg, #0f172a, #111827)",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
   color: "#fff",
+
   fontWeight: 800,
-  boxShadow: "0 10px 24px rgba(15,23,42,0.16)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
 };
 
 const tableWrapper = {
   overflow: "auto",
+
   flex: 1,
+
   borderRadius: 18,
-  background: "rgba(255,255,255,0.64)",
-  border: "1px solid rgba(148,163,184,0.18)",
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
 
 const table = {

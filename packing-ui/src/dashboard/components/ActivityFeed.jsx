@@ -120,8 +120,7 @@ const wrapper = {
   display: "flex",
   flexDirection: "column",
   height: "100%",
-  background: "#ffffff",
-  color: "#0f172a"
+  color: "#fff",
 };
 
 const topBar = {
@@ -132,26 +131,37 @@ const topBar = {
 };
 
 const heading = {
-  fontSize: 20,
-  fontWeight: 800,
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#fff",
 };
 
 const subHeading = {
   fontSize: 12,
-  opacity: 0.75,
+  color: "rgba(255,255,255,.58)",
   marginTop: 4,
 };
 
 const countBadge = {
-  minWidth: 34,
-  height: 34,
+  minWidth: 36,
+  height: 36,
+
   borderRadius: 999,
+
   display: "flex",
+
   alignItems: "center",
+
   justifyContent: "center",
-  background: "rgba(255,255,255,0.15)",
-  fontWeight: 700,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  fontWeight: 800,
+
   fontSize: 13,
+
+  color: "#fff",
 };
 
 const feedArea = {
@@ -162,12 +172,23 @@ const feedArea = {
 
 const card = {
   display: "flex",
-  justifyContent: "space-between",
-  padding: "12px 14px",
-  borderRadius: 12,
-  marginBottom: 10,
-  background: "#f8fafc",
-  border: "1px solid #e5e7eb",
+
+  justifyContent:
+    "space-between",
+
+  padding: "14px 16px",
+
+  borderRadius: 18,
+
+  marginBottom: 12,
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(10px)",
 };
 
 const left = {
@@ -200,18 +221,32 @@ const right = {
 
 const userChip = {
   padding: "4px 10px",
-  borderRadius: 6,
-  background: "#eef2ff",
-  color: "#4f46e5",
+
+  borderRadius: 999,
+
+  background:
+    "rgba(59,130,246,.16)",
+
+  color: "#60a5fa",
+
   fontSize: 11,
-  fontWeight: 600,
+
+  fontWeight: 700,
 };
 
 const roleChip = {
   padding: "5px 10px",
+
   borderRadius: 999,
-  background: "rgba(0,0,0,0.35)",
+
+  background:
+    "rgba(255,255,255,.05)",
+
+  color: "rgba(255,255,255,.72)",
+
   fontSize: 10,
+
+  fontWeight: 700,
 };
 
 const pagination = {

@@ -10,8 +10,8 @@ function StatusDonutChart({ packed, dispatched, pending, darkMode = false }) {
   const pendingLen = (pending / total) * circumference;
 
   return (
-    <div style={card(darkMode)}>
-      <h3 style={title(darkMode)}>Warehouse Status</h3>
+    <div style={card}>
+      <h3 style={title}>Warehouse Status</h3>
 
       <svg width="200" height="200" viewBox="0 0 200 200">
         <g transform="rotate(-90 100 100)">
@@ -51,24 +51,24 @@ function StatusDonutChart({ packed, dispatched, pending, darkMode = false }) {
       </svg>
 
       <div style={legend}>
-        <Legend color="rgba(96,165,250,0.95)" label={`Packed (${packed})`} darkMode={darkMode} />
-        <Legend color="rgba(52,211,153,0.95)" label={`Dispatched (${dispatched})`} darkMode={darkMode} />
-        <Legend color="rgba(251,191,36,0.95)" label={`Pending (${pending})`} darkMode={darkMode} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Packed (${packed})`} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Dispatched (${dispatched})`} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Pending (${pending})`} />
       </div>
     </div>
   );
 }
 
-function Legend({ color, label, darkMode }) {
+function Legend({ color, label}) {
   return (
     <div style={legendItem}>
       <span style={{ ...dot, background: color }} />
-      <span style={{ color: darkMode ? "#334155" : "#475569" }}>{label}</span>
+      <span style={{ color: "rgba(255,255,255,.72)" }}>{label}</span>
     </div>
   );
 }
 
-const card = (darkMode) => ({
+const card = {
   width: "100%",
   height: "100%",
   display: "flex",
@@ -78,15 +78,15 @@ const card = (darkMode) => ({
   stroke: "#6366f1",
    fill: "#6366f1",
   textAlign: "center",
-});
+};
 
-const title = (darkMode) => ({
+const title = {
   marginBottom: 18,
   fontSize: 20,
   fontWeight: 800,
   stroke: "#6366f1",
      fill: "#6366f1",
-});
+};
 
 const legend = {
   marginTop: 12,

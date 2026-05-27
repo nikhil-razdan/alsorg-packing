@@ -38,11 +38,18 @@ function ReportTable({ rows = [], columns = [] }) {
 
 const wrap = {
   maxHeight: "55vh",
+
   overflow: "auto",
+
   marginTop: 12,
-  borderRadius: 16,
-  border: "1px solid rgba(148,163,184,0.18)",
-  background: "rgba(255,255,255,0.68)",
+
+  borderRadius: 18,
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "rgba(255,255,255,.03)",
 };
 
 const table = {
@@ -53,19 +60,31 @@ const table = {
 
 const th = {
   textAlign: "left",
+
   padding: "12px 12px",
-  borderBottom: "1px solid rgba(148,163,184,0.18)",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+
   fontWeight: 800,
-  background: "#f8fafc",
-  color: "#334155",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "#fff",
+
   position: "sticky",
+
   top: 0,
 };
 
 const td = {
   padding: "10px 12px",
-  borderBottom: "1px solid rgba(148,163,184,0.12)",
-  color: "#0f172a",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.04)",
+
+  color: "rgba(255,255,255,.82)",
 };
 
 const empty = {

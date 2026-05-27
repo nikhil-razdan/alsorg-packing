@@ -92,20 +92,29 @@ function ScheduledReports({ darkMode = false }) {
   );
 }
 
-const wrap = (darkMode) => ({
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-  padding: 16,
-  borderRadius: 18,
-});
+const wrap = {
+  background:
+    "rgba(15,23,42,.72)",
 
-const title = (darkMode) => ({
-  marginBottom: 10,
-  fontSize: 16,
-  fontWeight: 800,
-  color: darkMode ? "#f8fafc" : "#0f172a",
-});
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 18px 35px rgba(2,6,23,.32)",
+
+  padding: 18,
+
+  borderRadius: 22,
+
+  backdropFilter: "blur(18px)",
+};
+
+const title = {
+  marginBottom: 14,
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#fff",
+};
 
 const form = {
   display: "flex",
@@ -114,26 +123,38 @@ const form = {
   flexWrap: "wrap",
 };
 
-const input = (darkMode) => ({
-  padding: "8px 10px",
-  borderRadius: 10,
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.20)"
-    : "1px solid rgba(148,163,184,0.24)",
-  background: darkMode ? "rgba(15,23,42,0.9)" : "#fff",
-  color: darkMode ? "#fff" : "#0f172a",
-  outline: "none",
-});
+const input = {
+  padding: "10px 12px",
 
-const btn = (darkMode) => ({
-  padding: "8px 12px",
-  borderRadius: 10,
+  borderRadius: 12,
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "#fff",
+
+  outline: "none",
+};
+
+const btn = {
+  padding: "10px 14px",
+
+  borderRadius: 12,
+
   border: "none",
+
   cursor: "pointer",
-  background: darkMode ? "#e2e8f0" : "#0f172a",
-  color: darkMode ? "#0f172a" : "#fff",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
   fontWeight: 800,
-});
+};
 
 const list = {
   display: "flex",

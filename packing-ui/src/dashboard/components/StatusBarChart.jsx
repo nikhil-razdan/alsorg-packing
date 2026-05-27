@@ -4,8 +4,8 @@ function StatusBarChart({ packed, dispatched, pending, darkMode = false }) {
   const scaleH = (value) => (value / max) * 90;
 
   return (
-    <div style={card(darkMode)}>
-      <h3 style={title(darkMode)}>Inventory Status</h3>
+    <div style={card}>
+      <h3 style={title}>Inventory Status</h3>
 
       <svg width="220" height="160">
         <rect
@@ -40,29 +40,29 @@ function StatusBarChart({ packed, dispatched, pending, darkMode = false }) {
           y1="140"
           x2="190"
           y2="140"
-          stroke={darkMode ? "rgba(148,163,184,0.25)" : "rgba(148,163,184,0.35)"}
+          stroke= "rgba(148,163,184,0.25)"
         />
       </svg>
 
       <div style={legend}>
-        <Legend color="rgba(96,165,250,0.95)" label={`Packed (${packed})`} darkMode={darkMode} />
-        <Legend color="rgba(52,211,153,0.95)" label={`Dispatched (${dispatched})`} darkMode={darkMode} />
-        <Legend color="rgba(251,191,36,0.95)" label={`Pending (${pending})`} darkMode={darkMode} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Packed (${packed})`} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Dispatched (${dispatched})`} />
+        <Legend color= "rgba(255,255,255,.72)" label={`Pending (${pending})`} />
       </div>
     </div>
   );
 }
 
-function Legend({ color, label, darkMode }) {
+function Legend({ color, label }) {
   return (
     <div style={legendItem}>
       <span style={{ ...dot, background: color }} />
-      <span style={{ color: darkMode ? "#334155" : "#475569" }}>{label}</span>
+      <span style={{ color: "rgba(255,255,255,.72)" }}>{label}</span>
     </div>
   );
 }
 
-const card = (darkMode) => ({
+const card = {
   width: "100%",
   height: "100%",
   display: "flex",
@@ -72,15 +72,15 @@ const card = (darkMode) => ({
   stroke: "#6366f1",
   fill: "#6366f1",
   textAlign: "center",
-});
+};
 
-const title = (darkMode) => ({
+const title ={
   marginBottom: 18,
   fontSize: 20,
   fontWeight: 800,
   stroke: "#6366f1",
   fill: "#6366f1"
-});
+};
 
 const legend = {
   marginTop: 12,

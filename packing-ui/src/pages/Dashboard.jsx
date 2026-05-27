@@ -15,13 +15,13 @@ import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShif
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 import FleetOverview from "../dashboard/components/logistics/FleetOverview";
 
-function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
+function StatCard({ title, value, subtle, accent = "#60a5fa"}) {
   return (
-    <div style={statCard(darkMode, accent)}>
+    <div style={statCard(accent)}>
       <div style={cardAccent(accent)} />
-      <p style={statTitle(darkMode)}>{title}</p>
-      <h2 style={statValue(darkMode)}>{value}</h2>
-      {subtle && <div style={statSubtle(darkMode)}>{subtle}</div>}
+      <p style={statTitle}>{title}</p>
+      <h2 style={statValue}>{value}</h2>
+      {subtle && <div style={statSubtle}>{subtle}</div>}
     </div>
   );
 }
@@ -66,7 +66,6 @@ function DashboardPage() {
   const [chartType, setChartType] = useState("donut");
   const [activeReport, setActiveReport] = useState(null);
   const [mode, setMode] = useState("inventory");
-  const [darkMode, setDarkMode] = useState(false);
   
   const [shiftModal, setShiftModal] =
     useState(false);
@@ -125,14 +124,14 @@ function DashboardPage() {
   }, []);
 
   return (
-    <div style={page(mode, darkMode)}>
-      <div style={backgroundText(mode, darkMode)}>Alsorg</div>
+    <div style={page(mode)}>
+      <div style={backgroundText(mode)}>Alsorg</div>
 
       <div style={content}>
         <div style={heroRow}>
           <div>
-            <h2 style={heroTitle(mode, darkMode)}>Dashboard</h2>
-            <div style={heroSubtitle(mode, darkMode)}>
+            <h2 style={heroTitle(mode)}>Dashboard</h2>
+            <div style={heroSubtitle(mode)}>
               Inventory and logistics overview in one workspace
             </div>
           </div>
@@ -140,23 +139,16 @@ function DashboardPage() {
           <div style={heroActions}>
             <button
               onClick={() => setMode("inventory")}
-              style={modeBtn(mode === "inventory", darkMode)}
+              style={modeBtn(mode === "inventory")}
             >
               📦 Inventory
             </button>
 
             <button
               onClick={() => setMode("logistics")}
-              style={modeBtn(mode === "logistics", darkMode)}
+              style={modeBtn(mode === "logistics")}
             >
               🚚 Logistics
-            </button>
-
-            <button
-              onClick={() => setDarkMode((v) => !v)}
-              style={themeBtn(darkMode)}
-            >
-              {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
             </button>
           </div>
         </div>
@@ -165,25 +157,21 @@ function DashboardPage() {
           <>
             <div style={kpiGrid}>
               <StatCard
-                darkMode={darkMode}
                 accent="#60a5fa"
                 title="Total Items In Inventory"
                 value={Number(stats.totalItems || 0)}
               />
               <StatCard
-                darkMode={darkMode}
                 accent="#f472b6"
                 title="Stickers Generated"
                 value={Number(stats.stickersGenerated || 0)}
               />
               <StatCard
-                darkMode={darkMode}
                 accent="#34d399"
                 title="Packed Items"
                 value={Number(stats.packedItems || 0)}
               />
               <StatCard
-                darkMode={darkMode}
                 accent="#f59e0b"
                 title="Pending Items"
                 value={pending}
@@ -192,16 +180,16 @@ function DashboardPage() {
 
             <div style={reportHeaderRow}>
               <div>
-                <div style={sectionTitle(mode, darkMode)}>Reports Center</div>
-                <div style={sectionSubtitle(mode, darkMode)}>
+                <div style={sectionTitle}>Reports Center</div>
+                <div style={sectionSubtitle}>
                   View, export and analyze inventory reports
                 </div>
               </div>
 
-              <div style={reportToggleGroup(darkMode)}>
+              <div style={reportToggleGroup}>
                 <div
                   style={{
-                    ...reportSliderIndicator(darkMode),
+                    ...reportSliderIndicator,
                     transform: `translateX(${reportIndex * 118}px)`,
                   }}
                 />
@@ -209,12 +197,10 @@ function DashboardPage() {
                 <button
                   style={{
                     ...reportToggleBtn,
-                    color:
-                      activeReport === "packing"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
+					color:
+					  activeReport === "packing"
+					    ? "#fff"
+					    : "rgba(255,255,255,.72)",
                   }}
                   onClick={() => setActiveReport("packing")}
                 >
@@ -224,12 +210,10 @@ function DashboardPage() {
                 <button
                   style={{
                     ...reportToggleBtn,
-                    color:
-                      activeReport === "dispatch"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
+					color:
+					  activeReport === "dispatch"
+					    ? "#fff"
+					    : "rgba(255,255,255,.72)",
                   }}
                   onClick={() => setActiveReport("dispatch")}
                 >
@@ -239,12 +223,10 @@ function DashboardPage() {
                 <button
                   style={{
                     ...reportToggleBtn,
-                    color:
-                      activeReport === "combined"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
+					color:
+					  activeReport === "combined"
+					    ? "#fff"
+					    : "rgba(255,255,255,.72)",
                   }}
                   onClick={() => setActiveReport("combined")}
                 >
@@ -254,12 +236,10 @@ function DashboardPage() {
                 <button
                   style={{
                     ...reportToggleBtn,
-                    color:
-                      activeReport === "aging"
-                        ? "#111"
-                        : darkMode
-                        ? "#fff"
-                        : "#111827",
+					color:
+					  activeReport === "aging"
+					    ? "#fff"
+					    : "rgba(255,255,255,.72)",
                   }}
                   onClick={() => setActiveReport("aging")}
                 >
@@ -269,28 +249,28 @@ function DashboardPage() {
             </div>
 
             <div style={workspaceGrid}>
-              <div style={panelSurface(darkMode)}>
-                <div style={chartToggleWrap(darkMode)}>
+              <div style={panelSurface}>
+                <div style={chartToggleWrap}>
                   <div
                     style={{
-                      ...chartSlider(darkMode),
+                      ...chartSlider,
                       transform: `translateX(${chartIndex * 40}px)`,
                     }}
                   />
                   <button
-                    style={chartToggleBtn(darkMode)}
+                    style={chartToggleBtn}
                     onClick={() => setChartType("donut")}
                   >
                     <DonutIcon />
                   </button>
                   <button
-                    style={chartToggleBtn(darkMode)}
+                    style={chartToggleBtn}
                     onClick={() => setChartType("line")}
                   >
                     <LineIcon />
                   </button>
                   <button
-                    style={chartToggleBtn(darkMode)}
+                    style={chartToggleBtn}
                     onClick={() => setChartType("bar")}
                   >
                     <BarIcon />
@@ -300,7 +280,6 @@ function DashboardPage() {
                 <div style={panelBody}>
                   {chartType === "donut" && (
                     <StatusDonutChart
-                      darkMode={darkMode}
                       packed={stats.packedItems}
                       dispatched={stats.dispatchedItems}
                       pending={pending}
@@ -308,7 +287,6 @@ function DashboardPage() {
                   )}
                   {chartType === "line" && (
                     <StatusLineChart
-                      darkMode={darkMode}
                       packed={stats.packedItems}
                       dispatched={stats.dispatchedItems}
                       pending={pending}
@@ -316,7 +294,6 @@ function DashboardPage() {
                   )}
                   {chartType === "bar" && (
                     <StatusBarChart
-                      darkMode={darkMode}
                       packed={stats.packedItems}
                       dispatched={stats.dispatchedItems}
                       pending={pending}
@@ -325,15 +302,15 @@ function DashboardPage() {
                 </div>
               </div>
 
-              <div style={panelSurface(darkMode)}>
-                <ActivityFeed logs={activityLogs} darkMode={darkMode} />
+              <div style={panelSurface}>
+                <ActivityFeed logs={activityLogs}  />
               </div>
             </div>
 
             {localStorage.getItem("role") === "ADMIN" && (
-              <div style={adminPanel(darkMode)}>
-                <h3 style={adminPanelTitle(darkMode)}>Scheduled Reports</h3>
-                <ScheduledReports darkMode={darkMode} />
+              <div style={adminPanel}>
+                <h3 style={adminPanelTitle}>Scheduled Reports</h3>
+                <ScheduledReports />
               </div>
             )}
           </>
@@ -395,53 +372,58 @@ function DashboardPage() {
   );
 }
 
-const page = (mode, darkMode) => ({
+const page = {
   minHeight: "100vh",
   padding: 18,
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
 
-  background:
-    mode === "inventory"
-      ? darkMode
-        ? "linear-gradient(135deg, #0b1020 0%, #111827 45%, #0f172a 100%)"
-        : `
-          radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
-          radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
-          linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
-        `
-      : `
-          radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%),
-          radial-gradient(circle at bottom right, rgba(14,165,233,0.12), transparent 24%),
-          linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%)
-        `,
+  background: `
+    radial-gradient(circle at top left,
+    rgba(59,130,246,0.16),
+    transparent 22%),
+
+    radial-gradient(circle at bottom right,
+    rgba(14,165,233,0.12),
+    transparent 24%),
+
+    linear-gradient(
+      135deg,
+      #020617 0%,
+      #0f172a 45%,
+      #111827 100%
+    )
+  `,
 
   backgroundAttachment: "fixed",
-});
+};
 
-const backgroundText = (mode, darkMode) => ({
+const backgroundText = {
   position: "absolute",
-  fontSize: mode === "inventory" ? 150 : 130,
+  fontSize: 140,
   fontWeight: 900,
+
   background:
-    mode === "inventory"
-      ? darkMode
-        ? "linear-gradient(180deg, rgba(96,165,250,0.12), rgba(96,165,250,0.03))"
-        : "linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.05))"
-      : darkMode
-      ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
-      : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
+    "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03))",
+
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
+
   top: "50%",
   left: "50%",
-  transform: "translate(-50%, -50%)",
+
+  transform:
+    "translate(-50%, -50%)",
+
   pointerEvents: "none",
+
   letterSpacing: 8,
+
   filter: "blur(1px)",
+
   opacity: 0.55,
-});
+};
 
 const emptyLogistics = {
   totalTrips: 0,
@@ -478,33 +460,19 @@ const heroRow = {
   marginBottom: 4,
 };
 
-const heroTitle = (mode, darkMode) => ({
+const heroTitle = {
   margin: 0,
-  fontSize: 28,
-  fontWeight: 800,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "#e2e8f0"
-        : "#0f172a"
-      : darkMode
-      ? "#FFD700"
-      : "#fff",
-  letterSpacing: 0.2,
-});
+  fontSize: 34,
+  fontWeight: 900,
+  color: "#fff",
+  letterSpacing: 0.3,
+};
 
-const heroSubtitle = (mode, darkMode) => ({
+const heroSubtitle = {
   marginTop: 6,
-  fontSize: 13,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "rgba(226,232,240,0.72)"
-        : "#475569"
-      : darkMode
-      ? "rgba(255,255,255,0.72)"
-      : "rgba(255,255,255,0.88)",
-});
+  fontSize: 14,
+  color: "rgba(255,255,255,.72)",
+};
 
 const heroActions = {
   display: "flex",
@@ -513,42 +481,31 @@ const heroActions = {
   flexWrap: "wrap",
 };
 
-const modeBtn = (active, darkMode) => ({
-  padding: "8px 16px",
-  borderRadius: 999,
-  border: darkMode
-    ? "1px solid rgba(255,255,255,0.12)"
-    : "1px solid rgba(96,165,250,0.22)",
-  cursor: "pointer",
-  background: active
-    ? darkMode
-      ? "linear-gradient(180deg, #e2e8f0, #cbd5e1)"
-      : "linear-gradient(180deg, #ffffff, #e2e8f0)"
-    : darkMode
-    ? "rgba(15,23,42,0.9)"
-    : "rgba(255,255,255,0.75)",
-  color: active ? "#0f172a" : darkMode ? "#fff" : "#0f172a",
-  fontWeight: 700,
-  boxShadow: darkMode
-    ? "0 8px 20px rgba(0,0,0,0.22)"
-    : "0 8px 20px rgba(15,23,42,0.08)",
-});
+const modeBtn = (active) => ({
+  height: 46,
+  padding: "0 18px",
 
-const themeBtn = (darkMode) => ({
-  padding: "8px 16px",
   borderRadius: 999,
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.28)"
-    : "1px solid rgba(96,165,250,0.20)",
+
+  border: active
+    ? "1px solid rgba(59,130,246,.4)"
+    : "1px solid rgba(255,255,255,.06)",
+
   cursor: "pointer",
-  background: darkMode
-    ? "linear-gradient(135deg, #111, #222)"
-    : "linear-gradient(180deg, #ffffff, #dbeafe)",
-  color: darkMode ? "#FFD700" : "#0f172a",
+
+  background: active
+    ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+    : "rgba(15,23,42,.78)",
+
+  color: "#fff",
+
   fontWeight: 800,
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 8px 20px rgba(15,23,42,0.10)",
+
+  boxShadow: active
+    ? "0 12px 28px rgba(37,99,235,.35)"
+    : "none",
+
+  transition: "all .25s ease",
 });
 
 const kpiGrid = {
@@ -564,23 +521,29 @@ const workspaceGrid = {
   alignItems: "stretch",
 };
 
-const panelSurface = (darkMode) => ({
+const panelSurface = {
   display: "flex",
   flexDirection: "column",
+
   minHeight: 300,
+
   padding: 18,
+
   borderRadius: 24,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.90))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.94), rgba(248,250,252,0.95))",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.18)"
-    : "1px solid rgba(148,163,184,0.18)",
-  boxShadow: darkMode
-    ? "0 18px 40px rgba(2,6,23,0.28)"
-    : "0 18px 40px rgba(15,23,42,0.10)",
+
+  background:
+    "rgba(15,23,42,.78)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 18px 40px rgba(2,6,23,.34)",
+
   overflow: "hidden",
-});
+
+  backdropFilter: "blur(18px)",
+};
 
 const panelBody = {
   flex: 1,
@@ -588,45 +551,66 @@ const panelBody = {
   marginTop: 8,
 };
 
-const chartToggleWrap = (darkMode) => ({
+const chartToggleWrap = {
   position: "relative",
-  display: "inline-flex",
-  gap: 8,
-  padding: 5,
-  borderRadius: 999,
-  background: darkMode ? "rgba(15,23,42,0.9)" : "rgba(219,234,254,0.75)",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.14)"
-    : "1px solid rgba(148,163,184,0.15)",
-  width: "fit-content",
-});
 
-const chartToggleBtn = (darkMode) => ({
+  display: "inline-flex",
+
+  gap: 8,
+
+  padding: 5,
+
+  borderRadius: 999,
+
+  background:
+    "rgba(15,23,42,.92)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  width: "fit-content",
+};
+
+const chartToggleBtn = {
   width: 32,
   height: 32,
-  borderRadius: "50%",
-  border: "none",
-  background: "transparent",
-  color: darkMode ? "#fff" : "#0f172a",
-  cursor: "pointer",
-  zIndex: 1,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-});
 
-const chartSlider = (darkMode) => ({
+  borderRadius: "50%",
+
+  border: "none",
+
+  background: "transparent",
+
+  color: "#fff",
+
+  cursor: "pointer",
+
+  zIndex: 1,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "center",
+};
+
+const chartSlider = {
   position: "absolute",
+
   top: 5,
   left: 5,
+
   width: 32,
   height: 32,
+
   borderRadius: "50%",
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(219,234,254,0.75))",
-  transition: "transform 0.35s cubic-bezier(.4,0,.2,1)",
-});
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  transition:
+    "transform .35s cubic-bezier(.4,0,.2,1)",
+};
 
 const reportHeaderRow = {
   marginBottom: 14,
@@ -637,47 +621,37 @@ const reportHeaderRow = {
   flexWrap: "wrap",
 };
 
-const sectionTitle = (mode, darkMode) => ({
-  fontSize: 22,
-  fontWeight: 800,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "#e2e8f0"
-        : "#0f172a"
-      : darkMode
-      ? "#FFD700"
-      : "#fff",
-});
+const sectionTitle = {
+  fontSize: 24,
+  fontWeight: 900,
+  color: "#fff",
+};
 
-const sectionSubtitle = (mode, darkMode) => ({
+const sectionSubtitle = {
   fontSize: 13,
   marginTop: 4,
-  color:
-    mode === "inventory"
-      ? darkMode
-        ? "rgba(226,232,240,0.72)"
-        : "#64748b"
-      : darkMode
-      ? "rgba(255,255,255,0.72)"
-      : "rgba(255,255,255,0.88)",
-});
+  color: "rgba(255,255,255,.62)",
+};
 
-const reportToggleGroup = (darkMode) => ({
+const reportToggleGroup = {
   position: "relative",
+
   display: "inline-flex",
+
   gap: 8,
+
   padding: 5,
+
   borderRadius: 999,
-  background: darkMode ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.78)",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.14)"
-    : "1px solid rgba(148,163,184,0.15)",
+
+  background:
+    "rgba(15,23,42,.92)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
   overflow: "hidden",
-  boxShadow: darkMode
-    ? "0 12px 30px rgba(2,6,23,0.22)"
-    : "0 12px 30px rgba(15,23,42,0.08)",
-});
+};
 
 const reportToggleBtn = {
   width: 110,
@@ -691,18 +665,23 @@ const reportToggleBtn = {
   zIndex: 1,
 };
 
-const reportSliderIndicator = (darkMode) => ({
+const reportSliderIndicator = {
   position: "absolute",
+
   top: 5,
   left: 5,
+
   width: 110,
   height: 32,
+
   borderRadius: 999,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,255,255,0.80), rgba(255,255,255,0.45))"
-    : "linear-gradient(180deg, #e2e8f0, #cbd5e1)",
-  transition: "transform 0.35s cubic-bezier(.4,0,.2,1)",
-});
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  transition:
+    "transform .35s cubic-bezier(.4,0,.2,1)",
+};
 
 const statCard = (darkMode, accent) => ({
   position: "relative",
@@ -754,26 +733,30 @@ const statSubtle = (darkMode) => ({
   color: darkMode ? "#94a3b8" : "#64748b",
 });
 
-const adminPanel = (darkMode) => ({
+const adminPanel = {
   marginTop: 2,
-  borderRadius: 24,
-  padding: 18,
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.88))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))",
-  border: darkMode
-    ? "1px solid rgba(148,163,184,0.16)"
-    : "1px solid rgba(148,163,184,0.18)",
-  boxShadow: darkMode
-    ? "0 18px 35px rgba(2,6,23,0.24)"
-    : "0 18px 35px rgba(15,23,42,0.08)",
-});
 
-const adminPanelTitle = (darkMode) => ({
-  color: darkMode ? "#f8fafc" : "#0f172a",
+  borderRadius: 24,
+
+  padding: 18,
+
+  background:
+    "rgba(15,23,42,.78)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 18px 35px rgba(2,6,23,.32)",
+
+  backdropFilter: "blur(18px)",
+};
+
+const adminPanelTitle = {
+  color: "#fff",
   marginBottom: 12,
   fontSize: 16,
   fontWeight: 800,
-});
+};
 
 export default DashboardPage;
