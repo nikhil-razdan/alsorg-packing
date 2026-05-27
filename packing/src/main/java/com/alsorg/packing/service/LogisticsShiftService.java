@@ -2,6 +2,8 @@ package com.alsorg.packing.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -124,6 +126,22 @@ public class LogisticsShiftService {
         return shiftRepository.save(shift);
     }
 
+    public List<LogisticsShift> getAllShifts() {
+
+        return shiftRepository.findAll();
+    }
+    
+    public void deleteShift(UUID id) {
+
+        LogisticsShift shift =
+                shiftRepository.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Shift not found"
+                                ));
+
+        shiftRepository.delete(shift);
+    }
     /*
     ========================================
     PERFORMANCE ENGINE

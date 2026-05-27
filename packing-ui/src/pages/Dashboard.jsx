@@ -13,6 +13,7 @@ import {
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/LogisticsShiftModal";
 import LogisticsDashboard from "../dashboard/components/LogisticsDashboard";
+import FleetOverview from "../dashboard/components/FleetOverview";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
   return (

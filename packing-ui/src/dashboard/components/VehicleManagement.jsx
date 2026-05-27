@@ -1,22 +1,33 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  fetchVehicles,
+} from "../api/logisticsApi";
+
+import CreateVehicleModal from "./logistics/modals/CreateVehicleModal";
 
 function VehicleManagement() {
-  const [vehicles] = useState([
-    {
-      id: 1,
-      number: "HR55AB1234",
-      type: "Truck",
-      status: "ACTIVE",
-      fuel: "78%",
-    },
-    {
-      id: 2,
-      number: "DL01XY8899",
-      type: "Mini Truck",
-      status: "MAINTENANCE",
-      fuel: "41%",
-    },
-  ]);
+	const [vehicles, setVehicles] =
+	  useState([]);
+
+	const [open, setOpen] =
+	  useState(false);
+
+	useEffect(() => {
+	  const loadVehicles = async () => {
+	    try {
+	      const data = await fetchVehicles();
+	      setVehicles(data || []);
+	    } catch (e) {
+	      console.error(e);
+	    }
+	  };
+
+	  loadVehicles();
+	}, []);
 
   return (
     <div style={wrap}>
@@ -31,9 +42,14 @@ function VehicleManagement() {
           </div>
         </div>
 
-        <button style={button}>
-          + Add Vehicle
-        </button>
+		<button
+		  style={button}
+		  onClick={() =>
+		    setOpen(true)
+		  }
+		>
+		  + Add Vehicle
+		</button>
       </div>
 
       <div style={table}>
@@ -49,13 +65,27 @@ function VehicleManagement() {
             key={v.id}
             style={tableRow}
           >
-            <div>{v.number}</div>
-            <div>{v.type}</div>
+            <div>{v.vehicleNumber}</div>
+            <div>{v.vehicleType}</div>
             <div>{v.status}</div>
             <div>{v.fuel}</div>
           </div>
         ))}
       </div>
+	  <CreateVehicleModal
+	    open={open}
+	    onClose={() =>
+	      setOpen(false)
+	    }
+		onCreated={async () => {
+		  try {
+		    const data = await fetchVehicles();
+		    setVehicles(data || []);
+		  } catch (e) {
+		    console.error(e);
+		  }
+		}}
+	  />
     </div>
   );
 }

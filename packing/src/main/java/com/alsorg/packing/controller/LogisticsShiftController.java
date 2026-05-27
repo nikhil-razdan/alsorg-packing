@@ -1,5 +1,8 @@
 package com.alsorg.packing.controller;
 
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.web.bind.annotation.*;
 
 import com.alsorg.packing.domain.logistics.LogisticsShift;
@@ -24,5 +27,18 @@ public class LogisticsShiftController {
             @RequestBody CreateShiftRequest request
     ) {
         return service.createShift(request);
+    }
+    
+    @GetMapping
+    public List<LogisticsShift> getAll() {
+
+        return service.getAllShifts();
+    }
+    
+    @DeleteMapping("/{id}")
+    public void deleteShift(
+            @PathVariable UUID id
+    ) {
+        service.deleteShift(id);
     }
 }

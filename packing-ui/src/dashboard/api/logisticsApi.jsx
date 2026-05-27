@@ -6,7 +6,7 @@ const authHeaders = () => ({
 
 export async function fetchDrivers() {
   const res = await fetch(
-    `${API_BASE_URL}/api/logistics/master/drivers`,
+    `${API_BASE_URL}/api/logistics/drivers`,
     {
       headers: authHeaders(),
     }
@@ -21,7 +21,7 @@ export async function fetchDrivers() {
 
 export async function fetchVehicles() {
   const res = await fetch(
-    `${API_BASE_URL}/api/logistics/master/vehicles`,
+    `${API_BASE_URL}/api/logistics/vehicles`,
     {
       headers: authHeaders(),
     }
@@ -68,9 +68,58 @@ export async function createShift(
   );
 
   if (!res.ok) {
-    throw new Error(
-      "Failed create shift"
-    );
+    const text =
+      await res.text();
+
+    throw new Error(text);
+  }
+
+  return res.json();
+}
+
+export async function deleteShift(
+  id
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/shifts/${id}`,
+    {
+      method: "DELETE",
+
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text =
+      await res.text();
+
+    throw new Error(text);
+  }
+}
+
+export async function createVehicle(
+  payload
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles`,
+    {
+      method: "POST",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text =
+      await res.text();
+
+    throw new Error(text);
   }
 
   return res.json();

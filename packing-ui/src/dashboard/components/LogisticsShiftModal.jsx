@@ -9,6 +9,7 @@ import {
   createShift,
 } from "../api/logisticsApi";
 
+
 function LogisticsShiftModal({
   open,
   onClose,
@@ -59,7 +60,17 @@ function LogisticsShiftModal({
     try {
       setSaving(true);
 
-      await createShift(form);
+	  const payload = {
+	    ...form,
+
+	    shiftStart:
+	      form.shiftStart + ":00",
+
+	    shiftEnd:
+	      form.shiftEnd + ":00",
+	  };
+
+	  await createShift(payload);
 
       alert(
         "Shift created successfully"
@@ -70,12 +81,16 @@ function LogisticsShiftModal({
       onClose();
 
     } catch (e) {
-      console.error(e);
+	    console.error(e);
 
-      alert(
-        "Failed to create shift"
-      );
-    } finally {
+	    const message =
+	      e?.message ||
+	      "Unknown error";
+
+	    alert(
+	      `Failed to create shift: ${message}`
+	    );
+	  } finally {
       setSaving(false);
     }
   };
