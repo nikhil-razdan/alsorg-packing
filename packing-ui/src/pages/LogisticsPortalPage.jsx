@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import ShiftOperations from "../dashboard/components/ShiftOperations";
-import DriverManagement from "../dashboard/components/DriverManagement";
-import VehicleManagement from "../dashboard/components/VehicleManagement";
-import ShiftHistory from "../dashboard/components/ShiftHistory";
+import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
+import DriverManagement from "../dashboard/components/logistics/DriverManagement";
+import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
+import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
 
 function LogisticsPortalPage() {
   const [tab, setTab] =

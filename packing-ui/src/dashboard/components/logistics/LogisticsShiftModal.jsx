@@ -42,9 +42,36 @@ function LogisticsShiftModal({
   useEffect(() => {
     if (!open) return;
 
-    fetchDrivers().then(setDrivers);
+    const loadData = async () => {
+      try {
+        const driversData =
+          await fetchDrivers();
 
-    fetchVehicles().then(setVehicles);
+        setDrivers(
+          Array.isArray(driversData)
+            ? driversData
+            : []
+        );
+
+        const vehiclesData =
+          await fetchVehicles();
+
+        setVehicles(
+          Array.isArray(vehiclesData)
+            ? vehiclesData
+            : []
+        );
+
+      } catch (e) {
+        console.error(
+          "Modal load failed",
+          e
+        );
+      }
+    };
+
+    loadData();
+
   }, [open]);
 
   if (!open) return null;

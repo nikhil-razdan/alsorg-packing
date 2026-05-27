@@ -11,9 +11,9 @@ import {
   fetchLogisticsStats,
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
-import LogisticsShiftModal from "../dashboard/components/LogisticsShiftModal";
+import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShiftModal";
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
-import FleetOverview from "../dashboard/components/FleetOverview";
+import FleetOverview from "../dashboard/components/logistics/FleetOverview";
 
 function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
   return (
