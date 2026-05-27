@@ -12,6 +12,7 @@ import {
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/LogisticsShiftModal";
+import LogisticsDashboard from "../dashboard/components/LogisticsDashboard";\
 
 function StatCard({ title, value, subtle, accent = "#60a5fa", darkMode }) {
   return (
@@ -338,105 +339,12 @@ function DashboardPage() {
         )}
 
 		{mode === "logistics" && logistics && (
-		  <>
-		    <div style={logisticsHero}>
-		     
-		      <div style={logisticsFilters}>
-			  <button
-			    style={createShiftBtn}
-			    onClick={() =>
-			      setShiftModal(true)
-			    }
-			  >
-			    + Create Shift
-			  </button>
-		        <input
-		          type="date"
-		          style={logisticsInput}
-		        />
-
-		        <select style={logisticsInput}>
-		          <option>All Drivers</option>
-		        </select>
-
-		        <select style={logisticsInput}>
-		          <option>All Vehicles</option>
-		        </select>
-		      </div>
-		    </div>
-
-		    <div style={logisticsKpiGrid}>
-		      <StatCard
-		        darkMode={true}
-		        accent="#3b82f6"
-		        title="Working Trips"
-		        value={logistics.totalTrips}
-		        subtle="Trips Completed"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#22c55e"
-		        title="Total Loaders"
-		        value={logistics.totalLoaders}
-		        subtle="Loaders Utilized"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#f59e0b"
-		        title="Fleet Efficiency"
-		        value={`${Number(
-		          logistics.efficiency || 0
-		        ).toFixed(1)}%`}
-		        subtle="Loaders / Trip"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#8b5cf6"
-		        title="Active Drivers"
-		        value={logistics.activeDrivers}
-		        subtle="Drivers Available"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#ec4899"
-		        title="Active Vehicles"
-		        value={logistics.activeVehicles}
-		        subtle="Fleet Running"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#06b6d4"
-		        title="Trips / Driver"
-		        value={Number(
-		          logistics.averageTripsPerDriver || 0
-		        ).toFixed(1)}
-		        subtle="Average Productivity"
-		      />
-
-		      <StatCard
-		        darkMode={true}
-		        accent="#f97316"
-		        title="Trips / Vehicle"
-		        value={Number(
-		          logistics.averageTripsPerVehicle || 0
-		        ).toFixed(1)}
-		        subtle="Fleet Utilization"
-		      />
-		    </div>
-
-		    <div style={logisticsMainGrid}>
-		      <div style={logisticsMainPanel}>
-		        <AnalyticsGrid
-		          data={logistics}
-		        />
-		      </div>
-		    </div>
-		  </>
+		  <LogisticsDashboard
+		    logistics={logistics}
+		    setShiftModal={setShiftModal}
+		    StatCard={StatCard}
+		    AnalyticsGrid={AnalyticsGrid}
+		  />
 		)}
 
         <ReportViewerModal
