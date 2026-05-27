@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import {
   createVehicle,
-} from "../../api/logisticsApi";
+} from "../../../api/logisticsApi";
 
 function CreateVehicleModal({
   open,
