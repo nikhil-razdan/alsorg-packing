@@ -73,28 +73,49 @@ function Sidebar() {
       link.roles.includes(role)
     );
 	
-  const linkStyle = (active) => ({
-    display: "flex",
-    alignItems: "center",
-    gap: collapsed ? 0 : 12,
-    padding: "12px 16px",
-    marginBottom: 10,
-    borderRadius: 14,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: 14,
-    color: active ? "#111827" : "rgba(255,255,255,0.9)",
-    background: active
-      ? "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82))"
-      : "rgba(255,255,255,0.06)",
-    boxShadow: active
-      ? "inset 0 1px 0 rgba(255,255,255,0.65)"
-      : "inset 0 1px 0 rgba(255,255,255,0.08)",
-    backdropFilter: "blur(10px)",
-    WebkitBackdropFilter: "blur(10px)",
-    transition: "background 0.25s ease, color 0.25s ease",
-    justifyContent: collapsed ? "center" : "flex-start",
-  });
+
+	const linkStyle = (active) => ({
+	  display: "flex",
+
+	  alignItems: "center",
+
+	  gap: collapsed ? 0 : 14,
+
+	  padding: "14px 16px",
+
+	  marginBottom: 8,
+
+	  borderRadius: 18,
+
+	  textDecoration: "none",
+
+	  fontWeight: 700,
+
+	  fontSize: 14,
+
+	  color: active
+	    ? "#fff"
+	    : "rgba(255,255,255,.72)",
+
+	  background: active
+	    ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+	    : "transparent",
+
+	  border: active
+	    ? "1px solid rgba(59,130,246,.35)"
+	    : "1px solid transparent",
+
+	  boxShadow: active
+	    ? "0 10px 24px rgba(37,99,235,.22)"
+	    : "none",
+
+	  transition: "all .22s ease",
+
+	  justifyContent:
+	    collapsed
+	      ? "center"
+	      : "flex-start",
+	});
 
   return (
     <div
@@ -113,6 +134,24 @@ function Sidebar() {
       >
         {collapsed ? "›" : "‹"}
       </button>
+	  
+	  <div style={logoSection}>
+	    <div style={logoIcon}>
+	      A
+	    </div>
+
+	    {!collapsed && (
+	      <div>
+	        <div style={logoTitle}>
+	          ALSORG ERP
+	        </div>
+
+	        <div style={logoSub}>
+	          Enterprise Suite
+	        </div>
+	      </div>
+	    )}
+	  </div>
 
       {!collapsed && <h4 style={menuTitle}>Menu</h4>}
 
@@ -136,20 +175,32 @@ function Sidebar() {
 /* ===================== STYLES ===================== */
 
 const sidebar = {
+  width: 260,
+
   height: "100vh",
-  padding: "26px 12px",
+
+  padding: "22px 14px",
+
   boxSizing: "border-box",
+
   display: "flex",
+
   flexDirection: "column",
+
   position: "relative",
+
   background:
-    "linear-gradient(180deg, rgba(31,41,55,0.9), rgba(17,24,39,0.9))",
-  backdropFilter: "blur(18px)",
-  WebkitBackdropFilter: "blur(18px)",
+    "linear-gradient(180deg,#071120 0%,#0a162b 100%)",
+
+  borderRight:
+    "1px solid rgba(255,255,255,.06)",
+
   boxShadow:
-    "6px 0 28px rgba(0,0,0,0.45), inset -1px 0 0 rgba(255,255,255,0.08)",
+    "8px 0 30px rgba(2,6,23,.45)",
+
   overflow: "hidden",
-  transition: "width 0.3s ease",
+
+  transition: "width .25s ease",
 };
 
 const topHighlight = {
@@ -165,18 +216,27 @@ const topHighlight = {
 
 const toggleButton = {
   position: "absolute",
-  top: 8,
-  right: 4,
-  width: 22,
-  height: 22,
-  borderRadius: "50%",
+
+  top: 18,
+
+  right: 12,
+
+  width: 28,
+
+  height: 28,
+
+  borderRadius: 10,
+
   border: "none",
+
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.75))",
-  boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
+    "rgba(255,255,255,.06)",
+
+  color: "#fff",
+
   cursor: "pointer",
+
   fontWeight: 700,
-  color: "#111827",
 };
 
 const menuTitle = {
@@ -199,6 +259,62 @@ const divider = {
   background:
     "linear-gradient(90deg, rgba(255,255,255,0.14), transparent)",
   marginTop: 24,
+};
+
+const logoSection = {
+  display: "flex",
+
+  alignItems: "center",
+
+  gap: 14,
+
+  marginBottom: 32,
+
+  paddingLeft: 4,
+};
+
+const logoIcon = {
+  width: 42,
+
+  height: 42,
+
+  borderRadius: 14,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "center",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
+  fontWeight: 900,
+
+  fontSize: 18,
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
+};
+
+const logoTitle = {
+  color: "#fff",
+
+  fontWeight: 900,
+
+  fontSize: 15,
+
+  letterSpacing: 1,
+};
+
+const logoSub = {
+  color: "rgba(255,255,255,.45)",
+
+  fontSize: 11,
+
+  marginTop: 2,
 };
 
 export default Sidebar;
