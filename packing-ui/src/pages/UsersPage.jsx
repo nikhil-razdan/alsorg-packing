@@ -47,7 +47,6 @@ function UsersPage() {
   const [snackType,setSnackType] = useState("success");
   const [deleteOpen,setDeleteOpen] = useState(false);
   const [deleteUserId,setDeleteUserId] = useState(null);
-  const [darkMode,setDarkMode] = useState(false);
   const [createOpen,setCreateOpen] = useState(false);
 
   useEffect(() => {
@@ -70,18 +69,49 @@ function UsersPage() {
   }, []);
 
   const createUser = async () => {
-    try{
-      await API.post("/users",{username,password,role});
+
+    try {
+
+      await API.post("/users",{
+        username,
+        password,
+        role
+      });
+
       setUsername("");
       setPassword("");
-	  const res = await API.get("/users");
-	  setUsers(res.data.map(u => ({...u,id:u.id})));
-    }  catch{
-    setSnackMsg("User creation failed");
-    setSnackType("error");
-    setSnackOpen(true);
-	setCreateOpen(false);
-  }
+
+      const res = await API.get("/users");
+
+      setUsers(
+        res.data.map(u => ({
+          ...u,
+          id:u.id
+        }))
+      );
+
+      setCreateOpen(false);
+
+      setSnackMsg(
+        "User created successfully"
+      );
+
+      setSnackType("success");
+
+      setSnackOpen(true);
+
+    } catch {
+
+      setSnackMsg(
+        "User creation failed"
+      );
+
+      setSnackType("error");
+
+      setSnackOpen(true);
+
+      setCreateOpen(false);
+    }
   };
 
   const startEdit = (u)=>{
@@ -153,20 +183,40 @@ function UsersPage() {
 
   const resetPassword = async ()=>{
 
-    try{
+    try {
 
-      await API.put(`/users/${resetUser.id}/password`,{
-        password:newPassword
-      });
+      await API.put(
+        `/users/${resetUser.id}/password`,
+        {
+          password:newPassword
+        }
+      );
 
       setResetOpen(false);
 
-    }	  catch(err){
-	    console.error("Password reset failed:", err);
-		setSnackMsg("Password reset failed");
-		setSnackType("error");
-		setSnackOpen(true);
-	  }
+      setSnackMsg(
+        "Password reset successful"
+      );
+
+      setSnackType("success");
+
+      setSnackOpen(true);
+
+    } catch(err) {
+
+      console.error(
+        "Password reset failed:",
+        err
+      );
+
+      setSnackMsg(
+        "Password reset failed"
+      );
+
+      setSnackType("error");
+
+      setSnackOpen(true);
+    }
   };
 
   const filteredRows = useMemo(()=>{
@@ -225,7 +275,10 @@ function UsersPage() {
 
 	  renderHeader: () => (
 	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      👤 <span>Username</span>
+		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
+		  <AdminPanelSettingsIcon sx={{ fontSize:18 }} />
+		  <span>Username</span>
+		</Box>
 	    </Box>
 	  ),
 
@@ -244,39 +297,34 @@ function UsersPage() {
 			    "& .MuiInputBase-root": {
 			      borderRadius: "14px",
 
-			      background: darkMode
-			        ? "rgba(255,255,255,0.04)"
-			        : "#fff",
+				  background:
+				    "rgba(255,255,255,.04)",
 
-			      color: darkMode ? "#fff" : "#111",
+				  color:"#fff",
 
-			      border: darkMode
-			        ? "1px solid rgba(255,215,0,0.08)"
-			        : "1px solid rgba(0,0,0,0.08)",
+			      border:  "1px solid rgba(0,0,0,0.08)",
 			    },
 
 			    "& input": {
-			      color: darkMode ? "#fff" : "#111",
+			      color:  "#fff",
 			    },
 
 			    "& input::placeholder": {
-			      color: darkMode
-			        ? "rgba(255,255,255,0.4)"
+			      color
 			        : "rgba(0,0,0,0.4)",
 			      opacity: 1,
 			    },
 
 			    "& .MuiSvgIcon-root": {
-			      color: darkMode ? "#FFD700" : "#111",
+			      color: "#111",
 			    },
 
 			    "& .MuiSelect-select": {
-			      color: darkMode ? "#fff" : "#111",
+			      color:"#fff" ,
 			    },
 
 			    "& label": {
-			      color: darkMode
-			        ? "rgba(255,255,255,0.65)"
+			      color
 			        : "#475569",
 			    },
 			  }}
@@ -322,7 +370,10 @@ function UsersPage() {
 
 	  renderHeader: () => (
 	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      🛡️ <span>Role</span>
+		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
+		  <InventoryIcon sx={{ fontSize:18 }} />
+		  <span>Role</span>
+		</Box>
 	    </Box>
 	  ),
 
@@ -342,39 +393,34 @@ function UsersPage() {
 			    "& .MuiInputBase-root": {
 			      borderRadius: "14px",
 
-			      background: darkMode
-			        ? "rgba(255,255,255,0.04)"
-			        : "#fff",
+				  background:
+				    "rgba(255,255,255,.04)",
 
-			      color: darkMode ? "#fff" : "#111",
+				  color:"#fff",
 
-			      border: darkMode
-			        ? "1px solid rgba(255,215,0,0.08)"
+			      border
 			        : "1px solid rgba(0,0,0,0.08)",
 			    },
 
 			    "& input": {
-			      color: darkMode ? "#fff" : "#111",
+			      color: "#fff",
 			    },
 
 			    "& input::placeholder": {
-			      color: darkMode
-			        ? "rgba(255,255,255,0.4)"
-			        : "rgba(0,0,0,0.4)",
+			      color:  "rgba(0,0,0,0.4)",
 			      opacity: 1,
 			    },
 
 			    "& .MuiSvgIcon-root": {
-			      color: darkMode ? "#FFD700" : "#111",
+			      color: "#111",
 			    },
 
 			    "& .MuiSelect-select": {
-			      color: darkMode ? "#fff" : "#111",
+			      color: "#fff" ,
 			    },
 
 			    "& label": {
-			      color: darkMode
-			        ? "rgba(255,255,255,0.65)"
+			      color
 			        : "#475569",
 			    },
 			  }}
@@ -411,7 +457,12 @@ function UsersPage() {
 
 	  renderHeader: () => (
 	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      ⚡ <span style={{ fontWeight: 700 }}>Action</span>
+		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
+		  <EditIcon sx={{ fontSize:18 }} />
+		  <span style={{ fontWeight:700 }}>
+		    Actions
+		  </span>
+		</Box>
 	    </Box>
 	  ),
 
@@ -471,244 +522,65 @@ function UsersPage() {
 
   return(
 
-  <div style={page(darkMode)}>
+  <div style={page}>
+  <div style={headerRow}>
+    <div>
+      <div style={logo}>
+        👥 User Management
+      </div>
 
-    <div style={backgroundText(darkMode)}>Alsorg</div>
+      <div style={subtitle}>
+        Manage roles, permissions and
+        enterprise access control
+      </div>
+    </div>
 
+    <Button
+      onClick={() => setCreateOpen(true)}
+      sx={createBtn}
+    >
+      + Create User
+    </Button>
+  </div>
     <div style={content}>
 
-	<Box
-	  sx={{
-	    display: "flex",
-	    alignItems: "center",
-	    justifyContent: "space-between",
-	    mb: 2,
-	  }}
-	>
-	  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-
-	    <Box
-	      sx={{
-	        width: 52,
-	        height: 52,
-	        borderRadius: 3,
-	        background: "linear-gradient(135deg,#facc15,#f59e0b)",
-	        display: "flex",
-	        alignItems: "center",
-	        justifyContent: "center",
-	        boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
-	        fontSize: 22,
-	      }}
-	    >
-	      👥
-	    </Box>
-
-	    <Box>
-		<div
-		  style={{
-		    fontSize: 28,
-		    fontWeight: 700,
-
-		    color: darkMode
-		      ? "#FFD700"
-		      : "#ffffff",
-
-		    letterSpacing: 0.4,
-
-		    textShadow: darkMode
-		      ? "0 0 18px rgba(255,215,0,0.25)"
-		      : "0 3px 10px rgba(0,0,0,0.25)",
-		  }}
-		>
-		  User Management
-		</div>
-
-		<div
-		  style={{
-		    fontSize: 13,
-
-		    color: darkMode
-		      ? "rgba(255,215,0,0.78)"
-		      : "rgba(255,255,255,0.85)",
-		  }}
-		>
-		  Manage roles, passwords and access permissions
-		</div>
-	    </Box>
-	  </Box>
-
-	  <Box sx={{ display:"flex", alignItems:"center", gap:1.5 }}>
-
-	  <Button
-	    onClick={() => setCreateOpen(true)}
-	    sx={{
-	      height: 42,
-	      px: 3.2,
-
-	      borderRadius: "14px",
-
-	      fontSize: 12,
-	      fontWeight: 800,
-
-	      whiteSpace: "nowrap",
-
-	      color: "#fff",
-
-	      background: darkMode
-	        ? "linear-gradient(135deg,#1f1f1f,#0f0f0f)"
-	        : "linear-gradient(135deg,#374151,#1f2937)",
-
-	      border: darkMode
-	        ? "1px solid rgba(255,215,0,0.12)"
-	        : "1px solid rgba(255,255,255,0.08)",
-
-	      boxShadow: darkMode
-	        ? `
-	          0 10px 25px rgba(0,0,0,0.55),
-	          inset 0 1px 0 rgba(255,215,0,0.05)
-	        `
-	        : `
-	          0 10px 25px rgba(17,24,39,0.28),
-	          inset 0 1px 0 rgba(255,255,255,0.08)
-	        `,
-
-	      transition: "all 0.22s ease",
-
-	      "&:hover": {
-	        background: darkMode
-	          ? "linear-gradient(135deg,#2b2b2b,#141414)"
-	          : "linear-gradient(135deg,#4b5563,#374151)",
-
-	        transform: "translateY(-2px)",
-
-	        boxShadow: darkMode
-	          ? "0 14px 30px rgba(0,0,0,0.65)"
-	          : "0 14px 30px rgba(17,24,39,0.38)",
-	      },
-	    }}
-	  >
-	    + Create User
-	  </Button>
-	  
-	    <Button
-	      onClick={() => setDarkMode(!darkMode)}
-	      sx={themeBtn(darkMode)}
-	    >
-	      {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-	    </Button>
-
-	    <Box
-	      sx={{
-	        px: 2,
-	        py: 0.8,
-	        borderRadius: "999px",
-
-	        background: darkMode
-	          ? "rgba(255,215,0,0.12)"
-	          : "rgba(255,255,255,0.25)",
-
-	        backdropFilter: "blur(10px)",
-
-	        color: darkMode ? "#FFD700" : "#fff",
-
-	        fontWeight: 600,
-
-	        border: darkMode
-	          ? "1px solid rgba(255,215,0,0.2)"
-	          : "1px solid rgba(255,255,255,0.3)",
-
-	        fontSize: 13,
-	      }}
-	    >
-	      {users.length} Users
-	    </Box>
-
-	  </Box>
-	</Box>
-
-      <Box sx={searchPanel(darkMode)}>
-
+	<Box sx={toolbar}>
 	  <SearchIcon
 	    sx={{
-	      opacity: 0.7,
-	      color: darkMode ? "#FFD700" : "#475569",
+	      color: "rgba(255,255,255,.45)",
 	    }}
 	  />
 
-        <TextField
-          variant="standard"
-          placeholder="Search users..."
-          value={search}
-          onChange={(e)=>setSearch(e.target.value)}
-          InputProps={{disableUnderline:true}}
-		  sx={{
-			flex: "1 1 180px",
-			minWidth: 140,
-			maxWidth: 260,
+	  <TextField
+	    variant="standard"
+	    placeholder="Search users..."
+	    value={search}
+	    onChange={(e)=>setSearch(e.target.value)}
+	    InputProps={{
+	      disableUnderline:true
+	    }}
+	    sx={searchInput}
+	  />
+	</Box>
 
-		    "& .MuiInputBase-root": {
-		      height: 40,
+      <div style={tableWrapper}>
+	  <div style={tableTopBar}>
+	    <div style={tableTitle}>
+	      System Users
+	    </div>
 
-		      borderRadius: "18px",
-
-		      padding: "0 10px",
-
-		      background: darkMode
-		        ? "rgba(255,255,255,0.03)"
-		        : "rgba(255,255,255,0.55)",
-
-		      color: darkMode ? "#fff" : "#111",
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(255,255,255,0.35)",
-
-		      transition: "all 0.25s ease",
-		    },
-
-		    "& input": {
-		      color: darkMode ? "#fff" : "#111",
-		      fontSize: 14,
-		      fontWeight: 500,
-		    },
-
-		    "& input::placeholder": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.45)"
-		        : "rgba(0,0,0,0.45)",
-		      opacity: 1,
-		    },
-
-		    "& .MuiInputBase-root:hover": {
-		      background: darkMode
-		        ? "rgba(255,255,255,0.05)"
-		        : "#fff",
-		    },
-
-		    "& .Mui-focused": {
-		      background: darkMode
-		        ? "rgba(255,255,255,0.06)"
-		        : "#fff",
-
-		      boxShadow: darkMode
-		        ? "0 0 0 2px rgba(255,215,0,0.22)"
-		        : "0 0 0 2px rgba(59,130,246,0.3)",
-		    },
-		  }}
-        />
-
-        
-      </Box>
-
-      <div style={tableWrapper(darkMode)}>
-
-        <DataGrid
+	    <div style={tableMeta}>
+	      {users.length} Active Accounts
+	    </div>
+	  </div>
+	  <DataGrid
+	    style={{ height:"100%" }}
           rows={filteredRows}
           columns={columns}
           loading={loading}
           disableRowSelectionOnClick
           density="compact"
-          sx={dataGridStyles(darkMode)}
+          sx={dataGridStyles}
         />
 
       </div>
@@ -722,15 +594,15 @@ function UsersPage() {
 	    sx: {
 	      width: 380,
 
-	      background: darkMode
-	        ? "linear-gradient(180deg,#0f0f0f,#111)"
-	        : "linear-gradient(180deg,#ffffff,#f8fafc)",
+		  background:
+		    "linear-gradient(180deg,#020617,#0f172a)",
 
-	      color: darkMode ? "#fff" : "#111",
+	      color: "#fff" ,
 
 	      borderTopLeftRadius: 24,
 	      borderBottomLeftRadius: 24,
-
+		  borderLeft:
+		    "1px solid rgba(255,255,255,.06)",
 	      p: 3,
 	    },
 	  }}
@@ -758,8 +630,7 @@ function UsersPage() {
 		    sx={{
 		      fontSize: 13,
 
-		      color: darkMode
-		        ? "rgba(255,255,255,0.72)"
+		      color
 		        : "#6b7280",
 		    }}
 		  >
@@ -780,7 +651,7 @@ function UsersPage() {
 	        value={username}
 	        onChange={(e)=>setUsername(e.target.value)}
 	        fullWidth
-			sx={formFieldSx(darkMode)}
+			sx={formFieldSx}
 	      />
 
 	      <TextField
@@ -789,7 +660,7 @@ function UsersPage() {
 	        value={password}
 	        onChange={(e)=>setPassword(e.target.value)}
 	        fullWidth
-			sx={formFieldSx(darkMode)}
+			sx={formFieldSx}
 	      />
 
 		  <TextField
@@ -798,7 +669,7 @@ function UsersPage() {
 		    value={role}
 		    onChange={(e)=>setRole(e.target.value)}
 		    fullWidth
-		    sx={formFieldSx(darkMode)}
+		    sx={formFieldSx}
 		    slotProps={{
 		      select: {
 		        MenuProps: {
@@ -807,33 +678,29 @@ function UsersPage() {
 		              mt: 1,
 		              borderRadius: "18px",
 
-		              background: darkMode
-		                ? "rgba(15,15,15,0.98)"
+		              background
 		                : "#ffffff",
 
-		              color: darkMode
-		                ? "#fff"
-		                : "#111",
+		              color: 
+		                 "#fff"
+		               ,
 
-		              border: darkMode
-		                ? "1px solid rgba(255,215,0,0.12)"
+		              border
 		                : "1px solid rgba(0,0,0,0.08)",
 
 		              backdropFilter: "blur(20px)",
 
 		              "& .MuiMenuItem-root": {
-		                color: darkMode
-		                  ? "#fff"
-		                  : "#111",
+		                color:
+		                   "#fff"
+		                  ,
 		              },
 
 		              "& .Mui-selected": {
-		                background: darkMode
-		                  ? "rgba(255,215,0,0.14) !important"
+		                background
 		                  : "rgba(59,130,246,0.12) !important",
 
-		                color: darkMode
-		                  ? "#FFD700"
+		                color
 		                  : "#2563eb",
 		              },
 		            },
@@ -861,8 +728,7 @@ function UsersPage() {
 		    mt: 4,
 		    pt: 2,
 
-		    borderTop: darkMode
-		      ? "1px solid rgba(255,215,0,0.08)"
+		    borderTop
 		      : "1px solid rgba(0,0,0,0.06)",
 		  }}
 		>
@@ -876,25 +742,21 @@ function UsersPage() {
 
 		    fontWeight: 700,
 
-		    color: darkMode
-		      ? "#fff"
-		      : "#374151",
+		    color
+		      : "#fff"
+		      ,
 
-		    borderColor: darkMode
-		      ? "rgba(255,215,0,0.18)"
+		    borderColor
 		      : "rgba(0,0,0,0.12)",
 
-		    background: darkMode
-		      ? "rgba(255,255,255,0.02)"
+		    background
 		      : "#fff",
 
 		    "&:hover": {
-		      borderColor: darkMode
-		        ? "#FFD700"
+		      borderColor
 		        : "#111827",
 
-		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
+		      background
 		        : "#f9fafb",
 		    },
 		  }}
@@ -914,7 +776,20 @@ function UsersPage() {
 
 	  </Box>
 	</Drawer>
-    <Dialog open={resetOpen} onClose={()=>setResetOpen(false)}>
+    <Dialog open={resetOpen} onClose={()=>setResetOpen(false)} 	
+	PaperProps={{
+	  sx:{
+	    background:
+	      "linear-gradient(180deg,#0f172a,#111827)",
+
+	    color:"#fff",
+
+	    borderRadius:"24px",
+
+	    border:
+	      "1px solid rgba(255,255,255,.06)",
+	  }
+	}}>
       <DialogTitle>Reset Password</DialogTitle>
 
       <DialogContent>
@@ -925,48 +800,7 @@ function UsersPage() {
           value={newPassword}
           onChange={(e)=>setNewPassword(e.target.value)}
           fullWidth
-		  sx={{
-		    minWidth: 140,
-
-		    "& .MuiInputBase-root": {
-		      borderRadius: "14px",
-
-		      background: darkMode
-		        ? "rgba(255,255,255,0.04)"
-		        : "#fff",
-
-		      color: darkMode ? "#fff" : "#111",
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.08)"
-		        : "1px solid rgba(0,0,0,0.08)",
-		    },
-
-		    "& input": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& input::placeholder": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.4)"
-		        : "rgba(0,0,0,0.4)",
-		      opacity: 1,
-		    },
-
-		    "& .MuiSvgIcon-root": {
-		      color: darkMode ? "#FFD700" : "#111",
-		    },
-
-		    "& .MuiSelect-select": {
-		      color: darkMode ? "#fff" : "#111",
-		    },
-
-		    "& label": {
-		      color: darkMode
-		        ? "rgba(255,255,255,0.65)"
-		        : "#475569",
-		    },
-		  }}
+		  sx={formFieldSx}
         />
 
       </DialogContent>
@@ -984,7 +818,20 @@ function UsersPage() {
       </DialogActions>
 
     </Dialog>
-	<Dialog open={deleteOpen} onClose={()=>setDeleteOpen(false)}>
+	<Dialog open={deleteOpen} onClose={()=>setDeleteOpen(false)} 	
+	PaperProps={{
+	  sx:{
+	    background:
+	      "linear-gradient(180deg,#0f172a,#111827)",
+
+	    color:"#fff",
+
+	    borderRadius:"24px",
+
+	    border:
+	      "1px solid rgba(255,255,255,.06)",
+	  }
+	}}>
 
 	  <DialogTitle>
 	    Delete User
@@ -1034,181 +881,201 @@ function UsersPage() {
 
 /* ===== ENHANCED GLASS STYLE ===== */
 
-const page = (darkMode) => ({
+const page = {
   minHeight:"100vh",
   padding:20,
   position:"relative",
   overflowX:"hidden",
   overflowY:"auto",
-  background: "#f1f5f9",
+  background:
+    "linear-gradient(135deg,#020617,#0f172a)",
   backgroundAttachment:"fixed",
-});
-
-const backgroundText = (darkMode) => ({
-  position:"absolute",
-  fontSize:220,
-  fontWeight:900,
-
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
-
-  WebkitBackgroundClip:"text",
-  WebkitTextFillColor:"transparent",
-
-  top:"50%",
-  left:"50%",
-  transform:"translate(-50%,-50%)",
-
-  pointerEvents:"none",
-  letterSpacing:10,
-
-  filter:"blur(1px)",
-});
-
-const content={position:"relative", zIndex:1};
-
-const pageTitle={
-  marginTop:0,
-  marginBottom:12,
-  fontSize:28,
-  fontWeight:700,
-  color:"#fff",
-  letterSpacing:1
 };
 
-const tableWrapper = (darkMode) => ({
-  height:"calc(100vh - 170px)",
-  borderRadius:18,
+const content = {
+  position: "relative",
 
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+  zIndex: 1,
 
-  backdropFilter:"blur(16px)",
-  WebkitBackdropFilter:"blur(16px)",
+  display: "flex",
 
-  boxShadow: darkMode
-    ? "0 22px 55px rgba(0,0,0,0.65)"
-    : "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+  flexDirection: "column",
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.15)"
-    : "none",
+  gap: 18,
+};
 
-  padding:12,
-  overflowX:"auto",
-});
+const toolbar = {
+	
+  display: "flex",
 
-const dataGridStyles = (darkMode) => ({
+  alignItems: "center",
 
-  background: darkMode ? "#0f0f0f" : "#fff",
+  gap: 12,
 
-  color: darkMode ? "#fff" : "#111",
+  padding: "14px 18px",
 
-  borderRadius:12,
+  marginBottom: 18,
 
-  border:"none",
+  borderRadius: 18,
+
+  background:
+    "rgba(15,23,42,.72)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 10px 30px rgba(0,0,0,.25)",
+};
+
+const searchInput = {
+  flex: 1,
+
+  "& .MuiInputBase-root": {
+    color: "#fff",
+
+    fontSize: 14,
+  },
+
+  "& input::placeholder": {
+    color: "rgba(255,255,255,.42)",
+    opacity: 1,
+  },
+};
+
+const headerRow = {
+  display: "flex",
+
+  justifyContent: "space-between",
+
+  alignItems: "center",
+
+  marginBottom: 24,
+
+  position: "relative",
+
+  zIndex: 2,
+}; 
+
+const logo = {
+  color: "#fff",
+
+  fontSize: 34,
+
+  fontWeight: 900,
+
+  marginBottom: 8,
+
+  letterSpacing: -1,
+};
+
+const subtitle = {
+  color: "rgba(255,255,255,.62)",
+
+  fontSize: 14,
+};
+
+const createBtn = {
+  height: 46,
+
+  paddingLeft: 20,
+  paddingRight: 20,
+
+  borderRadius: 14,
+
+  textTransform: "none",
+
+  fontWeight: 800,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 12px 30px rgba(37,99,235,.32)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+
+const tableWrapper = {
+  height: "calc(100vh - 220px)",
+
+  borderRadius: 24,
+
+  overflow: "hidden",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 20px 55px rgba(0,0,0,.45)",
+};
+
+const dataGridStyles = {
+  border: "none",
+
+  background: "transparent",
+
+  color: "#fff",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
+    background:
+      "rgba(255,255,255,.03)",
 
-    borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e2e8f0",
+    borderBottom:
+      "1px solid rgba(255,255,255,.06)",
 
-    minHeight:"52px !important",
-    maxHeight:"52px !important",
-  },
-  
-  "& .MuiDataGrid-filler": {
-      backgroundColor: darkMode
-        ? "#111111 !important"
-        : "#f8fafc !important",
-
-      borderBottom: darkMode
-        ? "1px solid rgba(255,215,0,0.08)"
-        : "1px solid #e2e8f0",
-    },
-
-    "& .MuiDataGrid-scrollbarFiller": {
-      backgroundColor: darkMode
-        ? "#111111 !important"
-        : "#f8fafc !important",
-    },
-
-  "& .MuiDataGrid-columnHeader": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
-
-    fontWeight:700,
-    fontSize:13,
-    letterSpacing:"0.4px",
-
-    textTransform:"uppercase",
-
-    borderRight: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #e5e7eb",
+    minHeight: "54px !important",
+    maxHeight: "54px !important",
   },
 
   "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight:800,
-
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569 !important",
-  },
-
-  "& .MuiDataGrid-sortIcon": {
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
-  },
-
-  "& .MuiSvgIcon-root": {
-    color: darkMode
-      ? "#FFD700"
-      : "#475569",
-  },
-
-  "& .MuiDataGrid-row": {
-    borderBottom: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #f1f5f9",
-
-    transition:"all 0.2s ease",
-  },
-
-  "& .MuiDataGrid-row:hover": {
-    background: darkMode
-      ? "rgba(255,215,0,0.05)"
-      : "#f9fafb",
+    fontWeight: 800,
+    color: "#93c5fd",
+    letterSpacing: ".4px",
   },
 
   "& .MuiDataGrid-cell": {
-    fontSize:13,
-    display:"flex",
-    alignItems:"center",
+    borderBottom:
+      "1px solid rgba(255,255,255,.04)",
 
-    color: darkMode ? "#f5f5f5" : "#111",
+    color: "rgba(255,255,255,.88)",
+
+    fontSize: 13,
+  },
+
+  "& .MuiDataGrid-row:hover": {
+    background:
+      "rgba(59,130,246,.08)",
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e5e7eb",
+    borderTop:
+      "1px solid rgba(255,255,255,.06)",
 
-    color: darkMode ? "#fff" : "#111",
+    background:
+      "rgba(255,255,255,.02)",
   },
-});
+
+  "& .MuiCheckbox-root": {
+    color: "#60a5fa",
+  },
+};
 
 const avatar={
   width:30,
@@ -1301,278 +1168,140 @@ const actionContainer = {
 };
 
 const actionPrimary = {
-  px: 2.4,
-  py: 0.7,
-  minWidth: "unset",
-  borderRadius: "999px",
+  borderRadius: 12,
 
-  fontSize: 11,
+  textTransform: "none",
+
   fontWeight: 700,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
 
   color: "#fff",
 
-  background:
-    "linear-gradient(135deg,#10b981,#059669)",
-
-  border: "1px solid rgba(255,255,255,0.15)",
+  border:
+    "1px solid rgba(59,130,246,.35)",
 
   boxShadow:
-    "0 10px 24px rgba(16,185,129,0.32)",
-
-  transition: "all 0.22s ease",
+    "0 10px 24px rgba(37,99,235,.35)",
 
   "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow:
-      "0 14px 30px rgba(16,185,129,0.4)",
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
   },
 };
 
 const actionSecondary = {
-  px: 2.2,
-  py: 0.7,
-  minWidth: "unset",
-  borderRadius: "999px",
+  borderRadius: 12,
 
-  fontSize: 11,
-  fontWeight: 600,
+  textTransform: "none",
 
-  background: "#fff",
+  fontWeight: 700,
 
-  border: "1px solid #d1d5db",
+  background:
+    "rgba(255,255,255,.04)",
 
-  transition: "all 0.22s ease",
+  color: "#fff",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
 
   "&:hover": {
-    transform: "translateY(-1px)",
-    background: "#f9fafb",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+    background:
+      "rgba(255,255,255,.08)",
   },
 };
 
 const actionDanger = {
-  px: 2.2,
-  py: 0.7,
-  minWidth: "unset",
-  borderRadius: "999px",
+  borderRadius: 12,
 
-  fontSize: 11,
+  textTransform: "none",
+
   fontWeight: 700,
+
+  background:
+    "linear-gradient(135deg,#dc2626,#ef4444)",
 
   color: "#fff",
 
-  background:
-    "linear-gradient(135deg,#ef4444,#b91c1c)",
-
   boxShadow:
-    "0 10px 24px rgba(239,68,68,0.28)",
-
-  transition: "all 0.22s ease",
-
-  "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow:
-      "0 14px 30px rgba(239,68,68,0.38)",
-  },
+    "0 10px 24px rgba(239,68,68,.28)",
 };
 
-const searchPanel = (darkMode) => ({
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  rowGap: 12,
-  marginBottom: 4,
-
-  padding: "5px 18px",
-
-  borderRadius: 16,
-
-  width: "100%",
-  maxWidth: "100%",
-
-  flexWrap: "wrap",
-  minWidth: 0,
-
-  background: darkMode
-    ? `
-      linear-gradient(
-        145deg,
-        rgba(12,12,12,0.96),
-        rgba(18,18,18,0.92)
-      )
-    `
-    : `
-      linear-gradient(
-        145deg,
-        rgba(255,255,255,0.72),
-        rgba(255,255,255,0.42)
-      )
-    `,
-
-  backdropFilter: "blur(30px)",
-  WebkitBackdropFilter: "blur(30px)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "1px solid rgba(255,255,255,0.4)",
-
-  boxShadow: darkMode
-    ? `
-      0 10px 40px rgba(0,0,0,0.65),
-      inset 0 1px 0 rgba(255,215,0,0.05)
-    `
-    : `
-      0 14px 35px rgba(0,0,0,0.18),
-      inset 0 1px 0 rgba(255,255,255,0.45)
-    `,
-});
-
-const themeBtn = (darkMode) => ({
-  px:2.6,
-  py:1,
-
-  borderRadius:"999px",
-
-  fontSize:12,
-  fontWeight:700,
-
-  background: darkMode
-    ? "linear-gradient(135deg,#111,#222)"
-    : "#111",
-
-  color: darkMode
-    ? "#FFD700"
-    : "#fff",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.25)"
-    : "1px solid rgba(255,255,255,0.25)",
-
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 10px 25px rgba(0,0,0,0.25)",
-
-  "&:hover": {
-    transform:"translateY(-3px) scale(1.04)",
-  },
-});
-
-const formFieldSx = (darkMode) => ({
+const formFieldSx = {
   "& .MuiFormLabel-root": {
-    color: darkMode
-      ? "rgba(255,215,0,0.72)"
-      : "#475569",
-
-    fontWeight: 500,
-
-    transition: "all 0.2s ease",
+    color: "rgba(255,255,255,.62)",
   },
 
   "& .MuiFormLabel-root.Mui-focused": {
-    color: darkMode
-      ? "#FFD700"
-      : "#111827",
-  },
-
-  "& .MuiFormLabel-root.Mui-error": {
-    color: "#ef4444",
+    color: "#60a5fa",
   },
 
   "& .MuiOutlinedInput-root": {
     borderRadius: "16px",
 
-    background: darkMode
-      ? "rgba(255,255,255,0.04)"
-      : "rgba(255,255,255,0.92)",
+    background:
+      "rgba(255,255,255,.04)",
 
-    color: darkMode
-      ? "#ffffff"
-      : "#111827",
+    color: "#fff",
 
-    transition: "all 0.25s ease",
+    transition: "all .22s ease",
 
     "& fieldset": {
-      borderColor: darkMode
-        ? "rgba(255,215,0,0.14)"
-        : "rgba(0,0,0,0.12)",
+      borderColor:
+        "rgba(255,255,255,.08)",
     },
 
     "&:hover fieldset": {
-      borderColor: darkMode
-        ? "rgba(255,215,0,0.35)"
-        : "#111827",
+      borderColor:
+        "rgba(59,130,246,.45)",
     },
 
     "&.Mui-focused fieldset": {
-      borderColor: darkMode
-        ? "#FFD700"
-        : "#111827",
+      borderColor:
+        "#3b82f6",
 
-      boxShadow: darkMode
-        ? "0 0 0 3px rgba(255,215,0,0.14)"
-        : "0 0 0 3px rgba(17,24,39,0.08)",
-    },
-
-    "&.Mui-error fieldset": {
-      borderColor: "#ef4444",
+      boxShadow:
+        "0 0 0 3px rgba(59,130,246,.14)",
     },
   },
 
   "& .MuiInputBase-input": {
-    color: darkMode
-      ? "#ffffff"
-      : "#111827",
-
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
-
-    fontWeight: 500,
-  },
-
-  "& .MuiInputBase-input::placeholder": {
-    color: darkMode
-      ? "rgba(255,255,255,0.42)"
-      : "rgba(0,0,0,0.42)",
-
-    opacity: 1,
-  },
-
-  "& textarea": {
-    color: darkMode
-      ? "#ffffff"
-      : "#111827",
-
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
+    color: "#fff",
   },
 
   "& .MuiSvgIcon-root": {
-    color: darkMode
-      ? "#FFD700"
-      : "#374151",
+    color: "#94a3b8",
   },
+};
 
-  "& .MuiFormHelperText-root": {
-    color: darkMode
-      ? "rgba(255,255,255,0.65)"
-      : "#6b7280",
-  },
+const tableTopBar = {
+  height: 58,
 
-  "& input:-webkit-autofill": {
-    WebkitBoxShadow: darkMode
-      ? "0 0 0 100px rgba(18,18,18,1) inset"
-      : "0 0 0 100px #fff inset",
+  display: "flex",
 
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
+  alignItems: "center",
 
-    borderRadius: "16px",
+  justifyContent: "space-between",
 
-    transition: "background-color 9999s ease-in-out 0s",
-  },
-});
+  padding: "0 20px",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const tableTitle = {
+  color: "#fff",
+
+  fontWeight: 800,
+
+  fontSize: 15,
+};
+
+const tableMeta = {
+  color: "rgba(255,255,255,.45)",
+
+  fontSize: 13,
+};
 
 export default UsersPage;
