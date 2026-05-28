@@ -847,8 +847,6 @@ const content = {
   display: "flex",
 
   flexDirection: "column",
-
-  gap: 10,
 };
 
 const toolbar = {
@@ -861,7 +859,7 @@ const toolbar = {
 
   padding: "10px 18px",
 
-  marginBottom: 18,
+  marginBottom: 8,
 
   borderRadius: 18,
 
@@ -899,7 +897,7 @@ const headerRow = {
 
   alignItems: "center",
 
-  marginBottom: 24,
+  marginBottom: 18,
 
   position: "relative",
 
@@ -957,6 +955,8 @@ const createBtn = {
 const tableWrapper = {
   width: "100%",
 
+  paddingTop: 2,
+  
   borderRadius: 24,
 
   overflow: "hidden",
@@ -968,8 +968,6 @@ const tableWrapper = {
     "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
 
   backdropFilter: "blur(18px)",
-
-  marginTop: 8,
   
   boxShadow:
     "0 20px 55px rgba(0,0,0,.45)",

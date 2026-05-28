@@ -77,9 +77,7 @@ function LogisticsDashboard({
                 "Driver Availability",
 
               value: `${Number(
-                logistics.driverAvailability ||
-                  92
-              ).toFixed(0)}%`,
+                logistics.driverAvailability).toFixed(0)}%`,
 
               subtle:
                 "Operational Readiness",
@@ -103,8 +101,7 @@ function LogisticsDashboard({
                 "Fleet Efficiency",
 
               value: `${Number(
-                logistics.efficiency || 0
-              ).toFixed(1)}%`,
+                logistics.efficiency).toFixed(1)}%`,
 
               subtle:
                 "Trips / Resources",
@@ -117,8 +114,7 @@ function LogisticsDashboard({
                 "Fuel Usage",
 
               value:
-                logistics.totalFuelUsed ||
-                0,
+                logistics.totalFuelUsed ,
 
               subtle:
                 "Litres Consumed",
@@ -131,8 +127,7 @@ function LogisticsDashboard({
                 "Distance Covered",
 
               value:
-                logistics.totalDistance ||
-                0,
+                logistics.totalDistance ,
 
               subtle:
                 "KM Travelled",
@@ -145,8 +140,7 @@ function LogisticsDashboard({
                 "Vehicles Active",
 
               value:
-                logistics.activeVehicles ||
-                0,
+                logistics.activeVehicles,
 
               subtle:
                 "Fleet Running",
@@ -196,8 +190,7 @@ function LogisticsDashboard({
                 "Route Efficiency",
 
               value: `${Number(
-                logistics.efficiency || 0
-              ).toFixed(1)}%`,
+                logistics.efficiency).toFixed(1)}%`,
 
               subtle:
                 "Performance Score",
@@ -233,8 +226,7 @@ function LogisticsDashboard({
                 "Delayed Routes",
 
               value:
-                logistics.delayedRoutes ||
-                2,
+                logistics.delayedRoutes,
 
               subtle:
                 "Needs Attention",
@@ -247,8 +239,7 @@ function LogisticsDashboard({
                 "Fuel Alerts",
 
               value:
-                logistics.fuelAlerts ||
-                1,
+                logistics.fuelAlerts,
 
               subtle:
                 "Low Fuel Vehicles",
@@ -261,8 +252,7 @@ function LogisticsDashboard({
                 "Inactive Drivers",
 
               value:
-                logistics.inactiveDrivers ||
-                3,
+                logistics.inactiveDrivers,
 
               subtle:
                 "Unavailable Staff",
@@ -298,8 +288,7 @@ function LogisticsDashboard({
                 "Factory Routes",
 
               value:
-                logistics.factoryRoutes ||
-                12,
+                logistics.factoryRoutes ,
 
               subtle:
                 "Industrial Deliveries",
@@ -312,8 +301,7 @@ function LogisticsDashboard({
                 "Warehouse Routes",
 
               value:
-                logistics.warehouseRoutes ||
-                8,
+                logistics.warehouseRoutes,
 
               subtle:
                 "Storage Operations",
@@ -326,8 +314,7 @@ function LogisticsDashboard({
                 "Residential Routes",
 
               value:
-                logistics.residentialRoutes ||
-                14,
+                logistics.residentialRoutes,
 
               subtle:
                 "Customer Deliveries",
@@ -389,8 +376,7 @@ function LogisticsDashboard({
                 "Fleet Efficiency",
 
               value: `${Number(
-                logistics.efficiency || 0
-              ).toFixed(1)}%`,
+                logistics.efficiency).toFixed(1)}%`,
 
               subtle:
                 "Loaders / Trip",
