@@ -859,7 +859,7 @@ const toolbar = {
 
   padding: "10px 18px",
 
-  marginBottom: 8,
+  marginBottom: 4,
 
   borderRadius: 18,
 
@@ -897,7 +897,7 @@ const headerRow = {
 
   alignItems: "center",
 
-  marginBottom: 18,
+  marginBottom: 14,
 
   position: "relative",
 
@@ -954,8 +954,6 @@ const createBtn = {
 
 const tableWrapper = {
   width: "100%",
-
-  paddingTop: 2,
   
   borderRadius: 24,
 
