@@ -337,10 +337,18 @@ function UsersPage() {
 
 	    {filteredRows.map((u) => (
 
-	      <div
-	        key={u.id}
-	        style={tableRow}
-	      >
+			<div
+			  key={u.id}
+			  style={tableRow}
+			  onMouseEnter={(e)=>{
+			    e.currentTarget.style.background =
+			      "rgba(255,255,255,.025)";
+			  }}
+			  onMouseLeave={(e)=>{
+			    e.currentTarget.style.background =
+			      "transparent";
+			  }}
+			>
 
 	        {/* USER COLUMN */}
 
@@ -368,9 +376,19 @@ function UsersPage() {
 
 	            ) : (
 
-	              <span>
-	                {u.username}
-	              </span>
+					<span
+					  style={{
+					    color: "#ffffff",
+
+					    fontWeight: 500,
+
+					    fontSize: 15,
+
+					    letterSpacing: 0.2,
+					  }}
+					>
+					  {u.username}
+					</span>
 
 	            )}
 	          </div>
@@ -805,14 +823,20 @@ function UsersPage() {
 /* ===== ENHANCED GLASS STYLE ===== */
 
 const page = {
-  minHeight:"100vh",
-  padding:20,
-  position:"relative",
-  overflowX:"hidden",
-  overflowY:"auto",
+  minHeight: "100vh",
+
+  padding: 20,
+
   background:
     "linear-gradient(135deg,#020617,#0f172a)",
-  backgroundAttachment:"fixed",
+
+  backgroundAttachment: "fixed",
+
+  overflowY: "auto",
+
+  overflowX: "hidden",
+
+  boxSizing: "border-box",
 };
 
 const content = {
@@ -824,7 +848,7 @@ const content = {
 
   flexDirection: "column",
 
-  gap: 18,
+  gap: 10,
 };
 
 const toolbar = {
@@ -835,7 +859,7 @@ const toolbar = {
 
   gap: 12,
 
-  padding: "14px 18px",
+  padding: "10px 18px",
 
   marginBottom: 18,
 
@@ -931,7 +955,7 @@ const createBtn = {
 
 
 const tableWrapper = {
-  height: "calc(100vh - 220px)",
+  width: "100%",
 
   borderRadius: 24,
 
@@ -945,6 +969,8 @@ const tableWrapper = {
 
   backdropFilter: "blur(18px)",
 
+  marginTop: 8,
+  
   boxShadow:
     "0 20px 55px rgba(0,0,0,.45)",
 };
@@ -1186,7 +1212,11 @@ const tableRow = {
   borderBottom:
     "1px solid rgba(255,255,255,.05)",
 
-  transition: "all .2s ease",
+  background: "transparent",
+
+  cursor: "pointer",
+
+  transition: "all .22s ease",
 };
 
 const userColumn = {
