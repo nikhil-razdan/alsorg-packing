@@ -342,7 +342,7 @@ function UsersPage() {
 			  style={tableRow}
 			  onMouseEnter={(e)=>{
 			    e.currentTarget.style.background =
-			      "rgba(255,255,255,.025)";
+			      "rgba(255,255,255,.03)";
 			  }}
 			  onMouseLeave={(e)=>{
 			    e.currentTarget.style.background =
@@ -615,36 +615,29 @@ function UsersPage() {
 		      select: {
 		        MenuProps: {
 		          PaperProps: {
-		            sx: {
-		              mt: 1,
-		              borderRadius: "18px",
+					sx: {
+					  mt: 1,
+					  borderRadius: "18px",
 
-		              background
-		                : "#ffffff",
+					  background:
+					    "linear-gradient(180deg,#0f172a,#111827)",
 
-		              color: 
-		                 "#fff"
-		               ,
+					  color: "#fff",
 
-		              border
-		                : "1px solid rgba(0,0,0,0.08)",
+					  border:
+					    "1px solid rgba(255,255,255,.06)",
 
-		              backdropFilter: "blur(20px)",
+					  "& .MuiMenuItem-root": {
+					    color: "#fff",
+					  },
 
-		              "& .MuiMenuItem-root": {
-		                color:
-		                   "#fff"
-		                  ,
-		              },
+					  "& .Mui-selected": {
+					    background:
+					      "rgba(59,130,246,.18) !important",
 
-		              "& .Mui-selected": {
-		                background
-		                  : "rgba(59,130,246,0.12) !important",
-
-		                color
-		                  : "#2563eb",
-		              },
-		            },
+					    color: "#fff",
+					  },
+					},
 		          },
 		        },
 		      },
@@ -669,8 +662,8 @@ function UsersPage() {
 		    mt: 4,
 		    pt: 2,
 
-		    borderTop
-		      : "1px solid rgba(0,0,0,0.06)",
+			borderTop:
+			  "1px solid rgba(255,255,255,.06)",
 		  }}
 		>
 
@@ -690,8 +683,8 @@ function UsersPage() {
 		    borderColor
 		      : "rgba(0,0,0,0.12)",
 
-		    background
-		      : "#fff",
+			  background
+			  : "rgba(255,255,255,.04)",
 
 		    "&:hover": {
 		      borderColor
@@ -748,11 +741,13 @@ function UsersPage() {
 
       <DialogActions>
 
-        <Button onClick={()=>setResetOpen(false)}>
+        <Button onClick={()=>setResetOpen(false)}
+		sx={actionSecondary}>
           Cancel
         </Button>
 
-        <Button onClick={resetPassword}>
+        <Button onClick={resetPassword}
+		sx={actionPrimary}>
           Reset
         </Button>
 
@@ -784,13 +779,13 @@ function UsersPage() {
 
 	  <DialogActions>
 
-	    <Button onClick={()=>setDeleteOpen(false)}>
+	    <Button onClick={()=>setDeleteOpen(false)}
+		sx={actionSecondary}>
 	      Cancel
 	    </Button>
 
 	    <Button
-	      variant="contained"
-	      color="error"
+		sx={actionDanger}
 	      onClick={confirmDelete}
 	    >
 	      Delete
@@ -825,8 +820,6 @@ function UsersPage() {
 const page = {
   minHeight: "100vh",
 
-  padding: 20,
-
   background:
     "linear-gradient(135deg,#020617,#0f172a)",
 
@@ -840,13 +833,7 @@ const page = {
 };
 
 const content = {
-  position: "relative",
-
-  zIndex: 1,
-
-  display: "flex",
-
-  flexDirection: "column",
+  padding: 24,
 };
 
 const toolbar = {
@@ -857,22 +844,20 @@ const toolbar = {
 
   gap: 12,
 
-  padding: "10px 18px",
+  padding: "0 16px",
+  
+  height: 48,
 
   marginBottom: 4,
 
-  borderRadius: 18,
+  borderRadius: 14,
 
-  background:
-    "rgba(15,23,42,.72)",
-
+  background: "#111827",
+  
+  boxShadow: "none",
+  
   border:
     "1px solid rgba(255,255,255,.06)",
-
-  backdropFilter: "blur(18px)",
-
-  boxShadow:
-    "0 10px 30px rgba(0,0,0,.25)",
 };
 
 const searchInput = {
@@ -906,51 +891,27 @@ const headerRow = {
 
 const logo = {
   color: "#fff",
-
-  fontSize: 34,
-
+  fontSize: 32,
   fontWeight: 900,
-
   marginBottom: 8,
-
-  letterSpacing: -1,
 };
 
 const subtitle = {
-  color: "rgba(255,255,255,.62)",
-
+  color: "#94a3b8",
   fontSize: 14,
 };
 
 const createBtn = {
-  height: 46,
-
-  paddingLeft: 20,
-  paddingRight: 20,
-
-  borderRadius: 14,
-
-  textTransform: "none",
-
-  fontWeight: 800,
-
+  height: 44,
+  padding: "0 18px",
+  borderRadius: 12,
+  border: "none",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
-
   color: "#fff",
-
-  border:
-    "1px solid rgba(59,130,246,.35)",
-
-  boxShadow:
-    "0 12px 30px rgba(37,99,235,.32)",
-
-  "&:hover": {
-    background:
-      "linear-gradient(135deg,#1d4ed8,#2563eb)",
-  },
+  fontWeight: 700,
+  cursor: "pointer",
 };
-
 
 const tableWrapper = {
   width: "100%",
@@ -959,98 +920,61 @@ const tableWrapper = {
 
   overflow: "hidden",
 
+  boxShadow: "none",
+  
   border:
     "1px solid rgba(255,255,255,.06)",
 
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
-
-  backdropFilter: "blur(18px)",
-  
-  boxShadow:
-    "0 20px 55px rgba(0,0,0,.45)",
+	  "linear-gradient(180deg,#0f172a,#111827)"
 };
 
 const avatar={
   width:30,
   height:30,
-  borderRadius:"50%",
+  borderRadius:12,
   background:"linear-gradient(135deg,#6366f1,#4f46e5)",
   color:"#fff",
   fontWeight:700,
   display:"flex",
   alignItems:"center",
   justifyContent:"center",
-  boxShadow:"0 4px 10px rgba(0,0,0,0.3)"
 };
 
 const adminChip = {
   fontWeight: 700,
-  color: "#fff",
-
+  color: "#cbd5e1",
   background:
-    "linear-gradient(135deg,#111827,#374151)",
-
-  border: "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(0,0,0,0.25)",
-
-  "& .MuiChip-icon": {
-    color: "#fff",
-  },
+    "rgba(148,163,184,.12)",
+  border:
+    "1px solid rgba(148,163,184,.18)",
 };
 
 const dispatchChip = {
   fontWeight: 700,
-  color: "#ecfdf5",
-
+  color: "#4ade80",
   background:
-    "linear-gradient(135deg,#059669,#047857)",
-
-  border: "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(16,185,129,0.25)",
-
-  "& .MuiChip-icon": {
-    color: "#ecfdf5",
-  },
+    "rgba(34,197,94,.12)",
+  border:
+    "1px solid rgba(34,197,94,.18)",
 };
 
 const warehouseChip = {
   fontWeight: 700,
-  color: "#fff7ed",
-
+  color: "#fbbf24",
   background:
-    "linear-gradient(135deg,#ea580c,#c2410c)",
-
+    "rgba(251,191,36,.12)",
   border:
-    "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(234,88,12,0.25)",
-
-  "& .MuiChip-icon": {
-    color: "#fff7ed",
-  },
+    "1px solid rgba(251,191,36,.18)",
 };
 
 const packingChip = {
   fontWeight: 700,
-  color: "#eff6ff",
-
+  color: "#60a5fa",
   background:
-    "linear-gradient(135deg,#2563eb,#1d4ed8)",
-
-  border: "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(37,99,235,0.25)",
-
-  "& .MuiChip-icon": {
-    color: "#eff6ff",
-  },
+    "rgba(59,130,246,.12)",
+  border:
+    "1px solid rgba(59,130,246,.18)",
 };
 
 const actionContainer = {
@@ -1062,11 +986,10 @@ const actionContainer = {
 };
 
 const actionPrimary = {
-  borderRadius: 12,
-
+  borderRadius: 10,
   textTransform: "none",
-
   fontWeight: 700,
+  minHeight: 34,
 
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
@@ -1074,23 +997,19 @@ const actionPrimary = {
   color: "#fff",
 
   border:
-    "1px solid rgba(59,130,246,.35)",
+    "1px solid rgba(59,130,246,.25)",
 
-  boxShadow:
-    "0 10px 24px rgba(37,99,235,.35)",
-
-  "&:hover": {
-    background:
-      "linear-gradient(135deg,#1d4ed8,#2563eb)",
-  },
+  boxShadow: "none",
 };
 
 const actionSecondary = {
-  borderRadius: 12,
+  borderRadius: 10,
 
   textTransform: "none",
 
   fontWeight: 700,
+
+  minHeight: 34,
 
   background:
     "rgba(255,255,255,.04)",
@@ -1098,28 +1017,27 @@ const actionSecondary = {
   color: "#fff",
 
   border:
-    "1px solid rgba(255,255,255,.08)",
-
-  "&:hover": {
-    background:
-      "rgba(255,255,255,.08)",
-  },
+    "1px solid rgba(255,255,255,.06)",
 };
 
 const actionDanger = {
-  borderRadius: 12,
+  borderRadius: 10,
 
   textTransform: "none",
 
   fontWeight: 700,
 
+  minHeight: 34,
+
   background:
-    "linear-gradient(135deg,#dc2626,#ef4444)",
+    "rgba(239,68,68,.12)",
 
-  color: "#fff",
+  color: "#f87171",
 
-  boxShadow:
-    "0 10px 24px rgba(239,68,68,.28)",
+  border:
+    "1px solid rgba(239,68,68,.2)",
+
+  boxShadow: "none",
 };
 
 const formFieldSx = {
@@ -1170,23 +1088,17 @@ const formFieldSx = {
 };
 
 const tableHeader = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns:
+    "1.4fr .9fr 1.2fr",
 
-  alignItems: "center",
+  padding: 16,
 
-  height: 58,
+  background: "#111827",
 
-  paddingLeft: 28,
-  paddingRight: 28,
-
-  borderBottom:
-    "1px solid rgba(255,255,255,.06)",
-
-  color: "rgba(255,255,255,.55)",
+  color: "#94a3b8",
 
   fontWeight: 700,
-
-  fontSize: 14,
 };
 
 const tableBody = {
@@ -1196,47 +1108,19 @@ const tableBody = {
 };
 
 const tableRow = {
-  display: "flex",
+  display: "grid",
 
-  alignItems: "center",
+  gridTemplateColumns:
+    "1.4fr .9fr 1.2fr",
 
-  minHeight: 68,
+  padding: 16,
 
-  paddingLeft: 28,
-  paddingRight: 28,
+  color: "#fff",
 
-  borderBottom:
-    "1px solid rgba(255,255,255,.05)",
+  borderTop:
+    "1px solid rgba(255,255,255,0.06)",
 
-  background: "transparent",
-
-  cursor: "pointer",
-
-  transition: "all .22s ease",
-};
-
-const userColumn = {
-  flex: 1.2,
-
-  display: "flex",
-
-  alignItems: "center",
-};
-
-const roleColumn = {
-  width: 240,
-
-  display: "flex",
-
-  alignItems: "center",
-};
-
-const actionColumn = {
-  width: 320,
-
-  display: "flex",
-
-  justifyContent: "flex-start",
+  transition: "0.2s ease",
 };
 
 const userInfo = {
