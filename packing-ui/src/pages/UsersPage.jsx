@@ -279,46 +279,52 @@ function UsersPage() {
         enterprise access control
       </div>
     </div>
-
-    <Button
-      onClick={() => setCreateOpen(true)}
-      sx={createBtn}
-    >
-      + Create User
-    </Button>
   </div>
-    <div style={content}>
+  <div style={content}>
 
-	<Box sx={toolbar}>
-	  <SearchIcon
-	    sx={{
-	      color: "rgba(255,255,255,.45)",
-	    }}
-	  />
+    <div style={moduleCard}>
 
-	  <TextField
-	    variant="standard"
-	    placeholder="Search users..."
-	    value={search}
-	    onChange={(e)=>setSearch(e.target.value)}
-	    InputProps={{
-	      disableUnderline:true
-	    }}
-	    sx={searchInput}
-	  />
-	</Box>
+      <div style={moduleHeader}>
 
-      <div style={tableWrapper}>
-	  <div style={tableTopBar}>
-	    <div style={tableTitle}>
-	      System Users
-	    </div>
+        <div>
+          <div style={moduleTitle}>
+            System Users
+          </div>
 
-	    <div style={tableMeta}>
-	      {users.length} Active Accounts
-	    </div>
-	  </div>
+          <div style={moduleSubtitle}>
+            User access, permissions and role operations
+          </div>
+        </div>
 
+        <button
+          style={moduleButton}
+          onClick={() => setCreateOpen(true)}
+        >
+          + Create User
+        </button>
+
+      </div>
+
+	  <Box sx={toolbar}>
+	    <SearchIcon
+	      sx={{
+	        color: "rgba(255,255,255,.45)",
+	      }}
+	    />
+
+	    <TextField
+	      variant="standard"
+	      placeholder="Search users..."
+	      value={search}
+	      onChange={(e)=>setSearch(e.target.value)}
+	      InputProps={{
+	        disableUnderline:true
+	      }}
+	      sx={searchInput}
+	    />
+	  </Box>
+
+	  <div style={tableWrapper}>
 	  <div style={tableHeader}>
 	    <div>Username</div>
 
@@ -526,11 +532,10 @@ function UsersPage() {
 
 	    ))}
 
-	  </div>
-
-      </div>
-
-    </div>
+		      </div>
+		    </div>
+		  </div>
+		</div>
 	<Drawer
 	  anchor="right"
 	  open={createOpen}
@@ -826,18 +831,65 @@ const page = {
 
   background:
     "linear-gradient(135deg,#020617,#0f172a)",
-
-  backgroundAttachment: "fixed",
-
-  overflowY: "auto",
-
-  overflowX: "hidden",
-
-  boxSizing: "border-box",
 };
 
 const content = {
   padding: 24,
+};
+
+const moduleCard = {
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+
+  borderRadius: 24,
+
+  padding: 24,
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const moduleHeader = {
+  display: "flex",
+
+  justifyContent: "space-between",
+
+  alignItems: "center",
+
+  marginBottom: 20,
+};
+
+const moduleTitle = {
+  color: "#fff",
+
+  fontSize: 24,
+
+  fontWeight: 800,
+};
+
+const moduleSubtitle = {
+  color: "#94a3b8",
+
+  marginTop: 6,
+};
+
+const moduleButton = {
+  height: 44,
+
+  padding: "0 18px",
+
+  borderRadius: 12,
+
+  border: "none",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
+  fontWeight: 700,
+
+  cursor: "pointer",
 };
 
 const toolbar = {
@@ -852,7 +904,7 @@ const toolbar = {
   
   height: 48,
 
-  marginBottom: 4,
+  marginBottom: 18,
 
   borderRadius: 14,
 
@@ -880,18 +932,8 @@ const searchInput = {
 };
 
 const headerRow = {
-  display: "flex",
-
-  justifyContent: "space-between",
-
-  alignItems: "center",
-
-  marginBottom: 14,
-
-  position: "relative",
-
-  zIndex: 2,
-}; 
+  marginBottom: 24,
+};
 
 const logo = {
   color: "#fff",
@@ -905,32 +947,12 @@ const subtitle = {
   fontSize: 14,
 };
 
-const createBtn = {
-  height: 44,
-  padding: "0 18px",
-  borderRadius: 12,
-  border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
 const tableWrapper = {
   width: "100%",
-  
-  borderRadius: 24,
 
   overflow: "hidden",
 
-  boxShadow: "none",
-  
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  background:
-	  "linear-gradient(180deg,#0f172a,#111827)"
+  borderRadius: 18,
 };
 
 const avatar={
@@ -1170,35 +1192,6 @@ const inlineInput = {
   "& .MuiSvgIcon-root": {
     color: "#94a3b8",
   },
-};
-
-const tableTopBar = {
-  height: 58,
-
-  display: "flex",
-
-  alignItems: "center",
-
-  justifyContent: "space-between",
-
-  padding: "0 20px",
-
-  borderBottom:
-    "1px solid rgba(255,255,255,.06)",
-};
-
-const tableTitle = {
-  color: "#fff",
-
-  fontWeight: 800,
-
-  fontSize: 15,
-};
-
-const tableMeta = {
-  color: "rgba(255,255,255,.45)",
-
-  fontSize: 13,
 };
 
 export default UsersPage;
