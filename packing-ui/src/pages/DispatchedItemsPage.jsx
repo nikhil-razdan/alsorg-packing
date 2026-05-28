@@ -12,86 +12,125 @@ import { API_BASE_URL } from "../config";
 
 const page = () => ({
   minHeight: "100vh",
-  padding: 18,
+
+  padding: 20,
+
   position: "relative",
+
   overflowX: "hidden",
   overflowY: "auto",
 
-  background: `
-    radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
-    radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
-    linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
-  `,
+  background:
+    "linear-gradient(135deg,#020617,#0f172a)",
+
+  backgroundAttachment: "fixed",
 });
 
 
 const statusCard = {
-  p: 2,
-  borderRadius: 3,
+  p: 2.2,
+
+  borderRadius: 18,
+
   display: "flex",
+
   alignItems: "center",
+
   justifyContent: "space-between",
+
   cursor: "pointer",
-  transition: "all 0.25s ease",
-  border: "1px solid #e5e7eb",
+
+  transition: "all .22s ease",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  color: "#fff",
 
   "&:hover": {
-    transform: "translateY(-4px)",
-    boxShadow: "0 15px 40px rgba(0,0,0,0.2)",
-  }
+    transform: "translateY(-2px)",
+
+    background:
+      "rgba(255,255,255,.06)",
+  },
 };
 
 const premiumButton = {
-  px: 2.6,
-  py: 1,
-  borderRadius: "999px",
-  fontSize: 12,
-  fontWeight: 600,
-  letterSpacing: 0.4,
+  borderRadius: 12,
+
   textTransform: "none",
 
-  background: "rgba(255,255,255,0.15)",
+  fontWeight: 700,
+
+  px: 2.2,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
   color: "#fff",
 
-  backdropFilter: "blur(12px)",
-  border: "1px solid rgba(255,255,255,0.25)",
+  border:
+    "1px solid rgba(59,130,246,.35)",
 
-  transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
+
+  transition: "all .22s ease",
 
   "&:hover": {
-    transform: "translateY(-3px) scale(1.04)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
-    background: "rgba(255,255,255,0.25)",
-  },
-
-  "&:active": {
-    transform: "scale(0.96)",
+    transform: "translateY(-1px)",
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
   },
 };
 
-const backgroundText = (darkMode) => ({
-  position: "absolute",
-  fontSize: 220,
+const content = { position: "relative", zIndex: 1 };
+
+const headerRow = {
+  display: "flex",
+
+  justifyContent: "space-between",
+
+  alignItems: "center",
+
+  marginBottom: 14,
+};
+
+const logo = {
+  color: "#fff",
+
+  fontSize: 34,
+
   fontWeight: 900,
 
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
+  marginBottom: 8,
 
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
+  letterSpacing: -1,
+};
 
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
+const subtitle = {
+  color: "rgba(255,255,255,.62)",
 
-  pointerEvents: "none",
-  letterSpacing: 8,
+  fontSize: 14,
+};
 
-  filter: "blur(1px)",
-});
+const headerChip = {
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
 
-const content = { position: "relative", zIndex: 1 };
+  color: "#fff",
+
+  fontWeight: 800,
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 10px 25px rgba(37,99,235,.35)",
+};
 
 const pageTitle = {
   marginTop: 0,
@@ -132,33 +171,68 @@ const modalGloss = {
 
 const tableWrapper = {
   height: "calc(100vh - 220px)",
+
   borderRadius: 24,
-  padding: 16,
-  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-  border: "1px solid rgba(148,163,184,0.18)",
-  boxShadow: "0 18px 40px rgba(15,23,42,0.10)",
+
+  overflow: "hidden",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 20px 55px rgba(0,0,0,.45)",
 };
 
 const dataGridStyles = {
   border: "none",
-  fontSize: 13,
+
+  color: "#fff",
+
+  background: "transparent",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#f1f5f9",
-    borderBottom: "1px solid #e2e8f0",
-    fontWeight: 700,
+    background:
+      "rgba(255,255,255,.03)",
+
+    borderBottom:
+      "1px solid rgba(255,255,255,.06)",
+
+    color: "rgba(255,255,255,.65)",
+
+    fontWeight: 800,
+
+    fontSize: 13,
   },
 
   "& .MuiDataGrid-cell": {
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom:
+      "1px solid rgba(255,255,255,.05)",
+
+    fontSize: 13,
   },
 
   "& .MuiDataGrid-row:hover": {
-    background: "#f8fafc",
+    background:
+      "rgba(255,255,255,.025)",
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop: "1px solid #e5e7eb",
+    borderTop:
+      "1px solid rgba(255,255,255,.06)",
+
+    background:
+      "rgba(255,255,255,.02)",
+
+    color: "#94a3b8",
+  },
+
+  "& .MuiCheckbox-root": {
+    color: "#94a3b8 !important",
   },
 };
 /* ===== STATUS ===== */
@@ -219,22 +293,35 @@ const pendingChip = {
 
 const bulkBar = {
   position: "fixed",
+
   bottom: 24,
+
   left: "50%",
+
   transform: "translateX(-50%)",
 
   display: "flex",
+
   alignItems: "center",
-  gap: 20,
+
+  gap: 14,
 
   padding: "14px 22px",
 
-  background: "#1e293b", // 🔥 solid slate (dashboard match)
+  background:
+    "rgba(15,23,42,.94)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  borderRadius: 18,
+
+  backdropFilter: "blur(20px)",
+
+  boxShadow:
+    "0 20px 50px rgba(0,0,0,.45)",
+
   color: "#fff",
-
-  borderRadius: 16,
-
-  boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
 
   zIndex: 3000,
 };
@@ -247,48 +334,138 @@ const actionContainer = {
 };
 
 const actionPrimary = {
-  borderRadius: 999,
-  fontWeight: 600,
-  background: "#4f46e5",
+  borderRadius: 12,
+
+  textTransform: "none",
+
+  fontWeight: 700,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
   color: "#fff",
-  "&:hover": { background: "#4338ca" }
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const formFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "16px",
+
+    background:
+      "rgba(255,255,255,.04)",
+
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor:
+        "#3b82f6",
+    },
+  },
+
+  "& input": {
+    color: "#fff",
+  },
+};
+
+const darkModalBox = {
+  borderRadius: 28,
+
+  position: "relative",
+
+  overflow: "hidden",
+
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 35px 90px rgba(0,0,0,.55)",
 };
 
 const actionSecondary = {
-  borderRadius: 999,
-  background: "#f1f5f9",
-  color: "#0f172a",
+  borderRadius: 12,
+
+  textTransform: "none",
+
+  fontWeight: 700,
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.08)",
+  },
 };
 
 const actionDanger = {
-  borderRadius: 999,
-  background: "#ef4444",
+  borderRadius: 12,
+
+  textTransform: "none",
+
+  fontWeight: 700,
+
+  background:
+    "linear-gradient(135deg,#dc2626,#ef4444)",
+
   color: "#fff",
+
+  boxShadow:
+    "0 10px 24px rgba(239,68,68,.28)",
 };
 
 const searchPanel = {
   display: "flex",
+
   alignItems: "center",
-  gap: 16,
+
+  gap: 14,
+
+  padding: "10px 18px",
+
   marginBottom: 4,
-  padding: "5px 18px", 
-  borderRadius: 16,
 
-  background: `
-    linear-gradient(
-      145deg,
-      rgba(255,255,255,0.72),
-      rgba(255,255,255,0.42)
-    )
-  `,
+  borderRadius: 18,
 
-  backdropFilter: "blur(30px)",
-  border: "1px solid rgba(255,255,255,0.4)",
+  background:
+    "rgba(15,23,42,.72)",
 
-  boxShadow: `
-    0 14px 35px rgba(0,0,0,0.18),
-    inset 0 1px 0 rgba(255,255,255,0.45)
-  `,
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 10px 30px rgba(0,0,0,.25)",
 };
 
 const popupOverlay = {
@@ -305,11 +482,10 @@ const popupOverlay = {
 
 const popupBox = {
   width: 500,
-  borderRadius: 20,
-  padding: 20,
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+
+  padding: 24,
+
+  ...darkModalBox,
 };
 
 const themeBtn = (darkMode) => ({
@@ -1262,7 +1438,6 @@ function DispatchedItemsPage() {
   
   return (
     <div style={page()}>
-      <div style={backgroundText(false)}>Alsorg</div>
       <div style={content}>
 	  <Box
 	    sx={{
@@ -1272,52 +1447,29 @@ function DispatchedItemsPage() {
 	      mb: 2,
 	    }}
 	  >
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-	      
-	      {/* ICON BADGE */}
-		  <Box style={{
-		    display: "flex",
-		    alignItems: "center",
-		    justifyContent: "space-between",
-		    marginBottom: 10
-		  }}>
-		    <div>
-		      <h2 style={{
-		        margin: 0,
-		        fontSize: 28,
-		        fontWeight: 800,
-		        color: "#0f172a"
-		      }}>
-		        Dispatched Items
-		      </h2>
+	  <div style={headerRow}>
+	    <div>
+	      <div style={logo}>
+	        🚚 Dispatch Control Center
+	      </div>
 
-		      <div style={{
-		        fontSize: 13,
-		        color: "#64748b",
-		        marginTop: 4
-		      }}>
-		        Track, manage and dispatch inventory
-		      </div>
-		    </div>
+	      <div style={subtitle}>
+	        Track, manage and dispatch inventory operations
+	      </div>
+	    </div>
 
-		    <Chip
-		      label={`${rows.length} Items`}
-		      sx={{
-		        background: "#e0f2fe",
-		        color: "#0369a1",
-		        fontWeight: 700
-		      }}
-		    />
-		  </Box>
-	    </Box>
+	    <Chip
+	      label={`${rows.length} Active Items`}
+	      sx={headerChip}
+	    />
+	  </div>
 	  </Box>
 		
 	  <Box sx={searchPanel}>
 	    <SearchIcon
 		sx={{
-		    opacity: 0.75,
-		    color: "rgba(0,0,0,0.55)",
-		  }}
+		  color: "rgba(255,255,255,.45)",
+		}}
 	    />
 
 		<TextField
@@ -1327,37 +1479,16 @@ function DispatchedItemsPage() {
 		  onChange={(e) => setSearch(e.target.value)}
 		  InputProps={{ disableUnderline: true }}
 		  sx={{
-		    flex: 1,  // 🔥 IMPORTANT (fix width)
+		    flex: 1,
 
 		    "& .MuiInputBase-root": {
-		      height: 40,                // ✅ MATCH warehouse
-		      borderRadius: "18px",
-		      padding: "0 8px",
-
-		      background: "rgba(255,255,255,0.55)",
-		      border: "1px solid rgba(255,255,255,0.35)",
-
-		      transition: "all 0.25s ease",
-		    },
-
-		    "& input": {
+		      color: "#fff",
 		      fontSize: 14,
-		      fontWeight: 500,
-		      color: "#111",
 		    },
 
 		    "& input::placeholder": {
-		      color: "rgba(0,0,0,0.45)",
+		      color: "rgba(255,255,255,.42)",
 		      opacity: 1,
-		    },
-
-		    "& .MuiInputBase-root:hover": {
-		      background: "#fff",
-		    },
-
-		    "& .Mui-focused": {
-		      background: "#fff",
-		      boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
 		    },
 		  }}
 		/>
@@ -1446,45 +1577,6 @@ function DispatchedItemsPage() {
 		    <MenuItem value="STATUS">Group by Status</MenuItem>
 		    <MenuItem value="CLIENT">Group by Client</MenuItem>
 		  </TextField>
-		</Box>
-		<Box sx={legend}>
-		  
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-			background: "#e0f2fe",
-		    color: "#2563eb",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    🏠 IN WAREHOUSE
-		  </Box>
-
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-			background: "#dcfce7",
-		    color: "#059669",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    🚚 DISPATCHED
-		  </Box>
-
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-			background: "#fef3c7",
-		    color: "#d97706",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    ⏳ REQUESTED
-		  </Box>
-
 		</Box>
 
         <div style={tableWrapper}> 
@@ -1607,33 +1699,12 @@ function DispatchedItemsPage() {
 		  style={{
 		    width: 560,
 		    maxHeight: "80vh",
-		    padding: 22,
-		    borderRadius: 28,
+		    padding: 24,
 
-		    position: "relative",
-		    overflow: "auto",
-
-		    background: `
-		      linear-gradient(
-		        145deg,
-		        rgba(255,255,255,0.92),
-		        rgba(255,255,255,0.74)
-		      )
-		    `,
-
-		    backdropFilter: "blur(30px) saturate(180%)",
-		    WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-		    border: "1px solid rgba(255,255,255,0.35)",
-
-		    boxShadow: `
-		      0 35px 90px rgba(0,0,0,0.38),
-		      inset 0 1px 0 rgba(255,255,255,0.7)
-		    `,
+		    ...darkModalBox,
 		  }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-		  <div style={modalGloss} />
 	        <h3 style={{ marginBottom: 12 }}>
 	          Sticker History
 	        </h3>
@@ -1798,33 +1869,12 @@ function DispatchedItemsPage() {
 		  style={{
 		    width: 600,
 		    maxHeight: "80vh",
-		    padding: 22,
-		    borderRadius: 28,
+		    padding: 24,
 
-		    position: "relative",
-		    overflow: "auto",
-
-		    background: `
-		      linear-gradient(
-		        145deg,
-		        rgba(255,255,255,0.92),
-		        rgba(255,255,255,0.74)
-		      )
-		    `,
-
-		    backdropFilter: "blur(30px) saturate(180%)",
-		    WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-		    border: "1px solid rgba(255,255,255,0.35)",
-
-		    boxShadow: `
-		      0 35px 90px rgba(0,0,0,0.38),
-		      inset 0 1px 0 rgba(255,255,255,0.7)
-		    `,
+		    ...darkModalBox,
 		  }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-		  <div style={modalGloss} />
 	        <h3 style={{ marginBottom: 12 }}>
 	          Activity Log
 	        </h3>
@@ -1837,9 +1887,15 @@ function DispatchedItemsPage() {
 			  }}
 			>
 			  {/* ACTION FILTER */}
-			  <select
+			  <TextField
+			    select
+			    size="small"
 			    value={actionFilter}
 			    onChange={(e) => setActionFilter(e.target.value)}
+				sx={{
+				  ...formFieldSx,
+				  minWidth: 180,
+				}}
 			    style={{
 			      padding: "6px 10px",
 			      borderRadius: 8,
@@ -1855,12 +1911,18 @@ function DispatchedItemsPage() {
 			    <option value="DISPATCH">Dispatch</option>
 			    <option value="PACK">Pack</option>
 			    <option value="STICKER">Sticker</option>
-			  </select>
+			  </Textfield>
 
 			  {/* ROLE FILTER */}
-			  <select
+			  <teTextField
+			    select
+			  	size="small"
 			    value={roleFilter}
 			    onChange={(e) => setRoleFilter(e.target.value)}
+				sx={{
+				  ...formFieldSx,
+				  minWidth: 180,
+				}}
 			    style={{
 			      padding: "6px 10px",
 			      borderRadius: 8,
@@ -1980,16 +2042,27 @@ function DispatchedItemsPage() {
 	      }}
 	      onClick={() => setBulkDrawerOpen(false)}
 	    >
-	      <div
-	        style={{
-	          width: 420,
-	          height: "100%",
-	          background: "#fff",
-	          padding: 20,
-	          boxShadow: "-10px 0 40px rgba(0,0,0,0.3)",
-	          display: "flex",
-	          flexDirection: "column",
-	        }}
+		<div
+		  style={{
+		    width: 420,
+		    height: "100%",
+
+		    padding: 24,
+
+		    background:
+		      "linear-gradient(180deg,#0f172a,#111827)",
+
+		    color: "#fff",
+
+		    borderLeft:
+		      "1px solid rgba(255,255,255,.06)",
+
+		    boxShadow:
+		      "-10px 0 40px rgba(0,0,0,.55)",
+
+		    display: "flex",
+		    flexDirection: "column",
+		  }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
 	        <h3 style={{ marginBottom: 12 }}>
@@ -2088,7 +2161,6 @@ function DispatchedItemsPage() {
 	  {bulkGatePassOpen && (
 	    <div style={popupOverlay} onClick={() => setBulkGatePassOpen(false)}>
 	      <div style={popupBox} onClick={(e) => e.stopPropagation()}>
-		  <div style={modalGloss} />
 	        <h2>Bulk Gate Pass</h2>
 
 	        {/* Warehouse Code */}
@@ -2097,7 +2169,10 @@ function DispatchedItemsPage() {
 	          placeholder="Warehouse Code (WH-01)"
 	          value={warehouseCode}
 	          onChange={(e) => setWarehouseCode(e.target.value)}
-	          sx={{ mb: 2 }}
+			  sx={{
+			    ...formFieldSx,
+			    mb: 2,
+			  }}
 	        />
 
 	        {/* From Location */}
@@ -2106,7 +2181,10 @@ function DispatchedItemsPage() {
 	          placeholder="From Location"
 	          value={fromLocation}
 	          onChange={(e) => setFromLocation(e.target.value)}
-	          sx={{ mb: 2 }}
+			  sx={{
+			    ...formFieldSx,
+			    mb: 2,
+			  }}
 	        />
 
 	        {/* PDF PREVIEW */}
@@ -2208,7 +2286,6 @@ function DispatchedItemsPage() {
 
 	        onClick={(e) => e.stopPropagation()}
 	      >
-		  <div style={modalGloss} />
 	        <h2 style={{ marginBottom: 10 }}>Generate Gate Pass</h2>
 
 	        {/* INPUT */}
@@ -2217,18 +2294,7 @@ function DispatchedItemsPage() {
 	          placeholder="Enter Warehouse Code (WH-01)"
 	          value={warehouseCode}
 	          onChange={(e) => setWarehouseCode(e.target.value)}
-			  sx={{
-			    "& .MuiInputBase-root": {
-			      height: 40,
-			      borderRadius: 10,
-			      background: "#fff",
-			      border: "1px solid #e2e8f0",
-			    },
-			    "& input": {
-			      fontSize: 14,
-			      color: "#0f172a",
-			    }
-			  }}
+			  sx={formFieldSx}
 	        />
 
 	        {/* PREVIEW */}
@@ -2248,10 +2314,11 @@ function DispatchedItemsPage() {
 	        {/* ACTIONS */}
 	        <Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
 			<TextField
-						    fullWidth
-						    placeholder="From Location (Floor / Packing)"
-						    value={fromLocation}
-						    onChange={(e) => setFromLocation(e.target.value)}
+			fullWidth
+			placeholder="From Location (Floor / Packing)"
+			value={fromLocation}
+			onChange={(e) => setFromLocation(e.target.value)}
+			sx={formFieldSx}
 						  />
 	          <Button
 			  
@@ -2328,34 +2395,13 @@ function DispatchedItemsPage() {
 	      <div 		
 		  style={{
 		    width: 520,
+
 		    padding: 28,
-		    borderRadius: 28,
 
-		    position: "relative",
-		    overflow: "hidden",
-
-		    background: `
-		      linear-gradient(
-		        145deg,
-		        rgba(255,255,255,0.9),
-		        rgba(255,255,255,0.72)
-		      )
-		    `,
-
-		    backdropFilter: "blur(30px) saturate(180%)",
-		    WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-		    border: "1px solid rgba(255,255,255,0.35)",
-
-		    boxShadow: `
-		      0 35px 90px rgba(0,0,0,0.38),
-		      inset 0 1px 0 rgba(255,255,255,0.7)
-		    `,
-
-		    transform: "scale(1)",
-		    transition: "all 0.25s ease",
-		  }} onClick={(e) => e.stopPropagation()}>
-		  <div style={modalGloss} />
+		    ...darkModalBox,
+		  }}
+		  onClick={(e) => e.stopPropagation()}>
+		  
 
 	        <h2>Select Action</h2>
 
@@ -2429,36 +2475,13 @@ function DispatchedItemsPage() {
 	      <div
 		  style={{
 		    width: 520,
+
 		    padding: 28,
-		    borderRadius: 28,
 
-		    position: "relative",
-		    overflow: "hidden",
-
-		    background: `
-		      linear-gradient(
-		        145deg,
-		        rgba(255,255,255,0.9),
-		        rgba(255,255,255,0.72)
-		      )
-		    `,
-
-		    backdropFilter: "blur(30px) saturate(180%)",
-		    WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-		    border: "1px solid rgba(255,255,255,0.35)",
-
-		    boxShadow: `
-		      0 35px 90px rgba(0,0,0,0.38),
-		      inset 0 1px 0 rgba(255,255,255,0.7)
-		    `,
-
-		    transform: "scale(1)",
-		    transition: "all 0.25s ease",
+		    ...darkModalBox,
 		  }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-		  <div style={modalGloss} />
 	        <h2>Bulk Status Change</h2>
 
 	        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -2540,33 +2563,13 @@ function DispatchedItemsPage() {
 	      <div
 		  style={{
 		    width: 800,
+
 		    padding: 24,
-		    borderRadius: 28,
 
-		    position: "relative",
-		    overflow: "hidden",
-
-		    background: `
-		      linear-gradient(
-		        145deg,
-		        rgba(255,255,255,0.92),
-		        rgba(255,255,255,0.74)
-		      )
-		    `,
-
-		    backdropFilter: "blur(30px) saturate(180%)",
-		    WebkitBackdropFilter: "blur(30px) saturate(180%)",
-
-		    border: "1px solid rgba(255,255,255,0.35)",
-
-		    boxShadow: `
-		      0 35px 90px rgba(0,0,0,0.38),
-		      inset 0 1px 0 rgba(255,255,255,0.7)
-		    `,
+		    ...darkModalBox,
 		  }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-		  <div style={modalGloss} />
 	        <h2 style={{ marginBottom: 10 }}>Chalaan Preview</h2>
 
 	        <iframe
