@@ -268,6 +268,7 @@ function UsersPage() {
   return(
 
   <div style={page}>
+  <div style={content}>
   <div style={headerRow}>
     <div>
       <div style={logo}>
@@ -809,6 +810,7 @@ function UsersPage() {
 
 	</Snackbar>
   </div>
+  </div>
 
   );
 }
@@ -832,7 +834,7 @@ const wrap = {
 
   borderRadius: 24,
 
-  padding: 24,
+  padding: 28,
 };
 
 const moduleHeader = {
@@ -869,15 +871,17 @@ const searchPanel = {
 
   alignItems: "center",
 
-  gap: 14,
+  gap: 12,
 
-  padding: "12px 16px",
+  height: 52,
+
+  padding: "0 18px",
 
   marginBottom: 24,
 
   borderRadius: 16,
 
-  background: "#111827",
+  background: "rgba(255,255,255,0.03)",
 
   border:
     "1px solid rgba(255,255,255,.06)",
@@ -905,19 +909,17 @@ const headerRow = {
 
   alignItems: "center",
 
-  marginBottom: 14,
+  marginBottom: 24,
 };
 
 const logo = {
   color: "#fff",
 
-  fontSize: 34,
+  fontSize: 32,
 
   fontWeight: 900,
 
   marginBottom: 8,
-
-  letterSpacing: -1,
 };
 
 const subtitle = {
@@ -1107,7 +1109,7 @@ const tableHeader = {
   gridTemplateColumns:
     "1.4fr .9fr 1.3fr",
 
-  padding: 16,
+  padding: "14px 16px",
 
   background: "#111827",
 
@@ -1156,7 +1158,7 @@ const tableRow = {
 
   alignItems: "center",
 
-  padding: 16,
+  padding: "14px 16px",
 
   color: "#fff",
 
@@ -1212,9 +1214,9 @@ const tableTopBar = {
 
   justifyContent: "space-between",
 
-  alignItems: "center",
+  alignItems: "flex-start",
 
-  marginBottom: 24,
+  marginBottom: 28,
 };
 
 const tableTitle = {
