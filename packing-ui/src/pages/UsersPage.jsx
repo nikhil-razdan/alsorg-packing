@@ -281,7 +281,7 @@ function UsersPage() {
     </div>
   </div>
 
-  <Box sx={toolbar}>
+  <Box sx={searchPanel}>
     <SearchIcon
       sx={{
         color: "rgba(255,255,255,.45)",
@@ -300,9 +300,7 @@ function UsersPage() {
     />
   </Box>
   
-  <div style={content}>
-
-    <div style={moduleCard}>
+  <div style={wrap}>
 
 	<div style={tableTopBar}>
 
@@ -340,14 +338,6 @@ function UsersPage() {
 			<div
 			  key={u.id}
 			  style={tableRow}
-			  onMouseEnter={(e)=>{
-			    e.currentTarget.style.background =
-			      "rgba(255,255,255,.03)";
-			  }}
-			  onMouseLeave={(e)=>{
-			    e.currentTarget.style.background =
-			      "transparent";
-			  }}
 			>
 
 	        {/* USER COLUMN */}
@@ -535,7 +525,6 @@ function UsersPage() {
 		      </div>
 		    </div>
 		  </div>
-		</div>
 	<Drawer
 	  anchor="right"
 	  open={createOpen}
@@ -837,16 +826,13 @@ const content = {
   padding: 24,
 };
 
-const moduleCard = {
+const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
 
   borderRadius: 24,
 
-  padding: 0,
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  padding: 24,
 };
 
 const moduleHeader = {
@@ -857,20 +843,6 @@ const moduleHeader = {
   alignItems: "center",
 
   marginBottom: 20,
-};
-
-const moduleTitle = {
-  color: "#fff",
-
-  fontSize: 24,
-
-  fontWeight: 800,
-};
-
-const moduleSubtitle = {
-  color: "#94a3b8",
-
-  marginTop: 6,
 };
 
 const moduleButton = {
@@ -899,22 +871,16 @@ const searchPanel = {
 
   gap: 14,
 
-  padding: "10px 18px",
+  padding: "12px 16px",
 
-  marginBottom: 18,
+  marginBottom: 24,
 
-  borderRadius: 18,
+  borderRadius: 16,
 
-  background:
-    "rgba(15,23,42,.72)",
+  background: "#111827",
 
   border:
     "1px solid rgba(255,255,255,.06)",
-
-  backdropFilter: "blur(18px)",
-
-  boxShadow:
-    "0 10px 30px rgba(0,0,0,.25)",
 };
 
 const searchInput = {
@@ -964,28 +930,15 @@ const tableContent = {
 };
 
 const tableWrapper = {
-  width: "100%",
-
   overflow: "hidden",
 
-  borderRadius: 24,
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  background:
-    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
-
-  backdropFilter: "blur(18px)",
-
-  boxShadow:
-    "0 20px 55px rgba(0,0,0,.45)",
+  borderRadius: 18,
 };
 
 const avatar={
-  width:30,
-  height:30,
-  borderRadius:12,
+  width:28,
+  height:28,
+  borderRadius:10,
   background:"linear-gradient(135deg,#6366f1,#4f46e5)",
   color:"#fff",
   fontWeight:700,
@@ -1035,7 +988,7 @@ const actionContainer = {
 
   alignItems: "center",
 
-  gap: 1,
+  gap: 8,
 
   flexWrap: "nowrap",
 };
@@ -1150,8 +1103,9 @@ const formFieldSx = {
 
 const tableHeader = {
   display: "grid",
+
   gridTemplateColumns:
-    "1.6fr .8fr 1.6fr",
+    "1.4fr .9fr 1.3fr",
 
   padding: 16,
 
@@ -1198,18 +1152,16 @@ const tableRow = {
   display: "grid",
 
   gridTemplateColumns:
-    "1.6fr .8fr 1.6fr",
+    "1.4fr .9fr 1.3fr",
 
   alignItems: "center",
 
-  padding: "18px 16px",
+  padding: 16,
 
   color: "#fff",
 
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
-
-  transition: "0.2s ease",
 };
 
 const userInfo = {
@@ -1256,32 +1208,27 @@ const inlineInput = {
 };
 
 const tableTopBar = {
-  height: 58,
-
   display: "flex",
-
-  alignItems: "center",
 
   justifyContent: "space-between",
 
-  padding: "0 20px",
+  alignItems: "center",
 
-  borderBottom:
-    "1px solid rgba(255,255,255,.06)",
+  marginBottom: 24,
 };
 
 const tableTitle = {
   color: "#fff",
 
-  fontWeight: 800,
+  fontSize: 24,
 
-  fontSize: 15,
+  fontWeight: 800,
 };
 
 const tableMeta = {
-  color: "rgba(255,255,255,.45)",
+  color: "#94a3b8",
 
-  fontSize: 13,
+  marginTop: 6,
 };
 
 export default UsersPage;

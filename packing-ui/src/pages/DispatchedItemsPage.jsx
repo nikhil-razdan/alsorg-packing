@@ -1448,7 +1448,7 @@ function DispatchedItemsPage() {
 		    🚚
 		  </span>
 
-		  Dispatch Control Center
+		  Dispatched Items
 		</div>
 
 	      <div style={subtitle}>
