@@ -118,18 +118,29 @@ const subtitle = {
 };
 
 const headerChip = {
+  height: 42,
+
+  paddingLeft: 18,
+  paddingRight: 18,
+
+  borderRadius: 999,
+
+  fontSize: 14,
+
+  fontWeight: 800,
+
+  letterSpacing: 0.3,
+
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
 
   color: "#fff",
 
-  fontWeight: 800,
-
   border:
     "1px solid rgba(59,130,246,.35)",
 
   boxShadow:
-    "0 10px 25px rgba(37,99,235,.35)",
+    "0 12px 30px rgba(37,99,235,.32)",
 };
 
 const pageTitle = {
@@ -170,7 +181,7 @@ const modalGloss = {
 /* ===== TABLE ===== */
 
 const tableWrapper = {
-  height: "calc(100vh - 220px)",
+  height: "calc(100vh - 180px)",
 
   borderRadius: 24,
 
@@ -195,25 +206,53 @@ const dataGridStyles = {
 
   background: "transparent",
 
+  fontSize: 14,
+
+  "& .MuiDataGrid-main": {
+    background: "transparent",
+  },
+
   "& .MuiDataGrid-columnHeaders": {
+    minHeight: "58px !important",
+
+    maxHeight: "58px !important",
+
     background:
-      "rgba(255,255,255,.03)",
+      "rgba(255,255,255,.02)",
 
     borderBottom:
       "1px solid rgba(255,255,255,.06)",
 
-    color: "rgba(255,255,255,.65)",
+    color: "rgba(255,255,255,.55)",
 
-    fontWeight: 800,
+    fontWeight: 700,
 
-    fontSize: 13,
+    fontSize: 14,
+  },
+
+  "& .MuiDataGrid-columnHeader": {
+    paddingLeft: "12px",
   },
 
   "& .MuiDataGrid-cell": {
     borderBottom:
       "1px solid rgba(255,255,255,.05)",
 
-    fontSize: 13,
+    display: "flex",
+
+    alignItems: "center",
+
+    paddingLeft: "12px",
+
+    fontSize: 14,
+  },
+
+  "& .MuiDataGrid-row": {
+    minHeight: "68px !important",
+
+    maxHeight: "68px !important",
+
+    transition: "all .22s ease",
   },
 
   "& .MuiDataGrid-row:hover": {
@@ -234,8 +273,45 @@ const dataGridStyles = {
   "& .MuiCheckbox-root": {
     color: "#94a3b8 !important",
   },
+
+  "& .MuiDataGrid-virtualScroller": {
+    background: "transparent",
+  },
+  
+  "& .MuiDataGrid-cellContent": {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
 };
-/* ===== STATUS ===== */
+
+const tableTopBar = {
+  height: 58,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "space-between",
+
+  padding: "0 20px",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const tableTitle = {
+  color: "#fff",
+
+  fontWeight: 800,
+
+  fontSize: 15,
+};
+
+const tableMeta = {
+  color: "rgba(255,255,255,.45)",
+
+  fontSize: 13,
+};
 
 const statusPacked = {
   fontSize: 11,
@@ -256,6 +332,36 @@ const statusPacked = {
     0 6px 16px rgba(59,130,246,0.25),
     inset 0 1px 0 rgba(255,255,255,0.5)
   `,
+};
+
+const readyChip = {
+  fontWeight: 700,
+
+  color: "#eff6ff",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#1d4ed8)",
+
+  border:
+    "1px solid rgba(255,255,255,0.15)",
+
+  boxShadow:
+    "0 6px 18px rgba(37,99,235,0.25)",
+};
+
+const dispatchedChip = {
+  fontWeight: 700,
+
+  color: "#ecfdf5",
+
+  background:
+    "linear-gradient(135deg,#059669,#047857)",
+
+  border:
+    "1px solid rgba(255,255,255,0.15)",
+
+  boxShadow:
+    "0 6px 18px rgba(16,185,129,0.25)",
 };
 
 const statusDispatched = {
@@ -312,11 +418,11 @@ const bulkBar = {
     "rgba(15,23,42,.94)",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(255,255,255,.08)",
 
-  borderRadius: 18,
+  borderRadius: 22,
 
-  backdropFilter: "blur(20px)",
+  backdropFilter: "blur(24px)",
 
   boxShadow:
     "0 20px 50px rgba(0,0,0,.45)",
@@ -488,35 +594,6 @@ const popupBox = {
   ...darkModalBox,
 };
 
-const themeBtn = (darkMode) => ({
-  px: 2.6,
-  py: 1,
-  borderRadius: "999px",
-  fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: 0.4,
-  textTransform: "none",
-
-  background: darkMode
-    ? "linear-gradient(135deg,#111,#222)"
-    : "#111",
-
-  color: darkMode ? "#FFD700" : "#fff",
-
-  backdropFilter: "blur(12px)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.25)"
-    : "1px solid rgba(255,255,255,0.25)",
-
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 10px 25px rgba(0,0,0,0.25)",
-
-  "&:hover": {
-    transform: "translateY(-3px) scale(1.04)",
-  },
-});
 /**
  * Dispatched Items Page
  * FINAL RULESET IMPLEMENTED
@@ -881,9 +958,7 @@ function DispatchedItemsPage() {
 	  minWidth: 300,
 
 	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🔖 <span>Item Name</span>
-	    </Box>
+	    <span>Item Name</span>
 	  ),
 
 	  renderCell: (params) => {
@@ -963,9 +1038,7 @@ function DispatchedItemsPage() {
 	  headerName: "PD No",
 	  width: 140,
 	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🧾 <span>PD No</span>
-	    </Box>
+	    <span>PD No</span>
 	  ),
 	  renderCell: (params) => (
 	    <span
@@ -987,9 +1060,7 @@ function DispatchedItemsPage() {
 	  headerName: "Dwg No.",
 	  width: 160,
 	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📐 <span>Dwg No.</span>
-	    </Box>
+	    <span>DWG No</span>
 	  ),
 	  renderCell: (params) => (
 	    <span
@@ -1012,9 +1083,7 @@ function DispatchedItemsPage() {
 	  headerName: "Description",
 	  width: 220,
 	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📝 <span>Description</span>
-	    </Box>
+	    <span>Description</span>
 	  ),
 	  renderCell: (params) => (
 	    <span
@@ -1041,9 +1110,7 @@ function DispatchedItemsPage() {
 	  headerName: "Stock",
 	  width: 100,
 	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📦 <span>Stock</span>
-	    </Box>
+	    <span>Stock</span>
 	  ),
 		  renderCell: (params) => (
 		    <span
@@ -1061,18 +1128,14 @@ function DispatchedItemsPage() {
 		  headerName: "Client",
 		  minWidth: 180,
 		  renderHeader: () => (
-		    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-		      👤 <span>Client</span>
-		    </Box>
+		    <span>Client</span>
 		  ), },
 		  {
 		    field: "status",
 		    headerName: "Status",
 		    width: 220,
 		    renderHeader: () => (
-		      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-		        📋 <span>Status</span>
-		      </Box>
+		      <span>Status</span>
 		    ),
 	  renderCell: (params) => {
 	    const row = params.row;
@@ -1126,19 +1189,7 @@ function DispatchedItemsPage() {
 	      <Button
 	        size="small"
 	        onClick={() => setStatusModal(row)}   // 🔥 open modal
-			sx={{
-			  borderRadius: "999px",
-			  fontWeight: 600,
-			  color: "#fff",
-			  background:
-			    "linear-gradient(135deg,#111827,#374151)",
-			  boxShadow: "0 6px 18px rgba(0,0,0,0.4)",
-
-			  "&:hover": {
-			    transform: "translateY(-2px)",
-			    boxShadow: "0 10px 25px rgba(0,0,0,0.6)",
-			  }
-			}}
+			sx={actionPrimary}
 	      >
 	        Change Status
 	      </Button>
@@ -1223,20 +1274,7 @@ function DispatchedItemsPage() {
 			      alert("Failed to preview chalaan");
 			    }
 			  }}
-			  sx={{
-			    px: 2.2,
-			    borderRadius: "999px",
-			    fontSize: 12,
-			    fontWeight: 600,
-			    color: "#fff",
-			    background:
-			      "linear-gradient(180deg, rgba(59,130,246,0.95), rgba(37,99,235,0.95))",
-			    transition: "all 0.25s ease",
-			    "&:hover": {
-			      transform: "translateY(-2px) scale(1.03)",
-			      boxShadow: "0 10px 25px rgba(37,99,235,0.5)"
-			    }
-			  }}
+			  sx={actionSecondary}
 		    >
 		      Generate Chalaan
 		    </Button>
@@ -1439,19 +1477,15 @@ function DispatchedItemsPage() {
   return (
     <div style={page()}>
       <div style={content}>
-	  <Box
-	    sx={{
-	      display: "flex",
-	      alignItems: "center",
-	      justifyContent: "space-between",
-	      mb: 2,
-	    }}
-	  >
 	  <div style={headerRow}>
 	    <div>
-	      <div style={logo}>
-	        🚚 Dispatch Control Center
-	      </div>
+		<div style={logo}>
+		  <span style={{ marginRight: 12 }}>
+		    🚚
+		  </span>
+
+		  Dispatch Control Center
+		</div>
 
 	      <div style={subtitle}>
 	        Track, manage and dispatch inventory operations
@@ -1463,7 +1497,7 @@ function DispatchedItemsPage() {
 	      sx={headerChip}
 	    />
 	  </div>
-	  </Box>
+	 
 		
 	  <Box sx={searchPanel}>
 	    <SearchIcon
@@ -1501,52 +1535,85 @@ function DispatchedItemsPage() {
 	      slotProps={{
 	        select: {
 	          MenuProps: {
-	            PaperProps: {
-	              sx: {
-	                mt: 1,
-	                borderRadius: "18px",
-	                overflow: "hidden",
+				PaperProps: {
+				  sx: {
+				    mt: 1,
 
-	                // ❌ removed blur (not in dashboard)
-	                background: "#ffffff",
-	                color: "#111",
+				    borderRadius: "18px",
 
-	                border: "1px solid rgba(0,0,0,0.06)",
-	                boxShadow: "0 20px 45px rgba(0,0,0,0.18)",
+				    background:
+				      "linear-gradient(180deg,#0f172a,#111827)",
 
-	                "& .MuiMenuItem-root": {
-	                  fontSize: 14,
-	                  fontWeight: 500,
-	                  color: "#111",
-	                  transition: "all 0.2s ease",
-	                },
+				    color: "#fff",
 
-	                "& .MuiMenuItem-root:hover": {
-	                  background: "rgba(59,130,246,0.08)",
-	                },
+				    border:
+				      "1px solid rgba(255,255,255,.06)",
 
-	                "& .Mui-selected": {
-	                  background: "rgba(59,130,246,0.12) !important",
-	                  color: "#2563eb",
-	                  fontWeight: 700,
-	                },
-	              },
-	            },
+				    backdropFilter: "blur(20px)",
+
+				    "& .MuiMenuItem-root": {
+				      fontSize: 14,
+				      fontWeight: 500,
+				      color: "#fff",
+				    },
+
+				    "& .MuiMenuItem-root:hover": {
+				      background:
+				        "rgba(59,130,246,.08)",
+				    },
+
+				    "& .Mui-selected": {
+				      background:
+				        "rgba(59,130,246,.16) !important",
+
+				      color: "#60a5fa",
+
+				      fontWeight: 700,
+				    },
+				  },
+				},
 	          },
 	        }
 	      }}
-	      sx={{
-	        "& .MuiInputBase-root": {
-	          height: 40,
-	          borderRadius: 10,
-	          background: "#fff",
-	          border: "1px solid #e2e8f0",
-	        },
-	        "& input": {
-	          fontSize: 14,
-	          color: "#0f172a",
-	        }
-	      }}
+		  sx={{
+		    minWidth: 180,
+
+		    ...formFieldSx,
+
+		    "& .MuiOutlinedInput-root": {
+		      height: 44,
+
+		      borderRadius: "14px",
+
+		      background:
+		        "rgba(255,255,255,.04)",
+
+		      color: "#fff",
+
+		      "& fieldset": {
+		        borderColor:
+		          "rgba(255,255,255,.08)",
+		      },
+
+		      "&:hover fieldset": {
+		        borderColor:
+		          "rgba(59,130,246,.45)",
+		      },
+
+		      "&.Mui-focused fieldset": {
+		        borderColor: "#3b82f6",
+		      },
+		    },
+
+		    "& .MuiSelect-select": {
+		      color: "#fff",
+		      fontWeight: 500,
+		    },
+
+		    "& .MuiSvgIcon-root": {
+		      color: "#94a3b8",
+		    },
+		  }}
 	    >
 		    <MenuItem value="ALL">All Status</MenuItem>
 			<MenuItem value="READY">🟡 Ready (Decision Pending)</MenuItem>
@@ -1561,16 +1628,43 @@ function DispatchedItemsPage() {
 		    value={groupBy}
 		    onChange={(e) => setGroupBy(e.target.value)}
 			sx={{
-			  "& .MuiInputBase-root": {
-			    height: 40,
-			    borderRadius: 10,
-			    background: "#fff",
-			    border: "1px solid #e2e8f0",
+			  minWidth: 180,
+
+			  ...formFieldSx,
+
+			  "& .MuiOutlinedInput-root": {
+			    height: 44,
+
+			    borderRadius: "14px",
+
+			    background:
+			      "rgba(255,255,255,.04)",
+
+			    color: "#fff",
+
+			    "& fieldset": {
+			      borderColor:
+			        "rgba(255,255,255,.08)",
+			    },
+
+			    "&:hover fieldset": {
+			      borderColor:
+			        "rgba(59,130,246,.45)",
+			    },
+
+			    "&.Mui-focused fieldset": {
+			      borderColor: "#3b82f6",
+			    },
 			  },
-			  "& input": {
-			    fontSize: 14,
-			    color: "#0f172a",
-			  }
+
+			  "& .MuiSelect-select": {
+			    color: "#fff",
+			    fontWeight: 500,
+			  },
+
+			  "& .MuiSvgIcon-root": {
+			    color: "#94a3b8",
+			  },
 			}}
 		  >
 		    <MenuItem value="NONE">No Group</MenuItem>
@@ -1580,6 +1674,15 @@ function DispatchedItemsPage() {
 		</Box>
 
         <div style={tableWrapper}> 
+		<div style={tableTopBar}>
+		  <div style={tableTitle}>
+		    Dispatch Inventory
+		  </div>
+
+		  <div style={tableMeta}>
+		    {filteredRows.length} Active Items
+		  </div>
+		</div>
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
