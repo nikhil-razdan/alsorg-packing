@@ -143,42 +143,6 @@ const headerChip = {
     "0 12px 30px rgba(37,99,235,.32)",
 };
 
-const pageTitle = {
-  marginTop: 0,
-  marginBottom: 12,
-  fontSize: 28,
-  fontWeight: 700,
-  color: "#fff",
-};
-
-const legend = {
-  display: "flex",
-  gap: 1.5,
-  mb: 1,
-};
-
-const modalGloss = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 120,
-
-  borderTopLeftRadius: 28,
-  borderTopRightRadius: 28,
-
-  background: `
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,0.45),
-      rgba(255,255,255,0.08),
-      transparent
-    )
-  `,
-
-  pointerEvents: "none",
-};
-/* ===== TABLE ===== */
 
 const tableWrapper = {
   height: "calc(100vh - 180px)",
