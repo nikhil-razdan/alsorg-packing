@@ -325,6 +325,15 @@ function UsersPage() {
 	  </Box>
 
 	  <div style={tableWrapper}>
+	  <div style={tableTopBar}>
+	    <div style={tableTitle}>
+	      System Users
+	    </div>
+
+	    <div style={tableMeta}>
+	      {filteredRows.length} Users
+	    </div>
+	  </div>
 	  <div style={tableHeader}>
 	    <div>Username</div>
 
@@ -893,27 +902,26 @@ const moduleButton = {
 };
 
 const toolbar = {
-	
   display: "flex",
-
   alignItems: "center",
+  gap: 14,
 
-  gap: 12,
+  padding: "10px 18px",
 
-  padding: "0 16px",
-  
-  height: 48,
+  marginBottom: 4,
 
-  marginBottom: 18,
+  borderRadius: 18,
 
-  borderRadius: 14,
+  background:
+    "rgba(15,23,42,.72)",
 
-  background: "#111827",
-  
-  boxShadow: "none",
-  
   border:
     "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 10px 30px rgba(0,0,0,.25)",
 };
 
 const searchInput = {
@@ -932,7 +940,10 @@ const searchInput = {
 };
 
 const headerRow = {
-  marginBottom: 24,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 20,
 };
 
 const logo = {
@@ -952,7 +963,18 @@ const tableWrapper = {
 
   overflow: "hidden",
 
-  borderRadius: 18,
+  borderRadius: 24,
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 20px 55px rgba(0,0,0,.45)",
 };
 
 const avatar={
@@ -1004,18 +1026,21 @@ const packingChip = {
 };
 
 const actionContainer = {
-  display:"flex",
-  gap:1,
-  alignItems:"center",
-  width:"100%",
-  flexWrap:"nowrap",
+  display: "flex",
+
+  alignItems: "center",
+
+  gap: 1,
+
+  flexWrap: "nowrap",
 };
 
 const actionPrimary = {
-  borderRadius: 10,
+  borderRadius: 12,
+
   textTransform: "none",
+
   fontWeight: 700,
-  minHeight: 34,
 
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
@@ -1023,19 +1048,23 @@ const actionPrimary = {
   color: "#fff",
 
   border:
-    "1px solid rgba(59,130,246,.25)",
+    "1px solid rgba(59,130,246,.35)",
 
-  boxShadow: "none",
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
 };
 
 const actionSecondary = {
-  borderRadius: 10,
+  borderRadius: 12,
 
   textTransform: "none",
 
   fontWeight: 700,
-
-  minHeight: 34,
 
   background:
     "rgba(255,255,255,.04)",
@@ -1043,27 +1072,28 @@ const actionSecondary = {
   color: "#fff",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.08)",
+  },
 };
 
 const actionDanger = {
-  borderRadius: 10,
+  borderRadius: 12,
 
   textTransform: "none",
 
   fontWeight: 700,
 
-  minHeight: 34,
-
   background:
-    "rgba(239,68,68,.12)",
+    "linear-gradient(135deg,#dc2626,#ef4444)",
 
-  color: "#f87171",
+  color: "#fff",
 
-  border:
-    "1px solid rgba(239,68,68,.2)",
-
-  boxShadow: "none",
+  boxShadow:
+    "0 10px 24px rgba(239,68,68,.28)",
 };
 
 const formFieldSx = {
@@ -1116,7 +1146,7 @@ const formFieldSx = {
 const tableHeader = {
   display: "grid",
   gridTemplateColumns:
-    "1.4fr .9fr 1.2fr",
+    "1.6fr .8fr 1.6fr",
 
   padding: 16,
 
@@ -1137,11 +1167,11 @@ const tableRow = {
   display: "grid",
 
   gridTemplateColumns:
-    "1.4fr .9fr 1.2fr",
+    "1.6fr .8fr 1.6fr",
 
   alignItems: "center",
 
-  padding: 16,
+  padding: "18px 16px",
 
   color: "#fff",
 
@@ -1192,6 +1222,35 @@ const inlineInput = {
   "& .MuiSvgIcon-root": {
     color: "#94a3b8",
   },
+};
+
+const tableTopBar = {
+  height: 58,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "space-between",
+
+  padding: "0 20px",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const tableTitle = {
+  color: "#fff",
+
+  fontWeight: 800,
+
+  fontSize: 15,
+};
+
+const tableMeta = {
+  color: "rgba(255,255,255,.45)",
+
+  fontSize: 13,
 };
 
 export default UsersPage;
