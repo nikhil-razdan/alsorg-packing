@@ -871,8 +871,6 @@ const searchPanel = {
 
   padding: "10px 18px",
 
-  marginBottom: 4,
-
   borderRadius: 18,
 
   background:
@@ -923,10 +921,6 @@ const logo = {
 const subtitle = {
   color: "#94a3b8",
   fontSize: 14,
-};
-
-const tableContent = {
-  padding: 24,
 };
 
 const tableWrapper = {
@@ -1114,32 +1108,6 @@ const tableHeader = {
   color: "#94a3b8",
 
   fontWeight: 700,
-};
-
-const headerChip = {
-  height: 42,
-
-  paddingLeft: 18,
-  paddingRight: 18,
-
-  borderRadius: 999,
-
-  fontSize: 14,
-
-  fontWeight: 800,
-
-  letterSpacing: 0.3,
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-  color: "#fff",
-
-  border:
-    "1px solid rgba(59,130,246,.35)",
-
-  boxShadow:
-    "0 12px 30px rgba(37,99,235,.32)",
 };
 
 const tableBody = {
