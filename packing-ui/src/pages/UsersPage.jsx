@@ -826,6 +826,12 @@ const page = {
 
 const content = {
   padding: 24,
+
+  display: "flex",
+
+  flexDirection: "column",
+
+  gap: 24,
 };
 
 const wrap = {
@@ -835,16 +841,6 @@ const wrap = {
   borderRadius: 24,
 
   padding: 28,
-};
-
-const moduleHeader = {
-  display: "flex",
-
-  justifyContent: "space-between",
-
-  alignItems: "center",
-
-  marginBottom: 20,
 };
 
 const moduleButton = {
@@ -871,20 +867,24 @@ const searchPanel = {
 
   alignItems: "center",
 
-  gap: 12,
+  gap: 14,
 
-  height: 52,
+  padding: "10px 18px",
 
-  padding: "0 18px",
+  marginBottom: 4,
 
-  marginBottom: 24,
+  borderRadius: 18,
 
-  borderRadius: 16,
-
-  background: "rgba(255,255,255,0.03)",
+  background:
+    "rgba(15,23,42,.72)",
 
   border:
     "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 10px 30px rgba(0,0,0,.25)",
 };
 
 const searchInput = {
@@ -908,8 +908,6 @@ const headerRow = {
   justifyContent: "space-between",
 
   alignItems: "center",
-
-  marginBottom: 24,
 };
 
 const logo = {
