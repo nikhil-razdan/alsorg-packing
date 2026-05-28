@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { DataGrid } from "@mui/x-data-grid";
+
 import {
   Box,
   Button,
@@ -263,262 +263,7 @@ function UsersPage() {
     return packingChip;
   };
 
-  const columns = [
 
-	{
-	  field:"username",
-	  headerName:"Username",
-
-	  flex: 1,              
-	  minWidth: 260,
-	  maxWidth: 340,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		  <AdminPanelSettingsIcon sx={{ fontSize:18 }} />
-		  <span>Username</span>
-		</Box>
-	    </Box>
-	  ),
-
-	  renderCell:(params)=>{
-	    const u = params.row;
-
-	    if(editId===u.id){
-	      return (
-	        <TextField
-	          value={editUsername}
-	          size="small"
-	          onChange={(e)=>setEditUsername(e.target.value)}
-			  sx={{
-			    minWidth: 140,
-
-			    "& .MuiInputBase-root": {
-			      borderRadius: "14px",
-
-				  background:
-				    "rgba(255,255,255,.04)",
-
-				  color:"#fff",
-
-			      border:  "1px solid rgba(0,0,0,0.08)",
-			    },
-
-			    "& input": {
-			      color:  "#fff",
-			    },
-
-			    "& input::placeholder": {
-			      color
-			        : "rgba(0,0,0,0.4)",
-			      opacity: 1,
-			    },
-
-			    "& .MuiSvgIcon-root": {
-			      color: "#111",
-			    },
-
-			    "& .MuiSelect-select": {
-			      color:"#fff" ,
-			    },
-
-			    "& label": {
-			      color
-			        : "#475569",
-			    },
-			  }}
-	        />
-	      );
-	    }
-
-	    return(
-	      <Box
-	        sx={{
-	          display:"flex",
-	          alignItems:"center",
-	          gap:1.2,
-	          width:"100%",
-	          overflow:"hidden",
-	        }}
-	      >
-	        <Box sx={avatar}>
-	          {u.username.charAt(0).toUpperCase()}
-	        </Box>
-
-	        <Box
-	          sx={{
-	            overflow:"hidden",
-	            textOverflow:"ellipsis",
-	            whiteSpace:"nowrap",
-	            fontWeight:500,
-	            flex:1,
-	          }}
-	          title={u.username}
-	        >
-	          {u.username}
-	        </Box>
-	      </Box>
-	    );
-	  }
-	},
-
-	{
-	  field:"role",
-	  headerName:"Role",
-	  width:200,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		  <InventoryIcon sx={{ fontSize:18 }} />
-		  <span>Role</span>
-		</Box>
-	    </Box>
-	  ),
-
-	  renderCell:(params)=>{
-        const u = params.row;
-
-        if(editId===u.id){
-          return(
-            <TextField
-              select
-              size="small"
-              value={editRole}
-              onChange={(e)=>setEditRole(e.target.value)}
-			  sx={{
-			    minWidth: 140,
-
-			    "& .MuiInputBase-root": {
-			      borderRadius: "14px",
-
-				  background:
-				    "rgba(255,255,255,.04)",
-
-				  color:"#fff",
-
-			      border
-			        : "1px solid rgba(0,0,0,0.08)",
-			    },
-
-			    "& input": {
-			      color: "#fff",
-			    },
-
-			    "& input::placeholder": {
-			      color:  "rgba(0,0,0,0.4)",
-			      opacity: 1,
-			    },
-
-			    "& .MuiSvgIcon-root": {
-			      color: "#111",
-			    },
-
-			    "& .MuiSelect-select": {
-			      color: "#fff" ,
-			    },
-
-			    "& label": {
-			      color
-			        : "#475569",
-			    },
-			  }}
-            >
-			<MenuItem value="ADMIN">ADMIN</MenuItem>
-			<MenuItem value="PACKING">PACKING</MenuItem>
-			<MenuItem value="WAREHOUSE">WAREHOUSE </MenuItem>
-			<MenuItem value="DISPATCH">DISPATCH</MenuItem>
-			<MenuItem value="LOGISTICS">LOGISTICS</MenuItem>
-            </TextField>
-          );
-        }
-
-        return(
-          <Chip
-            icon={roleIcon(u.role)}
-            label={u.role}
-            size="small"
-            sx={roleChip(u.role)}
-          />
-        );
-      }
-    },
-
-	{
-	  field:"actions",
-	  headerName:"Action",
-
-	  flex: 1,
-	  minWidth: 420,
-	  maxWidth: 460,
-
-	  sortable:false,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		<Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-		  <EditIcon sx={{ fontSize:18 }} />
-		  <span style={{ fontWeight:700 }}>
-		    Actions
-		  </span>
-		</Box>
-	    </Box>
-	  ),
-
-	  renderCell:(params)=>{
-        const u = params.row;
-
-        if(editId===u.id){
-          return(
-            <Box sx={actionContainer}>
-              <Button size="small" sx={actionPrimary} onClick={saveEdit}>
-                Save
-              </Button>
-
-              <Button size="small" sx={actionSecondary} onClick={cancelEdit}>
-                Cancel
-              </Button>
-            </Box>
-          );
-        }
-
-        return(
-          <Box sx={actionContainer}>
-
-            <Button
-              startIcon={<EditIcon/>}
-              size="small"
-              sx={actionSecondary}
-              onClick={()=>startEdit(u)}
-            >
-              Edit
-            </Button>
-
-            <Button
-              startIcon={<LockResetIcon/>}
-              size="small"
-              sx={actionPrimary}
-              onClick={()=>openReset(u)}
-            >
-              Reset
-            </Button>
-
-            <Button
-              startIcon={<DeleteIcon/>}
-              size="small"
-              sx={actionDanger}
-              onClick={()=>deleteUser(u.id)}
-            >
-              Delete
-            </Button>
-
-          </Box>
-        );
-      }
-    }
-
-  ];
 
   return(
 
@@ -573,15 +318,193 @@ function UsersPage() {
 	      {users.length} Active Accounts
 	    </div>
 	  </div>
-	  <DataGrid
-	    style={{ height:"100%" }}
-          rows={filteredRows}
-          columns={columns}
-          loading={loading}
-          disableRowSelectionOnClick
-          density="compact"
-          sx={dataGridStyles}
-        />
+
+	  <div style={tableHeader}>
+	    <div style={userColumn}>
+	      Username
+	    </div>
+
+	    <div style={roleColumn}>
+	      Role
+	    </div>
+
+	    <div style={actionColumn}>
+	      Actions
+	    </div>
+	  </div>
+
+	  <div style={tableBody}>
+
+	    {filteredRows.map((u) => (
+
+	      <div
+	        key={u.id}
+	        style={tableRow}
+	      >
+
+	        {/* USER COLUMN */}
+
+	        <div style={userColumn}>
+
+	          <div style={userInfo}>
+	            <div style={avatar}>
+	              {u.username
+	                .charAt(0)
+	                .toUpperCase()}
+	            </div>
+
+	            {editId === u.id ? (
+
+	              <TextField
+	                value={editUsername}
+	                size="small"
+	                onChange={(e)=>
+	                  setEditUsername(
+	                    e.target.value
+	                  )
+	                }
+	                sx={inlineInput}
+	              />
+
+	            ) : (
+
+	              <span>
+	                {u.username}
+	              </span>
+
+	            )}
+	          </div>
+
+	        </div>
+
+	        {/* ROLE COLUMN */}
+
+	        <div style={roleColumn}>
+
+	          {editId === u.id ? (
+
+	            <TextField
+	              select
+	              size="small"
+	              value={editRole}
+	              onChange={(e)=>
+	                setEditRole(
+	                  e.target.value
+	                )
+	              }
+	              sx={inlineInput}
+	            >
+	              <MenuItem value="ADMIN">
+	                ADMIN
+	              </MenuItem>
+
+	              <MenuItem value="PACKING">
+	                PACKING
+	              </MenuItem>
+
+	              <MenuItem value="WAREHOUSE">
+	                WAREHOUSE
+	              </MenuItem>
+
+	              <MenuItem value="DISPATCH">
+	                DISPATCH
+	              </MenuItem>
+
+	              <MenuItem value="LOGISTICS">
+	                LOGISTICS
+	              </MenuItem>
+
+	            </TextField>
+
+	          ) : (
+
+	            <Chip
+	              icon={roleIcon(u.role)}
+	              label={u.role}
+	              size="small"
+	              sx={roleChip(u.role)}
+	            />
+
+	          )}
+
+	        </div>
+
+	        {/* ACTIONS */}
+
+	        <div style={actionColumn}>
+
+	          {editId === u.id ? (
+
+	            <Box sx={actionContainer}>
+
+	              <Button
+	                size="small"
+	                sx={actionPrimary}
+	                onClick={saveEdit}
+	              >
+	                Save
+	              </Button>
+
+	              <Button
+	                size="small"
+	                sx={actionSecondary}
+	                onClick={cancelEdit}
+	              >
+	                Cancel
+	              </Button>
+
+	            </Box>
+
+	          ) : (
+
+	            <Box sx={actionContainer}>
+
+	              <Button
+	                startIcon={<EditIcon />}
+	                size="small"
+	                sx={actionSecondary}
+	                onClick={()=>
+	                  startEdit(u)
+	                }
+	              >
+	                Edit
+	              </Button>
+
+	              <Button
+	                startIcon={
+	                  <LockResetIcon />
+	                }
+	                size="small"
+	                sx={actionPrimary}
+	                onClick={()=>
+	                  openReset(u)
+	                }
+	              >
+	                Reset
+	              </Button>
+
+	              <Button
+	                startIcon={<DeleteIcon />}
+	                size="small"
+	                sx={actionDanger}
+	                onClick={()=>
+	                  deleteUser(u.id)
+	                }
+	              >
+	                Delete
+	              </Button>
+
+	            </Box>
+
+	          )}
+
+	        </div>
+
+	      </div>
+
+	    ))}
+
+	  </div>
 
       </div>
 
@@ -1026,57 +949,6 @@ const tableWrapper = {
     "0 20px 55px rgba(0,0,0,.45)",
 };
 
-const dataGridStyles = {
-  border: "none",
-
-  background: "transparent",
-
-  color: "#fff",
-
-  "& .MuiDataGrid-columnHeaders": {
-    background:
-      "rgba(255,255,255,.03)",
-
-    borderBottom:
-      "1px solid rgba(255,255,255,.06)",
-
-    minHeight: "54px !important",
-    maxHeight: "54px !important",
-  },
-
-  "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight: 800,
-    color: "#93c5fd",
-    letterSpacing: ".4px",
-  },
-
-  "& .MuiDataGrid-cell": {
-    borderBottom:
-      "1px solid rgba(255,255,255,.04)",
-
-    color: "rgba(255,255,255,.88)",
-
-    fontSize: 13,
-  },
-
-  "& .MuiDataGrid-row:hover": {
-    background:
-      "rgba(59,130,246,.08)",
-  },
-
-  "& .MuiDataGrid-footerContainer": {
-    borderTop:
-      "1px solid rgba(255,255,255,.06)",
-
-    background:
-      "rgba(255,255,255,.02)",
-  },
-
-  "& .MuiCheckbox-root": {
-    color: "#60a5fa",
-  },
-};
-
 const avatar={
   width:30,
   height:30,
@@ -1267,6 +1139,115 @@ const formFieldSx = {
   },
 
   "& .MuiInputBase-input": {
+    color: "#fff",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+};
+
+const tableHeader = {
+  display: "flex",
+
+  alignItems: "center",
+
+  height: 58,
+
+  paddingLeft: 28,
+  paddingRight: 28,
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+
+  color: "rgba(255,255,255,.55)",
+
+  fontWeight: 700,
+
+  fontSize: 14,
+};
+
+const tableBody = {
+  display: "flex",
+
+  flexDirection: "column",
+};
+
+const tableRow = {
+  display: "flex",
+
+  alignItems: "center",
+
+  minHeight: 68,
+
+  paddingLeft: 28,
+  paddingRight: 28,
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.05)",
+
+  transition: "all .2s ease",
+};
+
+const userColumn = {
+  flex: 1.2,
+
+  display: "flex",
+
+  alignItems: "center",
+};
+
+const roleColumn = {
+  width: 240,
+
+  display: "flex",
+
+  alignItems: "center",
+};
+
+const actionColumn = {
+  width: 320,
+
+  display: "flex",
+
+  justifyContent: "flex-start",
+};
+
+const userInfo = {
+  display: "flex",
+
+  alignItems: "center",
+
+  gap: 14,
+};
+
+const inlineInput = {
+  minWidth: 180,
+
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "14px",
+
+    background:
+      "rgba(255,255,255,.04)",
+
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& input": {
     color: "#fff",
   },
 
