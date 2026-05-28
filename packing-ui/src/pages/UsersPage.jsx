@@ -320,17 +320,11 @@ function UsersPage() {
 	  </div>
 
 	  <div style={tableHeader}>
-	    <div style={userColumn}>
-	      Username
-	    </div>
+	    <div>Username</div>
 
-	    <div style={roleColumn}>
-	      Role
-	    </div>
+	    <div>Role</div>
 
-	    <div style={actionColumn}>
-	      Actions
-	    </div>
+	    <div>Actions</div>
 	  </div>
 
 	  <div style={tableBody}>
@@ -352,7 +346,7 @@ function UsersPage() {
 
 	        {/* USER COLUMN */}
 
-	        <div style={userColumn}>
+	        <div>
 
 	          <div style={userInfo}>
 	            <div style={avatar}>
@@ -397,7 +391,12 @@ function UsersPage() {
 
 	        {/* ROLE COLUMN */}
 
-	        <div style={roleColumn}>
+			<div
+			  style={{
+			    display: "flex",
+			    alignItems: "center",
+			  }}
+			>
 
 	          {editId === u.id ? (
 
@@ -449,7 +448,12 @@ function UsersPage() {
 
 	        {/* ACTIONS */}
 
-	        <div style={actionColumn}>
+			<div
+			  style={{
+			    display: "flex",
+			    alignItems: "center",
+			  }}
+			>
 
 	          {editId === u.id ? (
 
@@ -1112,6 +1116,8 @@ const tableRow = {
 
   gridTemplateColumns:
     "1.4fr .9fr 1.2fr",
+
+  alignItems: "center",
 
   padding: 16,
 
