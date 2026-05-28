@@ -1891,11 +1891,13 @@ function DispatchedItemsPage() {
 			    select
 			    size="small"
 			    value={actionFilter}
-			    onChange={(e) => setActionFilter(e.target.value)}
-				sx={{
-				  ...formFieldSx,
-				  minWidth: 180,
-				}}
+			    onChange={(e) =>
+			      setActionFilter(e.target.value)
+			    }
+			    sx={{
+			      ...formFieldSx,
+			      minWidth: 180,
+			    }}
 			    style={{
 			      padding: "6px 10px",
 			      borderRadius: 8,
@@ -1904,25 +1906,48 @@ function DispatchedItemsPage() {
 			      fontWeight: 600,
 			    }}
 			  >
-			    <option value="ALL">All Actions</option>
-			    <option value="REQUEST">Requests</option>
-			    <option value="APPROVE">Approvals</option>
-			    <option value="REJECT">Rejections</option>
-			    <option value="DISPATCH">Dispatch</option>
-			    <option value="PACK">Pack</option>
-			    <option value="STICKER">Sticker</option>
-			  </Textfield>
+			    <option value="ALL">
+			      All Actions
+			    </option>
+
+			    <option value="REQUEST">
+			      Requests
+			    </option>
+
+			    <option value="APPROVE">
+			      Approvals
+			    </option>
+
+			    <option value="REJECT">
+			      Rejections
+			    </option>
+
+			    <option value="DISPATCH">
+			      Dispatch
+			    </option>
+
+			    <option value="PACK">
+			      Pack
+			    </option>
+
+			    <option value="STICKER">
+			      Sticker
+			    </option>
+			  </TextField>
 
 			  {/* ROLE FILTER */}
-			  <teTextField
+
+			  <TextField
 			    select
-			  	size="small"
+			    size="small"
 			    value={roleFilter}
-			    onChange={(e) => setRoleFilter(e.target.value)}
-				sx={{
-				  ...formFieldSx,
-				  minWidth: 180,
-				}}
+			    onChange={(e) =>
+			      setRoleFilter(e.target.value)
+			    }
+			    sx={{
+			      ...formFieldSx,
+			      minWidth: 180,
+			    }}
 			    style={{
 			      padding: "6px 10px",
 			      borderRadius: 8,
@@ -1931,11 +1956,22 @@ function DispatchedItemsPage() {
 			      fontWeight: 600,
 			    }}
 			  >
-			    <option value="ALL">All Roles</option>
-			    <option value="ADMIN">Admin</option>
-			    <option value="DISPATCH">Dispatch</option>
-			    <option value="USER">Packing</option>
-			  </select>
+			    <option value="ALL">
+			      All Roles
+			    </option>
+
+			    <option value="ADMIN">
+			      Admin
+			    </option>
+
+			    <option value="DISPATCH">
+			      Dispatch
+			    </option>
+
+			    <option value="USER">
+			      Packing
+			    </option>
+			  </TextField>
 			</Box>
 
 	        {auditLoading && <p>Loading…</p>}
