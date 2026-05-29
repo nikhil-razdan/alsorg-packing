@@ -1564,6 +1564,24 @@ function DispatchedItemsPage() {
 		  </div>
 		</Box>
 	    </div>
+		<Box
+				      sx={{
+				        color: "#94a3b8",
+				        fontSize: 14,
+				        fontWeight: 600,
+				      }}
+				    >
+				      Total Items:{" "}
+				      <span
+				        style={{
+				          color: "#60a5fa",
+				          fontWeight: 800,
+				        }}
+				      >
+				        {filteredRows.length}
+				      </span>
+				    </Box>
+
 	  </div>
 	 
 		
@@ -1928,8 +1946,8 @@ function DispatchedItemsPage() {
 			  disabled={pageNo === 1}
 			  onClick={() => setPageNo(p => p - 1)}
 			  sx={{
-			    minWidth: 105,
-			    height: 40,
+			    minWidth: 100,
+			    height: 30,
 			    borderRadius: "12px",
 			    background:
 			      "linear-gradient(180deg,#1e293b,#0f172a)",
@@ -1937,8 +1955,8 @@ function DispatchedItemsPage() {
 			    border:
 			      "1px solid rgba(255,255,255,.08)",
 
-			    fontSize: 13,
-			    fontWeight: 600,
+			    fontSize: 10,
+			    fontWeight: 500,
 
 			    "&:disabled": {
 			      opacity: 0.45,
@@ -1952,7 +1970,7 @@ function DispatchedItemsPage() {
 			<Box
 			  sx={{
 			    px: 2.5,
-			    height: 40,
+			    height: 30,
 
 			    display: "flex",
 			    alignItems: "center",
@@ -1967,8 +1985,8 @@ function DispatchedItemsPage() {
 			    border:
 			      "1px solid rgba(255,255,255,.06)",
 
-			    fontSize: 13,
-			    fontWeight: 600,
+			    fontSize: 10,
+			    fontWeight: 500,
 			  }}
 			>
 			  Page
@@ -1978,8 +1996,6 @@ function DispatchedItemsPage() {
 			    sx={{
 			      mx: 1,
 			      color: "#60a5fa",
-			      fontWeight: 800,
-			      fontSize: 15,
 			    }}
 			  >
 			    {pageNo}
@@ -1992,8 +2008,8 @@ function DispatchedItemsPage() {
 			  disabled={pageNo === totalPages}
 			  onClick={() => setPageNo(p => p + 1)}
 			  sx={{
-			    minWidth: 105,
-			    height: 40,
+			    minWidth: 100,
+			    height: 30,
 			    borderRadius: "12px",
 
 			    background:
@@ -2001,8 +2017,8 @@ function DispatchedItemsPage() {
 
 			    color: "#fff",
 
-			    fontSize: 13,
-			    fontWeight: 600,
+			    fontSize: 10,
+			    fontWeight: 500,
 
 			    "&:disabled": {
 			      opacity: 0.45,
@@ -2013,26 +2029,6 @@ function DispatchedItemsPage() {
 			  Next ▶
 			</Button>
 		    </Box>
-
-		    {/* RIGHT SIDE */}
-		    <Box
-		      sx={{
-		        color: "#94a3b8",
-		        fontSize: 14,
-		        fontWeight: 600,
-		      }}
-		    >
-		      Total Items:{" "}
-		      <span
-		        style={{
-		          color: "#60a5fa",
-		          fontWeight: 800,
-		        }}
-		      >
-		        {filteredRows.length}
-		      </span>
-		    </Box>
-
 		  </Box>
 		</div>
 		</div>
