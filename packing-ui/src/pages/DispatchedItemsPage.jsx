@@ -633,7 +633,7 @@ function DispatchedItemsPage() {
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
   const [pageNo, setPageNo] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
   
   const filteredRows = useMemo(() => {
   if (!Array.isArray(rows)) return [];
@@ -1867,41 +1867,57 @@ function DispatchedItemsPage() {
 		        Show
 		      </Box>
 
-		      <TextField
-		        select
-		        size="small"
-		        value={pageSize}
-		        onChange={(e) =>
-		          setPageSize(Number(e.target.value))
-		        }
-		        sx={{
-		          width: 110,
+			  <Box
+			    sx={{
+			      display: "flex",
+			      alignItems: "center",
+			      gap: 1.5,
+			    }}
+			  >
+			    <TextField
+			      select
+			      size="small"
+			      value={pageSize}
+			      onChange={(e) =>
+			        setPageSize(Number(e.target.value))
+			      }
+			      sx={{
+			        width: 110,
 
-		          "& .MuiOutlinedInput-root": {
-		            height: 42,
-		            borderRadius: "12px",
+			        "& .MuiOutlinedInput-root": {
+			          height: 36,
+			          borderRadius: "12px",
 
-		            background:
-		              "linear-gradient(180deg,#0f172a,#111827)",
+			          background:
+			            "rgba(255,255,255,.04)",
 
-		            color: "#fff",
+			          color: "#fff",
 
-		            "& fieldset": {
-		              borderColor:
-		                "rgba(255,255,255,.08)",
-		            },
-		          },
+			          "& fieldset": {
+			            borderColor:
+			              "rgba(255,255,255,.08)",
+			          },
 
-		          "& .MuiSvgIcon-root": {
-		            color: "#94a3b8",
-		          },
-		        }}
-		      >
-		        <MenuItem value={50}>50</MenuItem>
-		        <MenuItem value={100}>100</MenuItem>
-		        <MenuItem value={150}>150</MenuItem>
-		        <MenuItem value={200}>200</MenuItem>
-		      </TextField>
+			          "&:hover fieldset": {
+			            borderColor:
+			              "rgba(59,130,246,.35)",
+			          },
+			        },
+
+			        "& .MuiSvgIcon-root": {
+			          color: "#94a3b8",
+			        },
+			      }}
+			    >
+			      <MenuItem value={25}>
+			        25
+			      </MenuItem>
+
+			      <MenuItem value={50}>
+			        50
+			      </MenuItem>
+			    </TextField>
+			  </Box>
 
 		      <Box
 		        sx={{

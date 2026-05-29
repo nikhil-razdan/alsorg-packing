@@ -81,11 +81,11 @@ function Sidebar() {
 
 	  gap: collapsed ? 0 : 14,
 
-	  padding: "14px 16px",
+	  padding: "11px 14px",
 
-	  marginBottom: 8,
+	  marginBottom: 6,
 
-	  borderRadius: 18,
+	  borderRadius: 14,
 
 	  textDecoration: "none",
 
@@ -98,7 +98,7 @@ function Sidebar() {
 	    : "rgba(255,255,255,.72)",
 
 	  background: active
-	    ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+	    ? "linear-gradient(135deg,#1d4ed8,#2563eb)"
 	    : "transparent",
 
 	  border: active
@@ -106,7 +106,7 @@ function Sidebar() {
 	    : "1px solid transparent",
 
 	  boxShadow: active
-	    ? "0 10px 24px rgba(37,99,235,.22)"
+	    ? "0 6px 18px rgba(37,99,235,.18)"
 	    : "none",
 
 	  transition: "all .22s ease",
@@ -121,7 +121,7 @@ function Sidebar() {
     <div
       style={{
         ...sidebar,
-        width: collapsed ? 72 : 240,
+        width: collapsed ? 64 : 210,
       }}
     >
       {/* Glass highlight */}
@@ -175,7 +175,7 @@ function Sidebar() {
 /* ===================== STYLES ===================== */
 
 const sidebar = {
-  width: 260,
+  width: 220,
 
   height: "100vh",
 
@@ -217,35 +217,38 @@ const topHighlight = {
 const toggleButton = {
   position: "absolute",
 
-  top: 18,
+  top: 16,
 
-  right: 12,
+  right: 10,
 
-  width: 28,
+  width: 24,
 
-  height: 28,
+  height: 24,
 
-  borderRadius: 10,
+  borderRadius: 8,
 
-  border: "none",
+  border:
+    "1px solid rgba(255,255,255,.08)",
 
   background:
-    "rgba(255,255,255,.06)",
+    "rgba(255,255,255,.04)",
 
-  color: "#fff",
+  color: "#94a3b8",
 
   cursor: "pointer",
 
   fontWeight: 700,
+
+  transition: "all .2s ease",
 };
 
 const menuTitle = {
   marginBottom: 26,
   paddingLeft: 6,
   fontWeight: 700,
-  fontSize: 12,
+  fontSize: 11,
   color: "rgba(255,255,255,0.55)",
-  letterSpacing: "0.16em",
+  letterSpacing: "0.12em",
   textTransform: "uppercase",
 };
 
@@ -274,9 +277,9 @@ const logoSection = {
 };
 
 const logoIcon = {
-  width: 42,
+  width: 36,
 
-  height: 42,
+  height: 36,
 
   borderRadius: 14,
 
@@ -293,7 +296,7 @@ const logoIcon = {
 
   fontWeight: 900,
 
-  fontSize: 18,
+  fontSize: 16,
 
   boxShadow:
     "0 10px 24px rgba(37,99,235,.35)",
