@@ -170,6 +170,12 @@ const tableWrapper = {
   overflow: "hidden",
 
   borderRadius: 18,
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
 };
 
 const dataGridStyles = {
@@ -187,10 +193,17 @@ const dataGridStyles = {
 
   "& .MuiDataGrid-columnHeaders": {
     background: "#111827 !important",
+
     color: "#94a3b8",
-    minHeight: "56px !important",
-    maxHeight: "56px !important",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
+
+    borderBottom:
+      "1px solid rgba(255,255,255,.06)",
+
+    minHeight:
+      "56px !important",
+
+    maxHeight:
+      "56px !important",
   },
   
   "& .MuiDataGrid-columnHeaderTitle": {
@@ -204,45 +217,58 @@ const dataGridStyles = {
 
   "& .MuiDataGrid-cell": {
     borderBottom:
-      "1px solid rgba(255,255,255,.05)",
+      "none",
 
-    display: "flex",
+    display:
+      "flex",
 
-    alignItems: "center",
-	
-	paddingLeft: "16px",
-	paddingRight: "16px",
+    alignItems:
+      "center",
 
-    fontSize: 13,
-	whiteSpace: "nowrap",
-	overflow: "hidden",
-	textOverflow: "ellipsis",
+    color:
+      "#fff",
+
+    paddingLeft:
+      "16px",
+
+    paddingRight:
+      "16px",
+
+    fontSize:
+      13,
   },
 
   "& .MuiDataGrid-row": {
-    minHeight: "62px !important",
-    maxHeight: "62px !important",
+    minHeight:
+      "60px !important",
 
-    transition: "all .22s ease",
-
-    "&:hover": {
-      background: "rgba(255,255,255,.025)",
-    },
-  },
-
-  "& .MuiDataGrid-row:hover": {
-    background:
-      "rgba(255,255,255,.025)",
-  },
-
-  "& .MuiDataGrid-footerContainer": {
-    background:
-      "rgba(255,255,255,.02)",
+    maxHeight:
+      "60px !important",
 
     borderTop:
       "1px solid rgba(255,255,255,.06)",
 
-    color:"#94a3b8",
+    transition:
+      "all .22s ease",
+  },
+
+  "& .MuiDataGrid-row:hover": {
+    background:
+      "rgba(255,255,255,.02)",
+
+    cursor:
+      "pointer",
+  },
+
+  "& .MuiDataGrid-footerContainer": {
+    background:
+      "#111827",
+
+    borderTop:
+      "1px solid rgba(255,255,255,.06)",
+
+    color:
+      "#94a3b8",
   },
 
   "& .MuiCheckbox-root": {
@@ -260,10 +286,6 @@ const dataGridStyles = {
   
   "& .MuiDataGrid-topContainer": {
     background: "#111827",
-  },
-
-  "& .MuiDataGrid-columnHeaderTitle": {
-    color: "#94a3b8",
   },
 
   "& .MuiDataGrid-scrollbar": {
@@ -561,7 +583,10 @@ const wrap = {
 
   borderRadius: 24,
 
-  padding: 28,
+  padding: 24,
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
 
 const popupOverlay = {
@@ -583,6 +608,43 @@ const popupBox = {
 
   ...darkModalBox,
 };
+
+const dispatchTable = {
+  overflow: "hidden",
+  borderRadius: 18,
+};
+
+const dispatchHead = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "2fr 1fr 1.2fr 1.5fr 1fr 2fr",
+
+  padding: 16,
+
+  background: "#111827",
+
+  color: "#94a3b8",
+
+  fontWeight: 700,
+};
+
+const dispatchRow = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "2fr 1fr 1.2fr 1.5fr 1fr 2fr",
+
+  padding: 16,
+
+  color: "#fff",
+
+  borderTop:
+    "1px solid rgba(255,255,255,0.06)",
+
+  alignItems: "center",
+};
+
 
 /**
  * Dispatched Items Page
@@ -1689,7 +1751,11 @@ function DispatchedItemsPage() {
         <div style={wrap}>
 
 		<div style={tableWrapper}>
-		<div>
+		<div
+		  style={{
+		    padding: "0 0 20px 0",
+		  }}
+		>
 		  <div style={tableTitle}>
 		    Dispatch Inventory
 		  </div>
@@ -1700,19 +1766,33 @@ function DispatchedItemsPage() {
 		</div>
 		<DataGrid
 		  selectionModel={selectionModel}
-		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
-		  rows={Array.isArray(filteredRows) ? filteredRows : []}
+		  onSelectionModelChange={(newSelection) =>
+		    setSelectionModel(newSelection)
+		  }
+
+		  rows={
+		    Array.isArray(filteredRows)
+		      ? filteredRows
+		      : []
+		  }
+
 		  columns={columns}
+
 		  loading={loading}
-		  density="compact"
-		  sx={dataGridStyles}
-		  onRowClick={(params) => {
-		    setAnimatingId(params.id);
-		    setTimeout(() => setAnimatingId(null), 200);
-		  }}
-		  getRowId={(row) => row.zohoItemId}
-		  disableRowSelectionOnClick
+
+		  getRowId={(row) =>
+		    row.zohoItemId
+		  }
+
 		  disableColumnMenu
+
+		  disableRowSelectionOnClick
+
+		  hideFooterSelectedRowCount
+
+		  rowHeight={60}
+
+		  sx={dataGridStyles}
 		/>
         </div>
       </div>
