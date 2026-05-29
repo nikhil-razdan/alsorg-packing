@@ -308,12 +308,6 @@ function UsersPage() {
   </Box>
   
   <div style={wrap}>
-
-	<div style={tableTopBar}>
-
-	  
-
-	</div>
 	  <div style={tableWrapper}>
 	  <div style={tableHeader}>
 	    <div>Username</div>
