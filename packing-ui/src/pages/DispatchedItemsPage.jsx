@@ -4,6 +4,7 @@ import { Chip, Box, Button, IconButton, TextField, MenuItem} from "@mui/material
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
+import Checkbox from "@mui/material/Checkbox";
 import DescriptionOutlinedIcon
 from "@mui/icons-material/DescriptionOutlined";
 
@@ -186,11 +187,17 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#111827 !important",
-    color: "#94a3b8",
-    minHeight: "56px !important",
-    maxHeight: "56px !important",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
+    background:
+      "linear-gradient(180deg,#111827,#0f172a)",
+
+    borderBottom:
+      "1px solid rgba(59,130,246,.18)",
+
+    minHeight:
+      "64px !important",
+
+    maxHeight:
+      "64px !important",
   },
   
   "& .MuiDataGrid-columnHeaderTitle": {
@@ -209,7 +216,7 @@ const dataGridStyles = {
     display: "flex",
 
     alignItems: "center",
-	
+	fontWeight:500,
 	paddingLeft: "16px",
 	paddingRight: "16px",
 
@@ -220,8 +227,8 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-row": {
-    minHeight: "62px !important",
-    maxHeight: "62px !important",
+    minHeight: "72px !important",
+    maxHeight: "72px !important",
 
     transition: "all .22s ease",
 
@@ -578,9 +585,17 @@ const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
 
-  borderRadius: 24,
+  borderRadius:28,
 
-  padding: 28,
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 25px 60px rgba(0,0,0,.45)",
+
+  overflow:"hidden",
+
+  padding:0,
 };
 
 const popupOverlay = {
@@ -1498,6 +1513,12 @@ function DispatchedItemsPage() {
     <div style={page}>
       <div style={content}>
 	  <div style={headerRow}>
+	  <Box sx={{
+	   display:"grid",
+	   gridTemplateColumns:
+	     "repeat(4,1fr)",
+	   gap:2
+	  }}>
 	    <div>
 		<Box
 		  sx={{
@@ -1528,6 +1549,7 @@ function DispatchedItemsPage() {
 		  </div>
 		</Box>
 	    </div>
+		</Box>
 	  </div>
 	 
 		
@@ -1706,18 +1728,18 @@ function DispatchedItemsPage() {
 		</Box>
 
         <div style={wrap}>
-		<div style={tableTopBar}>
-		  <div>
-		    <div style={tableTitle}>
-		      Dispatch Inventory
-		    </div>
-
-		    <div style={tableMeta}>
-		      Track dispatched items and warehouse movements
-		    </div>
-		  </div>
-		</div>
 		<div style={tableWrapper}>
+		<div style={tableTopBar}>
+				  <div>
+				    <div style={tableTitle}>
+				      Dispatch Inventory
+				    </div>
+
+				    <div style={tableMeta}>
+				      Track dispatched items and warehouse movements
+				    </div>
+				  </div>
+				</div>
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
