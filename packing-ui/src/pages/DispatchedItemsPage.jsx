@@ -1744,19 +1744,7 @@ function DispatchedItemsPage() {
         <div style={wrap}>
 
 		<div style={tableWrapper}>
-		<div
-		  style={{
-		    padding: "0 0 20px 0",
-		  }}
-		>
-		  <div style={tableTitle}>
-		    Dispatch Inventory
-		  </div>
-
-		  <div style={tableMeta}>
-		    Track dispatched items and warehouse movements
-		  </div>
-		</div>
+		
 		<div style={tableWrapper}>
 		  <div
 		    style={{
