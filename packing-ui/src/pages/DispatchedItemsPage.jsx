@@ -1924,66 +1924,94 @@ function DispatchedItemsPage() {
 		        gap: 3,
 		      }}
 		    >
-		      <Button
-		        disabled={pageNo === 1}
-		        onClick={() => setPageNo(p => p - 1)}
-		        sx={{
-		          minWidth: 130,
-		          height: 48,
-		          borderRadius: "14px",
-		          background:
-		            "linear-gradient(180deg,#1e293b,#0f172a)",
-		          color: "#fff",
-		          border:
-		            "1px solid rgba(255,255,255,.08)",
-		        }}
-		      >
-		        ◀ Previous
-		      </Button>
+			<Button
+			  disabled={pageNo === 1}
+			  onClick={() => setPageNo(p => p - 1)}
+			  sx={{
+			    minWidth: 105,
+			    height: 40,
+			    borderRadius: "12px",
+			    background:
+			      "linear-gradient(180deg,#1e293b,#0f172a)",
+			    color: "#fff",
+			    border:
+			      "1px solid rgba(255,255,255,.08)",
 
-		      <Box
-		        sx={{
-		          px: 4,
-		          height: 48,
-		          display: "flex",
-		          alignItems: "center",
-		          borderRadius: "16px",
-		          background:
-		            "linear-gradient(180deg,#0f172a,#111827)",
-		          color: "#fff",
-		          border:
-		            "1px solid rgba(255,255,255,.06)",
-		        }}
-		      >
-		        Page
-		        <Box
-		          component="span"
-		          sx={{
-		            mx: 1,
-		            color: "#60a5fa",
-		            fontWeight: 800,
-		            fontSize: 18,
-		          }}
-		        >
-		          {pageNo}
-		        </Box>
-		        of {totalPages}
-		      </Box>
+			    fontSize: 13,
+			    fontWeight: 600,
 
-		      <Button
-		        disabled={pageNo === totalPages}
-		        onClick={() => setPageNo(p => p + 1)}
-		        sx={{
-		          minWidth: 130,
-		          height: 48,
-		          borderRadius: "14px",
-		          background:
-		            "linear-gradient(180deg,#2563eb,#1d4ed8)",
-		          color: "#fff",
-		        }}
-		      >
-		        Next ▶
-		      </Button>
+			    "&:disabled": {
+			      opacity: 0.45,
+			      color: "#94a3b8",
+			    },
+			  }}
+			>
+			  ◀ Previous
+			</Button>
+
+			<Box
+			  sx={{
+			    px: 2.5,
+			    height: 40,
+
+			    display: "flex",
+			    alignItems: "center",
+
+			    borderRadius: "12px",
+
+			    background:
+			      "linear-gradient(180deg,#0f172a,#111827)",
+
+			    color: "#cbd5e1",
+
+			    border:
+			      "1px solid rgba(255,255,255,.06)",
+
+			    fontSize: 13,
+			    fontWeight: 600,
+			  }}
+			>
+			  Page
+
+			  <Box
+			    component="span"
+			    sx={{
+			      mx: 1,
+			      color: "#60a5fa",
+			      fontWeight: 800,
+			      fontSize: 15,
+			    }}
+			  >
+			    {pageNo}
+			  </Box>
+
+			  of {totalPages}
+			</Box>
+
+			<Button
+			  disabled={pageNo === totalPages}
+			  onClick={() => setPageNo(p => p + 1)}
+			  sx={{
+			    minWidth: 105,
+			    height: 40,
+			    borderRadius: "12px",
+
+			    background:
+			      "linear-gradient(180deg,#2563eb,#1d4ed8)",
+
+			    color: "#fff",
+
+			    fontSize: 13,
+			    fontWeight: 600,
+
+			    "&:disabled": {
+			      opacity: 0.45,
+			      color: "#cbd5e1",
+			    },
+			  }}
+			>
+			  Next ▶
+			</Button>
 		    </Box>
 
 		    {/* RIGHT SIDE */}

@@ -53,7 +53,6 @@ const BarIcon = () => (
   </svg>
 );
 
-
 function DashboardPage() {
   const [stats, setStats] = useState({
     totalItems: 0,
