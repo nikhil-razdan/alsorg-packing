@@ -893,6 +893,34 @@ function DispatchedItemsPage() {
 	      />
 	    );
 	  }, 
+
+	  renderCell: (params) => {
+	    const id = params.row.zohoItemId;
+		const isReady = selectableStatuses.includes(params.row.status);
+		
+	    return (
+	      <input
+	        type="checkbox"
+	        disabled={!isReady}
+	        checked={selectionModel.includes(id)}
+	        onChange={(e) => {
+	          if (!isReady) return;
+
+	          if (e.target.checked) {
+				setSelectionModel(prev =>
+				  prev.includes(id) ? prev : [...prev, id]
+				);
+	          } else {
+	            setSelectionModel(prev =>
+	              prev.filter(item => item !== id)
+	            );
+	          }
+	        }}
+			
+	      />
+	    );
+		
+	  },
 	},
 	{
 	  field: "name",
@@ -1673,69 +1701,60 @@ function DispatchedItemsPage() {
 
 		    {filteredRows.map((row) => (
 
-		      <div
-		        key={row.zohoItemId}
-		        style={tableRow}
-		      >
+				<div
+				  key={row.zohoItemId}
+				  style={tableRow}
+				>
 
-		        {/* SELECT */}
-		        <div>
-		          {columns[0].renderCell({ row })}
-		        </div>
+				  <div>
+				    {columns[0].renderCell({ row })}
+				  </div>
 
-		        {/* ITEM */}
-		        <div>
-		          {columns[1].renderCell({ row })}
-		        </div>
+				  <div>
+				    {columns[1].renderCell({ row })}
+				  </div>
 
-		        {/* PD */}
-		        <div>
-				{columns[2].renderCell({
-				    value: row.pdNo,
-				    row
-				  })}
-		        </div>
+				  <div>
+				    {columns[2].renderCell({
+				      value: row.pdNo,
+				      row
+				    })}
+				  </div>
 
-		        {/* DRAWING */}
-		        <div>
-				{columns[3].renderCell({
-				    value: row.drawingNo,
-				    row
-				  })}
-		        </div>
+				  <div>
+				    {columns[3].renderCell({
+				      value: row.drawingNo,
+				      row
+				    })}
+				  </div>
 
-		        {/* DESCRIPTION */}
-				<div>
-				  {columns[4].renderCell({
-				    value: row.description,
-				    row
-				  })}
+				  <div>
+				    {columns[4].renderCell({
+				      value: row.description,
+				      row
+				    })}
+				  </div>
+
+				  <div>
+				    {columns[5].renderCell({
+				      value: row.stock,
+				      row
+				    })}
+				  </div>
+
+				  <div>
+				    {row.clientName}
+				  </div>
+
+				  <div>
+				    {columns[7].renderCell({ row })}
+				  </div>
+
+				  <div>
+				    {columns[8].renderCell({ row })}
+				  </div>
+
 				</div>
-
-		        {/* STOCK */}
-				<div>
-				  {columns[5].renderCell({
-				    value: row.stock,
-				    row
-				  })}
-				</div>
-
-		        {/* CLIENT */}
-		        <div>
-		          {row.clientName}
-		        </div>
-
-		        {/* STATUS */}
-				<div>
-				  {columns[7].renderCell({ row })}
-				</div>
-
-		        {/* ACTIONS */}
-				<div>
-				  {columns[8].renderCell({ row })}
-				</div>
-
-		      </div>
 
 		    ))}
 
