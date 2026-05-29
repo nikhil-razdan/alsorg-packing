@@ -1743,7 +1743,6 @@ function DispatchedItemsPage() {
 
         <div style={wrap}>
 
-		<div style={tableWrapper}>
 		
 		<div style={tableWrapper}>
 		  <div
@@ -2009,7 +2008,7 @@ function DispatchedItemsPage() {
 		  </Box>
 		</div>
 		</div>
-        </div>
+        
       </div>
 	  {Array.isArray(selectionModel) && selectionModel.length > 0 && isDispatch && (
 		<div

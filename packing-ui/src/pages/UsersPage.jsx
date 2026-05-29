@@ -280,6 +280,12 @@ function UsersPage() {
         enterprise access control
       </div>
     </div>
+	<button
+		    style={moduleButton}
+		    onClick={() => setCreateOpen(true)}
+		  >
+		    + Create User
+		  </button>
   </div>
 
   <Box sx={searchPanel}>
@@ -305,22 +311,7 @@ function UsersPage() {
 
 	<div style={tableTopBar}>
 
-	  <div>
-	    <div style={tableTitle}>
-	      System Users
-	    </div>
-
-	    <div style={tableMeta}>
-	      User access and permissions
-	    </div>
-	  </div>
-
-	  <button
-	    style={moduleButton}
-	    onClick={() => setCreateOpen(true)}
-	  >
-	    + Create User
-	  </button>
+	  
 
 	</div>
 	  <div style={tableWrapper}>
