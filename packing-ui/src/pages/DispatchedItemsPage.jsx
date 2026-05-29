@@ -18,11 +18,15 @@ const page = {
     "linear-gradient(135deg,#020617,#0f172a)",
 };
 
+
 const tableHeader = {
+	position: "sticky",
+	  top: 0,
+	  zIndex: 20,
   display: "grid",
 
   gridTemplateColumns:
-    "70px 2.5fr 140px 160px 220px 100px 180px 220px 450px",
+  "70px 350px 140px 180px 250px 100px 220px 180px 500px",
 
   padding: "14px 16px",
 
@@ -42,7 +46,7 @@ const tableRow = {
   display: "grid",
 
   gridTemplateColumns:
-    "70px 2.5fr 140px 160px 220px 100px 180px 220px 450px",
+  "70px 350px 140px 180px 250px 100px 220px 180px 500px",
 
   alignItems: "center",
 
@@ -53,7 +57,7 @@ const tableRow = {
   borderTop:
     "1px solid rgba(255,255,255,.06)",
 
-  minHeight: 72,
+  minHeight: 58,
 };
 
 const tableActionButton = {
@@ -204,12 +208,14 @@ const subtitle = {
 };
 
 const tableWrapper = {
-  overflow: "hidden",
+  overflowX: "auto",
+  overflowY: "hidden",
+
+  width: "100%",
 
   borderRadius: 18,
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  border: "1px solid rgba(255,255,255,.06)",
 
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
@@ -603,12 +609,29 @@ function DispatchedItemsPage() {
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
+  const [pageNo, setPageNo] = useState(1);
+
+  const pageSize = 25;
   
   useEffect(() => {
     console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
     console.log("SELECTED IDS:", selectionModel);
   }, [selectionModel, rows]);
   
+  const paginatedRows = useMemo(() => {
+    const start = (pageNo - 1) * pageSize;
+
+    return filteredRows.slice(
+      start,
+      start + pageSize
+    );
+  }, [filteredRows, pageNo]);
+  
+  const totalPages =
+    Math.ceil(
+      filteredRows.length / pageSize
+    );
+	
   const getAuthHeaders = () => {
      const token = localStorage.getItem("token");
 
@@ -998,7 +1021,18 @@ function DispatchedItemsPage() {
 	          <DescriptionOutlinedIcon fontSize="small" />
 	        </IconButton>
 
-	        <span>{row.name}</span>
+			<span
+			  style={{
+			    whiteSpace: "nowrap",
+			    overflow: "hidden",
+			    textOverflow: "ellipsis",
+			    maxWidth: "250px",
+			    display: "block",
+			  }}
+			  title={row.name}
+			>
+			  {row.name}
+			</span>
 
 	      </Box>
 	    );
@@ -1684,7 +1718,12 @@ function DispatchedItemsPage() {
 		  </div>
 		</div>
 		<div style={tableWrapper}>
-
+		  <div
+		    style={{
+		      minWidth: "1900px"
+		    }}
+		  >
+		
 		  <div style={tableHeader}>
 		    <div>Select</div>
 		    <div>Item Name</div>
@@ -1699,7 +1738,7 @@ function DispatchedItemsPage() {
 
 		  <div style={tableBody}>
 
-		    {filteredRows.map((row) => (
+		    {paginatedRows.map((row) => (
 
 				<div
 				  key={row.zohoItemId}
@@ -1759,7 +1798,43 @@ function DispatchedItemsPage() {
 		    ))}
 
 		  </div>
+		  <Box
+		    sx={{
+		      display: "flex",
+		      justifyContent: "center",
+		      gap: 2,
+		      mt: 3,
+		    }}
+		  >
+		    <Button
+		      disabled={pageNo === 1}
+		      onClick={() =>
+		        setPageNo(p => p - 1)
+		      }
+		    >
+		      Previous
+		    </Button>
 
+		    <Box
+		      sx={{
+		        color: "#fff",
+		        display: "flex",
+		        alignItems: "center",
+		      }}
+		    >
+		      Page {pageNo} of {totalPages}
+		    </Box>
+
+		    <Button
+		      disabled={pageNo === totalPages}
+		      onClick={() =>
+		        setPageNo(p => p + 1)
+		      }
+		    >
+		      Next
+		    </Button>
+		  </Box>
+		</div>
 		</div>
         </div>
       </div>
