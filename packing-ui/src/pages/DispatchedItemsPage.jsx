@@ -618,6 +618,26 @@ function DispatchedItemsPage() {
     console.log("SELECTED IDS:", selectionModel);
   }, [selectionModel, rows]);
   
+  const filteredRows = useMemo(() => {
+  if (!Array.isArray(rows)) return [];
+    return rows.filter((r) => {
+      const name = r.name || "";
+      const client = r.clientName || "";
+
+      if (
+        search &&
+        !name.toLowerCase().includes(search.toLowerCase()) &&
+        !client.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+
+      if (statusFilter !== "ALL" && r.status !== statusFilter)
+        return false;
+
+      return true;
+    });
+  }, [rows, search, statusFilter]);
+  
   const paginatedRows = useMemo(() => {
     const start = (pageNo - 1) * pageSize;
 
@@ -1445,25 +1465,6 @@ function DispatchedItemsPage() {
   };
 
   /* ===== FILTERED ROWS ===== */
-  const filteredRows = useMemo(() => {
-	if (!Array.isArray(rows)) return [];
-    return rows.filter((r) => {
-      const name = r.name || "";
-      const client = r.clientName || "";
-
-      if (
-        search &&
-        !name.toLowerCase().includes(search.toLowerCase()) &&
-        !client.toLowerCase().includes(search.toLowerCase())
-      )
-        return false;
-
-      if (statusFilter !== "ALL" && r.status !== statusFilter)
-        return false;
-
-      return true;
-    });
-  }, [rows, search, statusFilter]);
   console.log("🔥 selectionModel:", selectionModel);
   
   const selectedItems = rows.filter(r =>
