@@ -10,21 +10,12 @@ import { API_BASE_URL } from "../config";
 /* ===================== STYLES ===================== */
 /* (UNCHANGED — EXACTLY AS YOU PROVIDED) */
 
-const page = () => ({
+const page = {
   minHeight: "100vh",
-
-  padding: 20,
-
-  position: "relative",
-
-  overflowX: "hidden",
-  overflowY: "auto",
 
   background:
     "linear-gradient(135deg,#020617,#0f172a)",
-
-  backgroundAttachment: "fixed",
-});
+};
 
 
 const statusCard = {
@@ -51,10 +42,14 @@ const statusCard = {
   color: "#fff",
 
   "&:hover": {
-    transform: "translateY(-2px)",
+    transform:
+      "translateY(-4px)",
 
-    background:
-      "rgba(255,255,255,.06)",
+    boxShadow:
+      "0 20px 40px rgba(0,0,0,.25)",
+
+    border:
+      "1px solid rgba(59,130,246,.25)",
   },
 };
 
@@ -87,7 +82,15 @@ const premiumButton = {
   },
 };
 
-const content = { position: "relative", zIndex: 1 };
+const content = {
+  padding: 24,
+
+  display: "flex",
+
+  flexDirection: "column",
+
+  gap: 24,
+};
 
 const headerRow = {
   display: "flex",
@@ -95,20 +98,17 @@ const headerRow = {
   justifyContent: "space-between",
 
   alignItems: "center",
-
-  marginBottom: 14,
 };
 
 const logo = {
   color: "#fff",
 
-  fontSize: 34,
+  fontSize: 32,
 
   fontWeight: 900,
 
   marginBottom: 8,
 
-  letterSpacing: -1,
 };
 
 const subtitle = {
@@ -117,50 +117,10 @@ const subtitle = {
   fontSize: 14,
 };
 
-const headerChip = {
-  height: 42,
-
-  paddingLeft: 18,
-  paddingRight: 18,
-
-  borderRadius: 999,
-
-  fontSize: 14,
-
-  fontWeight: 800,
-
-  letterSpacing: 0.3,
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-  color: "#fff",
-
-  border:
-    "1px solid rgba(59,130,246,.35)",
-
-  boxShadow:
-    "0 12px 30px rgba(37,99,235,.32)",
-};
-
-
 const tableWrapper = {
-  height: "calc(100vh - 180px)",
-
-  borderRadius: 24,
-
   overflow: "hidden",
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  background:
-    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.82))",
-
-  backdropFilter: "blur(18px)",
-
-  boxShadow:
-    "0 20px 55px rgba(0,0,0,.45)",
+  borderRadius: 18,
 };
 
 const dataGridStyles = {
@@ -177,21 +137,18 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-columnHeaders": {
-    minHeight: "58px !important",
-
-    maxHeight: "58px !important",
-
-    background:
-      "rgba(255,255,255,.02)",
+    background: "#111827",
 
     borderBottom:
       "1px solid rgba(255,255,255,.06)",
 
-    color: "rgba(255,255,255,.55)",
+    color: "#94a3b8",
 
     fontWeight: 700,
 
-    fontSize: 14,
+    minHeight: "56px !important",
+
+    maxHeight: "56px !important",
   },
 
   "& .MuiDataGrid-columnHeader": {
@@ -209,14 +166,21 @@ const dataGridStyles = {
     paddingLeft: "12px",
 
     fontSize: 14,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
   },
 
   "& .MuiDataGrid-row": {
-    minHeight: "68px !important",
-
-    maxHeight: "68px !important",
+    minHeight: "64px !important",
+    maxHeight: "64px !important",
 
     transition: "all .22s ease",
+
+    "&:hover": {
+      background: "rgba(255,255,255,.025)",
+      transform: "scale(1.002)",
+    },
   },
 
   "& .MuiDataGrid-row:hover": {
@@ -225,13 +189,13 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-footerContainer": {
-    borderTop:
-      "1px solid rgba(255,255,255,.06)",
-
     background:
       "rgba(255,255,255,.02)",
 
-    color: "#94a3b8",
+    borderTop:
+      "1px solid rgba(255,255,255,.06)",
+
+    color:"#94a3b8",
   },
 
   "& .MuiCheckbox-root": {
@@ -246,21 +210,32 @@ const dataGridStyles = {
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
+  
+  "& .MuiDataGrid-topContainer": {
+    background: "#111827",
+  },
+
+  "& .MuiDataGrid-columnHeaderTitle": {
+    color: "#94a3b8",
+  },
+
+  "& .MuiDataGrid-scrollbar": {
+    background: "#0f172a",
+  },
+
+  "& .MuiDataGrid-filler": {
+    background: "#111827",
+  },
 };
 
 const tableTopBar = {
-  height: 58,
-
   display: "flex",
-
-  alignItems: "center",
 
   justifyContent: "space-between",
 
-  padding: "0 20px",
+  alignItems: "flex-start",
 
-  borderBottom:
-    "1px solid rgba(255,255,255,.06)",
+  marginBottom: 28,
 };
 
 const tableTitle = {
@@ -268,13 +243,13 @@ const tableTitle = {
 
   fontWeight: 800,
 
-  fontSize: 15,
+  fontSize: 24,
 };
 
 const tableMeta = {
-  color: "rgba(255,255,255,.45)",
+  color: "#94a3b8",
 
-  fontSize: 13,
+  marginTop: 6,
 };
 
 const statusPacked = {
@@ -376,7 +351,7 @@ const bulkBar = {
 
   gap: 14,
 
-  padding: "14px 22px",
+  padding: "12px 18px",
 
   background:
     "rgba(15,23,42,.94)",
@@ -384,7 +359,7 @@ const bulkBar = {
   border:
     "1px solid rgba(255,255,255,.08)",
 
-  borderRadius: 22,
+  borderRadius: 18,
 
   backdropFilter: "blur(24px)",
 
@@ -518,24 +493,27 @@ const searchPanel = {
 
   alignItems: "center",
 
-  gap: 14,
+  gap: 12,
 
-  padding: "10px 18px",
+  height: 52,
 
-  marginBottom: 4,
+  padding: "0 18px",
 
-  borderRadius: 18,
+  borderRadius: 16,
 
-  background:
-    "rgba(15,23,42,.72)",
+  background: "rgba(255,255,255,0.03)",
 
   border:
     "1px solid rgba(255,255,255,.06)",
+};
 
-  backdropFilter: "blur(18px)",
+const wrap = {
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
 
-  boxShadow:
-    "0 10px 30px rgba(0,0,0,.25)",
+  borderRadius: 24,
+
+  padding: 28,
 };
 
 const popupOverlay = {
@@ -1253,7 +1231,8 @@ function DispatchedItemsPage() {
 		      }}
 			  sx={{
 			    ...premiumButton,
-			    background: "linear-gradient(180deg,#10b981,#059669)",
+				background:
+				  "linear-gradient(135deg,#059669,#10b981)",
 			    color: "#fff"
 			  }}
 		    >
@@ -1268,7 +1247,8 @@ function DispatchedItemsPage() {
                   onClick={() => approveRestore(row.zohoItemId)}
 				  sx={{
 				    ...premiumButton,
-				    background: "linear-gradient(180deg,#10b981,#059669)",
+					background:
+					  "linear-gradient(135deg,#059669,#10b981)",
 				    color: "#fff"
 				  }}
                 >
@@ -1439,27 +1419,51 @@ function DispatchedItemsPage() {
   );
   
   return (
-    <div style={page()}>
+    <div style={page}>
       <div style={content}>
 	  <div style={headerRow}>
 	    <div>
-		<div style={logo}>
-		  <span style={{ marginRight: 12 }}>
+		<Box
+		  sx={{
+		    display:"flex",
+		    alignItems:"center",
+		    gap:2,
+		  }}
+		>
+		  <Box
+		    sx={{
+		      width:56,
+		      height:56,
+
+		      borderRadius:16,
+
+		      display:"flex",
+		      alignItems:"center",
+		      justifyContent:"center",
+
+		      background:
+		        "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+		      boxShadow:
+		        "0 12px 24px rgba(37,99,235,.35)",
+
+		      fontSize:28,
+		    }}
+		  >
 		    🚚
-		  </span>
+		  </Box>
 
-		  Dispatched Items
-		</div>
+		  <div>
+		    <div style={logo}>
+		      Dispatched Items
+		    </div>
 
-	      <div style={subtitle}>
-	        Track, manage and dispatch inventory operations
-	      </div>
+		    <div style={subtitle}>
+		      Track, manage and dispatch inventory operations
+		    </div>
+		  </div>
+		</Box>
 	    </div>
-
-	    <Chip
-	      label={`${rows.length} Active Items`}
-	      sx={headerChip}
-	    />
 	  </div>
 	 
 		
@@ -1637,7 +1641,7 @@ function DispatchedItemsPage() {
 		  </TextField>
 		</Box>
 
-        <div style={tableWrapper}> 
+        <div style={wrap}>
 		<div style={tableTopBar}>
 		  <div style={tableTitle}>
 		    Dispatch Inventory
@@ -1647,6 +1651,7 @@ function DispatchedItemsPage() {
 		    {filteredRows.length} Active Items
 		  </div>
 		</div>
+		<div style={tableWrapper}>
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
@@ -1792,10 +1797,13 @@ function DispatchedItemsPage() {
 	              mb: 1,
 	              p: 1.2,
 	              borderRadius: 8,
-	              background:
-	                idx === 0
-	                  ? "rgba(209,250,229,0.6)"
-	                  : "rgba(243,244,246,0.8)",
+				  background:
+				    idx === 0
+				      ? "rgba(16,185,129,.12)"
+				      : "rgba(255,255,255,.03)",
+
+				  border:
+				    "1px solid rgba(255,255,255,.06)",
 	            }}
 	          >
 	            <Box>
@@ -2088,7 +2096,11 @@ function DispatchedItemsPage() {
 				            mb: 1.2,
 				            p: 1.4,
 				            borderRadius: 10,
-				            background: actionStyle.bg,
+							background:
+							  "rgba(255,255,255,.03)",
+
+							border:
+							  "1px solid rgba(255,255,255,.06)",
 				            display: "flex",
 				            justifyContent: "space-between",
 				            alignItems: "center",
@@ -2181,7 +2193,11 @@ function DispatchedItemsPage() {
 	                  p: 1.5,
 	                  mb: 1,
 	                  borderRadius: 10,
-	                  background: "rgba(243,244,246,0.9)",
+					  background:
+					    "rgba(255,255,255,.03)",
+
+					  border:
+					    "1px solid rgba(255,255,255,.06)",
 	                }}
 	              >
 	                <div style={{ fontWeight: 600 }}>{item.name}</div>
@@ -2718,6 +2734,7 @@ function DispatchedItemsPage() {
 	    </div>
 	  )}
     </div>
+	</div>
   );
 }
 
