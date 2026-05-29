@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo  } from "react";
-import { DataGrid } from "@mui/x-data-grid";
 import { Chip, Box, Button, IconButton, TextField, MenuItem} from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
@@ -17,6 +16,44 @@ const page = {
 
   background:
     "linear-gradient(135deg,#020617,#0f172a)",
+};
+
+const tableHeader = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "70px 2.5fr 140px 160px 220px 100px 180px 220px 450px",
+
+  padding: "14px 16px",
+
+  background: "#111827",
+
+  color: "#94a3b8",
+
+  fontWeight: 700,
+};
+
+const tableBody = {
+  display: "flex",
+  flexDirection: "column",
+};
+
+const tableRow = {
+  display: "grid",
+
+  gridTemplateColumns:
+    "70px 2.5fr 140px 160px 220px 100px 180px 220px 450px",
+
+  alignItems: "center",
+
+  padding: "14px 16px",
+
+  color: "#fff",
+
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+
+  minHeight: 72,
 };
 
 const tableActionButton = {
@@ -178,124 +215,6 @@ const tableWrapper = {
     "linear-gradient(180deg,#0f172a,#111827)",
 };
 
-const dataGridStyles = {
-  border: "none",
-
-  color: "#fff",
-
-  background: "transparent",
-
-  fontSize: 14,
-
-  "& .MuiDataGrid-main": {
-    background: "transparent",
-  },
-
-  "& .MuiDataGrid-columnHeaders": {
-    background: "#111827 !important",
-
-    color: "#94a3b8",
-
-    borderBottom:
-      "1px solid rgba(255,255,255,.06)",
-
-    minHeight:
-      "56px !important",
-
-    maxHeight:
-      "56px !important",
-  },
-  
-  "& .MuiDataGrid-columnHeaderTitle": {
-    fontWeight: 700,
-    fontSize: 13,
-  },
-
-  "& .MuiDataGrid-columnHeader": {
-    paddingLeft: "12px",
-  },
-
-  "& .MuiDataGrid-cell": {
-    borderBottom:
-      "none",
-
-    display:
-      "flex",
-
-    alignItems:
-      "center",
-
-    color:
-      "#fff",
-
-    paddingLeft:
-      "16px",
-
-    paddingRight:
-      "16px",
-
-    fontSize:
-      13,
-  },
-
-  "& .MuiDataGrid-row": {
-    minHeight:
-      "60px !important",
-
-    maxHeight:
-      "60px !important",
-
-    borderTop:
-      "1px solid rgba(255,255,255,.06)",
-
-    transition:
-      "all .22s ease",
-  },
-
-  "& .MuiDataGrid-row:hover": {
-    background:
-      "rgba(255,255,255,.02)",
-
-    cursor:
-      "pointer",
-  },
-
-  "& .MuiDataGrid-footerContainer": {
-    background:
-      "#111827",
-
-    borderTop:
-      "1px solid rgba(255,255,255,.06)",
-
-    color:
-      "#94a3b8",
-  },
-
-  "& .MuiCheckbox-root": {
-    color: "#94a3b8 !important",
-  },
-
-  "& .MuiDataGrid-virtualScroller": {
-    background: "transparent",
-  },
-  
-  "& .MuiDataGrid-cellContent": {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  
-  "& .MuiDataGrid-topContainer": {
-    background: "#111827",
-  },
-
-  "& .MuiDataGrid-scrollbar": {
-    background: "#0f172a",
-  },
-
-  "& .MuiDataGrid-filler": {
-    background: "#111827",
-  },
-};
 
 const tableTopBar = {
   display: "flex",
@@ -974,34 +893,6 @@ function DispatchedItemsPage() {
 	      />
 	    );
 	  }, 
-
-	  renderCell: (params) => {
-	    const id = params.row.zohoItemId;
-		const isReady = selectableStatuses.includes(params.row.status);
-		
-	    return (
-	      <input
-	        type="checkbox"
-	        disabled={!isReady}
-	        checked={selectionModel.includes(id)}
-	        onChange={(e) => {
-	          if (!isReady) return;
-
-	          if (e.target.checked) {
-				setSelectionModel(prev =>
-				  prev.includes(id) ? prev : [...prev, id]
-				);
-	          } else {
-	            setSelectionModel(prev =>
-	              prev.filter(item => item !== id)
-	            );
-	          }
-	        }}
-			
-	      />
-	    );
-		
-	  },
 	},
 	{
 	  field: "name",
@@ -1764,36 +1655,93 @@ function DispatchedItemsPage() {
 		    Track dispatched items and warehouse movements
 		  </div>
 		</div>
-		<DataGrid
-		  selectionModel={selectionModel}
-		  onSelectionModelChange={(newSelection) =>
-		    setSelectionModel(newSelection)
-		  }
+		<div style={tableWrapper}>
 
-		  rows={
-		    Array.isArray(filteredRows)
-		      ? filteredRows
-		      : []
-		  }
+		  <div style={tableHeader}>
+		    <div>Select</div>
+		    <div>Item Name</div>
+		    <div>PD No</div>
+		    <div>DWG No</div>
+		    <div>Description</div>
+		    <div>Stock</div>
+		    <div>Client</div>
+		    <div>Status</div>
+		    <div>Actions</div>
+		  </div>
 
-		  columns={columns}
+		  <div style={tableBody}>
 
-		  loading={loading}
+		    {filteredRows.map((row) => (
 
-		  getRowId={(row) =>
-		    row.zohoItemId
-		  }
+		      <div
+		        key={row.zohoItemId}
+		        style={tableRow}
+		      >
 
-		  disableColumnMenu
+		        {/* SELECT */}
+		        <div>
+		          {columns[0].renderCell({ row })}
+		        </div>
 
-		  disableRowSelectionOnClick
+		        {/* ITEM */}
+		        <div>
+		          {columns[1].renderCell({ row })}
+		        </div>
 
-		  hideFooterSelectedRowCount
+		        {/* PD */}
+		        <div>
+				{columns[2].renderCell({
+				    value: row.pdNo,
+				    row
+				  })}
+		        </div>
 
-		  rowHeight={60}
+		        {/* DRAWING */}
+		        <div>
+				{columns[3].renderCell({
+				    value: row.drawingNo,
+				    row
+				  })}
+		        </div>
 
-		  sx={dataGridStyles}
-		/>
+		        {/* DESCRIPTION */}
+				<div>
+				  {columns[4].renderCell({
+				    value: row.description,
+				    row
+				  })}
+				</div>
+
+		        {/* STOCK */}
+				<div>
+				  {columns[5].renderCell({
+				    value: row.stock,
+				    row
+				  })}
+				</div>
+
+		        {/* CLIENT */}
+		        <div>
+		          {row.clientName}
+		        </div>
+
+		        {/* STATUS */}
+				<div>
+				  {columns[7].renderCell({ row })}
+				</div>
+
+		        {/* ACTIONS */}
+				<div>
+				  {columns[8].renderCell({ row })}
+				</div>
+
+		      </div>
+
+		    ))}
+
+		  </div>
+
+		</div>
         </div>
       </div>
 	  {Array.isArray(selectionModel) && selectionModel.length > 0 && isDispatch && (

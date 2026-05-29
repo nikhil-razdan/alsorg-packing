@@ -352,7 +352,7 @@ function LogisticsDashboard({
       default:
         return {
           title:
-            "Driver & Vehicle Operations Dashboard",
+            "Driver & Vehicle Operations",
 
           subtitle:
             "Real-time overview of trips, loaders and performance",
