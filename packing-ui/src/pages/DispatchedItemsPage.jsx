@@ -209,18 +209,41 @@ const subtitle = {
 
 const tableWrapper = {
   overflowX: "auto",
-  overflowY: "hidden",
 
-  width: "100%",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 #0f172a",
 
-  borderRadius: 18,
+  WebkitOverflowScrolling: "touch",
 
-  border: "1px solid rgba(255,255,255,.06)",
+  "&::-webkit-scrollbar": {
+    height: 14,
+  },
 
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
+  "&::-webkit-scrollbar-track": {
+    background:
+      "linear-gradient(180deg,#0f172a,#111827)",
+
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(90deg,#2563eb,#60a5fa)",
+
+    borderRadius: 999,
+
+    border:
+      "2px solid #0f172a",
+
+    boxShadow:
+      "0 0 16px rgba(59,130,246,.55)",
+  },
+
+  "&::-webkit-scrollbar-thumb:hover": {
+    background:
+      "linear-gradient(90deg,#3b82f6,#93c5fd)",
+  },
 };
-
 
 const tableTopBar = {
   display: "flex",
@@ -1803,36 +1826,142 @@ function DispatchedItemsPage() {
 		    sx={{
 		      display: "flex",
 		      justifyContent: "center",
-		      gap: 2,
-		      mt: 3,
+		      alignItems: "center",
+		      gap: 3,
+		      mt: 4,
+		      py: 2,
 		    }}
 		  >
+		    {/* PREVIOUS */}
 		    <Button
 		      disabled={pageNo === 1}
-		      onClick={() =>
-		        setPageNo(p => p - 1)
-		      }
-		    >
-		      Previous
-		    </Button>
-
-		    <Box
+		      onClick={() => setPageNo(p => p - 1)}
 		      sx={{
-		        color: "#fff",
-		        display: "flex",
-		        alignItems: "center",
+		        minWidth: 130,
+		        height: 48,
+
+		        borderRadius: "14px",
+
+		        background:
+		          pageNo === 1
+		            ? "rgba(255,255,255,.04)"
+		            : "linear-gradient(180deg,#1e293b,#0f172a)",
+
+		        color:
+		          pageNo === 1
+		            ? "rgba(255,255,255,.35)"
+		            : "#fff",
+
+		        border:
+		          "1px solid rgba(255,255,255,.08)",
+
+		        boxShadow:
+		          pageNo === 1
+		            ? "none"
+		            : "0 8px 24px rgba(59,130,246,.18)",
+
+		        fontWeight: 700,
+		        letterSpacing: ".4px",
+
+		        "&:hover": {
+		          background:
+		            "linear-gradient(180deg,#334155,#1e293b)",
+		        },
 		      }}
 		    >
-		      Page {pageNo} of {totalPages}
+		      ◀ Previous
+		    </Button>
+
+		    {/* PAGE INDICATOR */}
+		    <Box
+		      sx={{
+		        px: 4,
+		        height: 48,
+
+		        display: "flex",
+		        alignItems: "center",
+		        justifyContent: "center",
+
+		        borderRadius: "16px",
+
+		        background:
+		          "linear-gradient(180deg,#0f172a,#111827)",
+
+		        color: "#fff",
+
+		        border:
+		          "1px solid rgba(255,255,255,.06)",
+
+		        boxShadow:
+		          "0 0 0 1px rgba(255,255,255,.03), 0 10px 30px rgba(0,0,0,.35)",
+		      }}
+		    >
+		      <span
+		        style={{
+		          color: "#94a3b8",
+		          fontWeight: 600,
+		        }}
+		      >
+		        Page
+		      </span>
+
+		      <span
+		        style={{
+		          marginLeft: 8,
+		          marginRight: 8,
+		          color: "#60a5fa",
+		          fontWeight: 800,
+		          fontSize: 18,
+		        }}
+		      >
+		        {pageNo}
+		      </span>
+
+		      <span
+		        style={{
+		          color: "#94a3b8",
+		          fontWeight: 600,
+		        }}
+		      >
+		        of {totalPages}
+		      </span>
 		    </Box>
 
+		    {/* NEXT */}
 		    <Button
 		      disabled={pageNo === totalPages}
-		      onClick={() =>
-		        setPageNo(p => p + 1)
-		      }
+		      onClick={() => setPageNo(p => p + 1)}
+		      sx={{
+		        minWidth: 130,
+		        height: 48,
+
+		        borderRadius: "14px",
+
+		        background:
+		          pageNo === totalPages
+		            ? "rgba(255,255,255,.04)"
+		            : "linear-gradient(180deg,#2563eb,#1d4ed8)",
+
+		        color: "#fff",
+
+		        border:
+		          "1px solid rgba(96,165,250,.25)",
+
+		        boxShadow:
+		          pageNo === totalPages
+		            ? "none"
+		            : "0 10px 28px rgba(37,99,235,.35)",
+
+		        fontWeight: 700,
+		        letterSpacing: ".4px",
+
+		        "&:hover": {
+		          background:
+		            "linear-gradient(180deg,#3b82f6,#2563eb)",
+		        },
+		      }}
 		    >
-		      Next
+		      Next ▶
 		    </Button>
 		  </Box>
 		</div>
