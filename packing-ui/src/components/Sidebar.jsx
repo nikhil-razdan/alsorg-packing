@@ -137,20 +137,10 @@ function Sidebar() {
 	  
 	  <div style={logoSection}>
 	    <div style={logoIcon}>
-	      A
+	      ALSORG
 	    </div>
 
-	    {!collapsed && (
-	      <div>
-	        <div style={logoTitle}>
-	          ALSORG ERP
-	        </div>
-
-	        <div style={logoSub}>
-	          Enterprise Suite
-	        </div>
-	      </div>
-	    )}
+	    
 	  </div>
 
       {!collapsed && <h4 style={menuTitle}>Menu</h4>}
