@@ -636,14 +636,16 @@ function DispatchedItemsPage() {
   const [pageSize, setPageSize] = useState(50);
   
   useEffect(() => {
+     setPageNo(1);
+   }, [pageSize]);
+   
+  
+  useEffect(() => {
     console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
     console.log("SELECTED IDS:", selectionModel);
   }, [selectionModel, rows]);
   
-  useEffect(() => {
-    setPageNo(1);
-  }, [pageSize]);
-  
+ 
   useEffect(() => {
     const maxPage =
       Math.max(
