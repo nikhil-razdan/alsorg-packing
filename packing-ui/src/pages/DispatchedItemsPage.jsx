@@ -635,6 +635,40 @@ function DispatchedItemsPage() {
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   
+  const filteredRows = useMemo(() => {
+  if (!Array.isArray(rows)) return [];
+    return rows.filter((r) => {
+      const name = r.name || "";
+      const client = r.clientName || "";
+
+      if (
+        search &&
+        !name.toLowerCase().includes(search.toLowerCase()) &&
+        !client.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+
+      if (statusFilter !== "ALL" && r.status !== statusFilter)
+        return false;
+
+      return true;
+    });
+  }, [rows, search, statusFilter]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (pageNo - 1) * pageSize;
+
+    return filteredRows.slice(
+      start,
+      start + pageSize
+    );
+  }, [filteredRows, pageNo, pageSize]);
+
+  const totalPages =
+    Math.ceil(
+      filteredRows.length / pageSize
+    );
+	
   useEffect(() => {
     console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
     console.log("SELECTED IDS:", selectionModel);
@@ -656,39 +690,6 @@ function DispatchedItemsPage() {
     }
   }, [filteredRows.length, pageSize, pageNo]);
   
-  const filteredRows = useMemo(() => {
-  if (!Array.isArray(rows)) return [];
-    return rows.filter((r) => {
-      const name = r.name || "";
-      const client = r.clientName || "";
-
-      if (
-        search &&
-        !name.toLowerCase().includes(search.toLowerCase()) &&
-        !client.toLowerCase().includes(search.toLowerCase())
-      )
-        return false;
-
-      if (statusFilter !== "ALL" && r.status !== statusFilter)
-        return false;
-
-      return true;
-    });
-  }, [rows, search, statusFilter]);
-  
-  const paginatedRows = useMemo(() => {
-    const start = (pageNo - 1) * pageSize;
-
-    return filteredRows.slice(
-      start,
-      start + pageSize
-    );
-  }, [filteredRows, pageNo, pageSize]);
-  
-  const totalPages =
-    Math.ceil(
-      filteredRows.length / pageSize
-    );
 	
   const getAuthHeaders = () => {
      const token = localStorage.getItem("token");
