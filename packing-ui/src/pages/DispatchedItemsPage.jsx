@@ -245,16 +245,6 @@ const tableWrapper = {
   },
 };
 
-const tableTopBar = {
-  display: "flex",
-
-  justifyContent: "space-between",
-
-  alignItems: "flex-start",
-
-  marginBottom: 28,
-};
-
 const tableTitle = {
   color: "#fff",
 
@@ -267,69 +257,6 @@ const tableMeta = {
   color: "#94a3b8",
 
   marginTop: 6,
-};
-
-const statusPacked = {
-  fontSize: 11,
-  fontWeight: 700,
-  px: 1.8,
-  borderRadius: "999px",
-
-  color: "#1e3a8a",
-
-  backdropFilter: "blur(12px)",
-
-  background:
-    "linear-gradient(135deg, rgba(191,219,254,0.88), rgba(147,197,253,0.62))",
-
-  border: "1px solid rgba(255,255,255,0.35)",
-
-  boxShadow: `
-    0 6px 16px rgba(59,130,246,0.25),
-    inset 0 1px 0 rgba(255,255,255,0.5)
-  `,
-};
-
-const readyChip = {
-  fontWeight: 700,
-
-  color: "#eff6ff",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#1d4ed8)",
-
-  border:
-    "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(37,99,235,0.25)",
-};
-
-const dispatchedChip = {
-  fontWeight: 700,
-
-  color: "#ecfdf5",
-
-  background:
-    "linear-gradient(135deg,#059669,#047857)",
-
-  border:
-    "1px solid rgba(255,255,255,0.15)",
-
-  boxShadow:
-    "0 6px 18px rgba(16,185,129,0.25)",
-};
-
-const statusDispatched = {
-  fontSize: 11,
-  fontWeight: 700,
-  px: 1.8,
-  borderRadius: "999px",
-  color: "#064e3b",
-  backdropFilter: "blur(8px)",
-  background:
-    "linear-gradient(135deg, rgba(167,243,208,0.8), rgba(110,231,183,0.8))",
-  boxShadow: "0 4px 12px rgba(16,185,129,0.25)",
 };
 
 const pendingChip = {
@@ -557,42 +484,6 @@ const popupBox = {
   ...darkModalBox,
 };
 
-const dispatchTable = {
-  overflow: "hidden",
-  borderRadius: 18,
-};
-
-const dispatchHead = {
-  display: "grid",
-
-  gridTemplateColumns:
-    "2fr 1fr 1.2fr 1.5fr 1fr 2fr",
-
-  padding: 16,
-
-  background: "#111827",
-
-  color: "#94a3b8",
-
-  fontWeight: 700,
-};
-
-const dispatchRow = {
-  display: "grid",
-
-  gridTemplateColumns:
-    "2fr 1fr 1.2fr 1.5fr 1fr 2fr",
-
-  padding: 16,
-
-  color: "#fff",
-
-  borderTop:
-    "1px solid rgba(255,255,255,0.06)",
-
-  alignItems: "center",
-};
-
 
 /**
  * Dispatched Items Page
@@ -601,7 +492,6 @@ const dispatchRow = {
 
 function DispatchedItemsPage() {
   const [rows, setRows] = useState([]);
-  const [animatingId, setAnimatingId] = useState(null);
   const [loading, setLoading] = useState(false);
   /* ===== SEARCH + FILTER ===== */
   const [search, setSearch] = useState("");
@@ -628,7 +518,6 @@ function DispatchedItemsPage() {
   const [gatePassPreview, setGatePassPreview] = useState(null);
   const [statusModal, setStatusModal] = useState(null);
   const [chalaanPreview, setChalaanPreview] = useState(null);
-  const [chalaanModal, setChalaanModal] = useState(null);
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
@@ -636,16 +525,14 @@ function DispatchedItemsPage() {
   const [pageSize, setPageSize] = useState(50);
   
   useEffect(() => {
-     setPageNo(1);
-   }, [pageSize]);
-   
-  
-  useEffect(() => {
     console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
     console.log("SELECTED IDS:", selectionModel);
   }, [selectionModel, rows]);
   
- 
+  useEffect(() => {
+    setPageNo(1);
+  }, [pageSize]);
+  
   useEffect(() => {
     const maxPage =
       Math.max(
@@ -685,7 +572,7 @@ function DispatchedItemsPage() {
       start,
       start + pageSize
     );
-  }, [filteredRows, pageNo]);
+  }, [filteredRows, pageNo, pageSize]);
   
   const totalPages =
     Math.ceil(
@@ -1227,8 +1114,6 @@ function DispatchedItemsPage() {
 		    };
 		  };
 
-		  const style = getStatusStyle(row.status);
-
 		  return (
 		    <Chip
 		      size="small"
@@ -1276,9 +1161,6 @@ function DispatchedItemsPage() {
 
 	  renderCell:(params)=>{
         const row = params.row;
-
-		const canGenerateChalaan =
-		  isDispatch && row.status === "READY_TO_DISPATCH";
 		  
 		  const canRequestRestore =
 		    row.status === "DISPATCHED" &&
@@ -1312,8 +1194,6 @@ function DispatchedItemsPage() {
 			          headers: getAuthHeaders(),
 			        }
 			      );
-
-			      const contentType = res.headers.get("content-type");
 
 				  if (!res.ok) {
 				    const text = await res.text();
@@ -1514,10 +1394,6 @@ function DispatchedItemsPage() {
   const selectedStatusSet = new Set(selectedItems.map(i => i.status));
 
   const isSingleStatus = selectedStatusSet.size === 1;
-
-  const selectedStatus = isSingleStatus
-    ? [...selectedStatusSet][0]
-    : null;
 
   const allReadyToDispatch = selectedItems.length > 0 && selectedItems.every(
     item => item.status === "READY_TO_DISPATCH"
