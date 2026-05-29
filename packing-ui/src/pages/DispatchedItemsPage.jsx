@@ -4,7 +4,6 @@ import { Chip, Box, Button, IconButton, TextField, MenuItem} from "@mui/material
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
-import Checkbox from "@mui/material/Checkbox";
 import DescriptionOutlinedIcon
 from "@mui/icons-material/DescriptionOutlined";
 
@@ -187,17 +186,11 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-columnHeaders": {
-    background:
-      "linear-gradient(180deg,#111827,#0f172a)",
-
-    borderBottom:
-      "1px solid rgba(59,130,246,.18)",
-
-    minHeight:
-      "64px !important",
-
-    maxHeight:
-      "64px !important",
+    background: "#111827 !important",
+    color: "#94a3b8",
+    minHeight: "56px !important",
+    maxHeight: "56px !important",
+    borderBottom: "1px solid rgba(255,255,255,.06)",
   },
   
   "& .MuiDataGrid-columnHeaderTitle": {
@@ -216,7 +209,7 @@ const dataGridStyles = {
     display: "flex",
 
     alignItems: "center",
-	fontWeight:500,
+	
 	paddingLeft: "16px",
 	paddingRight: "16px",
 
@@ -227,8 +220,8 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-row": {
-    minHeight: "72px !important",
-    maxHeight: "72px !important",
+    minHeight: "62px !important",
+    maxHeight: "62px !important",
 
     transition: "all .22s ease",
 
@@ -269,34 +262,16 @@ const dataGridStyles = {
     background: "#111827",
   },
 
+  "& .MuiDataGrid-columnHeaderTitle": {
+    color: "#94a3b8",
+  },
+
   "& .MuiDataGrid-scrollbar": {
     background: "#0f172a",
   },
 
   "& .MuiDataGrid-filler": {
     background: "#111827",
-  },
-  
-  "& .MuiDataGrid-columnSeparator": {
-    display: "none",
-  },
-
-  "& .MuiDataGrid-cell:focus": {
-    outline: "none",
-  },
-
-  "& .MuiDataGrid-columnHeader:focus": {
-    outline: "none",
-  },
-
-  "& .MuiDataGrid-row.Mui-selected": {
-    background:
-      "rgba(59,130,246,.08) !important",
-  },
-
-  "& .MuiDataGrid-row.Mui-selected:hover": {
-    background:
-      "rgba(59,130,246,.12) !important",
   },
 };
 
@@ -423,17 +398,16 @@ const bulkBar = {
 
   gap: 14,
 
-  padding: "14px 22px",
+  padding: "12px 18px",
 
   background:
-    "linear-gradient(180deg,#0f172a,#111827)",
+    "rgba(15,23,42,.94)",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(255,255,255,.08)",
 
-  borderRadius: 24,
+  borderRadius: 18,
 
-  
   backdropFilter: "blur(24px)",
 
   boxShadow:
@@ -585,17 +559,9 @@ const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
 
-  borderRadius:28,
+  borderRadius: 24,
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 25px 60px rgba(0,0,0,.45)",
-
-  overflow:"hidden",
-
-  padding:0,
+  padding: 28,
 };
 
 const popupOverlay = {
@@ -1513,12 +1479,6 @@ function DispatchedItemsPage() {
     <div style={page}>
       <div style={content}>
 	  <div style={headerRow}>
-	  <Box sx={{
-	   display:"grid",
-	   gridTemplateColumns:
-	     "repeat(4,1fr)",
-	   gap:2
-	  }}>
 	    <div>
 		<Box
 		  sx={{
@@ -1549,7 +1509,6 @@ function DispatchedItemsPage() {
 		  </div>
 		</Box>
 	    </div>
-		</Box>
 	  </div>
 	 
 		
@@ -1728,18 +1687,17 @@ function DispatchedItemsPage() {
 		</Box>
 
         <div style={wrap}>
-		<div style={tableWrapper}>
-		<div style={tableTopBar}>
-				  <div>
-				    <div style={tableTitle}>
-				      Dispatch Inventory
-				    </div>
 
-				    <div style={tableMeta}>
-				      Track dispatched items and warehouse movements
-				    </div>
-				  </div>
-				</div>
+		<div style={tableWrapper}>
+		<div>
+		  <div style={tableTitle}>
+		    Dispatch Inventory
+		  </div>
+
+		  <div style={tableMeta}>
+		    Track dispatched items and warehouse movements
+		  </div>
+		</div>
 		<DataGrid
 		  selectionModel={selectionModel}
 		  onSelectionModelChange={(newSelection) => setSelectionModel(newSelection)}
