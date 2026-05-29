@@ -1,10 +1,12 @@
 import { useEffect, useState, useMemo  } from "react";
 import { DataGrid } from "@mui/x-data-grid";
-import { Chip, Box, Button, IconButton, TextField} from "@mui/material";
-import MenuItem from "@mui/material/MenuItem";
+import { Chip, Box, Button, IconButton, TextField, MenuItem} from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
+import DescriptionOutlinedIcon
+from "@mui/icons-material/DescriptionOutlined";
+
 
 
 /* ===================== STYLES ===================== */
@@ -17,6 +19,53 @@ const page = {
     "linear-gradient(135deg,#020617,#0f172a)",
 };
 
+const tableActionButton = {
+  minWidth: 120,
+
+  height: 34,
+
+  borderRadius: 12,
+
+  fontWeight: 700,
+
+  textTransform: "none",
+};
+
+const readyStatusChip = {
+  fontWeight: 700,
+
+  color: "#60a5fa",
+
+  background:
+    "rgba(59,130,246,.12)",
+
+  border:
+    "1px solid rgba(59,130,246,.18)",
+};
+
+const dispatchedStatusChip = {
+  fontWeight: 700,
+
+  color: "#4ade80",
+
+  background:
+    "rgba(34,197,94,.12)",
+
+  border:
+    "1px solid rgba(34,197,94,.18)",
+};
+
+const pendingStatusChip = {
+  fontWeight: 700,
+
+  color: "#fbbf24",
+
+  background:
+    "rgba(251,191,36,.12)",
+
+  border:
+    "1px solid rgba(251,191,36,.18)",
+};
 
 const statusCard = {
   p: 2.2,
@@ -137,18 +186,16 @@ const dataGridStyles = {
   },
 
   "& .MuiDataGrid-columnHeaders": {
-    background: "#111827",
-
-    borderBottom:
-      "1px solid rgba(255,255,255,.06)",
-
+    background: "#111827 !important",
     color: "#94a3b8",
-
-    fontWeight: 700,
-
     minHeight: "56px !important",
-
     maxHeight: "56px !important",
+    borderBottom: "1px solid rgba(255,255,255,.06)",
+  },
+  
+  "& .MuiDataGrid-columnHeaderTitle": {
+    fontWeight: 700,
+    fontSize: 13,
   },
 
   "& .MuiDataGrid-columnHeader": {
@@ -162,24 +209,24 @@ const dataGridStyles = {
     display: "flex",
 
     alignItems: "center",
+	
+	paddingLeft: "16px",
+	paddingRight: "16px",
 
-    paddingLeft: "12px",
-
-    fontSize: 14,
+    fontSize: 13,
 	whiteSpace: "nowrap",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
   },
 
   "& .MuiDataGrid-row": {
-    minHeight: "64px !important",
-    maxHeight: "64px !important",
+    minHeight: "62px !important",
+    maxHeight: "62px !important",
 
     transition: "all .22s ease",
 
     "&:hover": {
       background: "rgba(255,255,255,.025)",
-      transform: "scale(1.002)",
     },
   },
 
@@ -215,16 +262,34 @@ const dataGridStyles = {
     background: "#111827",
   },
 
-  "& .MuiDataGrid-columnHeaderTitle": {
-    color: "#94a3b8",
-  },
-
   "& .MuiDataGrid-scrollbar": {
     background: "#0f172a",
   },
 
   "& .MuiDataGrid-filler": {
     background: "#111827",
+  },
+  
+  "& .MuiDataGrid-columnSeparator": {
+    display: "none",
+  },
+
+  "& .MuiDataGrid-cell:focus": {
+    outline: "none",
+  },
+
+  "& .MuiDataGrid-columnHeader:focus": {
+    outline: "none",
+  },
+
+  "& .MuiDataGrid-row.Mui-selected": {
+    background:
+      "rgba(59,130,246,.08) !important",
+  },
+
+  "& .MuiDataGrid-row.Mui-selected:hover": {
+    background:
+      "rgba(59,130,246,.12) !important",
   },
 };
 
@@ -351,16 +416,17 @@ const bulkBar = {
 
   gap: 14,
 
-  padding: "12px 18px",
+  padding: "14px 22px",
 
   background:
-    "rgba(15,23,42,.94)",
+    "linear-gradient(180deg,#0f172a,#111827)",
 
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(255,255,255,.06)",
 
-  borderRadius: 18,
+  borderRadius: 24,
 
+  
   backdropFilter: "blur(24px)",
 
   boxShadow:
@@ -374,8 +440,9 @@ const bulkBar = {
 
 const actionContainer = {
   display: "flex",
+  alignItems: "center",
   gap: 1,
-  flexWrap: "wrap",
+  flexWrap: "nowrap",
 };
 
 const actionPrimary = {
@@ -966,7 +1033,7 @@ function DispatchedItemsPage() {
 	            },
 	          }}
 	        >
-	          📄
+	          <DescriptionOutlinedIcon fontSize="small" />
 	        </IconButton>
 
 	        <span>{row.name}</span>
@@ -987,8 +1054,13 @@ function DispatchedItemsPage() {
 	      style={{
 	        padding: "4px 10px",
 	        borderRadius: "999px",
-	        background: "rgba(99,102,241,0.1)",
-	        color: "#4f46e5",
+			background:
+			  "rgba(59,130,246,.12)",
+
+			color:"#60a5fa",
+
+			border:
+			  "1px solid rgba(59,130,246,.18)",
 	        fontWeight: 600,
 	        fontSize: 12,
 	      }}
@@ -1028,23 +1100,16 @@ function DispatchedItemsPage() {
 	    <span>Description</span>
 	  ),
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "8px",
-	        background: "rgba(16,185,129,0.1)",
-	        color: "#059669",
-	        fontSize: 12,
-	        maxWidth: "180px",
-	        overflow: "hidden",
-	        textOverflow: "ellipsis",
-	        whiteSpace: "nowrap",
-	        display: "inline-block",
+	    <Chip
+	      size="small"
+	      label={params.value || "No description"}
+	      sx={{
+	        color:"#4ade80",
+	        background:"rgba(34,197,94,.12)",
+	        border:"1px solid rgba(34,197,94,.18)",
+	        maxWidth:"100%",
 	      }}
-	      title={params.value}
-	    >
-	      {params.value || "No description"}
-	    </span>
+	    />
 	  ),
 	},
 	{
@@ -1109,21 +1174,17 @@ function DispatchedItemsPage() {
 		  const style = getStatusStyle(row.status);
 
 		  return (
-		    <Box
-		      sx={{
-		        px: 1.8,
-		        py: 0.4,
-		        borderRadius: "999px",
-		        fontSize: 11,
-		        fontWeight: 700,
-		        display: "inline-flex",
-		        alignItems: "center",
-		        gap: 0.6,
-		        ...style,
-		      }}
-		    >
-		      ● {row.status}
-		    </Box>
+		    <Chip
+		      size="small"
+		      label={row.status}
+		      sx={
+		        row.status === "READY"
+		          ? readyStatusChip
+		          : row.status === "DISPATCHED"
+		          ? dispatchedStatusChip
+		          : pendingStatusChip
+		      }
+		    />
 		  );
 		}
 
@@ -1131,7 +1192,10 @@ function DispatchedItemsPage() {
 	      <Button
 	        size="small"
 	        onClick={() => setStatusModal(row)}   // 🔥 open modal
-			sx={actionPrimary}
+			sx={{
+			  ...actionPrimary,
+			  ...tableActionButton,
+			}}
 	      >
 	        Change Status
 	      </Button>
@@ -1143,8 +1207,8 @@ function DispatchedItemsPage() {
 	  headerName:"Action",
 
 	  flex: 1,
-	  minWidth: 420,
-	  maxWidth: 460,
+	  minWidth:420,
+	  maxWidth:500,
 
 	  sortable:false,
 
@@ -1216,7 +1280,10 @@ function DispatchedItemsPage() {
 			      alert("Failed to preview chalaan");
 			    }
 			  }}
-			  sx={actionSecondary}
+			  sx={{
+			    ...actionSecondary,
+			    ...tableActionButton,
+			  }}
 		    >
 		      Generate Chalaan
 		    </Button>
@@ -1257,7 +1324,10 @@ function DispatchedItemsPage() {
                 <Button
                   size="small"
                   onClick={() => rejectRestore(row.zohoItemId)}
-                  sx={actionDanger}
+				  sx={{
+				    ...actionDanger,
+				    ...tableActionButton,
+				  }}
                 >
                   Reject
                 </Button>
@@ -1268,7 +1338,10 @@ function DispatchedItemsPage() {
 			  <Button
 			    size="small"
 			    onClick={() => requestRestore(row.zohoItemId)}
-			    sx={actionSecondary}
+				sx={{
+				  ...actionSecondary,
+				  ...tableActionButton,
+				}}
 			  >
 			    Request Restore
 			  </Button>
@@ -1294,7 +1367,10 @@ function DispatchedItemsPage() {
 			    <Button
 			      size="small"
 			      onClick={() => rejectReturn(row.zohoItemId)}
-			      sx={actionDanger}
+				  sx={{
+				    ...actionDanger,
+				    ...tableActionButton,
+				  }}
 			    >
 			      Reject
 			    </Button>
@@ -1430,28 +1506,16 @@ function DispatchedItemsPage() {
 		    gap:2,
 		  }}
 		>
-		  <Box
-		    sx={{
-		      width:56,
-		      height:56,
-
-		      borderRadius:16,
-
-		      display:"flex",
-		      alignItems:"center",
-		      justifyContent:"center",
-
-		      background:
-		        "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-		      boxShadow:
-		        "0 12px 24px rgba(37,99,235,.35)",
-
-		      fontSize:28,
-		    }}
-		  >
-		    🚚
-		  </Box>
+		<Box
+		  sx={{
+		    fontSize: 34,
+		    display: "flex",
+		    alignItems: "center",
+		    color: "#60a5fa",
+		  }}
+		>
+		  🚚
+		</Box>
 
 		  <div>
 		    <div style={logo}>
@@ -1643,12 +1707,14 @@ function DispatchedItemsPage() {
 
         <div style={wrap}>
 		<div style={tableTopBar}>
-		  <div style={tableTitle}>
-		    Dispatch Inventory
-		  </div>
+		  <div>
+		    <div style={tableTitle}>
+		      Dispatch Inventory
+		    </div>
 
-		  <div style={tableMeta}>
-		    {filteredRows.length} Active Items
+		    <div style={tableMeta}>
+		      Track dispatched items and warehouse movements
+		    </div>
 		  </div>
 		</div>
 		<div style={tableWrapper}>
@@ -1799,7 +1865,7 @@ function DispatchedItemsPage() {
 	              borderRadius: 8,
 				  background:
 				    idx === 0
-				      ? "rgba(16,185,129,.12)"
+				      ? "rgba(16,185,129,.08)"
 				      : "rgba(255,255,255,.03)",
 
 				  border:
@@ -1985,29 +2051,29 @@ function DispatchedItemsPage() {
 			      All Actions
 			    </option>
 
-			    <option value="REQUEST">
+			    <MenuItem value="REQUEST">
 			      Requests
-			    </option>
+			    </MenuItem>
 
-			    <option value="APPROVE">
+			    <MenuItem value="APPROVE">
 			      Approvals
-			    </option>
+			    </MenuItem>
 
-			    <option value="REJECT">
+			    <MenuItem value="REJECT">
 			      Rejections
-			    </option>
+			    </MenuItem>
 
-			    <option value="DISPATCH">
+			    <MenuItem value="DISPATCH">
 			      Dispatch
-			    </option>
+			    </MenuItem>
 
-			    <option value="PACK">
+			    <MenuItem value="PACK">
 			      Pack
-			    </option>
+			    </MenuItem>
 
-			    <option value="STICKER">
+			    <MenuItem value="STICKER">
 			      Sticker
-			    </option>
+			    </MenuItem>
 			  </TextField>
 
 			  {/* ROLE FILTER */}
@@ -2530,7 +2596,11 @@ function DispatchedItemsPage() {
 			  <Box
 			    sx={{
 			      ...statusCard,
-			      background: "linear-gradient(180deg,#ecfdf5,#d1fae5)"
+				  background:
+				    "rgba(59,130,246,.08)",
+
+				  border:
+				    "1px solid rgba(59,130,246,.18)",
 			    }}
 				onClick={async () => {
 				  try {
@@ -2609,7 +2679,11 @@ function DispatchedItemsPage() {
 	          <Box
 	            sx={{
 	              ...statusCard,
-	              background: "linear-gradient(180deg,#ecfdf5,#d1fae5)"
+				  background:
+				    "rgba(16,185,129,.08)",
+
+				  border:
+				    "1px solid rgba(16,185,129,.18)",
 	            }}
 	            onClick={async () => {
 	              try {
