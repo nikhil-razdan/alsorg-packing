@@ -572,7 +572,13 @@ function WarehousePage() {
 	            alert("Failed to load gate pass");
 	          }
 	        }}
-	        sx={formFieldSx}
+	        sx={{
+	          fontSize: 11,
+	          borderRadius: "999px",
+	          px: 1.5,
+	          background: "linear-gradient(180deg,#6366f1,#4338ca)",
+	          color: "#fff",
+	        }}
 	      >
 	        VIEW
 	      </Button>
@@ -1180,7 +1186,13 @@ function WarehousePage() {
 			  {gatePassPopup?.previewUrl && (
 			          <iframe
 			            src={gatePassPopup.previewUrl}
-			            sx={formFieldSx}
+			            style={{
+			              width: "100%",
+			              height: "420px",
+			              border: "none",
+			              borderRadius: 8,
+			              marginBottom: 12,
+			            }}
 			          />
 			        )}
 					
@@ -1233,7 +1245,17 @@ function WarehousePage() {
 		        {previewRows.map((row, i) => (
 		          <div
 		            key={i}
-		            sx={formFieldSx}
+		            style={{
+		              display: "flex",
+		              justifyContent: "space-between",
+		              padding: 8,
+		              borderBottom: "1px solid #eee",
+					  background: row.valid
+					    ?  "#ecfdf5"
+					    :  "#fee2e2",
+
+					  color: "#111",
+		            }}
 		          >
 				  <span>
 				    {row.zohoItemId || "New Item"} | 📍 {row.location || "-"}
