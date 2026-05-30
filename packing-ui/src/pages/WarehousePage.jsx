@@ -572,13 +572,7 @@ function WarehousePage() {
 	            alert("Failed to load gate pass");
 	          }
 	        }}
-	        sx={{
-	          fontSize: 11,
-	          borderRadius: "999px",
-	          px: 1.5,
-	          background: "linear-gradient(180deg,#6366f1,#4338ca)",
-	          color: "#fff",
-	        }}
+	        sx={formFieldSx}
 	      >
 	        VIEW
 	      </Button>
@@ -727,24 +721,9 @@ function WarehousePage() {
 				      }))
 				    }
 					sx={{
-					  "& .MuiInputBase-root": {
-					    borderRadius: "14px",
+					  width: 180,
 
-					    background:"#fff",
-
-					    color: "#111",
-
-					    border:"1px solid rgba(0,0,0,0.08)",
-					  },
-
-					  "& input": {
-					    color:"#111",
-					  },
-
-					  "& input::placeholder": {
-					    color:"rgba(0,0,0,0.4)",
-					    opacity: 1,
-					  },
+					  ...formFieldSx,
 					}}
 				  />
 
@@ -955,8 +934,8 @@ function WarehousePage() {
         <Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
-		    opacity: 0.75,
-		    color: "rgba(0,0,0,0.55)",
+		    color:
+		      "rgba(255,255,255,.45)",
 		  }}
 		/>
           <TextField
@@ -969,40 +948,13 @@ function WarehousePage() {
 			  flex: 1,
 
 			  "& .MuiInputBase-root": {
-			    height: 40,
-
-			    borderRadius: "18px",
-
-			    padding: "0 8px",
-
-			    background:"rgba(255,255,255,0.55)",
-
-			    color:"#111",
-
-			    border: "1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& input": {
-			    color:"#111",
+			    color: "#fff",
 			    fontSize: 14,
-			    fontWeight: 500,
 			  },
 
 			  "& input::placeholder": {
-			    color: "rgba(0,0,0,0.45)",
+			    color: "rgba(255,255,255,.42)",
 			    opacity: 1,
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: "#fff",
-
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
 			  },
 			}}
           />
@@ -1030,83 +982,7 @@ function WarehousePage() {
 			sx={{
 			  width: 220,
 
-			  "& .MuiInputBase-root": {
-			    height: 40,
-
-			    borderRadius: "18px",
-
-			    background: "rgba(255,255,255,0.55)",
-
-			    color: "#111",
-
-			    border:"1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& .MuiSelect-select": {
-			    display: "flex",
-			    alignItems: "center",
-			    color: "#111",
-			    fontWeight: 500,
-			  },
-
-			  "& .MuiSvgIcon-root": {
-			    color:"#111",
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: "#fff",
-
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
-			  },
-			}}
-			slotProps={{
-			  select: {
-			    MenuProps: {
-			      PaperProps: {
-			        sx: {
-			          mt: 1,
-
-			          borderRadius: "18px",
-
-			          overflow: "hidden",
-
-			          backdropFilter: "blur(18px)",
-
-			          background: "rgba(255,255,255,0.96)",
-
-			          color:"#111",
-
-			          border:"1px solid rgba(0,0,0,0.06)",
-
-			          boxShadow: "0 20px 45px rgba(0,0,0,0.18)",
-
-			          "& .MuiMenuItem-root": {
-			            fontSize: 14,
-			            fontWeight: 500,
-			            color: "#111",
-			          },
-
-			          "& .MuiMenuItem-root:hover": {
-			            background: "rgba(59,130,246,0.08)",
-			          },
-
-			          "& .Mui-selected": {
-			            background: "rgba(59,130,246,0.12) !important",
-
-			            color: "#2563eb",
-
-			            fontWeight: 700,
-			          },
-			        },
-			      },
-			    },
-			  },
+			  ...formFieldSx,
 			}}
 		  >
 		    <MenuItem value="CREATE">Create Inventory</MenuItem>
@@ -1304,13 +1180,7 @@ function WarehousePage() {
 			  {gatePassPopup?.previewUrl && (
 			          <iframe
 			            src={gatePassPopup.previewUrl}
-			            style={{
-			              width: "100%",
-			              height: "420px",
-			              border: "none",
-			              borderRadius: 8,
-			              marginBottom: 12,
-			            }}
+			            sx={formFieldSx}
 			          />
 			        )}
 					
@@ -1363,17 +1233,7 @@ function WarehousePage() {
 		        {previewRows.map((row, i) => (
 		          <div
 		            key={i}
-		            style={{
-		              display: "flex",
-		              justifyContent: "space-between",
-		              padding: 8,
-		              borderBottom: "1px solid #eee",
-					  background: row.valid
-					    ?  "#ecfdf5"
-					    :  "#fee2e2",
-
-					  color: "#111",
-		            }}
+		            sx={formFieldSx}
 		          >
 				  <span>
 				    {row.zohoItemId || "New Item"} | 📍 {row.location || "-"}

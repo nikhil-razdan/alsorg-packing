@@ -56,7 +56,7 @@ function LogisticsDashboard({
 
             {
               title:
-                "Loaders Per Driver",
+                "Helpers Per Driver",
 
               value: Number(
                 (logistics.totalLoaders || 0) /
@@ -180,13 +180,13 @@ function LogisticsDashboard({
 
             {
               title:
-                "Total Loaders",
+                "Total Helpers",
 
               value:
                 logistics.totalLoaders,
 
               subtle:
-                "Loaders Utilized",
+                "Helpers Utilized",
 
               accent: "#22c55e",
             },
@@ -355,7 +355,7 @@ function LogisticsDashboard({
             "Driver & Vehicle Operations",
 
           subtitle:
-            "Real-time overview of trips, loaders and performance",
+            "Real-time overview of trips, helpers and performance",
 
           cards: [
             {
@@ -373,13 +373,13 @@ function LogisticsDashboard({
 
             {
               title:
-                "Total Loaders",
+                "Total Helpers",
 
               value:
                 logistics.totalLoaders,
 
               subtle:
-                "Loaders Utilized",
+                "Helpers Utilized",
 
               accent: "#22c55e",
             },
@@ -393,7 +393,7 @@ function LogisticsDashboard({
               ).toFixed(1)}%`,
 
               subtle:
-                "Loaders / Trip",
+                "Helpers / Trip",
 
               accent: "#f59e0b",
             },

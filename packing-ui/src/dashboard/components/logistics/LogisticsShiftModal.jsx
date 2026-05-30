@@ -22,7 +22,7 @@ function LogisticsShiftModal({
     shiftEnd: "",
     overtimeHours: 0,
     totalTrips: 0,
-    totalLoaders: 0,
+    totalHelpers: 0,
     fuelUsed: 0,
     totalDistance: 0,
     routeCategory: "Factory",
@@ -75,7 +75,7 @@ function LogisticsShiftModal({
         vehicleId: form.vehicleId,
         overtimeHours: Number(form.overtimeHours || 0),
         totalTrips: Number(form.totalTrips || 0),
-        totalLoaders: Number(form.totalLoaders || 0),
+        totalHelpers: Number(form.totalLoaders || 0),
         fuelUsed: Number(form.fuelUsed || 0),
         totalDistance: Number(form.totalDistance || 0),
       };
@@ -167,12 +167,12 @@ function LogisticsShiftModal({
             />
           </Field>
 
-          <Field label="Loaders">
+          <Field label="Helpers">
             <input
               type="number"
               style={input}
               value={form.totalLoaders}
-              onChange={(e) => update("totalLoaders", Number(e.target.value))}
+              onChange={(e) => update("totalHelpers", Number(e.target.value))}
             />
           </Field>
 
