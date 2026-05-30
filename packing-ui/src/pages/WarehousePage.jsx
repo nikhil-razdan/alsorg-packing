@@ -881,7 +881,7 @@ function WarehousePage() {
 	
   return (
     <div style={page}>
-      <div style={backgroundText}>Warehouse</div>
+      <div style={backgroundText(false)}>Warehouse</div>
 
       <div style={content}>
 	  <Box
@@ -1157,7 +1157,7 @@ function WarehousePage() {
                 return "row-pending";
               return "row-floor";
             }}
-            sx={dataGridStyles}
+            sx={dataGridStyles(false)}
           />
         </div>
 		</div>
@@ -1173,7 +1173,7 @@ function WarehousePage() {
 			  }}
 			>
 			<div
-			  style={popupBox}
+			  style={popupBox(false)}
 			  onClick={(e) => e.stopPropagation()}
 			>
 			<div style={modalGloss} />
@@ -1237,7 +1237,7 @@ function WarehousePage() {
 		)}
 		{previewOpen && (
 		  <div style={popupOverlay}>
-		    <div style={{ ...popupBox, width: 800 }}>
+		    <div style={{ ...popupBox(false), width: 800 }}>
 
 		      <h2>Import Preview</h2>
 
