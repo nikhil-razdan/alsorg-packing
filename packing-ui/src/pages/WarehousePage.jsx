@@ -20,7 +20,6 @@ function WarehousePage() {
   const [uploadFile, setUploadFile] = useState(null);
   const [selectionModel, setSelectionModel] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   /* ===================== FETCH ===================== */
 
   const fetchItems = async () => {
@@ -486,7 +485,7 @@ function WarehousePage() {
 	    <span
 	      style={{
 	        fontWeight: 600,
-	        color: darkMode ? "#f9fafb" : "#374151",
+	        color:"#374151",
 	      }}
 	    >
 	      {params.value || "—"}
@@ -731,25 +730,19 @@ function WarehousePage() {
 					  "& .MuiInputBase-root": {
 					    borderRadius: "14px",
 
-					    background: darkMode
-					      ? "rgba(255,255,255,0.04)"
-					      : "#fff",
+					    background:"#fff",
 
-					    color: darkMode ? "#fff" : "#111",
+					    color: "#111",
 
-					    border: darkMode
-					      ? "1px solid rgba(255,215,0,0.08)"
-					      : "1px solid rgba(0,0,0,0.08)",
+					    border:"1px solid rgba(0,0,0,0.08)",
 					  },
 
 					  "& input": {
-					    color: darkMode ? "#fff" : "#111",
+					    color:"#111",
 					  },
 
 					  "& input::placeholder": {
-					    color: darkMode
-					      ? "rgba(255,255,255,0.4)"
-					      : "rgba(0,0,0,0.4)",
+					    color:"rgba(0,0,0,0.4)",
 					    opacity: 1,
 					  },
 					}}
@@ -902,109 +895,68 @@ function WarehousePage() {
     );
 	
   return (
-    <div style={page(darkMode)}>
-      <div style={backgroundText(darkMode)}>Warehouse</div>
+    <div style={page}>
+      <div style={backgroundText}>Warehouse</div>
 
       <div style={content}>
 	  <Box
 	    sx={{
-	      display: "flex",
-	      alignItems: "center",
-	      justifyContent: "space-between",
-	      mb: 2,
+	      display:"flex",
+	      justifyContent:"space-between",
+	      alignItems:"center",
 	    }}
 	  >
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-
-	      {/* ICON BADGE */}
+	    <Box
+	      sx={{
+	        display:"flex",
+	        alignItems:"center",
+	        gap:2,
+	      }}
+	    >
 	      <Box
 	        sx={{
-	          width: 52,
-	          height: 52,
-	          borderRadius: 3,
-	          background: "linear-gradient(135deg,#facc15,#f59e0b)",
-	          display: "flex",
-	          alignItems: "center",
-	          justifyContent: "center",
-	          boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
-	          fontSize: 22,
+	          fontSize:34,
+	          color:"#60a5fa",
 	        }}
 	      >
 	        🏭
 	      </Box>
 
-	      {/* TEXT */}
 	      <Box>
-	        <div
-	          style={{
-	            fontSize: 28, 
-	            fontWeight: 700,
-	            color: darkMode ? "#FFD700" : "#ffffff",
-	            letterSpacing: 0.4,
-	            textShadow: "0 3px 10px rgba(0,0,0,0.25)",
-	          }}
-	        >
+	        <div style={logo}>
 	          Warehouse
 	        </div>
 
-	        <div
-	          style={{
-	            fontSize: 13,
-				color: darkMode
-				  ? "rgba(255,215,0,0.82)"
-				  : "rgba(255,255,255,0.85)",
-	          }}
-	        >
-	          Track warehouse movement and storage requests
+	        <div style={subtitle}>
+	          Track warehouse movement and storage operations
 	        </div>
 	      </Box>
 	    </Box>
 
-	    {/* ITEMS CHIP */}
-		<Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-
-		  <Button
-		    onClick={() => setDarkMode(!darkMode)}
-		    sx={themeBtn(darkMode)}
-		  >
-		    {darkMode ? "☀ Classic" : "🌙 Dark Mode"}
-		  </Button>
-
-		  <Box
-		    sx={{
-		      px: 2,
-		      py: 0.8,
-		      borderRadius: "999px",
-
-		      background: darkMode
-		        ? "rgba(255,215,0,0.12)"
-		        : "rgba(255,255,255,0.25)",
-
-		      backdropFilter: "blur(10px)",
-
-		      color: darkMode ? "#FFD700" : "#fff",
-
-		      fontWeight: 600,
-
-		      border: darkMode
-		        ? "1px solid rgba(255,215,0,0.2)"
-		        : "1px solid rgba(255,255,255,0.3)",
-
-		      fontSize: 13,
-		    }}
-		  >
-		    {rows.length} Items
-		  </Box>
-
-		</Box>
-		</Box>
-        <Box sx={searchPanel(darkMode)}>
+	    <Box
+	      sx={{
+	        color:"#94a3b8",
+	        fontSize:14,
+	        fontWeight:600,
+	      }}
+	    >
+	      Total Items:
+	      <span
+	        style={{
+	          color:"#60a5fa",
+	          marginLeft:6,
+	          fontWeight:800,
+	        }}
+	      >
+	        {filteredRows.length}
+	      </span>
+	    </Box>
+	  </Box>
+        <Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
 		    opacity: 0.75,
-		    color: darkMode
-		      ? "#FFD700"
-		      : "rgba(0,0,0,0.55)",
+		    color: "rgba(0,0,0,0.55)",
 		  }}
 		/>
           <TextField
@@ -1023,92 +975,41 @@ function WarehousePage() {
 
 			    padding: "0 8px",
 
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
+			    background:"rgba(255,255,255,0.55)",
 
-			    color: darkMode ? "#fff" : "#111",
+			    color:"#111",
 
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
+			    border: "1px solid rgba(255,255,255,0.35)",
 
 			    transition: "all 0.25s ease",
 			  },
 
 			  "& input": {
-			    color: darkMode ? "#fff" : "#111",
+			    color:"#111",
 			    fontSize: 14,
 			    fontWeight: 500,
 			  },
 
 			  "& input::placeholder": {
-			    color: darkMode
-			      ? "rgba(255,255,255,0.45)"
-			      : "rgba(0,0,0,0.45)",
+			    color: "rgba(0,0,0,0.45)",
 			    opacity: 1,
 			  },
 
 			  "& .MuiInputBase-root:hover": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.05)"
-			      : "#fff",
+			    background: "#fff",
 			  },
 
 			  "& .Mui-focused": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.06)"
-			      : "#fff",
+			    background: "#fff",
 
-			    boxShadow: darkMode
-			      ? "0 0 0 2px rgba(255,215,0,0.22)"
-			      : "0 0 0 2px rgba(59,130,246,0.3)",
+			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
 			  },
 			}}
           />
         </Box>
-		<Box sx={legend}>
-
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-		    background: "rgba(209,250,229,0.9)",
-		    color: "#059669",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    📦 STORED IN WAREHOUSE
-		  </Box>
-
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-		    background: "rgba(254,243,199,0.9)",
-		    color: "#d97706",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    ⏳ REQUESTED
-		  </Box>
-
-		  <Box sx={{
-		    px: 2,
-		    py: 0.6,
-		    borderRadius: "999px",
-		    background: "rgba(254,226,226,0.9)",
-		    color: "#dc2626",
-		    fontWeight: 600,
-		    fontSize: 12
-		  }}>
-		    🔁 RETURN REQUESTED
-		  </Box>
-
-		</Box>
-
+		
 		{/* 🔥 ADD THIS BLOCK RIGHT HERE */}
-        <div style={tableWrapper(darkMode)}>
+        <div style={tableWrapper}>
 		<Box sx={{ display: "flex", gap: 2, mb: 2 }}>
 
 		  {/* EXPORT */}
@@ -1134,15 +1035,11 @@ function WarehousePage() {
 
 			    borderRadius: "18px",
 
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
+			    background: "rgba(255,255,255,0.55)",
 
-			    color: darkMode ? "#fff" : "#111",
+			    color: "#111",
 
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
+			    border:"1px solid rgba(255,255,255,0.35)",
 
 			    transition: "all 0.25s ease",
 			  },
@@ -1150,28 +1047,22 @@ function WarehousePage() {
 			  "& .MuiSelect-select": {
 			    display: "flex",
 			    alignItems: "center",
-			    color: darkMode ? "#fff" : "#111",
+			    color: "#111",
 			    fontWeight: 500,
 			  },
 
 			  "& .MuiSvgIcon-root": {
-			    color: darkMode ? "#FFD700" : "#111",
+			    color:"#111",
 			  },
 
 			  "& .MuiInputBase-root:hover": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.05)"
-			      : "#fff",
+			    background: "#fff",
 			  },
 
 			  "& .Mui-focused": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.06)"
-			      : "#fff",
+			    background: "#fff",
 
-			    boxShadow: darkMode
-			      ? "0 0 0 2px rgba(255,215,0,0.22)"
-			      : "0 0 0 2px rgba(59,130,246,0.3)",
+			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
 			  },
 			}}
 			slotProps={{
@@ -1187,40 +1078,28 @@ function WarehousePage() {
 
 			          backdropFilter: "blur(18px)",
 
-			          background: darkMode
-			            ? "rgba(15,15,15,0.96)"
-			            : "rgba(255,255,255,0.96)",
+			          background: "rgba(255,255,255,0.96)",
 
-			          color: darkMode ? "#fff" : "#111",
+			          color:"#111",
 
-			          border: darkMode
-			            ? "1px solid rgba(255,215,0,0.12)"
-			            : "1px solid rgba(0,0,0,0.06)",
+			          border:"1px solid rgba(0,0,0,0.06)",
 
-			          boxShadow: darkMode
-			            ? "0 20px 45px rgba(0,0,0,0.7)"
-			            : "0 20px 45px rgba(0,0,0,0.18)",
+			          boxShadow: "0 20px 45px rgba(0,0,0,0.18)",
 
 			          "& .MuiMenuItem-root": {
 			            fontSize: 14,
 			            fontWeight: 500,
-			            color: darkMode ? "#fff" : "#111",
+			            color: "#111",
 			          },
 
 			          "& .MuiMenuItem-root:hover": {
-			            background: darkMode
-			              ? "rgba(255,215,0,0.08)"
-			              : "rgba(59,130,246,0.08)",
+			            background: "rgba(59,130,246,0.08)",
 			          },
 
 			          "& .Mui-selected": {
-			            background: darkMode
-			              ? "rgba(255,215,0,0.14) !important"
-			              : "rgba(59,130,246,0.12) !important",
+			            background: "rgba(59,130,246,0.12) !important",
 
-			            color: darkMode
-			              ? "#FFD700"
-			              : "#2563eb",
+			            color: "#2563eb",
 
 			            fontWeight: 700,
 			          },
@@ -1238,33 +1117,21 @@ function WarehousePage() {
 		    variant="contained"
 			disabled={!importMode}
 			sx={{
-			  background: darkMode
-			    ? "linear-gradient(180deg,#16a34a,#15803d)"
-			    : "#16a34a",
+			  background: "#16a34a",
 
 			  color: "#fff",
 
-			  border: darkMode
-			    ? "1px solid rgba(255,255,255,0.08)"
-			    : "none",
+			  border: "none",
 
-			  boxShadow: darkMode
-			    ? "0 10px 25px rgba(22,163,74,0.28)"
-			    : "none",
+			  boxShadow:"none",
 
 			  "&:hover": {
-			    background: darkMode
-			      ? "linear-gradient(180deg,#22c55e,#16a34a)"
-			      : "#15803d",
+			    background: "#15803d",
 			  },
 			  "&.Mui-disabled": {
-			    background: darkMode
-			      ? "rgba(255,255,255,0.08)"
-			      : "rgba(0,0,0,0.12)",
+			    background:"rgba(0,0,0,0.12)",
 
-			    color: darkMode
-			      ? "rgba(255,255,255,0.35)"
-			      : "rgba(0,0,0,0.35)",
+			    color: "rgba(0,0,0,0.35)",
 			  },
 			}}
 		  >
@@ -1299,26 +1166,18 @@ function WarehousePage() {
 		  sx={{
 		    mt: 1,
 
-		    color: darkMode ? "#FFD700" : "#111827",
+		    color: "#111827",
 
-		    borderColor: darkMode
-		      ? "rgba(255,215,0,0.35)"
-		      : "rgba(17,24,39,0.25)",
+		    borderColor:"rgba(17,24,39,0.25)",
 
-		    background: darkMode
-		      ? "rgba(255,215,0,0.04)"
-		      : "rgba(255,255,255,0.4)",
+		    background:"rgba(255,255,255,0.4)",
 
 		    backdropFilter: "blur(12px)",
 
 		    "&:hover": {
-		      borderColor: darkMode
-		        ? "#FFD700"
-		        : "#111827",
+		      borderColor:"#111827",
 
-		      background: darkMode
-		        ? "rgba(255,215,0,0.08)"
-		        : "rgba(255,255,255,0.7)",
+		      background:"rgba(255,255,255,0.7)",
 		    },
 		  }}
 		>
@@ -1416,7 +1275,7 @@ function WarehousePage() {
                 return "row-pending";
               return "row-floor";
             }}
-            sx={dataGridStyles(darkMode)}
+            sx={dataGridStyles}
           />
         </div>
 		</div>
@@ -1432,7 +1291,7 @@ function WarehousePage() {
 			  }}
 			>
 			<div
-			  style={popupBox(darkMode)}
+			  style={popupBox}
 			  onClick={(e) => e.stopPropagation()}
 			>
 			<div style={modalGloss} />
@@ -1510,14 +1369,10 @@ function WarehousePage() {
 		              padding: 8,
 		              borderBottom: "1px solid #eee",
 					  background: row.valid
-					    ? darkMode
-					      ? "rgba(6,78,59,0.45)"
-					      : "#ecfdf5"
-					    : darkMode
-					      ? "rgba(127,29,29,0.45)"
-					      : "#fee2e2",
+					    ?  "#ecfdf5"
+					    :  "#fee2e2",
 
-					  color: darkMode ? "#fff" : "#111",
+					  color: "#111",
 		            }}
 		          >
 				  <span>
@@ -1574,27 +1429,12 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 
-const page = (darkMode) => ({
+const page = {
   minHeight: "100vh",
-  padding: 20,
-  position: "relative",
-  overflowX: "hidden",
-  overflowY: "auto",
 
-  background: darkMode
-    ? `
-      radial-gradient(circle at top left, rgba(255,215,0,0.08), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,215,0,0.06), transparent 25%),
-      linear-gradient(135deg, #000000 0%, #111111 45%, #1a1a1a 100%)
-    `
-    : `
-      radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 25%),
-      radial-gradient(circle at bottom right, rgba(255,255,255,0.12), transparent 25%),
-      linear-gradient(135deg, #f5c542 0%, #d4a017 45%, #8b5e00 100%)
-    `,
-
-  backgroundAttachment: "fixed",
-});
+  background:
+    "linear-gradient(135deg,#020617,#0f172a)",
+};
 
 const backgroundText = (darkMode) => ({
   position: "absolute",
@@ -1618,38 +1458,64 @@ const backgroundText = (darkMode) => ({
   filter: "blur(1px)",
 });
 
-const content = { position: "relative", zIndex: 1 };
+const content = {
+  padding: 24,
 
-const pageTitle = {
-  marginTop: 0,
-  marginBottom: 12,
-  fontSize: 28,
-  fontWeight: 700,
-  color: "#fff",
+  display: "flex",
+
+  flexDirection: "column",
+
+  gap: 24,
 };
 
-const tableWrapper = (darkMode) => ({
-  height: "calc(100vh - 170px)",
-  borderRadius: 18,
+const logo = {
+  color:"#fff",
+  fontSize:32,
+  fontWeight:900,
+  marginBottom:8,
+};
 
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(20,20,20,0.95), rgba(10,10,10,0.92))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
+const subtitle = {
+  color:"rgba(255,255,255,.62)",
+  fontSize:14,
+};
 
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
+const wrap = {
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
 
-  boxShadow: darkMode
-    ? "0 22px 55px rgba(0,0,0,0.65)"
-    : "0 22px 55px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+  borderRadius:24,
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.15)"
-    : "none",
+  padding:24,
 
-  padding: 12,
-  overflowX: "auto",
-});
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const tableWrapper = {
+  overflowX:"auto",
+
+  scrollbarWidth:"thin",
+
+  scrollbarColor:
+    "#3b82f6 #0f172a",
+
+  WebkitOverflowScrolling:"touch",
+
+  "&::-webkit-scrollbar":{
+    height:14,
+  },
+
+  "&::-webkit-scrollbar-track":{
+    background:
+      "linear-gradient(180deg,#0f172a,#111827)",
+  },
+
+  "&::-webkit-scrollbar-thumb":{
+    background:
+      "linear-gradient(90deg,#2563eb,#60a5fa)",
+  },
+};
 
 const dataGridStyles = (darkMode) => ({
   background: darkMode ? "#0f0f0f" : "#fff",
@@ -1785,49 +1651,54 @@ const legend = {
   mb: 1.5,
 };
 
-const searchPanel = (darkMode) => ({
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  marginBottom: 4,
-  padding: "5px 18px",
-  borderRadius: 16,
-  maxWidth: "100%",
+const searchPanel = {
+  display:"flex",
 
-  background: darkMode
-    ? `
-      linear-gradient(
-        145deg,
-        rgba(12,12,12,0.96),
-        rgba(18,18,18,0.92)
-      )
-    `
-    : `
-      linear-gradient(
-        145deg,
-        rgba(255,255,255,0.72),
-        rgba(255,255,255,0.42)
-      )
-    `,
+  alignItems:"center",
 
-  backdropFilter: "blur(30px)",
-  WebkitBackdropFilter: "blur(30px)",
+  gap:12,
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "1px solid rgba(255,255,255,0.4)",
+  height:52,
 
-  boxShadow: darkMode
-    ? `
-      0 10px 40px rgba(0,0,0,0.65),
-      inset 0 1px 0 rgba(255,215,0,0.05)
-    `
-    : `
-      0 14px 35px rgba(0,0,0,0.18),
-      inset 0 1px 0 rgba(255,255,255,0.45)
-    `,
-});
+  padding:"0 18px",
 
+  borderRadius:16,
+
+  background:"rgba(255,255,255,.03)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const formFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "16px",
+
+    background:
+      "rgba(255,255,255,.04)",
+
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor:
+        "#3b82f6",
+    },
+  },
+
+  "& input": {
+    color: "#fff",
+  },
+};
 
 const statusPacked = {
   fontSize: 11,
@@ -1927,11 +1798,6 @@ const actionPrimary = {
   },
 };
 
-const inputStyle = {
-  background: "#fff",
-  borderRadius: 8,
-};
-
 const popupOverlay = {
   position: "fixed",
   top: 0,
@@ -1986,36 +1852,6 @@ const popupBox = (darkMode) => ({
       0 30px 80px rgba(0,0,0,0.35),
       inset 0 1px 0 rgba(255,255,255,0.7)
     `,
-});
-
-const themeBtn = (darkMode) => ({
-  px: 2.6,
-  py: 1,
-  borderRadius: "999px",
-  fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: 0.4,
-  textTransform: "none",
-
-  background: darkMode
-    ? "linear-gradient(135deg,#111,#222)"
-    : "#111",
-
-  color: darkMode ? "#FFD700" : "#fff",
-
-  backdropFilter: "blur(12px)",
-
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.25)"
-    : "1px solid rgba(255,255,255,0.25)",
-
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 10px 25px rgba(0,0,0,0.25)",
-
-  "&:hover": {
-    transform: "translateY(-3px) scale(1.04)",
-  },
 });
 
 const modalGloss = {

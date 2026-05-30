@@ -6,11 +6,6 @@ import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon
 from "@mui/icons-material/DescriptionOutlined";
 
-
-
-/* ===================== STYLES ===================== */
-/* (UNCHANGED — EXACTLY AS YOU PROVIDED) */
-
 const page = {
   minHeight: "100vh",
 
@@ -469,11 +464,6 @@ const popupBox = {
 
   ...darkModalBox,
 };
-
-/**
- * Dispatched Items Page
- * FINAL RULESET IMPLEMENTED
- */
 
 function DispatchedItemsPage() {
   const [rows, setRows] = useState([]);
