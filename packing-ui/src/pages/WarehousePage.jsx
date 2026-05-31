@@ -998,16 +998,6 @@ function WarehousePage() {
 	      </span>
 	    </Box>
 	  </Box>
-	  <Box
-	    sx={{
-	      height: 1,
-
-	      background:
-	        "rgba(255,255,255,.06)",
-
-	      mb: 3,
-	    }}
-	  />
         <Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
@@ -1457,53 +1447,71 @@ function WarehousePage() {
 		          key={row.zohoItemId}
 		          style={tableRow}
 		        >
-				     <div>
-								    {columns[0].renderCell({ row })}
-								  </div>
+				<div>
+				  {columns[0].renderCell({ row })}
+				</div>
 
-								  <div>
-								    {columns[1].renderCell({ row })}
-								  </div>
+				<div>
+				  {columns[1].renderCell({ row })}
+				</div>
 
-								  <div>
-								    {columns[2].renderCell({
-								      value: row.pdNo,
-								      row
-								    })}
-								  </div>
+				<div>
+				  {columns[2].renderCell({
+				    value: row.sku,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {columns[3].renderCell({
-								      value: row.drawingNo,
-								      row
-								    })}
-								  </div>
+				<div>
+				  {columns[3].renderCell({
+				    value: row.pdNo,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {columns[4].renderCell({
-								      value: row.description,
-								      row
-								    })}
-								  </div>
+				<div>
+				  {columns[4].renderCell({
+				    value: row.drawingNo,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {columns[5].renderCell({
-								      value: row.stock,
-								      row
-								    })}
-								  </div>
+				<div>
+				  {columns[5].renderCell({
+				    value: row.description,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {row.clientName}
-								  </div>
+				<div>
+				  {columns[6].renderCell({
+				    value: row.clientName,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {columns[7].renderCell({ row })}
-								  </div>
+				<div>
+				  {columns[7].renderCell({
+				    value: row.location,
+				    row,
+				  })}
+				</div>
 
-								  <div>
-								    {columns[8].renderCell({ row })}
-								  </div>
+				<div>
+				  {columns[8].renderCell({ row })}
+				</div>
+
+				<div>
+				  {row.factoryFloor || "—"}
+				</div>
+
+				<div>
+				  {row.warehouseCode || "—"}
+				</div>
+
+				<div>
+				  {columns[11].renderCell({ row })}
+				</div>
 
 		        </div>
 		      ))}
@@ -1793,7 +1801,7 @@ const wrap = {
 
   borderRadius: 24,
 
-  padding: 24,
+  padding: 16,
 
   border:
     "1px solid rgba(255,255,255,.06)",
@@ -1912,9 +1920,9 @@ const searchPanel = {
 
   gap: 14,
 
-  height: 60,
+  height: 52,
 
-  padding: "0 22px",
+  padding: "0 18px",
 
   marginBottom: 20,
 
