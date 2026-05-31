@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { DataGrid } from "@mui/x-data-grid";
 import { Button, TextField, Box, Chip, MenuItem } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
@@ -1049,10 +1048,15 @@ function WarehousePage() {
 		<Box
 		  sx={{
 		    display: "flex",
-		    justifyContent: "space-between",
 		    alignItems: "center",
-		    mb: 2,
+		    justifyContent: "space-between",
+
 		    gap: 2,
+
+		    mt: 2,
+		    mb: 2,
+
+		    flexWrap: "wrap",
 		  }}
 		>
 		  {/* LEFT */}
@@ -1157,27 +1161,26 @@ function WarehousePage() {
 		  		      onChange={handleUpload}
 		  		    />
 		  		  </Button>
+				  </Box>
+				  				<Box sx={legend}>
 
+				  				  <Chip
+				  				    label="Stored In Warehouse"
+				  				    sx={statusStored}
+				  				  />
+
+				  				  <Chip
+				  				    label="Pending Request"
+				  				    sx={pendingChip}
+				  				  />
+
+				  				  <Chip
+				  				    label="Return Requested"
+				  				    sx={returnChip}
+				  				  />
+
+				  				</Box>
 		  		</Box>
-				</Box>
-				<Box sx={legend}>
-
-				  <Chip
-				    label="Stored In Warehouse"
-				    sx={statusStored}
-				  />
-
-				  <Chip
-				    label="Pending Request"
-				    sx={pendingChip}
-				  />
-
-				  <Chip
-				    label="Return Requested"
-				    sx={returnChip}
-				  />
-
-				</Box>
 				<Box
 				  sx={{
 				    display: "flex",
@@ -1431,48 +1434,83 @@ function WarehousePage() {
 		      "linear-gradient(180deg,#0f172a,#111827)",
 		  }}
 		>
-          <DataGrid
-		    rowHeight={56}
-		    columnHeaderHeight={58}
-            rows={filteredRows}
-			getRowId={(row) => row.zohoItemId}
-            columns={columns}
-            loading={loading}
-            density="compact"
-			disableColumnMenu
-			disableRowSelectionOnClick
-			slotProps={{
-			  loadingOverlay: {
-			    variant: "linear-progress",
-			  },
-			}}
-			localeText={{
-			  noRowsLabel:
-			    "No warehouse records found",
-			}}
-			getRowClassName={(params) => {
-			  let base = "";
+		<div style={tableWrapper}>
+		  <div style={{ minWidth: "2400px" }}>
 
-			  if (params.row.status === "READY_TO_STORE")
-			    base = "row-pending";
+		    <div style={tableHeader}>
+		      <div>Select</div>
+		      <div>Item Name</div>
+		      <div>SKU</div>
+		      <div>PD No</div>
+		      <div>DWG No.</div>
+		      <div>Description</div>
+		      <div>Client</div>
+		      <div>Movement Status</div>
+		      <div>Factory Floor</div>
+		      <div>Warehouse</div>
+		      <div>Actions</div>
+		    </div>
 
-			  else if (params.row.status === "IN_WAREHOUSE")
-			    base = "row-warehouse";
+		    <div style={tableBody}>
+		      {filteredRows.map((row) => (
+		        <div
+		          key={row.zohoItemId}
+		          style={tableRow}
+		        >
+				     <div>
+								    {columns[0].renderCell({ row })}
+								  </div>
 
-			  else if (params.row.status === "WAREHOUSE_REQUESTED")
-			    base = "row-pending";
+								  <div>
+								    {columns[1].renderCell({ row })}
+								  </div>
 
-			  else
-			    base = "row-floor";
+								  <div>
+								    {columns[2].renderCell({
+								      value: row.pdNo,
+								      row
+								    })}
+								  </div>
 
-			  return `${base} ${
-			    params.indexRelativeToCurrentPage % 2 === 0
-			      ? "even-row"
-			      : "odd-row"
-			  }`;
-			}}
-            sx={dataGridStyles(false)}
-          />
+								  <div>
+								    {columns[3].renderCell({
+								      value: row.drawingNo,
+								      row
+								    })}
+								  </div>
+
+								  <div>
+								    {columns[4].renderCell({
+								      value: row.description,
+								      row
+								    })}
+								  </div>
+
+								  <div>
+								    {columns[5].renderCell({
+								      value: row.stock,
+								      row
+								    })}
+								  </div>
+
+								  <div>
+								    {row.clientName}
+								  </div>
+
+								  <div>
+								    {columns[7].renderCell({ row })}
+								  </div>
+
+								  <div>
+								    {columns[8].renderCell({ row })}
+								  </div>
+
+		        </div>
+		      ))}
+		    </div>
+
+		  </div>
+		</div>
 		  </Box>
         </div>
 		</div>
@@ -1759,11 +1797,6 @@ const wrap = {
 
   border:
     "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 25px 60px rgba(0,0,0,.45)",
-
-  overflow: "hidden",
 };
 
 const legend = {
@@ -1793,169 +1826,84 @@ const legend = {
 const tableWrapper = {
   overflowX: "auto",
 
-  overflowY: "hidden",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 #0f172a",
 
-  paddingTop: 12,
-  
-  borderRadius: 18,
+  WebkitOverflowScrolling: "touch",
 
-  background:
-    "linear-gradient(180deg,#020617,#0f172a)",
+  "&::-webkit-scrollbar": {
+    height: 14,
+  },
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  "&::-webkit-scrollbar-track": {
+    background:
+      "linear-gradient(180deg,#0f172a,#111827)",
 
-  WebkitOverflowScrolling:"touch",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(90deg,#2563eb,#60a5fa)",
+
+    borderRadius: 999,
+
+    border:
+      "2px solid #0f172a",
+
+    boxShadow:
+      "0 0 16px rgba(59,130,246,.55)",
+  },
+
+  "&::-webkit-scrollbar-thumb:hover": {
+    background:
+      "linear-gradient(90deg,#3b82f6,#93c5fd)",
+  },
 };
 
-const dataGridStyles = (darkMode) => ({
-   background: "#020617",
-   color: "#fff",
-   borderRadius: 18,
-   border: "none",
-   
-   "& .even-row": {
-     backdropFilter: "brightness(1)",
-   },
+const tableRow = {
+  display: "grid",
 
-   "& .odd-row": {
-     backdropFilter: "brightness(.96)",
-   },
+  gridTemplateColumns:
+    "70px 320px 150px 130px 180px 180px 140px 250px 180px 180px 420px",
 
-   "& .MuiDataGrid-columnHeaders": {
-     background:
-       "linear-gradient(180deg,#111827,#0f172a)",
+  alignItems: "center",
 
-     borderBottom:
-       "1px solid rgba(255,255,255,.06)",
+  padding: "12px 16px",
 
-     minHeight: "58px !important",
+  minHeight: 56,
 
-     maxHeight: "58px !important",
-   },
+  color: "#fff",
 
-   "& .MuiCheckbox-root": {
-     color:"#64748b",
-   },
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+};
 
-   "& .MuiCheckbox-root.Mui-checked": {
-     color:"#3b82f6",
-   },
-   
-   "& .MuiDataGrid-row:nth-of-type(even)": {
-     background:
-       "rgba(255,255,255,.015)",
-   },
-   
-   "& .MuiDataGrid-columnHeader": {
-     color: "#cbd5e1",
+const tableBody = {
+  display: "flex",
+  flexDirection: "column",
+};
 
-     fontWeight: 800,
+const tableHeader = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
 
-     fontSize: 12,
+  display: "grid",
 
-     letterSpacing: ".8px",
+  gridTemplateColumns:
+    "70px 320px 150px 130px 180px 180px 140px 250px 180px 180px 420px",
 
-     textTransform: "uppercase",
+  padding: "14px 16px",
 
-     borderRight:
-       "1px solid rgba(255,255,255,.04)",
-   },
+  background: "#f8fafc",
 
-  "& .MuiDataGrid-columnHeaderTitle": {
-    color: "#60a5fa",
+  color: "#94a3b8",
 
-    fontWeight: 800,
+  fontWeight: 700,
 
-    letterSpacing: ".8px",
-  },
-  
-  "& .MuiDataGrid-iconSeparator": {
-    color:
-      "rgba(255,255,255,.08)",
-  },
-
-  "& .MuiDataGrid-sortIcon": {
-    color: "#60a5fa",
-  },
-
-  "& .MuiSvgIcon-root": {
-    color: "#60a5fa",
-  },
-
-  "& .MuiDataGrid-cell": {
-    borderBottom:
-      "1px solid rgba(255,255,255,.04)",
-
-    color: "#f8fafc",
-
-    fontSize: 13,
-
-    display: "flex",
-
-    alignItems: "center",
-  },
-
-  "& .MuiDataGrid-row": {
-    borderBottom:
-      "1px solid rgba(255,255,255,.03)",
-  },
-  
-  "& .MuiDataGrid-row:hover": {
-    background:
-      "rgba(59,130,246,.08)",
-
-    transition:
-      "all .18s ease",
-  },
-  
-  "& .Mui-selected": {
-    background:
-      "rgba(59,130,246,.12) !important",
-  },
-  
-  "& .Mui-selected:hover": {
-    background:
-      "rgba(59,130,246,.16) !important",
-  },
-
-  "& .MuiDataGrid-footerContainer": {
-    background:
-      "linear-gradient(180deg,#111827,#0f172a)",
-
-    borderTop:
-      "1px solid rgba(255,255,255,.06)",
-
-    color:"#cbd5e1",
-  },
-
-  "& .MuiCheckbox-root": {
-    color: "#60a5fa",
-  },
-
-  "& .MuiTablePagination-root": {
-    color:"#cbd5e1",
-  },
-  
-  "& .MuiIconButton-root": {
-    color:"#94a3b8",
-  },
-
-  "& .row-floor": {
-    background:
-      "rgba(59,130,246,.05)",
-  },
-
-  "& .row-warehouse": {
-    background:
-      "rgba(16,185,129,.08)",
-  },
-
-  "& .row-pending": {
-    background:
-      "rgba(245,158,11,.08)",
-  },
-});
+  borderRadius: "18px 18px 0 0",
+};
 
 const searchPanel = {
   display: "flex",
