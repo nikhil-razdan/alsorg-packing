@@ -1249,11 +1249,13 @@ function WarehousePage() {
 		  style={{
 		    position: "fixed",
 
+		    bottom: 24,
+
 		    left: "50%",
 
-		    bottom: 28,
-
 		    transform: "translateX(-50%)",
+
+		    zIndex: 4000,
 
 		    display: "flex",
 
@@ -1261,20 +1263,20 @@ function WarehousePage() {
 
 		    gap: 18,
 
-		    padding: "14px 22px",
+		    padding: "16px 22px",
 
 		    borderRadius: 20,
-
-		    zIndex: 5000,
 
 		    background:
 		      "linear-gradient(180deg,#0f172a,#111827)",
 
 		    border:
-		      "1px solid rgba(255,255,255,.08)",
+		      "1px solid rgba(255,255,255,.06)",
 
 		    boxShadow:
-		      "0 25px 60px rgba(0,0,0,.55)",
+		      "0 25px 60px rgba(0,0,0,.45)",
+
+		    color: "#fff",
 
 		    backdropFilter: "blur(18px)",
 		  }}
@@ -1295,14 +1297,44 @@ function WarehousePage() {
 		  >
 		    <span>📦</span>
 
-		    <span>
-		      {selectionModel.length}
-		      {" "}
-		      item
-		      {selectionModel.length > 1 ? "s" : ""}
-		      {" "}
-		      selected
-		    </span>
+			<Box
+			  sx={{
+			    display: "flex",
+			    alignItems: "center",
+			    gap: 1,
+			  }}
+			>
+			  <span>☑️</span>
+
+			  <span
+			    style={{
+			      fontWeight: 800,
+			    }}
+			  >
+			    {selectionModel.length}
+			    {" "}
+			    Selected
+			  </span>
+			</Box>
+			<Chip
+			  size="small"
+			  label={
+			    allWarehouseItems
+			      ? "Ready"
+			      : "Mixed Selection"
+			  }
+			  sx={{
+			    background: allWarehouseItems
+			      ? "rgba(16,185,129,.15)"
+			      : "rgba(239,68,68,.15)",
+
+			    color: allWarehouseItems
+			      ? "#34d399"
+			      : "#f87171",
+
+			    fontWeight: 700,
+			  }}
+			/>
 		  </Box>
 		  <Box
 		      sx={{
@@ -1318,59 +1350,54 @@ function WarehousePage() {
 		      onClick={bulkReturnToDispatch}
 
 			  sx={{
-			    px: 3,
+			    minWidth: 220,
 
-			    height: 40,
+			    height: 44,
 
-			    borderRadius: "12px",
+			    borderRadius: "14px",
 
 			    fontWeight: 700,
 
 			    textTransform: "none",
 
-			    color: "#fff",
-
 			    background: allWarehouseItems
 			      ? "linear-gradient(180deg,#f59e0b,#d97706)"
-			      : "rgba(255,255,255,.08)",
+			      : "#64748b",
+
+			    color: "#fff",
 
 			    boxShadow: allWarehouseItems
-			      ? "0 10px 25px rgba(245,158,11,.30)"
+			      ? "0 10px 25px rgba(245,158,11,.35)"
 			      : "none",
 
 			    "&:hover": {
-			      background:
-			        "linear-gradient(180deg,#fbbf24,#f59e0b)",
+			      background: allWarehouseItems
+			        ? "linear-gradient(180deg,#fbbf24,#f59e0b)"
+			        : "#64748b",
 			    },
-				
-				"&.Mui-disabled": {
-				  color: "rgba(255,255,255,.35)",
-
-				  background:
-				    "rgba(255,255,255,.08)",
-
-				  boxShadow: "none",
-				},
 			  }}
 		    >
-		      🔁 Bulk Return To Dispatch
+			{bulkLoading
+			  ? "Processing..."
+			  : "🔁 Bulk Return To Dispatch"}
 		    </Button>
 
 		    <Button
 		      size="small"
 		      onClick={() => setSelectionModel([])}
 			  sx={{
-			    minWidth: 40,
+			    minWidth: 100,
+
+			    borderRadius: "14px",
 
 			    color: "#94a3b8",
 
-			    fontWeight: 700,
-
-			    borderRadius: "10px",
+			    border:
+			      "1px solid rgba(255,255,255,.06)",
 
 			    "&:hover": {
 			      background:
-			        "rgba(255,255,255,.05)",
+			        "rgba(255,255,255,.04)",
 
 			      color: "#fff",
 			    },
@@ -2190,10 +2217,15 @@ const popupBox = {
 };
 
 const gatePassNumber = {
-  fontSize: 26,
-  fontWeight: 800,
+  fontSize: 30,
+
+  fontWeight: 900,
+
+  color: "#60a5fa",
+
   letterSpacing: 2,
-  margin: "20px 0",
+
+  marginBottom: 24,
 };
 
 export default WarehousePage;
