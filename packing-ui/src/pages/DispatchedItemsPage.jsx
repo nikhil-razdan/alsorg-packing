@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo  } from "react";
-import { Chip, Box, Button, IconButton, TextField, MenuItem} from "@mui/material";
+import { Chip, Box, Button, IconButton, TextField, MenuItem, Tooltip } from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
@@ -13,11 +13,10 @@ const page = {
     "linear-gradient(135deg,#020617,#0f172a)",
 };
 
-
 const tableHeader = {
-	position: "sticky",
-	  top: 0,
-	  zIndex: 20,
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
   display: "grid",
 
   gridTemplateColumns:
@@ -30,6 +29,7 @@ const tableHeader = {
   color: "#94a3b8",
 
   fontWeight: 700,
+  fontSize: 13,
 };
 
 const tableBody = {
@@ -53,6 +53,8 @@ const tableRow = {
     "1px solid rgba(255,255,255,.06)",
 
   minHeight: 58,
+
+  fontSize: 13,
 };
 
 const tableActionButton = {
@@ -65,6 +67,112 @@ const tableActionButton = {
   fontWeight: 700,
 
   textTransform: "none",
+};
+
+const simpleCellText = {
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 13,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const simpleMutedText = {
+  color: "#f1f5f9",
+  fontWeight: 750,
+  fontSize: 13,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const simpleMonoText = {
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 13,
+  lineHeight: 1.25,
+  fontFamily: "monospace",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const itemNameCell = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  minWidth: 0,
+};
+
+const itemNameText = {
+  ...simpleCellText,
+  maxWidth: 245,
+};
+
+const tableIconButton = {
+  width: 32,
+  height: 32,
+  borderRadius: "12px",
+  flexShrink: 0,
+  transition: "all .2s ease",
+  border: "1px solid rgba(255,255,255,.08)",
+  backdropFilter: "blur(12px)",
+
+  "& svg": {
+    fontSize: 17,
+  },
+
+  "&:hover": {
+    transform: "translateY(-1px)",
+  },
+};
+
+const stickerHistoryButton = {
+  ...tableIconButton,
+
+  color: "#93c5fd",
+
+  background:
+    "linear-gradient(135deg,rgba(37,99,235,.20),rgba(59,130,246,.08))",
+
+  boxShadow:
+    "0 8px 18px rgba(37,99,235,.16)",
+
+  "&:hover": {
+    ...tableIconButton["&:hover"],
+    color: "#fff",
+    background:
+      "linear-gradient(135deg,#2563eb,#3b82f6)",
+    boxShadow:
+      "0 10px 24px rgba(37,99,235,.35)",
+  },
+};
+
+const auditLogButton = {
+  ...tableIconButton,
+
+  color: "#fdba74",
+
+  background:
+    "linear-gradient(135deg,rgba(249,115,22,.20),rgba(251,146,60,.08))",
+
+  boxShadow:
+    "0 8px 18px rgba(249,115,22,.15)",
+
+  "&:hover": {
+    ...tableIconButton["&:hover"],
+    color: "#fff",
+    background:
+      "linear-gradient(135deg,#ea580c,#f97316)",
+    boxShadow:
+      "0 10px 24px rgba(249,115,22,.30)",
+  },
 };
 
 const readyStatusChip = {
@@ -880,84 +988,47 @@ function DispatchedItemsPage() {
 	  ),
 
 	  renderCell: (params) => {
-
 	    const row = params.row;
 
 	    return (
-	      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+	      <Box sx={itemNameCell}>
+	        <Tooltip title="Sticker History" arrow>
+	          <IconButton
+	            size="small"
+	            sx={stickerHistoryButton}
+	            onClick={() => {
+	              if (!row.packetItemId) {
+	                alert("Packet Item ID missing");
+	                return;
+	              }
 
-	        {/* ⬇ STICKER HISTORY */}
-	        <IconButton
-	          size="small"
-	          sx={{
-	            width: 34,
-	            height: 34,
-	            borderRadius: "10px",
-	            background: "rgba(59,130,246,0.1)",
-	            color: "#2563eb",
+	              openStickerHistory(row.packetItemId);
+	            }}
+	          >
+	            <DownloadOutlinedIcon fontSize="small" />
+	          </IconButton>
+	        </Tooltip>
 
-	            "&:hover": {
-	              background: "#2563eb",
-	              color: "#fff",
-	            },
-	          }}
+	        <Tooltip title="Activity / Audit Logs" arrow>
+	          <IconButton
+	            size="small"
+	            sx={auditLogButton}
+	            onClick={() => {
+	              if (!row.zohoItemId) {
+	                alert("Zoho Item ID missing");
+	                return;
+	              }
 
-	          onClick={() => {
+	              openAuditLogs(row.zohoItemId);
+	            }}
+	          >
+	            <DescriptionOutlinedIcon fontSize="small" />
+	          </IconButton>
+	        </Tooltip>
 
-	            if (!row.packetItemId) {
-	              alert("Packet Item ID missing");
-	              return;
-	            }
-
-	            openStickerHistory(row.packetItemId);
-	          }}
-	        >
-	          <DownloadOutlinedIcon fontSize="small" />
-	        </IconButton>
-
-	        {/* 📄 AUDIT LOGS */}
-	        <IconButton
-	          size="small"
-
-	          onClick={() => {
-
-	            if (!row.zohoItemId) {
-	              alert("Zoho Item ID missing");
-	              return;
-	            }
-
-	            openAuditLogs(row.zohoItemId);
-	          }}
-
-	          sx={{
-	            width: 34,
-	            height: 34,
-	            borderRadius: "10px",
-	            background: "rgba(249,115,22,0.1)",
-	            color: "#ea580c",
-
-	            "&:hover": {
-	              background: "#ea580c",
-	              color: "#fff",
-	            },
-	          }}
-	        >
-	          <DescriptionOutlinedIcon fontSize="small" />
-	        </IconButton>
-
-			<span
-			  style={{
-			    whiteSpace: "nowrap",
-			    overflow: "hidden",
-			    textOverflow: "ellipsis",
-			    maxWidth: "250px",
-			    display: "block",
-			  }}
-			  title={row.name}
-			>
-			  {row.name}
-			</span>
-
+	        <span style={itemNameText} title={row.name}>
+	          {row.name || "—"}
+	        </span>
 	      </Box>
 	    );
 	  },
@@ -966,25 +1037,13 @@ function DispatchedItemsPage() {
 	  field: "pdNo",
 	  headerName: "PD No",
 	  width: 140,
+
 	  renderHeader: () => (
 	    <span>PD No</span>
 	  ),
+
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "999px",
-			background:
-			  "rgba(59,130,246,.12)",
-
-			color:"#60a5fa",
-
-			border:
-			  "1px solid rgba(59,130,246,.18)",
-	        fontWeight: 600,
-	        fontSize: 12,
-	      }}
-	    >
+	    <span style={simpleMutedText} title={params.value}>
 	      {params.value || "—"}
 	    </span>
 	  ),
@@ -993,21 +1052,13 @@ function DispatchedItemsPage() {
 	  field: "drawingNo",
 	  headerName: "Dwg No.",
 	  width: 160,
+
 	  renderHeader: () => (
 	    <span>DWG No</span>
 	  ),
+
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "6px",
-	        background: "#111827",
-	        color: "#e5e7eb",
-	        fontFamily: "monospace",
-	        fontSize: 12,
-	        letterSpacing: "0.5px",
-	      }}
-	    >
+	    <span style={simpleMonoText} title={params.value}>
 	      {params.value || "N/A"}
 	    </span>
 	  ),
@@ -1016,20 +1067,15 @@ function DispatchedItemsPage() {
 	  field: "description",
 	  headerName: "Description",
 	  width: 220,
+
 	  renderHeader: () => (
 	    <span>Description</span>
 	  ),
+
 	  renderCell: (params) => (
-	    <Chip
-	      size="small"
-	      label={params.value || "No description"}
-	      sx={{
-	        color:"#4ade80",
-	        background:"rgba(34,197,94,.12)",
-	        border:"1px solid rgba(34,197,94,.18)",
-	        maxWidth:"100%",
-	      }}
-	    />
+	    <span style={simpleMutedText} title={params.value}>
+	      {params.value || "No description"}
+	    </span>
 	  ),
 	},
 	{
@@ -1054,9 +1100,17 @@ function DispatchedItemsPage() {
 		  field: "clientName",
 		  headerName: "Client",
 		  minWidth: 180,
+
 		  renderHeader: () => (
 		    <span>Client</span>
-		  ), },
+		  ),
+
+		  renderCell: (params) => (
+		    <span style={simpleCellText} title={params.value}>
+		      {params.value || "—"}
+		    </span>
+		  ),
+		},
 		  {
 		    field: "status",
 		    headerName: "Status",
@@ -1627,7 +1681,7 @@ function DispatchedItemsPage() {
         <div style={wrap}>
 
 		
-		<div style={tableWrapper}>
+		<Box sx={tableWrapper}>
 		  <div
 		    style={{
 		      minWidth: "1900px"
@@ -1692,7 +1746,10 @@ function DispatchedItemsPage() {
 				  </div>
 
 				  <div>
-				    {row.clientName}
+				    {columns[6].renderCell({
+				      value: row.clientName,
+				      row
+				    })}
 				  </div>
 
 				  <div>
@@ -1709,7 +1766,7 @@ function DispatchedItemsPage() {
 
 		  </div>
 		</div>
-		</div>
+		</Box>
 		<Box
 				    sx={{
 				      display: "flex",
