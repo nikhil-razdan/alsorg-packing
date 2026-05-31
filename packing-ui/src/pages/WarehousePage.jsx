@@ -1439,11 +1439,19 @@ function WarehousePage() {
 			  }}
 			>
 			<div
-			  style={popupBox(false)}
+			  style={popupBox}
 			  onClick={(e) => e.stopPropagation()}
 			>
-			<div style={modalGloss} />
-		      <h2 style={{ marginBottom: 10 }}>Gate Pass Generated</h2>
+			<h2
+			  style={{
+			    marginBottom: 20,
+			    fontSize: 24,
+			    fontWeight: 800,
+			    color: "#fff",
+			  }}
+			>
+			  Gate Pass Preview
+			</h2>
 
 		      <div style={gatePassNumber}>
 		        {gatePassPopup.gatePass}
@@ -1465,7 +1473,19 @@ function WarehousePage() {
 		      <Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
 		        <Button
 		          variant="contained"
-		          sx={{ background: "#111827" }}
+				  sx={{
+				      minWidth: 140,
+
+				      borderRadius: "14px",
+
+				      background:
+				        "linear-gradient(180deg,#1e293b,#0f172a)",
+
+				      border:
+				        "1px solid rgba(255,255,255,.08)",
+
+				      color:"#fff",
+				    }}
 				  onClick={() => {
 				    try {
 				      if (!gatePassPopup?.previewUrl) {
@@ -1503,9 +1523,18 @@ function WarehousePage() {
 		)}
 		{previewOpen && (
 		  <div style={popupOverlay}>
-		    <div style={{ ...popupBox(false), width: 800 }}>
+		    <div style={{ ...popupBox, width: 1000 }}>
 
-		      <h2>Import Preview</h2>
+			<h2
+			  style={{
+			    marginBottom: 20,
+			    fontSize: 24,
+			    fontWeight: 800,
+			    color: "#fff",
+			  }}
+			>
+			  Import Preview
+			</h2>
 
 		      <div style={{ maxHeight: 400, overflow: "auto" }}>
 		        {previewRows.map((row, i) => (
@@ -1517,10 +1546,10 @@ function WarehousePage() {
 		              padding: 8,
 		              borderBottom: "1px solid #eee",
 					  background: row.valid
-					    ?  "#ecfdf5"
-					    :  "#fee2e2",
+					    ? "rgba(16,185,129,.12)"
+					    : "rgba(239,68,68,.12)",
 
-					  color: "#111",
+					  color: "#fff",
 		            }}
 		          >
 				  <span>
@@ -1558,12 +1587,36 @@ function WarehousePage() {
 		            setPreviewOpen(false);
 		            fetchItems();
 		          }}
-		          sx={{ background: "#16a34a" }}
+				  sx={{
+				      minWidth: 140,
+
+				      borderRadius: "14px",
+
+				      background:
+				        "linear-gradient(180deg,#1e293b,#0f172a)",
+
+				      border:
+				        "1px solid rgba(255,255,255,.08)",
+
+				      color:"#fff",
+				    }}
 		        >
 		          Confirm Import
 		        </Button>
 
-		        <Button onClick={() => setPreviewOpen(false)}>
+				<Button
+				  sx={{
+				    minWidth: 120,
+
+				    borderRadius: "14px",
+
+				    color: "#cbd5e1",
+
+				    border:
+				      "1px solid rgba(255,255,255,.08)",
+				  }}
+				 onClick={() => setPreviewOpen(false)}
+				 >
 		          Cancel
 		        </Button>
 
@@ -2112,67 +2165,28 @@ const popupOverlay = {
   zIndex: 9999,
 };
 
-const popupBox = (darkMode) => ({
-  padding: 30,
-  borderRadius: 28,
-  textAlign: "center",
-  minWidth: 350,
-  position: "relative",
-  overflow: "hidden",
+const popupBox = {
+  width: "90%",
+  maxWidth: 1100,
 
-  background: darkMode
-    ? `
-      linear-gradient(
-        145deg,
-        rgba(10,10,10,0.96),
-        rgba(20,20,20,0.92)
-      )
-    `
-    : `
-      linear-gradient(
-        145deg,
-        rgba(255,255,255,0.88),
-        rgba(255,255,255,0.72)
-      )
-    `,
+  maxHeight: "90vh",
 
-  color: darkMode ? "#fff" : "#111",
+  overflow: "auto",
 
-  backdropFilter: "blur(28px) saturate(180%)",
-  WebkitBackdropFilter: "blur(28px) saturate(180%)",
+  borderRadius: 24,
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.15)"
-    : "1px solid rgba(255,255,255,0.4)",
+  padding: 24,
 
-  boxShadow: darkMode
-    ? "0 30px 80px rgba(0,0,0,0.75)"
-    : `
-      0 30px 80px rgba(0,0,0,0.35),
-      inset 0 1px 0 rgba(255,255,255,0.7)
-    `,
-});
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
 
-const modalGloss = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 120,
+  color: "#fff",
 
-  borderTopLeftRadius: 28,
-  borderTopRightRadius: 28,
+  border:
+    "1px solid rgba(255,255,255,.06)",
 
-  background: `
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,0.45),
-      rgba(255,255,255,0.08),
-      transparent
-    )
-  `,
-
-  pointerEvents: "none",
+  boxShadow:
+    "0 30px 80px rgba(0,0,0,.55)",
 };
 
 const gatePassNumber = {
