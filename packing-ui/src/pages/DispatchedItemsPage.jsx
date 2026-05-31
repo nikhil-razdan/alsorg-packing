@@ -196,9 +196,15 @@ const enhancedOverlaySx = {
 };
 
 const enhancedModalSx = {
-  ...darkModalBox,
-
   p: 0,
+
+  position: "relative",
+
+  overflow: "hidden",
+
+  borderRadius: 28,
+
+  color: "#fff",
 
   background: `
     radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
