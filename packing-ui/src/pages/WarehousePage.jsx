@@ -19,6 +19,9 @@ function WarehousePage() {
   const [uploadFile, setUploadFile] = useState(null);
   const [selectionModel, setSelectionModel] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [pageNo, setPageNo] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   /* ===================== FETCH ===================== */
 
   const fetchItems = async () => {
@@ -66,6 +69,16 @@ function WarehousePage() {
   useEffect(() => {
     fetchItems();
   }, []);
+  
+  useEffect(() => {
+    setPageNo(1);
+  }, [pageSize, statusFilter, search]);
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
 
   const exportCSV = () => {
     const headers = [
@@ -372,14 +385,15 @@ function WarehousePage() {
 
 	  renderCell: (params) => (
 	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "999px",
-	        background: "rgba(99,102,241,0.1)",
-	        color: "#4f46e5",
-	        fontWeight: 600,
-	        fontSize: 12,
-	      }}
+		style={{
+		  padding: "4px 10px",
+		  borderRadius: "999px",
+		  background: "rgba(59,130,246,.12)",
+		  color: "#60a5fa",
+		  border: "1px solid rgba(59,130,246,.18)",
+		  fontWeight: 600,
+		  fontSize: 12,
+		}}
 	    >
 	      {params.value || "—"}
 	    </span>
@@ -398,14 +412,15 @@ function WarehousePage() {
 
 	  renderCell: (params) => (
 	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "999px",
-	        background: "rgba(99,102,241,0.1)",
-	        color: "#4f46e5",
-	        fontWeight: 600,
-	        fontSize: 12,
-	      }}
+		style={{
+		  padding: "4px 10px",
+		  borderRadius: "999px",
+		  background: "rgba(59,130,246,.12)",
+		  color: "#60a5fa",
+		  border: "1px solid rgba(59,130,246,.18)",
+		  fontWeight: 600,
+		  fontSize: 12,
+		}}
 	    >
 	      {params.value || "—"}
 	    </span>
@@ -450,23 +465,16 @@ function WarehousePage() {
 	  ),
 
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "8px",
-	        background: "rgba(16,185,129,0.1)",
-	        color: "#059669",
-	        fontSize: 12,
-	        maxWidth: "180px",
-	        overflow: "hidden",
-	        textOverflow: "ellipsis",
-	        whiteSpace: "nowrap",
-	        display: "inline-block",
+	    <Chip
+	      size="small"
+	      label={params.value || "No description"}
+	      sx={{
+	        color: "#4ade80",
+	        background: "rgba(34,197,94,.12)",
+	        border: "1px solid rgba(34,197,94,.18)",
+	        maxWidth: "100%",
 	      }}
-	      title={params.value}
-	    >
-	      {params.value || "No description"}
-	    </span>
+	    />
 	  ),
 	},
 	{
@@ -484,7 +492,7 @@ function WarehousePage() {
 	    <span
 	      style={{
 	        fontWeight: 600,
-	        color:"#374151",
+	        color:"#e5e7eb",
 	      }}
 	    >
 	      {params.value || "—"}
@@ -756,7 +764,7 @@ function WarehousePage() {
 				    size="small"
 					disabled={!approveGatePass[row.id]}
 				    onClick={() => approveWarehouse(row.id)}
-				    sx={actionPrimary}
+				    sx={actionSuccess}
 				  >
 				    Approve
 				  </Button>
@@ -824,7 +832,7 @@ function WarehousePage() {
 		              );
 		              fetchItems();
 		            }}
-		            sx={actionPrimary}
+		            sx={actionSuccess}
 		          >
 		            Approve
 		          </Button>
@@ -872,14 +880,30 @@ function WarehousePage() {
         search &&
         !r.name?.toLowerCase().includes(searchValue) &&
         !r.status?.toLowerCase().includes(searchValue) &&
-        !r.clientName?.toLowerCase().includes(searchValue)
+        !r.clientName?.toLowerCase().includes(searchValue) &&
+        !r.pdNo?.toLowerCase().includes(searchValue) &&
+        !r.sku?.toLowerCase().includes(searchValue)
       ) {
+        return false;
+      }
+
+      if (statusFilter !== "ALL" && r.status !== statusFilter) {
         return false;
       }
 
       return true;
     });
-  }, [rows, search]);
+  }, [rows, search, statusFilter]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (pageNo - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, pageNo, pageSize]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / pageSize)
+  );
 
   /* ===================== UI ===================== */
 
@@ -895,146 +919,131 @@ function WarehousePage() {
 	
   return (
     <div style={page}>
-      <div style={backgroundText}>Warehouse</div>
-
       <div style={content}>
-	  <Box
-	    sx={{
-	      display: "flex",
-	      alignItems: "center",
-	      justifyContent: "space-between",
-	      mb: 3,
-	    }}
-	  >
-	    <Box
-	      sx={{
-	        display: "flex",
-	        alignItems: "center",
-	        gap: 2,
-	      }}
-	    >
-	      {/* ICON TILE */}
-	      <Box
-	        sx={{
-	          width: 56,
-	          height: 56,
+	  <div style={headerRow}>
+	  <div>
+	          <Box
+	            sx={{
+	              display: "flex",
+	              alignItems: "center",
+	              gap: 2,
+	            }}
+	          >
+	            <Box
+	              sx={{
+	                fontSize: 34,
+	                display: "flex",
+	                alignItems: "center",
+	                color: "#60a5fa",
+	              }}
+	            >
+	              🏭
+	            </Box>
 
-	          borderRadius: "16px",
+	            <div>
+	              <div style={logo}>
+	                Warehouse
+	              </div>
 
-	          background:
-	            "linear-gradient(135deg,#2563eb,#60a5fa)",
-
-	          display: "flex",
-	          alignItems: "center",
-	          justifyContent: "center",
-
-	          fontSize: 28,
-
-	          boxShadow:
-	            "0 15px 35px rgba(37,99,235,.35)",
-	        }}
-	      >
-	        🏭
-	      </Box>
-
-	      {/* TITLE AREA */}
-	      <Box>
-	        <div
-	          style={{
-	            color: "#fff",
-	            fontSize: 30,
-	            fontWeight: 800,
-	            lineHeight: 1.1,
-	          }}
-	        >
-	          Warehouse
+	              <div style={subtitle}>
+	                Track warehouse movement and storage operations
+	              </div>
+	            </div>
+	          </Box>
 	        </div>
 
-	        <div
-	          style={{
-	            color: "rgba(255,255,255,.55)",
-	            fontSize: 13,
-	            marginTop: 4,
+	        <Box
+	          sx={{
+	            color: "#94a3b8",
+	            fontSize: 14,
+	            fontWeight: 600,
 	          }}
 	        >
-	          Track warehouse movement and storage operations
-	        </div>
-	      </Box>
-	    </Box>
+	          Total Items:{" "}
+	          <span
+	            style={{
+	              color: "#60a5fa",
+	              fontWeight: 800,
+	            }}
+	          >
+	            {filteredRows.length}
+	          </span>
+	        </Box>
+	      </div>
+		  <Box sx={searchPanel}>
+		    <SearchIcon
+		      sx={{
+		        color: "rgba(255,255,255,.45)",
+		      }}
+		    />
 
-	    {/* RIGHT STATS */}
-	    <Box
-	      sx={{
-	        px: 2.5,
-	        py: 1.2,
+		    <TextField
+		      variant="standard"
+		      placeholder="Search by Item, SKU, PD No, Status or Client..."
+		      value={search}
+		      onChange={(e) => setSearch(e.target.value)}
+		      InputProps={{ disableUnderline: true }}
+		      sx={{
+		        flex: 1,
 
-	        borderRadius: "999px",
+		        "& .MuiInputBase-root": {
+		          color: "#fff",
+		          fontSize: 14,
+		        },
 
-	        background:
-	          "rgba(255,255,255,.04)",
+		        "& input::placeholder": {
+		          color: "rgba(255,255,255,.42)",
+		          opacity: 1,
+		        },
+		      }}
+		    />
 
-	        border:
-	          "1px solid rgba(255,255,255,.06)",
+		    <TextField
+		      select
+		      size="small"
+		      value={statusFilter}
+		      onChange={(e) => setStatusFilter(e.target.value)}
+		      sx={{
+		        minWidth: 210,
+		        ...formFieldSx,
 
-	        backdropFilter: "blur(12px)",
+		        "& .MuiOutlinedInput-root": {
+		          height: 44,
+		          borderRadius: "14px",
+		          background: "rgba(255,255,255,.04)",
+		          color: "#fff",
 
-	        color: "#94a3b8",
+		          "& fieldset": {
+		            borderColor: "rgba(255,255,255,.08)",
+		          },
 
-	        fontSize: 13,
+		          "&:hover fieldset": {
+		            borderColor: "rgba(59,130,246,.45)",
+		          },
 
-	        fontWeight: 600,
-	      }}
-	    >
-	      Total Items
+		          "&.Mui-focused fieldset": {
+		            borderColor: "#3b82f6",
+		          },
+		        },
 
-	      <span
-	        style={{
-	          color: "#60a5fa",
-	          marginLeft: 8,
-	          fontWeight: 800,
-	        }}
-	      >
-	        {filteredRows.length}
-	      </span>
-	    </Box>
-	  </Box>
-        <Box sx={searchPanel}>
-		<SearchIcon
-		  sx={{
-		    color: "#60a5fa",
+		        "& .MuiSelect-select": {
+		          color: "#fff",
+		          fontWeight: 500,
+		        },
 
-		    fontSize: 22,
-		  }}
-		/>
-          <TextField
-            variant="standard"
-            placeholder="Search by Item, Status or Client..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{ disableUnderline: true }}
-			sx={{
-			  flex: 1,
-
-			  "& .MuiInputBase-root": {
-			    color: "#fff",
-
-			    fontSize: 14,
-
-			    fontWeight: 500,
-			  },
-
-			  "& input": {
-			    color: "#fff",
-			  },
-
-			  "& input::placeholder": {
-			    color: "rgba(255,255,255,.42)",
-
-			    opacity: 1,
-			  },
-			}}
-          />
-        </Box>
+		        "& .MuiSvgIcon-root": {
+		          color: "#94a3b8",
+		        },
+		      }}
+		    >
+		      <MenuItem value="ALL">All Status</MenuItem>
+		      <MenuItem value="ON_FLOOR">🏭 On Floor</MenuItem>
+		      <MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
+		      <MenuItem value="WAREHOUSE_REQUESTED">⏳ Warehouse Requested</MenuItem>
+		      <MenuItem value="IN_WAREHOUSE">✅ In Warehouse</MenuItem>
+		      <MenuItem value="WAREHOUSE_RETURN_REQUESTED">🔁 Return Requested</MenuItem>
+		    </TextField>
+		  </Box>
 		<Box
 		  sx={{
 		    display: "flex",
@@ -1231,50 +1240,11 @@ function WarehousePage() {
 				
 		
 		<div style={wrap}>
-		 <div style={tableWrapper}>
-		
-		
 		{Array.isArray(selectionModel) &&
 		 selectionModel.length > 0 &&
 		 isDispatch && (
 
-		  <div
-		  style={{
-		    position: "fixed",
-
-		    bottom: 24,
-
-		    left: "50%",
-
-		    transform: "translateX(-50%)",
-
-		    zIndex: 4000,
-
-		    display: "flex",
-
-		    alignItems: "center",
-
-		    gap: 18,
-
-		    padding: "16px 22px",
-
-		    borderRadius: 20,
-
-		    background:
-		      "linear-gradient(180deg,#0f172a,#111827)",
-
-		    border:
-		      "1px solid rgba(255,255,255,.06)",
-
-		    boxShadow:
-		      "0 25px 60px rgba(0,0,0,.45)",
-
-		    color: "#fff",
-
-		    backdropFilter: "blur(18px)",
-		  }}
-		  >
-
+		  <div style={bulkBar}>
 		  <Box
 		    sx={{
 		      display: "flex",
@@ -1410,22 +1380,9 @@ function WarehousePage() {
 
 		    mb: 2,
 		  }}
-		/>
-		<Box
-		  sx={{
-		    borderRadius: 3,
-
-		    overflow: "hidden",
-
-		    border:
-		      "1px solid rgba(255,255,255,.06)",
-
-		    background:
-		      "linear-gradient(180deg,#0f172a,#111827)",
-		  }}
-		>
-		<div style={tableWrapper}>
-		  <div style={{ minWidth: "2400px" }}>
+		/>		
+		<Box style={tableWrapper}>
+		  <div style={{ minWidth: "2700px" }}>
 
 		    <div style={tableHeader}>
 		      <div>Select</div>
@@ -1435,6 +1392,7 @@ function WarehousePage() {
 		      <div>DWG No.</div>
 		      <div>Description</div>
 		      <div>Client</div>
+			  <div>Location</div>
 		      <div>Movement Status</div>
 		      <div>Factory Floor</div>
 		      <div>Warehouse</div>
@@ -1442,7 +1400,7 @@ function WarehousePage() {
 		    </div>
 
 		    <div style={tableBody}>
-		      {filteredRows.map((row) => (
+		      {paginatedRows.map((row) => (
 		        <div
 		          key={row.zohoItemId}
 		          style={tableRow}
@@ -1518,12 +1476,156 @@ function WarehousePage() {
 		    </div>
 
 		  </div>
-		</div>
+		</Box>
+		<Box
+		  sx={{
+		    display: "flex",
+		    justifyContent: "space-between",
+		    alignItems: "center",
+		    mt: 4,
+		    gap: 2,
+		    flexWrap: "wrap",
+		  }}
+		>
+		  <Box
+		    sx={{
+		      display: "flex",
+		      alignItems: "center",
+		      gap: 2,
+		    }}
+		  >
+		    <Box
+		      sx={{
+		        color: "#94a3b8",
+		        fontWeight: 600,
+		        fontSize: 14,
+		      }}
+		    >
+		      Show
+		    </Box>
+
+		    <TextField
+		      select
+		      size="small"
+		      value={pageSize}
+		      onChange={(e) => setPageSize(Number(e.target.value))}
+		      sx={{
+		        width: 110,
+
+		        "& .MuiOutlinedInput-root": {
+		          height: 36,
+		          borderRadius: "12px",
+		          background: "rgba(255,255,255,.04)",
+		          color: "#fff",
+
+		          "& fieldset": {
+		            borderColor: "rgba(255,255,255,.08)",
+		          },
+
+		          "&:hover fieldset": {
+		            borderColor: "rgba(59,130,246,.35)",
+		          },
+		        },
+
+		        "& .MuiSvgIcon-root": {
+		          color: "#94a3b8",
+		        },
+		      }}
+		    >
+		      <MenuItem value={25}>25</MenuItem>
+		      <MenuItem value={50}>50</MenuItem>
+		    </TextField>
+
+		    <Box
+		      sx={{
+		        color: "#94a3b8",
+		        fontSize: 14,
+		      }}
+		    >
+		      items per page
+		    </Box>
 		  </Box>
+
+		  <Box
+		    sx={{
+		      display: "flex",
+		      alignItems: "center",
+		      gap: 3,
+		    }}
+		  >
+		    <Button
+		      disabled={pageNo === 1}
+		      onClick={() => setPageNo((p) => p - 1)}
+		      sx={{
+		        minWidth: 100,
+		        height: 30,
+		        borderRadius: "12px",
+		        background: "linear-gradient(180deg,#1e293b,#0f172a)",
+		        color: "#fff",
+		        border: "1px solid rgba(255,255,255,.08)",
+		        fontSize: 10,
+		        fontWeight: 500,
+
+		        "&:disabled": {
+		          opacity: 0.45,
+		          color: "#94a3b8",
+		        },
+		      }}
+		    >
+		      ◀ Previous
+		    </Button>
+
+		    <Box
+		      sx={{
+		        px: 2.5,
+		        height: 30,
+		        display: "flex",
+		        alignItems: "center",
+		        borderRadius: "12px",
+		        background: "linear-gradient(180deg,#0f172a,#111827)",
+		        color: "#cbd5e1",
+		        border: "1px solid rgba(255,255,255,.06)",
+		        fontSize: 10,
+		        fontWeight: 500,
+		      }}
+		    >
+		      Page
+		      <Box
+		        component="span"
+		        sx={{
+		          mx: 1,
+		          color: "#60a5fa",
+		        }}
+		      >
+		        {pageNo}
+		      </Box>
+		      of {totalPages}
+		    </Box>
+
+		    <Button
+		      disabled={pageNo === totalPages}
+		      onClick={() => setPageNo((p) => p + 1)}
+		      sx={{
+		        minWidth: 100,
+		        height: 30,
+		        borderRadius: "12px",
+		        background: "linear-gradient(180deg,#2563eb,#1d4ed8)",
+		        color: "#fff",
+		        fontSize: 10,
+		        fontWeight: 500,
+
+		        "&:disabled": {
+		          opacity: 0.45,
+		          color: "#cbd5e1",
+		        },
+		      }}
+		    >
+		      Next ▶
+		    </Button>
+		  </Box>
+		</Box>
         </div>
-		</div>
-		</div>
-		
+		</div>				
 		{gatePassPopup && (
 			<div
 			  style={popupOverlay}
@@ -1726,82 +1828,130 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 
+const warehouseGrid =
+  "70px 350px 150px 140px 180px 250px 220px 180px 250px 180px 180px 500px";
+
 const page = {
   minHeight: "100vh",
-
-  background: `
-    radial-gradient(
-      circle at top right,
-      rgba(59,130,246,.12),
-      transparent 28%
-    ),
-
-    radial-gradient(
-      circle at bottom left,
-      rgba(99,102,241,.08),
-      transparent 30%
-    ),
-
-    linear-gradient(
-      180deg,
-      #020617,
-      #0f172a,
-      #111827
-    )
-  `,
-
-  padding: 24,
-
-  overflow: "hidden",
-
-  position: "relative",
-};
-
-const backgroundText = {
-  position: "absolute",
-
-  top: "50%",
-
-  left: "50%",
-
-  transform: "translate(-50%,-50%)",
-
-  fontSize: "220px",
-
-  fontWeight: 900,
-
-  color: "rgba(255,255,255,.025)",
-
-  letterSpacing: 12,
-
-  userSelect: "none",
-
-  pointerEvents: "none",
-
-  whiteSpace: "nowrap",
-
-  zIndex: 0,
+  background:
+    "linear-gradient(135deg,#020617,#0f172a)",
 };
 
 const content = {
-  position: "relative",
-
-  zIndex: 2,
-
+  padding: 24,
   display: "flex",
-
   flexDirection: "column",
+  gap: 24,
+};
 
-  gap: 20,
+const headerRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const logo = {
+  color: "#fff",
+  fontSize: 32,
+  fontWeight: 900,
+  marginBottom: 8,
+};
+
+const subtitle = {
+  color: "rgba(255,255,255,.62)",
+  fontSize: 14,
 };
 
 const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
-
   borderRadius: 24,
+  padding: 24,
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
 
-  padding: 16,
+const tableWrapper = {
+  overflowX: "auto",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 #0f172a",
+  WebkitOverflowScrolling: "touch",
+
+  "&::-webkit-scrollbar": {
+    height: 14,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background:
+      "linear-gradient(180deg,#0f172a,#111827)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(90deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+    border:
+      "2px solid #0f172a",
+    boxShadow:
+      "0 0 16px rgba(59,130,246,.55)",
+  },
+
+  "&::-webkit-scrollbar-thumb:hover": {
+    background:
+      "linear-gradient(90deg,#3b82f6,#93c5fd)",
+  },
+};
+
+const tableHeader = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
+
+  display: "grid",
+  gridTemplateColumns: warehouseGrid,
+
+  padding: "14px 16px",
+
+  background: "#111827",
+  color: "#94a3b8",
+
+  fontWeight: 700,
+};
+
+const tableRow = {
+  display: "grid",
+  gridTemplateColumns: warehouseGrid,
+
+  alignItems: "center",
+
+  padding: "14px 16px",
+
+  color: "#fff",
+
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+
+  minHeight: 58,
+};
+
+const tableBody = {
+  display: "flex",
+  flexDirection: "column",
+};
+
+const searchPanel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+
+  height: 52,
+
+  padding: "0 18px",
+
+  borderRadius: 16,
+
+  background: "rgba(255,255,255,0.03)",
 
   border:
     "1px solid rgba(255,255,255,.06)",
@@ -1829,115 +1979,6 @@ const legend = {
   backdropFilter: "blur(12px)",
 
   marginBottom: 16,
-};
-
-const tableWrapper = {
-  overflowX: "auto",
-
-  scrollbarWidth: "thin",
-  scrollbarColor: "#3b82f6 #0f172a",
-
-  WebkitOverflowScrolling: "touch",
-
-  "&::-webkit-scrollbar": {
-    height: 14,
-  },
-
-  "&::-webkit-scrollbar-track": {
-    background:
-      "linear-gradient(180deg,#0f172a,#111827)",
-
-    borderRadius: 999,
-  },
-
-  "&::-webkit-scrollbar-thumb": {
-    background:
-      "linear-gradient(90deg,#2563eb,#60a5fa)",
-
-    borderRadius: 999,
-
-    border:
-      "2px solid #0f172a",
-
-    boxShadow:
-      "0 0 16px rgba(59,130,246,.55)",
-  },
-
-  "&::-webkit-scrollbar-thumb:hover": {
-    background:
-      "linear-gradient(90deg,#3b82f6,#93c5fd)",
-  },
-};
-
-const tableRow = {
-  display: "grid",
-
-  gridTemplateColumns:
-    "70px 320px 150px 130px 180px 180px 140px 250px 180px 180px 420px",
-
-  alignItems: "center",
-
-  padding: "12px 16px",
-
-  minHeight: 56,
-
-  color: "#fff",
-
-  borderTop:
-    "1px solid rgba(255,255,255,.06)",
-};
-
-const tableBody = {
-  display: "flex",
-  flexDirection: "column",
-};
-
-const tableHeader = {
-  position: "sticky",
-  top: 0,
-  zIndex: 20,
-
-  display: "grid",
-
-  gridTemplateColumns:
-    "70px 320px 150px 130px 180px 180px 140px 250px 180px 180px 420px",
-
-  padding: "14px 16px",
-
-  background: "#f8fafc",
-
-  color: "#94a3b8",
-
-  fontWeight: 700,
-
-  borderRadius: "18px 18px 0 0",
-};
-
-const searchPanel = {
-  display: "flex",
-
-  alignItems: "center",
-
-  gap: 14,
-
-  height: 52,
-
-  padding: "0 18px",
-
-  marginBottom: 20,
-
-  borderRadius: 20,
-
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 12px 35px rgba(0,0,0,.28)",
-
-  backdropFilter: "blur(18px)",
 };
 
 const formFieldSx = {
@@ -2028,131 +2069,140 @@ const returnChip = {
     "rgba(239,68,68,.15)",
 };
 
-const actionPrimary = {
-  px: 2.4,
-  py: 0.8,
+const bulkBar = {
+  position: "fixed",
 
-  borderRadius: "12px",
+  bottom: 24,
 
-  minWidth: 100,
+  left: "50%",
 
-  fontSize: 12,
-  fontWeight: 700,
+  transform: "translateX(-50%)",
 
-  color: "#fff",
+  display: "flex",
+
+  alignItems: "center",
+
+  gap: 14,
+
+  padding: "12px 18px",
 
   background:
-    "linear-gradient(180deg,#16a34a,#15803d)",
+    "rgba(15,23,42,.94)",
 
   border:
     "1px solid rgba(255,255,255,.08)",
 
-  boxShadow:
-    "0 10px 24px rgba(22,163,74,.28)",
+  borderRadius: 18,
 
+  backdropFilter: "blur(24px)",
+
+  boxShadow:
+    "0 20px 50px rgba(0,0,0,.45)",
+
+  color: "#fff",
+
+  zIndex: 3000,
+};
+
+const tableActionButton = {
+  minWidth: 120,
+  height: 34,
+  borderRadius: 12,
+  fontWeight: 700,
   textTransform: "none",
+};
+
+const actionPrimary = {
+  ...tableActionButton,
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
 
   "&:hover": {
-    transform: "translateY(-1px)",
-
     background:
-      "linear-gradient(180deg,#22c55e,#16a34a)",
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const actionSuccess = {
+  ...tableActionButton,
+
+  background:
+    "linear-gradient(135deg,#059669,#10b981)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(16,185,129,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(16,185,129,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#047857,#059669)",
   },
 };
 
 const actionDanger = {
-  px: 2.4,
-  py: 0.8,
+  ...tableActionButton,
 
-  borderRadius: "12px",
-
-  minWidth: 100,
-
-  fontSize: 12,
-  fontWeight: 700,
+  background:
+    "linear-gradient(135deg,#dc2626,#ef4444)",
 
   color: "#fff",
 
-  background:
-    "linear-gradient(180deg,#dc2626,#b91c1c)",
-
-  border:
-    "1px solid rgba(255,255,255,.08)",
-
   boxShadow:
-    "0 10px 24px rgba(220,38,38,.30)",
-
-  textTransform: "none",
+    "0 10px 24px rgba(239,68,68,.28)",
 
   "&:hover": {
-    transform: "translateY(-1px)",
-
     background:
-      "linear-gradient(180deg,#ef4444,#dc2626)",
+      "linear-gradient(135deg,#b91c1c,#dc2626)",
   },
 };
 
 const actionWarning = {
-  px: 2.4,
-  py: 0.8,
-
-  borderRadius: "12px",
-
-  minWidth: 120,
-
-  fontSize: 12,
-  fontWeight: 700,
-
-  color: "#fff",
+  ...tableActionButton,
 
   background:
-    "linear-gradient(180deg,#f59e0b,#d97706)",
+    "linear-gradient(135deg,#f59e0b,#d97706)",
 
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  color: "#fff",
 
   boxShadow:
     "0 10px 24px rgba(245,158,11,.30)",
 
-  textTransform: "none",
-
   "&:hover": {
-    transform: "translateY(-1px)",
-
     background:
-      "linear-gradient(180deg,#fbbf24,#f59e0b)",
+      "linear-gradient(135deg,#fbbf24,#f59e0b)",
   },
 };
 
 const actionInfo = {
-  px: 2.2,
-  py: 0.8,
+  ...tableActionButton,
 
-  borderRadius: "12px",
-
-  minWidth: 90,
-
-  fontSize: 12,
-  fontWeight: 700,
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
 
   color: "#fff",
 
-  background:
-    "linear-gradient(180deg,#2563eb,#1d4ed8)",
-
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(59,130,246,.35)",
 
   boxShadow:
-    "0 10px 24px rgba(37,99,235,.30)",
-
-  textTransform: "none",
+    "0 10px 24px rgba(37,99,235,.35)",
 
   "&:hover": {
-    transform: "translateY(-1px)",
-
     background:
-      "linear-gradient(180deg,#3b82f6,#2563eb)",
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
   },
 };
 

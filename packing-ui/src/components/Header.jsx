@@ -24,7 +24,7 @@ function Header() {
 
           <div>
             <div style={title}>
-              ALSORG ERP SUITE
+              AES
             </div>
 
             <div style={subtitle}>
