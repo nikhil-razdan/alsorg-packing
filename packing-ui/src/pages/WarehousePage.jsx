@@ -881,67 +881,125 @@ function WarehousePage() {
 	
   return (
     <div style={page}>
-      <div style={backgroundText(false)}>Warehouse</div>
+      <div style={backgroundText}>Warehouse</div>
 
       <div style={content}>
 	  <Box
 	    sx={{
-	      display:"flex",
-	      justifyContent:"space-between",
-	      alignItems:"center",
+	      display: "flex",
+	      alignItems: "center",
+	      justifyContent: "space-between",
+	      mb: 3,
 	    }}
 	  >
 	    <Box
 	      sx={{
-	        display:"flex",
-	        alignItems:"center",
-	        gap:2,
+	        display: "flex",
+	        alignItems: "center",
+	        gap: 2,
 	      }}
 	    >
+	      {/* ICON TILE */}
 	      <Box
 	        sx={{
-	          fontSize:34,
-	          color:"#60a5fa",
+	          width: 56,
+	          height: 56,
+
+	          borderRadius: "16px",
+
+	          background:
+	            "linear-gradient(135deg,#2563eb,#60a5fa)",
+
+	          display: "flex",
+	          alignItems: "center",
+	          justifyContent: "center",
+
+	          fontSize: 28,
+
+	          boxShadow:
+	            "0 15px 35px rgba(37,99,235,.35)",
 	        }}
 	      >
 	        🏭
 	      </Box>
 
+	      {/* TITLE AREA */}
 	      <Box>
-	        <div style={logo}>
+	        <div
+	          style={{
+	            color: "#fff",
+	            fontSize: 30,
+	            fontWeight: 800,
+	            lineHeight: 1.1,
+	          }}
+	        >
 	          Warehouse
 	        </div>
 
-	        <div style={subtitle}>
+	        <div
+	          style={{
+	            color: "rgba(255,255,255,.55)",
+	            fontSize: 13,
+	            marginTop: 4,
+	          }}
+	        >
 	          Track warehouse movement and storage operations
 	        </div>
 	      </Box>
 	    </Box>
 
+	    {/* RIGHT STATS */}
 	    <Box
 	      sx={{
-	        color:"#94a3b8",
-	        fontSize:14,
-	        fontWeight:600,
+	        px: 2.5,
+	        py: 1.2,
+
+	        borderRadius: "999px",
+
+	        background:
+	          "rgba(255,255,255,.04)",
+
+	        border:
+	          "1px solid rgba(255,255,255,.06)",
+
+	        backdropFilter: "blur(12px)",
+
+	        color: "#94a3b8",
+
+	        fontSize: 13,
+
+	        fontWeight: 600,
 	      }}
 	    >
-	      Total Items:
+	      Total Items
+
 	      <span
 	        style={{
-	          color:"#60a5fa",
-	          marginLeft:6,
-	          fontWeight:800,
+	          color: "#60a5fa",
+	          marginLeft: 8,
+	          fontWeight: 800,
 	        }}
 	      >
 	        {filteredRows.length}
 	      </span>
 	    </Box>
 	  </Box>
+	  <Box
+	    sx={{
+	      height: 1,
+
+	      background:
+	        "rgba(255,255,255,.06)",
+
+	      mb: 3,
+	    }}
+	  />
         <Box sx={searchPanel}>
 		<SearchIcon
 		  sx={{
-		    color:
-		      "rgba(255,255,255,.45)",
+		    color: "#60a5fa",
+
+		    fontSize: 22,
 		  }}
 		/>
           <TextField
@@ -955,19 +1013,39 @@ function WarehousePage() {
 
 			  "& .MuiInputBase-root": {
 			    color: "#fff",
+
 			    fontSize: 14,
+
+			    fontWeight: 500,
+			  },
+
+			  "& input": {
+			    color: "#fff",
 			  },
 
 			  "& input::placeholder": {
 			    color: "rgba(255,255,255,.42)",
+
 			    opacity: 1,
 			  },
 			}}
           />
         </Box>
+		<Box
+		  sx={{
+		    display: "flex",
+		    justifyContent: "space-between",
+		    alignItems: "center",
+		    mb: 2,
+		  }}
+		>
+		  <Box />
+		  <Box />
+		</Box>
 		
 		{/* 🔥 ADD THIS BLOCK RIGHT HERE */}
-        <div style={tableWrapper}>
+		<div style={wrap}>
+		 <div style={tableWrapper}>
 		<Box sx={{ display: "flex", gap: 2, mb: 2 }}>
 
 		  {/* EXPORT */}
@@ -1161,6 +1239,7 @@ function WarehousePage() {
           />
         </div>
 		</div>
+		</div>
 		
 		{gatePassPopup && (
 			<div
@@ -1314,64 +1393,87 @@ function WarehousePage() {
 const page = {
   minHeight: "100vh",
 
-  background:
-    "linear-gradient(135deg,#020617,#0f172a)",
+  background: `
+    radial-gradient(
+      circle at top right,
+      rgba(59,130,246,.12),
+      transparent 28%
+    ),
+
+    radial-gradient(
+      circle at bottom left,
+      rgba(99,102,241,.08),
+      transparent 30%
+    ),
+
+    linear-gradient(
+      180deg,
+      #020617,
+      #0f172a,
+      #111827
+    )
+  `,
+
+  padding: 24,
+
+  overflow: "hidden",
+
+  position: "relative",
 };
 
-const backgroundText = (darkMode) => ({
+const backgroundText = {
   position: "absolute",
-  fontSize: 220,
-  fontWeight: 900,
-
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
-
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
 
   top: "50%",
+
   left: "50%",
-  transform: "translate(-50%, -50%)",
+
+  transform: "translate(-50%,-50%)",
+
+  fontSize: "220px",
+
+  fontWeight: 900,
+
+  color: "rgba(255,255,255,.025)",
+
+  letterSpacing: 12,
+
+  userSelect: "none",
 
   pointerEvents: "none",
-  letterSpacing: 8,
 
-  filter: "blur(1px)",
-});
+  whiteSpace: "nowrap",
+
+  zIndex: 0,
+};
 
 const content = {
-  padding: 24,
+  position: "relative",
+
+  zIndex: 2,
 
   display: "flex",
 
   flexDirection: "column",
 
-  gap: 24,
-};
-
-const logo = {
-  color:"#fff",
-  fontSize:32,
-  fontWeight:900,
-  marginBottom:8,
-};
-
-const subtitle = {
-  color:"rgba(255,255,255,.62)",
-  fontSize:14,
+  gap: 20,
 };
 
 const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
 
-  borderRadius:24,
+  borderRadius: 24,
 
-  padding:24,
+  padding: 24,
 
   border:
     "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 25px 60px rgba(0,0,0,.45)",
+
+  overflow: "hidden",
 };
 
 const tableWrapper = {
@@ -1534,22 +1636,30 @@ const legend = {
 };
 
 const searchPanel = {
-  display:"flex",
+  display: "flex",
 
-  alignItems:"center",
+  alignItems: "center",
 
-  gap:12,
+  gap: 14,
 
-  height:52,
+  height: 60,
 
-  padding:"0 18px",
+  padding: "0 22px",
 
-  borderRadius:16,
+  marginBottom: 20,
 
-  background:"rgba(255,255,255,.03)",
+  borderRadius: 20,
+
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
 
   border:
     "1px solid rgba(255,255,255,.06)",
+
+  boxShadow:
+    "0 12px 35px rgba(0,0,0,.28)",
+
+  backdropFilter: "blur(18px)",
 };
 
 const formFieldSx = {
