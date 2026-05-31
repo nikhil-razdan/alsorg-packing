@@ -572,13 +572,7 @@ function WarehousePage() {
 	            alert("Failed to load gate pass");
 	          }
 	        }}
-	        sx={{
-	          fontSize: 11,
-	          borderRadius: "999px",
-	          px: 1.5,
-	          background: "linear-gradient(180deg,#6366f1,#4338ca)",
-	          color: "#fff",
-	        }}
+	        sx={actionInfo}
 	      >
 	        VIEW
 	      </Button>
@@ -685,8 +679,8 @@ function WarehousePage() {
 	  headerName:"Action",
 
 	  flex: 1,
-	  minWidth: 420,
-	  maxWidth: 460,
+	  minWidth: 520,
+	  maxWidth: 600,
 
 	  sortable:false,
 
@@ -715,7 +709,14 @@ function WarehousePage() {
           // DISPATCH VIEW
           if (isDispatch) {
             return (
-				<Box sx={{ display: "flex", gap: 1 }}>
+				<Box
+				  sx={{
+				    display: "flex",
+				    alignItems: "center",
+				    gap: 1.2,
+				    flexWrap: "wrap",
+				  }}
+				>
 				  <TextField
 				    size="small"
 				    placeholder="Gate Pass"
@@ -745,10 +746,7 @@ function WarehousePage() {
 				  <Button
 				    size="small"
 				    onClick={() => rejectWarehouse(row.id)}
-				    sx={{
-				      ...actionPrimary,
-				      background: "linear-gradient(180deg,#ef4444,#b91c1c)",
-				    }}
+				    sx={actionDanger}
 				  >
 				    Reject
 				  </Button>
@@ -768,13 +766,7 @@ function WarehousePage() {
 		        <Button
 		          size="small"
 		          onClick={() => requestReturn(row.zohoItemId)}
-		          sx={{
-		            fontSize: 11,
-		            borderRadius: "999px",
-		            px: 1.5,
-		            background: "linear-gradient(180deg,#f59e0b,#d97706)",
-		            color: "#fff",
-		          }}
+		          sx={actionWarning}
 		        >
 		          Return to Dispatch
 		        </Button>
@@ -792,7 +784,14 @@ function WarehousePage() {
 
 		    if (role === "ADMIN") {
 		      return (
-		        <Box sx={{ display: "flex", gap: 1 }}>
+				<Box
+				  sx={{
+				    display: "flex",
+				    alignItems: "center",
+				    gap: 1.2,
+				    flexWrap: "wrap",
+				  }}
+				>
 		          <Button
 		            size="small"
 		            onClick={async () => {
@@ -826,10 +825,7 @@ function WarehousePage() {
 		              );
 		              fetchItems();
 		            }}
-		            sx={{
-		              ...actionPrimary,
-		              background: "linear-gradient(180deg,#ef4444,#b91c1c)",
-		            }}
+		            sx={actionDanger}
 		          >
 		            Reject
 		          </Button>
@@ -1853,10 +1849,12 @@ const pendingChip = {
 };
 
 const actionPrimary = {
-  px: 2.6,
+  px: 2.4,
   py: 0.8,
 
-  borderRadius: "999px",
+  borderRadius: "12px",
+
+  minWidth: 100,
 
   fontSize: 12,
   fontWeight: 700,
@@ -1864,26 +1862,117 @@ const actionPrimary = {
   color: "#fff",
 
   background:
-    "linear-gradient(135deg,#10b981,#059669)",
+    "linear-gradient(180deg,#16a34a,#15803d)",
 
-  border: "1px solid rgba(255,255,255,0.2)",
+  border:
+    "1px solid rgba(255,255,255,.08)",
 
-  boxShadow: `
-    0 10px 25px rgba(16,185,129,0.38),
-    inset 0 1px 0 rgba(255,255,255,0.28)
-  `,
+  boxShadow:
+    "0 10px 24px rgba(22,163,74,.28)",
 
-  backdropFilter: "blur(12px)",
-
-  transition: "all 0.25s ease",
+  textTransform: "none",
 
   "&:hover": {
-    transform: "translateY(-3px) scale(1.03)",
+    transform: "translateY(-1px)",
 
-    boxShadow: `
-      0 16px 35px rgba(16,185,129,0.48),
-      0 0 18px rgba(16,185,129,0.35)
-    `,
+    background:
+      "linear-gradient(180deg,#22c55e,#16a34a)",
+  },
+};
+
+const actionDanger = {
+  px: 2.4,
+  py: 0.8,
+
+  borderRadius: "12px",
+
+  minWidth: 100,
+
+  fontSize: 12,
+  fontWeight: 700,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(180deg,#dc2626,#b91c1c)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 10px 24px rgba(220,38,38,.30)",
+
+  textTransform: "none",
+
+  "&:hover": {
+    transform: "translateY(-1px)",
+
+    background:
+      "linear-gradient(180deg,#ef4444,#dc2626)",
+  },
+};
+
+const actionWarning = {
+  px: 2.4,
+  py: 0.8,
+
+  borderRadius: "12px",
+
+  minWidth: 120,
+
+  fontSize: 12,
+  fontWeight: 700,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(180deg,#f59e0b,#d97706)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 10px 24px rgba(245,158,11,.30)",
+
+  textTransform: "none",
+
+  "&:hover": {
+    transform: "translateY(-1px)",
+
+    background:
+      "linear-gradient(180deg,#fbbf24,#f59e0b)",
+  },
+};
+
+const actionInfo = {
+  px: 2.2,
+  py: 0.8,
+
+  borderRadius: "12px",
+
+  minWidth: 90,
+
+  fontSize: 12,
+  fontWeight: 700,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(180deg,#2563eb,#1d4ed8)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.30)",
+
+  textTransform: "none",
+
+  "&:hover": {
+    transform: "translateY(-1px)",
+
+    background:
+      "linear-gradient(180deg,#3b82f6,#2563eb)",
   },
 };
 
