@@ -728,7 +728,7 @@ function WarehousePage() {
 				      }))
 				    }
 					sx={{
-					  width: 180,
+					  width: 220,
 
 					  ...formFieldSx,
 					}}
@@ -1209,56 +1209,112 @@ function WarehousePage() {
 		 isDispatch && (
 
 		  <div
-		    style={{
-		      position: "fixed",
-		      bottom: 24,
-		      left: "50%",
-		      transform: "translateX(-50%)",
+		  style={{
+		    position: "fixed",
 
-		      color: "#fff",
+		    left: "50%",
 
-		      padding: "14px 22px",
+		    bottom: 28,
 
-		      borderRadius: 999,
+		    transform: "translateX(-50%)",
 
-		      display: "flex",
-		      alignItems: "center",
-		      gap: 20,
+		    display: "flex",
 
-		      boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+		    alignItems: "center",
 
-		      zIndex: 3000,
+		    gap: 18,
 
-		      background: "rgba(17,24,39,0.85)",
+		    padding: "14px 22px",
 
-		      backdropFilter: "blur(18px)",
+		    borderRadius: 20,
 
-		      border: "1px solid rgba(255,255,255,0.1)",
-		    }}
+		    zIndex: 5000,
+
+		    background:
+		      "linear-gradient(180deg,#0f172a,#111827)",
+
+		    border:
+		      "1px solid rgba(255,255,255,.08)",
+
+		    boxShadow:
+		      "0 25px 60px rgba(0,0,0,.55)",
+
+		    backdropFilter: "blur(18px)",
+		  }}
 		  >
 
-		    <span style={{ fontWeight: 600 }}>
-		      {selectionModel.length} item
-		      {selectionModel.length > 1 ? "s" : ""}
-		      {" "}selected
-		    </span>
+		  <Box
+		    sx={{
+		      display: "flex",
+		      alignItems: "center",
+		      gap: 1,
 
+		      color: "#cbd5e1",
+
+		      fontWeight: 700,
+
+		      fontSize: 13,
+		    }}
+		  >
+		    <span>📦</span>
+
+		    <span>
+		      {selectionModel.length}
+		      {" "}
+		      item
+		      {selectionModel.length > 1 ? "s" : ""}
+		      {" "}
+		      selected
+		    </span>
+		  </Box>
+		  <Box
+		      sx={{
+		        width: 1,
+		        height: 24,
+		        background:
+		          "rgba(255,255,255,.08)",
+		      }}
+		    />
 		    <Button
 		      disabled={!allWarehouseItems || bulkLoading}
 
 		      onClick={bulkReturnToDispatch}
 
-		      sx={{
-		        px: 2.8,
-		        borderRadius: "999px",
-		        fontWeight: 600,
+			  sx={{
+			    px: 3,
 
-		        background: allWarehouseItems
-		          ? "linear-gradient(180deg,#f59e0b,#d97706)"
-		          : "#9ca3af",
+			    height: 40,
 
-		        color: "#fff",
-		      }}
+			    borderRadius: "12px",
+
+			    fontWeight: 700,
+
+			    textTransform: "none",
+
+			    color: "#fff",
+
+			    background: allWarehouseItems
+			      ? "linear-gradient(180deg,#f59e0b,#d97706)"
+			      : "rgba(255,255,255,.08)",
+
+			    boxShadow: allWarehouseItems
+			      ? "0 10px 25px rgba(245,158,11,.30)"
+			      : "none",
+
+			    "&:hover": {
+			      background:
+			        "linear-gradient(180deg,#fbbf24,#f59e0b)",
+			    },
+				
+				"&.Mui-disabled": {
+				  color: "rgba(255,255,255,.35)",
+
+				  background:
+				    "rgba(255,255,255,.08)",
+
+				  boxShadow: "none",
+				},
+			  }}
 		    >
 		      🔁 Bulk Return To Dispatch
 		    </Button>
@@ -1266,13 +1322,22 @@ function WarehousePage() {
 		    <Button
 		      size="small"
 		      onClick={() => setSelectionModel([])}
-		      sx={{
-		        color: "#9ca3af",
+			  sx={{
+			    minWidth: 40,
 
-		        "&:hover": {
-		          color: "#fff",
-		        },
-		      }}
+			    color: "#94a3b8",
+
+			    fontWeight: 700,
+
+			    borderRadius: "10px",
+
+			    "&:hover": {
+			      background:
+			        "rgba(255,255,255,.05)",
+
+			      color: "#fff",
+			    },
+			  }}
 		    >
 		      Clear
 		    </Button>
