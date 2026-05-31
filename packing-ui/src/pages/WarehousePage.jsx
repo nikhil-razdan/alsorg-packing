@@ -1418,8 +1418,21 @@ function WarehousePage() {
 		    mb: 2,
 		  }}
 		/>
+		<Box
+		  sx={{
+		    borderRadius: 3,
+
+		    overflow: "hidden",
+
+		    border:
+		      "1px solid rgba(255,255,255,.06)",
+
+		    background:
+		      "linear-gradient(180deg,#0f172a,#111827)",
+		  }}
+		>
           <DataGrid
-		  rowHeight={56}
+		    rowHeight={56}
 		    columnHeaderHeight={58}
             rows={filteredRows}
 			getRowId={(row) => row.zohoItemId}
@@ -1428,6 +1441,15 @@ function WarehousePage() {
             density="compact"
 			disableColumnMenu
 			disableRowSelectionOnClick
+			slotProps={{
+			  loadingOverlay: {
+			    variant: "linear-progress",
+			  },
+			}}
+			localeText={{
+			  noRowsLabel:
+			    "No warehouse records found",
+			}}
 			getRowClassName={(params) => {
 			  let base = "";
 
@@ -1451,6 +1473,7 @@ function WarehousePage() {
 			}}
             sx={dataGridStyles(false)}
           />
+		  </Box>
         </div>
 		</div>
 		</div>
@@ -1768,9 +1791,11 @@ const legend = {
 };
 
 const tableWrapper = {
-  overflowX:"auto",
+  overflowX: "auto",
 
-  scrollbarWidth:"thin",
+  overflowY: "hidden",
+
+  paddingTop: 12,
   
   borderRadius: 18,
 
@@ -1780,24 +1805,7 @@ const tableWrapper = {
   border:
     "1px solid rgba(255,255,255,.06)",
 
-  scrollbarColor:
-    "#3b82f6 #0f172a",
-
   WebkitOverflowScrolling:"touch",
-
-  "&::-webkit-scrollbar":{
-    height:14,
-  },
-
-  "&::-webkit-scrollbar-track":{
-    background:
-      "linear-gradient(180deg,#0f172a,#111827)",
-  },
-
-  "&::-webkit-scrollbar-thumb":{
-    background:
-      "linear-gradient(90deg,#2563eb,#60a5fa)",
-  },
 };
 
 const dataGridStyles = (darkMode) => ({
@@ -1814,38 +1822,45 @@ const dataGridStyles = (darkMode) => ({
      backdropFilter: "brightness(.96)",
    },
 
-  "& .MuiDataGrid-columnHeaders": {
-    background:
-      "linear-gradient(180deg,#0f172a,#111827) !important",
+   "& .MuiDataGrid-columnHeaders": {
+     background:
+       "linear-gradient(180deg,#111827,#0f172a)",
 
-    borderBottom:
-      "1px solid rgba(255,255,255,.08)",
+     borderBottom:
+       "1px solid rgba(255,255,255,.06)",
 
-    minHeight: "58px !important",
+     minHeight: "58px !important",
 
-    maxHeight: "58px !important",
+     maxHeight: "58px !important",
+   },
 
-    boxShadow:
-      "inset 0 -1px 0 rgba(255,255,255,.05)",
-  },
+   "& .MuiCheckbox-root": {
+     color:"#64748b",
+   },
 
-  "& .MuiDataGrid-columnHeader": {
-    background:
-      "linear-gradient(180deg,#0f172a,#111827) !important",
+   "& .MuiCheckbox-root.Mui-checked": {
+     color:"#3b82f6",
+   },
+   
+   "& .MuiDataGrid-row:nth-of-type(even)": {
+     background:
+       "rgba(255,255,255,.015)",
+   },
+   
+   "& .MuiDataGrid-columnHeader": {
+     color: "#cbd5e1",
 
-    color: "#60a5fa",
+     fontWeight: 800,
 
-    fontWeight: 800,
+     fontSize: 12,
 
-    fontSize: 12,
+     letterSpacing: ".8px",
 
-    textTransform: "uppercase",
+     textTransform: "uppercase",
 
-    letterSpacing: ".8px",
-
-    borderRight:
-      "1px solid rgba(255,255,255,.05)",
-  },
+     borderRight:
+       "1px solid rgba(255,255,255,.04)",
+   },
 
   "& .MuiDataGrid-columnHeaderTitle": {
     color: "#60a5fa",
@@ -1870,15 +1885,14 @@ const dataGridStyles = (darkMode) => ({
 
   "& .MuiDataGrid-cell": {
     borderBottom:
-      "1px solid rgba(255,255,255,.05)",
+      "1px solid rgba(255,255,255,.04)",
 
-    color: "#e2e8f0",
+    color: "#f8fafc",
 
     fontSize: 13,
 
-    fontWeight: 500,
-
     display: "flex",
+
     alignItems: "center",
   },
 
@@ -1889,25 +1903,30 @@ const dataGridStyles = (darkMode) => ({
   
   "& .MuiDataGrid-row:hover": {
     background:
-      "rgba(59,130,246,.08) !important",
+      "rgba(59,130,246,.08)",
 
     transition:
-      "all .2s ease",
+      "all .18s ease",
   },
   
   "& .Mui-selected": {
     background:
-      "rgba(59,130,246,.10) !important",
+      "rgba(59,130,246,.12) !important",
+  },
+  
+  "& .Mui-selected:hover": {
+    background:
+      "rgba(59,130,246,.16) !important",
   },
 
   "& .MuiDataGrid-footerContainer": {
     background:
-      "linear-gradient(180deg,#0f172a,#111827)",
+      "linear-gradient(180deg,#111827,#0f172a)",
 
     borderTop:
       "1px solid rgba(255,255,255,.06)",
 
-    color: "#cbd5e1",
+    color:"#cbd5e1",
   },
 
   "& .MuiCheckbox-root": {
@@ -1915,7 +1934,11 @@ const dataGridStyles = (darkMode) => ({
   },
 
   "& .MuiTablePagination-root": {
-    color: "#cbd5e1",
+    color:"#cbd5e1",
+  },
+  
+  "& .MuiIconButton-root": {
+    color:"#94a3b8",
   },
 
   "& .row-floor": {
