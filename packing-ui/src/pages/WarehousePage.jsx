@@ -1294,6 +1294,7 @@ function WarehousePage() {
 		  }}
 		/>
           <DataGrid
+		    columnHeaderHeight={58}
             rows={filteredRows}
 			getRowId={(row) => row.zohoItemId}
             columns={columns}
@@ -1555,6 +1556,14 @@ const tableWrapper = {
   overflowX:"auto",
 
   scrollbarWidth:"thin",
+  
+  borderRadius: 18,
+
+  background:
+    "linear-gradient(180deg,#020617,#0f172a)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
 
   scrollbarColor:
     "#3b82f6 #0f172a",
@@ -1577,80 +1586,63 @@ const tableWrapper = {
 };
 
 const dataGridStyles = (darkMode) => ({
-  background: darkMode ? "#0f0f0f" : "#fff",
-  color: darkMode ? "#fff" : "#111",
-  borderRadius: 12,
-  border: "none",
+   background: "#020617",
+   color: "#fff",
+   borderRadius: 18,
+   border: "none",
 
   "& .MuiDataGrid-columnHeaders": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
+    background:
+      "linear-gradient(180deg,#0f172a,#111827) !important",
 
-    borderBottom: darkMode
-      ? "1px solid rgba(255,215,0,0.12)"
-      : "1px solid #e2e8f0",
+    borderBottom:
+      "1px solid rgba(255,255,255,.08)",
 
-    minHeight: "52px !important",
-    maxHeight: "52px !important",
+    minHeight: "58px !important",
 
-    boxShadow: darkMode
-      ? "inset 0 -1px 0 rgba(255,215,0,0.08)"
-      : "none",
+    maxHeight: "58px !important",
+
+    boxShadow:
+      "inset 0 -1px 0 rgba(255,255,255,.05)",
   },
 
   "& .MuiDataGrid-columnHeader": {
-    background: darkMode
-      ? "linear-gradient(180deg,#111,#0b0b0b) !important"
-      : "#f8fafc !important",
+    background:
+      "linear-gradient(180deg,#0f172a,#111827) !important",
 
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
+    color: "#60a5fa",
 
-    fontWeight: 700,
+    fontWeight: 800,
 
-    fontSize: 13,
-
-    letterSpacing: "0.4px",
+    fontSize: 12,
 
     textTransform: "uppercase",
 
-    borderRight: darkMode
-      ? "1px solid rgba(255,255,255,0.05)"
-      : "1px solid #e5e7eb",
+    letterSpacing: ".8px",
 
-    textShadow: darkMode
-      ? "0 0 10px rgba(255,215,0,0.18)"
-      : "none",
+    borderRight:
+      "1px solid rgba(255,255,255,.05)",
   },
 
   "& .MuiDataGrid-columnHeaderTitle": {
+    color: "#60a5fa",
+
     fontWeight: 800,
 
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569 !important",
-
-    letterSpacing: "0.4px",
+    letterSpacing: ".8px",
   },
   
   "& .MuiDataGrid-iconSeparator": {
-    color: darkMode
-      ? "rgba(255,215,0,0.12)"
-      : "#cbd5e1",
+    color:
+      "rgba(255,255,255,.08)",
   },
 
   "& .MuiDataGrid-sortIcon": {
-    color: darkMode
-      ? "#FFD700 !important"
-      : "#475569",
+    color: "#60a5fa",
   },
 
   "& .MuiSvgIcon-root": {
-    color: darkMode
-      ? "#FFD700"
-      : "#475569",
+    color: "#60a5fa",
   },
 
   "& .MuiDataGrid-cell": {
