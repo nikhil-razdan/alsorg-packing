@@ -175,6 +175,554 @@ const auditLogButton = {
   },
 };
 
+const enhancedOverlaySx = {
+  position: "fixed",
+  inset: 0,
+
+  background: `
+    radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
+    radial-gradient(circle at 80% 90%, rgba(16,185,129,.12), transparent 30%),
+    rgba(2,6,23,.72)
+  `,
+
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  zIndex: 5000,
+};
+
+const enhancedModalSx = {
+  ...darkModalBox,
+
+  p: 0,
+
+  background: `
+    radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
+    linear-gradient(180deg,#0f172a,#111827)
+  `,
+
+  border:
+    "1px solid rgba(148,163,184,.14)",
+
+  boxShadow:
+    "0 40px 110px rgba(0,0,0,.68)",
+
+  "&::before": {
+    content: '""',
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    background:
+      "linear-gradient(135deg,rgba(255,255,255,.08),transparent 28%,rgba(255,255,255,.03))",
+  },
+
+  "& > *": {
+    position: "relative",
+    zIndex: 1,
+  },
+};
+
+const modalHeaderSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+
+  px: 3,
+  py: 2.4,
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const modalTitleWrapSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1.6,
+};
+
+const modalIconBubble = (color = "#3b82f6") => ({
+  width: 44,
+  height: 44,
+
+  borderRadius: "16px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  fontSize: 22,
+
+  background:
+    color === "#10b981"
+      ? "linear-gradient(135deg,rgba(16,185,129,.24),rgba(16,185,129,.08))"
+      : color === "#f97316"
+      ? "linear-gradient(135deg,rgba(249,115,22,.24),rgba(249,115,22,.08))"
+      : "linear-gradient(135deg,rgba(59,130,246,.24),rgba(59,130,246,.08))",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 12px 28px rgba(0,0,0,.25)",
+});
+
+const modalTitleSx = {
+  color: "#fff",
+  fontSize: 22,
+  fontWeight: 900,
+  lineHeight: 1.1,
+};
+
+const modalSubtitleSx = {
+  color: "rgba(255,255,255,.55)",
+  fontSize: 12,
+  fontWeight: 600,
+  mt: 0.4,
+};
+
+const modalCloseButtonSx = {
+  width: 36,
+  height: 36,
+
+  borderRadius: "12px",
+
+  color: "#94a3b8",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  "&:hover": {
+    color: "#fff",
+    background:
+      "rgba(239,68,68,.16)",
+    borderColor:
+      "rgba(239,68,68,.28)",
+  },
+};
+
+const modalContentSx = {
+  p: 3,
+};
+
+const modalScrollBodySx = {
+  maxHeight: "58vh",
+  overflowY: "auto",
+  pr: 0.8,
+
+  "&::-webkit-scrollbar": {
+    width: 8,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background: "rgba(255,255,255,.03)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(180deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+  },
+};
+
+const modalFooterSx = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 1.2,
+
+  px: 3,
+  py: 2,
+
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const modalSecondaryButtonSx = {
+  height: 36,
+
+  px: 2.2,
+
+  borderRadius: "12px",
+
+  textTransform: "none",
+
+  fontWeight: 800,
+
+  color: "#cbd5e1",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.08)",
+    color: "#fff",
+  },
+};
+
+const modalEmptyStateSx = {
+  p: 3,
+
+  borderRadius: "18px",
+
+  textAlign: "center",
+
+  color: "#94a3b8",
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  border:
+    "1px dashed rgba(255,255,255,.12)",
+
+  fontWeight: 700,
+};
+
+const historyCardSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+
+  gap: 2,
+
+  p: 1.6,
+  mb: 1.2,
+
+  borderRadius: "16px",
+
+  background:
+    "rgba(255,255,255,.035)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+
+  transition: "all .2s ease",
+
+  "&:hover": {
+    transform: "translateY(-1px)",
+    background:
+      "rgba(255,255,255,.055)",
+    borderColor:
+      "rgba(59,130,246,.22)",
+  },
+};
+
+const latestHistoryCardSx = {
+  ...historyCardSx,
+
+  background:
+    "linear-gradient(135deg,rgba(16,185,129,.13),rgba(255,255,255,.035))",
+
+  border:
+    "1px solid rgba(16,185,129,.22)",
+};
+
+const historyNumberSx = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const historyMetaSx = {
+  color: "rgba(255,255,255,.56)",
+  fontSize: 12,
+  fontWeight: 600,
+  mt: 0.4,
+};
+
+const modalMiniButtonSx = {
+  width: 34,
+  height: 34,
+
+  borderRadius: "12px",
+
+  color: "#cbd5e1",
+
+  background:
+    "rgba(255,255,255,.04)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    color: "#fff",
+    background:
+      "linear-gradient(135deg,#2563eb,#3b82f6)",
+    boxShadow:
+      "0 10px 22px rgba(37,99,235,.28)",
+  },
+};
+
+const auditFilterBarSx = {
+  display: "flex",
+  gap: 1.2,
+  flexWrap: "wrap",
+
+  p: 1.2,
+  mb: 2,
+
+  borderRadius: "16px",
+
+  background:
+    "rgba(255,255,255,.035)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+};
+
+const modalFilterFieldSx = {
+  minWidth: 170,
+
+  "& .MuiOutlinedInput-root": {
+    height: 38,
+    borderRadius: "12px",
+    background: "rgba(255,255,255,.04)",
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor: "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: "rgba(59,130,246,.35)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& .MuiSelect-select": {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+};
+
+const auditGroupTitleSx = {
+  color: "#93c5fd",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".4px",
+  textTransform: "uppercase",
+  mb: 1,
+  mt: 1.5,
+};
+
+const auditLogCardSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+
+  gap: 2,
+
+  p: 1.5,
+  mb: 1,
+
+  borderRadius: "16px",
+
+  background:
+    "rgba(255,255,255,.035)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+
+  transition: "all .2s ease",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.055)",
+    borderColor:
+      "rgba(59,130,246,.22)",
+  },
+};
+
+const auditActionChipBaseSx = {
+  height: 26,
+
+  borderRadius: "999px",
+
+  fontSize: 11,
+  fontWeight: 900,
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+};
+
+const getAuditActionTone = (action = "") => {
+  const a = action.toLowerCase();
+
+  if (a.includes("approved")) {
+    return {
+      bg: "rgba(16,185,129,.15)",
+      color: "#6ee7b7",
+      border: "1px solid rgba(16,185,129,.25)",
+    };
+  }
+
+  if (a.includes("rejected")) {
+    return {
+      bg: "rgba(239,68,68,.15)",
+      color: "#fca5a5",
+      border: "1px solid rgba(239,68,68,.25)",
+    };
+  }
+
+  if (a.includes("requested")) {
+    return {
+      bg: "rgba(245,158,11,.15)",
+      color: "#fcd34d",
+      border: "1px solid rgba(245,158,11,.25)",
+    };
+  }
+
+  if (a.includes("dispatched")) {
+    return {
+      bg: "rgba(59,130,246,.15)",
+      color: "#93c5fd",
+      border: "1px solid rgba(59,130,246,.25)",
+    };
+  }
+
+  if (a.includes("packed")) {
+    return {
+      bg: "rgba(99,102,241,.15)",
+      color: "#c4b5fd",
+      border: "1px solid rgba(99,102,241,.25)",
+    };
+  }
+
+  if (a.includes("sticker")) {
+    return {
+      bg: "rgba(14,165,233,.15)",
+      color: "#7dd3fc",
+      border: "1px solid rgba(14,165,233,.25)",
+    };
+  }
+
+  return {
+    bg: "rgba(148,163,184,.14)",
+    color: "#cbd5e1",
+    border: "1px solid rgba(148,163,184,.20)",
+  };
+};
+
+const auditTimeSx = {
+  color: "rgba(255,255,255,.55)",
+  fontSize: 12,
+  fontWeight: 600,
+  mt: 0.7,
+};
+
+const statusChoiceCardSx = (color = "#3b82f6") => ({
+  p: 2,
+
+  borderRadius: "20px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+
+  cursor: "pointer",
+
+  background:
+    color === "#10b981"
+      ? "linear-gradient(135deg,rgba(16,185,129,.14),rgba(255,255,255,.035))"
+      : color === "#f59e0b"
+      ? "linear-gradient(135deg,rgba(245,158,11,.14),rgba(255,255,255,.035))"
+      : "linear-gradient(135deg,rgba(59,130,246,.14),rgba(255,255,255,.035))",
+
+  border:
+    color === "#10b981"
+      ? "1px solid rgba(16,185,129,.22)"
+      : color === "#f59e0b"
+      ? "1px solid rgba(245,158,11,.22)"
+      : "1px solid rgba(59,130,246,.22)",
+
+  transition: "all .22s ease",
+
+  "&:hover": {
+    transform: "translateY(-3px)",
+    boxShadow:
+      "0 20px 42px rgba(0,0,0,.35)",
+  },
+});
+
+const statusChoiceLeftSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1.6,
+};
+
+const statusChoiceIconSx = (color = "#3b82f6") => ({
+  width: 46,
+  height: 46,
+
+  borderRadius: "16px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  fontSize: 24,
+
+  background:
+    color === "#10b981"
+      ? "rgba(16,185,129,.18)"
+      : color === "#f59e0b"
+      ? "rgba(245,158,11,.18)"
+      : "rgba(59,130,246,.18)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+});
+
+const statusChoiceTitleSx = {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 900,
+};
+
+const statusChoiceSubtitleSx = {
+  color: "rgba(255,255,255,.58)",
+  fontSize: 12,
+  fontWeight: 600,
+  mt: 0.4,
+};
+
+const statusChoiceArrowSx = {
+  width: 34,
+  height: 34,
+
+  borderRadius: "999px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  color: "#fff",
+
+  background:
+    "rgba(255,255,255,.07)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+};
+
 const readyStatusChip = {
   fontWeight: 700,
 
@@ -2035,395 +2583,386 @@ function DispatchedItemsPage() {
 		</div>
 	  )}
 	  {historyOpen && (
-	    <div
-	      style={{
-	        position: "fixed",
-	        inset: 0,
-			background: `
-			  radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 20%),
-			  rgba(15,23,42,0.55)
-			`,
-			backdropFilter: "blur(8px)",
-			WebkitBackdropFilter: "blur(8px)",
-	        display: "flex",
-	        alignItems: "center",
-	        justifyContent: "center",
-	        zIndex: 2000,
-	      }}
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 2000 }}
 	      onClick={() => setHistoryOpen(false)}
 	    >
 	      <Box
-		  style={{
-		    width: 560,
-		    maxHeight: "80vh",
-		    padding: 24,
-
-		    ...darkModalBox,
-		  }}
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 580,
+	          maxHeight: "84vh",
+	        }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-	        <h3 style={{ marginBottom: 12 }}>
-	          Sticker History
-	        </h3>
-
-	        {historyLoading && <p>Loading…</p>}
-
-	        {!historyLoading && historyRows.length === 0 && (
-	          <p>No sticker history found.</p>
-	        )}
-
-	        {!historyLoading && historyRows.map((h, idx) => (
-	          <Box
-	            key={h.id}
-	            sx={{
-	              display: "flex",
-	              alignItems: "center",
-	              justifyContent: "space-between",
-	              mb: 1,
-	              p: 1.2,
-	              borderRadius: 8,
-				  background:
-				    idx === 0
-				      ? "rgba(16,185,129,.08)"
-				      : "rgba(255,255,255,.03)",
-
-				  border:
-				    "1px solid rgba(255,255,255,.06)",
-	            }}
-	          >
-	            <Box>
-	              <div style={{ fontWeight: 600 }}>
-	                {h.stickerNumber}
-	              </div>
-	              <div style={{ fontSize: 12, opacity: 0.75 }}>
-	                {new Date(h.generatedAt).toLocaleString()}
-	                {" • "}
-	                {h.reason}
-	              </div>
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#3b82f6")}>
+	              🏷️
 	            </Box>
 
-				<Box sx={{ display: "flex", gap: 1 }}>
-				{/* 👁 VIEW */}
-				<IconButton
-				  onClick={async () => {
-				    try {
-				      const res = await fetch(
-				        `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
-				        {
-				          method: "GET",
-				          headers: getAuthHeaders(),
-				        }
-				      );
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Sticker History
+	              </Box>
 
-				      if (!res.ok) {
-				        const text = await res.text();
-
-				        console.error("❌ Sticker preview failed:", text);
-
-				        alert(text || "Preview failed");
-
-				        return;
-				      }
-
-				      const blob = await res.blob();
-
-				      // 🔥 IMPORTANT
-				      if (blob.size === 0) {
-				        alert("Empty PDF received");
-				        return;
-				      }
-
-				      const blobUrl = URL.createObjectURL(blob);
-
-				      // 🔥 OPEN SECURELY
-				      const newTab = window.open();
-
-				      if (!newTab) {
-				        alert("Popup blocked");
-				        return;
-				      }
-
-				      newTab.location.href = blobUrl;
-
-				      // 🔥 DO NOT revoke immediately
-				      setTimeout(() => {
-				        URL.revokeObjectURL(blobUrl);
-				      }, 10000);
-
-				    } catch (err) {
-				      console.error(err);
-				      alert("Preview failed");
-				    }
-				  }}
-				  size="small"
-				>
-				  👁
-				</IconButton>
-
-				  {/* ⬇ DOWNLOAD */}
-				  <IconButton
-				    onClick={async () => {
-				      try {
-				        const res = await fetch(
-				          `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
-				          {
-				            method: "GET",
-				            headers: getAuthHeaders(),
-				          }
-				        );
-
-				        if (!res.ok) throw new Error();
-
-				        const blob = await res.blob();
-				        const url = window.URL.createObjectURL(blob);
-
-				        const a = document.createElement("a");
-				        a.href = url;
-				        a.download = `STICKER_${h.stickerNumber}.pdf`;
-				        a.click();
-
-						setTimeout(() => {
-						  window.URL.revokeObjectURL(url);
-						}, 10000);
-
-				      } catch (err) {
-				        console.error(err);
-				        alert("Download failed");
-				      }
-				    }}
-				    size="small"
-				  >
-				    ⬇
-				  </IconButton>
-				</Box>
+	              <Box sx={modalSubtitleSx}>
+	                View and download previously generated stickers
+	              </Box>
+	            </Box>
 	          </Box>
-	        ))}
 
-	        <Box sx={{ textAlign: "right", mt: 2 }}>
-	          <Button onClick={() => setHistoryOpen(false)}>
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setHistoryOpen(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          {historyLoading && (
+	            <Box sx={modalEmptyStateSx}>
+	              Loading sticker history…
+	            </Box>
+	          )}
+
+	          {!historyLoading && historyRows.length === 0 && (
+	            <Box sx={modalEmptyStateSx}>
+	              No sticker history found.
+	            </Box>
+	          )}
+
+	          {!historyLoading && historyRows.length > 0 && (
+	            <Box sx={modalScrollBodySx}>
+	              {historyRows.map((h, idx) => (
+	                <Box
+	                  key={h.id}
+	                  sx={idx === 0 ? latestHistoryCardSx : historyCardSx}
+	                >
+	                  <Box sx={{ minWidth: 0 }}>
+	                    <Box
+	                      sx={{
+	                        display: "flex",
+	                        alignItems: "center",
+	                        gap: 1,
+	                        mb: 0.4,
+	                      }}
+	                    >
+	                      <Box sx={historyNumberSx}>
+	                        {h.stickerNumber}
+	                      </Box>
+
+	                      {idx === 0 && (
+	                        <Chip
+	                          label="Latest"
+	                          size="small"
+	                          sx={{
+	                            height: 22,
+	                            fontSize: 10,
+	                            fontWeight: 900,
+	                            color: "#6ee7b7",
+	                            background: "rgba(16,185,129,.14)",
+	                            border: "1px solid rgba(16,185,129,.22)",
+	                          }}
+	                        />
+	                      )}
+	                    </Box>
+
+	                    <Box sx={historyMetaSx}>
+	                      {new Date(h.generatedAt).toLocaleString()}
+	                      {" • "}
+	                      {h.reason || "Generated"}
+	                    </Box>
+	                  </Box>
+
+	                  <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
+	                    <IconButton
+	                      size="small"
+	                      sx={modalMiniButtonSx}
+	                      onClick={async () => {
+	                        try {
+	                          const res = await fetch(
+	                            `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
+	                            {
+	                              method: "GET",
+	                              headers: getAuthHeaders(),
+	                            }
+	                          );
+
+	                          if (!res.ok) {
+	                            const text = await res.text();
+	                            console.error("❌ Sticker preview failed:", text);
+	                            alert(text || "Preview failed");
+	                            return;
+	                          }
+
+	                          const blob = await res.blob();
+
+	                          if (blob.size === 0) {
+	                            alert("Empty PDF received");
+	                            return;
+	                          }
+
+	                          const blobUrl = URL.createObjectURL(blob);
+	                          const newTab = window.open();
+
+	                          if (!newTab) {
+	                            alert("Popup blocked");
+	                            return;
+	                          }
+
+	                          newTab.location.href = blobUrl;
+
+	                          setTimeout(() => {
+	                            URL.revokeObjectURL(blobUrl);
+	                          }, 10000);
+	                        } catch (err) {
+	                          console.error(err);
+	                          alert("Preview failed");
+	                        }
+	                      }}
+	                    >
+	                      👁
+	                    </IconButton>
+
+	                    <IconButton
+	                      size="small"
+	                      sx={modalMiniButtonSx}
+	                      onClick={async () => {
+	                        try {
+	                          const res = await fetch(
+	                            `${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
+	                            {
+	                              method: "GET",
+	                              headers: getAuthHeaders(),
+	                            }
+	                          );
+
+	                          if (!res.ok) throw new Error();
+
+	                          const blob = await res.blob();
+	                          const url = window.URL.createObjectURL(blob);
+
+	                          const a = document.createElement("a");
+	                          a.href = url;
+	                          a.download = `STICKER_${h.stickerNumber}.pdf`;
+	                          a.click();
+
+	                          setTimeout(() => {
+	                            window.URL.revokeObjectURL(url);
+	                          }, 10000);
+	                        } catch (err) {
+	                          console.error(err);
+	                          alert("Download failed");
+	                        }
+	                      }}
+	                    >
+	                      ⬇
+	                    </IconButton>
+	                  </Box>
+	                </Box>
+	              ))}
+	            </Box>
+	          )}
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => setHistoryOpen(false)}
+	            sx={modalSecondaryButtonSx}
+	          >
 	            Close
 	          </Button>
 	        </Box>
 	      </Box>
-	    </div>
+	    </Box>
 	  )}
 	  {auditOpen && (
-	    <div
-	      style={{
-	        position: "fixed",
-	        inset: 0,
-			background: `
-			  radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 20%),
-			  rgba(15,23,42,0.55)
-			`,
-			backdropFilter: "blur(8px)",
-			WebkitBackdropFilter: "blur(8px)",
-	        display: "flex",
-	        alignItems: "center",
-	        justifyContent: "center",
-	        zIndex: 2100,
-	      }}
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 2100 }}
 	      onClick={() => setAuditOpen(false)}
 	    >
-	      <div
-		  style={{
-		    width: 600,
-		    maxHeight: "80vh",
-		    padding: 24,
-
-		    ...darkModalBox,
-		  }}
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 680,
+	          maxHeight: "86vh",
+	        }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-	        <h3 style={{ marginBottom: 12 }}>
-	          Activity Log
-	        </h3>
-			<Box
-			  sx={{
-			    display: "flex",
-			    gap: 1.5,
-			    mb: 2,
-			    flexWrap: "wrap",
-			  }}
-			>
-			  {/* ACTION FILTER */}
-			  <TextField
-			    select
-			    size="small"
-			    value={actionFilter}
-			    onChange={(e) =>
-			      setActionFilter(e.target.value)
-			    }
-			    sx={{
-			      ...formFieldSx,
-			      minWidth: 180,
-			    }}
-			    style={{
-			      padding: "6px 10px",
-			      borderRadius: 8,
-			      border: "1px solid #d1d5db",
-			      fontSize: 12,
-			      fontWeight: 600,
-			    }}
-			  >
-			    <option value="ALL">
-			      All Actions
-			    </option>
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#f97316")}>
+	              📄
+	            </Box>
 
-			    <MenuItem value="REQUEST">
-			      Requests
-			    </MenuItem>
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Activity Log
+	              </Box>
 
-			    <MenuItem value="APPROVE">
-			      Approvals
-			    </MenuItem>
+	              <Box sx={modalSubtitleSx}>
+	                Track approvals, requests, dispatch and sticker actions
+	              </Box>
+	            </Box>
+	          </Box>
 
-			    <MenuItem value="REJECT">
-			      Rejections
-			    </MenuItem>
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setAuditOpen(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
 
-			    <MenuItem value="DISPATCH">
-			      Dispatch
-			    </MenuItem>
+	        <Box sx={modalContentSx}>
+	          <Box sx={auditFilterBarSx}>
+	            <TextField
+	              select
+	              size="small"
+	              value={actionFilter}
+	              onChange={(e) => setActionFilter(e.target.value)}
+	              sx={modalFilterFieldSx}
+	            >
+	              <MenuItem value="ALL">All Actions</MenuItem>
+	              <MenuItem value="REQUEST">Requests</MenuItem>
+	              <MenuItem value="APPROVE">Approvals</MenuItem>
+	              <MenuItem value="REJECT">Rejections</MenuItem>
+	              <MenuItem value="DISPATCH">Dispatch</MenuItem>
+	              <MenuItem value="PACK">Pack</MenuItem>
+	              <MenuItem value="STICKER">Sticker</MenuItem>
+	            </TextField>
 
-			    <MenuItem value="PACK">
-			      Pack
-			    </MenuItem>
+	            <TextField
+	              select
+	              size="small"
+	              value={roleFilter}
+	              onChange={(e) => setRoleFilter(e.target.value)}
+	              sx={modalFilterFieldSx}
+	            >
+	              <MenuItem value="ALL">All Roles</MenuItem>
+	              <MenuItem value="ADMIN">Admin</MenuItem>
+	              <MenuItem value="DISPATCH">Dispatch</MenuItem>
+	              <MenuItem value="USER">Packing</MenuItem>
+	            </TextField>
+	          </Box>
 
-			    <MenuItem value="STICKER">
-			      Sticker
-			    </MenuItem>
-			  </TextField>
+	          {auditLoading && (
+	            <Box sx={modalEmptyStateSx}>
+	              Loading activity logs…
+	            </Box>
+	          )}
 
-			  {/* ROLE FILTER */}
+	          {!auditLoading && auditRows.length === 0 && (
+	            <Box sx={modalEmptyStateSx}>
+	              No activity recorded.
+	            </Box>
+	          )}
 
-			  <TextField
-			    select
-			    size="small"
-			    value={roleFilter}
-			    onChange={(e) =>
-			      setRoleFilter(e.target.value)
-			    }
-			    sx={{
-			      ...formFieldSx,
-			      minWidth: 180,
-			    }}
-			    style={{
-			      padding: "6px 10px",
-			      borderRadius: 8,
-			      border: "1px solid #d1d5db",
-			      fontSize: 12,
-			      fontWeight: 600,
-			    }}
-			  >
-			    <option value="ALL">
-			      All Roles
-			    </option>
+	          {!auditLoading && auditRows.length > 0 && (
+	            <Box sx={modalScrollBodySx}>
+	              {Object.entries(
+	                (auditRows || [])
+	                  .filter((log) => {
+	                    if (actionFilter !== "ALL") {
+	                      if (!log.action?.toUpperCase().includes(actionFilter)) return false;
+	                    }
 
-			    <option value="ADMIN">
-			      Admin
-			    </option>
+	                    if (roleFilter !== "ALL" && log.role !== roleFilter) return false;
 
-			    <option value="DISPATCH">
-			      Dispatch
-			    </option>
+	                    return true;
+	                  })
+	                  .reduce((groups, log) => {
+	                    const label = getDateGroupLabel(log.performedAt);
 
-			    <option value="USER">
-			      Packing
-			    </option>
-			  </TextField>
-			</Box>
+	                    if (!groups[label]) groups[label] = [];
 
-	        {auditLoading && <p>Loading…</p>}
+	                    groups[label].push(log);
 
-	        {!auditLoading && auditRows.length === 0 && (
-	          <p>No activity recorded.</p>
-	        )}
+	                    return groups;
+	                  }, {})
+	              ).map(([group, logs]) => (
+	                <Box key={group}>
+	                  <Box sx={auditGroupTitleSx}>
+	                    {group}
+	                  </Box>
 
-			{!auditLoading &&
-				Object.entries(
-				  (auditRows || [])
-				    .filter((log) => {
-				      if (actionFilter !== "ALL") {
-				        if (!log.action?.toUpperCase().includes(actionFilter)) return false;
-				      }
-				      if (roleFilter !== "ALL" && log.role !== roleFilter) return false;
-				      return true;
-				    })
-				    .reduce((groups, log) => {
-				      const label = getDateGroupLabel(log.performedAt);
-				      if (!groups[label]) groups[label] = [];
-				      groups[label].push(log);
-				      return groups;
-				    }, {})
-				).map(([group, logs]) => (
-				  <Box key={group} sx={{ mb: 2 }}>
-				    {/* DATE HEADER */}
-				    <div
-				      style={{
-				        fontWeight: 700,
-				        fontSize: 13,
-				        marginBottom: 6,
-				        opacity: 0.7,
-				      }}
-				    >
-				      {group}
-				    </div>
+	                  {logs.map((log) => {
+	                    const tone = getAuditActionTone(log.action);
+	                    const roleStyle = getRoleChipStyle(log.role);
 
-				    {logs.map((log) => {
-				      const actionStyle = getActionStyle(log.action);
-				      const roleStyle = getRoleChipStyle(log.role);
+	                    return (
+	                      <Box
+	                        key={log.id}
+	                        sx={auditLogCardSx}
+	                      >
+	                        <Box sx={{ minWidth: 0 }}>
+	                          <Chip
+	                            label={log.action || "Activity"}
+	                            size="small"
+	                            sx={{
+	                              ...auditActionChipBaseSx,
+	                              color: tone.color,
+	                              background: tone.bg,
+	                              border: tone.border,
+	                            }}
+	                          />
 
-				      return (
-				        <Box
-				          key={log.id}
-				          sx={{
-				            mb: 1.2,
-				            p: 1.4,
-				            borderRadius: 10,
-							background:
-							  "rgba(255,255,255,.03)",
+	                          <Box sx={auditTimeSx}>
+	                            {new Date(log.performedAt).toLocaleString()}
+	                          </Box>
+	                        </Box>
 
-							border:
-							  "1px solid rgba(255,255,255,.06)",
-				            display: "flex",
-				            justifyContent: "space-between",
-				            alignItems: "center",
-				          }}
-				        >
-				          <Box>
-				            <div style={{ fontWeight: 700, color: actionStyle.color }}>
-				              {log.action}
-				            </div>
-				            <div style={{ fontSize: 12, opacity: 0.75 }}>
-				              {new Date(log.performedAt).toLocaleString()}
-				            </div>
-				          </Box>
+	                        <Box
+	                          sx={{
+	                            display: "flex",
+	                            gap: 1,
+	                            alignItems: "center",
+	                            flexShrink: 0,
+	                          }}
+	                        >
+	                          <Chip
+	                            label={log.performedBy || "System"}
+	                            size="small"
+	                            sx={{
+	                              color: "#e5e7eb",
+	                              fontWeight: 800,
+	                              background: "rgba(255,255,255,.05)",
+	                              border: "1px solid rgba(255,255,255,.08)",
+	                            }}
+	                          />
 
-				          <Box sx={{ display: "flex", gap: 1 }}>
-				            <Chip label={log.performedBy} size="small" />
-				            <Chip
-				              label={log.role}
-				              size="small"
-				              sx={{
-				                background: roleStyle.bg,
-				                color: roleStyle.color,
-				              }}
-				            />
-				          </Box>
-				        </Box>
-				      );
-				    })}
-				  </Box>
-				))}
+	                          <Chip
+	                            label={log.role || "—"}
+	                            size="small"
+	                            sx={{
+	                              background: roleStyle.bg,
+	                              color: roleStyle.color,
+	                              fontWeight: 800,
+	                              border: "1px solid rgba(255,255,255,.08)",
+	                            }}
+	                          />
+	                        </Box>
+	                      </Box>
+	                    );
+	                  })}
+	                </Box>
+	              ))}
+	            </Box>
+	          )}
+	        </Box>
 
-	        <Box sx={{ textAlign: "right", mt: 2 }}>
-	          <Button onClick={() => setAuditOpen(false)}>
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => setAuditOpen(false)}
+	            sx={modalSecondaryButtonSx}
+	          >
 	            Close
 	          </Button>
 	        </Box>
-	      </div>
-	    </div>
+	      </Box>
+	    </Box>
 	  )}
 	  {bulkDrawerOpen && (
 	    <div
@@ -2795,174 +3334,245 @@ function DispatchedItemsPage() {
 	    </div>
 	  )}
 	  {statusModal && (
-	    <div style={popupOverlay} onClick={() => setStatusModal(null)}>
-	      <div 		
-		  style={{
-		    width: 520,
-
-		    padding: 28,
-
-		    ...darkModalBox,
-		  }}
-		  onClick={(e) => e.stopPropagation()}>
-		  
-
-	        <h2>Select Action</h2>
-
-			<Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-
-			  {/* STORE */}
-			  <Box
-			    sx={{
-			      ...statusCard,
-				  background:
-				    "rgba(59,130,246,.08)",
-
-				  border:
-				    "1px solid rgba(59,130,246,.18)",
-			    }}
-				onClick={async () => {
-				  try {
-				    const row = statusModal;
-
-				    await updateStatus(row.zohoItemId, "READY_TO_STORE");
-
-				    const fresh = await fetchData();
-				    const updated = fresh.find(r => r.zohoItemId === row.zohoItemId);
-
-				    if (!updated || updated.status !== "READY_TO_STORE") {
-				      alert("Item not ready for warehouse");
-				      return;
-				    }
-
-				    setStatusModal(null);
-				    setGatePassModal(updated);
-
-				  } catch (err) {
-				    console.error(err);
-				    alert("Failed to prepare item for warehouse");
-				  }
-				}}
-			  >
-			    <Box>
-			      <div style={{ fontWeight: 700 }}>📦 Move to Warehouse</div>
-			      <div style={{ fontSize: 12, opacity: 0.7 }}>
-			        Generate Gate Pass
-			      </div>
-			    </Box>
-			    ➜
-			  </Box>
-
-			  {/* DISPATCH */}
-			  <Box
-			    sx={{
-			      ...statusCard,
-			      background: "linear-gradient(180deg,#eff6ff,#dbeafe)"
-			    }}
-			    onClick={async () => {
-			      setStatusModal(null);
-			      await updateStatus(statusModal.zohoItemId, "READY_TO_DISPATCH");
-			    }}
-			  >
-			    <Box>
-			      <div style={{ fontWeight: 700 }}>🚚 Dispatch Item</div>
-			      <div style={{ fontSize: 12, opacity: 0.7 }}>
-			        Generate Chalaan
-			      </div>
-			    </Box>
-			    ➜
-			  </Box>
-
-			</Box>
-
-	      </div>
-	    </div>
-	  )}
-	  {bulkStatusModal && (
-	    <div style={popupOverlay} onClick={() => setBulkStatusModal(false)}>
-	      <div
-		  style={{
-		    width: 520,
-
-		    padding: 28,
-
-		    ...darkModalBox,
-		  }}
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5000 }}
+	      onClick={() => setStatusModal(null)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 560,
+	        }}
 	        onClick={(e) => e.stopPropagation()}
 	      >
-	        <h2>Bulk Status Change</h2>
-
-	        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-
-	          {/* 📦 MOVE TO WAREHOUSE */}
-	          <Box
-	            sx={{
-	              ...statusCard,
-				  background:
-				    "rgba(16,185,129,.08)",
-
-				  border:
-				    "1px solid rgba(16,185,129,.18)",
-	            }}
-	            onClick={async () => {
-	              try {
-	                for (const id of selectionModel) {
-	                  await updateStatus(id, "READY_TO_STORE");
-	                }
-
-	                await fetchData();
-	                setSelectionModel([]);
-	                setBulkStatusModal(false);
-
-	              } catch (err) {
-	                console.error(err);
-	                alert("Bulk store failed");
-	              }
-	            }}
-	          >
-	            <Box>
-	              <div style={{ fontWeight: 700 }}>📦 Move to Warehouse</div>
-	              <div style={{ fontSize: 12, opacity: 0.7 }}>
-	                Mark all as READY_TO_STORE
-	              </div>
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#3b82f6")}>
+	              ⚡
 	            </Box>
-	            ➜
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Select Action
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Choose the next movement for this item
+	              </Box>
+	            </Box>
 	          </Box>
 
-	          {/* 🚚 DISPATCH */}
-	          <Box
-	            sx={{
-	              ...statusCard,
-	              background: "linear-gradient(180deg,#eff6ff,#dbeafe)"
-	            }}
-	            onClick={async () => {
-	              try {
-	                for (const id of selectionModel) {
-	                  await updateStatus(id, "READY_TO_DISPATCH");
-	                }
-
-	                await fetchData();
-	                setSelectionModel([]);
-	                setBulkStatusModal(false);
-
-	              } catch (err) {
-	                console.error(err);
-	                alert("Bulk dispatch failed");
-	              }
-	            }}
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setStatusModal(null)}
 	          >
-	            <Box>
-	              <div style={{ fontWeight: 700 }}>🚚 Dispatch Items</div>
-	              <div style={{ fontSize: 12, opacity: 0.7 }}>
-	                Mark all as READY_TO_DISPATCH
-	              </div>
-	            </Box>
-	            ➜
-	          </Box>
-
+	            ×
+	          </IconButton>
 	        </Box>
-	      </div>
-	    </div>
+
+	        <Box sx={modalContentSx}>
+	          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.6 }}>
+	            <Box
+	              sx={statusChoiceCardSx("#10b981")}
+	              onClick={async () => {
+	                try {
+	                  const row = statusModal;
+
+	                  await updateStatus(row.zohoItemId, "READY_TO_STORE");
+
+	                  const fresh = await fetchData();
+
+	                  const updated = fresh.find(
+	                    r => r.zohoItemId === row.zohoItemId
+	                  );
+
+	                  if (!updated || updated.status !== "READY_TO_STORE") {
+	                    alert("Item not ready for warehouse");
+	                    return;
+	                  }
+
+	                  setStatusModal(null);
+	                  setGatePassModal(updated);
+	                } catch (err) {
+	                  console.error(err);
+	                  alert("Failed to prepare item for warehouse");
+	                }
+	              }}
+	            >
+	              <Box sx={statusChoiceLeftSx}>
+	                <Box sx={statusChoiceIconSx("#10b981")}>
+	                  📦
+	                </Box>
+
+	                <Box>
+	                  <Box sx={statusChoiceTitleSx}>
+	                    Move to Warehouse
+	                  </Box>
+
+	                  <Box sx={statusChoiceSubtitleSx}>
+	                    Mark item as ready to store and generate gate pass
+	                  </Box>
+	                </Box>
+	              </Box>
+
+	              <Box sx={statusChoiceArrowSx}>
+	                ➜
+	              </Box>
+	            </Box>
+
+	            <Box
+	              sx={statusChoiceCardSx("#3b82f6")}
+	              onClick={async () => {
+	                setStatusModal(null);
+	                await updateStatus(statusModal.zohoItemId, "READY_TO_DISPATCH");
+	              }}
+	            >
+	              <Box sx={statusChoiceLeftSx}>
+	                <Box sx={statusChoiceIconSx("#3b82f6")}>
+	                  🚚
+	                </Box>
+
+	                <Box>
+	                  <Box sx={statusChoiceTitleSx}>
+	                    Dispatch Item
+	                  </Box>
+
+	                  <Box sx={statusChoiceSubtitleSx}>
+	                    Mark item as ready to dispatch and generate chalaan
+	                  </Box>
+	                </Box>
+	              </Box>
+
+	              <Box sx={statusChoiceArrowSx}>
+	                ➜
+	              </Box>
+	            </Box>
+	          </Box>
+	        </Box>
+	      </Box>
+	    </Box>
+	  )}
+	  {bulkStatusModal && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5000 }}
+	      onClick={() => setBulkStatusModal(false)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 580,
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#f59e0b")}>
+	              ☑️
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Bulk Status Change
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Apply movement action to {selectionModel.length} selected item
+	                {selectionModel.length > 1 ? "s" : ""}
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setBulkStatusModal(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.6 }}>
+	            <Box
+	              sx={statusChoiceCardSx("#10b981")}
+	              onClick={async () => {
+	                try {
+	                  for (const id of selectionModel) {
+	                    await updateStatus(id, "READY_TO_STORE");
+	                  }
+
+	                  await fetchData();
+
+	                  setSelectionModel([]);
+	                  setBulkStatusModal(false);
+	                } catch (err) {
+	                  console.error(err);
+	                  alert("Bulk store failed");
+	                }
+	              }}
+	            >
+	              <Box sx={statusChoiceLeftSx}>
+	                <Box sx={statusChoiceIconSx("#10b981")}>
+	                  📦
+	                </Box>
+
+	                <Box>
+	                  <Box sx={statusChoiceTitleSx}>
+	                    Move to Warehouse
+	                  </Box>
+
+	                  <Box sx={statusChoiceSubtitleSx}>
+	                    Mark selected items as READY_TO_STORE
+	                  </Box>
+	                </Box>
+	              </Box>
+
+	              <Box sx={statusChoiceArrowSx}>
+	                ➜
+	              </Box>
+	            </Box>
+
+	            <Box
+	              sx={statusChoiceCardSx("#3b82f6")}
+	              onClick={async () => {
+	                try {
+	                  for (const id of selectionModel) {
+	                    await updateStatus(id, "READY_TO_DISPATCH");
+	                  }
+
+	                  await fetchData();
+
+	                  setSelectionModel([]);
+	                  setBulkStatusModal(false);
+	                } catch (err) {
+	                  console.error(err);
+	                  alert("Bulk dispatch failed");
+	                }
+	              }}
+	            >
+	              <Box sx={statusChoiceLeftSx}>
+	                <Box sx={statusChoiceIconSx("#3b82f6")}>
+	                  🚚
+	                </Box>
+
+	                <Box>
+	                  <Box sx={statusChoiceTitleSx}>
+	                    Dispatch Items
+	                  </Box>
+
+	                  <Box sx={statusChoiceSubtitleSx}>
+	                    Mark selected items as READY_TO_DISPATCH
+	                  </Box>
+	                </Box>
+	              </Box>
+
+	              <Box sx={statusChoiceArrowSx}>
+	                ➜
+	              </Box>
+	            </Box>
+	          </Box>
+	        </Box>
+	      </Box>
+	    </Box>
 	  )}
 	  {chalaanPreview && (
 	    <div
