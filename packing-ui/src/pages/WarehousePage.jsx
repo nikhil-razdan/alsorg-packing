@@ -524,14 +524,7 @@ function WarehousePage() {
 	    // ===============================
 	    if (row.status === "WAREHOUSE_REQUESTED") {
 	      return (
-			<Box
-			  sx={{
-			    display: "flex",
-			    alignItems: "center",
-			    gap: 1,
-			    flexWrap: "wrap",
-			  }}
-			>
+			<Box sx={actionCell}>
 	          <Chip
 	            label={`${location} WIP Packed`}
 	            size="small"
@@ -658,22 +651,21 @@ function WarehousePage() {
 				    flexWrap: "wrap",
 				  }}
 				>
-				  <TextField
-				    size="small"
-				    placeholder="Gate Pass"
-				    value={approveGatePass[row.id] || ""}
-				    onChange={(e) =>
-				      setApproveGatePass((prev) => ({
-				        ...prev,
-				        [row.id]: e.target.value,
-				      }))
-				    }
-					sx={{
-					  width: 220,
-
-					  ...formFieldSx,
-					}}
-				  />
+				<TextField
+				  size="small"
+				  placeholder="Gate Pass"
+				  value={approveGatePass[row.id] || ""}
+				  onChange={(e) =>
+				    setApproveGatePass((prev) => ({
+				      ...prev,
+				      [row.id]: e.target.value,
+				    }))
+				  }
+				  sx={{
+				    width: 155,
+				    ...compactActionFieldSx,
+				  }}
+				/>
 
 				  <Button
 				    size="small"
@@ -725,14 +717,7 @@ function WarehousePage() {
 
 		    if (role === "ADMIN") {
 		      return (
-				<Box
-				  sx={{
-				    display: "flex",
-				    alignItems: "center",
-				    gap: 1.2,
-				    flexWrap: "wrap",
-				  }}
-				>
+				<Box sx={actionCell}>
 		          <Button
 		            size="small"
 		            onClick={async () => {
@@ -1645,8 +1630,8 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 const warehouseGrid =
-  "52px minmax(220px,1.4fr) 120px 95px 105px minmax(170px,1fr) minmax(160px,1fr) 105px 230px 120px 130px 360px";
-
+  "52px 230px 125px 85px 85px 160px 155px 90px 220px 115px 120px 460px";
+  
 const content = {
   padding: "18px 24px",
   display: "flex",
@@ -1671,13 +1656,13 @@ const tableHeader = {
   display: "grid",
   gridTemplateColumns: warehouseGrid,
 
-  padding: "10px 12px",
+  padding: "11px 12px",
 
   background: "#111827",
   color: "#94a3b8",
 
   fontWeight: 800,
-  fontSize: 12,
+  fontSize: 13,
 };
 
 const tableRow = {
@@ -1686,16 +1671,16 @@ const tableRow = {
 
   alignItems: "center",
 
-  padding: "9px 12px",
+  padding: "10px 12px",
 
   color: "#fff",
 
   borderTop:
     "1px solid rgba(255,255,255,.06)",
 
-  minHeight: 44,
+  minHeight: 48,
 
-  fontSize: 12,
+  fontSize: 13,
 };
 
 const searchPanel = {
@@ -1739,6 +1724,41 @@ const subtitle = {
   color: "rgba(255,255,255,.62)",
   fontSize: 14,
 };
+
+const compactActionFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    height: 32,
+    borderRadius: "12px",
+    background: "rgba(255,255,255,.04)",
+    color: "#fff",
+    fontSize: 12,
+
+    "& fieldset": {
+      borderColor: "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: "rgba(59,130,246,.35)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& input": {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "7px 10px",
+  },
+
+  "& input::placeholder": {
+    color: "rgba(255,255,255,.45)",
+    opacity: 1,
+  },
+};
+
 const tableWrapper = {
   overflowX: "auto",
   scrollbarWidth: "thin",
@@ -1811,10 +1831,10 @@ const toolbarButton = {
 };
 
 const simpleCellText = {
-  color: "#f8fafc",
+  color: "#ffffff",
   fontWeight: 800,
-  fontSize: 12,
-  lineHeight: 1.2,
+  fontSize: 13,
+  lineHeight: 1.25,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1822,10 +1842,10 @@ const simpleCellText = {
 };
 
 const simpleMutedText = {
-  color: "#e5e7eb",
-  fontWeight: 700,
-  fontSize: 12,
-  lineHeight: 1.2,
+  color: "#f1f5f9",
+  fontWeight: 750,
+  fontSize: 13,
+  lineHeight: 1.25,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1833,10 +1853,10 @@ const simpleMutedText = {
 };
 
 const simpleMonoText = {
-  color: "#f8fafc",
+  color: "#ffffff",
   fontWeight: 800,
-  fontSize: 12,
-  lineHeight: 1.2,
+  fontSize: 13,
+  lineHeight: 1.25,
   fontFamily: "monospace",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1940,8 +1960,16 @@ const compactFieldSx = {
   },
 };
 
+const actionCell = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  flexWrap: "nowrap",
+  whiteSpace: "nowrap",
+};
+
 const statusBase = {
-  fontSize: 11,
+  fontSize: 12,
 
   fontWeight: 800,
 
@@ -1951,7 +1979,7 @@ const statusBase = {
 
   px: 1.8,
 
-  letterSpacing: ".3px",
+  letterSpacing: ".25px",
 
   border:
     "1px solid rgba(255,255,255,.08)",
@@ -2034,11 +2062,13 @@ const bulkBar = {
 };
 
 const tableActionButton = {
-  minWidth: 120,
-  height: 34,
+  minWidth: 82,
+  height: 32,
   borderRadius: 12,
-  fontWeight: 700,
+  fontWeight: 800,
+  fontSize: 11.5,
   textTransform: "none",
+  px: 1.5,
 };
 
 const actionPrimary = {
@@ -2100,6 +2130,8 @@ const actionDanger = {
 
 const actionWarning = {
   ...tableActionButton,
+
+  minWidth: 150,
 
   background:
     "linear-gradient(135deg,#f59e0b,#d97706)",
