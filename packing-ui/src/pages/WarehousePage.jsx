@@ -70,16 +70,6 @@ function WarehousePage() {
     fetchItems();
   }, []);
   
-  useEffect(() => {
-    setPageNo(1);
-  }, [pageSize, statusFilter, search]);
-
-  useEffect(() => {
-    if (pageNo > totalPages) {
-      setPageNo(totalPages);
-    }
-  }, [pageNo, totalPages]);
-
   const exportCSV = () => {
     const headers = [
       "zohoItemId",
@@ -904,6 +894,16 @@ function WarehousePage() {
     1,
     Math.ceil(filteredRows.length / pageSize)
   );
+
+  useEffect(() => {
+     setPageNo(1);
+   }, [pageSize, statusFilter, search]);
+
+   useEffect(() => {
+     if (pageNo > totalPages) {
+       setPageNo(totalPages);
+     }
+   }, [pageNo, totalPages]);
 
   /* ===================== UI ===================== */
 
