@@ -1708,196 +1708,195 @@ function DispatchedItemsPage() {
 		    ))}
 
 		  </div>
-		  <Box
-		    sx={{
-		      display: "flex",
-		      justifyContent: "space-between",
-		      alignItems: "center",
-		      mt: 4,
-		      gap: 2,
-		      flexWrap: "wrap",
-		    }}
-		  >
+		</div>
+		</div>
+		<Box
+				    sx={{
+				      display: "flex",
+				      justifyContent: "space-between",
+				      alignItems: "center",
+				      mt: 4,
+				      gap: 2,
+				      flexWrap: "wrap",
+				    }}
+				  >
 
-		    {/* LEFT SIDE */}
-		    <Box
-		      sx={{
-		        display: "flex",
-		        alignItems: "center",
-		        gap: 2,
-		      }}
-		    >
-		      <Box
-		        sx={{
-		          color: "#94a3b8",
-		          fontWeight: 600,
-		          fontSize: 14,
-		        }}
-		      >
-		        Show
-		      </Box>
+				    {/* LEFT SIDE */}
+				    <Box
+				      sx={{
+				        display: "flex",
+				        alignItems: "center",
+				        gap: 2,
+				      }}
+				    >
+				      <Box
+				        sx={{
+				          color: "#94a3b8",
+				          fontWeight: 600,
+				          fontSize: 14,
+				        }}
+				      >
+				        Show
+				      </Box>
 
-			  <Box
-			    sx={{
-			      display: "flex",
-			      alignItems: "center",
-			      gap: 1.5,
-			    }}
-			  >
-			    <TextField
-			      select
-			      size="small"
-			      value={pageSize}
-			      onChange={(e) =>
-			        setPageSize(Number(e.target.value))
-			      }
-			      sx={{
-			        width: 110,
+					  <Box
+					    sx={{
+					      display: "flex",
+					      alignItems: "center",
+					      gap: 1.5,
+					    }}
+					  >
+					    <TextField
+					      select
+					      size="small"
+					      value={pageSize}
+					      onChange={(e) =>
+					        setPageSize(Number(e.target.value))
+					      }
+					      sx={{
+					        width: 110,
 
-			        "& .MuiOutlinedInput-root": {
-			          height: 36,
-			          borderRadius: "12px",
+					        "& .MuiOutlinedInput-root": {
+					          height: 36,
+					          borderRadius: "12px",
 
-			          background:
-			            "rgba(255,255,255,.04)",
+					          background:
+					            "rgba(255,255,255,.04)",
 
-			          color: "#fff",
+					          color: "#fff",
 
-			          "& fieldset": {
-			            borderColor:
-			              "rgba(255,255,255,.08)",
-			          },
+					          "& fieldset": {
+					            borderColor:
+					              "rgba(255,255,255,.08)",
+					          },
 
-			          "&:hover fieldset": {
-			            borderColor:
-			              "rgba(59,130,246,.35)",
-			          },
-			        },
+					          "&:hover fieldset": {
+					            borderColor:
+					              "rgba(59,130,246,.35)",
+					          },
+					        },
 
-			        "& .MuiSvgIcon-root": {
+					        "& .MuiSvgIcon-root": {
+					          color: "#94a3b8",
+					        },
+					      }}
+					    >
+					      <MenuItem value={25}>
+					        25
+				      </MenuItem>
+
+				      <MenuItem value={50}>
+				        50
+				      </MenuItem>
+				    </TextField>
+				  </Box>
+
+			      <Box
+			        sx={{
 			          color: "#94a3b8",
-			        },
+			          fontSize: 14,
+			        }}
+			      >
+			        items per page
+			      </Box>
+			    </Box>
+
+			    {/* CENTER PAGINATION */}
+			    <Box
+			      sx={{
+			        display: "flex",
+			        alignItems: "center",
+			        gap: 3,
 			      }}
 			    >
-			      <MenuItem value={25}>
-			        25
-			      </MenuItem>
+				<Button
+				  disabled={pageNo === 1}
+				  onClick={() => setPageNo(p => p - 1)}
+				  sx={{
+				    minWidth: 100,
+				    height: 30,
+				    borderRadius: "12px",
+				    background:
+				      "linear-gradient(180deg,#1e293b,#0f172a)",
+				    color: "#fff",
+				    border:
+				      "1px solid rgba(255,255,255,.08)",
 
-			      <MenuItem value={50}>
-			        50
-			      </MenuItem>
-			    </TextField>
+				    fontSize: 10,
+				    fontWeight: 500,
+
+				    "&:disabled": {
+				      opacity: 0.45,
+				      color: "#94a3b8",
+				    },
+				  }}
+				>
+				  ◀ Previous
+				</Button>
+
+				<Box
+				  sx={{
+				    px: 2.5,
+				    height: 30,
+
+				    display: "flex",
+				    alignItems: "center",
+
+				    borderRadius: "12px",
+
+				    background:
+				      "linear-gradient(180deg,#0f172a,#111827)",
+
+				    color: "#cbd5e1",
+
+				    border:
+				      "1px solid rgba(255,255,255,.06)",
+
+				    fontSize: 10,
+				    fontWeight: 500,
+				  }}
+				>
+				  Page
+
+				  <Box
+				    component="span"
+				    sx={{
+				      mx: 1,
+				      color: "#60a5fa",
+				    }}
+				  >
+				    {pageNo}
+				  </Box>
+
+				  of {totalPages}
+				</Box>
+
+				<Button
+				  disabled={pageNo === totalPages}
+				  onClick={() => setPageNo(p => p + 1)}
+				  sx={{
+				    minWidth: 100,
+				    height: 30,
+				    borderRadius: "12px",
+
+				    background:
+				      "linear-gradient(180deg,#2563eb,#1d4ed8)",
+
+				    color: "#fff",
+
+				    fontSize: 10,
+				    fontWeight: 500,
+
+				    "&:disabled": {
+				      opacity: 0.45,
+				      color: "#cbd5e1",
+				    },
+				  }}
+				>
+				  Next ▶
+				</Button>
+			    </Box>
 			  </Box>
-
-		      <Box
-		        sx={{
-		          color: "#94a3b8",
-		          fontSize: 14,
-		        }}
-		      >
-		        items per page
-		      </Box>
-		    </Box>
-
-		    {/* CENTER PAGINATION */}
-		    <Box
-		      sx={{
-		        display: "flex",
-		        alignItems: "center",
-		        gap: 3,
-		      }}
-		    >
-			<Button
-			  disabled={pageNo === 1}
-			  onClick={() => setPageNo(p => p - 1)}
-			  sx={{
-			    minWidth: 100,
-			    height: 30,
-			    borderRadius: "12px",
-			    background:
-			      "linear-gradient(180deg,#1e293b,#0f172a)",
-			    color: "#fff",
-			    border:
-			      "1px solid rgba(255,255,255,.08)",
-
-			    fontSize: 10,
-			    fontWeight: 500,
-
-			    "&:disabled": {
-			      opacity: 0.45,
-			      color: "#94a3b8",
-			    },
-			  }}
-			>
-			  ◀ Previous
-			</Button>
-
-			<Box
-			  sx={{
-			    px: 2.5,
-			    height: 30,
-
-			    display: "flex",
-			    alignItems: "center",
-
-			    borderRadius: "12px",
-
-			    background:
-			      "linear-gradient(180deg,#0f172a,#111827)",
-
-			    color: "#cbd5e1",
-
-			    border:
-			      "1px solid rgba(255,255,255,.06)",
-
-			    fontSize: 10,
-			    fontWeight: 500,
-			  }}
-			>
-			  Page
-
-			  <Box
-			    component="span"
-			    sx={{
-			      mx: 1,
-			      color: "#60a5fa",
-			    }}
-			  >
-			    {pageNo}
-			  </Box>
-
-			  of {totalPages}
-			</Box>
-
-			<Button
-			  disabled={pageNo === totalPages}
-			  onClick={() => setPageNo(p => p + 1)}
-			  sx={{
-			    minWidth: 100,
-			    height: 30,
-			    borderRadius: "12px",
-
-			    background:
-			      "linear-gradient(180deg,#2563eb,#1d4ed8)",
-
-			    color: "#fff",
-
-			    fontSize: 10,
-			    fontWeight: 500,
-
-			    "&:disabled": {
-			      opacity: 0.45,
-			      color: "#cbd5e1",
-			    },
-			  }}
-			>
-			  Next ▶
-			</Button>
-		    </Box>
-		  </Box>
-		</div>
-		</div>
-        
       </div>
 	  {Array.isArray(selectionModel) && selectionModel.length > 0 && isDispatch && (
 		<div
