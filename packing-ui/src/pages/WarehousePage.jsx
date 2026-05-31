@@ -21,7 +21,7 @@ function WarehousePage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [pageNo, setPageNo] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(20);
   /* ===================== FETCH ===================== */
 
   const fetchItems = async () => {
@@ -349,16 +349,12 @@ function WarehousePage() {
 	  flex: 1,
 	  minWidth: 260,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🔖 <span>Item Name</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>Item Name</span>,
 
 	  renderCell: (params) => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      <span>{params.row.name}</span>
-	    </Box>
+	    <span style={simpleCellText} title={params.row.name}>
+	      {params.row.name || "—"}
+	    </span>
 	  ),
 	},
 
@@ -367,24 +363,10 @@ function WarehousePage() {
 	  headerName: "SKU",
 	  width: 160,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🏷️ <span>SKU</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>SKU</span>,
 
 	  renderCell: (params) => (
-	    <span
-		style={{
-		  padding: "4px 10px",
-		  borderRadius: "999px",
-		  background: "rgba(59,130,246,.12)",
-		  color: "#60a5fa",
-		  border: "1px solid rgba(59,130,246,.18)",
-		  fontWeight: 600,
-		  fontSize: 12,
-		}}
-	    >
+	    <span style={simpleMutedText} title={params.value}>
 	      {params.value || "—"}
 	    </span>
 	  ),
@@ -394,24 +376,10 @@ function WarehousePage() {
 	  headerName: "PD No",
 	  width: 140,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🧾 <span>PD No</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>PD No</span>,
 
 	  renderCell: (params) => (
-	    <span
-		style={{
-		  padding: "4px 10px",
-		  borderRadius: "999px",
-		  background: "rgba(59,130,246,.12)",
-		  color: "#60a5fa",
-		  border: "1px solid rgba(59,130,246,.18)",
-		  fontWeight: 600,
-		  fontSize: 12,
-		}}
-	    >
+	    <span style={simpleMutedText} title={params.value}>
 	      {params.value || "—"}
 	    </span>
 	  ),
@@ -421,24 +389,10 @@ function WarehousePage() {
 	  headerName: "Dwg No.",
 	  width: 160,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📐 <span>Dwg No.</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>DWG No.</span>,
 
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "6px",
-	        background: "#111827",
-	        color: "#e5e7eb",
-	        fontFamily: "monospace",
-	        fontSize: 12,
-	        letterSpacing: "0.5px",
-	      }}
-	    >
+	    <span style={simpleMonoText} title={params.value}>
 	      {params.value || "N/A"}
 	    </span>
 	  ),
@@ -448,23 +402,12 @@ function WarehousePage() {
 	  headerName: "Description",
 	  width: 220,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📝 <span>Description</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>DWG No.</span>,
 
 	  renderCell: (params) => (
-	    <Chip
-	      size="small"
-	      label={params.value || "No description"}
-	      sx={{
-	        color: "#4ade80",
-	        background: "rgba(34,197,94,.12)",
-	        border: "1px solid rgba(34,197,94,.18)",
-	        maxWidth: "100%",
-	      }}
-	    />
+	    <span style={simpleMonoText} title={params.value}>
+	      {params.value || "N/A"}
+	    </span>
 	  ),
 	},
 	{
@@ -472,20 +415,11 @@ function WarehousePage() {
 	  headerName: "Client",
 	  minWidth: 180,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      👤 <span>Client</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>Description</span>,
 
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        fontWeight: 600,
-	        color:"#e5e7eb",
-	      }}
-	    >
-	      {params.value || "—"}
+	    <span style={simpleMutedText} title={params.value}>
+	      {params.value || "No description"}
 	    </span>
 	  ),
 	},
@@ -494,23 +428,10 @@ function WarehousePage() {
 	  headerName: "Location",
 	  width: 160,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📍 <span>Location</span>
-	    </Box>
-	  ),
+	  renderHeader: () => <span>Location</span>,
 
 	  renderCell: (params) => (
-	    <span
-	      style={{
-	        padding: "4px 10px",
-	        borderRadius: "999px",
-	        background: "rgba(59,130,246,0.1)",
-	        color: "#1d4ed8",
-	        fontWeight: 600,
-	        fontSize: 12,
-	      }}
-	    >
+	    <span style={simpleMutedText} title={params.value}>
 	      {params.value || "-"}
 	    </span>
 	  ),
@@ -671,10 +592,12 @@ function WarehousePage() {
 	  headerName: "Factory Floor",
 	  width: 180,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      🏭 <span>Factory Floor</span>
-	    </Box>
+	  renderHeader: () => <span>Factory Floor</span>,
+
+	  renderCell: (params) => (
+	    <span style={simpleMutedText} title={params.row.factoryFloor}>
+	      {params.row.factoryFloor || "—"}
+	    </span>
 	  ),
     },
 
@@ -683,10 +606,12 @@ function WarehousePage() {
 	  headerName: "Warehouse",
 	  width: 180,
 
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      📦 <span>Warehouse</span>
-	    </Box>
+	  renderHeader: () => <span>Warehouse</span>,
+
+	  renderCell: (params) => (
+	    <span style={simpleMutedText} title={params.row.warehouseCode}>
+	      {params.row.warehouseCode || "—"}
+	    </span>
 	  ),
     },
 
@@ -1044,199 +969,100 @@ function WarehousePage() {
 		      <MenuItem value="WAREHOUSE_RETURN_REQUESTED">🔁 Return Requested</MenuItem>
 		    </TextField>
 		  </Box>
-		<Box
-		  sx={{
-		    display: "flex",
-		    alignItems: "center",
-		    justifyContent: "space-between",
+		  <Box sx={compactToolbar}>
+		    <Box sx={toolbarLeft}>
+		      <Button
+		        variant="contained"
+		        onClick={exportCSV}
+		        sx={toolbarButton}
+		      >
+		        Export CSV
+		      </Button>
 
-		    gap: 2,
+		      <TextField
+		        select
+		        size="small"
+		        value={importMode}
+		        onChange={(e) => setImportMode(e.target.value)}
+		        sx={{
+		          width: 190,
+		          ...compactFieldSx,
+		        }}
+		      >
+		        <MenuItem value="CREATE">Create Inventory</MenuItem>
+		      </TextField>
 
-		    mt: 2,
-		    mb: 2,
+		      <Button
+		        component="label"
+		        variant="contained"
+		        disabled={!importMode}
+		        sx={{
+		          ...toolbarButton,
+		          background: importMode
+		            ? "linear-gradient(135deg,#059669,#10b981)"
+		            : "rgba(255,255,255,.08)",
 
-		    flexWrap: "wrap",
-		  }}
-		>
-		  {/* LEFT */}
-		  <Box
-		    sx={{
-		      display: "flex",
-		      alignItems: "center",
-		      gap: 2,
-		      flexWrap: "wrap",
-		    }}
-		  >
-		  <Box sx={{ display: "flex", gap: 2}}>
+		          color: importMode
+		            ? "#fff"
+		            : "rgba(255,255,255,.35)",
 
-		  		  {/* EXPORT */}
-		  		  <Button
-		  		    variant="contained"
-		  		    onClick={exportCSV}
-					sx={{
-					  height: 42,
+		          "&:hover": {
+		            background: importMode
+		              ? "linear-gradient(135deg,#047857,#059669)"
+		              : "rgba(255,255,255,.08)",
+		          },
+		        }}
+		      >
+		        Upload Excel
+		        <input
+		          type="file"
+		          hidden
+		          accept=".csv,.xlsx"
+		          onChange={handleUpload}
+		        />
+		      </Button>
 
-					  px: 2.5,
+		      <Button
+		        variant="outlined"
+		        onClick={async () => {
+		          const res = await fetch(
+		            `${API_BASE_URL}/api/warehouse/import/template`,
+		            {
+		              headers: { Authorization: `Bearer ${token}` },
+		            }
+		          );
 
-					  borderRadius: "14px",
+		          const blob = await res.blob();
+		          const url = window.URL.createObjectURL(blob);
 
-					  textTransform: "none",
+		          const a = document.createElement("a");
+		          a.href = url;
+		          a.download = "warehouse_import_template.csv";
+		          a.click();
+		        }}
+		        sx={toolbarButtonSecondary}
+		      >
+		        Download Template
+		      </Button>
+		    </Box>
 
-					  fontWeight: 700,
+		    <Box sx={compactLegend}>
+		      <Chip
+		        label="Stored"
+		        sx={statusStored}
+		      />
 
-					  background:
-					    "linear-gradient(180deg,#1e293b,#0f172a)",
+		      <Chip
+		        label="Pending"
+		        sx={pendingChip}
+		      />
 
-					  border:
-					    "1px solid rgba(255,255,255,.06)",
-
-					  boxShadow:
-					    "0 8px 25px rgba(0,0,0,.35)",
-
-					  "&:hover": {
-					    background:
-					      "linear-gradient(180deg,#334155,#1e293b)",
-					  },
-					}}
-		  		  >
-		  		    Export CSV
-		  		  </Button>
-
-		  		  {/* IMPORT */}
-		  		  <TextField
-		  		    select
-		  		    size="small"
-		  		    value={importMode}
-		  		    onChange={(e) => setImportMode(e.target.value)}
-		  			sx={{
-		  			  width: 260,
-
-		  			  ...formFieldSx,
-		  			}}
-		  		  >
-		  		    <MenuItem value="CREATE">Create Inventory</MenuItem>
-		  		  </TextField>
-
-		  		  <Button
-		  		    component="label"
-		  		    variant="contained"
-		  			disabled={!importMode}
-					sx={{
-					  height: 42,
-
-					  px: 2.5,
-
-					  borderRadius: "14px",
-
-					  textTransform: "none",
-
-					  fontWeight: 700,
-
-					  background:
-					    "linear-gradient(180deg,#16a34a,#15803d)",
-
-					  boxShadow:
-					    "0 8px 25px rgba(22,163,74,.28)",
-
-					  "&:hover": {
-					    background:
-					      "linear-gradient(180deg,#22c55e,#16a34a)",
-					  },
-
-					  "&.Mui-disabled": {
-					    background:
-					      "rgba(255,255,255,.08)",
-
-					    color:
-					      "rgba(255,255,255,.35)",
-					  },
-					}}
-		  		  >
-		  		    Upload Excel
-		  		    <input
-		  		      type="file"
-		  		      hidden
-		  		      accept=".csv,.xlsx"
-		  		      onChange={handleUpload}
-		  		    />
-		  		  </Button>
-				  </Box>
-				  				<Box sx={legend}>
-
-				  				  <Chip
-				  				    label="Stored In Warehouse"
-				  				    sx={statusStored}
-				  				  />
-
-				  				  <Chip
-				  				    label="Pending Request"
-				  				    sx={pendingChip}
-				  				  />
-
-				  				  <Chip
-				  				    label="Return Requested"
-				  				    sx={returnChip}
-				  				  />
-
-				  				</Box>
-		  		</Box>
-				<Box
-				  sx={{
-				    display: "flex",
-				    alignItems: "center",
-				    gap: 2,
-				  }}
-				>
-				<Button
-						  variant="outlined"
-						  onClick={async () => {
-						    const res = await fetch(
-						      `${API_BASE_URL}/api/warehouse/import/template`,
-						      {
-						        headers: { Authorization: `Bearer ${token}` },
-						      }
-						    );
-
-						    const blob = await res.blob();
-						    const url = window.URL.createObjectURL(blob);
-
-						    const a = document.createElement("a");
-						    a.href = url;
-						    a.download = "warehouse_import_template.csv";
-						    a.click();
-						  }}
-						  sx={{
-						    height: 42,
-
-						    px: 2.5,
-
-						    borderRadius: "14px",
-
-						    textTransform: "none",
-
-						    fontWeight: 700,
-
-						    color: "#cbd5e1",
-
-						    border:
-						      "1px solid rgba(255,255,255,.08)",
-
-						    background:
-						      "rgba(255,255,255,.03)",
-
-						    "&:hover": {
-						      background:
-						        "rgba(255,255,255,.06)",
-
-						      borderColor:
-						        "rgba(59,130,246,.45)",
-						    },
-						  }}
-						>
-						  Download Template
-						</Button>
-						</Box>
-						</Box>
+		      <Chip
+		        label="Return"
+		        sx={returnChip}
+		      />
+		    </Box>
+		  </Box>
 				
 		
 		<div style={wrap}>
@@ -1370,19 +1196,9 @@ function WarehousePage() {
 		    </Button>
 
 		  </div>
-		)}
-		<Box
-		  sx={{
-		    height: 1,
-
-		    background:
-		      "rgba(255,255,255,.06)",
-
-		    mb: 2,
-		  }}
-		/>		
-		<Box style={tableWrapper}>
-		  <div style={{ minWidth: "2700px" }}>
+		)}	
+		<Box sx={tableWrapper}>
+		  <div style={{ minWidth: "1900px" }}>
 
 		    <div style={tableHeader}>
 		      <div>Select</div>
@@ -1460,11 +1276,11 @@ function WarehousePage() {
 				</div>
 
 				<div>
-				  {row.factoryFloor || "—"}
+				  {columns[9].renderCell({ row })}
 				</div>
 
 				<div>
-				  {row.warehouseCode || "—"}
+				  {columns[10].renderCell({ row })}
 				</div>
 
 				<div>
@@ -1532,8 +1348,9 @@ function WarehousePage() {
 		        },
 		      }}
 		    >
-		      <MenuItem value={25}>25</MenuItem>
-		      <MenuItem value={50}>50</MenuItem>
+			<MenuItem value={20}>20</MenuItem>
+			<MenuItem value={30}>30</MenuItem>
+			<MenuItem value={50}>50</MenuItem>
 		    </TextField>
 
 		    <Box
@@ -1827,9 +1644,76 @@ function WarehousePage() {
 }
 
 /* ===================== STYLES ===================== */
-
 const warehouseGrid =
-  "70px 350px 150px 140px 180px 250px 220px 180px 250px 180px 180px 500px";
+  "52px minmax(220px,1.4fr) 120px 95px 105px minmax(170px,1fr) minmax(160px,1fr) 105px 230px 120px 130px 360px";
+
+const content = {
+  padding: "18px 24px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const wrap = {
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+  borderRadius: 20,
+  padding: 16,
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const tableHeader = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
+
+  display: "grid",
+  gridTemplateColumns: warehouseGrid,
+
+  padding: "10px 12px",
+
+  background: "#111827",
+  color: "#94a3b8",
+
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const tableRow = {
+  display: "grid",
+  gridTemplateColumns: warehouseGrid,
+
+  alignItems: "center",
+
+  padding: "9px 12px",
+
+  color: "#fff",
+
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+
+  minHeight: 44,
+
+  fontSize: 12,
+};
+
+const searchPanel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+
+  height: 44,
+
+  padding: "0 14px",
+
+  borderRadius: 14,
+
+  background: "rgba(255,255,255,0.03)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
 
 const page = {
   minHeight: "100vh",
@@ -1837,17 +1721,11 @@ const page = {
     "linear-gradient(135deg,#020617,#0f172a)",
 };
 
-const content = {
-  padding: 24,
-  display: "flex",
-  flexDirection: "column",
-  gap: 24,
-};
-
 const headerRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  marginBottom: 2,
 };
 
 const logo = {
@@ -1861,16 +1739,6 @@ const subtitle = {
   color: "rgba(255,255,255,.62)",
   fontSize: 14,
 };
-
-const wrap = {
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
-  border:
-    "1px solid rgba(255,255,255,.06)",
-};
-
 const tableWrapper = {
   overflowX: "auto",
   scrollbarWidth: "thin",
@@ -1903,82 +1771,104 @@ const tableWrapper = {
   },
 };
 
-const tableHeader = {
-  position: "sticky",
-  top: 0,
-  zIndex: 20,
-
-  display: "grid",
-  gridTemplateColumns: warehouseGrid,
-
-  padding: "14px 16px",
-
-  background: "#111827",
-  color: "#94a3b8",
-
-  fontWeight: 700,
-};
-
-const tableRow = {
-  display: "grid",
-  gridTemplateColumns: warehouseGrid,
-
-  alignItems: "center",
-
-  padding: "14px 16px",
-
-  color: "#fff",
-
-  borderTop:
-    "1px solid rgba(255,255,255,.06)",
-
-  minHeight: 58,
-};
-
 const tableBody = {
   display: "flex",
   flexDirection: "column",
 };
 
-const searchPanel = {
+const compactToolbar = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-
-  height: 52,
-
-  padding: "0 18px",
-
-  borderRadius: 16,
-
-  background: "rgba(255,255,255,0.03)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  justifyContent: "space-between",
+  gap: 1.5,
+  flexWrap: "wrap",
+  marginTop: 0,
+  marginBottom: 0,
 };
 
-const legend = {
+const toolbarLeft = {
   display: "flex",
-
   alignItems: "center",
-
-  flexWrap: "wrap",
-
   gap: 1.2,
+  flexWrap: "wrap",
+};
 
-  padding: "12px 16px",
+const toolbarButton = {
+  height: 36,
+  px: 2,
+  borderRadius: "12px",
+  textTransform: "none",
+  fontWeight: 700,
+  fontSize: 12,
+  background: "linear-gradient(135deg,#1e293b,#0f172a)",
+  border: "1px solid rgba(255,255,255,.08)",
+  color: "#fff",
+  boxShadow: "none",
 
-  borderRadius: 20,
+  "&:hover": {
+    background: "linear-gradient(135deg,#334155,#1e293b)",
+  },
+};
 
-  background:
-    "rgba(255,255,255,.03)",
+const simpleCellText = {
+  color: "#f8fafc",
+  fontWeight: 800,
+  fontSize: 12,
+  lineHeight: 1.2,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
+const simpleMutedText = {
+  color: "#e5e7eb",
+  fontWeight: 700,
+  fontSize: 12,
+  lineHeight: 1.2,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
 
-  backdropFilter: "blur(12px)",
+const simpleMonoText = {
+  color: "#f8fafc",
+  fontWeight: 800,
+  fontSize: 12,
+  lineHeight: 1.2,
+  fontFamily: "monospace",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
 
-  marginBottom: 16,
+const toolbarButtonSecondary = {
+  height: 36,
+  px: 2,
+  borderRadius: "12px",
+  textTransform: "none",
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#cbd5e1",
+  border: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(255,255,255,.03)",
+
+  "&:hover": {
+    background: "rgba(255,255,255,.06)",
+    borderColor: "rgba(59,130,246,.45)",
+  },
+};
+
+const compactLegend = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  padding: "6px 10px",
+  borderRadius: 14,
+  background: "rgba(255,255,255,.03)",
+  border: "1px solid rgba(255,255,255,.06)",
 };
 
 const formFieldSx = {
@@ -2008,6 +1898,45 @@ const formFieldSx = {
 
   "& input": {
     color: "#fff",
+  },
+};
+
+const compactFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    height: 36,
+    borderRadius: "12px",
+    background: "rgba(255,255,255,.04)",
+    color: "#fff",
+    fontSize: 12,
+
+    "& fieldset": {
+      borderColor: "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: "rgba(59,130,246,.35)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& .MuiSelect-select": {
+    color: "#fff",
+    fontWeight: 600,
+    fontSize: 12,
+    paddingTop: "8px",
+    paddingBottom: "8px",
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+
+  "& input": {
+    color: "#fff",
+    fontSize: 12,
   },
 };
 
