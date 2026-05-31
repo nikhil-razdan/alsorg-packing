@@ -1037,112 +1037,177 @@ function WarehousePage() {
 		    justifyContent: "space-between",
 		    alignItems: "center",
 		    mb: 2,
+		    gap: 2,
 		  }}
 		>
-		  <Box />
-		  <Box />
-		</Box>
+		  {/* LEFT */}
+		  <Box
+		    sx={{
+		      display: "flex",
+		      alignItems: "center",
+		      gap: 2,
+		      flexWrap: "wrap",
+		    }}
+		  >
+		  <Box sx={{ display: "flex", gap: 2}}>
+
+		  		  {/* EXPORT */}
+		  		  <Button
+		  		    variant="contained"
+		  		    onClick={exportCSV}
+					sx={{
+					  height: 42,
+
+					  px: 2.5,
+
+					  borderRadius: "14px",
+
+					  textTransform: "none",
+
+					  fontWeight: 700,
+
+					  background:
+					    "linear-gradient(180deg,#1e293b,#0f172a)",
+
+					  border:
+					    "1px solid rgba(255,255,255,.06)",
+
+					  boxShadow:
+					    "0 8px 25px rgba(0,0,0,.35)",
+
+					  "&:hover": {
+					    background:
+					      "linear-gradient(180deg,#334155,#1e293b)",
+					  },
+					}}
+		  		  >
+		  		    Export CSV
+		  		  </Button>
+
+		  		  {/* IMPORT */}
+		  		  <TextField
+		  		    select
+		  		    size="small"
+		  		    value={importMode}
+		  		    onChange={(e) => setImportMode(e.target.value)}
+		  			sx={{
+		  			  width: 260,
+
+		  			  ...formFieldSx,
+		  			}}
+		  		  >
+		  		    <MenuItem value="CREATE">Create Inventory</MenuItem>
+		  		  </TextField>
+
+		  		  <Button
+		  		    component="label"
+		  		    variant="contained"
+		  			disabled={!importMode}
+					sx={{
+					  height: 42,
+
+					  px: 2.5,
+
+					  borderRadius: "14px",
+
+					  textTransform: "none",
+
+					  fontWeight: 700,
+
+					  background:
+					    "linear-gradient(180deg,#16a34a,#15803d)",
+
+					  boxShadow:
+					    "0 8px 25px rgba(22,163,74,.28)",
+
+					  "&:hover": {
+					    background:
+					      "linear-gradient(180deg,#22c55e,#16a34a)",
+					  },
+
+					  "&.Mui-disabled": {
+					    background:
+					      "rgba(255,255,255,.08)",
+
+					    color:
+					      "rgba(255,255,255,.35)",
+					  },
+					}}
+		  		  >
+		  		    Upload Excel
+		  		    <input
+		  		      type="file"
+		  		      hidden
+		  		      accept=".csv,.xlsx"
+		  		      onChange={handleUpload}
+		  		    />
+		  		  </Button>
+
+		  		</Box>
+				</Box>
+				<Box
+				  sx={{
+				    display: "flex",
+				    alignItems: "center",
+				    gap: 2,
+				  }}
+				>
+				<Button
+						  variant="outlined"
+						  onClick={async () => {
+						    const res = await fetch(
+						      `${API_BASE_URL}/api/warehouse/import/template`,
+						      {
+						        headers: { Authorization: `Bearer ${token}` },
+						      }
+						    );
+
+						    const blob = await res.blob();
+						    const url = window.URL.createObjectURL(blob);
+
+						    const a = document.createElement("a");
+						    a.href = url;
+						    a.download = "warehouse_import_template.csv";
+						    a.click();
+						  }}
+						  sx={{
+						    height: 42,
+
+						    px: 2.5,
+
+						    borderRadius: "14px",
+
+						    textTransform: "none",
+
+						    fontWeight: 700,
+
+						    color: "#cbd5e1",
+
+						    border:
+						      "1px solid rgba(255,255,255,.08)",
+
+						    background:
+						      "rgba(255,255,255,.03)",
+
+						    "&:hover": {
+						      background:
+						        "rgba(255,255,255,.06)",
+
+						      borderColor:
+						        "rgba(59,130,246,.45)",
+						    },
+						  }}
+						>
+						  Download Template
+						</Button>
+						</Box>
+						</Box>
+				
 		
-		{/* 🔥 ADD THIS BLOCK RIGHT HERE */}
 		<div style={wrap}>
 		 <div style={tableWrapper}>
-		<Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-
-		  {/* EXPORT */}
-		  <Button
-		    variant="contained"
-		    onClick={exportCSV}
-		    sx={{ background: "#111827" }}
-		  >
-		    Export CSV
-		  </Button>
-
-		  {/* IMPORT */}
-		  <TextField
-		    select
-		    size="small"
-		    value={importMode}
-		    onChange={(e) => setImportMode(e.target.value)}
-			sx={{
-			  width: 220,
-
-			  ...formFieldSx,
-			}}
-		  >
-		    <MenuItem value="CREATE">Create Inventory</MenuItem>
-		  </TextField>
-
-		  <Button
-		    component="label"
-		    variant="contained"
-			disabled={!importMode}
-			sx={{
-			  background: "#16a34a",
-
-			  color: "#fff",
-
-			  border: "none",
-
-			  boxShadow:"none",
-
-			  "&:hover": {
-			    background: "#15803d",
-			  },
-			  "&.Mui-disabled": {
-			    background:"rgba(0,0,0,0.12)",
-
-			    color: "rgba(0,0,0,0.35)",
-			  },
-			}}
-		  >
-		    Upload Excel
-		    <input
-		      type="file"
-		      hidden
-		      accept=".csv,.xlsx"
-		      onChange={handleUpload}
-		    />
-		  </Button>
-
-		</Box>
-		<Button
-		  variant="outlined"
-		  onClick={async () => {
-		    const res = await fetch(
-		      `${API_BASE_URL}/api/warehouse/import/template`,
-		      {
-		        headers: { Authorization: `Bearer ${token}` },
-		      }
-		    );
-
-		    const blob = await res.blob();
-		    const url = window.URL.createObjectURL(blob);
-
-		    const a = document.createElement("a");
-		    a.href = url;
-		    a.download = "warehouse_import_template.csv";
-		    a.click();
-		  }}
-		  sx={{
-		    mt: 1,
-
-		    color: "#111827",
-
-		    borderColor:"rgba(17,24,39,0.25)",
-
-		    background:"rgba(255,255,255,0.4)",
-
-		    backdropFilter: "blur(12px)",
-
-		    "&:hover": {
-		      borderColor:"#111827",
-
-		      background:"rgba(255,255,255,0.7)",
-		    },
-		  }}
-		>
-		  Download Template
-		</Button>
+		
+		
 		{Array.isArray(selectionModel) &&
 		 selectionModel.length > 0 &&
 		 isDispatch && (
@@ -1218,6 +1283,16 @@ function WarehousePage() {
 
 		  </div>
 		)}
+		<Box
+		  sx={{
+		    height: 1,
+
+		    background:
+		      "rgba(255,255,255,.06)",
+
+		    mb: 2,
+		  }}
+		/>
           <DataGrid
             rows={filteredRows}
 			getRowId={(row) => row.zohoItemId}
