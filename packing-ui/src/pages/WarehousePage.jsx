@@ -592,7 +592,13 @@ function WarehousePage() {
 		}
 		
 		if (row.status === "READY_TO_STORE") {
-		  return <Chip label="Waiting Dispatch Action" sx={pendingChip} />
+			return (
+			  <Chip
+			    label="Waiting Dispatch Action"
+			    size="small"
+			    sx={pendingChip}
+			  />
+			)
 		}
 
 	    // ===============================
@@ -600,15 +606,18 @@ function WarehousePage() {
 	    // ===============================
 	    if (row.status === "WAREHOUSE_REQUESTED") {
 	      return (
-	        <Box sx={{ display: "flex", gap: 1 }}>
+			<Box
+			  sx={{
+			    display: "flex",
+			    alignItems: "center",
+			    gap: 1,
+			    flexWrap: "wrap",
+			  }}
+			>
 	          <Chip
 	            label={`${location} WIP Packed`}
 	            size="small"
-	            sx={{
-	              fontWeight: 700,
-	              color: "#92400e",
-	              background: "rgba(254,243,199,0.9)",
-	            }}
+	            sx={pendingChip}
 	          />
 	          {canView && <ViewButton />}
 	        </Box>
@@ -620,26 +629,36 @@ function WarehousePage() {
 	    // ===============================
 	    if (row.status === "IN_WAREHOUSE") {
 	      return (
-	        <Box sx={{ display: "flex", gap: 1 }}>
-	          <Chip label="Stored in Warehouse" size="small" sx={statusStored} />
+			<Box
+			  sx={{
+			    display: "flex",
+			    alignItems: "center",
+			    gap: 1,
+			    flexWrap: "wrap",
+			  }}
+			>
+	          <Chip 
+			  label="Stored in Warehouse" 
+			  size="small" 
+			  sx={statusStored} />
 	          {canView && <ViewButton />}
 	        </Box>
 	      );
 	    }
 		if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 		  return (
-		    <Box sx={{ display: "flex", gap: 1 }}>
+			<Box
+			  sx={{
+			    display: "flex",
+			    alignItems: "center",
+			    gap: 1,
+			    flexWrap: "wrap",
+			  }}
+			>
 		      <Chip
 		        label="Return Requested"
 		        size="small"
-		        sx={{
-		          fontSize: 11,
-		          fontWeight: 700,
-		          px: 1.6,
-		          borderRadius: "999px",
-		          color: "#7c2d12",
-		          background: "rgba(254,226,226,0.9)",
-		        }}
+		        sx={returnChip}
 		      />
 		      {canView && <ViewButton />}
 		    </Box>
@@ -701,7 +720,7 @@ function WarehousePage() {
               <Chip
                 label="Awaiting Dispatch"
                 size="small"
-                sx={statusPacked}
+                sx={pendingChip}
               />
             );
           }
@@ -1140,6 +1159,24 @@ function WarehousePage() {
 		  		  </Button>
 
 		  		</Box>
+				</Box>
+				<Box sx={legend}>
+
+				  <Chip
+				    label="Stored In Warehouse"
+				    sx={statusStored}
+				  />
+
+				  <Chip
+				    label="Pending Request"
+				    sx={pendingChip}
+				  />
+
+				  <Chip
+				    label="Return Requested"
+				    sx={returnChip}
+				  />
+
 				</Box>
 				<Box
 				  sx={{
@@ -1626,6 +1663,30 @@ const wrap = {
   overflow: "hidden",
 };
 
+const legend = {
+  display: "flex",
+
+  alignItems: "center",
+
+  flexWrap: "wrap",
+
+  gap: 1.2,
+
+  padding: "12px 16px",
+
+  borderRadius: 20,
+
+  background:
+    "rgba(255,255,255,.03)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  backdropFilter: "blur(12px)",
+
+  marginBottom: 16,
+};
+
 const tableWrapper = {
   overflowX:"auto",
 
@@ -1850,67 +1911,62 @@ const formFieldSx = {
   },
 };
 
-const statusPacked = {
+const statusBase = {
   fontSize: 11,
-  fontWeight: 700,
-  px: 1.8,
+
+  fontWeight: 800,
+
+  height: 28,
+
   borderRadius: "999px",
 
-  color: "#1e3a8a",
+  px: 1.8,
 
-  backdropFilter: "blur(12px)",
+  letterSpacing: ".3px",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  backdropFilter: "blur(10px)",
+
+  boxShadow:
+    "0 6px 16px rgba(0,0,0,.18)",
+};
+
+const statusPacked = {
+  ...statusBase,
+
+  color: "#93c5fd",
 
   background:
-    "linear-gradient(135deg, rgba(191,219,254,0.88), rgba(147,197,253,0.62))",
-
-  border: "1px solid rgba(255,255,255,0.35)",
-
-  boxShadow: `
-    0 6px 16px rgba(59,130,246,0.25),
-    inset 0 1px 0 rgba(255,255,255,0.5)
-  `,
+    "rgba(37,99,235,.15)",
 };
 
 const statusStored = {
-  fontSize: 11,
-  fontWeight: 700,
-  px: 1.8,
-  borderRadius: "999px",
+  ...statusBase,
 
-  color: "#065f46",
-
-  backdropFilter: "blur(12px)",
+  color: "#6ee7b7",
 
   background:
-    "linear-gradient(135deg, rgba(167,243,208,0.88), rgba(110,231,183,0.62))",
-
-  border: "1px solid rgba(255,255,255,0.35)",
-
-  boxShadow: `
-    0 6px 16px rgba(16,185,129,0.28),
-    inset 0 1px 0 rgba(255,255,255,0.5)
-  `,
+    "rgba(16,185,129,.15)",
 };
 
 const pendingChip = {
-  fontSize: 11,
-  fontWeight: 700,
-  px: 1.8,
-  borderRadius: "999px",
+  ...statusBase,
 
-  color: "#78350f",
-
-  backdropFilter: "blur(12px)",
+  color: "#fcd34d",
 
   background:
-    "linear-gradient(135deg, rgba(254,215,170,0.88), rgba(253,186,116,0.62))",
+    "rgba(245,158,11,.15)",
+};
 
-  border: "1px solid rgba(255,255,255,0.35)",
+const returnChip = {
+  ...statusBase,
 
-  boxShadow: `
-    0 6px 16px rgba(245,158,11,0.3),
-    inset 0 1px 0 rgba(255,255,255,0.5)
-  `,
+  color: "#fca5a5",
+
+  background:
+    "rgba(239,68,68,.15)",
 };
 
 const actionPrimary = {
