@@ -202,7 +202,7 @@ const enhancedModalSx = {
 
   overflow: "hidden",
 
-  borderRadius: 28,
+  borderRadius: 14,
 
   color: "#fff",
 
@@ -254,7 +254,7 @@ const modalIconBubble = (color = "#3b82f6") => ({
   width: 44,
   height: 44,
 
-  borderRadius: "16px",
+  borderRadius: "10px",
 
   display: "flex",
   alignItems: "center",
@@ -294,7 +294,7 @@ const modalCloseButtonSx = {
   width: 36,
   height: 36,
 
-  borderRadius: "12px",
+  borderRadius: "8px",
 
   color: "#94a3b8",
 
@@ -355,7 +355,7 @@ const modalSecondaryButtonSx = {
 
   px: 2.2,
 
-  borderRadius: "12px",
+  borderRadius: "8px",
 
   textTransform: "none",
 
@@ -379,7 +379,7 @@ const modalSecondaryButtonSx = {
 const modalEmptyStateSx = {
   p: 3,
 
-  borderRadius: "18px",
+  borderRadius: "10px",
 
   textAlign: "center",
 
@@ -404,7 +404,7 @@ const historyCardSx = {
   p: 1.6,
   mb: 1.2,
 
-  borderRadius: "16px",
+  borderRadius: "10px",
 
   background:
     "rgba(255,255,255,.035)",
@@ -450,7 +450,7 @@ const modalMiniButtonSx = {
   width: 34,
   height: 34,
 
-  borderRadius: "12px",
+  borderRadius: "8px",
 
   color: "#cbd5e1",
 
@@ -477,7 +477,7 @@ const auditFilterBarSx = {
   p: 1.2,
   mb: 2,
 
-  borderRadius: "16px",
+  borderRadius: "10px",
 
   background:
     "rgba(255,255,255,.035)",
@@ -491,7 +491,7 @@ const modalFilterFieldSx = {
 
   "& .MuiOutlinedInput-root": {
     height: 38,
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "rgba(255,255,255,.04)",
     color: "#fff",
 
@@ -539,7 +539,7 @@ const auditLogCardSx = {
   p: 1.5,
   mb: 1,
 
-  borderRadius: "16px",
+  borderRadius: "10px",
 
   background:
     "rgba(255,255,255,.035)",
@@ -637,7 +637,7 @@ const auditTimeSx = {
 const statusChoiceCardSx = (color = "#3b82f6") => ({
   p: 2,
 
-  borderRadius: "20px",
+  borderRadius: "12px",
 
   display: "flex",
   alignItems: "center",
@@ -678,7 +678,7 @@ const statusChoiceIconSx = (color = "#3b82f6") => ({
   width: 46,
   height: 46,
 
-  borderRadius: "16px",
+  borderRadius: "10px",
 
   display: "flex",
   alignItems: "center",
@@ -714,7 +714,7 @@ const statusChoiceArrowSx = {
   width: 34,
   height: 34,
 
-  borderRadius: "999px",
+  borderRadius: "8px",
 
   display: "flex",
   alignItems: "center",
@@ -763,41 +763,6 @@ const pendingStatusChip = {
 
   border:
     "1px solid rgba(251,191,36,.18)",
-};
-
-const statusCard = {
-  p: 2.2,
-
-  borderRadius: 18,
-
-  display: "flex",
-
-  alignItems: "center",
-
-  justifyContent: "space-between",
-
-  cursor: "pointer",
-
-  transition: "all .22s ease",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  background:
-    "rgba(255,255,255,.03)",
-
-  color: "#fff",
-
-  "&:hover": {
-    transform:
-      "translateY(-4px)",
-
-    boxShadow:
-      "0 20px 40px rgba(0,0,0,.25)",
-
-    border:
-      "1px solid rgba(59,130,246,.25)",
-  },
 };
 
 const premiumButton = {
@@ -1155,7 +1120,6 @@ function DispatchedItemsPage() {
   const [gatePassPreview, setGatePassPreview] = useState(null);
   const [statusModal, setStatusModal] = useState(null);
   const [chalaanPreview, setChalaanPreview] = useState(null);
-  const [chalaanModal, setChalaanModal] = useState(null);
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
   const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
@@ -1698,8 +1662,6 @@ function DispatchedItemsPage() {
 		      background: "rgba(254,243,199,0.9)",
 		    };
 		  };
-
-		  const style = getStatusStyle(row.status);
 
 		  return (
 		    <Chip
