@@ -1,6 +1,12 @@
-import { useState } from "react";
+import {
+  useCallback,
+  useState,
+} from "react";
+
 import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
+import Alert from "@mui/material/Alert";
+
+import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
 import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
@@ -18,14 +24,17 @@ function LogisticsPortalPage() {
   const [snackType, setSnackType] =
     useState("success");
 
-  const showAlert = (
-    message,
-    type = "success"
-  ) => {
-    setSnackMsg(message);
-    setSnackType(type);
-    setSnackOpen(true);
-  };
+	const showAlert = useCallback(
+	  (
+	    message,
+	    type = "success"
+	  ) => {
+	    setSnackMsg(message);
+	    setSnackType(type);
+	    setSnackOpen(true);
+	  },
+	  []
+	);
 
   return (
     <div style={page}>

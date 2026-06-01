@@ -67,21 +67,6 @@ export async function deleteDriver(
   }
 }
 
-export async function fetchVehicles() {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error("Failed vehicles");
-  }
-
-  return res.json();
-}
-
 export async function fetchShifts() {
   const res = await fetch(
     `${API_BASE_URL}/api/logistics/shifts`,
@@ -145,6 +130,22 @@ export async function deleteShift(
   }
 }
 
+
+export async function fetchVehicles() {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error("Failed vehicles");
+  }
+
+  return res.json();
+}
+
 export async function createVehicle(
   payload
 ) {
@@ -162,13 +163,27 @@ export async function createVehicle(
       body: JSON.stringify(payload),
     }
   );
-
   if (!res.ok) {
     const text =
       await res.text();
 
     throw new Error(text);
   }
-
   return res.json();
+}
+
+export async function deleteVehicle(id) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles/${id}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(text);
+  }
 }

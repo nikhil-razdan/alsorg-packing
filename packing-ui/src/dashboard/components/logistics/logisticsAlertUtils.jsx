@@ -8,11 +8,26 @@ export const getBackendMessage = (
     return data;
   }
 
-  return (
-    data?.message ||
-    data?.error ||
-    data?.details ||
-    error?.message ||
-    fallback
-  );
+  if (data?.message) return data.message;
+  if (data?.error) return data.error;
+  if (data?.details) return data.details;
+
+  const message = error?.message;
+
+  if (message) {
+    try {
+      const parsed = JSON.parse(message);
+
+      return (
+        parsed?.message ||
+        parsed?.error ||
+        parsed?.details ||
+        message
+      );
+    } catch {
+      return message;
+    }
+  }
+
+  return fallback;
 };

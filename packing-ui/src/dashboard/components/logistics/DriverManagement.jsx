@@ -51,20 +51,33 @@ function DriverManagement({
 		}
     };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data =
-          await fetchDrivers();
+	useEffect(() => {
+	  let active = true;
 
-        setDrivers(data || []);
-      } catch (e) {
-        console.error(e);
-      }
-    };
+	  fetchDrivers()
+	    .then((data) => {
+	      if (!active) return;
 
-    load();
-  }, []);
+	      setDrivers(data || []);
+	    })
+	    .catch((e) => {
+	      if (!active) return;
+
+	      console.error(e);
+
+	      showAlert(
+	        getBackendMessage(
+	          e,
+	          "Failed to load drivers"
+	        ),
+	        "error"
+	      );
+	    });
+
+	  return () => {
+	    active = false;
+	  };
+	}, [showAlert]);
 
   const remove = async (id) => {
     try {
@@ -90,10 +103,20 @@ function DriverManagement({
     }
   };
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(drivers.length / pageSize)
+  );
+
+  const currentPage = Math.min(
+    pageNo,
+    totalPages
+  );
+
   const paginatedDrivers =
     drivers.slice(
-      (pageNo - 1) * pageSize,
-      pageNo * pageSize
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
     );
 	
   return (
@@ -144,11 +167,12 @@ function DriverManagement({
 			<div>
 			             {d.licenseNumber}
 			           </div>
-			<div>
-			  {d.active
-			    ? "ACTIVE"
-			    : "INACTIVE"}
-			</div>
+					   <div>
+					     {d.status ||
+					       (d.active
+					         ? "ACTIVE"
+					         : "INACTIVE")}
+					   </div>
             <div>
               <button
                 style={deleteBtn}
@@ -164,7 +188,7 @@ function DriverManagement({
 		</div>
 
 		<LogisticsPagination
-		  pageNo={pageNo}
+		  pageNo={currentPage}
 		  setPageNo={setPageNo}
 		  pageSize={pageSize}
 		  setPageSize={setPageSize}
@@ -176,14 +200,7 @@ function DriverManagement({
 		  onClose={() =>
 		    setOpen(false)
 		  }
-		  onCreated={async () => {
-		    await loadDrivers();
-
-		    showAlert(
-		      "Driver created successfully",
-		      "success"
-		    );
-		  }}
+		  onCreated={loadDrivers}
 		  showAlert={showAlert}
 		/>
     </div>

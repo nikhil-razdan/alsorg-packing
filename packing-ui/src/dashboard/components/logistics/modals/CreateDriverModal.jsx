@@ -20,48 +20,78 @@ function CreateDriverModal({
   const [form, setForm] =
     useState({
       name: "",
-      phone: "",
+      phoneNumber: "",
       licenseNumber: "",
       status: "AVAILABLE",
     });
 
   if (!open) return null;
 
-  const update = (
-    key,
-    value
-  ) => {
+  const update = (key, value) => {
     setForm((prev) => ({
       ...prev,
       [key]: value,
     }));
   };
 
+  const resetForm = () => {
+    setForm({
+      name: "",
+      phoneNumber: "",
+      licenseNumber: "",
+      status: "AVAILABLE",
+    });
+  };
+
   const submit = async () => {
+    if (saving) return;
+
     try {
       setSaving(true);
 
+      if (!form.name.trim()) {
+        throw new Error(
+          "Driver name is required"
+        );
+      }
+
+      if (!form.phoneNumber.trim()) {
+        throw new Error(
+          "Phone number is required"
+        );
+      }
+
+      if (!form.licenseNumber.trim()) {
+        throw new Error(
+          "License number is required"
+        );
+      }
+
       await createDriver(form);
 
-      alert(
-        "Driver created successfully"
+      showAlert(
+        "Driver created successfully",
+        "success"
       );
 
-      onCreated?.();
+      await onCreated?.();
+
+      resetForm();
 
       onClose();
 
-	  } catch (e) {
-	    console.error(e);
+    } catch (e) {
+      console.error(e);
 
-	    showAlert(
-	      getBackendMessage(
-	        e,
-	        "Create failed"
-	      ),
-	      "error"
-	    );
-	  } finally {
+      showAlert(
+        getBackendMessage(
+          e,
+          "Driver creation failed"
+        ),
+        "error"
+      );
+
+    } finally {
       setSaving(false);
     }
   };
@@ -89,10 +119,10 @@ function CreateDriverModal({
           <input
             placeholder="Phone Number"
             style={input}
-            value={form.phone}
+            value={form.phoneNumber}
             onChange={(e) =>
               update(
-                "phone",
+                "phoneNumber",
                 e.target.value
               )
             }
@@ -138,13 +168,21 @@ function CreateDriverModal({
           <button
             style={cancelBtn}
             onClick={onClose}
+            disabled={saving}
           >
             Cancel
           </button>
 
           <button
-            style={saveBtn}
+            style={{
+              ...saveBtn,
+              opacity: saving ? 0.65 : 1,
+              cursor: saving
+                ? "not-allowed"
+                : "pointer",
+            }}
             onClick={submit}
+            disabled={saving}
           >
             {saving
               ? "Saving..."
@@ -161,99 +199,69 @@ const overlay = {
   inset: 0,
   background:
     "rgba(0,0,0,.6)",
-
   display: "flex",
-
   justifyContent: "center",
-
   alignItems: "center",
-
   zIndex: 9999,
 };
 
 const modal = {
   width: 500,
-
   background:
     "linear-gradient(180deg,#020617,#0f172a)",
-
   borderRadius: 24,
-
   padding: 24,
-
   border:
     "1px solid rgba(255,255,255,.08)",
 };
 
 const title = {
   color: "#fff",
-
   fontSize: 24,
-
   fontWeight: 800,
-
   marginBottom: 20,
 };
 
 const grid = {
   display: "grid",
-
   gap: 16,
 };
 
 const input = {
   height: 48,
-
   borderRadius: 14,
-
   border:
     "1px solid rgba(255,255,255,.08)",
-
   background: "#111827",
-
   color: "#fff",
-
   padding: "0 14px",
 };
 
 const footer = {
   display: "flex",
-
   justifyContent: "flex-end",
-
   gap: 12,
-
   marginTop: 24,
 };
 
 const cancelBtn = {
   height: 44,
-
   padding: "0 20px",
-
   borderRadius: 12,
-
   background: "#1e293b",
-
   border: "none",
-
   color: "#fff",
+  cursor: "pointer",
 };
 
 const saveBtn = {
   height: 44,
-
   padding: "0 20px",
-
   borderRadius: 12,
-
   border: "none",
-
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
-
   color: "#fff",
-
   fontWeight: 700,
 };
 
