@@ -233,18 +233,21 @@ function UsersPage() {
     Math.ceil(filteredRows.length / pageSize)
   );
 
-  useEffect(() => {
-    if (pageNo > totalPages) {
-      setPageNo(totalPages);
-    }
-  }, [pageNo, totalPages]);
+  const currentPage = Math.min(
+    pageNo,
+    totalPages
+  );
 
   const paginatedRows = useMemo(() => {
     return filteredRows.slice(
-      (pageNo - 1) * pageSize,
-      pageNo * pageSize
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
     );
-  }, [filteredRows, pageNo, pageSize]);
+  }, [
+    filteredRows,
+    currentPage,
+    pageSize,
+  ]);
 
   const roleIcon = (role) => {
     if (role === "ADMIN") {
@@ -620,10 +623,10 @@ function UsersPage() {
 		        }}
 		      >
 		        <Button
-		          disabled={pageNo === 1}
-		          onClick={() =>
-		            setPageNo((p) => Math.max(1, p - 1))
-		          }
+				disabled={currentPage === 1}
+				onClick={() =>
+				  setPageNo(currentPage - 1)
+				}
 		          sx={{
 		            minWidth: 100,
 		            height: 30,
@@ -672,19 +675,17 @@ function UsersPage() {
 		              color: "#60a5fa",
 		            }}
 		          >
-		            {pageNo}
+		            {currentPage}
 		          </Box>
 
 		          of {totalPages}
 		        </Box>
 
 		        <Button
-		          disabled={pageNo === totalPages}
-		          onClick={() =>
-		            setPageNo((p) =>
-		              Math.min(totalPages, p + 1)
-		            )
-		          }
+				disabled={currentPage === totalPages}
+				onClick={() =>
+				  setPageNo(currentPage + 1)
+				}
 		          sx={{
 		            minWidth: 100,
 		            height: 30,
