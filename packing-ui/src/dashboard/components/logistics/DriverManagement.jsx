@@ -3,6 +3,8 @@ import {
   useState,
 } from "react";
 
+import LogisticsPagination from "./LogisticsPagination";
+
 import {
   fetchDrivers,
   deleteDriver,
@@ -14,6 +16,12 @@ function DriverManagement() {
   const [drivers, setDrivers] =
     useState([]);
 
+	const [pageNo, setPageNo] =
+	  useState(1);
+
+	const [pageSize, setPageSize] =
+	  useState(25);
+	  
   const [open, setOpen] =
     useState(false);
 
@@ -57,6 +65,12 @@ function DriverManagement() {
     }
   };
 
+  const paginatedDrivers =
+    drivers.slice(
+      (pageNo - 1) * pageSize,
+      pageNo * pageSize
+    );
+	
   return (
     <div style={wrap}>
       <div style={header}>
@@ -94,7 +108,7 @@ function DriverManagement() {
           <div>Actions</div>
         </div>
 
-        {drivers.map((d) => (
+        {paginatedDrivers.map((d) => (
           <div
             key={d.id}
             style={row}
@@ -122,9 +136,17 @@ function DriverManagement() {
             </div>
           </div>
         ))}
-      </div>
+		</div>
 
-      <CreateDriverModal
+		<LogisticsPagination
+		  pageNo={pageNo}
+		  setPageNo={setPageNo}
+		  pageSize={pageSize}
+		  setPageSize={setPageSize}
+		  totalItems={drivers.length}
+		/>
+
+		<CreateDriverModal
         open={open}
         onClose={() =>
           setOpen(false)

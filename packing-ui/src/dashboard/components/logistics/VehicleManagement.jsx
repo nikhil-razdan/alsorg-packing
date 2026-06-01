@@ -3,6 +3,8 @@ import {
   useState,
 } from "react";
 
+import LogisticsPagination from "./LogisticsPagination";
+
 import {
   fetchVehicles,
 } from "../../api/logisticsApi";
@@ -13,6 +15,12 @@ function VehicleManagement() {
 	const [vehicles, setVehicles] =
 	  useState([]);
 
+	  const [pageNo, setPageNo] =
+	    useState(1);
+
+	  const [pageSize, setPageSize] =
+	    useState(25);
+		
 	const [open, setOpen] =
 	  useState(false);
 
@@ -29,6 +37,12 @@ function VehicleManagement() {
 	  loadVehicles();
 	}, []);
 
+	const paginatedVehicles =
+	  vehicles.slice(
+	    (pageNo - 1) * pageSize,
+	    pageNo * pageSize
+	  );
+	  
   return (
     <div style={wrap}>
       <div style={header}>
@@ -60,7 +74,7 @@ function VehicleManagement() {
           <div>Fuel</div>
         </div>
 
-        {vehicles.map((v) => (
+        {paginatedVehicles.map((v) => (
           <div
             key={v.id}
             style={tableRow}
@@ -71,8 +85,17 @@ function VehicleManagement() {
             <div>{v.fuel}</div>
           </div>
         ))}
-      </div>
-	  <CreateVehicleModal
+		</div>
+
+		<LogisticsPagination
+		  pageNo={pageNo}
+		  setPageNo={setPageNo}
+		  pageSize={pageSize}
+		  setPageSize={setPageSize}
+		  totalItems={vehicles.length}
+		/>
+
+		<CreateVehicleModal
 	    open={open}
 	    onClose={() =>
 	      setOpen(false)

@@ -3,6 +3,7 @@ import {
   useState,
 } from "react";
 
+import LogisticsPagination from "./LogisticsPagination";
 import LogisticsShiftModal from "./LogisticsShiftModal";
 
 import {
@@ -34,6 +35,12 @@ function ShiftOperations() {
   const [shifts, setShifts] =
     useState([]);
 
+	const [pageNo, setPageNo] =
+	  useState(1);
+
+	const [pageSize, setPageSize] =
+	  useState(25);
+
   const load = async () => {
     try {
       setLoading(true);
@@ -53,6 +60,12 @@ function ShiftOperations() {
     load();
   }, []);
 
+  const paginatedShifts =
+    shifts.slice(
+      (pageNo - 1) * pageSize,
+      pageNo * pageSize
+    );
+	
   return (
     <div style={wrap}>
       <div style={header}>
@@ -83,8 +96,8 @@ function ShiftOperations() {
           <div>Status</div>
         </div>
 
-        {!loading &&
-          shifts.map((s) => (
+		{!loading &&
+		  paginatedShifts.map((s) => (
             <div
               key={s.id}
               style={row}
@@ -136,9 +149,17 @@ function ShiftOperations() {
 			  </div>
             </div>
           ))}
-      </div>
+		  </div>
 
-      <LogisticsShiftModal
+		  <LogisticsPagination
+		    pageNo={pageNo}
+		    setPageNo={setPageNo}
+		    pageSize={pageSize}
+		    setPageSize={setPageSize}
+		    totalItems={shifts.length}
+		  />
+
+		  <LogisticsShiftModal
         open={open}
         onClose={() =>
           setOpen(false)
