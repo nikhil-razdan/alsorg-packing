@@ -490,9 +490,9 @@ function WarehousePage() {
 	            alert("Failed to load gate pass");
 	          }
 	        }}
-	        sx={actionInfo}
+	        sx={statusViewButton}
 	      >
-	        VIEW
+	        View
 	      </Button>
 	    );
 
@@ -522,55 +522,54 @@ function WarehousePage() {
 	    // ===============================
 	    // STEP 2: REQUESTED
 	    // ===============================
-	    if (row.status === "WAREHOUSE_REQUESTED") {
-	      return (
-			<Box sx={actionCell}>
-	          <Chip
-	            label={`${location} WIP Packed`}
-	            size="small"
-	            sx={pendingChip}
-	          />
-	          {canView && <ViewButton />}
-	        </Box>
-	      );
-	    }
+		if (row.status === "WAREHOUSE_REQUESTED") {
+		  return (
+		    <Box sx={movementStatusCell}>
+		      <Chip
+		        label={`${location} WIP Packed`}
+		        size="small"
+		        sx={{
+		          ...pendingChip,
+		          ...movementStatusChipSx,
+		        }}
+		      />
+
+		      {canView && <ViewButton />}
+		    </Box>
+		  );
+		}
 
 	    // ===============================
 	    // STEP 3: STORED
 	    // ===============================
-	    if (row.status === "IN_WAREHOUSE") {
-	      return (
-			<Box
-			  sx={{
-			    display: "flex",
-			    alignItems: "center",
-			    gap: 1,
-			    flexWrap: "wrap",
-			  }}
-			>
-	          <Chip 
-			  label="Stored in Warehouse" 
-			  size="small" 
-			  sx={statusStored} />
-	          {canView && <ViewButton />}
-	        </Box>
-	      );
-	    }
+		if (row.status === "IN_WAREHOUSE") {
+		  return (
+		    <Box sx={movementStatusCell}>
+		      <Chip
+		        label="Stored in Warehouse"
+		        size="small"
+		        sx={{
+		          ...statusStored,
+		          ...movementStatusChipSx,
+		        }}
+		      />
+
+		      {canView && <ViewButton />}
+		    </Box>
+		  );
+		}
 		if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 		  return (
-			<Box
-			  sx={{
-			    display: "flex",
-			    alignItems: "center",
-			    gap: 1,
-			    flexWrap: "wrap",
-			  }}
-			>
+		    <Box sx={movementStatusCell}>
 		      <Chip
 		        label="Return Requested"
 		        size="small"
-		        sx={returnChip}
+		        sx={{
+		          ...returnChip,
+		          ...movementStatusChipSx,
+		        }}
 		      />
+
 		      {canView && <ViewButton />}
 		    </Box>
 		  );
@@ -1183,7 +1182,7 @@ function WarehousePage() {
 		  </div>
 		)}	
 		<Box sx={tableWrapper}>
-		  <div style={{ minWidth: "1900px" }}>
+		  <div style={{ width: "max-content", minWidth: "100%" }}>
 
 		    <div style={tableHeader}>
 		      <div>Select</div>
@@ -1256,7 +1255,7 @@ function WarehousePage() {
 				  })}
 				</div>
 
-				<div>
+				<div style={movementStatusCellWrap}>
 				  {columns[8].renderCell({ row })}
 				</div>
 
@@ -1630,7 +1629,7 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 const warehouseGrid =
-  "52px 230px 125px 85px 85px 160px 155px 90px 220px 115px 120px 460px";
+  "52px 220px 120px 85px 85px 150px 145px 90px 300px 110px 115px 440px";
   
 const content = {
   padding: "18px 24px",
@@ -1966,6 +1965,72 @@ const actionCell = {
   gap: 1,
   flexWrap: "nowrap",
   whiteSpace: "nowrap",
+};
+
+const movementStatusCellWrap = {
+  minWidth: 0,
+  overflow: "hidden",
+};
+
+const movementStatusCell = {
+  display: "flex",
+  alignItems: "center",
+  gap: 0.7,
+  flexWrap: "nowrap",
+  whiteSpace: "nowrap",
+  minWidth: 0,
+  maxWidth: "100%",
+  overflow: "hidden",
+};
+
+const movementStatusChipSx = {
+  maxWidth: 210,
+  minWidth: 0,
+  flexShrink: 1,
+
+  "& .MuiChip-label": {
+    display: "block",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    paddingLeft: "10px",
+    paddingRight: "10px",
+  },
+};
+
+const statusViewButton = {
+  minWidth: 52,
+  width: 52,
+  height: 26,
+
+  borderRadius: "8px",
+
+  px: 0,
+
+  fontSize: 10,
+  fontWeight: 900,
+
+  lineHeight: 1,
+
+  flexShrink: 0,
+
+  textTransform: "none",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 6px 14px rgba(37,99,235,.25)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
 };
 
 const statusBase = {
