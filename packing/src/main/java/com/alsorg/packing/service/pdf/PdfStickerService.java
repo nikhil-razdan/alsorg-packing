@@ -187,11 +187,9 @@ public class PdfStickerService {
                 drawTextWithFont(cs, bold, FONT_SIZE, 420, FOOTER_TEXT_Y, "Checked By:");
 
                 String qrData =
-                        "Item: " + safe(data.getItemName()) +
-                        "\nSNo: " + safe(data.getStickerNumber()) +
-                        "\nClient: " + safe(data.getClientName()) +
-                        "\nDimension: " + safe(data.getDimensions()) +
-                        "\nWeight: " + safe(data.getWeight());
+                        data.getQrPayload() != null && !data.getQrPayload().isBlank()
+                                ? data.getQrPayload()
+                                : "ALSORG|SN=" + safe(data.getStickerNumber());
 
                 byte[] qrBytes;
                 try {

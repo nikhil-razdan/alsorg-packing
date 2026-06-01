@@ -15,6 +15,8 @@ public interface PacketItemRepository extends JpaRepository<PacketItem, UUID> {
 
     Optional<PacketItem> findByZohoItemId(String zohoItemId);
     
+    Optional<PacketItem> findByStickerNumber(String stickerNumber);
+    
     boolean existsByMasterItemIdAndPacketNumber(UUID masterItemId, String packetNumber);
     
     long countByMasterItemId(UUID masterItemId);

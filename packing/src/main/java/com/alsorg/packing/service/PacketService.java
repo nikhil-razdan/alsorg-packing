@@ -313,6 +313,14 @@ public class PacketService {
 
         pdf.setStickerNumber(stickerNumber);
         pdf.setBarcodeText(stickerNumber);
+
+        pdf.setPacketItemId(item.getId().toString());
+
+        pdf.setQrPayload(
+                "ALSORG"
+                + "|PI=" + item.getId()
+                + "|SN=" + stickerNumber
+        );
         pdf.setShowCompanyHeader(showCompanyHeader);
         pdf.setItemName(item.getItemName() + " (" + item.getSku() + ")");
         pdf.setDescription(item.getDescription());

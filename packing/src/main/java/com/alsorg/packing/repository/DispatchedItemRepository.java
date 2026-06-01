@@ -2,6 +2,7 @@ package com.alsorg.packing.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -23,6 +24,10 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
     long countByStatusIn(List<ItemDispatchStatus> statuses);
     Optional<DispatchedItem> findBySku(String sku);
     Optional<DispatchedItem> findByName(String name);
+    
+    Optional<DispatchedItem> findByPacketItemId(UUID packetItemId);
+
+    Optional<DispatchedItem> findByStickerNumber(String stickerNumber);
     // ===================== APPROVAL =====================
 
     List<DispatchedItem> findByApprovalStatus(ApprovalStatus status);

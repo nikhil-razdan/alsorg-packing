@@ -28,6 +28,8 @@ public class StickerPdfData {
     private long printIteration;
     private String dimensions;
     private String weight;
+    private String packetItemId;
+    private String qrPayload;
 
     private boolean showCompanyHeader;
 
@@ -212,5 +214,21 @@ public class StickerPdfData {
 
 	public void setWeight(String weight) {
 		this.weight = weight;
+	}
+	
+	public String getPacketItemId() {
+	    return packetItemId;
+	}
+
+	public void setPacketItemId(String packetItemId) {
+	    this.packetItemId = packetItemId;
+	}
+
+	public String getQrPayload() {
+	    return qrPayload;
+	}
+
+	public void setQrPayload(String qrPayload) {
+	    this.qrPayload = qrPayload;
 	}
 }

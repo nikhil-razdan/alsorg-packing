@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo  } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Chip, Box, Button, IconButton, TextField, MenuItem, Tooltip } from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
@@ -78,6 +78,141 @@ const simpleCellText = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   display: "block",
+};
+
+const qrDispatchButtonSx = {
+  height: 38,
+  px: 2,
+  borderRadius: "10px",
+  textTransform: "none",
+  fontWeight: 900,
+  fontSize: 12,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  border:
+    "1px solid rgba(59,130,246,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const scannerModeButtonSx = {
+  flex: 1,
+  height: 38,
+  borderRadius: "8px",
+  textTransform: "none",
+  fontWeight: 900,
+  color: "#94a3b8",
+  background: "transparent",
+
+  "&:hover": {
+    color: "#fff",
+    background: "rgba(255,255,255,.05)",
+  },
+};
+
+const scannerModeActiveSx = {
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,rgba(37,99,235,.9),rgba(59,130,246,.75))",
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.28)",
+};
+
+const scannerInputSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "10px",
+    background: "rgba(255,255,255,.04)",
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: 800,
+
+    "& fieldset": {
+      borderColor: "rgba(59,130,246,.35)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: "rgba(59,130,246,.65)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#60a5fa",
+      boxShadow: "0 0 0 3px rgba(59,130,246,.16)",
+    },
+  },
+
+  "& textarea": {
+    color: "#fff",
+    fontWeight: 800,
+  },
+
+  "& textarea::placeholder": {
+    color: "rgba(255,255,255,.42)",
+    opacity: 1,
+  },
+};
+
+const scannerCartCardSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 2,
+
+  p: 1.4,
+  mb: 1,
+
+  borderRadius: "10px",
+
+  background:
+    "rgba(255,255,255,.035)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.055)",
+    borderColor:
+      "rgba(59,130,246,.22)",
+  },
+};
+
+const scannerGenerateButtonSx = {
+  height: 36,
+  px: 2,
+  borderRadius: "8px",
+  textTransform: "none",
+  fontWeight: 900,
+  fontSize: 12,
+
+  color: "#fff",
+
+  background:
+    "linear-gradient(135deg,#059669,#10b981)",
+
+  boxShadow:
+    "0 10px 24px rgba(16,185,129,.25)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#047857,#059669)",
+  },
+
+  "&.Mui-disabled": {
+    background:
+      "rgba(255,255,255,.08)",
+    color:
+      "rgba(255,255,255,.35)",
+  },
 };
 
 const simpleMutedText = {
@@ -1125,6 +1260,15 @@ function DispatchedItemsPage() {
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const scannerInputRef = useRef(null);
+  const scanTimerRef = useRef(null);
+
+  const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
+  const [scanMode, setScanMode] = useState("SINGLE");
+  const [scannerText, setScannerText] = useState("");
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
+  const [scanCart, setScanCart] = useState([]);
   
   const filteredRows = useMemo(() => {
   if (!Array.isArray(rows)) return [];
@@ -1181,6 +1325,13 @@ function DispatchedItemsPage() {
     }
   }, [filteredRows.length, pageSize, pageNo]);
   
+  useEffect(() => {
+    if (!qrDispatchOpen) return;
+
+    setTimeout(() => {
+      scannerInputRef.current?.focus();
+    }, 150);
+  }, [qrDispatchOpen, scanMode, scanCart.length]);
 	
   const getAuthHeaders = () => {
      const token = localStorage.getItem("token");
@@ -1234,6 +1385,208 @@ function DispatchedItemsPage() {
 	   return;
      } finally {
        setLoading(false);
+     }
+   };
+   
+   const resolveScan = async (rawScan) => {
+     const res = await fetch(`${API_BASE_URL}/api/scanner/resolve`, {
+       method: "POST",
+       headers: {
+         "Content-Type": "application/json",
+         ...getAuthHeaders(),
+       },
+       body: JSON.stringify({
+         scanText: rawScan,
+       }),
+     });
+
+     if (!res.ok) {
+       const text = await res.text();
+       throw new Error(text || "Unable to resolve QR scan");
+     }
+
+     return await res.json();
+   };
+
+   const dispatchSingleByScan = async (rawScan) => {
+     try {
+       setScanLoading(true);
+       setScanMessage("Generating challan from scanned QR...");
+
+       const res = await fetch(
+         `${API_BASE_URL}/api/scanner/dispatch-single?preview=true`,
+         {
+           method: "POST",
+           headers: {
+             "Content-Type": "application/json",
+             ...getAuthHeaders(),
+           },
+           body: JSON.stringify({
+             scanText: rawScan,
+           }),
+         }
+       );
+
+       if (!res.ok) {
+         const text = await res.text();
+         throw new Error(text || "QR dispatch failed");
+       }
+
+       const blob = await res.blob();
+       const url = URL.createObjectURL(blob);
+
+       setChalaanPreview({
+         url,
+         id: "QR_SINGLE",
+       });
+
+       setScannerText("");
+       setScanMessage("Challan generated successfully");
+       setQrDispatchOpen(false);
+
+       await fetchData();
+     } catch (err) {
+       console.error(err);
+       setScanMessage(err.message || "QR dispatch failed");
+       alert(err.message || "QR dispatch failed");
+     } finally {
+       setScanLoading(false);
+     }
+   };
+
+   const addBulkScanToCart = async (rawScan) => {
+     try {
+       setScanLoading(true);
+       setScanMessage("Reading scanned QR...");
+
+       const item = await resolveScan(rawScan);
+
+       if (!item.dispatchAllowed) {
+         setScanMessage(item.message || "Item cannot be dispatched");
+         alert(item.message || "Item cannot be dispatched");
+         return;
+       }
+
+       const alreadyAdded = scanCart.some(
+         (x) => x.zohoItemId === item.zohoItemId
+       );
+
+       if (alreadyAdded) {
+         setScanMessage("Item already scanned");
+         setScannerText("");
+         return;
+       }
+
+       setScanCart((prev) => [
+         ...prev,
+         {
+           ...item,
+           rawScan,
+         },
+       ]);
+
+       setScannerText("");
+       setScanMessage(`Added: ${item.itemName}`);
+     } catch (err) {
+       console.error(err);
+       setScanMessage(err.message || "Failed to add scanned item");
+       alert(err.message || "Failed to add scanned item");
+     } finally {
+       setScanLoading(false);
+
+       setTimeout(() => {
+         scannerInputRef.current?.focus();
+       }, 100);
+     }
+   };
+
+   const processScannedText = async (rawValue) => {
+     const rawScan = rawValue?.trim();
+
+     if (!rawScan || scanLoading) return;
+
+     if (scanMode === "SINGLE") {
+       await dispatchSingleByScan(rawScan);
+     } else {
+       await addBulkScanToCart(rawScan);
+     }
+   };
+
+   const handleScannerChange = (e) => {
+     const value = e.target.value;
+
+     setScannerText(value);
+
+     if (scanTimerRef.current) {
+       clearTimeout(scanTimerRef.current);
+     }
+
+     scanTimerRef.current = setTimeout(() => {
+       processScannedText(value);
+     }, 350);
+   };
+
+   const handleScannerKeyDown = async (e) => {
+     if (e.key !== "Enter" && e.key !== "Tab") return;
+
+     e.preventDefault();
+
+     if (scanTimerRef.current) {
+       clearTimeout(scanTimerRef.current);
+     }
+
+     await processScannedText(scannerText);
+   };
+
+   const generateBulkChalaanFromScans = async () => {
+     if (scanCart.length === 0) {
+       alert("Scan items first");
+       return;
+     }
+
+     try {
+       setScanLoading(true);
+       setScanMessage("Generating bulk challan...");
+
+       const res = await fetch(
+         `${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
+         {
+           method: "POST",
+           headers: {
+             "Content-Type": "application/json",
+             ...getAuthHeaders(),
+           },
+           body: JSON.stringify({
+             scanTexts: scanCart.map((x) => x.rawScan),
+           }),
+         }
+       );
+
+       if (!res.ok) {
+         const text = await res.text();
+         throw new Error(text || "Bulk QR dispatch failed");
+       }
+
+       const blob = await res.blob();
+       const url = URL.createObjectURL(blob);
+
+       setChalaanPreview({
+         url,
+         id: "QR_BULK",
+       });
+
+       setScanCart([]);
+       setScannerText("");
+       setQrDispatchOpen(false);
+       setScanMessage("Bulk challan generated successfully");
+
+       await fetchData();
+     } catch (err) {
+       console.error(err);
+       setScanMessage(err.message || "Bulk QR dispatch failed");
+       alert(err.message || "Bulk QR dispatch failed");
+     } finally {
+       setScanLoading(false);
      }
    };
   /* ===================== ACTIONS ===================== */
@@ -2000,22 +2353,45 @@ function DispatchedItemsPage() {
 		</Box>
 	    </div>
 		<Box
-				      sx={{
-				        color: "#94a3b8",
-				        fontSize: 14,
-				        fontWeight: 600,
-				      }}
-				    >
-				      Total Items:{" "}
-				      <span
-				        style={{
-				          color: "#60a5fa",
-				          fontWeight: 800,
-				        }}
-				      >
-				        {filteredRows.length}
-				      </span>
-				    </Box>
+		  sx={{
+		    display: "flex",
+		    alignItems: "center",
+		    gap: 2,
+		  }}
+		>
+		  <Box
+		    sx={{
+		      color: "#94a3b8",
+		      fontSize: 14,
+		      fontWeight: 600,
+		    }}
+		  >
+		    Total Items:{" "}
+		    <span
+		      style={{
+		        color: "#60a5fa",
+		        fontWeight: 800,
+		      }}
+		    >
+		      {filteredRows.length}
+		    </span>
+		  </Box>
+
+		  {isDispatch && (
+		    <Button
+		      onClick={() => {
+		        setQrDispatchOpen(true);
+		        setScanMode("SINGLE");
+		        setScannerText("");
+		        setScanMessage("");
+		        setScanCart([]);
+		      }}
+		      sx={qrDispatchButtonSx}
+		    >
+		      📷 QR Dispatch
+		    </Button>
+		  )}
+		</Box>
 
 	  </div>
 	 
@@ -2549,6 +2925,273 @@ function DispatchedItemsPage() {
 		    Clear
 		  </Button>
 		</div>
+	  )}
+	  {qrDispatchOpen && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5200 }}
+	      onClick={() => setQrDispatchOpen(false)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 720,
+	          maxHeight: "88vh",
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#3b82f6")}>
+	              📷
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                QR Auto Dispatch
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Scan sticker QR to generate challan automatically
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setQrDispatchOpen(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box
+	            sx={{
+	              display: "flex",
+	              gap: 1,
+	              mb: 2,
+	              p: 1,
+	              borderRadius: "10px",
+	              background: "rgba(255,255,255,.035)",
+	              border: "1px solid rgba(255,255,255,.07)",
+	            }}
+	          >
+	            <Button
+	              onClick={() => {
+	                setScanMode("SINGLE");
+	                setScanCart([]);
+	                setScannerText("");
+	                setScanMessage("");
+	              }}
+	              sx={{
+	                ...scannerModeButtonSx,
+	                ...(scanMode === "SINGLE" ? scannerModeActiveSx : {}),
+	              }}
+	            >
+	              Single Item
+	            </Button>
+
+	            <Button
+	              onClick={() => {
+	                setScanMode("BULK");
+	                setScannerText("");
+	                setScanMessage("");
+	              }}
+	              sx={{
+	                ...scannerModeButtonSx,
+	                ...(scanMode === "BULK" ? scannerModeActiveSx : {}),
+	              }}
+	            >
+	              Bulk Items
+	            </Button>
+	          </Box>
+
+	          <Box
+	            sx={{
+	              p: 2,
+	              borderRadius: "12px",
+	              background:
+	                "linear-gradient(135deg,rgba(59,130,246,.10),rgba(255,255,255,.035))",
+	              border: "1px solid rgba(59,130,246,.18)",
+	              mb: 2,
+	            }}
+	          >
+	            <Box
+	              sx={{
+	                color: "#fff",
+	                fontWeight: 900,
+	                mb: 0.8,
+	              }}
+	            >
+	              {scanMode === "SINGLE"
+	                ? "Scan one sticker to auto-generate challan"
+	                : "Scan multiple stickers, then generate one bulk challan"}
+	            </Box>
+
+	            <Box
+	              sx={{
+	                color: "rgba(255,255,255,.58)",
+	                fontSize: 12,
+	                fontWeight: 600,
+	              }}
+	            >
+	              Keep the cursor inside the scan box. USB QR scanners work like keyboard input.
+	            </Box>
+	          </Box>
+
+	          <TextField
+	            inputRef={scannerInputRef}
+	            fullWidth
+	            multiline
+	            minRows={2}
+	            maxRows={4}
+	            placeholder="Scan QR here..."
+	            value={scannerText}
+	            onChange={handleScannerChange}
+	            onKeyDown={handleScannerKeyDown}
+	            disabled={scanLoading}
+	            sx={scannerInputSx}
+	          />
+
+	          <Box
+	            sx={{
+	              display: "flex",
+	              justifyContent: "space-between",
+	              alignItems: "center",
+	              mt: 1.5,
+	              gap: 2,
+	            }}
+	          >
+	            <Box
+	              sx={{
+	                color: scanLoading ? "#fcd34d" : "#94a3b8",
+	                fontSize: 12,
+	                fontWeight: 700,
+	              }}
+	            >
+	              {scanLoading
+	                ? "Processing scan..."
+	                : scanMessage || "Ready to scan"}
+	            </Box>
+
+	            <Button
+	              disabled={!scannerText || scanLoading}
+	              onClick={() => processScannedText(scannerText)}
+	              sx={modalSecondaryButtonSx}
+	            >
+	              Process
+	            </Button>
+	          </Box>
+
+	          {scanMode === "BULK" && (
+	            <Box sx={{ mt: 2 }}>
+	              <Box
+	                sx={{
+	                  display: "flex",
+	                  justifyContent: "space-between",
+	                  alignItems: "center",
+	                  mb: 1,
+	                }}
+	              >
+	                <Box
+	                  sx={{
+	                    color: "#fff",
+	                    fontWeight: 900,
+	                  }}
+	                >
+	                  Scanned Items: {scanCart.length}
+	                </Box>
+
+	                <Button
+	                  disabled={scanCart.length === 0 || scanLoading}
+	                  onClick={generateBulkChalaanFromScans}
+	                  sx={scannerGenerateButtonSx}
+	                >
+	                  Generate Bulk Challan
+	                </Button>
+	              </Box>
+
+	              {scanCart.length === 0 && (
+	                <Box sx={modalEmptyStateSx}>
+	                  No items scanned yet.
+	                </Box>
+	              )}
+
+	              {scanCart.length > 0 && (
+	                <Box sx={{ ...modalScrollBodySx, maxHeight: "32vh" }}>
+	                  {scanCart.map((item, index) => (
+	                    <Box
+	                      key={item.zohoItemId}
+	                      sx={scannerCartCardSx}
+	                    >
+	                      <Box sx={{ minWidth: 0 }}>
+	                        <Box
+	                          sx={{
+	                            color: "#fff",
+	                            fontWeight: 900,
+	                            fontSize: 13,
+	                            whiteSpace: "nowrap",
+	                            overflow: "hidden",
+	                            textOverflow: "ellipsis",
+	                          }}
+	                        >
+	                          {index + 1}. {item.itemName}
+	                        </Box>
+
+	                        <Box
+	                          sx={{
+	                            color: "rgba(255,255,255,.55)",
+	                            fontSize: 12,
+	                            fontWeight: 600,
+	                            mt: 0.4,
+	                          }}
+	                        >
+	                          {item.pdNo || "—"} • {item.clientName || "—"} • {item.status}
+	                        </Box>
+	                      </Box>
+
+	                      <Button
+	                        size="small"
+	                        onClick={() =>
+	                          setScanCart((prev) =>
+	                            prev.filter((x) => x.zohoItemId !== item.zohoItemId)
+	                          )
+	                        }
+	                        sx={{
+	                          minWidth: 70,
+	                          height: 30,
+	                          borderRadius: "8px",
+	                          color: "#fca5a5",
+	                          fontWeight: 800,
+	                          textTransform: "none",
+	                          background: "rgba(239,68,68,.10)",
+	                          border: "1px solid rgba(239,68,68,.18)",
+	                        }}
+	                      >
+	                        Remove
+	                      </Button>
+	                    </Box>
+	                  ))}
+	                </Box>
+	              )}
+	            </Box>
+	          )}
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => {
+	              setQrDispatchOpen(false);
+	              setScannerText("");
+	              setScanMessage("");
+	            }}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Close
+	          </Button>
+	        </Box>
+	      </Box>
+	    </Box>
 	  )}
 	  {historyOpen && (
 	    <Box

@@ -89,6 +89,10 @@ public class ChalaanPdfController {
         	ci.setDescription(
         	    packetItem != null ? packetItem.getDescription() : item.getDescription()
         	);
+        	
+        	ci.setClientAddress(
+        	        packetItem != null ? packetItem.getClientAddress() : item.getClientAddress()
+        	);
 
         	ci.setDrawingNo(
         	    packetItem != null ? packetItem.getDrawingNo() : item.getDrawingNo()
@@ -99,14 +103,23 @@ public class ChalaanPdfController {
         	);
         ci.setZohoItemId(item.getZohoItemId());
 
+        String chalaan = "CH-" + System.currentTimeMillis();
+
+        data.setVoucherNo(chalaan);
+        data.setDesignerName("-");
+        data.setOt("-");
+
         data.setItems(List.of(ci));
-        data.setAddress(item.getClientAddress());
+        data.setAddress(
+                packetItem != null && packetItem.getClientAddress() != null
+                        ? packetItem.getClientAddress()
+                        : item.getClientAddress()
+        );
 
         byte[] pdf = pdfService.generateChalaan(data);
 
         /* ================= SAVE CHALAAN ================= */
 
-        String chalaan = "CH-" + System.currentTimeMillis();
         item.setChalaanNumber(chalaan);
         repo.save(item);
 
@@ -177,15 +190,20 @@ public class ChalaanPdfController {
             list.add(ci);
         }
 
+        String chalaan = "CH-" + System.currentTimeMillis();
+
+        data.setVoucherNo(chalaan);
+        data.setDesignerName("-");
+        data.setOt("-");
+
         data.setItems(list);
         data.setAddress(items.get(0).getClientAddress());
+
         /* ================= GENERATE PDF ================= */
 
         byte[] pdf = pdfService.generateChalaan(data);
 
         /* ================= SAVE CHALAAN ================= */
-
-        String chalaan = "CH-" + System.currentTimeMillis();
 
         items.forEach(i -> i.setChalaanNumber(chalaan));
         repo.saveAll(items);
