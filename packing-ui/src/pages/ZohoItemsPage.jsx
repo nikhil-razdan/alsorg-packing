@@ -524,12 +524,12 @@ function ZohoItemsPage() {
 
         <div style={wrap}>
           <Box sx={tableWrapper}>
-            <div
-              style={{
-                width: "max-content",
-                minWidth: "100%",
-              }}
-            >
+		  <div
+		    style={{
+		      width: "max-content",
+		      minWidth: inventoryTableMinWidth,
+		    }}
+		  >
               <div style={tableHeader}>
                 <div>Generate</div>
                 <div>Add Packets</div>
@@ -1617,8 +1617,48 @@ function ZohoItemsPage() {
 
 /* ===================== STYLES ===================== */
 
-const inventoryGrid =
-  "130px 190px 110px 110px 260px 300px 120px 150px 180px 260px 260px 160px";
+/* ===================== COLUMN WIDTH CONTROLLER ===================== */
+
+const inventoryColumnWidths = {
+  generate: 130,
+  addPackets: 190,
+  edit: 110,
+  delete: 110,
+
+  itemName: 300,
+  sku: 340,
+  pdNo: 120,
+  drawingNo: 150,
+  client: 200,
+  address: 300,
+  description: 300,
+  status: 170,
+};
+
+const inventoryColumnOrder = [
+  "generate",
+  "addPackets",
+  "edit",
+  "delete",
+
+  "itemName",
+  "sku",
+  "pdNo",
+  "drawingNo",
+  "client",
+  "address",
+  "description",
+  "status",
+];
+
+const inventoryGrid = inventoryColumnOrder
+  .map((key) => `${inventoryColumnWidths[key]}px`)
+  .join(" ");
+
+const inventoryTableMinWidth = inventoryColumnOrder.reduce(
+  (total, key) => total + inventoryColumnWidths[key],
+  0
+);
 
 const page = {
   minHeight: "100vh",
