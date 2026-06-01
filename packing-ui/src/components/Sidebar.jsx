@@ -124,14 +124,6 @@ function Sidebar() {
     >
       {/* Glass highlight */}
       <div style={topHighlight} />
-
-      {/* Collapse Toggle */}
-      <button
-        onClick={() => setCollapsed((v) => !v)}
-        style={toggleButton}
-      >
-        {collapsed ? "›" : "‹"}
-      </button>
 	  
 	  <div style={logoSection}>
 	    <div style={logoIcon}>
@@ -151,8 +143,49 @@ function Sidebar() {
 	    )}
 	  </div>
 
-      {!collapsed && <h4 style={menuTitle}>Menu</h4>}
+	  <div
+	    style={{
+	      ...toggleRow,
+	      justifyContent: collapsed
+	        ? "center"
+	        : "space-between",
+	    }}
+	  >
+	    {!collapsed && (
+	      <div style={menuTitle}>
+	        Menu
+	      </div>
+	    )}
 
+	    <button
+	      onClick={() =>
+	        setCollapsed((v) => !v)
+	      }
+	      style={toggleButton}
+	      title={
+	        collapsed
+	          ? "Expand sidebar"
+	          : "Collapse sidebar"
+	      }
+	    >
+	      {collapsed ? "›" : "‹"}
+	    </button>
+	  </div>
+	  
+	  {/* Collapse Toggle */}
+	  <button
+	      onClick={() =>
+	        setCollapsed((v) => !v)
+	      }
+	      style={toggleButton}
+	      title={
+	        collapsed
+	          ? "Expand sidebar"
+	          : "Collapse sidebar"
+	      }
+	    >
+	      {collapsed ? "›" : "‹"}
+	    </button>
       {/* Links */}
       {visibleLinks.map((link) => {
         const active = location.pathname === link.path;
@@ -213,17 +246,10 @@ const topHighlight = {
 };
 
 const toggleButton = {
-  position: "absolute",
+  width: 28,
+  height: 28,
 
-  top: 16,
-
-  right: 10,
-
-  width: 24,
-
-  height: 24,
-
-  borderRadius: 8,
+  borderRadius: 10,
 
   border:
     "1px solid rgba(255,255,255,.08)",
@@ -235,19 +261,36 @@ const toggleButton = {
 
   cursor: "pointer",
 
-  fontWeight: 700,
+  fontWeight: 900,
+
+  fontSize: 18,
+
+  lineHeight: 1,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "center",
 
   transition: "all .2s ease",
 };
 
 const menuTitle = {
-  marginBottom: 26,
+  margin: 0,
   paddingLeft: 6,
   fontWeight: 700,
   fontSize: 11,
   color: "rgba(255,255,255,0.55)",
   letterSpacing: "0.12em",
   textTransform: "uppercase",
+};
+
+const toggleRow = {
+  display: "flex",
+  alignItems: "center",
+  marginBottom: 18,
+  minHeight: 28,
 };
 
 const icon = {
@@ -269,7 +312,7 @@ const logoSection = {
 
   gap: 14,
 
-  marginBottom: 32,
+  marginBottom: 18,
 
   paddingLeft: 4,
 };
