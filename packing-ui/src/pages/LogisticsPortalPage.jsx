@@ -1,6 +1,6 @@
 import { useState } from "react";
-
-import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
 import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
@@ -8,6 +8,24 @@ import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
 function LogisticsPortalPage() {
   const [tab, setTab] =
     useState("operations");
+
+  const [snackOpen, setSnackOpen] =
+    useState(false);
+
+  const [snackMsg, setSnackMsg] =
+    useState("");
+
+  const [snackType, setSnackType] =
+    useState("success");
+
+  const showAlert = (
+    message,
+    type = "success"
+  ) => {
+    setSnackMsg(message);
+    setSnackType(type);
+    setSnackOpen(true);
+  };
 
   return (
     <div style={page}>
@@ -67,23 +85,56 @@ function LogisticsPortalPage() {
           />
         </div>
 
-        {tab ===
-          "operations" && (
-          <ShiftOperations />
-        )}
+		{tab === "operations" && (
+		  <ShiftOperations
+		    showAlert={showAlert}
+		  />
+		)}
 
-        {tab === "drivers" && (
-          <DriverManagement />
-        )}
+		{tab === "drivers" && (
+		  <DriverManagement
+		    showAlert={showAlert}
+		  />
+		)}
 
-        {tab ===
-          "vehicles" && (
-          <VehicleManagement />
-        )}
+		{tab === "vehicles" && (
+		  <VehicleManagement
+		    showAlert={showAlert}
+		  />
+		)}
 
-        {tab === "history" && (
-          <ShiftHistory />
-        )}
+		{tab === "history" && (
+		  <ShiftHistory
+		    showAlert={showAlert}
+		  />
+		)}
+		<Snackbar
+		  open={snackOpen}
+		  autoHideDuration={3000}
+		  onClose={() =>
+		    setSnackOpen(false)
+		  }
+		  anchorOrigin={{
+		    vertical: "top",
+		    horizontal: "center",
+		  }}
+		>
+		  <Alert
+		    severity={snackType}
+		    variant="filled"
+		    onClose={() =>
+		      setSnackOpen(false)
+		    }
+		    sx={{
+		      borderRadius: "14px",
+		      fontWeight: 700,
+		      boxShadow:
+		        "0 18px 45px rgba(0,0,0,.35)",
+		    }}
+		  >
+		    {snackMsg}
+		  </Alert>
+		</Snackbar>
       </div>
     </div>
   );

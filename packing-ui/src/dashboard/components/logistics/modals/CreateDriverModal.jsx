@@ -1,6 +1,10 @@
 import { useState } from "react";
 
 import {
+  getBackendMessage,
+} from "../logisticsAlertUtils";
+
+import {
   createDriver,
 } from "../../../api/logisticsApi";
 
@@ -8,6 +12,7 @@ function CreateDriverModal({
   open,
   onClose,
   onCreated,
+  showAlert = () => {},
 }) {
   const [saving, setSaving] =
     useState(false);
@@ -46,14 +51,17 @@ function CreateDriverModal({
 
       onClose();
 
-    } catch (e) {
-      console.error(e);
+	  } catch (e) {
+	    console.error(e);
 
-      alert(
-        e.message ||
-          "Failed to create driver"
-      );
-    } finally {
+	    showAlert(
+	      getBackendMessage(
+	        e,
+	        "Create failed"
+	      ),
+	      "error"
+	    );
+	  } finally {
       setSaving(false);
     }
   };

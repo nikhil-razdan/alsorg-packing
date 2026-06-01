@@ -4,10 +4,15 @@ import {
   createVehicle,
 } from "../../../api/logisticsApi";
 
+import {
+  getBackendMessage,
+} from "../logisticsAlertUtils";
+
 function CreateVehicleModal({
   open,
   onClose,
   onCreated,
+  showAlert = () => {},
 }) {
   const [saving, setSaving] =
     useState(false);
@@ -33,23 +38,52 @@ function CreateVehicleModal({
   };
 
   const submit = async () => {
+    if (saving) return;
+
     try {
       setSaving(true);
 
+      if (!form.vehicleNumber) {
+        throw new Error(
+          "Vehicle number is required"
+        );
+      }
+
+      if (!form.vehicleType) {
+        throw new Error(
+          "Vehicle type is required"
+        );
+      }
+
       await createVehicle(form);
 
-      alert(
-        "Vehicle created successfully"
+      showAlert(
+        "Vehicle created successfully",
+        "success"
       );
 
-      onCreated?.();
+      await onCreated?.();
 
       onClose();
+
+      setForm({
+        vehicleNumber: "",
+        vehicleType: "",
+        fuelCapacity: "",
+        status: "ACTIVE",
+      });
 
     } catch (e) {
       console.error(e);
 
-      alert(e.message);
+      showAlert(
+        getBackendMessage(
+          e,
+          "Vehicle creation failed"
+        ),
+        "error"
+      );
+
     } finally {
       setSaving(false);
     }
@@ -95,9 +129,7 @@ function CreateVehicleModal({
             onChange={(e) =>
               update(
                 "fuelCapacity",
-                Number(
-                  e.target.value
-                )
+                Number(e.target.value)
               )
             }
           />
@@ -107,13 +139,21 @@ function CreateVehicleModal({
           <button
             style={cancelBtn}
             onClick={onClose}
+            disabled={saving}
           >
             Cancel
           </button>
 
           <button
-            style={saveBtn}
+            style={{
+              ...saveBtn,
+              opacity: saving ? 0.7 : 1,
+              cursor: saving
+                ? "not-allowed"
+                : "pointer",
+            }}
             onClick={submit}
+            disabled={saving}
           >
             {saving
               ? "Saving..."
@@ -207,6 +247,8 @@ const cancelBtn = {
   border: "none",
 
   color: "#fff",
+
+  cursor: "pointer",
 };
 
 const saveBtn = {

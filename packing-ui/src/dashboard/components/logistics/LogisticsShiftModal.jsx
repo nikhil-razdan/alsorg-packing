@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 import {
   fetchDrivers,
@@ -6,54 +9,79 @@ import {
   createShift,
 } from "../../api/logisticsApi";
 
+import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
 function LogisticsShiftModal({
   open,
   onClose,
   onCreated,
+  showAlert = () => {},
 }) {
-  const [drivers, setDrivers] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
-  const [saving, setSaving] = useState(false);
+  const [drivers, setDrivers] =
+    useState([]);
 
-  const [form, setForm] = useState({
-    driverId: "",
-    vehicleId: "",
-    shiftStart: "",
-    shiftEnd: "",
-    overtimeHours: 0,
-    totalTrips: 0,
-    totalHelpers: 0,
-    fuelUsed: 0,
-    totalDistance: 0,
-    routeCategory: "Factory",
-    remarks: "",
-    status: "WORKING",
-  });
+  const [vehicles, setVehicles] =
+    useState([]);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [form, setForm] =
+    useState({
+      driverId: "",
+      vehicleId: "",
+      shiftStart: "",
+      shiftEnd: "",
+      overtimeHours: 0,
+      totalTrips: 0,
+      totalHelpers: 0,
+      fuelUsed: 0,
+      totalDistance: 0,
+      routeCategory: "Factory",
+      remarks: "",
+      status: "WORKING",
+    });
 
   useEffect(() => {
     if (!open) return;
 
     const loadMasterData = async () => {
       try {
-        const [driverData, vehicleData] = await Promise.all([
+        const [
+          driverData,
+          vehicleData,
+        ] = await Promise.all([
           fetchDrivers(),
           fetchVehicles(),
         ]);
 
         setDrivers(driverData || []);
         setVehicles(vehicleData || []);
+
       } catch (e) {
         console.error(e);
-        alert("Failed to load drivers or vehicles");
+
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load drivers or vehicles"
+          ),
+          "error"
+        );
       }
     };
 
     loadMasterData();
-  }, [open]);
+  }, [open, showAlert]);
 
   if (!open) return null;
 
-  const update = (key, value) => {
+  const update = (
+    key,
+    value
+  ) => {
     setForm((prev) => ({
       ...prev,
       [key]: value,
@@ -61,50 +89,132 @@ function LogisticsShiftModal({
   };
 
   const submit = async () => {
+    if (saving) return;
+
     try {
       setSaving(true);
 
-      if (!form.driverId) throw new Error("Please select a driver");
-      if (!form.vehicleId) throw new Error("Please select a vehicle");
-      if (!form.shiftStart) throw new Error("Shift start is required");
-      if (!form.shiftEnd) throw new Error("Shift end is required");
+      if (!form.driverId) {
+        throw new Error(
+          "Please select a driver"
+        );
+      }
+
+      if (!form.vehicleId) {
+        throw new Error(
+          "Please select a vehicle"
+        );
+      }
+
+      if (!form.shiftStart) {
+        throw new Error(
+          "Shift start is required"
+        );
+      }
+
+      if (!form.shiftEnd) {
+        throw new Error(
+          "Shift end is required"
+        );
+      }
 
       const payload = {
         ...form,
+
         driverId: form.driverId,
+
         vehicleId: form.vehicleId,
-        overtimeHours: Number(form.overtimeHours || 0),
-        totalTrips: Number(form.totalTrips || 0),
-        totalHelpers: Number(form.totalLoaders || 0),
-        fuelUsed: Number(form.fuelUsed || 0),
-        totalDistance: Number(form.totalDistance || 0),
+
+        overtimeHours: Number(
+          form.overtimeHours || 0
+        ),
+
+        totalTrips: Number(
+          form.totalTrips || 0
+        ),
+
+        totalHelpers: Number(
+          form.totalHelpers || 0
+        ),
+
+        fuelUsed: Number(
+          form.fuelUsed || 0
+        ),
+
+        totalDistance: Number(
+          form.totalDistance || 0
+        ),
       };
 
       await createShift(payload);
 
-      alert("Shift created successfully");
-      onCreated?.();
+      showAlert(
+        "Shift created successfully",
+        "success"
+      );
+
+      await onCreated?.();
+
       onClose();
+
+      setForm({
+        driverId: "",
+        vehicleId: "",
+        shiftStart: "",
+        shiftEnd: "",
+        overtimeHours: 0,
+        totalTrips: 0,
+        totalHelpers: 0,
+        fuelUsed: 0,
+        totalDistance: 0,
+        routeCategory: "Factory",
+        remarks: "",
+        status: "WORKING",
+      });
+
     } catch (e) {
       console.error(e);
-      alert(`Failed to create shift: ${e.message || "Unknown error"}`);
+
+      showAlert(
+        getBackendMessage(
+          e,
+          "Failed to create shift"
+        ),
+        "error"
+      );
+
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={overlay} onClick={onClose}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
+    <div
+      style={overlay}
+      onClick={onClose}
+    >
+      <div
+        style={modal}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+      >
         <div style={header}>
           <div>
-            <div style={title}>Logistics Shift Entry</div>
+            <div style={title}>
+              Logistics Shift Entry
+            </div>
+
             <div style={subtitle}>
               Driver and vehicle operations management
             </div>
           </div>
 
-          <button onClick={onClose} style={closeBtn}>
+          <button
+            onClick={onClose}
+            style={closeBtn}
+            disabled={saving}
+          >
             ✕
           </button>
         </div>
@@ -113,12 +223,23 @@ function LogisticsShiftModal({
           <Field label="Driver">
             <select
               value={form.driverId}
-              onChange={(e) => update("driverId", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "driverId",
+                  e.target.value
+                )
+              }
               style={input}
             >
-              <option value="">Select Driver</option>
+              <option value="">
+                Select Driver
+              </option>
+
               {drivers.map((d) => (
-                <option key={d.id} value={d.id}>
+                <option
+                  key={d.id}
+                  value={d.id}
+                >
                   {d.name}
                 </option>
               ))}
@@ -128,12 +249,23 @@ function LogisticsShiftModal({
           <Field label="Vehicle">
             <select
               value={form.vehicleId}
-              onChange={(e) => update("vehicleId", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "vehicleId",
+                  e.target.value
+                )
+              }
               style={input}
             >
-              <option value="">Select Vehicle</option>
+              <option value="">
+                Select Vehicle
+              </option>
+
               {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>
+                <option
+                  key={v.id}
+                  value={v.id}
+                >
                   {v.vehicleNumber}
                 </option>
               ))}
@@ -145,7 +277,12 @@ function LogisticsShiftModal({
               type="datetime-local"
               style={input}
               value={form.shiftStart}
-              onChange={(e) => update("shiftStart", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "shiftStart",
+                  e.target.value
+                )
+              }
             />
           </Field>
 
@@ -154,7 +291,12 @@ function LogisticsShiftModal({
               type="datetime-local"
               style={input}
               value={form.shiftEnd}
-              onChange={(e) => update("shiftEnd", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "shiftEnd",
+                  e.target.value
+                )
+              }
             />
           </Field>
 
@@ -163,7 +305,12 @@ function LogisticsShiftModal({
               type="number"
               style={input}
               value={form.totalTrips}
-              onChange={(e) => update("totalTrips", Number(e.target.value))}
+              onChange={(e) =>
+                update(
+                  "totalTrips",
+                  Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -171,8 +318,13 @@ function LogisticsShiftModal({
             <input
               type="number"
               style={input}
-              value={form.totalLoaders}
-              onChange={(e) => update("totalHelpers", Number(e.target.value))}
+              value={form.totalHelpers}
+              onChange={(e) =>
+                update(
+                  "totalHelpers",
+                  Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -181,7 +333,12 @@ function LogisticsShiftModal({
               type="number"
               style={input}
               value={form.fuelUsed}
-              onChange={(e) => update("fuelUsed", Number(e.target.value))}
+              onChange={(e) =>
+                update(
+                  "fuelUsed",
+                  Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -190,7 +347,12 @@ function LogisticsShiftModal({
               type="number"
               style={input}
               value={form.totalDistance}
-              onChange={(e) => update("totalDistance", Number(e.target.value))}
+              onChange={(e) =>
+                update(
+                  "totalDistance",
+                  Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -199,7 +361,12 @@ function LogisticsShiftModal({
               type="number"
               style={input}
               value={form.overtimeHours}
-              onChange={(e) => update("overtimeHours", Number(e.target.value))}
+              onChange={(e) =>
+                update(
+                  "overtimeHours",
+                  Number(e.target.value)
+                )
+              }
             />
           </Field>
 
@@ -207,12 +374,28 @@ function LogisticsShiftModal({
             <select
               style={input}
               value={form.routeCategory}
-              onChange={(e) => update("routeCategory", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "routeCategory",
+                  e.target.value
+                )
+              }
             >
-              <option value="Factory">Factory</option>
-              <option value="Residential">Residential</option>
-              <option value="Mall">Mall</option>
-              <option value="Warehouse">Warehouse</option>
+              <option value="Factory">
+                Factory
+              </option>
+
+              <option value="Residential">
+                Residential
+              </option>
+
+              <option value="Mall">
+                Mall
+              </option>
+
+              <option value="Warehouse">
+                Warehouse
+              </option>
             </select>
           </Field>
 
@@ -220,11 +403,24 @@ function LogisticsShiftModal({
             <select
               style={input}
               value={form.status}
-              onChange={(e) => update("status", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "status",
+                  e.target.value
+                )
+              }
             >
-              <option value="WORKING">WORKING</option>
-              <option value="OFF">OFF</option>
-              <option value="ON_LEAVE">ON_LEAVE</option>
+              <option value="WORKING">
+                WORKING
+              </option>
+
+              <option value="OFF">
+                OFF
+              </option>
+
+              <option value="ON_LEAVE">
+                ON_LEAVE
+              </option>
             </select>
           </Field>
 
@@ -233,18 +429,39 @@ function LogisticsShiftModal({
               rows={3}
               style={textarea}
               value={form.remarks}
-              onChange={(e) => update("remarks", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "remarks",
+                  e.target.value
+                )
+              }
             />
           </Field>
         </div>
 
         <div style={footer}>
-          <button style={cancelBtn} onClick={onClose}>
+          <button
+            style={cancelBtn}
+            onClick={onClose}
+            disabled={saving}
+          >
             Cancel
           </button>
 
-          <button style={saveBtn} onClick={submit} disabled={saving}>
-            {saving ? "Saving..." : "Create Shift"}
+          <button
+            style={{
+              ...saveBtn,
+              opacity: saving ? 0.7 : 1,
+              cursor: saving
+                ? "not-allowed"
+                : "pointer",
+            }}
+            onClick={submit}
+            disabled={saving}
+          >
+            {saving
+              ? "Saving..."
+              : "Create Shift"}
           </button>
         </div>
       </div>
@@ -252,20 +469,20 @@ function LogisticsShiftModal({
   );
 }
 
-function Field({ label, children }) {
+function Field({
+  label,
+  children,
+}) {
   return (
     <div style={field}>
-      <div style={fieldLabel}>{label}</div>
+      <div style={fieldLabel}>
+        {label}
+      </div>
+
       {children}
     </div>
   );
 }
-
-/*
-========================================
-STYLES
-========================================
-*/
 
 const overlay = {
   position: "fixed",
@@ -282,9 +499,12 @@ const modal = {
   maxWidth: 1100,
   borderRadius: 24,
   padding: 24,
-  background: "linear-gradient(180deg,#020617,#0f172a)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+  background:
+    "linear-gradient(180deg,#020617,#0f172a)",
+  border:
+    "1px solid rgba(255,255,255,0.08)",
+  boxShadow:
+    "0 20px 60px rgba(0,0,0,0.45)",
   maxHeight: "90vh",
   overflowY: "auto",
 };
@@ -316,7 +536,8 @@ const closeBtn = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+  gridTemplateColumns:
+    "repeat(2, minmax(0,1fr))",
   gap: 18,
 };
 
@@ -335,7 +556,8 @@ const fieldLabel = {
 const input = {
   height: 46,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border:
+    "1px solid rgba(255,255,255,0.08)",
   background: "#111827",
   color: "#fff",
   padding: "0 14px",
@@ -344,7 +566,8 @@ const input = {
 
 const textarea = {
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border:
+    "1px solid rgba(255,255,255,0.08)",
   background: "#111827",
   color: "#fff",
   padding: 14,
@@ -362,7 +585,8 @@ const cancelBtn = {
   height: 44,
   padding: "0 20px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border:
+    "1px solid rgba(255,255,255,0.08)",
   background: "#1e293b",
   color: "#fff",
   cursor: "pointer",
@@ -373,10 +597,10 @@ const saveBtn = {
   padding: "0 22px",
   borderRadius: 12,
   border: "none",
-  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   fontWeight: 700,
-  cursor: "pointer",
 };
 
 export default LogisticsShiftModal;

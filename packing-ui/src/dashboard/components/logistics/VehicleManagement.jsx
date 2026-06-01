@@ -3,6 +3,10 @@ import {
   useState,
 } from "react";
 
+import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
 import LogisticsPagination from "./LogisticsPagination";
 
 import {
@@ -11,7 +15,9 @@ import {
 
 import CreateVehicleModal from "./modals/CreateVehicleModal";
 
-function VehicleManagement() {
+function VehicleManagement({
+  showAlert = () => {},
+}) {
 	const [vehicles, setVehicles] =
 	  useState([]);
 
@@ -29,9 +35,17 @@ function VehicleManagement() {
 	    try {
 	      const data = await fetchVehicles();
 	      setVehicles(data || []);
-	    } catch (e) {
-	      console.error(e);
-	    }
+	  } catch (e) {
+	    console.error(e);
+
+	    showAlert(
+	      getBackendMessage(
+	        e,
+	        "Failed to load vehicles"
+	      ),
+	      "error"
+	    );
+	  }
 	  };
 
 	  loadVehicles();
@@ -96,19 +110,29 @@ function VehicleManagement() {
 		/>
 
 		<CreateVehicleModal
-	    open={open}
-	    onClose={() =>
-	      setOpen(false)
-	    }
-		onCreated={async () => {
-		  try {
-		    const data = await fetchVehicles();
-		    setVehicles(data || []);
-		  } catch (e) {
-		    console.error(e);
+		  open={open}
+		  onClose={() =>
+		    setOpen(false)
 		  }
-		}}
-	  />
+		  onCreated={async () => {
+		    try {
+		      const data = await fetchVehicles();
+
+		      setVehicles(data || []);
+		    } catch (e) {
+		      console.error(e);
+
+		      showAlert(
+		        getBackendMessage(
+		          e,
+		          "Failed to refresh vehicles"
+		        ),
+		        "error"
+		      );
+		    }
+		  }}
+		  showAlert={showAlert}
+		/>
     </div>
   );
 }

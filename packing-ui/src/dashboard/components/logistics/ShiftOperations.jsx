@@ -3,6 +3,10 @@ import {
   useState,
 } from "react";
 
+import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
 import LogisticsPagination from "./LogisticsPagination";
 import LogisticsShiftModal from "./LogisticsShiftModal";
 
@@ -11,18 +15,31 @@ import {
   deleteShift,
 } from "../../api/logisticsApi";
 
-function ShiftOperations() {
+function ShiftOperations({
+  showAlert = () => {},
+}) {
 	
 	const remove = async (id) => {
 	  try {
 	    await deleteShift(id);
 
-	    load();
+	    await load();
+
+	    showAlert(
+	      "Shift deleted successfully",
+	      "success"
+	    );
 
 	  } catch (e) {
 	    console.error(e);
 
-	    alert(e.message);
+	    showAlert(
+	      getBackendMessage(
+	        e,
+	        "Shift delete failed"
+	      ),
+	      "error"
+	    );
 	  }
 	};
 	
@@ -49,9 +66,17 @@ function ShiftOperations() {
         await fetchShifts();
 
       setShifts(data || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
+	  } catch (e) {
+	    console.error(e);
+
+	    showAlert(
+	      getBackendMessage(
+	        e,
+	        "Failed to load shifts"
+	      ),
+	      "error"
+	    );
+	  } finally {
       setLoading(false);
     }
   };
@@ -160,12 +185,13 @@ function ShiftOperations() {
 		  />
 
 		  <LogisticsShiftModal
-        open={open}
-        onClose={() =>
-          setOpen(false)
-        }
-        onCreated={load}
-      />
+		    open={open}
+		    onClose={() =>
+		      setOpen(false)
+		    }
+		    onCreated={load}
+		    showAlert={showAlert}
+		  />
     </div>
   );
 }

@@ -3,6 +3,10 @@ import {
   useState,
 } from "react";
 
+import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
 import LogisticsPagination from "./LogisticsPagination";
 
 import {
@@ -12,7 +16,9 @@ import {
 
 import CreateDriverModal from "./modals/CreateDriverModal";
 
-function DriverManagement() {
+function DriverManagement({
+  showAlert = () => {},
+}) {
   const [drivers, setDrivers] =
     useState([]);
 
@@ -32,9 +38,17 @@ function DriverManagement() {
           await fetchDrivers();
 
         setDrivers(data || []);
-      } catch (e) {
-        console.error(e);
-      }
+		} catch (e) {
+		  console.error(e);
+
+		  showAlert(
+		    getBackendMessage(
+		      e,
+		      "Failed to load drivers"
+		    ),
+		    "error"
+		  );
+		}
     };
 
   useEffect(() => {
@@ -56,12 +70,23 @@ function DriverManagement() {
     try {
       await deleteDriver(id);
 
-      loadDrivers();
+      await loadDrivers();
+
+      showAlert(
+        "Driver deleted successfully",
+        "success"
+      );
 
     } catch (e) {
       console.error(e);
 
-      alert(e.message);
+      showAlert(
+        getBackendMessage(
+          e,
+          "Driver delete failed"
+        ),
+        "error"
+      );
     }
   };
 
@@ -147,12 +172,20 @@ function DriverManagement() {
 		/>
 
 		<CreateDriverModal
-        open={open}
-        onClose={() =>
-          setOpen(false)
-        }
-        onCreated={loadDrivers}
-      />
+		  open={open}
+		  onClose={() =>
+		    setOpen(false)
+		  }
+		  onCreated={async () => {
+		    await loadDrivers();
+
+		    showAlert(
+		      "Driver created successfully",
+		      "success"
+		    );
+		  }}
+		  showAlert={showAlert}
+		/>
     </div>
   );
 }

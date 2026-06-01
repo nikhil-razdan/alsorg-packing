@@ -5,12 +5,18 @@ import {
 } from "react";
 
 import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
+import {
   fetchShifts,
 } from "../../api/logisticsApi";
 
 import LogisticsPagination from "./LogisticsPagination";
 
-function ShiftHistory() {
+function ShiftHistory({
+  showAlert = () => {},
+}) {
   const [loading, setLoading] =
     useState(true);
 
@@ -30,12 +36,20 @@ function ShiftHistory() {
       const data = await fetchShifts();
 
       setShifts(data || []);
-    } catch (e) {
-      console.error(
-        "Failed to load shift history",
-        e
-      );
-    } finally {
+	  } catch (e) {
+	    console.error(
+	      "Failed to load shift history",
+	      e
+	    );
+
+	    showAlert(
+	      getBackendMessage(
+	        e,
+	        "Failed to load shift history"
+	      ),
+	      "error"
+	    );
+	  } finally {
       setLoading(false);
     }
   };
