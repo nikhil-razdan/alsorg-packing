@@ -2271,6 +2271,7 @@ const popupBox = {
     "0 30px 80px rgba(0,0,0,.55)",
 };
 
+
 const gatePassNumber = {
   fontSize: 30,
 

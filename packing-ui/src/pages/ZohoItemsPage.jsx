@@ -1,22 +1,138 @@
-import { useEffect, useState} from "react";
-import { DataGrid } from "@mui/x-data-grid";
+import { useEffect, useState, useMemo } from "react";
 import {
-  Drawer,
   Button,
   Divider,
   TextField,
   MenuItem,
   Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Chip,
+  IconButton,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
 import { FormControlLabel, Switch } from "@mui/material";
+
+function InventoryModal({
+  open,
+  onClose,
+  icon = "📦",
+  title,
+  subtitle,
+  width = 620,
+  children,
+  footer,
+}) {
+  if (!open) return null;
+
+  return (
+    <Box
+      sx={enhancedOverlaySx}
+      onClick={onClose}
+    >
+      <Box
+        sx={{
+          ...enhancedModalSx,
+          width,
+          maxHeight: "88vh",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Box sx={modalHeaderSx}>
+          <Box sx={modalTitleWrapSx}>
+            <Box sx={modalIconBubble("#3b82f6")}>
+              {icon}
+            </Box>
+
+            <Box>
+              <Box sx={modalTitleSx}>
+                {title}
+              </Box>
+
+              {subtitle && (
+                <Box sx={modalSubtitleSx}>
+                  {subtitle}
+                </Box>
+              )}
+            </Box>
+          </Box>
+
+          <IconButton
+            sx={modalCloseButtonSx}
+            onClick={onClose}
+          >
+            ×
+          </IconButton>
+        </Box>
+
+        <Box sx={modalContentSx}>
+          {children}
+        </Box>
+
+        {footer && (
+          <Box sx={modalFooterSx}>
+            {footer}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function InventorySidePanel({
+  open,
+  onClose,
+  icon = "📦",
+  title,
+  subtitle,
+  children,
+}) {
+  if (!open) return null;
+
+  return (
+    <Box
+      sx={sidePanelOverlaySx}
+      onClick={onClose}
+    >
+      <Box
+        sx={sidePanelSx}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Box sx={modalHeaderSx}>
+          <Box sx={modalTitleWrapSx}>
+            <Box sx={modalIconBubble("#3b82f6")}>
+              {icon}
+            </Box>
+
+            <Box>
+              <Box sx={modalTitleSx}>
+                {title}
+              </Box>
+
+              {subtitle && (
+                <Box sx={modalSubtitleSx}>
+                  {subtitle}
+                </Box>
+              )}
+            </Box>
+          </Box>
+
+          <IconButton
+            sx={modalCloseButtonSx}
+            onClick={onClose}
+          >
+            ×
+          </IconButton>
+        </Box>
+
+        <Box sx={sidePanelBodySx}>
+          {children}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
@@ -33,7 +149,7 @@ function ZohoItemsPage() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const darkMode = true;
   const [customPacketNo, setCustomPacketNo] = useState("");
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
   const [customAddOpen, setCustomAddOpen] = useState(false);
@@ -45,6 +161,8 @@ function ZohoItemsPage() {
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("NONE");
   const [createOpen, setCreateOpen] = useState(false);
+  const [pageNo, setPageNo] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [descriptions, setDescriptions] = useState([]);
   const [form, setForm] = useState({
     itemName: "",
@@ -77,350 +195,7 @@ function ZohoItemsPage() {
   });
 
   /* ===================== COLUMNS ===================== */
-  const columns = [
-	{
-	  field: "action",
-	  headerName: "Generate",
-	  width: 150,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      ⚙️ <span style={{ fontWeight: 700 }}>Generate</span>
-	    </Box>
-	  ),
-
-	  sortable: false,
-
-	  renderCell: (params) => (
-        <Button
-          size="small"
-          disabled={generating || !!params.row.stickerNumber}
-          onClick={async () => {
-            try {
-              setGenerating(true);
-              setSelectedItem(params.row);
-              setPdfUrl(null);
-              setDrawerOpen(true);
-            } catch (e) {
-              alert(e.message);
-            } finally {
-              setGenerating(false);
-            }
-          }}
-          sx={{
-            px: 2,
-            py: 0.6,
-            fontSize: 12,
-            fontWeight: 600,
-            borderRadius: "999px",
-            textTransform: "none",
-            color: "rgba(255,255,255,0.9)",
-            background:
-              "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
-          }}
-        >
-          Generate
-        </Button>
-      ),
-    },
-	{
-	  field: "addMore",
-	  headerName: "Add Packets",
-	  width: 170,
-	  sortable: false,
-
-	  renderHeader: () => (
-	    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-	      ➕ <span style={{ fontWeight: 700 }}>Add Packets</span>
-	    </Box>
-	  ),
-
-	  renderCell: (params) => {
-	    const masterId = params.row.masterItemId;
-
-	    // 🔥 SAFELY EXTRACT CURRENT PACKET NUMBER
-	    const current = getPacketNumber(params.row.sku) || 0;
-
-	    // 🔥 SAFELY GET MAX
-	    const max = maxPacketMap?.[masterId] || 0;
-
-	    // 🔥 FIX: allow >= (sometimes mismatch happens)
-	    const isLast = current >= max;
-
-	    
-
-	    const currentCount = rows.filter(
-	      (r) => r.masterItemId === masterId
-	    ).length;
-
-		// 🔥 REMOVE HARD LIMIT LOGIC
-		const isLimitReached = false;
-
-	    // 🧠 DEBUG (remove later)
-	    // console.log({ current, max, total, currentCount });
-
-	    // ❌ NOT LAST → NO BUTTON
-	    if (!isLast) return null;
-
-		return (
-		  <Box sx={{ display: "flex", gap: 1 }}>
-		    {/* NORMAL ADD */}
-		    <Button
-		      size="small"
-		      disabled={isLimitReached}
-		      onClick={() => {
-		        setSelectedItem(params.row);
-		        setAddCount(1);
-
-		        setDescriptions([]);
-		        setWeights([]);
-		        setDimensionsList([]);
-		        setRemarksList([]);
-
-		        setAddMoreOpen(true);
-		      }}
-		      sx={{
-		        px: 2,
-		        py: 0.6,
-		        fontSize: 12,
-		        fontWeight: 600,
-		        borderRadius: "999px",
-		        textTransform: "none",
-		        color: "#fff",
-		        background: "linear-gradient(180deg, #2563eb, #1e3a8a)",
-		      }}
-		    >
-		      + Add
-		    </Button>
-
-		    {/* 🔥 NEW CUSTOM BUTTON */}
-		    <Button
-		      size="small"
-		      onClick={() => {
-		        setSelectedItem(params.row);
-		        setCustomPacketNo("");
-		        setCustomAddOpen(true);
-		      }}
-		      sx={{
-		        px: 2,
-		        py: 0.6,
-		        fontSize: 12,
-		        fontWeight: 600,
-		        borderRadius: "999px",
-		        textTransform: "none",
-		        color: "#fff",
-		        background: "linear-gradient(180deg, #059669, #065f46)",
-		      }}
-		    >
-		      + Custom
-		    </Button>
-		  </Box>
-		);
-	  }
-	},
-	{
-	  field: "edit",
-	  headerName: "Edit",
-	  width: 120,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      ✏️ <span style={{ fontWeight: 700 }}>Edit</span>
-	    </Box>
-	  ),
-
-	  sortable: false,
-
-	  renderCell: (params) => (
-	    <Button
-	      size="small"
-	      onClick={() => {
-	        setEditItem(params.row);
-
-	        setEditForm({
-	          itemName: params.row.itemName || "",
-	          pdNo: params.row.pdNo || "",
-	          drawingNo: params.row.drawingNo || "",
-	          clientName: params.row.clientName || "",
-	          clientAddress: params.row.clientAddress || "",
-	          floor: params.row.floor || "",
-	          description: params.row.description || "",
-	          weight: params.row.weight || "",
-	          dimensions: params.row.dimensions || "",
-	          remarks: params.row.remarks || "",
-	          location: params.row.location || "",
-	          stickerNumber: params.row.stickerNumber,
-	        });
-
-	        setEditOpen(true);
-	      }}
-	      sx={{
-	        px: 2,
-	        py: 0.6,
-	        fontSize: 12,
-	        fontWeight: 600,
-	        borderRadius: "999px",
-	        textTransform: "none",
-	        color: "#fff",
-	        background:
-	          "linear-gradient(180deg, #f59e0b, #b45309)",
-	      }}
-	    >
-	      Edit
-	    </Button>
-	  ),
-	},
-	{
-	  field: "delete",
-	  headerName: "Delete",
-	  width: 120,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      🗑️ <span style={{ fontWeight: 700 }}>Delete</span>
-	    </Box>
-	  ),
-
-	  sortable: false,
-
-	  renderCell: (params) => {
-	    const isDeletable =
-	      params.row.status === "CREATED" && !params.row.stickerNumber;
-
-	    return (
-	      <Button
-	        size="small"
-	        disabled= {false}
-	        onClick={async () => {
-	          if (!window.confirm("Delete this item?")) return;
-
-	          try {
-	            await fetch(
-	              `${API_BASE_URL}/api/packets/items/${params.row.itemId}`,
-	              {
-	                method: "DELETE",
-	                headers: {
-	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                },
-	              }
-	            );
-
-	            fetchItems(); // refresh
-	          } catch (e) {
-	            alert("Delete failed");
-	          }
-	        }}
-			sx={{
-			  px: 2,
-			  py: 0.6,
-			  fontSize: 12,
-			  fontWeight: 600,
-			  borderRadius: "999px",
-			  textTransform: "none",
-			  color: "#fff",
-			  opacity: isDeletable ? 1 : 0.85, 
-			  background: isDeletable
-			    ? "linear-gradient(180deg, #dc2626, #7f1d1d)"  
-			    : "linear-gradient(180deg, #4b5563, #1f2937)", 
-			  boxShadow: isDeletable
-			    ? "0 4px 12px rgba(220,38,38,0.4)"
-			    : "0 2px 6px rgba(0,0,0,0.25)", 
-				"&:hover": {
-				  filter: "brightness(1.1)",
-				  transform: "translateY(-1px)",
-				}
-			}}
-	      >
-	        Delete
-	      </Button>
-	    );
-	  },
-	},
-	{
-	  field: "itemName",
-	  headerName: "Item Name",
-	  flex: 1,
-	  minWidth: 320,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      📦 <span style={{ fontWeight: 700 }}>Item Name</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "sku",
-	  headerName: "SKU",
-	  minWidth: 260,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      🔖 <span style={{ fontWeight: 700 }}>SKU</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "pdNo",
-	  headerName: "PD No",
-	  width: 140,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      🧾 <span style={{ fontWeight: 700 }}>PD No</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "drawingNo",
-	  headerName: "Drawing No",
-	  width: 160,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      📐 <span style={{ fontWeight: 700 }}>Drawing No</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "clientName",
-	  headerName: "Client",
-	  width: 180,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      🏢 <span style={{ fontWeight: 700 }}>Client</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "clientAddress",
-	  headerName: "Address",
-	  width: 220,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      📍 <span style={{ fontWeight: 700 }}>Address</span>
-	    </Box>
-	  ),
-	},
-
-	{
-	  field: "description",
-	  headerName: "Description",
-	  width: 200,
-
-	  renderHeader: () => (
-	    <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-	      📝 <span style={{ fontWeight: 700 }}>Description</span>
-	    </Box>
-	  ),
-	},
-  ];
+ 
 
   const fetchItems = async () => {
     setLoading(true);
@@ -457,17 +232,72 @@ function ZohoItemsPage() {
     return match ? Number(match[1]) : 0;
   };
   
-  // 🔥 FIND LAST PACKET PER MASTER ITEM
-  const maxPacketMap = {};
+  const maxPacketMap = useMemo(() => {
+    const map = {};
 
-  rows.forEach((r) => {
-    const key = r.masterItemId || r.itemName;
-    const pktNo = getPacketNumber(r.sku);
+    rows.forEach((r) => {
+      const key = r.masterItemId || r.itemName;
+      const pktNo = getPacketNumber(r.sku);
 
-    if (!maxPacketMap[key] || pktNo > maxPacketMap[key]) {
-      maxPacketMap[key] = pktNo;
+      if (!map[key] || pktNo > map[key]) {
+        map[key] = pktNo;
+      }
+    });
+
+    return map;
+  }, [rows]);
+  
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    let list = Array.isArray(rows) ? [...rows] : [];
+
+    if (q) {
+      list = list.filter((r) => {
+        return (
+          (r.itemName || "").toLowerCase().includes(q) ||
+          (r.sku || "").toLowerCase().includes(q) ||
+          (r.clientName || "").toLowerCase().includes(q) ||
+          (r.pdNo || "").toLowerCase().includes(q) ||
+          (r.drawingNo || "").toLowerCase().includes(q)
+        );
+      });
     }
-  });
+
+    if (groupBy === "SKU") {
+      list.sort((a, b) => (a.sku || "").localeCompare(b.sku || ""));
+    }
+
+    if (groupBy === "NAME") {
+      list.sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
+    }
+
+    return list;
+  }, [rows, search, groupBy]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / pageSize)
+  );
+
+  const safePageNo = Math.min(pageNo, totalPages);
+
+  const paginatedRows = useMemo(() => {
+    const start = (safePageNo - 1) * pageSize;
+
+    return filteredRows.slice(
+      start,
+      start + pageSize
+    );
+  }, [filteredRows, safePageNo, pageSize]);
+
+  const isLastPacket = (row) => {
+    const key = row.masterItemId || row.itemName;
+    const current = getPacketNumber(row.sku) || 0;
+    const max = maxPacketMap?.[key] || 0;
+
+    return current >= max;
+  };
   
   const validateStep1 = () => {
     let err = {};
@@ -495,6 +325,76 @@ function ZohoItemsPage() {
     return valid;
   };
   
+  const openGenerateStickerPanel = (row) => {
+    setGenerating(false);
+    setSelectedItem(row);
+    setPdfUrl(null);
+    setDrawerOpen(true);
+  };
+
+  const openAddPacketsModal = (row) => {
+    setSelectedItem(row);
+    setAddCount(1);
+
+    setDescriptions([]);
+    setWeights([]);
+    setDimensionsList([]);
+    setRemarksList([]);
+
+    setAddMoreOpen(true);
+  };
+
+  const openCustomAddModal = (row) => {
+    setSelectedItem(row);
+    setCustomPacketNo("");
+    setDescriptions([]);
+    setWeights([]);
+    setDimensionsList([]);
+    setRemarksList([]);
+    setCustomAddOpen(true);
+  };
+
+  const openEditModal = (row) => {
+    setEditItem(row);
+
+    setEditForm({
+      itemName: row.itemName || "",
+      pdNo: row.pdNo || "",
+      drawingNo: row.drawingNo || "",
+      clientName: row.clientName || "",
+      clientAddress: row.clientAddress || "",
+      floor: row.floor || "",
+      description: row.description || "",
+      weight: row.weight || "",
+      dimensions: row.dimensions || "",
+      remarks: row.remarks || "",
+      location: row.location || "",
+      stickerNumber: row.stickerNumber,
+    });
+
+    setEditOpen(true);
+  };
+
+  const deletePacketItem = async (row) => {
+    if (!window.confirm("Delete this item?")) return;
+
+    try {
+      await fetch(
+        `${API_BASE_URL}/api/packets/items/${row.itemId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      fetchItems();
+    } catch (e) {
+      alert("Delete failed");
+    }
+  };
+  
   useEffect(() => {
     fetchItems();
   }, []);
@@ -518,732 +418,568 @@ function ZohoItemsPage() {
   }, [form.numberOfPackets]);
   /* ===================== RENDER ===================== */
   return (
-    <div style={page()}>
-      <div style={backgroundText(darkMode)}>Alsorg</div>
-
+    <div style={page}>
       <div style={content}>
-	  <Box
-	    sx={{
-	      display: "flex",
-	      alignItems: "center",
-	      justifyContent: "space-between",
-	      mb: 2,
-	    }}
-	  >
-	    <Box>
-	      <h2
-	        style={{
-	          margin: 0,
-	          fontSize: 28,
-	          fontWeight: 800,
-	          color: darkMode ? "#FFD700" : "#0f172a",
-	        }}
-	      >
-	        Inventory Items
-	      </h2>
+        <div style={headerRow}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                fontSize: 34,
+                display: "flex",
+                alignItems: "center",
+                color: "#60a5fa",
+              }}
+            >
+              📦
+            </Box>
 
-	      <div
-	        style={{
-	          fontSize: 13,
-	          color: darkMode
-	            ? "rgba(255,215,0,0.75)"
-	            : "#64748b",
-	          marginTop: 4,
-	        }}
-	      >
-	        Manage packed inventory and stickers
-	      </div>
-	    </Box>
+            <div>
+              <div style={logo}>
+                Inventory Items
+              </div>
 
-	    <Box sx={{ display: "flex", gap: 1.5 }}>
-	      <Button onClick={() => setDarkMode(!darkMode)} sx={themeBtn(darkMode)}>
-	        {darkMode ? "☀ Classic" : "🌙 Dark"}
-	      </Button>
+              <div style={subtitle}>
+                Manage packed inventory, packets and stickers
+              </div>
+            </div>
+          </Box>
 
-	      <Box
-	        sx={{
-	          px: 2,
-	          py: 0.6,
-	          borderRadius: "999px",
-	          background: darkMode ? "#111" : "#e0f2fe",
-	          color: darkMode ? "#FFD700" : "#0369a1",
-	          fontWeight: 700,
-	          fontSize: 12,
-	        }}
-	      >
-	        {rowCount} Items
-	      </Box>
-	    </Box>
-	  </Box>
-	  <Box sx={{ display: "flex", gap: 1.5, mb: 1 }}>
-	    <Button
-	      variant="contained"
-	      onClick={() => {
-	        setActiveStep(0);
-	        setCreateOpen(true);
-	      }}
-	      sx={{
-	        px: 2.6,
-	        py: 1,
-	        borderRadius: "999px",
-	        fontWeight: 600,
-	        background: "#4f46e5",
-	        color: "#fff",
-	        "&:hover": { background: "#4338ca" }
-	      }}
-	    >
-	      Create Item
-	    </Button>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+            }}
+          >
+            <Box sx={countBadgeSx}>
+              Total Items:{" "}
+              <span style={{ color: "#60a5fa", fontWeight: 900 }}>
+                {filteredRows.length}
+              </span>
+            </Box>
 
-	    <Button
-	      variant="outlined"
-	      onClick={() => {
-	        setCustomPacketNo("");
-	        setCustomCreateOpen(true);
-	      }}
-	      sx={{
-	        borderRadius: "999px",
-	        fontWeight: 600
-	      }}
-	    >
-	      + Custom Packet
-	    </Button>
-	  </Box>
-		<Box sx={searchPanel}>
-		<SearchIcon
-		  sx={{
-		    opacity: 0.75,
-		    color: darkMode
-		      ? "#FFD700"
-		      : "rgba(0,0,0,0.55)",
-		  }}
-		/>
+            <Button
+              onClick={() => {
+                setActiveStep(0);
+                setCreateOpen(true);
+              }}
+              sx={premiumButton}
+            >
+              + Create Item
+            </Button>
 
-		  <TextField
-		    variant="standard"
-		    placeholder="Search by Item Name or SKU..."
-		    value={search}
-		    onChange={(e) => setSearch(e.target.value)}
-		    InputProps={{ disableUnderline: true }}
-			sx={{
-			  flex: 1,
-
-			  "& .MuiInputBase-root": {
-			    height: 40,
-			    borderRadius: "18px",
-			    padding: "0 8px",
-			    background: "rgba(255,255,255,0.55)",
-			    border: "1px solid rgba(255,255,255,0.35)",
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& input": {
-			    fontSize: 14,
-			    fontWeight: 500,
-			    color: "#111",
-			  },
-
-			  "& input::placeholder": {
-			    color: "rgba(0,0,0,0.45)",
-			  },
-
-			  "& .MuiInputBase-root:hover": {
-			    background: "#fff",
-			  },
-
-			  "& .Mui-focused": {
-			    background: "#fff",
-			    boxShadow: "0 0 0 2px rgba(59,130,246,0.3)",
-			  },
-			}}
-		  />
-		  <TextField
-		    select
-		    size="small"
-		    value={groupBy}
-		    onChange={(e) => setGroupBy(e.target.value)}
-			sx={{
-			  flex: 1,
-			  minWidth: 150,
-
-			  "& .MuiInputBase-root": {
-			    height: 40,
-
-			    borderRadius: "18px",
-
-			    padding: "0 10px",
-
-			    background: darkMode
-			      ? "rgba(255,255,255,0.03)"
-			      : "rgba(255,255,255,0.55)",
-
-			    color: darkMode ? "#fff" : "#111",
-
-			    border: darkMode
-			      ? "1px solid rgba(255,215,0,0.08)"
-			      : "1px solid rgba(255,255,255,0.35)",
-
-			    transition: "all 0.25s ease",
-			  },
-
-			  "& input": {
-			    color: darkMode ? "#fff" : "#111",
-			    fontWeight: 500,
-			  },
-
-			  "& input::placeholder": {
-			    color: darkMode
-			      ? "rgba(255,255,255,0.45)"
-			      : "rgba(0,0,0,0.45)",
-			    opacity: 1,
-			  },
-
-			  "& .MuiSvgIcon-root": {
-			    color: darkMode ? "#FFD700" : "#111",
-			  },
-
-			  "& .MuiSelect-select": {
-			    color: darkMode ? "#fff" : "#111",
-			    display: "flex",
-			    alignItems: "center",
-			  },
-			}}
-			slotProps={{
-			  select: {
-			    MenuProps: {
-			      PaperProps: {
-			        sx: {
-			          mt: 1,
-			          borderRadius: "18px",
-
-			          background: darkMode
-			            ? "rgba(15,15,15,0.96)"
-			            : "rgba(255,255,255,0.96)",
-
-			          color: darkMode ? "#fff" : "#111",
-
-			          border: darkMode
-			            ? "1px solid rgba(255,215,0,0.12)"
-			            : "1px solid rgba(0,0,0,0.06)",
-
-			          backdropFilter: "blur(18px)",
-
-			          "& .MuiMenuItem-root": {
-			            color: darkMode ? "#fff" : "#111",
-			          },
-
-			          "& .Mui-selected": {
-			            background: darkMode
-			              ? "rgba(255,215,0,0.14) !important"
-			              : "rgba(59,130,246,0.12) !important",
-
-			            color: darkMode ? "#FFD700" : "#2563eb",
-			          },
-			        },
-			      },
-			    },
-			  },
-			}}
-		  >
-		    <MenuItem value="NONE">No Group</MenuItem>
-		    <MenuItem value="SKU">Group by SKU</MenuItem>
-		    <MenuItem value="NAME">Group by Name</MenuItem>
-		  </TextField>
-		</Box>
-		
-        <div style={tableWrapper}>
-          <DataGrid
-		    rows={rows}
-			rowCount={rowCount}
-            columns={columns}
-            loading={loading}
-            density="compact"
-            getRowId={(row) => row.itemId}
-            getRowClassName={() => "row-packed"}
-            sx={dataGridStyles}
-          />
+            <Button
+              onClick={() => {
+                setCustomPacketNo("");
+                setCustomCreateOpen(true);
+              }}
+              sx={actionSecondary}
+            >
+              + Custom Packet
+            </Button>
+          </Box>
         </div>
-      </div>
+
+        <Box sx={searchPanel}>
+          <SearchIcon
+            sx={{
+              color: "rgba(255,255,255,.45)",
+            }}
+          />
+
+          <TextField
+            variant="standard"
+            placeholder="Search by Item, SKU, Client, PD No..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPageNo(1);
+            }}
+            InputProps={{ disableUnderline: true }}
+            sx={searchInputSx}
+          />
+
+          <TextField
+            select
+            size="small"
+            value={groupBy}
+            onChange={(e) => {
+              setGroupBy(e.target.value);
+              setPageNo(1);
+            }}
+            sx={selectFieldSx}
+            slotProps={selectMenuSlotProps}
+          >
+            <MenuItem value="NONE">No Group</MenuItem>
+            <MenuItem value="SKU">Group by SKU</MenuItem>
+            <MenuItem value="NAME">Group by Name</MenuItem>
+          </TextField>
+        </Box>
+
+        <div style={wrap}>
+          <Box sx={tableWrapper}>
+            <div
+              style={{
+                width: "max-content",
+                minWidth: "100%",
+              }}
+            >
+              <div style={tableHeader}>
+                <div>Generate</div>
+                <div>Add Packets</div>
+                <div>Edit</div>
+                <div>Delete</div>
+                <div>Item Name</div>
+                <div>SKU</div>
+                <div>PD No</div>
+                <div>DWG No</div>
+                <div>Client</div>
+                <div>Address</div>
+                <div>Description</div>
+                <div>Status</div>
+              </div>
+
+              <div style={tableBody}>
+                {loading && (
+                  <div style={emptyTableState}>
+                    Loading inventory items...
+                  </div>
+                )}
+
+                {!loading && paginatedRows.length === 0 && (
+                  <div style={emptyTableState}>
+                    No inventory items found.
+                  </div>
+                )}
+
+                {!loading && paginatedRows.map((row) => {
+                  const lastPacket = isLastPacket(row);
+                  const isDeletable =
+                    row.status === "CREATED" && !row.stickerNumber;
+
+                  return (
+                    <div
+                      key={row.itemId}
+                      style={tableRow}
+                    >
+                      <div style={tableCellWrap}>
+                        <Button
+                          size="small"
+                          disabled={generating || !!row.stickerNumber}
+                          onClick={() => openGenerateStickerPanel(row)}
+                          sx={{
+                            ...actionPrimary,
+                            ...tableActionButton,
+                            opacity: row.stickerNumber ? 0.45 : 1,
+                          }}
+                        >
+                          {row.stickerNumber ? "Generated" : "Generate"}
+                        </Button>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        {lastPacket ? (
+                          <Box sx={actionCell}>
+                            <Button
+                              size="small"
+                              onClick={() => openAddPacketsModal(row)}
+                              sx={{
+                                ...actionPrimary,
+                                ...smallActionButton,
+                              }}
+                            >
+                              + Add
+                            </Button>
+
+                            <Button
+                              size="small"
+                              onClick={() => openCustomAddModal(row)}
+                              sx={{
+                                ...actionSuccess,
+                                ...smallActionButton,
+                              }}
+                            >
+                              + Custom
+                            </Button>
+                          </Box>
+                        ) : (
+                          <span style={simpleMutedText}>
+                            —
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <Button
+                          size="small"
+                          onClick={() => openEditModal(row)}
+                          sx={{
+                            ...actionWarning,
+                            ...tableActionButton,
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <Button
+                          size="small"
+                          disabled={!isDeletable}
+                          onClick={() => deletePacketItem(row)}
+                          sx={{
+                            ...actionDanger,
+                            ...tableActionButton,
+                            opacity: isDeletable ? 1 : 0.45,
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleCellText}
+                          title={row.itemName}
+                        >
+                          {row.itemName || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleMonoText}
+                          title={row.sku}
+                        >
+                          {row.sku || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleMutedText}
+                          title={row.pdNo}
+                        >
+                          {row.pdNo || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleMonoText}
+                          title={row.drawingNo}
+                        >
+                          {row.drawingNo || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleCellText}
+                          title={row.clientName}
+                        >
+                          {row.clientName || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleMutedText}
+                          title={row.clientAddress}
+                        >
+                          {row.clientAddress || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <span
+                          style={simpleMutedText}
+                          title={row.description}
+                        >
+                          {row.description || "—"}
+                        </span>
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <Chip
+                          label={row.stickerNumber ? "Sticker Printed" : row.status || "CREATED"}
+                          size="small"
+                          sx={row.stickerNumber ? printedChipSx : createdChipSx}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Box>
+
+          <Box sx={paginationBarSx}>
+            <Box sx={paginationLeftSx}>
+              <Box sx={paginationTextSx}>
+                Show
+              </Box>
+
+              <TextField
+                select
+                size="small"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPageNo(1);
+                }}
+                sx={paginationSelectSx}
+                slotProps={selectMenuSlotProps}
+              >
+                <MenuItem value={25}>25</MenuItem>
+                <MenuItem value={50}>50</MenuItem>
+              </TextField>
+
+              <Box sx={paginationTextSx}>
+                items per page
+              </Box>
+            </Box>
+
+            <Box sx={paginationCenterSx}>
+              <Button
+                disabled={safePageNo === 1}
+                onClick={() => setPageNo((p) => Math.max(1, p - 1))}
+                sx={paginationButtonSx}
+              >
+                ◀ Previous
+              </Button>
+
+              <Box sx={pageCountSx}>
+                Page{" "}
+                <Box component="span" sx={{ mx: 1, color: "#60a5fa" }}>
+                  {safePageNo}
+                </Box>
+                of {totalPages}
+              </Box>
+
+              <Button
+                disabled={safePageNo === totalPages}
+                onClick={() => setPageNo((p) => Math.min(totalPages, p + 1))}
+                sx={{
+                  ...paginationButtonSx,
+                  background:
+                    "linear-gradient(180deg,#2563eb,#1d4ed8)",
+                }}
+              >
+                Next ▶
+              </Button>
+            </Box>
+          </Box>
+        </div>
 
       {/* ===================== DRAWER ===================== */}
-      <Drawer
-        anchor="right"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      >
-        <div style={drawer(darkMode)}>
-          <div style={drawerHighlight} />
-          <h3 style={drawerTitle(darkMode)}>{selectedItem?.itemName}</h3>
-
-          <Divider sx={{ my: 2 }} />
-
-          <p><b>SKU:</b><br />{selectedItem?.sku || "—"}</p>
-          <p><b>Location:</b> {selectedItem?.location ?? "—"}</p>
-
-          <Divider sx={{ my: 2 }} />
-		  <FormControlLabel
-		    control={
-		      <Switch
-		        checked={form.showCompanyHeader}
-		        onChange={(e) =>
-		          setForm((prev) => ({
-		            ...prev,
-		            showCompanyHeader: e.target.checked,
-		          }))
-		        }
-		      />
-		    }
-		    label="Show Company Header"
-		    sx={{
-		      mb: 1,
-		      "& .MuiFormControlLabel-label": {
-		        fontWeight: 500,
-		        fontSize: 13,
-		      },
-		    }}
-		  />
-		  <TextField
-		    label="Packing Floor"
-		    fullWidth
-		    value={form.factoryFloor || ""}
-		    onChange={(e) =>
-		      setForm((prev) => ({
-		        ...prev,
-		        factoryFloor: e.target.value,
-		      }))
-		    }
-		    sx={formFieldSx(darkMode)}
-		  />
-		  <Button
-		    disabled={generating}
-			onClick={async () => {
-			  try {
-			    setGenerating(true);			    
-			//	if (!form.factoryFloor) {
-			//	  alert("Factory Floor is required");
-			//	  setGenerating(false);
-			//	  return;
-			//	}
-			    const genRes = await fetch(
-			      `${API_BASE_URL}/api/packets/items/${selectedItem.itemId}/generate-sticker?factoryFloor=${encodeURIComponent(form.factoryFloor)}&showCompanyHeader=${form.showCompanyHeader}`,
-			      {
-			        method: "POST",
-			        headers: {
-			          Authorization: `Bearer ${localStorage.getItem("token")}`,
-			        },
-			      }
-			    );
-
-				const contentType = genRes.headers.get("content-type");
-
-				if (!contentType?.includes("pdf")) {
-				  const text = await genRes.text();
-				  console.error("NOT PDF:", text);
-				  throw new Error("Invalid response");
-				}
-
-			    // 🔥 STEP 3: SHOW PDF
-			    const blob = await genRes.blob();
-			    const url = URL.createObjectURL(blob);
-			    setPdfUrl(url);
-
-			  } catch (e) {
-			    console.error(e);
-			    alert("Failed to generate sticker");
-			  } finally {
-			    setGenerating(false);
-			  }
-			}}
-		    sx={drawerButton(darkMode)}
-		  >
-		    Generate Sticker
-		  </Button>
-
-
-          {pdfUrl && (
-            <>
-              <Divider sx={{ my: 2 }} />
-              <iframe
-                src={pdfUrl}
-                width="100%"
-                height="480"
-                style={{ borderRadius: 12, border: "1px solid #ddd" }}
-                title="Sticker Preview"
-              />
-            </>
-          )}
-        </div>
-      </Drawer>
-	  <Drawer
-	    anchor="right"
-	    open={createOpen}
-	    onClose={() => setCreateOpen(false)}
+	  <InventorySidePanel
+	    open={drawerOpen}
+	    onClose={() => setDrawerOpen(false)}
+	    icon="🏷️"
+	    title={selectedItem?.itemName || "Generate Sticker"}
+	    subtitle="Generate and preview sticker PDF"
 	  >
-	    <div style={drawer(darkMode)}>
-		<Stepper activeStep={activeStep} sx={{ mb: 3 }}>
-		    <Step><StepLabel>Item Info</StepLabel></Step>
-		    <Step><StepLabel>Packet Details</StepLabel></Step>
-		    <Step><StepLabel>Done</StepLabel></Step>
-		  </Stepper>
-	      <h3>Create Item</h3>
+	    <p style={infoLineSx}>
+	      <b>SKU:</b><br />
+	      {selectedItem?.sku || "—"}
+	    </p>
 
-	      {		  [
-		    "itemName",
-		    "pdNo",
-		    "drawingNo",
-		    "clientName",
-		    "clientAddress",
-		    "floor",
-		    "numberOfPackets",
-		  ].map((field) => (
-	        <TextField
-	          key={field}
-	          label={field}
-	          fullWidth
-	          type={field === "numberOfPackets" ? "number" : "text"}
-	          value={form[field]}
-			  onChange={(e) =>
-			    setForm((prev) => ({
-			      ...prev,
-			      [field]:
-			        field === "numberOfPackets"
-			          ? Number(e.target.value)
-			          : e.target.value,
-			    }))
-			  }
-			  error={!!errors[field]}                // ✅ ADD
-			  helperText={errors[field]}  
-	          sx={formFieldSx(darkMode)}
-	        />
-	      ))}
-		  <Button
-		    variant="contained"
-		    onClick={() => {
-		      if (!validateStep1()) return;
-		      setActiveStep(1);
-		      setDetailsPopup(true);
-		    }}
-		  >
-		    Continue →
-		  </Button>
-	    </div>
-	  </Drawer>
-	  <Dialog
-	    open={detailsPopup}
-	    onClose={() => setDetailsPopup(false)}
-	    fullWidth
-	    maxWidth="sm"
-	    PaperProps={{
-	      sx: {
-	        borderRadius: "24px",
+	    <p style={infoLineSx}>
+	      <b>Location:</b> {selectedItem?.location ?? "—"}
+	    </p>
 
-	        background: darkMode
-	          ? "linear-gradient(180deg,#111,#0b0b0b)"
-	          : "#ffffff",
+	    <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.08)" }} />
 
-	        color: darkMode ? "#fff" : "#111",
-
-	        border: darkMode
-	          ? "1px solid rgba(255,215,0,0.12)"
-	          : "none",
-
-	        boxShadow: darkMode
-	          ? "0 30px 80px rgba(0,0,0,0.8)"
-	          : "0 20px 50px rgba(0,0,0,0.2)",
-	      },
-	    }}
-	  >
-	    <DialogTitle sx={{ fontWeight: 700 }}>
-	      Packet Details
-	    </DialogTitle>
-
-		<DialogContent
-		  dividers
-		  sx={{
-		    borderColor: darkMode
-		      ? "rgba(255,215,0,0.08)"
-		      : "rgba(0,0,0,0.08)",
-		  }}
-		>
-	      {descriptions.map((_, i) => (
-			<motion.div
-			    key={i}
-			    initial={{ opacity: 0, y: 20 }}
-			    animate={{ opacity: 1, y: 0 }}
-			    transition={{ delay: i * 0.05 }}
-			  >
-			    <Box
-			      sx={{
-			        mb: 2,
-			        p: 2,
-			        borderRadius: 3,
-					background: darkMode
-					  ? "rgba(255,255,255,0.03)"
-					  : "rgba(0,0,0,0.03)",
-
-					border: darkMode
-					  ? "1px solid rgba(255,215,0,0.08)"
-					  : "1px solid rgba(0,0,0,0.05)",
-			      }}
-	        >
-	          <b style={{ display: "block", marginBottom: 8 }}>
-	            Packet {i + 1}
-	          </b>
-
-	          <TextField
-	            label="Description"
-	            fullWidth
-	            value={descriptions[i]}
-	            onChange={(e) => {
-	              const copy = [...descriptions];
-	              copy[i] = e.target.value;
-	              setDescriptions(copy);
-	            }}
-				sx={{
-				  ...formFieldSx(darkMode),
-				  mb: 1,
-				}}
-	          />
-
-	          <TextField
-	            label="Weight"
-	            fullWidth
-	            value={weights[i]}
-	            onChange={(e) => {
-	              const copy = [...weights];
-	              copy[i] = e.target.value;
-	              setWeights(copy);
-	            }}
-				error={!!errors[`weight-${i}`]}          
-				helperText={errors[`weight-${i}`]}
-				sx={{
-				  ...formFieldSx(darkMode),
-				  mb: 1,
-				}}
-	          />
-
-			  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
-			    <TextField
-			      label="L"
-			      type="number"
-			      value={dimensionsList[i]?.l || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], l: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>x</span>
-
-			    <TextField
-			      label="B"
-			      type="number"
-			      value={dimensionsList[i]?.b || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], b: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>x</span>
-
-			    <TextField
-			      label="H"
-			      type="number"
-			      value={dimensionsList[i]?.h || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], h: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>inches</span>
-			  </Box>
-
-	          <TextField
-	            label="Remarks"
-	            fullWidth
-	            value={remarksList[i]}
-	            onChange={(e) => {
-	              const copy = [...remarksList];
-	              copy[i] = e.target.value;
-	              setRemarksList(copy);
-	            }}
-				sx={formFieldSx(darkMode)}
-	          />
-			  </Box>
-			  </motion.div>
-	      ))}
-	    </DialogContent>
-
-	    <DialogActions 		
-		sx={{
-		  borderTop: darkMode
-		    ? "1px solid rgba(255,215,0,0.08)"
-		    : "1px solid rgba(0,0,0,0.06)",
-
-		  background: darkMode
-		    ? "#0b0b0b"
-		    : "#fff",
-		}}>
-	      <Button onClick={() => setDetailsPopup(false)}>
-	        Cancel
-	      </Button>
-
-		  <Button
-		    variant="contained"
-		    onClick={async () => {
-		      if (!validatePackets()) return;
-
-		      await fetch(`${API_BASE_URL}/api/packets/create`, {
-		        method: "POST",
-		        headers: {
-		          "Content-Type": "application/json",
-		          Authorization: `Bearer ${localStorage.getItem("token")}`,
-		        },
-		        body: JSON.stringify({
-		          ...form,
-		          descriptions,
-		          weights,
-				  dimensionsList: dimensionsList.map((d) =>
-				    d?.l && d?.b && d?.h
-				      ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-				      : ""
-				  ),
-		          remarksList,
-		        }),
-		      });
-
-			  setActiveStep(2);
-			  setDetailsPopup(false);
-			  fetchItems();
-
-			  setTimeout(() => {
-			    setCreateOpen(false);
-			    setActiveStep(0);
-			  }, 800);
-		    }}
-		  >
-		    Create Packets
-		  </Button>
-	    </DialogActions>
-	  </Dialog>
-	  <Dialog
-	    open={customCreateOpen}
-	    onClose={() => setCustomCreateOpen(false)}
-	    fullWidth
-	    maxWidth="sm"
-	  >
-	    <DialogTitle>Create Custom Packet</DialogTitle>
-
-	    <DialogContent>
-
-	      {/* 🔥 STEP 1: ITEM DETAILS */}
-	      {[
-	        "itemName",
-	        "pdNo",
-	        "drawingNo",
-	        "clientName",
-	        "clientAddress",
-	        "floor",
-	      ].map((field) => (
-	        <TextField
-	          key={field}
-	          label={field}
-	          fullWidth
-	          value={form[field]}
+	    <FormControlLabel
+	      control={
+	        <Switch
+	          checked={form.showCompanyHeader}
 	          onChange={(e) =>
 	            setForm((prev) => ({
 	              ...prev,
-	              [field]: e.target.value,
+	              showCompanyHeader: e.target.checked,
 	            }))
 	          }
-	          sx={formFieldSx(darkMode)}
 	        />
-	      ))}
+	      }
+	      label="Show Company Header"
+	      sx={{
+	        mb: 1,
+	        color: "#cbd5e1",
+	        "& .MuiFormControlLabel-label": {
+	          fontWeight: 700,
+	          fontSize: 13,
+	        },
+	      }}
+	    />
 
-	      {/* 🔥 CUSTOM PACKET NUMBER */}
+	    <TextField
+	      label="Packing Floor"
+	      fullWidth
+	      value={form.factoryFloor || ""}
+	      onChange={(e) =>
+	        setForm((prev) => ({
+	          ...prev,
+	          factoryFloor: e.target.value,
+	        }))
+	      }
+	      sx={formFieldSx(darkMode)}
+	    />
+
+	    <Button
+	      disabled={generating}
+	      onClick={async () => {
+	        try {
+	          setGenerating(true);
+
+	          const genRes = await fetch(
+	            `${API_BASE_URL}/api/packets/items/${selectedItem.itemId}/generate-sticker?factoryFloor=${encodeURIComponent(form.factoryFloor)}&showCompanyHeader=${form.showCompanyHeader}`,
+	            {
+	              method: "POST",
+	              headers: {
+	                Authorization: `Bearer ${localStorage.getItem("token")}`,
+	              },
+	            }
+	          );
+
+	          const contentType = genRes.headers.get("content-type");
+
+	          if (!contentType?.includes("pdf")) {
+	            const text = await genRes.text();
+	            console.error("NOT PDF:", text);
+	            throw new Error("Invalid response");
+	          }
+
+	          const blob = await genRes.blob();
+	          const url = URL.createObjectURL(blob);
+
+	          setPdfUrl(url);
+	          fetchItems();
+	        } catch (e) {
+	          console.error(e);
+	          alert("Failed to generate sticker");
+	        } finally {
+	          setGenerating(false);
+	        }
+	      }}
+	      sx={{
+	        ...premiumButton,
+	        width: "100%",
+	        height: 42,
+	        mt: 1,
+	      }}
+	    >
+	      {generating ? "Generating..." : "Generate Sticker"}
+	    </Button>
+
+	    {pdfUrl && (
+	      <>
+	        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.08)" }} />
+
+	        <iframe
+	          src={pdfUrl}
+	          width="100%"
+	          height="480"
+	          style={{
+	            borderRadius: 12,
+	            border: "1px solid rgba(255,255,255,.08)",
+	            background: "#fff",
+	          }}
+	          title="Sticker Preview"
+	        />
+	      </>
+	    )}
+	  </InventorySidePanel>
+	  <InventorySidePanel
+	    open={createOpen}
+	    onClose={() => setCreateOpen(false)}
+	    icon="➕"
+	    title="Create Item"
+	    subtitle="Create master item and packet details"
+	  >
+	    <Stepper
+	      activeStep={activeStep}
+	      sx={stepperSx}
+	    >
+	      <Step><StepLabel>Item Info</StepLabel></Step>
+	      <Step><StepLabel>Packet Details</StepLabel></Step>
+	      <Step><StepLabel>Done</StepLabel></Step>
+	    </Stepper>
+
+	    {[
+	      "itemName",
+	      "pdNo",
+	      "drawingNo",
+	      "clientName",
+	      "clientAddress",
+	      "floor",
+	      "numberOfPackets",
+	    ].map((field) => (
 	      <TextField
-	        label="Custom Packet Number"
-	        type="number"
+	        key={field}
+	        label={field}
 	        fullWidth
-	        value={customPacketNo}
-	        onChange={(e) => setCustomPacketNo(e.target.value)}
+	        type={field === "numberOfPackets" ? "number" : "text"}
+	        value={form[field]}
+	        onChange={(e) =>
+	          setForm((prev) => ({
+	            ...prev,
+	            [field]:
+	              field === "numberOfPackets"
+	                ? Number(e.target.value)
+	                : e.target.value,
+	          }))
+	        }
+	        error={!!errors[field]}
+	        helperText={errors[field]}
 	        sx={formFieldSx(darkMode)}
 	      />
+	    ))}
 
-	      {/* 🔥 PACKET DETAILS (SINGLE ONLY) */}
-	      <TextField
-	        label="Description"
-	        fullWidth
-	        value={descriptions[0] || ""}
-	        onChange={(e) => setDescriptions([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
+	    <Button
+	      onClick={() => {
+	        if (!validateStep1()) return;
+	        setActiveStep(1);
+	        setDetailsPopup(true);
+	      }}
+	      sx={{
+	        ...premiumButton,
+	        width: "100%",
+	        height: 42,
+	      }}
+	    >
+	      Continue →
+	    </Button>
+	  </InventorySidePanel>
+	  <InventoryModal
+	    open={detailsPopup}
+	    onClose={() => setDetailsPopup(false)}
+	    icon="📋"
+	    title="Packet Details"
+	    subtitle="Add packet-wise description, weight, dimensions and remarks"
+	    width={720}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => setDetailsPopup(false)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
 
-	      <TextField
-	        label="Weight"
-	        fullWidth
-	        value={weights[0] || ""}
-	        onChange={(e) => setWeights([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
+	        <Button
+	          sx={premiumButton}
+	          onClick={async () => {
+	            if (!validatePackets()) return;
 
-	      {/* DIMENSIONS */}
-	      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-	        {["l", "b", "h"].map((key, idx) => (
-	          <TextField
-	            key={key}
-	            label={key.toUpperCase()}
-	            type="number"
-	            value={dimensionsList[0]?.[key] || ""}
-	            onChange={(e) => {
-	              const copy = [...dimensionsList];
-	              copy[0] = { ...copy[0], [key]: e.target.value };
-	              setDimensionsList(copy);
-	            }}
-	            sx={{ width: 90 }}
-	          />
-	        ))}
-	      </Box>
-
-	      <TextField
-	        label="Remarks"
-	        fullWidth
-	        value={remarksList[0] || ""}
-	        onChange={(e) => setRemarksList([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
-
-	    </DialogContent>
-
-	    <DialogActions>
-	      <Button onClick={() => setCustomCreateOpen(false)}>Cancel</Button>
-
-	      <Button
-	        variant="contained"
-	        disabled={!customPacketNo}
-	        onClick={async () => {
-	          try {
-	            await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
+	            await fetch(`${API_BASE_URL}/api/packets/create`, {
 	              method: "POST",
 	              headers: {
 	                "Content-Type": "application/json",
@@ -1251,7 +987,6 @@ function ZohoItemsPage() {
 	              },
 	              body: JSON.stringify({
 	                ...form,
-	                customPacketNumber: Number(customPacketNo),
 	                descriptions,
 	                weights,
 	                dimensionsList: dimensionsList.map((d) =>
@@ -1263,295 +998,133 @@ function ZohoItemsPage() {
 	              }),
 	            });
 
-	            setCustomCreateOpen(false);
+	            setActiveStep(2);
+	            setDetailsPopup(false);
 	            fetchItems();
 
-	          } catch (e) {
-	            alert("Failed to create custom packet");
-	          }
-	        }}
-	      >
-	        Create
-	      </Button>
-	    </DialogActions>
-	  </Dialog>
-	  <Dialog
-	    open={addMoreOpen}
-	    onClose={() => setAddMoreOpen(false)}
-	    PaperProps={{
-	      sx: {
-	        borderRadius: "24px",
-
-	        background: darkMode
-	          ? "linear-gradient(180deg,#111,#0b0b0b)"
-	          : "#ffffff",
-
-	        color: darkMode ? "#fff" : "#111",
-
-	        border: darkMode
-	          ? "1px solid rgba(255,215,0,0.12)"
-	          : "none",
-
-	        boxShadow: darkMode
-	          ? "0 30px 80px rgba(0,0,0,0.8)"
-	          : "0 20px 50px rgba(0,0,0,0.2)",
-	      },
-	    }}
+	            setTimeout(() => {
+	              setCreateOpen(false);
+	              setActiveStep(0);
+	            }, 800);
+	          }}
+	        >
+	          Create Packets
+	        </Button>
+	      </>
+	    }
 	  >
-	    <DialogTitle>Add More Packets</DialogTitle>
+	    <Box sx={modalScrollBodySx}>
+	      {descriptions.map((_, i) => (
+	        <motion.div
+	          key={i}
+	          initial={{ opacity: 0, y: 14 }}
+	          animate={{ opacity: 1, y: 0 }}
+	          transition={{ delay: i * 0.04 }}
+	        >
+	          <Box sx={packetCardSx}>
+	            <Box sx={packetTitleSx}>
+	              Packet {i + 1}
+	            </Box>
 
-		<DialogContent
-		  dividers
-		  sx={{
-		    borderColor: darkMode
-		      ? "rgba(255,215,0,0.08)"
-		      : "rgba(0,0,0,0.08)",
-		  }}
-		>
+	            <TextField
+	              label="Description"
+	              fullWidth
+	              value={descriptions[i]}
+	              onChange={(e) => {
+	                const copy = [...descriptions];
+	                copy[i] = e.target.value;
+	                setDescriptions(copy);
+	              }}
+	              sx={formFieldSx(darkMode)}
+	            />
 
-		  <TextField
-		    label="Number of packets"
-		    type="number"
-		    value={addCount}
-		    onChange={(e) => setAddCount(Number(e.target.value))}
-		    fullWidth
-			sx={{
-			  ...formFieldSx(darkMode),
-			  mb: 1,
-			}}
-		  />
+	            <TextField
+	              label="Weight"
+	              fullWidth
+	              value={weights[i]}
+	              onChange={(e) => {
+	                const copy = [...weights];
+	                copy[i] = e.target.value;
+	                setWeights(copy);
+	              }}
+	              error={!!errors[`weight-${i}`]}
+	              helperText={errors[`weight-${i}`]}
+	              sx={formFieldSx(darkMode)}
+	            />
 
-		  {[...Array(addCount)].map((_, i) => (
-		    <Box key={i} sx={{ mb: 2 }}>
-		      <b>Packet {i + 1}</b>
+	            <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
+	              {["l", "b", "h"].map((key) => (
+	                <TextField
+	                  key={key}
+	                  label={key.toUpperCase()}
+	                  type="number"
+	                  value={dimensionsList[i]?.[key] || ""}
+	                  onChange={(e) => {
+	                    const copy = [...dimensionsList];
+	                    copy[i] = { ...copy[i], [key]: e.target.value };
+	                    setDimensionsList(copy);
+	                  }}
+	                  sx={{
+	                    ...formFieldSx(darkMode),
+	                    width: 90,
+	                    mb: 0,
+	                  }}
+	                />
+	              ))}
 
-		      <TextField
-		        label="Description"
-		        fullWidth
-		        value={descriptions[i] || ""}
-		        onChange={(e) => {
-		          const copy = [...descriptions];
-		          copy[i] = e.target.value;
-		          setDescriptions(copy);
-		        }}
-				sx={{
-				  ...formFieldSx(darkMode),
-				  mb: 1,
-				}}
-		      />
+	              <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+	                inches
+	              </span>
+	            </Box>
 
-		      <TextField
-		        label="Weight"
-		        fullWidth
-		        value={weights[i] || ""}
-		        onChange={(e) => {
-		          const copy = [...weights];
-		          copy[i] = e.target.value;
-		          setWeights(copy);
-		        }}
-				sx={{
-				  ...formFieldSx(darkMode),
-				  mb: 1,
-				}}
-		      />
+	            <TextField
+	              label="Remarks"
+	              fullWidth
+	              value={remarksList[i]}
+	              onChange={(e) => {
+	                const copy = [...remarksList];
+	                copy[i] = e.target.value;
+	                setRemarksList(copy);
+	              }}
+	              sx={formFieldSx(darkMode)}
+	            />
+	          </Box>
+	        </motion.div>
+	      ))}
+	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
+	    open={customCreateOpen}
+	    onClose={() => setCustomCreateOpen(false)}
+	    icon="📦"
+	    title="Create Custom Packet"
+	    subtitle="Create a single custom packet with selected packet number"
+	    width={640}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => setCustomCreateOpen(false)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
 
-			  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
-			    <TextField
-			      label="L"
-			      type="number"
-			      value={dimensionsList[i]?.l || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], l: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>x</span>
-
-			    <TextField
-			      label="B"
-			      type="number"
-			      value={dimensionsList[i]?.b || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], b: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>x</span>
-
-			    <TextField
-			      label="H"
-			      type="number"
-			      value={dimensionsList[i]?.h || ""}
-			      onChange={(e) => {
-			        const copy = [...dimensionsList];
-			        copy[i] = { ...copy[i], h: e.target.value };
-			        setDimensionsList(copy);
-			      }}
-				  sx={{
-				    ...formFieldSx(darkMode),
-				    width: 80,
-				    mb: 0,
-				  }}
-			    />
-
-			    <span>inches</span>
-			  </Box>
-
-		      <TextField
-		        label="Remarks"
-		        fullWidth
-		        value={remarksList[i] || ""}
-		        onChange={(e) => {
-		          const copy = [...remarksList];
-		          copy[i] = e.target.value;
-		          setRemarksList(copy);
-		        }}
-				sx={formFieldSx(darkMode)}
-		      />
-		    </Box>
-		  ))}
-
-		</DialogContent>
-
-	    <DialogActions 		
-		sx={{
-		  borderTop: darkMode
-		    ? "1px solid rgba(255,215,0,0.08)"
-		    : "1px solid rgba(0,0,0,0.06)",
-
-		  background: darkMode
-		    ? "#0b0b0b"
-		    : "#fff",
-		}}>
-	      <Button onClick={() => setAddMoreOpen(false)}>Cancel</Button>
-
-		  <Button
-		    variant="contained"
-		    disabled={!addCount || addCount <= 0}
-	        onClick={async () => {
-	          await fetch(
-	            `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
-	            {
-	              method: "POST",
-	              headers: {
-	                "Content-Type": "application/json",
-	                Authorization: `Bearer ${localStorage.getItem("token")}`,
-	              },
-				  body: JSON.stringify({
-				    numberOfPackets: addCount,
-				    descriptions,
-				    weights,
-					dimensionsList: dimensionsList.map((d) =>
-					  d?.l && d?.b && d?.h
-					    ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-					    : ""
-					),
-				    remarksList,
-				  }),
-	            }
-	          );
-
-	          setAddMoreOpen(false);
-	          fetchItems();
-	        }}
-	      >
-	        Add
-	      </Button>
-	    </DialogActions>
-	  </Dialog>
-	  <Dialog
-	    open={customAddOpen}
-	    onClose={() => setCustomAddOpen(false)}
-	    fullWidth
-	    maxWidth="sm"
-	  >
-	    <DialogTitle>Add Custom Packet</DialogTitle>
-
-	    <DialogContent>
-
-	      <TextField
-	        label="Custom Packet Number"
-	        type="number"
-	        fullWidth
-	        value={customPacketNo}
-	        onChange={(e) => setCustomPacketNo(e.target.value)}
-	        sx={formFieldSx(darkMode)}
-	      />
-
-	      <TextField
-	        label="Description"
-	        fullWidth
-	        value={descriptions[0] || ""}
-	        onChange={(e) => setDescriptions([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
-
-	      <TextField
-	        label="Weight"
-	        fullWidth
-	        value={weights[0] || ""}
-	        onChange={(e) => setWeights([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
-
-	      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-	        {["l", "b", "h"].map((key) => (
-	          <TextField
-	            key={key}
-	            label={key.toUpperCase()}
-	            type="number"
-	            value={dimensionsList[0]?.[key] || ""}
-	            onChange={(e) => {
-	              const copy = [...dimensionsList];
-	              copy[0] = { ...copy[0], [key]: e.target.value };
-	              setDimensionsList(copy);
-	            }}
-	            sx={{ width: 90 }}
-	          />
-	        ))}
-	      </Box>
-
-	      <TextField
-	        label="Remarks"
-	        fullWidth
-	        value={remarksList[0] || ""}
-	        onChange={(e) => setRemarksList([e.target.value])}
-	        sx={formFieldSx(darkMode)}
-	      />
-
-	    </DialogContent>
-
-	    <DialogActions>
-	      <Button onClick={() => setCustomAddOpen(false)}>Cancel</Button>
-
-	      <Button
-	        variant="contained"
-	        disabled={!customPacketNo}
-	        onClick={async () => {
-	          try {
-	            await fetch(
-	              `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
-	              {
+	        <Button
+	          disabled={!customPacketNo}
+	          sx={{
+	            ...premiumButton,
+	            opacity: !customPacketNo ? 0.45 : 1,
+	          }}
+	          onClick={async () => {
+	            try {
+	              await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
 	                method: "POST",
 	                headers: {
 	                  "Content-Type": "application/json",
 	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
 	                },
 	                body: JSON.stringify({
+	                  ...form,
 	                  customPacketNumber: Number(customPacketNo),
 	                  descriptions,
 	                  weights,
@@ -1562,31 +1135,437 @@ function ZohoItemsPage() {
 	                  ),
 	                  remarksList,
 	                }),
-	              }
-	            );
+	              });
 
-	            setCustomAddOpen(false);
-	            fetchItems();
+	              setCustomCreateOpen(false);
+	              fetchItems();
+	            } catch (e) {
+	              alert("Failed to create custom packet");
+	            }
+	          }}
+	        >
+	          Create
+	        </Button>
+	      </>
+	    }
+	  >
+	    <Box sx={modalScrollBodySx}>
+	      <Box sx={sectionCardSx}>
+	        <Box sx={sectionTitleSx}>
+	          Item Details
+	        </Box>
 
-	          } catch (e) {
-	            alert("Failed to add custom packet");
-	          }
-	        }}
-	      >
-	        Add
-	      </Button>
-	    </DialogActions>
-	  </Dialog>
-	  <Dialog
+	        {[
+	          "itemName",
+	          "pdNo",
+	          "drawingNo",
+	          "clientName",
+	          "clientAddress",
+	          "floor",
+	        ].map((field) => (
+	          <TextField
+	            key={field}
+	            label={field}
+	            fullWidth
+	            value={form[field]}
+	            onChange={(e) =>
+	              setForm((prev) => ({
+	                ...prev,
+	                [field]: e.target.value,
+	              }))
+	            }
+	            sx={formFieldSx(darkMode)}
+	          />
+	        ))}
+	      </Box>
+
+	      <Box sx={sectionCardSx}>
+	        <Box sx={sectionTitleSx}>
+	          Custom Packet Details
+	        </Box>
+
+	        <TextField
+	          label="Custom Packet Number"
+	          type="number"
+	          fullWidth
+	          value={customPacketNo}
+	          onChange={(e) => setCustomPacketNo(e.target.value)}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <TextField
+	          label="Description"
+	          fullWidth
+	          value={descriptions[0] || ""}
+	          onChange={(e) => setDescriptions([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <TextField
+	          label="Weight"
+	          fullWidth
+	          value={weights[0] || ""}
+	          onChange={(e) => setWeights([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <Box sx={dimensionRowSx}>
+	          {["l", "b", "h"].map((key) => (
+	            <TextField
+	              key={key}
+	              label={key.toUpperCase()}
+	              type="number"
+	              value={dimensionsList[0]?.[key] || ""}
+	              onChange={(e) => {
+	                const copy = [...dimensionsList];
+	                copy[0] = { ...copy[0], [key]: e.target.value };
+	                setDimensionsList(copy);
+	              }}
+	              sx={{
+	                ...formFieldSx(darkMode),
+	                width: 90,
+	                mb: 0,
+	              }}
+	            />
+	          ))}
+
+	          <span style={dimensionUnitText}>
+	            inches
+	          </span>
+	        </Box>
+
+	        <TextField
+	          label="Remarks"
+	          fullWidth
+	          value={remarksList[0] || ""}
+	          onChange={(e) => setRemarksList([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+	      </Box>
+	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
+	    open={addMoreOpen}
+	    onClose={() => setAddMoreOpen(false)}
+	    icon="➕"
+	    title="Add More Packets"
+	    subtitle={selectedItem?.itemName ? `Add packets to ${selectedItem.itemName}` : "Add packets to selected item"}
+	    width={720}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => setAddMoreOpen(false)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
+
+	        <Button
+	          disabled={!addCount || addCount <= 0}
+	          sx={{
+	            ...premiumButton,
+	            opacity: !addCount || addCount <= 0 ? 0.45 : 1,
+	          }}
+	          onClick={async () => {
+	            try {
+	              await fetch(
+	                `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
+	                {
+	                  method: "POST",
+	                  headers: {
+	                    "Content-Type": "application/json",
+	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+	                  },
+	                  body: JSON.stringify({
+	                    numberOfPackets: addCount,
+	                    descriptions,
+	                    weights,
+	                    dimensionsList: dimensionsList.map((d) =>
+	                      d?.l && d?.b && d?.h
+	                        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+	                        : ""
+	                    ),
+	                    remarksList,
+	                  }),
+	                }
+	              );
+
+	              setAddMoreOpen(false);
+	              fetchItems();
+	            } catch (e) {
+	              alert("Failed to add packets");
+	            }
+	          }}
+	        >
+	          Add Packets
+	        </Button>
+	      </>
+	    }
+	  >
+	    <Box sx={modalScrollBodySx}>
+	      <Box sx={sectionCardSx}>
+	        <Box sx={sectionTitleSx}>
+	          Packet Count
+	        </Box>
+
+	        <TextField
+	          label="Number of packets"
+	          type="number"
+	          value={addCount}
+	          onChange={(e) => setAddCount(Number(e.target.value))}
+	          fullWidth
+	          sx={formFieldSx(darkMode)}
+	        />
+	      </Box>
+
+	      {[...Array(addCount)].map((_, i) => (
+	        <motion.div
+	          key={i}
+	          initial={{ opacity: 0, y: 14 }}
+	          animate={{ opacity: 1, y: 0 }}
+	          transition={{ delay: i * 0.04 }}
+	        >
+	          <Box sx={packetCardSx}>
+	            <Box sx={packetTitleSx}>
+	              Packet {i + 1}
+	            </Box>
+
+	            <TextField
+	              label="Description"
+	              fullWidth
+	              value={descriptions[i] || ""}
+	              onChange={(e) => {
+	                const copy = [...descriptions];
+	                copy[i] = e.target.value;
+	                setDescriptions(copy);
+	              }}
+	              sx={formFieldSx(darkMode)}
+	            />
+
+	            <TextField
+	              label="Weight"
+	              fullWidth
+	              value={weights[i] || ""}
+	              onChange={(e) => {
+	                const copy = [...weights];
+	                copy[i] = e.target.value;
+	                setWeights(copy);
+	              }}
+	              sx={formFieldSx(darkMode)}
+	            />
+
+	            <Box sx={dimensionRowSx}>
+	              {["l", "b", "h"].map((key) => (
+	                <TextField
+	                  key={key}
+	                  label={key.toUpperCase()}
+	                  type="number"
+	                  value={dimensionsList[i]?.[key] || ""}
+	                  onChange={(e) => {
+	                    const copy = [...dimensionsList];
+	                    copy[i] = { ...copy[i], [key]: e.target.value };
+	                    setDimensionsList(copy);
+	                  }}
+	                  sx={{
+	                    ...formFieldSx(darkMode),
+	                    width: 90,
+	                    mb: 0,
+	                  }}
+	                />
+	              ))}
+
+	              <span style={dimensionUnitText}>
+	                inches
+	              </span>
+	            </Box>
+
+	            <TextField
+	              label="Remarks"
+	              fullWidth
+	              value={remarksList[i] || ""}
+	              onChange={(e) => {
+	                const copy = [...remarksList];
+	                copy[i] = e.target.value;
+	                setRemarksList(copy);
+	              }}
+	              sx={formFieldSx(darkMode)}
+	            />
+	          </Box>
+	        </motion.div>
+	      ))}
+	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
+	    open={customAddOpen}
+	    onClose={() => setCustomAddOpen(false)}
+	    icon="🧩"
+	    title="Add Custom Packet"
+	    subtitle={selectedItem?.itemName ? `Add custom packet to ${selectedItem.itemName}` : "Add one custom packet"}
+	    width={640}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => setCustomAddOpen(false)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
+
+	        <Button
+	          disabled={!customPacketNo}
+	          sx={{
+	            ...premiumButton,
+	            opacity: !customPacketNo ? 0.45 : 1,
+	          }}
+	          onClick={async () => {
+	            try {
+	              await fetch(
+	                `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+	                {
+	                  method: "POST",
+	                  headers: {
+	                    "Content-Type": "application/json",
+	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+	                  },
+	                  body: JSON.stringify({
+	                    customPacketNumber: Number(customPacketNo),
+	                    descriptions,
+	                    weights,
+	                    dimensionsList: dimensionsList.map((d) =>
+	                      d?.l && d?.b && d?.h
+	                        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+	                        : ""
+	                    ),
+	                    remarksList,
+	                  }),
+	                }
+	              );
+
+	              setCustomAddOpen(false);
+	              fetchItems();
+	            } catch (e) {
+	              alert("Failed to add custom packet");
+	            }
+	          }}
+	        >
+	          Add
+	        </Button>
+	      </>
+	    }
+	  >
+	    <Box sx={modalScrollBodySx}>
+	      <Box sx={sectionCardSx}>
+	        <Box sx={sectionTitleSx}>
+	          Custom Packet Details
+	        </Box>
+
+	        <TextField
+	          label="Custom Packet Number"
+	          type="number"
+	          fullWidth
+	          value={customPacketNo}
+	          onChange={(e) => setCustomPacketNo(e.target.value)}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <TextField
+	          label="Description"
+	          fullWidth
+	          value={descriptions[0] || ""}
+	          onChange={(e) => setDescriptions([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <TextField
+	          label="Weight"
+	          fullWidth
+	          value={weights[0] || ""}
+	          onChange={(e) => setWeights([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+
+	        <Box sx={dimensionRowSx}>
+	          {["l", "b", "h"].map((key) => (
+	            <TextField
+	              key={key}
+	              label={key.toUpperCase()}
+	              type="number"
+	              value={dimensionsList[0]?.[key] || ""}
+	              onChange={(e) => {
+	                const copy = [...dimensionsList];
+	                copy[0] = { ...copy[0], [key]: e.target.value };
+	                setDimensionsList(copy);
+	              }}
+	              sx={{
+	                ...formFieldSx(darkMode),
+	                width: 90,
+	                mb: 0,
+	              }}
+	            />
+	          ))}
+
+	          <span style={dimensionUnitText}>
+	            inches
+	          </span>
+	        </Box>
+
+	        <TextField
+	          label="Remarks"
+	          fullWidth
+	          value={remarksList[0] || ""}
+	          onChange={(e) => setRemarksList([e.target.value])}
+	          sx={formFieldSx(darkMode)}
+	        />
+	      </Box>
+	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
 	    open={editOpen}
 	    onClose={() => setEditOpen(false)}
-	    fullWidth
-	    maxWidth="sm"
+	    icon="✏️"
+	    title="Edit Packet Item"
+	    subtitle="Update editable packet information"
+	    width={620}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => setEditOpen(false)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
+
+	        <Button
+	          sx={premiumButton}
+	          onClick={async () => {
+	            try {
+	              const res = await fetch(
+	                `${API_BASE_URL}/api/packets/items/${editItem.itemId}`,
+	                {
+	                  method: "PUT",
+	                  headers: {
+	                    "Content-Type": "application/json",
+	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+	                  },
+	                  body: JSON.stringify(editForm),
+	                }
+	              );
+
+	              if (!res.ok) throw new Error();
+
+	              setEditOpen(false);
+	              fetchItems();
+	            } catch (e) {
+	              alert("Update failed");
+	            }
+	          }}
+	        >
+	          Save
+	        </Button>
+	      </>
+	    }
 	  >
-	    <DialogTitle>Edit Packet Item</DialogTitle>
-
-	    <DialogContent>
-
+	    <Box sx={modalScrollBodySx}>
 	      {[
 	        "itemName",
 	        "pdNo",
@@ -1600,7 +1579,6 @@ function ZohoItemsPage() {
 	        "remarks",
 	        "location",
 	      ].map((field) => {
-
 	        const locked =
 	          editForm.stickerNumber &&
 	          [
@@ -1623,389 +1601,840 @@ function ZohoItemsPage() {
 	                [field]: e.target.value,
 	              }))
 	            }
-	            sx={{ mb: 2 }}
+	            sx={formFieldSx(darkMode)}
 	          />
 	        );
 	      })}
-
-	    </DialogContent>
-
-	    <DialogActions>
-
-	      <Button onClick={() => setEditOpen(false)}>
-	        Cancel
-	      </Button>
-
-	      <Button
-	        variant="contained"
-	        onClick={async () => {
-
-	          try {
-
-	            const res = await fetch(
-	              `${API_BASE_URL}/api/packets/items/${editItem.itemId}`,
-	              {
-	                method: "PUT",
-	                headers: {
-	                  "Content-Type": "application/json",
-	                  Authorization:
-	                    `Bearer ${localStorage.getItem("token")}`,
-	                },
-	                body: JSON.stringify(editForm),
-	              }
-	            );
-
-	            if (!res.ok) {
-	              throw new Error();
-	            }
-
-	            setEditOpen(false);
-
-	            fetchItems();
-
-	          } catch (e) {
-
-	            alert("Update failed");
-	          }
-	        }}
-	      >
-	        Save
-	      </Button>
-
-	    </DialogActions>
-	  </Dialog>
+	    </Box>
+	  </InventoryModal>
     </div>
+</div>
   );
 }
 
+
 /* ===================== STYLES ===================== */
 
-const page = () => ({
+/* ===================== STYLES ===================== */
+
+const inventoryGrid =
+  "130px 190px 110px 110px 260px 300px 120px 150px 180px 260px 260px 160px";
+
+const page = {
   minHeight: "100vh",
-  padding: 18,
-  position: "relative",
-  overflowX: "hidden",
-  overflowY: "auto",
-
-  background: `
-    radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 25%),
-    radial-gradient(circle at bottom right, rgba(56,189,248,0.14), transparent 25%),
-    linear-gradient(180deg, #eaf3ff 0%, #f6f9ff 100%)
-  `,
-});
-
-const backgroundText = (darkMode) => ({
-  position: "absolute",
-  fontSize: 180,
-  fontWeight: 900,
-
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(255,215,0,0.12), rgba(255,215,0,0.03))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
-
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-
-  pointerEvents: "none",
-});
+  background:
+    "linear-gradient(135deg,#020617,#0f172a)",
+};
 
 const content = {
-  position: "relative",
-  zIndex: 1,
+  padding: 24,
+  display: "flex",
+  flexDirection: "column",
+  gap: 24,
 };
 
-const pageTitle = {
-  marginTop: 0,
-  marginBottom: 12,
-  fontSize: 28,
-  fontWeight: 700,
+const headerRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+};
+
+const logo = {
   color: "#fff",
+  fontSize: 32,
+  fontWeight: 900,
+  marginBottom: 8,
 };
 
-const tableWrapper = {
-  height: "calc(100vh - 220px)",
-  borderRadius: 24,
-  padding: 16,
-  background: "linear-gradient(180deg, #ffffff, #f8fafc)",
-  border: "1px solid rgba(148,163,184,0.18)",
-  boxShadow: "0 18px 40px rgba(15,23,42,0.10)",
+const subtitle = {
+  color: "rgba(255,255,255,.62)",
+  fontSize: 14,
 };
 
-const dataGridStyles = {
-  border: "none",
-  fontSize: 13,
-
-  "& .MuiDataGrid-columnHeaders": {
-    background: "#f1f5f9",
-    borderBottom: "1px solid #e2e8f0",
-    fontWeight: 700,
-  },
-
-  "& .MuiDataGrid-cell": {
-    borderBottom: "1px solid #f1f5f9",
-  },
-
-  "& .MuiDataGrid-row:hover": {
-    background: "#f8fafc",
-  },
-
-  "& .MuiDataGrid-footerContainer": {
-    borderTop: "1px solid #e5e7eb",
-  },
+const countBadgeSx = {
+  color: "#94a3b8",
+  fontSize: 14,
+  fontWeight: 700,
+  px: 2,
+  py: 1,
+  borderRadius: "12px",
+  background: "rgba(255,255,255,.035)",
+  border: "1px solid rgba(255,255,255,.06)",
 };
 
-/* ---------- Drawer ---------- */
-
-const drawer = (darkMode) => ({
-  width: 520,
-  height: "100%",
-  padding: 30,
-  boxSizing: "border-box",
-  position: "relative",
-
-  background: darkMode
-    ? "linear-gradient(180deg, rgba(12,12,12,0.98), rgba(18,18,18,0.95))"
-    : "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.35))",
-
-  color: darkMode ? "#fff" : "#1f2937",
-
-  backdropFilter: "blur(18px)",
-
-  borderLeft: darkMode
-    ? "1px solid rgba(255,215,0,0.12)"
-    : "none",
-
-  boxShadow: darkMode
-    ? "-20px 0 50px rgba(0,0,0,0.75)"
-    : "-20px 0 50px rgba(0,0,0,0.35)",
-});
-
-const drawerHighlight = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 80,
+const wrap = {
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.5), transparent)",
-  pointerEvents: "none",
+    "linear-gradient(180deg,#0f172a,#111827)",
+  borderRadius: 24,
+  padding: 24,
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
-
-const drawerTitle = (darkMode) => ({
-  marginBottom: 4,
-  fontSize: 22,
-  fontWeight: 700,
-  color: darkMode ? "#FFD700" : "#111",
-});
-
-const drawerButton = (darkMode) => ({
-  mt: 1,
-  px: 3,
-  fontWeight: 700,
-  borderRadius: "999px",
-
-  textTransform: "none",
-
-  background: darkMode
-    ? "linear-gradient(180deg,#facc15,#d97706)"
-    : "linear-gradient(180deg, rgba(31,41,55,0.85), rgba(17,24,39,0.85))",
-
-  color: darkMode ? "#111" : "#fff",
-
-  boxShadow: darkMode
-    ? "0 10px 30px rgba(255,215,0,0.25)"
-    : undefined,
-});
-
-const formFieldSx = (darkMode) => ({
-  mb: 2,
-
-  /* ================= LABEL ================= */
-
-  "& .MuiFormLabel-root": {
-    color: darkMode
-      ? "rgba(255,215,0,0.72)"
-      : "#374151",
-
-    fontWeight: 500,
-
-    transition: "all 0.2s ease",
-  },
-
-  "& .MuiFormLabel-root.Mui-focused": {
-    color: darkMode
-      ? "#FFD700"
-      : "#111827",
-  },
-
-  "& .MuiFormLabel-root.Mui-error": {
-    color: "#ef4444",
-  },
-
-  /* ================= INPUT ROOT ================= */
-
-  "& .MuiOutlinedInput-root": {
-    borderRadius: "16px",
-
-    background: darkMode
-      ? "rgba(255,255,255,0.04)"
-      : "rgba(255,255,255,0.92)",
-
-    color: darkMode ? "#ffffff" : "#111827",
-
-    transition: "all 0.25s ease",
-
-    /* BORDER */
-    "& fieldset": {
-      borderColor: darkMode
-        ? "rgba(255,215,0,0.14)"
-        : "rgba(0,0,0,0.12)",
-    },
-
-    "&:hover fieldset": {
-      borderColor: darkMode
-        ? "rgba(255,215,0,0.38)"
-        : "#111827",
-    },
-
-    "&.Mui-focused fieldset": {
-      borderColor: darkMode
-        ? "#FFD700"
-        : "#111827",
-
-      boxShadow: darkMode
-        ? "0 0 0 3px rgba(255,215,0,0.16)"
-        : "0 0 0 3px rgba(17,24,39,0.08)",
-    },
-
-    "&.Mui-error fieldset": {
-      borderColor: "#ef4444",
-    },
-  },
-
-  /* ================= INPUT TEXT ================= */
-
-  "& .MuiInputBase-input": {
-    color: darkMode ? "#ffffff" : "#111827",
-
-    fontWeight: 500,
-
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
-  },
-
-  /* ================= PLACEHOLDER ================= */
-
-  "& .MuiInputBase-input::placeholder": {
-    color: darkMode
-      ? "rgba(255,255,255,0.42)"
-      : "rgba(0,0,0,0.42)",
-
-    opacity: 1,
-  },
-
-  /* ================= MULTILINE ================= */
-
-  "& textarea": {
-    color: darkMode ? "#ffffff" : "#111827",
-
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
-  },
-
-  /* ================= HELPER TEXT ================= */
-
-  "& .MuiFormHelperText-root": {
-    color: darkMode
-      ? "rgba(255,255,255,0.65)"
-      : "#6b7280",
-
-    marginLeft: "4px",
-  },
-
-  "& .MuiFormHelperText-root.Mui-error": {
-    color: "#ef4444",
-  },
-
-  /* ================= ICONS ================= */
-
-  "& .MuiSvgIcon-root": {
-    color: darkMode
-      ? "#FFD700"
-      : "#374151",
-  },
-
-  /* ================= AUTOFILL FIX ================= */
-
-  "& input:-webkit-autofill": {
-    WebkitBoxShadow: darkMode
-      ? "0 0 0 100px rgba(22,22,22,1) inset"
-      : "0 0 0 100px #ffffff inset",
-
-    WebkitTextFillColor: darkMode
-      ? "#ffffff"
-      : "#111827",
-
-    borderRadius: "16px",
-
-    transition: "background-color 9999s ease-in-out 0s",
-  },
-});
 
 const searchPanel = {
   display: "flex",
   alignItems: "center",
-  gap: 16,
-  marginBottom: 8,
-  padding: "5px 18px",
+  gap: 12,
+  height: 52,
+  padding: "0 18px",
   borderRadius: 16,
-
-  background: `
-    linear-gradient(
-      145deg,
-      rgba(255,255,255,0.72),
-      rgba(255,255,255,0.42)
-    )
-  `,
-
-  backdropFilter: "blur(30px)",
-  border: "1px solid rgba(255,255,255,0.4)",
-
-  boxShadow: `
-    0 14px 35px rgba(0,0,0,0.18),
-    inset 0 1px 0 rgba(255,255,255,0.45)
-  `,
+  background: "rgba(255,255,255,0.03)",
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
 
-const themeBtn = (darkMode) => ({
-  px: 2.6,
-  py: 1,
-  borderRadius: "999px",
-  fontSize: 12,
+const searchInputSx = {
+  flex: 1,
+
+  "& .MuiInputBase-root": {
+    color: "#fff",
+    fontSize: 14,
+  },
+
+  "& input::placeholder": {
+    color: "rgba(255,255,255,.42)",
+    opacity: 1,
+  },
+};
+
+const selectFieldSx = {
+  minWidth: 180,
+
+  "& .MuiOutlinedInput-root": {
+    height: 44,
+    borderRadius: "14px",
+    background:
+      "rgba(255,255,255,.04)",
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& .MuiSelect-select": {
+    color: "#fff",
+    fontWeight: 500,
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+};
+
+const selectMenuSlotProps = {
+  select: {
+    MenuProps: {
+      PaperProps: {
+        sx: {
+          mt: 1,
+          borderRadius: "14px",
+          background:
+            "linear-gradient(180deg,#0f172a,#111827)",
+          color: "#fff",
+          border:
+            "1px solid rgba(255,255,255,.06)",
+          backdropFilter: "blur(20px)",
+
+          "& .MuiMenuItem-root": {
+            fontSize: 14,
+            fontWeight: 500,
+            color: "#fff",
+          },
+
+          "& .MuiMenuItem-root:hover": {
+            background:
+              "rgba(59,130,246,.08)",
+          },
+
+          "& .Mui-selected": {
+            background:
+              "rgba(59,130,246,.16) !important",
+            color: "#60a5fa",
+            fontWeight: 700,
+          },
+        },
+      },
+    },
+  },
+};
+
+const tableWrapper = {
+  overflowX: "auto",
+
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 #0f172a",
+
+  WebkitOverflowScrolling: "touch",
+
+  "&::-webkit-scrollbar": {
+    height: 14,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background:
+      "linear-gradient(180deg,#0f172a,#111827)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(90deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+    border:
+      "2px solid #0f172a",
+    boxShadow:
+      "0 0 16px rgba(59,130,246,.55)",
+  },
+};
+
+const tableHeader = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
+  display: "grid",
+  gridTemplateColumns: inventoryGrid,
+  padding: "14px 16px",
+  background: "#111827",
+  color: "#94a3b8",
   fontWeight: 700,
+  fontSize: 13,
+};
 
-  background: darkMode
-    ? "linear-gradient(135deg,#111,#222)"
-    : "#111",
+const tableBody = {
+  display: "flex",
+  flexDirection: "column",
+};
 
-  color: darkMode ? "#FFD700" : "#fff",
+const tableRow = {
+  display: "grid",
+  gridTemplateColumns: inventoryGrid,
+  alignItems: "center",
+  padding: "14px 16px",
+  color: "#fff",
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+  minHeight: 58,
+  fontSize: 13,
+};
 
-  border: darkMode
-    ? "1px solid rgba(255,215,0,0.25)"
-    : "1px solid rgba(255,255,255,0.25)",
+const tableCellWrap = {
+  minWidth: 0,
+  overflow: "hidden",
+};
 
-  boxShadow: darkMode
-    ? "0 0 18px rgba(255,215,0,0.15)"
-    : "0 10px 25px rgba(0,0,0,0.25)",
+const simpleCellText = {
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 13,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const simpleMutedText = {
+  color: "#f1f5f9",
+  fontWeight: 750,
+  fontSize: 13,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const simpleMonoText = {
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 13,
+  lineHeight: 1.25,
+  fontFamily: "monospace",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  display: "block",
+};
+
+const emptyTableState = {
+  padding: "30px 16px",
+  color: "#94a3b8",
+  fontWeight: 800,
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const actionCell = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  flexWrap: "nowrap",
+};
+
+const tableActionButton = {
+  minWidth: 92,
+  height: 32,
+  borderRadius: "10px",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "none",
+};
+
+const smallActionButton = {
+  minWidth: 76,
+  height: 30,
+  borderRadius: "10px",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const premiumButton = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  px: 2.2,
+  height: 38,
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  border:
+    "1px solid rgba(59,130,246,.35)",
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.35)",
+  transition: "all .22s ease",
 
   "&:hover": {
-    transform: "translateY(-3px) scale(1.04)",
+    transform: "translateY(-1px)",
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const actionPrimary = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  border:
+    "1px solid rgba(59,130,246,.35)",
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const actionSecondary = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  height: 38,
+  px: 2,
+  background:
+    "rgba(255,255,255,.04)",
+  color: "#fff",
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.08)",
+  },
+};
+
+const actionSuccess = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  background:
+    "linear-gradient(135deg,#059669,#10b981)",
+  color: "#fff",
+  border:
+    "1px solid rgba(16,185,129,.35)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#047857,#059669)",
+  },
+};
+
+const actionWarning = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  background:
+    "linear-gradient(135deg,#d97706,#f59e0b)",
+  color: "#fff",
+  border:
+    "1px solid rgba(245,158,11,.35)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#b45309,#d97706)",
+  },
+};
+
+const actionDanger = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+  background:
+    "linear-gradient(135deg,#dc2626,#ef4444)",
+  color: "#fff",
+  boxShadow:
+    "0 10px 24px rgba(239,68,68,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#b91c1c,#dc2626)",
+  },
+};
+
+const printedChipSx = {
+  fontWeight: 800,
+  color: "#4ade80",
+  background:
+    "rgba(34,197,94,.12)",
+  border:
+    "1px solid rgba(34,197,94,.18)",
+};
+
+const createdChipSx = {
+  fontWeight: 800,
+  color: "#fbbf24",
+  background:
+    "rgba(251,191,36,.12)",
+  border:
+    "1px solid rgba(251,191,36,.18)",
+};
+
+const paginationBarSx = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  mt: 4,
+  gap: 2,
+  flexWrap: "wrap",
+};
+
+const paginationLeftSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 2,
+};
+
+const paginationTextSx = {
+  color: "#94a3b8",
+  fontWeight: 600,
+  fontSize: 14,
+};
+
+const paginationCenterSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 3,
+};
+
+const paginationSelectSx = {
+  width: 110,
+
+  "& .MuiOutlinedInput-root": {
+    height: 36,
+    borderRadius: "12px",
+    background:
+      "rgba(255,255,255,.04)",
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.35)",
+    },
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+};
+
+const paginationButtonSx = {
+  minWidth: 100,
+  height: 30,
+  borderRadius: "12px",
+  background:
+    "linear-gradient(180deg,#1e293b,#0f172a)",
+  color: "#fff",
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  fontSize: 10,
+  fontWeight: 700,
+
+  "&:disabled": {
+    opacity: 0.45,
+    color: "#94a3b8",
+  },
+};
+
+const pageCountSx = {
+  px: 2.5,
+  height: 30,
+  display: "flex",
+  alignItems: "center",
+  borderRadius: "12px",
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+  color: "#cbd5e1",
+  border:
+    "1px solid rgba(255,255,255,.06)",
+  fontSize: 10,
+  fontWeight: 700,
+};
+
+/* ===================== MODAL / PANEL ===================== */
+
+const enhancedOverlaySx = {
+  position: "fixed",
+  inset: 0,
+  background: `
+    radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
+    radial-gradient(circle at 80% 90%, rgba(16,185,129,.12), transparent 30%),
+    rgba(2,6,23,.72)
+  `,
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 5000,
+};
+
+const enhancedModalSx = {
+  p: 0,
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: 14,
+  color: "#fff",
+  background: `
+    radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
+    linear-gradient(180deg,#0f172a,#111827)
+  `,
+  border:
+    "1px solid rgba(148,163,184,.14)",
+  boxShadow:
+    "0 40px 110px rgba(0,0,0,.68)",
+
+  "& > *": {
+    position: "relative",
+    zIndex: 1,
+  },
+};
+
+const modalHeaderSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  px: 3,
+  py: 2.4,
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const modalTitleWrapSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1.6,
+};
+
+const modalIconBubble = () => ({
+  width: 44,
+  height: 44,
+  borderRadius: "10px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 22,
+  background:
+    "linear-gradient(135deg,rgba(59,130,246,.24),rgba(59,130,246,.08))",
+  border:
+    "1px solid rgba(255,255,255,.08)",
+});
+
+const modalTitleSx = {
+  color: "#fff",
+  fontSize: 22,
+  fontWeight: 900,
+  lineHeight: 1.1,
+};
+
+const modalSubtitleSx = {
+  color: "rgba(255,255,255,.55)",
+  fontSize: 12,
+  fontWeight: 600,
+  mt: 0.4,
+};
+
+const modalCloseButtonSx = {
+  width: 36,
+  height: 36,
+  borderRadius: "8px",
+  color: "#94a3b8",
+  background:
+    "rgba(255,255,255,.04)",
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
+  "&:hover": {
+    color: "#fff",
+    background:
+      "rgba(239,68,68,.16)",
+    borderColor:
+      "rgba(239,68,68,.28)",
+  },
+};
+
+const modalContentSx = {
+  p: 3,
+};
+
+const modalFooterSx = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 1.2,
+  px: 3,
+  py: 2,
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const modalSecondaryButtonSx = {
+  height: 36,
+  px: 2.2,
+  borderRadius: "8px",
+  textTransform: "none",
+  fontWeight: 800,
+  color: "#cbd5e1",
+  background:
+    "rgba(255,255,255,.04)",
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  "&:hover": {
+    background:
+      "rgba(255,255,255,.08)",
+    color: "#fff",
+  },
+};
+
+const modalScrollBodySx = {
+  maxHeight: "58vh",
+  overflowY: "auto",
+  pr: 0.8,
+
+  "&::-webkit-scrollbar": {
+    width: 8,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background: "rgba(255,255,255,.03)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(180deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+  },
+};
+
+const sidePanelOverlaySx = {
+  position: "fixed",
+  inset: 0,
+  background:
+    "rgba(2,6,23,.62)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  zIndex: 5000,
+  display: "flex",
+  justifyContent: "flex-end",
+};
+
+const sidePanelSx = {
+  width: 540,
+  height: "100%",
+  color: "#fff",
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+  borderLeft:
+    "1px solid rgba(255,255,255,.08)",
+  boxShadow:
+    "-18px 0 60px rgba(0,0,0,.55)",
+  display: "flex",
+  flexDirection: "column",
+};
+
+const sidePanelBodySx = {
+  p: 3,
+  overflowY: "auto",
+};
+
+const infoLineSx = {
+  color: "#cbd5e1",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const packetCardSx = {
+  mb: 2,
+  p: 2,
+  borderRadius: "12px",
+  background:
+    "rgba(255,255,255,.035)",
+  border:
+    "1px solid rgba(255,255,255,.07)",
+};
+
+const sectionCardSx = {
+  mb: 2,
+  p: 2,
+  borderRadius: "12px",
+  background:
+    "rgba(255,255,255,.035)",
+  border:
+    "1px solid rgba(255,255,255,.07)",
+};
+
+const sectionTitleSx = {
+  color: "#93c5fd",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".4px",
+  textTransform: "uppercase",
+  mb: 1.5,
+};
+
+const dimensionRowSx = {
+  display: "flex",
+  gap: 1,
+  alignItems: "center",
+  mb: 2,
+  flexWrap: "wrap",
+};
+
+const dimensionUnitText = {
+  color: "#94a3b8",
+  fontWeight: 700,
+  fontSize: 12,
+};
+
+const packetTitleSx = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 14,
+  mb: 1.5,
+};
+
+const stepperSx = {
+  mb: 3,
+
+  "& .MuiStepLabel-label": {
+    color: "#94a3b8",
+    fontWeight: 700,
+  },
+
+  "& .Mui-active .MuiStepLabel-label": {
+    color: "#60a5fa",
+  },
+
+  "& .Mui-completed .MuiStepLabel-label": {
+    color: "#4ade80",
+  },
+
+  "& .MuiStepIcon-root": {
+    color: "rgba(255,255,255,.18)",
+  },
+
+  "& .MuiStepIcon-root.Mui-active": {
+    color: "#3b82f6",
+  },
+
+  "& .MuiStepIcon-root.Mui-completed": {
+    color: "#10b981",
+  },
+};
+
+const formFieldSx = () => ({
+  mb: 2,
+
+  "& .MuiFormLabel-root": {
+    color: "rgba(255,255,255,.62)",
+    fontWeight: 600,
+  },
+
+  "& .MuiFormLabel-root.Mui-focused": {
+    color: "#60a5fa",
+  },
+
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "12px",
+    background:
+      "rgba(255,255,255,.04)",
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor:
+        "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor:
+        "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor:
+        "#3b82f6",
+      boxShadow:
+        "0 0 0 3px rgba(59,130,246,.14)",
+    },
+  },
+
+  "& .MuiInputBase-input": {
+    color: "#fff",
+    fontWeight: 600,
+    WebkitTextFillColor: "#fff",
+  },
+
+  "& textarea": {
+    color: "#fff",
+    WebkitTextFillColor: "#fff",
+  },
+
+  "& .MuiFormHelperText-root": {
+    color: "rgba(255,255,255,.55)",
+  },
+
+  "& .MuiFormHelperText-root.Mui-error": {
+    color: "#f87171",
   },
 });
 
