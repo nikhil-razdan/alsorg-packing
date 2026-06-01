@@ -115,92 +115,89 @@ function Sidebar() {
 	      : "flex-start",
 	});
 
-  return (
-    <div
-      style={{
-        ...sidebar,
-        width: collapsed ? 64 : 210,
-      }}
-    >
-      {/* Glass highlight */}
-      <div style={topHighlight} />
-	  
-	  <div style={logoSection}>
-	    <div style={logoIcon}>
-	      A
-	    </div>
-
-	    {!collapsed && (
-	      <div>
-	        <div style={logoTitle}>
-	          ALSORG
-	        </div>
-
-	        <div style={logoSub}>
-	          Enterprise Suite
-	        </div>
-	      </div>
-	    )}
-	  </div>
-
+	return (
 	  <div
 	    style={{
-	      ...toggleRow,
-	      justifyContent: collapsed
-	        ? "center"
-	        : "space-between",
+	      ...sidebar,
+	      width: collapsed ? 64 : 210,
 	    }}
 	  >
-	    {!collapsed && (
-	      <div style={menuTitle}>
-	        Menu
+	    {/* Glass highlight */}
+	    <div style={topHighlight} />
+
+	    {/* Logo */}
+	    <div style={logoSection}>
+	      <div style={logoIcon}>
+	        A
 	      </div>
-	    )}
 
-	    <button
-	      onClick={() =>
-	        setCollapsed((v) => !v)
-	      }
-	      style={toggleButton}
-	      title={
-	        collapsed
-	          ? "Expand sidebar"
-	          : "Collapse sidebar"
-	      }
+	      {!collapsed && (
+	        <div>
+	          <div style={logoTitle}>
+	            ALSORG
+	          </div>
+
+	          <div style={logoSub}>
+	            Enterprise Suite
+	          </div>
+	        </div>
+	      )}
+	    </div>
+
+	    {/* Menu + Correct Toggle */}
+	    <div
+	      style={{
+	        ...toggleRow,
+	        justifyContent: collapsed
+	          ? "center"
+	          : "space-between",
+	      }}
 	    >
-	      {collapsed ? "›" : "‹"}
-	    </button>
+	      {!collapsed && (
+	        <div style={menuTitle}>
+	          Menu
+	        </div>
+	      )}
+
+	      <button
+	        onClick={() =>
+	          setCollapsed((v) => !v)
+	        }
+	        style={toggleButton}
+	        title={
+	          collapsed
+	            ? "Expand sidebar"
+	            : "Collapse sidebar"
+	        }
+	      >
+	        {collapsed ? "›" : "‹"}
+	      </button>
+	    </div>
+
+	    {/* Links */}
+	    {visibleLinks.map((link) => {
+	      const active =
+	        location.pathname === link.path;
+
+	      return (
+	        <Link
+	          key={link.path}
+	          to={link.path}
+	          style={linkStyle(active)}
+	        >
+	          <span style={icon}>
+	            {link.icon}
+	          </span>
+
+	          {!collapsed && link.label}
+	        </Link>
+	      );
+	    })}
+
+	    <div style={{ flexGrow: 1 }} />
+	    <div style={divider} />
 	  </div>
-	  
-	  {/* Collapse Toggle */}
-	  <button
-	      onClick={() =>
-	        setCollapsed((v) => !v)
-	      }
-	      style={toggleButton}
-	      title={
-	        collapsed
-	          ? "Expand sidebar"
-	          : "Collapse sidebar"
-	      }
-	    >
-	      {collapsed ? "›" : "‹"}
-	    </button>
-      {/* Links */}
-      {visibleLinks.map((link) => {
-        const active = location.pathname === link.path;
-        return (
-          <Link key={link.path} to={link.path} style={linkStyle(active)}>
-            <span style={icon}>{link.icon}</span>
-            {!collapsed && link.label}
-          </Link>
-        );
-      })}
-
-      <div style={{ flexGrow: 1 }} />
-      <div style={divider} />
-    </div>
-  );
+	);
 }
 
 /* ===================== STYLES ===================== */
