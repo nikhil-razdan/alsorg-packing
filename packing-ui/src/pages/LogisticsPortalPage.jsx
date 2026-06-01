@@ -42,7 +42,7 @@ function LogisticsPortalPage() {
         <div style={headerRow}>
           <div>
             <div style={logo}>
-              🚚 Logistics ERP
+              🚚 Logistics
             </div>
 
             <div style={subtitle}>

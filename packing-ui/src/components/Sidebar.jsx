@@ -32,7 +32,6 @@ function Sidebar() {
       label: "Warehouse",
       roles: [
         "ADMIN",
-        "PACKING",
         "DISPATCH",
         "WAREHOUSE",
       ],
@@ -44,7 +43,6 @@ function Sidebar() {
       label: "Dispatched Items",
       roles: [
         "ADMIN",
-        "PACKING",
         "DISPATCH",
         "WAREHOUSE",
       ],
@@ -53,7 +51,7 @@ function Sidebar() {
 
     {
       path: "/logistics",
-      label: "Logistics ERP",
+      label: "Logistics",
       roles: [
         "ADMIN",
         "LOGISTICS",
