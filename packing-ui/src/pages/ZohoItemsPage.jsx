@@ -179,7 +179,10 @@ function ZohoItemsPage() {
   });
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
-
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [uiAlert, setUiAlert] = useState(null);
   const [editForm, setEditForm] = useState({
     itemName: "",
     pdNo: "",
@@ -375,24 +378,43 @@ function ZohoItemsPage() {
     setEditOpen(true);
   };
 
-  const deletePacketItem = async (row) => {
+  const openDeleteConfirm = (row) => {
+    setDeleteTarget(row);
+    setDeleteConfirmOpen(true);
+  };
+
+  const closeDeleteConfirm = () => {
+    if (deleteLoading) return;
+
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
+  };
+
+  const showUiAlert = (type, message) => {
+    setUiAlert({
+      type,
+      message,
+    });
+  };
+
+  const deletePacketItem = async () => {
+    const row = deleteTarget;
+
     const deleteId =
-      row.itemId || row.id || row.packetItemId;
+      row?.itemId || row?.id || row?.packetItemId;
 
     if (!deleteId) {
-      alert("Packet Item ID missing. Cannot delete this row.");
+      showUiAlert(
+        "error",
+        "Packet Item ID missing. Cannot delete this row."
+      );
       console.error("Delete failed. Row has no itemId/id/packetItemId:", row);
       return;
     }
 
-    const itemLabel =
-      row.sku || row.itemName || deleteId;
-
-    if (!window.confirm(`Delete this item?\n\n${itemLabel}`)) {
-      return;
-    }
-
     try {
+      setDeleteLoading(true);
+
       const res = await fetch(
         `${API_BASE_URL}/api/packets/items/${encodeURIComponent(deleteId)}`,
         {
@@ -406,7 +428,12 @@ function ZohoItemsPage() {
       if (!res.ok) {
         const text = await res.text();
         console.error("Delete backend error:", text);
-        alert(text || "Delete failed from backend");
+
+        showUiAlert(
+          "error",
+          text || "Delete failed from backend"
+        );
+
         return;
       }
 
@@ -417,10 +444,24 @@ function ZohoItemsPage() {
         })
       );
 
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+
+      showUiAlert(
+        "success",
+        "Item deleted successfully"
+      );
+
       await fetchItems();
     } catch (e) {
       console.error(e);
-      alert("Delete failed");
+
+      showUiAlert(
+        "error",
+        "Delete failed. Please try again."
+      );
+    } finally {
+      setDeleteLoading(false);
     }
   };
   
@@ -445,6 +486,16 @@ function ZohoItemsPage() {
     adjust(setRemarksList);
 
   }, [form.numberOfPackets]);
+  
+  useEffect(() => {
+    if (!uiAlert) return;
+
+    const timer = setTimeout(() => {
+      setUiAlert(null);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [uiAlert]);
   /* ===================== RENDER ===================== */
   return (
     <div style={page}>
@@ -659,7 +710,7 @@ function ZohoItemsPage() {
 					    <Button
 					      type="button"
 					      size="small"
-					      onClick={() => deletePacketItem(row)}
+					      onClick={() => openDeleteConfirm(row)}
 					      sx={{
 					        ...actionDanger,
 					        ...tableActionButton,
@@ -806,7 +857,78 @@ function ZohoItemsPage() {
             </Box>
           </Box>
         </div>
+		<InventoryModal
+		  open={deleteConfirmOpen}
+		  onClose={closeDeleteConfirm}
+		  icon="🗑️"
+		  title="Delete Inventory Item"
+		  subtitle="This action will remove the selected packet item from inventory"
+		  width={560}
+		  footer={
+		    <>
+		      <Button
+		        disabled={deleteLoading}
+		        onClick={closeDeleteConfirm}
+		        sx={modalSecondaryButtonSx}
+		      >
+		        Cancel
+		      </Button>
 
+		      <Button
+		        disabled={deleteLoading}
+		        onClick={deletePacketItem}
+		        sx={{
+		          ...actionDanger,
+		          height: 36,
+		          px: 2.4,
+		          borderRadius: "8px",
+		          opacity: deleteLoading ? 0.6 : 1,
+		        }}
+		      >
+		        {deleteLoading ? "Deleting..." : "Yes, Delete"}
+		      </Button>
+		    </>
+		  }
+		>
+		  <Box sx={deleteWarningBoxSx}>
+		    <Box sx={deleteWarningIconSx}>
+		      ⚠️
+		    </Box>
+
+		    <Box>
+		      <Box sx={deleteWarningTitleSx}>
+		        Are you sure you want to delete this item?
+		      </Box>
+
+		      <Box sx={deleteWarningTextSx}>
+		        Once deleted, this item will be removed from the Inventory page.
+		      </Box>
+		    </Box>
+		  </Box>
+
+		  <Box sx={deleteItemCardSx}>
+		    <Box sx={deleteItemLabelSx}>
+		      Item Name
+		    </Box>
+
+		    <Box sx={deleteItemValueSx}>
+		      {deleteTarget?.itemName || "—"}
+		    </Box>
+
+		    <Box sx={deleteItemMetaSx}>
+		      SKU: {deleteTarget?.sku || "—"}
+		    </Box>
+
+		    <Box sx={deleteItemMetaSx}>
+		      Client: {deleteTarget?.clientName || "—"}
+		    </Box>
+
+		    <Box sx={deleteItemMetaSx}>
+		      Status: {deleteTarget?.status || "—"}
+		    </Box>
+		  </Box>
+		</InventoryModal>
+		
       {/* ===================== DRAWER ===================== */}
 	  <InventorySidePanel
 	    open={drawerOpen}
@@ -1637,6 +1759,40 @@ function ZohoItemsPage() {
 	    </Box>
 	  </InventoryModal>
     </div>
+	{uiAlert && (
+	  <Box sx={uiAlertWrapSx}>
+	    <Box
+	      sx={{
+	        ...uiAlertBoxSx,
+	        ...(uiAlert.type === "success"
+	          ? uiAlertSuccessSx
+	          : uiAlertErrorSx),
+	      }}
+	    >
+	      <Box sx={uiAlertIconSx}>
+	        {uiAlert.type === "success" ? "✅" : "❌"}
+	      </Box>
+
+	      <Box sx={{ minWidth: 0 }}>
+	        <Box sx={uiAlertTitleSx}>
+	          {uiAlert.type === "success" ? "Success" : "Error"}
+	        </Box>
+
+	        <Box sx={uiAlertMessageSx}>
+	          {uiAlert.message}
+	        </Box>
+	      </Box>
+
+	      <IconButton
+	        size="small"
+	        onClick={() => setUiAlert(null)}
+	        sx={uiAlertCloseSx}
+	      >
+	        ×
+	      </IconButton>
+	    </Box>
+	  </Box>
+	)}
 </div>
   );
 }
@@ -1984,6 +2140,189 @@ const actionSecondary = {
   "&:hover": {
     background:
       "rgba(255,255,255,.08)",
+  },
+};
+
+const deleteWarningBoxSx = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 1.5,
+
+  p: 2,
+  mb: 2,
+
+  borderRadius: "12px",
+
+  background:
+    "linear-gradient(135deg,rgba(239,68,68,.14),rgba(255,255,255,.035))",
+
+  border:
+    "1px solid rgba(239,68,68,.24)",
+};
+
+const deleteWarningIconSx = {
+  width: 38,
+  height: 38,
+
+  borderRadius: "10px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  background:
+    "rgba(239,68,68,.16)",
+
+  border:
+    "1px solid rgba(239,68,68,.22)",
+
+  flexShrink: 0,
+};
+
+const deleteWarningTitleSx = {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 900,
+  mb: 0.5,
+};
+
+const deleteWarningTextSx = {
+  color: "rgba(255,255,255,.62)",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.5,
+};
+
+const deleteItemCardSx = {
+  p: 2,
+
+  borderRadius: "12px",
+
+  background:
+    "rgba(255,255,255,.035)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+};
+
+const deleteItemLabelSx = {
+  color: "#93c5fd",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".4px",
+  textTransform: "uppercase",
+  mb: 0.7,
+};
+
+const deleteItemValueSx = {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 900,
+  lineHeight: 1.35,
+  mb: 1,
+};
+
+const deleteItemMetaSx = {
+  color: "rgba(255,255,255,.58)",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.7,
+};
+
+const uiAlertWrapSx = {
+  position: "fixed",
+  top: 24,
+  right: 24,
+  zIndex: 7000,
+  pointerEvents: "none",
+};
+
+const uiAlertBoxSx = {
+  minWidth: 320,
+  maxWidth: 430,
+
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 1.2,
+
+  p: 1.6,
+
+  borderRadius: "14px",
+
+  color: "#fff",
+
+  backdropFilter: "blur(18px)",
+  WebkitBackdropFilter: "blur(18px)",
+
+  boxShadow:
+    "0 24px 60px rgba(0,0,0,.45)",
+
+  pointerEvents: "auto",
+};
+
+const uiAlertSuccessSx = {
+  background:
+    "linear-gradient(135deg,rgba(16,185,129,.95),rgba(5,150,105,.88))",
+
+  border:
+    "1px solid rgba(110,231,183,.28)",
+};
+
+const uiAlertErrorSx = {
+  background:
+    "linear-gradient(135deg,rgba(220,38,38,.96),rgba(127,29,29,.9))",
+
+  border:
+    "1px solid rgba(252,165,165,.28)",
+};
+
+const uiAlertIconSx = {
+  width: 30,
+  height: 30,
+
+  borderRadius: "8px",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  background:
+    "rgba(255,255,255,.14)",
+
+  flexShrink: 0,
+};
+
+const uiAlertTitleSx = {
+  fontSize: 13,
+  fontWeight: 900,
+  lineHeight: 1.2,
+};
+
+const uiAlertMessageSx = {
+  mt: 0.3,
+  fontSize: 12,
+  fontWeight: 650,
+  lineHeight: 1.4,
+  color: "rgba(255,255,255,.82)",
+};
+
+const uiAlertCloseSx = {
+  width: 28,
+  height: 28,
+
+  ml: "auto",
+
+  color: "rgba(255,255,255,.75)",
+
+  background:
+    "rgba(255,255,255,.10)",
+
+  borderRadius: "8px",
+
+  "&:hover": {
+    color: "#fff",
+    background:
+      "rgba(255,255,255,.18)",
   },
 };
 
