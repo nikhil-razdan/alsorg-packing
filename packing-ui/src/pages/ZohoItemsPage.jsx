@@ -376,11 +376,25 @@ function ZohoItemsPage() {
   };
 
   const deletePacketItem = async (row) => {
-    if (!window.confirm("Delete this item?")) return;
+    const deleteId =
+      row.itemId || row.id || row.packetItemId;
+
+    if (!deleteId) {
+      alert("Packet Item ID missing. Cannot delete this row.");
+      console.error("Delete failed. Row has no itemId/id/packetItemId:", row);
+      return;
+    }
+
+    const itemLabel =
+      row.sku || row.itemName || deleteId;
+
+    if (!window.confirm(`Delete this item?\n\n${itemLabel}`)) {
+      return;
+    }
 
     try {
-      await fetch(
-        `${API_BASE_URL}/api/packets/items/${row.itemId}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(deleteId)}`,
         {
           method: "DELETE",
           headers: {
@@ -389,8 +403,23 @@ function ZohoItemsPage() {
         }
       );
 
-      fetchItems();
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Delete backend error:", text);
+        alert(text || "Delete failed from backend");
+        return;
+      }
+
+      setRows((prev) =>
+        prev.filter((r) => {
+          const id = r.itemId || r.id || r.packetItemId;
+          return id !== deleteId;
+        })
+      );
+
+      await fetchItems();
     } catch (e) {
+      console.error(e);
       alert("Delete failed");
     }
   };
@@ -524,12 +553,12 @@ function ZohoItemsPage() {
 
         <div style={wrap}>
           <Box sx={tableWrapper}>
-		  <div
-		    style={{
-		      width: "max-content",
-		      minWidth: inventoryTableMinWidth,
-		    }}
-		  >
+            <div
+              style={{
+                width: "max-content",
+                minWidth: "100%",
+              }}
+            >
               <div style={tableHeader}>
                 <div>Generate</div>
                 <div>Add Packets</div>
@@ -560,14 +589,12 @@ function ZohoItemsPage() {
 
                 {!loading && paginatedRows.map((row) => {
                   const lastPacket = isLastPacket(row);
-                  const isDeletable =
-                    row.status === "CREATED" && !row.stickerNumber;
+				  const rowDeleteId =
+				    row.itemId || row.id || row.packetItemId;
 
                   return (
                     <div
-                      key={row.itemId}
-                      style={tableRow}
-                    >
+                      key={row.itemId} style={tableRow}>
                       <div style={tableCellWrap}>
                         <Button
                           size="small"
@@ -628,20 +655,22 @@ function ZohoItemsPage() {
                         </Button>
                       </div>
 
-                      <div style={tableCellWrap}>
-                        <Button
-                          size="small"
-                          disabled={!isDeletable}
-                          onClick={() => deletePacketItem(row)}
-                          sx={{
-                            ...actionDanger,
-                            ...tableActionButton,
-                            opacity: isDeletable ? 1 : 0.45,
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+					  <div style={tableCellWrap}>
+					    <Button
+					      type="button"
+					      size="small"
+					      onClick={() => deletePacketItem(row)}
+					      sx={{
+					        ...actionDanger,
+					        ...tableActionButton,
+					        opacity: 1,
+					        pointerEvents: "auto",
+					        cursor: "pointer",
+					      }}
+					    >
+					      Delete
+					    </Button>
+					  </div>
 
                       <div style={tableCellWrap}>
                         <span
@@ -1617,48 +1646,8 @@ function ZohoItemsPage() {
 
 /* ===================== STYLES ===================== */
 
-/* ===================== COLUMN WIDTH CONTROLLER ===================== */
-
-const inventoryColumnWidths = {
-  generate: 130,
-  addPackets: 190,
-  edit: 110,
-  delete: 110,
-
-  itemName: 300,
-  sku: 340,
-  pdNo: 120,
-  drawingNo: 150,
-  client: 200,
-  address: 300,
-  description: 300,
-  status: 170,
-};
-
-const inventoryColumnOrder = [
-  "generate",
-  "addPackets",
-  "edit",
-  "delete",
-
-  "itemName",
-  "sku",
-  "pdNo",
-  "drawingNo",
-  "client",
-  "address",
-  "description",
-  "status",
-];
-
-const inventoryGrid = inventoryColumnOrder
-  .map((key) => `${inventoryColumnWidths[key]}px`)
-  .join(" ");
-
-const inventoryTableMinWidth = inventoryColumnOrder.reduce(
-  (total, key) => total + inventoryColumnWidths[key],
-  0
-);
+const inventoryGrid =
+  "130px 190px 110px 110px 260px 300px 120px 150px 180px 260px 260px 160px";
 
 const page = {
   minHeight: "100vh",
