@@ -16,16 +16,77 @@ import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashb
 import InventorySidebar from
   "../dashboard/components/inventory/InventorySidebar";
 
-function StatCard({ title, value, subtle, accent = "#60a5fa"}) {
-  return (
-    <div style={statCard(accent)}>
-      <div style={cardAccent(accent)} />
-      <p style={statTitle}>{title}</p>
-      <h2 style={statValue}>{value}</h2>
-      {subtle && <div style={statSubtle}>{subtle}</div>}
-    </div>
-  );
-}
+  function StatCard({
+    title,
+    value,
+    subtle,
+    accent = "#60a5fa",
+    onClick,
+    active = false,
+  }) {
+    const clickable = Boolean(onClick);
+
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={statCard(accent, clickable, active)}
+      >
+        <div style={cardAccent(accent)} />
+
+        <p style={statTitle}>{title}</p>
+
+        <h2 style={statValue}>{value}</h2>
+
+        {subtle && <div style={statSubtle}>{subtle}</div>}
+
+        {clickable && (
+          <div style={statClickHint}>
+            {active ? "Hide details" : "View details"}
+          </div>
+        )}
+      </button>
+    );
+  }
+  
+  function DetailStatCard({
+    title,
+    subtitle,
+    accent = "#60a5fa",
+    rows = [],
+    totalLabel,
+    totalValue,
+  }) {
+    return (
+      <div style={detailCard(accent)}>
+        <div style={detailHeader}>
+          <div>
+            <div style={detailTitle}>{title}</div>
+            {subtitle && <div style={detailSubtitle}>{subtitle}</div>}
+          </div>
+
+          {totalLabel && (
+            <div style={detailTotalBox}>
+              <span>{totalLabel}</span>
+              <strong>{totalValue}</strong>
+            </div>
+          )}
+        </div>
+
+        <div style={detailGrid}>
+          {rows.map((row) => (
+            <div key={row.label} style={detailItem}>
+              <div style={detailItemLabel}>{row.label}</div>
+              <div style={detailItemValue}>{row.value}</div>
+              {row.subtle && (
+                <div style={detailItemSubtle}>{row.subtle}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
 const DonutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -53,13 +114,79 @@ const BarIcon = () => (
   </svg>
 );
 
+const toNumber = (value) => Number(value ?? 0) || 0;
+
+const normalizeStats = (data) => {
+  const warehouseItems = toNumber(
+    data?.warehouseItems ??
+      data?.warehouse ??
+      data?.warehouseStock ??
+      data?.inWarehouse
+  );
+
+  const readyToDispatchItems = toNumber(
+    data?.readyToDispatchItems ??
+      data?.readyToDispatch ??
+      data?.readyToDispatchCount
+  );
+
+  const readyItems = toNumber(
+    data?.readyItems ??
+      data?.ready ??
+      data?.readyCount
+  );
+
+  const inventoryTotal =
+    warehouseItems + readyToDispatchItems + readyItems;
+
+  return {
+    warehouseItems,
+    readyToDispatchItems,
+    readyItems,
+
+    totalItems:
+      inventoryTotal ||
+      toNumber(data?.totalItems ?? data?.total ?? data?.inventoryItems),
+
+    packedItems: toNumber(data?.packedItems ?? data?.packed),
+
+    dispatchedItems: toNumber(
+      data?.dispatchedItems ?? data?.dispatched
+    ),
+
+    stickersGenerated: toNumber(
+      data?.stickersGenerated ?? data?.stickers
+    ),
+
+    todayStickerGenerated: toNumber(
+      data?.todayStickerGenerated ??
+        data?.todayStickersGenerated ??
+        data?.stickersGeneratedToday
+    ),
+
+    todayChallanGenerated: toNumber(
+      data?.todayChallanGenerated ??
+        data?.todayChallansGenerated ??
+        data?.challansGeneratedToday
+    ),
+  };
+};
+
 function DashboardPage() {
-  const [stats, setStats] = useState({
-    totalItems: 0,
-    packedItems: 0,
-    dispatchedItems: 0,
-    stickersGenerated: 0,
-  });
+	const [stats, setStats] = useState({
+	  totalItems: 0,
+
+	  warehouseItems: 0,
+	  readyToDispatchItems: 0,
+	  readyItems: 0,
+
+	  packedItems: 0,
+	  dispatchedItems: 0,
+	  stickersGenerated: 0,
+
+	  todayStickerGenerated: 0,
+	  todayChallanGenerated: 0,
+	});
 
   const [activityLogs, setActivityLogs] = useState([]);
   const [logistics, setLogistics] = useState(null);
@@ -69,22 +196,28 @@ function DashboardPage() {
   const [inventorySection, setInventorySection] =
     useState("summary");
 	
+  const [activeStatCard, setActiveStatCard] = useState(null);
   const [shiftModal, setShiftModal] =
     useState(false);
 	
-  const pending = Math.max(
-    Number(stats.totalItems || 0) -
-      Number(stats.packedItems || 0) -
-      Number(stats.dispatchedItems || 0),
-    0
-  );
+	const inventoryTotal =
+	   Number(stats.warehouseItems || 0) +
+	   Number(stats.readyToDispatchItems || 0) +
+	   Number(stats.readyItems || 0);
 
-  const normalizeStats = (data) => ({
-    totalItems: Number(data?.totalItems ?? data?.total ?? 0),
-    packedItems: Number(data?.packedItems ?? data?.packed ?? 0),
-    dispatchedItems: Number(data?.dispatchedItems ?? data?.dispatched ?? 0),
-    stickersGenerated: Number(data?.stickersGenerated ?? data?.stickers ?? 0),
-  });
+	 const finalInventoryTotal =
+	   inventoryTotal || Number(stats.totalItems || 0);
+
+	 const dailyThroughput =
+	   Number(stats.todayStickerGenerated || 0) +
+	   Number(stats.todayChallanGenerated || 0);
+	   
+	const pending = Math.max(
+	  finalInventoryTotal -
+	    Number(stats.packedItems || 0) -
+	    Number(stats.dispatchedItems || 0),
+	  0
+	);
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
   const reportIndex =
@@ -124,6 +257,11 @@ function DashboardPage() {
       active = false;
     };
   }, []);
+ 
+
+  const toggleStatCard = (key) => {
+    setActiveStatCard((current) => (current === key ? null : key));
+  };
 
   return (
     <div style={page}>
@@ -164,196 +302,260 @@ function DashboardPage() {
 
 		    <div style={inventoryMain}>
 			{inventorySection === "summary" && (
-			<div style={kpiGrid}>
-		    <StatCard
-		      accent="#60a5fa"
-		      title="Total Items In Inventory"
-		      value={Number(stats.totalItems || 0)}
-		      subtle="Warehouse Stock"
-		    />
+			  <>
+			    <div style={kpiGrid}>
+			      <StatCard
+			        accent="#60a5fa"
+			        title="Inventory Items"
+			        value={finalInventoryTotal}
+			        subtle="Warehouse + Ready To Dispatch + Ready"
+			        active={activeStatCard === "inventoryItems"}
+			        onClick={() => toggleStatCard("inventoryItems")}
+			      />
 
-		    <StatCard
-		      accent="#f472b6"
-		      title="Stickers Generated"
-		      value={Number(stats.stickersGenerated || 0)}
-		      subtle="Labels Printed"
-		    />
+			      <StatCard
+			        accent="#f472b6"
+			        title="Stickers Generated"
+			        value={Number(stats.stickersGenerated || 0)}
+			        subtle="Labels Printed"
+			      />
 
-		    <StatCard
-		      accent="#34d399"
-		      title="Packed Items"
-		      value={Number(stats.packedItems || 0)}
-		      subtle="Ready For Dispatch"
-		    />
+			      <StatCard
+			        accent="#34d399"
+			        title="Packed Items"
+			        value={Number(stats.packedItems || 0)}
+			        subtle="Sticker Generated"
+			      />
 
-		    <StatCard
-		      accent="#f59e0b"
-		      title="Pending Items"
-		      value={pending}
-		      subtle="Awaiting Processing"
-		    />
+			      <StatCard
+			        accent="#f59e0b"
+			        title="Pending Items"
+			        value={pending}
+			        subtle="Awaiting Processing"
+			      />
 
-		    <StatCard
-		      accent="#8b5cf6"
-		      title="Inventory Accuracy"
-		      value="98.4%"
-		      subtle="Warehouse Precision"
-		    />
+			      <StatCard
+			        accent="#8b5cf6"
+			        title="Inventory Accuracy"
+			        value="98.4%"
+			        subtle="Warehouse Precision"
+			      />
 
-		    <StatCard
-		      accent="#06b6d4"
-		      title="Daily Throughput"
-		      value="1,284"
-		      subtle="Items Processed"
-		    />
+			      <StatCard
+			        accent="#06b6d4"
+			        title="Daily Throughput"
+			        value={dailyThroughput}
+			        subtle="Today’s Sticker + Challan"
+			        active={activeStatCard === "dailyThroughput"}
+			        onClick={() => toggleStatCard("dailyThroughput")}
+			      />
 
-		    <StatCard
-		      accent="#ef4444"
-		      title="Delayed Dispatches"
-		      value="12"
-		      subtle="Needs Attention"
-		    />
+			      <StatCard
+			        accent="#ef4444"
+			        title="Ready to Dispatch"
+			        value={Number(stats.readyToDispatchItems || 0)}
+			        subtle="Dispatch action pending"
+			      />
 
-		    <StatCard
-		      accent="#22c55e"
-		      title="Operational Efficiency"
-		      value="94%"
-		      subtle="AI Optimized"
-		    />
-		  </div>
-	  )}
-	  
-            <div style={reportHeaderRow}>
-              <div>
-                <div style={sectionTitle}>Reports Center</div>
-                <div style={sectionSubtitle}>
-                  View, export and analyze inventory reports
-                </div>
-              </div>
+			      <StatCard
+			        accent="#22c55e"
+			        title="Operational Efficiency"
+			        value="94%"
+			        subtle="AI Optimized"
+			      />
+			    </div>
 
-              <div style={reportToggleGroup}>
-                <div
-                  style={{
-                    ...reportSliderIndicator,
-                    transform: `translateX(${reportIndex * 118}px)`,
-                  }}
-                />
+			    {activeStatCard === "dailyThroughput" && (
+			      <DetailStatCard
+			        accent="#06b6d4"
+			        title="Daily Throughput Details"
+			        subtitle="Today’s operational movement"
+			        totalLabel="Total Today"
+			        totalValue={dailyThroughput}
+			        rows={[
+			          {
+			            label: "Packed Items",
+			            value: Number(stats.todayStickerGenerated || 0),
+			            subtle: "Sticker Generated Today",
+			          },
+			          {
+			            label: "Dispatch Items",
+			            value: Number(stats.todayChallanGenerated || 0),
+			            subtle: "Challan Generated Today",
+			          },
+			        ]}
+			      />
+			    )}
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-					color:
-					  activeReport === "packing"
-					    ? "#fff"
-					    : "rgba(255,255,255,.72)",
-                  }}
-                  onClick={() => setActiveReport("packing")}
-                >
-                  📦 Packing
-                </button>
+			    {activeStatCard === "inventoryItems" && (
+			      <DetailStatCard
+			        accent="#60a5fa"
+			        title="Inventory Item Breakdown"
+			        subtitle="Live stock position by operational status"
+			        totalLabel="Inventory Total"
+			        totalValue={finalInventoryTotal}
+			        rows={[
+			          {
+			            label: "Warehouse Items",
+			            value: Number(stats.warehouseItems || 0),
+			            subtle: "Currently inside warehouse",
+			          },
+			          {
+			            label: "Ready to Dispatch",
+			            value: Number(stats.readyToDispatchItems || 0),
+			            subtle: "Waiting for dispatch",
+			          },
+			          {
+			            label: "Ready Items",
+			            value: Number(stats.readyItems || 0),
+			            subtle: "Ready / processed stock",
+			          },
+			        ]}
+			      />
+			    )}
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-					color:
-					  activeReport === "dispatch"
-					    ? "#fff"
-					    : "rgba(255,255,255,.72)",
-                  }}
-                  onClick={() => setActiveReport("dispatch")}
-                >
-                  🚚 Dispatch
-                </button>
+			    <div style={workspaceGrid}>
+			      <div style={panelSurface}>
+			        <div style={chartToggleWrap}>
+			          <div
+			            style={{
+			              ...chartSlider,
+			              transform: `translateX(${chartIndex * 40}px)`,
+			            }}
+			          />
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-					color:
-					  activeReport === "combined"
-					    ? "#fff"
-					    : "rgba(255,255,255,.72)",
-                  }}
-                  onClick={() => setActiveReport("combined")}
-                >
-                  📊 Combined
-                </button>
+			          <button
+			            style={chartToggleBtn}
+			            onClick={() => setChartType("donut")}
+			          >
+			            <DonutIcon />
+			          </button>
 
-                <button
-                  style={{
-                    ...reportToggleBtn,
-					color:
-					  activeReport === "aging"
-					    ? "#fff"
-					    : "rgba(255,255,255,.72)",
-                  }}
-                  onClick={() => setActiveReport("aging")}
-                >
-                  ⏳ Aging
-                </button>
-              </div>
-            </div>
+			          <button
+			            style={chartToggleBtn}
+			            onClick={() => setChartType("line")}
+			          >
+			            <LineIcon />
+			          </button>
 
-			{inventorySection === "warehouse" && (
-            <div style={workspaceGrid}>
-              <div style={panelSurface}>
-                <div style={chartToggleWrap}>
-                  <div
-                    style={{
-                      ...chartSlider,
-                      transform: `translateX(${chartIndex * 40}px)`,
-                    }}
-                  />
-                  <button
-                    style={chartToggleBtn}
-                    onClick={() => setChartType("donut")}
-                  >
-                    <DonutIcon />
-                  </button>
-                  <button
-                    style={chartToggleBtn}
-                    onClick={() => setChartType("line")}
-                  >
-                    <LineIcon />
-                  </button>
-                  <button
-                    style={chartToggleBtn}
-                    onClick={() => setChartType("bar")}
-                  >
-                    <BarIcon />
-                  </button>
-                </div>
+			          <button
+			            style={chartToggleBtn}
+			            onClick={() => setChartType("bar")}
+			          >
+			            <BarIcon />
+			          </button>
+			        </div>
 
-                <div style={panelBody}>
-                  {chartType === "donut" && (
-                    <StatusDonutChart
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                  {chartType === "line" && (
-                    <StatusLineChart
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                  {chartType === "bar" && (
-                    <StatusBarChart
-                      packed={stats.packedItems}
-                      dispatched={stats.dispatchedItems}
-                      pending={pending}
-                    />
-                  )}
-                </div>
-              </div>
+			        <div style={panelBody}>
+			          {chartType === "donut" && (
+			            <StatusDonutChart
+			              warehouse={stats.warehouseItems}
+			              readyToDispatch={stats.readyToDispatchItems}
+			              ready={stats.readyItems}
+			            />
+			          )}
 
-              <div style={panelSurface}>
-                <ActivityFeed logs={activityLogs}  />
-              </div>
-            </div>
+			          {chartType === "line" && (
+			            <StatusLineChart
+			              warehouse={stats.warehouseItems}
+			              readyToDispatch={stats.readyToDispatchItems}
+			              ready={stats.readyItems}
+			            />
+			          )}
+
+			          {chartType === "bar" && (
+			            <StatusBarChart
+			              warehouse={stats.warehouseItems}
+			              readyToDispatch={stats.readyToDispatchItems}
+			              ready={stats.readyItems}
+			            />
+			          )}
+			        </div>
+			      </div>
+
+			      <div style={panelSurface}>
+			        <ActivityFeed logs={activityLogs} />
+			      </div>
+			    </div>
+
+			    <div style={reportHeaderRow}>
+			      <div>
+			        <div style={sectionTitle}>Reports Center</div>
+			        <div style={sectionSubtitle}>
+			          View, export and analyze inventory reports
+			        </div>
+			      </div>
+
+			      <div style={reportToggleGroup}>
+			        <div
+			          style={{
+			            ...reportSliderIndicator,
+			            transform: `translateX(${reportIndex * 118}px)`,
+			          }}
+			        />
+
+			        <button
+			          style={{
+			            ...reportToggleBtn,
+			            color:
+			              activeReport === "packing"
+			                ? "#fff"
+			                : "rgba(255,255,255,.72)",
+			          }}
+			          onClick={() => setActiveReport("packing")}
+			        >
+			          📦 Packing
+			        </button>
+
+			        <button
+			          style={{
+			            ...reportToggleBtn,
+			            color:
+			              activeReport === "dispatch"
+			                ? "#fff"
+			                : "rgba(255,255,255,.72)",
+			          }}
+			          onClick={() => setActiveReport("dispatch")}
+			        >
+			          🚚 Dispatch
+			        </button>
+
+			        <button
+			          style={{
+			            ...reportToggleBtn,
+			            color:
+			              activeReport === "combined"
+			                ? "#fff"
+			                : "rgba(255,255,255,.72)",
+			          }}
+			          onClick={() => setActiveReport("combined")}
+			        >
+			          📊 Combined
+			        </button>
+
+			        <button
+			          style={{
+			            ...reportToggleBtn,
+			            color:
+			              activeReport === "aging"
+			                ? "#fff"
+			                : "rgba(255,255,255,.72)",
+			          }}
+			          onClick={() => setActiveReport("aging")}
+			        >
+			          ⏳ Aging
+			        </button>
+			      </div>
+			    </div>
+
+			    {localStorage.getItem("role") === "ADMIN" && (
+			      <div style={adminPanel}>
+			        <ScheduledReports />
+			      </div>
+			    )}
+			  </>
 			)}
-			
+	  
 			{inventorySection === "analytics" && (
 			<div style={analyticsSection}>
 			  <div style={analyticsHeader}>
@@ -490,15 +692,7 @@ function DashboardPage() {
 			      </div>
 			    </div>
 			  </div>
-			)}
-			
-			
-            {localStorage.getItem("role") === "ADMIN" && (
-              <div style={adminPanel}>
-                <h3 style={adminPanelTitle}>Scheduled Reports</h3>
-                <ScheduledReports />
-              </div>
-            )}
+			)}			
 			  </div>
 			</div>
         )}
@@ -879,28 +1073,144 @@ const cardAccent = (accent) => ({
   height: 4,
   background: accent,
 });
-const statCard = (accent) => ({
+
+const statCard = (accent, clickable = false, active = false) => ({
   position: "relative",
 
   padding: "20px 20px 18px",
 
   borderRadius: 22,
 
-  background:
-    "rgba(15,23,42,.78)",
+  background: active
+    ? `linear-gradient(180deg, ${accent}22, rgba(15,23,42,.82))`
+    : "rgba(15,23,42,.78)",
 
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  border: active
+    ? `1px solid ${accent}66`
+    : "1px solid rgba(255,255,255,.06)",
 
-  boxShadow:
-    "0 18px 35px rgba(2,6,23,.32)",
+  boxShadow: active
+    ? `0 18px 40px ${accent}26`
+    : "0 18px 35px rgba(2,6,23,.32)",
 
   overflow: "hidden",
 
   minHeight: 118,
 
   backdropFilter: "blur(18px)",
+
+  cursor: clickable ? "pointer" : "default",
+
+  textAlign: "left",
+
+  width: "100%",
+
+  color: "#fff",
+
+  fontFamily: "inherit",
+
+  transition: "all .25s ease",
 });
+
+const statClickHint = {
+  marginTop: 10,
+  fontSize: 11,
+  fontWeight: 800,
+  color: "rgba(255,255,255,.72)",
+};
+
+const detailCard = (accent) => ({
+  padding: 20,
+
+  borderRadius: 24,
+
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.82))",
+
+  border: `1px solid ${accent}55`,
+
+  boxShadow: `0 18px 40px ${accent}22`,
+
+  backdropFilter: "blur(18px)",
+});
+
+const detailHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 14,
+  marginBottom: 16,
+  flexWrap: "wrap",
+};
+
+const detailTitle = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const detailSubtitle = {
+  marginTop: 4,
+  fontSize: 13,
+  color: "rgba(255,255,255,.58)",
+};
+
+const detailTotalBox = {
+  minWidth: 140,
+  padding: "10px 14px",
+
+  borderRadius: 16,
+
+  background: "rgba(255,255,255,.05)",
+
+  border: "1px solid rgba(255,255,255,.08)",
+
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+
+  color: "rgba(255,255,255,.68)",
+
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const detailGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+  gap: 14,
+};
+
+const detailItem = {
+  padding: 16,
+
+  borderRadius: 18,
+
+  background: "rgba(255,255,255,.04)",
+
+  border: "1px solid rgba(255,255,255,.06)",
+};
+
+const detailItemLabel = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "rgba(255,255,255,.62)",
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+};
+
+const detailItemValue = {
+  marginTop: 8,
+  fontSize: 30,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const detailItemSubtle = {
+  marginTop: 6,
+  fontSize: 12,
+  color: "rgba(255,255,255,.52)",
+};
 
 const statTitle = {
   color: "rgba(255,255,255,.62)",
@@ -1059,13 +1369,6 @@ const analyticsCardWide = {
   ...analyticsCard,
 
   gridColumn: "span 2",
-};
-
-const adminPanelTitle = {
-  color: "#fff",
-  marginBottom: 12,
-  fontSize: 16,
-  fontWeight: 800,
 };
 
 const analyticsSection = {

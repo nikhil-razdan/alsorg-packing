@@ -1,70 +1,70 @@
-function StatusDonutChart({ packed, dispatched, pending }) {
-  const total = packed + dispatched + pending || 1;
+function StatusDonutChart({ warehouse = 0, readyToDispatch = 0, ready = 0 }) {
+  const total = warehouse + readyToDispatch + ready || 1;
 
   const radius = 70;
   const stroke = 16;
   const circumference = 2 * Math.PI * radius;
 
-  const packedLen = (packed / total) * circumference;
-  const dispatchedLen = (dispatched / total) * circumference;
-  const pendingLen = (pending / total) * circumference;
+  const warehouseLen = (warehouse / total) * circumference;
+  const readyToDispatchLen = (readyToDispatch / total) * circumference;
+  const readyLen = (ready / total) * circumference;
 
   return (
     <div style={card}>
-      <h3 style={title}>Warehouse Status</h3>
+      <h3 style={title}>Inventory Status</h3>
 
       <svg width="200" height="200" viewBox="0 0 200 200">
         <g transform="rotate(-90 100 100)">
-		<circle
-		  cx="100"
-		  cy="100"
-		  r={radius}
-		  fill="none"
-		  stroke="rgba(251,191,36,0.95)"
-		  strokeWidth={stroke}
-		  strokeDasharray={`${pendingLen} ${circumference}`}
-		  strokeDashoffset={0}
-		/>
+          <circle
+            cx="100"
+            cy="100"
+            r={radius}
+            fill="none"
+            stroke="rgba(96,165,250,0.95)"
+            strokeWidth={stroke}
+            strokeDasharray={`${warehouseLen} ${circumference}`}
+            strokeDashoffset={0}
+          />
 
-		<circle
-		  cx="100"
-		  cy="100"
-		  r={radius}
-		  fill="none"
-		  stroke="rgba(96,165,250,0.95)"
-		  strokeWidth={stroke}
-		  strokeDasharray={`${packedLen} ${circumference}`}
-		  strokeDashoffset={-pendingLen}
-		/>
+          <circle
+            cx="100"
+            cy="100"
+            r={radius}
+            fill="none"
+            stroke="rgba(251,191,36,0.95)"
+            strokeWidth={stroke}
+            strokeDasharray={`${readyToDispatchLen} ${circumference}`}
+            strokeDashoffset={-warehouseLen}
+          />
 
-		<circle
-		  cx="100"
-		  cy="100"
-		  r={radius}
-		  fill="none"
-		  stroke="rgba(52,211,153,0.95)"
-		  strokeWidth={stroke}
-		  strokeDasharray={`${dispatchedLen} ${circumference}`}
-		  strokeDashoffset={-(pendingLen + packedLen)}
-		/>
+          <circle
+            cx="100"
+            cy="100"
+            r={radius}
+            fill="none"
+            stroke="rgba(52,211,153,0.95)"
+            strokeWidth={stroke}
+            strokeDasharray={`${readyLen} ${circumference}`}
+            strokeDashoffset={-(warehouseLen + readyToDispatchLen)}
+          />
         </g>
       </svg>
 
-      <div style={legend}>	 
-	   <Legend
-	    color="rgba(96,165,250,0.95)"
-	    label={`Packed (${packed})`}
-	  />
+      <div style={legend}>
+        <Legend
+          color="rgba(96,165,250,0.95)"
+          label={`Warehouse (${warehouse})`}
+        />
 
-	  <Legend
-	    color="rgba(52,211,153,0.95)"
-	    label={`Dispatched (${dispatched})`}
-	  />
+        <Legend
+          color="rgba(251,191,36,0.95)"
+          label={`Ready to Dispatch (${readyToDispatch})`}
+        />
 
-	  <Legend
-	    color="rgba(251,191,36,0.95)"
-	    label={`Pending (${pending})`}
-	  />
+        <Legend
+          color="rgba(52,211,153,0.95)"
+          label={`Ready (${ready})`}
+        />
       </div>
     </div>
   );

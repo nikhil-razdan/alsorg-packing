@@ -1,49 +1,79 @@
-function StatusLineChart({ packed, dispatched, pending }) {
-  const max = Math.max(packed, dispatched, pending, 1);
+function StatusLineChart({ warehouse = 0, readyToDispatch = 0, ready = 0 }) {
+  const max = Math.max(warehouse, readyToDispatch, ready, 1);
 
   const scaleY = (value) => 140 - (value / max) * 100;
 
   return (
     <div style={card}>
-      <h3 style={title}>Warehouse Status</h3>
+      <h3 style={title}>Inventory Status</h3>
 
       <svg width="220" height="160">
-        <line x1="30" y1="140" x2="190" y2="140" stroke="rgba(148,163,184,0.25)" />
-        <line x1="30" y1="40" x2="190" y2="40" stroke="rgba(148,163,184,0.16)" />
+        <line
+          x1="30"
+          y1="140"
+          x2="190"
+          y2="140"
+          stroke="rgba(148,163,184,0.25)"
+        />
 
-		<polyline
-		  stroke="rgba(96,165,250,0.95)"
-		  fill="none"
-		  strokeWidth="3"
+        <line
+          x1="30"
+          y1="40"
+          x2="190"
+          y2="40"
+          stroke="rgba(148,163,184,0.16)"
+        />
+
+        <polyline
+          stroke="rgba(96,165,250,0.95)"
+          fill="none"
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
           points={`
-            50,${scaleY(packed)}
-            110,${scaleY(dispatched)}
-            170,${scaleY(pending)}
+            50,${scaleY(warehouse)}
+            110,${scaleY(readyToDispatch)}
+            170,${scaleY(ready)}
           `}
         />
 
-        <circle cx="50" cy={scaleY(packed)} r="4" fill="rgba(96,165,250,0.95)" />
-        <circle cx="110" cy={scaleY(dispatched)} r="4" fill="rgba(52,211,153,0.95)" />
-        <circle cx="170" cy={scaleY(pending)} r="4" fill="rgba(251,191,36,0.95)" />
+        <circle
+          cx="50"
+          cy={scaleY(warehouse)}
+          r="4"
+          fill="rgba(96,165,250,0.95)"
+        />
+
+        <circle
+          cx="110"
+          cy={scaleY(readyToDispatch)}
+          r="4"
+          fill="rgba(251,191,36,0.95)"
+        />
+
+        <circle
+          cx="170"
+          cy={scaleY(ready)}
+          r="4"
+          fill="rgba(52,211,153,0.95)"
+        />
       </svg>
 
       <div style={legend}>
-	  <Legend
-	    color="rgba(96,165,250,0.95)"
-	    label={`Packed (${packed})`}
-	  />
+        <Legend
+          color="rgba(96,165,250,0.95)"
+          label={`Warehouse (${warehouse})`}
+        />
 
-	  <Legend
-	    color="rgba(52,211,153,0.95)"
-	    label={`Dispatched (${dispatched})`}
-	  />
+        <Legend
+          color="rgba(251,191,36,0.95)"
+          label={`Ready to Dispatch (${readyToDispatch})`}
+        />
 
-	  <Legend
-	    color="rgba(251,191,36,0.95)"
-	    label={`Pending (${pending})`}
-	  />
+        <Legend
+          color="rgba(52,211,153,0.95)"
+          label={`Ready (${ready})`}
+        />
       </div>
     </div>
   );
