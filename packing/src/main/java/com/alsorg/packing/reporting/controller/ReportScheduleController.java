@@ -2,8 +2,12 @@ package com.alsorg.packing.reporting.controller;
 
 import com.alsorg.packing.reporting.dto.ReportSchedule;
 import com.alsorg.packing.reporting.repository.ReportScheduleRepository;
-import org.springframework.web.bind.annotation.*;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalTime;
 import java.util.List;
 
 @RestController
@@ -23,6 +27,45 @@ public class ReportScheduleController {
 
     @PostMapping
     public ReportSchedule create(@RequestBody ReportSchedule s) {
+
+        if (s.getEmail() == null || s.getEmail().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Email is required"
+            );
+        }
+
+        if (!s.getEmail().contains("@")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid email address"
+            );
+        }
+
+        if (s.getReportType() == null || s.getReportType().isBlank()) {
+            s.setReportType("combined");
+        }
+
+        String type = s.getReportType().trim().toLowerCase();
+
+        if (!type.equals("packing")
+                && !type.equals("dispatch")
+                && !type.equals("combined")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid report type"
+            );
+        }
+
+        s.setReportType(type);
+        s.setEmail(s.getEmail().trim());
+
+        if (s.getSendTime() == null) {
+            s.setSendTime(LocalTime.of(18, 0));
+        }
+
+        s.setEnabled(true);
+
         return repo.save(s);
     }
 

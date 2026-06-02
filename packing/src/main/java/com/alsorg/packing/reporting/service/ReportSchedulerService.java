@@ -1,8 +1,8 @@
 package com.alsorg.packing.reporting.service;
 
-import com.alsorg.packing.reporting.repository.ReportScheduleRepository;
 import com.alsorg.packing.reporting.dto.ReportSchedule;
 import com.alsorg.packing.reporting.export.ExcelExportUtil;
+import com.alsorg.packing.reporting.repository.ReportScheduleRepository;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -14,6 +14,8 @@ import java.util.List;
 
 @Service
 public class ReportSchedulerService {
+
+    private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
 
     private final ReportScheduleRepository repo;
     private final PackingReportService packingService;
@@ -27,7 +29,7 @@ public class ReportSchedulerService {
             DispatchReportService dispatchService,
             CombinedReportService combinedService,
             EmailService emailService
-    ){
+    ) {
         this.repo = repo;
         this.packingService = packingService;
         this.dispatchService = dispatchService;
@@ -35,101 +37,136 @@ public class ReportSchedulerService {
         this.emailService = emailService;
     }
 
-    @Scheduled(fixedRate = 60000)
-    public void runSchedules(){
+    @Scheduled(cron = "0 * * * * *", zone = "Asia/Kolkata")
+    public void runSchedules() {
 
-        System.out.println("Scheduler running...");
-
-        ZoneId zone = ZoneId.of("Asia/Kolkata");
-
-        LocalTime now = LocalTime.now(zone)
+        LocalTime now = LocalTime.now(ZONE)
                 .withSecond(0)
                 .withNano(0);
 
-        LocalDate today = LocalDate.now(zone);
+        LocalDate today = LocalDate.now(ZONE);
 
-        List<ReportSchedule> schedules = repo.findAll();
+        List<ReportSchedule> schedules =
+                repo.findDueSchedules(now, today);
 
-        for(ReportSchedule s : schedules){
+        if (schedules.isEmpty()) {
+            return;
+        }
 
-            if(!Boolean.TRUE.equals(s.getEnabled())) {
-                continue;
-            }
+        System.out.println("📩 Due report schedules found: " + schedules.size());
 
-            if(s.getEmail() == null || s.getEmail().isBlank()){
-                System.out.println("Skipping empty email schedule");
-                continue;
-            }
-
-            LocalTime scheduled = s.getSendTime();
-
-            if(scheduled == null){
-                System.out.println("Skipping schedule with no time");
-                continue;
-            }
-
-            System.out.println("Schedule found:");
-            System.out.println("Email: " + s.getEmail());
-            System.out.println("Scheduled time: " + scheduled);
-            System.out.println("Current time: " + now);
-
-            // ✅ Exact match check (reliable)
-            if(scheduled.equals(now)){
-
-                // ✅ Prevent duplicate sending in same day
-                if(s.getLastSent() != null && s.getLastSent().equals(today)){
-                    System.out.println("Already sent today. Skipping.");
-                    continue;
-                }
-
-                try {
-
-                    System.out.println("Sending report to: " + s.getEmail());
-
-                    byte[] excel = generateExcel(s.getReportType());
-
-                    System.out.println("Excel size: " + excel.length);
-
-                    emailService.sendExcel(
-                            s.getEmail(),
-                            "Alsorg Daily Report",
-                            excel,
-                            "report.xlsx"
-                    );
-
-                    // ✅ Update last sent date
-                    s.setLastSent(today);
-                    repo.save(s);
-
-                    System.out.println("✅ Report sent and schedule updated");
-
-                } catch(Exception e){
-                    System.out.println("❌ Email sending failed:");
-                    e.printStackTrace();
-                }
-            }
+        for (ReportSchedule schedule : schedules) {
+            sendSchedule(schedule, today);
         }
     }
 
-    private byte[] generateExcel(String type){
+    private void sendSchedule(
+            ReportSchedule schedule,
+            LocalDate today
+    ) {
+        try {
+            String reportType = normalizeReportType(
+                    schedule.getReportType()
+            );
 
-        if("packing".equalsIgnoreCase(type)){
+            byte[] excel = generateExcel(reportType);
+
+            String filename = buildFilename(reportType, today);
+
+            String subject = buildSubject(reportType, today);
+
+            emailService.sendExcel(
+                    schedule.getEmail(),
+                    subject,
+                    excel,
+                    filename
+            );
+
+            schedule.setLastSent(today);
+            repo.save(schedule);
+
+            System.out.println(
+                    "✅ Scheduled report sent | ID: "
+                            + schedule.getId()
+                            + " | Email: "
+                            + schedule.getEmail()
+            );
+
+        } catch (Exception e) {
+            System.out.println(
+                    "❌ Scheduled report failed | ID: "
+                            + schedule.getId()
+                            + " | Email: "
+                            + schedule.getEmail()
+            );
+
+            e.printStackTrace();
+        }
+    }
+
+    private byte[] generateExcel(String type) {
+
+        if ("packing".equals(type)) {
             return ExcelExportUtil.exportToExcel(
                     packingService.getPackingReport(null, null),
                     "Packing"
             );
         }
 
-        if("dispatch".equalsIgnoreCase(type)){
+        if ("dispatch".equals(type)) {
             return ExcelExportUtil.exportToExcel(
                     dispatchService.getDispatchReport(null, null),
                     "Dispatch"
             );
         }
 
-        return ExcelExportUtil.exportToExcel(
-                combinedService.getCombinedReport(null, null),
-                "Combined"
+        if ("combined".equals(type)) {
+            return ExcelExportUtil.exportToExcel(
+                    combinedService.getCombinedReport(null, null),
+                    "Combined"
+            );
+        }
+
+        throw new IllegalArgumentException(
+                "Invalid report type: " + type
         );
+    }
+
+    private String normalizeReportType(String type) {
+        if (type == null || type.isBlank()) {
+            return "combined";
+        }
+
+        return type.trim().toLowerCase();
+    }
+
+    private String buildFilename(
+            String reportType,
+            LocalDate today
+    ) {
+        return "alsorg-"
+                + reportType
+                + "-report-"
+                + today
+                + ".xlsx";
+    }
+
+    private String buildSubject(
+            String reportType,
+            LocalDate today
+    ) {
+        return "Alsorg "
+                + capitalize(reportType)
+                + " Report - "
+                + today;
+    }
+
+    private String capitalize(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+
+        return value.substring(0, 1).toUpperCase()
+                + value.substring(1).toLowerCase();
     }
 }
