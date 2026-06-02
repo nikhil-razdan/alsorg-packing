@@ -68,11 +68,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.resend</groupId>
-            <artifactId>resend-java</artifactId>
-            <version>3.0.0</version>
-        </dependency>
 
 <!-- ZXing Java SE (Image support) -->
         <dependency>
@@ -151,11 +146,6 @@
         <artifactId>google-http-client-gson</artifactId>
         <version>1.43.3</version>
     </dependency>
-    <dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-mail</artifactId>
-</dependency>
-
 
         <dependency>
     <groupId>com.opencsv</groupId>

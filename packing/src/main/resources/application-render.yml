@@ -12,6 +12,31 @@ spring:
       ddl-auto: update
     show-sql: false
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000  
+
+# =====================
+# MAIL
+# =====================
+
+app:
+  mail:
+    from: ${MAIL_FROM}
+    reply-to: ${MAIL_REPLY_TO:${MAIL_USERNAME}}   
 # =====================
 # SERVER
 # =====================
@@ -28,6 +53,7 @@ server:
         secure: true
         http-only: true
         same-site: none
+
 
 # =====================
 # STICKER STORAGE
