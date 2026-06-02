@@ -15,6 +15,7 @@ import {
 } from "../../api/logisticsApi";
 
 import CreateDriverModal from "./modals/CreateDriverModal";
+import LogisticsShiftModal from "./LogisticsShiftModal";
 
 function DriverManagement({
   showAlert = () => {},
@@ -31,6 +32,12 @@ function DriverManagement({
   const [open, setOpen] =
     useState(false);
 
+	const [shiftOpen, setShiftOpen] =
+	  useState(false);
+
+	const [selectedDriver, setSelectedDriver] =
+	  useState(null);
+	  
   const loadDrivers =
     async () => {
       try {
@@ -79,6 +86,16 @@ function DriverManagement({
 	  };
 	}, [showAlert]);
 
+	const openShiftForDriver = (driver) => {
+	  setSelectedDriver(driver);
+	  setShiftOpen(true);
+	};
+
+	const closeShiftForDriver = () => {
+	  setShiftOpen(false);
+	  setSelectedDriver(null);
+	};
+	
   const remove = async (id) => {
     try {
       await deleteDriver(id);
@@ -161,7 +178,17 @@ function DriverManagement({
             key={d.id}
             style={row}
           >
-            <div>{d.name}</div>
+		  <div>
+		    <button
+		      style={driverNameBtn}
+		      onClick={() =>
+		        openShiftForDriver(d)
+		      }
+		      title="Create shift for this driver"
+		    >
+		      {d.name}
+		    </button>
+		  </div>
 
 			<div>{d.phoneNumber}</div>
 			<div>
@@ -203,6 +230,20 @@ function DriverManagement({
 		  onCreated={loadDrivers}
 		  showAlert={showAlert}
 		/>
+		
+		{shiftOpen && selectedDriver && (
+		  <LogisticsShiftModal
+		    open={shiftOpen}
+		    mode="create"
+		    initialDriverId={
+		      selectedDriver.id
+		    }
+		    lockDriver={true}
+		    onClose={closeShiftForDriver}
+		    onSaved={loadDrivers}
+		    showAlert={showAlert}
+		  />
+		)}
     </div>
   );
 }
@@ -309,6 +350,17 @@ const deleteBtn = {
   cursor: "pointer",
 
   fontWeight: 700,
+};
+
+const driverNameBtn = {
+  border: "none",
+  background: "transparent",
+  color: "#60a5fa",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 14,
+  padding: 0,
+  textAlign: "left",
 };
 
 export default DriverManagement;

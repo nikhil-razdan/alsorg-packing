@@ -3,48 +3,81 @@ import {
   useState,
 } from "react";
 
+import LogisticsShiftModal from "./LogisticsShiftModal";
+import LogisticsPagination from "./LogisticsPagination";
+
 import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
 
-import LogisticsPagination from "./LogisticsPagination";
-import LogisticsShiftModal from "./LogisticsShiftModal";
-
 import {
   fetchShifts,
   deleteShift,
+  updateShift,
 } from "../../api/logisticsApi";
+
+const buildShiftUpdatePayload = (
+  shift,
+  overrides = {}
+) => ({
+  driverId:
+    shift.driver?.id ||
+    shift.driverId ||
+    "",
+
+  vehicleId:
+    shift.vehicle?.id ||
+    shift.vehicleId ||
+    "",
+
+  shiftStart:
+    shift.shiftStart || "",
+
+  shiftEnd:
+    shift.shiftEnd || "",
+
+  overtimeHours: Number(
+    shift.overtimeHours || 0
+  ),
+
+  totalTrips: Number(
+    shift.totalTrips || 0
+  ),
+
+  totalHelpers: Number(
+    shift.totalHelpers ||
+      shift.totalLoaders ||
+      0
+  ),
+
+  fuelUsed: Number(
+    shift.fuelUsed || 0
+  ),
+
+  totalDistance: Number(
+    shift.totalDistance || 0
+  ),
+
+  routeCategory:
+    shift.routeCategory || "Factory",
+
+  remarks:
+    shift.remarks || "",
+
+  status:
+    shift.status || "WORKING",
+
+  ...overrides,
+});
 
 function ShiftOperations({
   showAlert = () => {},
 }) {
-	
-	const remove = async (id) => {
-	  try {
-	    await deleteShift(id);
-
-	    await load();
-
-	    showAlert(
-	      "Shift deleted successfully",
-	      "success"
-	    );
-
-	  } catch (e) {
-	    console.error(e);
-
-	    showAlert(
-	      getBackendMessage(
-	        e,
-	        "Shift delete failed"
-	      ),
-	      "error"
-	    );
-	  }
-	};
-	
-  const [open, setOpen] =
+  const [createOpen, setCreateOpen] =
     useState(false);
+
+  const [editingShift, setEditingShift] =
+    useState(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -52,45 +85,147 @@ function ShiftOperations({
   const [shifts, setShifts] =
     useState([]);
 
-	const [pageNo, setPageNo] =
-	  useState(1);
+  const [pageNo, setPageNo] =
+    useState(1);
 
-	const [pageSize, setPageSize] =
-	  useState(25);
+  const [pageSize, setPageSize] =
+    useState(25);
 
   const load = async () => {
     try {
       setLoading(true);
 
-      const data =
-        await fetchShifts();
+      const data = await fetchShifts();
 
       setShifts(data || []);
-	  } catch (e) {
-	    console.error(e);
 
-	    showAlert(
-	      getBackendMessage(
-	        e,
-	        "Failed to load shifts"
-	      ),
-	      "error"
-	    );
-	  } finally {
+    } catch (e) {
+      console.error(e);
+
+      showAlert(
+        getBackendMessage(
+          e,
+          "Failed to load shifts"
+        ),
+        "error"
+      );
+
+    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    let active = true;
+
+    setLoading(true);
+
+    fetchShifts()
+      .then((data) => {
+        if (!active) return;
+
+        setShifts(data || []);
+      })
+      .catch((e) => {
+        if (!active) return;
+
+        console.error(e);
+
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load shifts"
+          ),
+          "error"
+        );
+      })
+      .finally(() => {
+        if (!active) return;
+
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [showAlert]);
+
+  const remove = async (id) => {
+    try {
+      await deleteShift(id);
+
+      await load();
+
+      showAlert(
+        "Shift deleted successfully",
+        "success"
+      );
+
+    } catch (e) {
+      console.error(e);
+
+      showAlert(
+        getBackendMessage(
+          e,
+          "Shift delete failed"
+        ),
+        "error"
+      );
+    }
+  };
+
+  const quickStatusChange =
+    async (shift, nextStatus) => {
+      try {
+        const payload =
+          buildShiftUpdatePayload(
+            shift,
+            {
+              status: nextStatus,
+            }
+          );
+
+        await updateShift(
+          shift.id,
+          payload
+        );
+
+        await load();
+
+        showAlert(
+          "Shift status updated successfully",
+          "success"
+        );
+
+      } catch (e) {
+        console.error(e);
+
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to update shift status"
+          ),
+          "error"
+        );
+      }
+    };
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(shifts.length / pageSize)
+  );
+
+  const currentPage = Math.min(
+    pageNo,
+    totalPages
+  );
 
   const paginatedShifts =
     shifts.slice(
-      (pageNo - 1) * pageSize,
-      pageNo * pageSize
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
     );
-	
+
   return (
     <div style={wrap}>
       <div style={header}>
@@ -106,7 +241,9 @@ function ShiftOperations({
 
         <button
           style={button}
-          onClick={() => setOpen(true)}
+          onClick={() =>
+            setCreateOpen(true)
+          }
         >
           + Create Shift
         </button>
@@ -119,79 +256,137 @@ function ShiftOperations({
           <div>Trips</div>
           <div>Route</div>
           <div>Status</div>
+          <div>Actions</div>
         </div>
 
-		{!loading &&
-		  paginatedShifts.map((s) => (
+        {loading && (
+          <div style={emptyRow}>
+            Loading shifts...
+          </div>
+        )}
+
+        {!loading &&
+          paginatedShifts.length === 0 && (
+            <div style={emptyRow}>
+              No shifts found
+            </div>
+          )}
+
+        {!loading &&
+          paginatedShifts.map((s) => (
             <div
               key={s.id}
               style={row}
             >
               <div>
-                {s.driver?.name}
+                {s.driver?.name || "-"}
               </div>
 
               <div>
-                {
-                  s.vehicle
-                    ?.vehicleNumber
-                }
+                {s.vehicle?.vehicleNumber ||
+                  "-"}
               </div>
 
               <div>
-                {s.totalTrips}
+                {s.totalTrips ?? "-"}
               </div>
 
               <div>
-                {
-                  s.routeCategory
-                }
+                {s.routeCategory || "-"}
               </div>
 
-			  <div
-			    style={{
-			      display: "flex",
-			      gap: 10,
-			      alignItems: "center",
-			    }}
-			  >
-			    <span
-			      style={status(
-			        s.status
-			      )}
-			    >
-			      {s.status}
-			    </span>
+              <div>
+                <select
+                  value={
+                    s.status || "WORKING"
+                  }
+                  onChange={(e) =>
+                    quickStatusChange(
+                      s,
+                      e.target.value
+                    )
+                  }
+                  style={statusSelect(
+                    s.status
+                  )}
+                >
+                  <option value="WORKING">
+                    WORKING
+                  </option>
 
-			    <button
-			      onClick={() =>
-			        remove(s.id)
-			      }
-			      style={deleteBtn}
-			    >
-			      Delete
-			    </button>
-			  </div>
+                  <option value="COMPLETED">
+                    COMPLETED
+                  </option>
+
+                  <option value="OFF">
+                    OFF
+                  </option>
+
+                  <option value="ON_LEAVE">
+                    ON_LEAVE
+                  </option>
+
+                  <option value="CANCELLED">
+                    CANCELLED
+                  </option>
+                </select>
+              </div>
+
+              <div style={actions}>
+                <button
+                  onClick={() =>
+                    setEditingShift(s)
+                  }
+                  style={editBtn}
+                >
+                  Edit
+                </button>
+
+                <button
+                  onClick={() =>
+                    remove(s.id)
+                  }
+                  style={deleteBtn}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
-		  </div>
+      </div>
 
-		  <LogisticsPagination
-		    pageNo={pageNo}
-		    setPageNo={setPageNo}
-		    pageSize={pageSize}
-		    setPageSize={setPageSize}
-		    totalItems={shifts.length}
-		  />
+      <LogisticsPagination
+        pageNo={currentPage}
+        setPageNo={setPageNo}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        totalItems={shifts.length}
+      />
 
-		  <LogisticsShiftModal
-		    open={open}
-		    onClose={() =>
-		      setOpen(false)
-		    }
-		    onCreated={load}
-		    showAlert={showAlert}
-		  />
+      {createOpen && (
+        <LogisticsShiftModal
+          open={createOpen}
+          mode="create"
+          onClose={() =>
+            setCreateOpen(false)
+          }
+          onSaved={load}
+          showAlert={showAlert}
+        />
+      )}
+
+      {editingShift && (
+        <LogisticsShiftModal
+          open={Boolean(editingShift)}
+          mode="edit"
+          shift={editingShift}
+          onClose={() =>
+            setEditingShift(null)
+          }
+          onSaved={load}
+          showAlert={showAlert}
+        />
+      )}
     </div>
   );
 }
@@ -242,62 +437,84 @@ const table = {
 const head = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr .7fr 1fr .8fr",
-
+    "1.1fr 1fr .6fr .9fr 1fr 1fr",
   padding: 16,
-
   background: "#111827",
-
   color: "#94a3b8",
-
   fontWeight: 700,
 };
 
 const row = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr .7fr 1fr .8fr",
-
+    "1.1fr 1fr .6fr .9fr 1fr 1fr",
   padding: 16,
-
   color: "#fff",
+  borderTop:
+    "1px solid rgba(255,255,255,0.06)",
+  alignItems: "center",
+};
 
+const emptyRow = {
+  padding: 28,
+  color: "#94a3b8",
+  textAlign: "center",
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
 };
 
-const deleteBtn = {
+const actions = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+};
+
+const editBtn = {
   border: "none",
-
-  background: "#ef4444",
-
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-
   borderRadius: 8,
-
   padding: "6px 10px",
-
   cursor: "pointer",
-
   fontWeight: 700,
 };
 
-const status = (value) => ({
+const deleteBtn = {
+  border: "none",
+  background: "#ef4444",
+  color: "#fff",
+  borderRadius: 8,
   padding: "6px 10px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
 
+const statusSelect = (value) => ({
+  height: 32,
   borderRadius: 999,
-
-  fontSize: 12,
-
-  background:
-    value === "WORKING"
-      ? "rgba(34,197,94,0.15)"
-      : "rgba(239,68,68,0.15)",
-
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  padding: "0 10px",
   color:
     value === "WORKING"
       ? "#4ade80"
-      : "#f87171",
+      : value === "COMPLETED"
+      ? "#60a5fa"
+      : value === "CANCELLED"
+      ? "#f87171"
+      : "#fbbf24",
+  background:
+    value === "WORKING"
+      ? "rgba(34,197,94,0.15)"
+      : value === "COMPLETED"
+      ? "rgba(59,130,246,0.15)"
+      : value === "CANCELLED"
+      ? "rgba(239,68,68,0.15)"
+      : "rgba(251,191,36,0.15)",
+  fontSize: 12,
+  fontWeight: 800,
+  outline: "none",
 });
 
 export default ShiftOperations;

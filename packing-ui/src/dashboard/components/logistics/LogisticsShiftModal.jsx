@@ -7,18 +7,114 @@ import {
   fetchDrivers,
   fetchVehicles,
   createShift,
+  updateShift,
 } from "../../api/logisticsApi";
 
 import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
 
+const toDateTimeLocal = (value) => {
+  if (!value) return "";
+
+  if (
+    typeof value === "string" &&
+    value.includes("T")
+  ) {
+    return value.slice(0, 16);
+  }
+
+  try {
+    return new Date(value)
+      .toISOString()
+      .slice(0, 16);
+  } catch {
+    return "";
+  }
+};
+
+const buildInitialForm = ({
+  initialDriverId,
+  shift,
+}) => {
+  if (shift) {
+    return {
+      driverId:
+        shift.driver?.id ||
+        shift.driverId ||
+        "",
+
+      vehicleId:
+        shift.vehicle?.id ||
+        shift.vehicleId ||
+        "",
+
+      shiftStart: toDateTimeLocal(
+        shift.shiftStart
+      ),
+
+      shiftEnd: toDateTimeLocal(
+        shift.shiftEnd
+      ),
+
+      overtimeHours:
+        shift.overtimeHours ?? 0,
+
+      totalTrips:
+        shift.totalTrips ?? 0,
+
+      totalHelpers:
+        shift.totalHelpers ??
+        shift.totalLoaders ??
+        0,
+
+      fuelUsed:
+        shift.fuelUsed ?? 0,
+
+      totalDistance:
+        shift.totalDistance ?? 0,
+
+      routeCategory:
+        shift.routeCategory || "Factory",
+
+      remarks:
+        shift.remarks || "",
+
+      status:
+        shift.status || "WORKING",
+    };
+  }
+
+  return {
+    driverId: initialDriverId || "",
+    vehicleId: "",
+    shiftStart: "",
+    shiftEnd: "",
+    overtimeHours: 0,
+    totalTrips: 0,
+    totalHelpers: 0,
+    fuelUsed: 0,
+    totalDistance: 0,
+    routeCategory: "Factory",
+    remarks: "",
+    status: "WORKING",
+  };
+};
+
 function LogisticsShiftModal({
   open,
   onClose,
   onCreated,
+  onSaved,
   showAlert = () => {},
+
+  mode = "create",
+  shift = null,
+  initialDriverId = "",
+  lockDriver = false,
 }) {
+  const isEdit = mode === "edit";
+
   const [drivers, setDrivers] =
     useState([]);
 
@@ -29,38 +125,36 @@ function LogisticsShiftModal({
     useState(false);
 
   const [form, setForm] =
-    useState({
-      driverId: "",
-      vehicleId: "",
-      shiftStart: "",
-      shiftEnd: "",
-      overtimeHours: 0,
-      totalTrips: 0,
-      totalHelpers: 0,
-      fuelUsed: 0,
-      totalDistance: 0,
-      routeCategory: "Factory",
-      remarks: "",
-      status: "WORKING",
-    });
+    useState(() =>
+      buildInitialForm({
+        initialDriverId,
+        shift,
+      })
+    );
 
   useEffect(() => {
     if (!open) return;
 
-    const loadMasterData = async () => {
-      try {
-        const [
+    let active = true;
+
+    Promise.all([
+      fetchDrivers(),
+      fetchVehicles(),
+    ])
+      .then(
+        ([
           driverData,
           vehicleData,
-        ] = await Promise.all([
-          fetchDrivers(),
-          fetchVehicles(),
-        ]);
+        ]) => {
+          if (!active) return;
 
-        setDrivers(driverData || []);
-        setVehicles(vehicleData || []);
+          setDrivers(driverData || []);
+          setVehicles(vehicleData || []);
+        }
+      )
+      .catch((e) => {
+        if (!active) return;
 
-      } catch (e) {
         console.error(e);
 
         showAlert(
@@ -70,10 +164,11 @@ function LogisticsShiftModal({
           ),
           "error"
         );
-      }
-    };
+      });
 
-    loadMasterData();
+    return () => {
+      active = false;
+    };
   }, [open, showAlert]);
 
   if (!open) return null;
@@ -87,6 +182,43 @@ function LogisticsShiftModal({
       [key]: value,
     }));
   };
+
+  const buildPayload = () => ({
+    driverId: form.driverId,
+
+    vehicleId: form.vehicleId,
+
+    shiftStart: form.shiftStart,
+
+    shiftEnd: form.shiftEnd,
+
+    overtimeHours: Number(
+      form.overtimeHours || 0
+    ),
+
+    totalTrips: Number(
+      form.totalTrips || 0
+    ),
+
+    totalHelpers: Number(
+      form.totalHelpers || 0
+    ),
+
+    fuelUsed: Number(
+      form.fuelUsed || 0
+    ),
+
+    totalDistance: Number(
+      form.totalDistance || 0
+    ),
+
+    routeCategory:
+      form.routeCategory || "Factory",
+
+    remarks: form.remarks || "",
+
+    status: form.status || "WORKING",
+  });
 
   const submit = async () => {
     if (saving) return;
@@ -118,59 +250,33 @@ function LogisticsShiftModal({
         );
       }
 
-      const payload = {
-        ...form,
+      const payload = buildPayload();
 
-        driverId: form.driverId,
+      if (isEdit) {
+        await updateShift(
+          shift.id,
+          payload
+        );
 
-        vehicleId: form.vehicleId,
+        showAlert(
+          "Shift updated successfully",
+          "success"
+        );
+      } else {
+        await createShift(payload);
 
-        overtimeHours: Number(
-          form.overtimeHours || 0
-        ),
+        showAlert(
+          "Shift created successfully",
+          "success"
+        );
+      }
 
-        totalTrips: Number(
-          form.totalTrips || 0
-        ),
+      const refreshFn =
+        onSaved || onCreated;
 
-        totalHelpers: Number(
-          form.totalHelpers || 0
-        ),
-
-        fuelUsed: Number(
-          form.fuelUsed || 0
-        ),
-
-        totalDistance: Number(
-          form.totalDistance || 0
-        ),
-      };
-
-      await createShift(payload);
-
-      showAlert(
-        "Shift created successfully",
-        "success"
-      );
-
-      await onCreated?.();
+      await refreshFn?.();
 
       onClose();
-
-      setForm({
-        driverId: "",
-        vehicleId: "",
-        shiftStart: "",
-        shiftEnd: "",
-        overtimeHours: 0,
-        totalTrips: 0,
-        totalHelpers: 0,
-        fuelUsed: 0,
-        totalDistance: 0,
-        routeCategory: "Factory",
-        remarks: "",
-        status: "WORKING",
-      });
 
     } catch (e) {
       console.error(e);
@@ -178,7 +284,9 @@ function LogisticsShiftModal({
       showAlert(
         getBackendMessage(
           e,
-          "Failed to create shift"
+          isEdit
+            ? "Failed to update shift"
+            : "Failed to create shift"
         ),
         "error"
       );
@@ -202,11 +310,15 @@ function LogisticsShiftModal({
         <div style={header}>
           <div>
             <div style={title}>
-              Logistics Shift Entry
+              {isEdit
+                ? "Edit Logistics Shift"
+                : "Logistics Shift Entry"}
             </div>
 
             <div style={subtitle}>
-              Driver and vehicle operations management
+              {isEdit
+                ? "Update shift details and status"
+                : "Driver and vehicle operations management"}
             </div>
           </div>
 
@@ -223,13 +335,22 @@ function LogisticsShiftModal({
           <Field label="Driver">
             <select
               value={form.driverId}
+              disabled={lockDriver}
               onChange={(e) =>
                 update(
                   "driverId",
                   e.target.value
                 )
               }
-              style={input}
+              style={{
+                ...input,
+                opacity: lockDriver
+                  ? 0.75
+                  : 1,
+                cursor: lockDriver
+                  ? "not-allowed"
+                  : "pointer",
+              }}
             >
               <option value="">
                 Select Driver
@@ -414,12 +535,20 @@ function LogisticsShiftModal({
                 WORKING
               </option>
 
+              <option value="COMPLETED">
+                COMPLETED
+              </option>
+
               <option value="OFF">
                 OFF
               </option>
 
               <option value="ON_LEAVE">
                 ON_LEAVE
+              </option>
+
+              <option value="CANCELLED">
+                CANCELLED
               </option>
             </select>
           </Field>
@@ -461,6 +590,8 @@ function LogisticsShiftModal({
           >
             {saving
               ? "Saving..."
+              : isEdit
+              ? "Update Shift"
               : "Create Shift"}
           </button>
         </div>

@@ -130,6 +130,34 @@ export async function deleteShift(
   }
 }
 
+export async function updateShift(
+  id,
+  payload
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/shifts/${id}`,
+    {
+      method: "PUT",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(text);
+  }
+
+  return res.json();
+}
+
 
 export async function fetchVehicles() {
   const res = await fetch(
