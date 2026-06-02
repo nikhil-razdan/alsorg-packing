@@ -1,5 +1,9 @@
 package com.alsorg.packing.reporting.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 import org.springframework.stereotype.Service;
 
 import com.alsorg.packing.reporting.dto.DashboardStatsDTO;
@@ -16,7 +20,26 @@ public class DashboardReportService {
 
     public DashboardStatsDTO getDashboardStats() {
 
-        long totalItems = repo.countTotalItems();
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+
+        LocalDate today = LocalDate.now(zone);
+
+        LocalDateTime startOfToday = today.atStartOfDay();
+
+        LocalDateTime startOfTomorrow = today
+                .plusDays(1)
+                .atStartOfDay();
+
+        long warehouseItems = repo.countWarehouseItems();
+
+        long readyToDispatchItems = repo.countReadyToDispatchItems();
+
+        long readyItems = repo.countReadyItems();
+
+        long totalItems =
+                warehouseItems
+                        + readyToDispatchItems
+                        + readyItems;
 
         long packedItems = repo.countPackedItems();
 
@@ -26,13 +49,29 @@ public class DashboardReportService {
 
         long stickersGenerated = repo.countStickersGenerated();
 
+        long todayStickerGenerated =
+                repo.countTodayStickerGenerated(
+                        startOfToday,
+                        startOfTomorrow
+                );
+
+        long todayChallanGenerated =
+                repo.countTodayChallanGenerated(
+                        startOfToday,
+                        startOfTomorrow
+                );
+
         return new DashboardStatsDTO(
                 totalItems,
+                warehouseItems,
+                readyToDispatchItems,
+                readyItems,
                 packedItems,
                 dispatchedItems,
                 pendingItems,
-                stickersGenerated
+                stickersGenerated,
+                todayStickerGenerated,
+                todayChallanGenerated
         );
     }
-
 }

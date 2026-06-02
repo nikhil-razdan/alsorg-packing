@@ -1,5 +1,7 @@
 package com.alsorg.packing.repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +39,13 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
             ApprovalStatus approvalStatus
     );
 
+    long countByStatusIn(Collection<ItemDispatchStatus> statuses);
+
+    long countByStatusAndDispatchedAtBetween(
+            ItemDispatchStatus status,
+            LocalDateTime start,
+            LocalDateTime end
+    );
     // ===================== EXISTS =====================
 
     boolean existsByZohoItemId(String zohoItemId);

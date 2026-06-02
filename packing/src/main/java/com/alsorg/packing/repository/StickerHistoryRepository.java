@@ -1,5 +1,6 @@
 package com.alsorg.packing.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +28,9 @@ public interface StickerHistoryRepository
     """)
     List<StickerHistoryResponse>
     findHistoryByItemId(UUID itemId);
-    
+    long countByGeneratedAtBetween(
+            LocalDateTime start,
+            LocalDateTime end
+    );
     Optional<StickerHistory> findTopByStickerNumberOrderByGeneratedAtDesc(String stickerNumber);
 }

@@ -117,6 +117,8 @@ const BarIcon = () => (
 const toNumber = (value) => Number(value ?? 0) || 0;
 
 const normalizeStats = (data) => {
+  console.log("Dashboard stats API response:", data);
+
   const warehouseItems = toNumber(
     data?.warehouseItems ??
       data?.warehouse ??
@@ -148,14 +150,25 @@ const normalizeStats = (data) => {
       inventoryTotal ||
       toNumber(data?.totalItems ?? data?.total ?? data?.inventoryItems),
 
-    packedItems: toNumber(data?.packedItems ?? data?.packed),
+    packedItems: toNumber(
+      data?.packedItems ??
+        data?.packed ??
+        data?.stickersGenerated
+    ),
 
     dispatchedItems: toNumber(
-      data?.dispatchedItems ?? data?.dispatched
+      data?.dispatchedItems ??
+        data?.dispatched
+    ),
+
+    pendingItems: toNumber(
+      data?.pendingItems ??
+        data?.pending
     ),
 
     stickersGenerated: toNumber(
-      data?.stickersGenerated ?? data?.stickers
+      data?.stickersGenerated ??
+        data?.stickers
     ),
 
     todayStickerGenerated: toNumber(
@@ -182,6 +195,7 @@ function DashboardPage() {
 
 	  packedItems: 0,
 	  dispatchedItems: 0,
+	  pendingItems: 0,
 	  stickersGenerated: 0,
 
 	  todayStickerGenerated: 0,
@@ -212,12 +226,14 @@ function DashboardPage() {
 	   Number(stats.todayStickerGenerated || 0) +
 	   Number(stats.todayChallanGenerated || 0);
 	   
-	const pending = Math.max(
-	  finalInventoryTotal -
-	    Number(stats.packedItems || 0) -
-	    Number(stats.dispatchedItems || 0),
-	  0
-	);
+	   const pending =
+	     Number(stats.pendingItems || 0) ||
+	     Math.max(
+	       finalInventoryTotal -
+	         Number(stats.packedItems || 0) -
+	         Number(stats.dispatchedItems || 0),
+	       0
+	     );
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
   const reportIndex =
