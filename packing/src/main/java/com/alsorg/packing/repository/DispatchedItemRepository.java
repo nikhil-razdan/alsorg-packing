@@ -12,14 +12,6 @@ import org.springframework.stereotype.Repository;
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
-import java.time.LocalDateTime;
-import java.util.List;
-
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
-import com.alsorg.packing.domain.common.ItemDispatchStatus;
-import com.alsorg.packing.reporting.dto.DailyUserThroughputResponse;
 
 @Repository
 public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, String> {
@@ -57,22 +49,4 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
     // ===================== EXISTS =====================
 
     boolean existsByZohoItemId(String zohoItemId);
-    
-    @Query("""
-    	    SELECT new com.alsorg.packing.reporting.dto.DailyUserThroughputResponse(
-    	        d.dispatchedBy,
-    	        COUNT(d)
-    	    )
-    	    FROM DispatchedItem d
-    	    WHERE d.dispatchedAt >= :from
-    	      AND d.dispatchedAt < :to
-    	      AND d.status = :status
-    	    GROUP BY d.dispatchedBy
-    	    ORDER BY COUNT(d) DESC
-    	""")
-    	List<DailyUserThroughputResponse> countDispatchedByUserBetween(
-    	        @Param("from") LocalDateTime from,
-    	        @Param("to") LocalDateTime to,
-    	        @Param("status") ItemDispatchStatus status
-    	);
 }

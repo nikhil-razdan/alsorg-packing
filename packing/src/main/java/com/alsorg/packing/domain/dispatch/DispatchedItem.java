@@ -39,6 +39,7 @@ public class DispatchedItem {
     
     private LocalDateTime createdAt;
 
+    
     @Column(nullable = false)
     private Integer stock = 0; // 🔥 default to avoid null violations
 

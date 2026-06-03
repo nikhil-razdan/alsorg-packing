@@ -9,6 +9,16 @@ import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Repository;
 
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
+import com.alsorg.packing.domain.common.ItemDispatchStatus;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
 
 @Repository
 public class DashboardReportRepository {
@@ -107,5 +117,65 @@ public class DashboardReportRepository {
         """, Long.class)
         .setParameter("status", status)
         .getSingleResult();
+    }
+    
+    public List<DailyThroughputUserDTO> fetchTodayPackingByUser(
+            LocalDateTime from,
+            LocalDateTime to
+    ) {
+        return em.createQuery("""
+            select new com.alsorg.packing.reporting.dto.DailyThroughputUserDTO(
+                case
+                    when h.generatedBy is null or h.generatedBy = ''
+                    then 'UNKNOWN'
+                    else h.generatedBy
+                end,
+                count(h)
+            )
+            from StickerHistory h
+            where h.generatedAt >= :from
+              and h.generatedAt < :to
+            group by
+                case
+                    when h.generatedBy is null or h.generatedBy = ''
+                    then 'UNKNOWN'
+                    else h.generatedBy
+                end
+            order by count(h) desc
+        """, DailyThroughputUserDTO.class)
+        .setParameter("from", from)
+        .setParameter("to", to)
+        .getResultList();
+    }
+
+    public List<DailyThroughputUserDTO> fetchTodayDispatchByUser(
+            LocalDateTime from,
+            LocalDateTime to
+    ) {
+        return em.createQuery("""
+            select new com.alsorg.packing.reporting.dto.DailyThroughputUserDTO(
+                case
+                    when d.dispatchedBy is null or d.dispatchedBy = ''
+                    then 'UNKNOWN'
+                    else d.dispatchedBy
+                end,
+                count(d)
+            )
+            from DispatchedItem d
+            where d.status = :status
+              and d.dispatchedAt >= :from
+              and d.dispatchedAt < :to
+            group by
+                case
+                    when d.dispatchedBy is null or d.dispatchedBy = ''
+                    then 'UNKNOWN'
+                    else d.dispatchedBy
+                end
+            order by count(d) desc
+        """, DailyThroughputUserDTO.class)
+        .setParameter("status", ItemDispatchStatus.DISPATCHED)
+        .setParameter("from", from)
+        .setParameter("to", to)
+        .getResultList();
     }
 }
