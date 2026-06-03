@@ -173,6 +173,12 @@ function DriverManagement({
           <div>Actions</div>
         </div>
 
+		{paginatedDrivers.length === 0 && (
+		  <div style={emptyRow}>
+		    No drivers found
+		  </div>
+		)}
+		
         {paginatedDrivers.map((d) => (
           <div
             key={d.id}
@@ -184,16 +190,17 @@ function DriverManagement({
 		      onClick={() =>
 		        openShiftForDriver(d)
 		      }
-		      title="Create shift for this driver"
+		      title="View shift history and create shift"
 		    >
 		      {d.name}
 		    </button>
 		  </div>
-
-			<div>{d.phoneNumber}</div>
-			<div>
-			             {d.licenseNumber}
-			           </div>
+		  <div>
+		    {d.phoneNumber || d.phone || "-"}
+		  </div>
+		  <div>
+		    {d.licenseNumber || "-"}
+		  </div>
 					   <div>
 					     {d.status ||
 					       (d.active
@@ -238,7 +245,11 @@ function DriverManagement({
 		    initialDriverId={
 		      selectedDriver.id
 		    }
+		    driverName={
+		      selectedDriver.name
+		    }
 		    lockDriver={true}
+		    showDriverHistory={true}
 		    onClose={closeShiftForDriver}
 		    onSaved={loadDrivers}
 		    showAlert={showAlert}
@@ -334,6 +345,8 @@ const row = {
 
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
+
+  alignItems: "center",
 };
 
 const deleteBtn = {
@@ -361,6 +374,14 @@ const driverNameBtn = {
   fontSize: 14,
   padding: 0,
   textAlign: "left",
+};
+
+const emptyRow = {
+  padding: 28,
+  color: "#94a3b8",
+  textAlign: "center",
+  borderTop:
+    "1px solid rgba(255,255,255,0.06)",
 };
 
 export default DriverManagement;
