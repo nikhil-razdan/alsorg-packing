@@ -16,6 +16,62 @@ import {
   updateShift,
 } from "../../api/logisticsApi";
 
+const formatShiftDate = (shift) => {
+  const value =
+    shift.shiftStart ||
+    shift.date ||
+    shift.createdAt;
+
+  if (!value) return "-";
+
+  try {
+    return new Date(value).toLocaleDateString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
+  } catch {
+    return "-";
+  }
+};
+
+const formatShiftTime = (value) => {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleTimeString(
+      "en-IN",
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+  } catch {
+    return "";
+  }
+};
+
+const formatShiftTimeRange = (shift) => {
+  const start = formatShiftTime(
+    shift.shiftStart
+  );
+
+  const end = formatShiftTime(
+    shift.shiftEnd
+  );
+
+  if (start && end) {
+    return `${start} - ${end}`;
+  }
+
+  if (start) return start;
+
+  return "";
+};
+
 const buildShiftUpdatePayload = (
   shift,
   overrides = {}
@@ -250,14 +306,15 @@ function ShiftOperations({
       </div>
 
       <div style={table}>
-        <div style={head}>
-          <div>Driver</div>
-          <div>Vehicle</div>
-          <div>Trips</div>
-          <div>Route</div>
-          <div>Status</div>
-          <div>Actions</div>
-        </div>
+	  <div style={head}>
+	    <div>Driver</div>
+	    <div>Vehicle</div>
+	    <div>Date</div>
+	    <div>Trips</div>
+	    <div>Route</div>
+	    <div>Status</div>
+	    <div>Actions</div>
+	  </div>
 
         {loading && (
           <div style={emptyRow}>
@@ -282,14 +339,24 @@ function ShiftOperations({
                 {s.driver?.name || "-"}
               </div>
 
-              <div>
-                {s.vehicle?.vehicleNumber ||
-                  "-"}
-              </div>
+			  <div>
+			    {s.vehicle?.vehicleNumber ||
+			      "-"}
+			  </div>
 
-              <div>
-                {s.totalTrips ?? "-"}
-              </div>
+			  <div>
+			    <div style={dateText}>
+			      {formatShiftDate(s)}
+			    </div>
+
+			    <div style={timeText}>
+			      {formatShiftTimeRange(s)}
+			    </div>
+			  </div>
+
+			  <div>
+			    {s.totalTrips ?? "-"}
+			  </div>
 
               <div>
                 {s.routeCategory || "-"}
@@ -437,7 +504,7 @@ const table = {
 const head = {
   display: "grid",
   gridTemplateColumns:
-    "1.1fr 1fr .6fr .9fr 1fr 1fr",
+    "1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
@@ -447,7 +514,7 @@ const head = {
 const row = {
   display: "grid",
   gridTemplateColumns:
-    "1.1fr 1fr .6fr .9fr 1fr 1fr",
+    "1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
   padding: 16,
   color: "#fff",
   borderTop:
@@ -467,6 +534,18 @@ const actions = {
   display: "flex",
   gap: 8,
   alignItems: "center",
+};
+
+const dateText = {
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const timeText = {
+  color: "#94a3b8",
+  fontSize: 11,
+  marginTop: 4,
 };
 
 const editBtn = {
