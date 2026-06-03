@@ -1,6 +1,8 @@
 package com.alsorg.packing.repository;
 
 import java.time.LocalDateTime;
+import org.springframework.data.repository.query.Param;
+import com.alsorg.packing.reporting.dto.DailyUserThroughputResponse;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -106,6 +108,22 @@ public interface StickerHistoryRepository
     """)
     List<String> findDistinctGeneratedByUsers();
 
+    @Query("""
+    	    SELECT new com.alsorg.packing.reporting.dto.DailyUserThroughputResponse(
+    	        h.generatedBy,
+    	        COUNT(h)
+    	    )
+    	    FROM StickerHistory h
+    	    WHERE h.generatedAt >= :from
+    	      AND h.generatedAt < :to
+    	    GROUP BY h.generatedBy
+    	    ORDER BY COUNT(h) DESC
+    	""")
+    	List<DailyUserThroughputResponse> countPackedByUserBetween(
+    	        @Param("from") LocalDateTime from,
+    	        @Param("to") LocalDateTime to
+    	);
+    
     /* ================= EXISTING COUNTERS / SCANNER SUPPORT ================= */
 
     long countByGeneratedAtBetween(

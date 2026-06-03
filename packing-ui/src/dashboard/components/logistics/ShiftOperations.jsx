@@ -317,7 +317,7 @@ function ShiftOperations({
 
 			    {isShiftOverSixPm(s) && (
 			      <div style={lateBadge}>
-			        After 6 PM
+			        Over Shift
 			      </div>
 			    )}
 			  </div>

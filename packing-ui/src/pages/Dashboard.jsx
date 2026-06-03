@@ -9,6 +9,7 @@ import {
   fetchDashboardStats,
   fetchDashboardActivity,
   fetchLogisticsStats,
+  fetchDailyThroughputUserBreakdown,
 } from "../dashboard/api/dashboardApi";
 import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
 import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShiftModal";
@@ -73,17 +74,52 @@ import InventorySidebar from
           )}
         </div>
 
-        <div style={detailGrid}>
-          {rows.map((row) => (
-            <div key={row.label} style={detailItem}>
-              <div style={detailItemLabel}>{row.label}</div>
-              <div style={detailItemValue}>{row.value}</div>
-              {row.subtle && (
-                <div style={detailItemSubtle}>{row.subtle}</div>
-              )}
-            </div>
-          ))}
-        </div>
+		<div style={detailGrid}>
+		  {rows.map((row) => {
+		    const clickable =
+		      typeof row.onClick === "function";
+
+		    return (
+		      <div
+		        key={row.label}
+		        role={clickable ? "button" : undefined}
+		        tabIndex={clickable ? 0 : undefined}
+		        onClick={row.onClick}
+		        onKeyDown={(e) => {
+		          if (!clickable) return;
+
+		          if (e.key === "Enter" || e.key === " ") {
+		            row.onClick();
+		          }
+		        }}
+		        style={{
+		          ...detailItem,
+		          ...(clickable ? detailItemClickable : {}),
+		        }}
+		      >
+		        <div style={detailItemLabel}>
+		          {row.label}
+		        </div>
+
+		        <div style={detailItemValue}>
+		          {row.value}
+		        </div>
+
+		        {row.subtle && (
+		          <div style={detailItemSubtle}>
+		            {row.subtle}
+		          </div>
+		        )}
+
+		        {clickable && (
+		          <div style={detailClickHint}>
+		            Click to view user-wise work
+		          </div>
+		        )}
+		      </div>
+		    );
+		  })}
+		</div>
       </div>
     );
   }
@@ -214,6 +250,21 @@ function DashboardPage() {
   const [shiftModal, setShiftModal] =
     useState(false);
 	
+	const isAdmin =
+	  localStorage.getItem("role") === "ADMIN";
+
+	const [throughputBreakdownType, setThroughputBreakdownType] =
+	  useState(null);
+
+	const [throughputUserRows, setThroughputUserRows] =
+	  useState([]);
+
+	const [throughputUserLoading, setThroughputUserLoading] =
+	  useState(false);
+
+	const [throughputUserError, setThroughputUserError] =
+	  useState("");
+	
 	const inventoryTotal =
 	   Number(stats.warehouseItems || 0) +
 	   Number(stats.readyToDispatchItems || 0) +
@@ -276,9 +327,58 @@ function DashboardPage() {
  
 
   const toggleStatCard = (key) => {
-    setActiveStatCard((current) => (current === key ? null : key));
+    setActiveStatCard((current) => {
+      const next =
+        current === key ? null : key;
+
+      if (next !== "dailyThroughput") {
+        setThroughputBreakdownType(null);
+        setThroughputUserRows([]);
+        setThroughputUserError("");
+      }
+
+      return next;
+    });
   };
 
+  const loadThroughputUserBreakdown = async (type) => {
+    if (!isAdmin) return;
+
+    try {
+      setThroughputBreakdownType(type);
+      setThroughputUserLoading(true);
+      setThroughputUserError("");
+
+      const data =
+        await fetchDailyThroughputUserBreakdown(type);
+
+      setThroughputUserRows(
+        Array.isArray(data) ? data : []
+      );
+    } catch (error) {
+      console.error(error);
+      setThroughputUserRows([]);
+      setThroughputUserError(
+        "Failed to load user-wise throughput"
+      );
+    } finally {
+      setThroughputUserLoading(false);
+    }
+  };
+  
+  const throughputBreakdownTotal =
+    throughputUserRows.reduce(
+      (sum, row) => sum + Number(row.count || 0),
+      0
+    );
+
+  const throughputBreakdownTitle =
+    throughputBreakdownType === "PACKED"
+      ? "Packed Items by User"
+      : throughputBreakdownType === "DISPATCHED"
+      ? "Dispatched Items by User"
+      : "";
+  
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
@@ -381,27 +481,120 @@ function DashboardPage() {
 			      />
 			    </div>
 
-			    {activeStatCard === "dailyThroughput" && (
-			      <DetailStatCard
-			        accent="#06b6d4"
-			        title="Daily Throughput Details"
-			        subtitle="Today’s operational movement"
-			        totalLabel="Total Today"
-			        totalValue={dailyThroughput}
-			        rows={[
-			          {
-			            label: "Packed Items",
-			            value: Number(stats.todayStickerGenerated || 0),
-			            subtle: "Sticker Generated Today",
-			          },
-			          {
-			            label: "Dispatch Items",
-			            value: Number(stats.todayChallanGenerated || 0),
-			            subtle: "Challan Generated Today",
-			          },
-			        ]}
-			      />
-			    )}
+				{activeStatCard === "dailyThroughput" && (
+				  <>
+				    <DetailStatCard
+				      accent="#06b6d4"
+				      title="Daily Throughput Details"
+				      subtitle={
+				        isAdmin
+				          ? "Today’s operational movement. Click Packed or Dispatch to view user-wise work."
+				          : "Today’s operational movement"
+				      }
+				      totalLabel="Total Today"
+				      totalValue={dailyThroughput}
+				      rows={[
+				        {
+				          label: "Packed Items",
+				          value: Number(stats.todayStickerGenerated || 0),
+				          subtle: isAdmin
+				            ? "Sticker Generated Today • Admin drilldown"
+				            : "Sticker Generated Today",
+				          onClick: isAdmin
+				            ? () => loadThroughputUserBreakdown("PACKED")
+				            : undefined,
+				        },
+				        {
+				          label: "Dispatch Items",
+				          value: Number(stats.todayChallanGenerated || 0),
+				          subtle: isAdmin
+				            ? "Dispatched Today • Admin drilldown"
+				            : "Dispatched Today",
+				          onClick: isAdmin
+				            ? () => loadThroughputUserBreakdown("DISPATCHED")
+				            : undefined,
+				        },
+				      ]}
+				    />
+
+				    {isAdmin && throughputBreakdownType && (
+				      <div style={userThroughputPanel}>
+				        <div style={userThroughputHeader}>
+				          <div>
+				            <div style={userThroughputTitle}>
+				              {throughputBreakdownTitle}
+				            </div>
+
+				            <div style={userThroughputSubtitle}>
+				              Today’s user-wise productivity
+				            </div>
+				          </div>
+
+				          <div style={userThroughputTotalBox}>
+				            <span>Total</span>
+				            <strong>{throughputBreakdownTotal}</strong>
+				          </div>
+				        </div>
+
+				        {throughputUserLoading && (
+				          <div style={userThroughputEmpty}>
+				            Loading user-wise work...
+				          </div>
+				        )}
+
+				        {!throughputUserLoading &&
+				          throughputUserError && (
+				            <div style={userThroughputError}>
+				              {throughputUserError}
+				            </div>
+				          )}
+
+				        {!throughputUserLoading &&
+				          !throughputUserError &&
+				          throughputUserRows.length === 0 && (
+				            <div style={userThroughputEmpty}>
+				              No user-wise data found for today.
+				            </div>
+				          )}
+
+				        {!throughputUserLoading &&
+				          !throughputUserError &&
+				          throughputUserRows.length > 0 && (
+				            <div style={userThroughputTable}>
+				              <div style={userThroughputTableHeader}>
+				                <div>User</div>
+				                <div>Work Type</div>
+				                <div style={{ textAlign: "right" }}>
+				                  Count
+				                </div>
+				              </div>
+
+				              {throughputUserRows.map((row) => (
+				                <div
+				                  key={`${throughputBreakdownType}-${row.username}`}
+				                  style={userThroughputTableRow}
+				                >
+				                  <div style={userNameCell}>
+				                    {row.username || "SYSTEM"}
+				                  </div>
+
+				                  <div style={workTypeCell}>
+				                    {throughputBreakdownType === "PACKED"
+				                      ? "Packed"
+				                      : "Dispatched"}
+				                  </div>
+
+				                  <div style={countCell}>
+				                    {Number(row.count || 0)}
+				                  </div>
+				                </div>
+				              ))}
+				            </div>
+				          )}
+				      </div>
+				    )}
+				  </>
+				)}
 
 			    {activeStatCard === "inventoryItems" && (
 			      <DetailStatCard
@@ -1420,6 +1613,141 @@ const inventoryMain = {
   flexDirection: "column",
 
   gap: 18,
+};
+
+const detailItemClickable = {
+  cursor: "pointer",
+  border: "1px solid rgba(6,182,212,.32)",
+  background:
+    "linear-gradient(180deg, rgba(6,182,212,.10), rgba(255,255,255,.04))",
+  boxShadow:
+    "0 14px 28px rgba(6,182,212,.12)",
+};
+
+const detailClickHint = {
+  marginTop: 10,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#67e8f9",
+};
+
+const userThroughputPanel = {
+  padding: 20,
+
+  borderRadius: 24,
+
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.86))",
+
+  border:
+    "1px solid rgba(6,182,212,.34)",
+
+  boxShadow:
+    "0 18px 40px rgba(6,182,212,.14)",
+
+  backdropFilter: "blur(18px)",
+};
+
+const userThroughputHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 14,
+  marginBottom: 16,
+  flexWrap: "wrap",
+};
+
+const userThroughputTitle = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const userThroughputSubtitle = {
+  marginTop: 4,
+  fontSize: 13,
+  color: "rgba(255,255,255,.58)",
+};
+
+const userThroughputTotalBox = {
+  minWidth: 110,
+  padding: "10px 14px",
+  borderRadius: 16,
+  background: "rgba(255,255,255,.05)",
+  border: "1px solid rgba(255,255,255,.08)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  color: "rgba(255,255,255,.68)",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const userThroughputTable = {
+  overflow: "hidden",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const userThroughputTableHeader = {
+  display: "grid",
+  gridTemplateColumns: "1fr 160px 100px",
+  gap: 12,
+  padding: "12px 14px",
+  background: "rgba(15,23,42,.92)",
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+};
+
+const userThroughputTableRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr 160px 100px",
+  gap: 12,
+  padding: "13px 14px",
+  borderTop: "1px solid rgba(255,255,255,.06)",
+  alignItems: "center",
+};
+
+const userNameCell = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const workTypeCell = {
+  color: "#67e8f9",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const countCell = {
+  color: "#fff",
+  fontSize: 18,
+  fontWeight: 900,
+  textAlign: "right",
+};
+
+const userThroughputEmpty = {
+  padding: 18,
+  borderRadius: 16,
+  color: "rgba(255,255,255,.62)",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.06)",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const userThroughputError = {
+  padding: 18,
+  borderRadius: 16,
+  color: "#fecaca",
+  background: "rgba(239,68,68,.10)",
+  border: "1px solid rgba(239,68,68,.22)",
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 export default DashboardPage;

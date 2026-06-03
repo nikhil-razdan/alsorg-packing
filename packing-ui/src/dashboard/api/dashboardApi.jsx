@@ -68,3 +68,39 @@ export async function fetchLogisticsStats() {
   return res.json();
 }
 
+const toLocalDateParam = (value = new Date()) => {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  const local =
+    new Date(
+      date.getTime() -
+        date.getTimezoneOffset() * 60000
+    );
+
+  return local.toISOString().slice(0, 10);
+};
+
+export async function fetchDailyThroughputUserBreakdown(
+  type,
+  date = new Date()
+) {
+  const day = toLocalDateParam(date);
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/reports/dashboard/daily-throughput/users?type=${encodeURIComponent(
+      type
+    )}&date=${day}`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error("Failed to load daily user throughput");
+  }
+
+  return res.json();
+}
