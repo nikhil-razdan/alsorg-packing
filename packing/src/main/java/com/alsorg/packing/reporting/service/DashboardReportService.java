@@ -53,13 +53,13 @@ public class DashboardReportService {
         long stickersGenerated = repo.countStickersGenerated();
 
         long todayStickerGenerated =
-                repo.countTodayStickerGenerated(
+                repo.countTodayPackedItems(
                         startOfToday,
                         startOfTomorrow
                 );
 
         long todayChallanGenerated =
-                repo.countTodayChallanGenerated(
+                repo.countTodayDispatchedItems(
                         startOfToday,
                         startOfTomorrow
                 );
@@ -91,16 +91,19 @@ public class DashboardReportService {
                 .plusDays(1)
                 .atStartOfDay();
 
-        String normalizedType = normalizeThroughputType(type);
+        String normalizedType =
+                type != null ? type.trim().toLowerCase() : "";
 
-        if ("packing".equals(normalizedType)) {
+        if ("packing".equals(normalizedType)
+                || "packed".equals(normalizedType)) {
             return repo.fetchTodayPackingByUser(
                     startOfToday,
                     startOfTomorrow
             );
         }
 
-        if ("dispatch".equals(normalizedType)) {
+        if ("dispatch".equals(normalizedType)
+                || "dispatched".equals(normalizedType)) {
             return repo.fetchTodayDispatchByUser(
                     startOfToday,
                     startOfTomorrow
@@ -110,29 +113,5 @@ public class DashboardReportService {
         throw new IllegalArgumentException(
                 "Invalid throughput type: " + type
         );
-    }
-
-    private String normalizeThroughputType(String type) {
-        if (type == null || type.isBlank()) {
-            return "";
-        }
-
-        String value = type.trim().toLowerCase();
-
-        if (value.equals("packing")
-                || value.equals("packed")
-                || value.equals("sticker")
-                || value.equals("stickers")) {
-            return "packing";
-        }
-
-        if (value.equals("dispatch")
-                || value.equals("dispatched")
-                || value.equals("challan")
-                || value.equals("chalaan")) {
-            return "dispatch";
-        }
-
-        return value;
     }
 }

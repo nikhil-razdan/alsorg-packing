@@ -70,14 +70,14 @@ export async function fetchLogisticsStats() {
 
 export async function fetchDailyThroughputUsers(type) {
   const res = await fetch(
-    `${API_BASE_URL}/api/reports/dashboard/daily-throughput/users?type=${encodeURIComponent(type)}`,
+    `${API_BASE_URL}/api/reports/dashboard/throughput/users?type=${encodeURIComponent(type)}`,
     {
       headers: authHeaders(),
     }
   );
 
   if (!res.ok) {
-    throw new Error("Failed to load daily throughput user data");
+    throw new Error("Failed to load throughput user data");
   }
 
   return res.json();

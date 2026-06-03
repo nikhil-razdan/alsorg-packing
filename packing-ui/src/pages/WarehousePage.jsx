@@ -20,6 +20,11 @@ function WarehousePage() {
   const [selectionModel, setSelectionModel] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [bulkWarehouseApproveOpen, setBulkWarehouseApproveOpen] =
+    useState(false);
+  const [bulkWarehouseApproveLoading, setBulkWarehouseApproveLoading] =
+    useState(false);
+  const [bulkGatePassNumber, setBulkGatePassNumber] = useState("");
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   /* ===================== FETCH ===================== */
@@ -142,13 +147,13 @@ function WarehousePage() {
   const approveWarehouse = async (id) => {
     const gp = approveGatePass[id];
 
-    if (!gp) {
+    if (!gp || !gp.trim()) {
       alert("Enter Gate Pass");
       return;
     }
 
     const res = await fetch(
-      `${API_BASE_URL}/api/warehouse/${id}/approve?gatePass=${gp}`,
+      `${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gp.trim())}`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, 
@@ -256,14 +261,187 @@ function WarehousePage() {
   };
 
   const selectableStatuses = [
-    "IN_WAREHOUSE"
+    "WAREHOUSE_REQUESTED",
+    "IN_WAREHOUSE",
   ];
 
-  const readyRows = useMemo(() => {
-    return rows.filter(r =>
-      selectableStatuses.includes(r.status)
+  const getWarehouseRowId = (row) => {
+    return (
+      row?.zohoItemId ||
+      row?.id ||
+      row?.itemId ||
+      row?.packetItemId ||
+      ""
     );
-  }, [rows]);
+  };
+
+  const getWarehouseStatus = (row) =>
+    row.status || row.movementStatus || "";
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const searchValue = search.trim().toLowerCase();
+
+      if (
+        searchValue &&
+        !(r.name || "").toLowerCase().includes(searchValue) &&
+        !(r.status || "").toLowerCase().includes(searchValue) &&
+        !(r.clientName || "").toLowerCase().includes(searchValue) &&
+        !(r.pdNo || "").toLowerCase().includes(searchValue) &&
+        !(r.sku || "").toLowerCase().includes(searchValue) &&
+        !(r.drawingNo || "").toLowerCase().includes(searchValue) &&
+        !(r.description || "").toLowerCase().includes(searchValue) &&
+        !(r.warehouseCode || "").toLowerCase().includes(searchValue)
+      ) {
+        return false;
+      }
+
+      if (statusFilter !== "ALL" && r.status !== statusFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [rows, search, statusFilter]);
+
+  const filteredSelectableRows = useMemo(() => {
+    return filteredRows.filter((row) => {
+      const id = getWarehouseRowId(row);
+      const status = getWarehouseStatus(row);
+
+      return !!id && selectableStatuses.includes(status);
+    });
+  }, [filteredRows]);
+
+  const filteredSelectableIds = useMemo(() => {
+    return filteredSelectableRows.map((row) => getWarehouseRowId(row));
+  }, [filteredSelectableRows]);
+
+  const allFilteredSelected =
+    filteredSelectableIds.length > 0 &&
+    filteredSelectableIds.every((id) => selectionModel.includes(id));
+
+  const someFilteredSelected =
+    filteredSelectableIds.length > 0 &&
+    filteredSelectableIds.some((id) => selectionModel.includes(id));
+
+  const toggleSelectAllFiltered = (checked) => {
+    if (checked) {
+      setSelectionModel((prev) =>
+        Array.from(new Set([...prev, ...filteredSelectableIds]))
+      );
+    } else {
+      setSelectionModel((prev) =>
+        prev.filter((id) => !filteredSelectableIds.includes(id))
+      );
+    }
+  };
+
+  const selectedWarehouseItems = useMemo(() => {
+    return rows.filter((row) =>
+      selectionModel.includes(getWarehouseRowId(row))
+    );
+  }, [rows, selectionModel]);
+
+  const allWarehouseItems =
+    selectedWarehouseItems.length > 0 &&
+    selectedWarehouseItems.every(
+      (item) => getWarehouseStatus(item) === "IN_WAREHOUSE"
+    );
+
+  const allSelectedWarehouseRequested =
+    selectedWarehouseItems.length > 0 &&
+    selectedWarehouseItems.every(
+      (item) => getWarehouseStatus(item) === "WAREHOUSE_REQUESTED"
+    );
+
+  const canBulkApproveWarehouseThroughGatePass =
+    allSelectedWarehouseRequested &&
+    selectedWarehouseItems.length > 0;
+
+  const paginatedRows = useMemo(() => {
+    const start = (pageNo - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, pageNo, pageSize]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / pageSize)
+  );
+
+  useEffect(() => {
+    setPageNo(1);
+  }, [pageSize, statusFilter, search]);
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
+
+  const bulkApproveWarehouseThroughGatePass = async () => {
+    if (selectionModel.length === 0) {
+      alert("Select items first");
+      return;
+    }
+
+    if (!allSelectedWarehouseRequested) {
+      alert("Only Warehouse Requested items can be approved through gate pass");
+      return;
+    }
+
+    const gatePass = bulkGatePassNumber.trim();
+
+    if (!gatePass) {
+      alert("Enter gate pass number");
+      return;
+    }
+
+    const confirmBulk = window.confirm(
+      `Approve ${selectedWarehouseItems.length} selected warehouse requested items with Gate Pass: ${gatePass}?`
+    );
+
+    if (!confirmBulk) return;
+
+    try {
+      setBulkWarehouseApproveLoading(true);
+
+      await Promise.all(
+        selectedWarehouseItems.map(async (row) => {
+          const id = getWarehouseRowId(row);
+
+          const res = await fetch(
+            `${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gatePass)}`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-Username": localStorage.getItem("username"),
+              },
+            }
+          );
+
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Approval failed for ${row.sku || id}`);
+          }
+        })
+      );
+
+      setSelectionModel([]);
+      setBulkGatePassNumber("");
+      setBulkWarehouseApproveOpen(false);
+
+      await fetchItems();
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Bulk warehouse approval failed");
+    } finally {
+      setBulkWarehouseApproveLoading(false);
+    }
+  };
+
+  /* ===================== COLUMNS ===================== */
   /* ===================== COLUMNS ===================== */
 
   const columns = [
@@ -275,71 +453,65 @@ function WarehousePage() {
 	  sortable: false,
 
 	  renderHeader: () => {
-
-	    const allSelected =
-	      readyRows.length > 0 &&
-	      readyRows.every(r =>
-	        selectionModel.includes(r.zohoItemId)
-	      );
-
 	    return (
-	      <input
-	        type="checkbox"
-	        checked={allSelected}
-	        onChange={(e) => {
-
-	          if (e.target.checked) {
-
-	            setSelectionModel(
-	              readyRows.map(r => r.zohoItemId)
-	            );
-
-	          } else {
-
-	            setSelectionModel([]);
-
+	      <Box sx={selectHeaderCellSx}>
+	        <input
+	          type="checkbox"
+	          ref={(el) => {
+	            if (el) {
+	              el.indeterminate =
+	                someFilteredSelected && !allFilteredSelected;
+	            }
+	          }}
+	          checked={allFilteredSelected}
+	          disabled={filteredSelectableIds.length === 0}
+	          title="Select all filtered warehouse action rows"
+	          style={
+	            filteredSelectableIds.length === 0
+	              ? selectCheckboxDisabledStyle
+	              : selectCheckboxStyle
 	          }
-
-	        }}
-	      />
+	          onChange={(e) => {
+	            toggleSelectAllFiltered(e.target.checked);
+	          }}
+	        />
+	      </Box>
 	    );
 	  },
 
 	  renderCell: (params) => {
-
-	    const id = params.row.zohoItemId;
+	    const id = getWarehouseRowId(params.row);
+	    const status = getWarehouseStatus(params.row);
 
 	    const isSelectable =
-	      selectableStatuses.includes(params.row.status);
+	      !!id && selectableStatuses.includes(status);
 
 	    return (
-	      <input
-	        type="checkbox"
-	        disabled={!isSelectable}
-	        checked={selectionModel.includes(id)}
-
-	        onChange={(e) => {
-
-	          if (!isSelectable) return;
-
-	          if (e.target.checked) {
-
-	            setSelectionModel(prev =>
-	              prev.includes(id)
-	                ? prev
-	                : [...prev, id]
-	            );
-
-	          } else {
-
-	            setSelectionModel(prev =>
-	              prev.filter(item => item !== id)
-	            );
-
+	      <Box sx={selectHeaderCellSx}>
+	        <input
+	          type="checkbox"
+	          disabled={!isSelectable}
+	          checked={isSelectable && selectionModel.includes(id)}
+	          style={
+	            isSelectable
+	              ? selectCheckboxStyle
+	              : selectCheckboxDisabledStyle
 	          }
+	          onChange={(e) => {
+	            if (!isSelectable) return;
 
-	        }}
-	      />
+	            if (e.target.checked) {
+	              setSelectionModel((prev) =>
+	                prev.includes(id) ? prev : [...prev, id]
+	              );
+	            } else {
+	              setSelectionModel((prev) =>
+	                prev.filter((item) => item !== id)
+	              );
+	            }
+	          }}
+	        />
+	      </Box>
 	    );
 	  },
 	},
@@ -769,63 +941,18 @@ function WarehousePage() {
 
   /* ===================== FILTER ===================== */
 
-  /* ===================== FILTER ===================== */
-
-  const filteredRows = useMemo(() => {
-    return rows.filter((r) => {
-      const searchValue = search.toLowerCase();
-
-      if (
-        search &&
-        !r.name?.toLowerCase().includes(searchValue) &&
-        !r.status?.toLowerCase().includes(searchValue) &&
-        !r.clientName?.toLowerCase().includes(searchValue) &&
-        !r.pdNo?.toLowerCase().includes(searchValue) &&
-        !r.sku?.toLowerCase().includes(searchValue)
-      ) {
-        return false;
-      }
-
-      if (statusFilter !== "ALL" && r.status !== statusFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [rows, search, statusFilter]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (pageNo - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, pageNo, pageSize]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / pageSize)
-  );
-
-  useEffect(() => {
-     setPageNo(1);
-   }, [pageSize, statusFilter, search]);
-
-   useEffect(() => {
-     if (pageNo > totalPages) {
-       setPageNo(totalPages);
-     }
-   }, [pageNo, totalPages]);
+  const warehouseGatePassEligibleItems = useMemo(() => {
+    return selectedWarehouseItems.filter(
+      (row) => getWarehouseStatus(row) === "WAREHOUSE_REQUESTED"
+    );
+  }, [selectedWarehouseItems]);
 
   /* ===================== UI ===================== */
 
   const selectedItems = rows.filter(r =>
     selectionModel?.includes(r.zohoItemId)
   );
-
-  const allWarehouseItems =
-    selectedItems.length > 0 &&
-    selectedItems.every(
-      item => item.status === "IN_WAREHOUSE"
-    );
-	
+  
   return (
     <div style={page}>
       <div style={content}>
@@ -1051,142 +1178,167 @@ function WarehousePage() {
 		
 		<div style={wrap}>
 		{Array.isArray(selectionModel) &&
-		 selectionModel.length > 0 &&
-		 isDispatch && (
+		  selectionModel.length > 0 &&
+		  isDispatch && (
 
 		  <div style={bulkBar}>
-		  <Box
-		    sx={{
-		      display: "flex",
-		      alignItems: "center",
-		      gap: 1,
+		    <Box
+		      sx={{
+		        display: "flex",
+		        alignItems: "center",
+		        gap: 1,
+		        color: "#cbd5e1",
+		        fontWeight: 700,
+		        fontSize: 13,
+		      }}
+		    >
+		      <span>📦</span>
 
-		      color: "#cbd5e1",
+		      <Box
+		        sx={{
+		          display: "flex",
+		          alignItems: "center",
+		          gap: 1,
+		        }}
+		      >
+		        <span>☑️</span>
 
-		      fontWeight: 700,
+		        <span
+		          style={{
+		            fontWeight: 800,
+		          }}
+		        >
+		          {selectionModel.length} Selected
+		        </span>
+		      </Box>
 
-		      fontSize: 13,
-		    }}
-		  >
-		    <span>📦</span>
+		      <Chip
+		        size="small"
+		        label={
+		          allSelectedWarehouseRequested
+		            ? "Warehouse Requested"
+		            : allWarehouseItems
+		              ? "Stored In Warehouse"
+		              : "Mixed Selection"
+		        }
+		        sx={{
+		          background:
+		            allSelectedWarehouseRequested || allWarehouseItems
+		              ? "rgba(16,185,129,.15)"
+		              : "rgba(239,68,68,.15)",
 
-			<Box
-			  sx={{
-			    display: "flex",
-			    alignItems: "center",
-			    gap: 1,
-			  }}
-			>
-			  <span>☑️</span>
+		          color:
+		            allSelectedWarehouseRequested || allWarehouseItems
+		              ? "#34d399"
+		              : "#f87171",
 
-			  <span
-			    style={{
-			      fontWeight: 800,
-			    }}
-			  >
-			    {selectionModel.length}
-			    {" "}
-			    Selected
-			  </span>
-			</Box>
-			<Chip
-			  size="small"
-			  label={
-			    allWarehouseItems
-			      ? "Ready"
-			      : "Mixed Selection"
-			  }
-			  sx={{
-			    background: allWarehouseItems
-			      ? "rgba(16,185,129,.15)"
-			      : "rgba(239,68,68,.15)",
+		          fontWeight: 700,
+		        }}
+		      />
+		    </Box>
 
-			    color: allWarehouseItems
-			      ? "#34d399"
-			      : "#f87171",
-
-			    fontWeight: 700,
-			  }}
-			/>
-		  </Box>
-		  <Box
+		    <Box
 		      sx={{
 		        width: 1,
 		        height: 24,
-		        background:
-		          "rgba(255,255,255,.08)",
+		        background: "rgba(255,255,255,.08)",
 		      }}
 		    />
+
+		    <Button
+		      disabled={
+		        !canBulkApproveWarehouseThroughGatePass ||
+		        bulkWarehouseApproveLoading
+		      }
+		      onClick={() => {
+		        setBulkGatePassNumber("");
+		        setBulkWarehouseApproveOpen(true);
+		      }}
+		      sx={{
+		        minWidth: 260,
+		        height: 44,
+		        borderRadius: "14px",
+		        fontWeight: 800,
+		        textTransform: "none",
+		        background: canBulkApproveWarehouseThroughGatePass
+		          ? "linear-gradient(180deg,#059669,#10b981)"
+		          : "#64748b",
+		        color: "#fff",
+		        boxShadow: canBulkApproveWarehouseThroughGatePass
+		          ? "0 10px 25px rgba(16,185,129,.35)"
+		          : "none",
+
+		        "&:hover": {
+		          background: canBulkApproveWarehouseThroughGatePass
+		            ? "linear-gradient(180deg,#10b981,#059669)"
+		            : "#64748b",
+		        },
+		      }}
+		    >
+		      {bulkWarehouseApproveLoading
+		        ? "Processing..."
+		        : "✅ Bulk Approve Through Gate Pass"}
+		    </Button>
+
 		    <Button
 		      disabled={!allWarehouseItems || bulkLoading}
-
 		      onClick={bulkReturnToDispatch}
+		      sx={{
+		        minWidth: 220,
+		        height: 44,
+		        borderRadius: "14px",
+		        fontWeight: 800,
+		        textTransform: "none",
+		        background: allWarehouseItems
+		          ? "linear-gradient(180deg,#f59e0b,#d97706)"
+		          : "#64748b",
+		        color: "#fff",
+		        boxShadow: allWarehouseItems
+		          ? "0 10px 25px rgba(245,158,11,.35)"
+		          : "none",
 
-			  sx={{
-			    minWidth: 220,
-
-			    height: 44,
-
-			    borderRadius: "14px",
-
-			    fontWeight: 700,
-
-			    textTransform: "none",
-
-			    background: allWarehouseItems
-			      ? "linear-gradient(180deg,#f59e0b,#d97706)"
-			      : "#64748b",
-
-			    color: "#fff",
-
-			    boxShadow: allWarehouseItems
-			      ? "0 10px 25px rgba(245,158,11,.35)"
-			      : "none",
-
-			    "&:hover": {
-			      background: allWarehouseItems
-			        ? "linear-gradient(180deg,#fbbf24,#f59e0b)"
-			        : "#64748b",
-			    },
-			  }}
+		        "&:hover": {
+		          background: allWarehouseItems
+		            ? "linear-gradient(180deg,#fbbf24,#f59e0b)"
+		            : "#64748b",
+		        },
+		      }}
 		    >
-			{bulkLoading
-			  ? "Processing..."
-			  : "🔁 Bulk Return To Dispatch"}
+		      {bulkLoading
+		        ? "Processing..."
+		        : "🔁 Bulk Return To Dispatch"}
 		    </Button>
 
 		    <Button
 		      size="small"
-		      onClick={() => setSelectionModel([])}
-			  sx={{
-			    minWidth: 100,
+		      onClick={() => {
+		        setSelectionModel([]);
+		        setBulkGatePassNumber("");
+		      }}
+		      sx={{
+		        minWidth: 100,
+		        borderRadius: "14px",
+		        color: "#94a3b8",
+		        border: "1px solid rgba(255,255,255,.06)",
 
-			    borderRadius: "14px",
-
-			    color: "#94a3b8",
-
-			    border:
-			      "1px solid rgba(255,255,255,.06)",
-
-			    "&:hover": {
-			      background:
-			        "rgba(255,255,255,.04)",
-
-			      color: "#fff",
-			    },
-			  }}
+		        "&:hover": {
+		          background: "rgba(255,255,255,.04)",
+		          color: "#fff",
+		        },
+		      }}
 		    >
 		      Clear
 		    </Button>
-
 		  </div>
 		)}	
 		<Box sx={tableWrapper}>
 		  <div style={{ width: "max-content", minWidth: "100%" }}>
 
-		    <div style={tableHeader}>
-		      <div>Select</div>
-		      <div>Item Name</div>
+		  <div style={tableHeader}>
+		    <div>
+		      {columns[0].renderHeader()}
+		    </div>
+		    <div>Item Name</div>
 		      <div>SKU</div>
 		      <div>PD No</div>
 		      <div>DWG No.</div>
@@ -1202,7 +1354,7 @@ function WarehousePage() {
 		    <div style={tableBody}>
 		      {paginatedRows.map((row) => (
 		        <div
-		          key={row.zohoItemId}
+		          key={getWarehouseRowId(row)}
 		          style={tableRow}
 		        >
 				<div>
@@ -1426,7 +1578,137 @@ function WarehousePage() {
 		  </Box>
 		</Box>
         </div>
-		</div>				
+		</div>
+		{bulkWarehouseApproveOpen && (
+		  <div
+		    style={popupOverlay}
+		    onClick={() => {
+		      if (!bulkWarehouseApproveLoading) {
+		        setBulkWarehouseApproveOpen(false);
+		      }
+		    }}
+		  >
+		    <div
+		      style={{
+		        ...popupBox,
+		        maxWidth: 560,
+		      }}
+		      onClick={(e) => e.stopPropagation()}
+		    >
+		      <h2
+		        style={{
+		          marginBottom: 10,
+		          fontSize: 24,
+		          fontWeight: 900,
+		          color: "#fff",
+		        }}
+		      >
+		        Bulk Approve Warehouse
+		      </h2>
+
+		      <Box
+		        sx={{
+		          color: "#94a3b8",
+		          fontSize: 13,
+		          fontWeight: 700,
+		          mb: 2.5,
+		          lineHeight: 1.6,
+		        }}
+		      >
+		        Enter one gate pass number. It will be applied to all selected
+		        Warehouse Requested items.
+		      </Box>
+
+		      <Box
+		        sx={{
+		          p: 1.5,
+		          mb: 2,
+		          borderRadius: "14px",
+		          background: "rgba(16,185,129,.10)",
+		          border: "1px solid rgba(16,185,129,.18)",
+		          color: "#6ee7b7",
+		          fontWeight: 900,
+		        }}
+		      >
+		        {selectedWarehouseItems.length} item
+		        {selectedWarehouseItems.length > 1 ? "s" : ""} selected for approval
+		      </Box>
+
+		      <TextField
+		        fullWidth
+		        size="small"
+		        placeholder="Enter Gate Pass Number"
+		        value={bulkGatePassNumber}
+		        onChange={(e) => setBulkGatePassNumber(e.target.value)}
+		        sx={{
+		          mb: 2.5,
+		          ...compactActionFieldSx,
+
+		          "& .MuiOutlinedInput-root": {
+		            ...compactActionFieldSx["& .MuiOutlinedInput-root"],
+		            height: 44,
+		          },
+		        }}
+		      />
+
+		      <Box
+		        sx={{
+		          display: "flex",
+		          justifyContent: "flex-end",
+		          gap: 1.5,
+		        }}
+		      >
+		        <Button
+		          disabled={bulkWarehouseApproveLoading}
+		          onClick={() => {
+		            setBulkWarehouseApproveOpen(false);
+		            setBulkGatePassNumber("");
+		          }}
+		          sx={{
+		            minWidth: 110,
+		            height: 38,
+		            borderRadius: "12px",
+		            color: "#cbd5e1",
+		            border: "1px solid rgba(255,255,255,.08)",
+		            textTransform: "none",
+		            fontWeight: 800,
+		          }}
+		        >
+		          Cancel
+		        </Button>
+
+		        <Button
+		          disabled={
+		            bulkWarehouseApproveLoading ||
+		            !bulkGatePassNumber.trim()
+		          }
+		          onClick={bulkApproveWarehouseThroughGatePass}
+		          sx={{
+		            minWidth: 170,
+		            height: 38,
+		            borderRadius: "12px",
+		            color: "#fff",
+		            background: bulkGatePassNumber.trim()
+		              ? "linear-gradient(135deg,#059669,#10b981)"
+		              : "#64748b",
+		            textTransform: "none",
+		            fontWeight: 900,
+
+		            "&:hover": {
+		              background: bulkGatePassNumber.trim()
+		                ? "linear-gradient(135deg,#047857,#059669)"
+		                : "#64748b",
+		            },
+		          }}
+		        >
+		          {bulkWarehouseApproveLoading
+		            ? "Approving..."
+		            : "Approve Selected"}
+		        </Button>
+		      </Box>
+		    </div>
+		  </div>
+		)}				
 		{gatePassPopup && (
 			<div
 			  style={popupOverlay}
@@ -2062,6 +2344,25 @@ const statusPacked = {
 
   background:
     "rgba(37,99,235,.15)",
+};
+
+const selectHeaderCellSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const selectCheckboxStyle = {
+  width: 16,
+  height: 16,
+  cursor: "pointer",
+  accentColor: "#3b82f6",
+};
+
+const selectCheckboxDisabledStyle = {
+  ...selectCheckboxStyle,
+  opacity: 0.35,
+  cursor: "not-allowed",
 };
 
 const statusStored = {

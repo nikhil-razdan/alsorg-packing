@@ -354,15 +354,12 @@ function DashboardPage() {
 	 const finalInventoryTotal =
 	   inventoryTotal || Number(stats.totalItems || 0);
 
-	   const todayPackedItems =
-	     Number(stats.todayStickerGenerated || 0);
+	   const throughputPackedItems =
+	     Number(stats.packedItems || 0);
 
-	   const todayDispatchedItems =
-	     Number(stats.todayChallanGenerated || 0);
-
-	   const dailyThroughput =
-	     todayPackedItems + todayDispatchedItems;
-	   
+	   const throughputDispatchedItems =
+	     Number(stats.dispatchedItems || 0);
+		 
 	   const pending =
 	     Number(stats.pendingItems || 0) ||
 	     Math.max(
@@ -371,6 +368,15 @@ function DashboardPage() {
 	         Number(stats.dispatchedItems || 0),
 	       0
 	     );
+		 
+		 const todayPackedItems =
+		   Number(stats.todayStickerGenerated || 0);
+
+		 const todayDispatchedItems =
+		   Number(stats.todayChallanGenerated || 0);
+
+		 const dailyThroughput =
+		   todayPackedItems + todayDispatchedItems;
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
   const reportIndex =
@@ -609,9 +615,12 @@ function DashboardPage() {
 				  <div style={detailCard("#06b6d4")}>
 				    <div style={detailHeader}>
 				      <div>
-				        <div style={detailTitle}>Daily Throughput Details</div>
+				        <div style={detailTitle}>
+				          Daily Throughput Details
+				        </div>
+
 				        <div style={detailSubtitle}>
-				          Today’s operational movement
+				          Today’s packed and dispatched work summary
 				        </div>
 				      </div>
 
@@ -628,18 +637,22 @@ function DashboardPage() {
 				        disabled={!isAdmin}
 				        style={throughputClickCard("#34d399", isAdmin)}
 				      >
-				        <div style={detailItemLabel}>Packed Items</div>
+				        <div style={detailItemLabel}>
+				          Packed Items
+				        </div>
 
 				        <div style={detailItemValue}>
 				          {todayPackedItems}
 				        </div>
 
 				        <div style={detailItemSubtle}>
-				          Sticker Generated Today
+				          Packed Today / Sticker Generated Today
 				        </div>
 
 				        <div style={throughputCardHint}>
-				          {isAdmin ? "Click to view user-wise packing" : "Admin only"}
+				          {isAdmin
+				            ? "Click to view user-wise packing"
+				            : "Admin only"}
 				        </div>
 				      </button>
 
@@ -649,18 +662,22 @@ function DashboardPage() {
 				        disabled={!isAdmin}
 				        style={throughputClickCard("#f59e0b", isAdmin)}
 				      >
-				        <div style={detailItemLabel}>Dispatched Items</div>
+				        <div style={detailItemLabel}>
+				          Dispatched Items
+				        </div>
 
 				        <div style={detailItemValue}>
 				          {todayDispatchedItems}
 				        </div>
 
 				        <div style={detailItemSubtle}>
-				          Challan Generated Today
+				          Dispatched Today / Chalaan Generated Today
 				        </div>
 
 				        <div style={throughputCardHint}>
-				          {isAdmin ? "Click to view user-wise dispatch" : "Admin only"}
+				          {isAdmin
+				            ? "Click to view user-wise dispatch"
+				            : "Admin only"}
 				        </div>
 				      </button>
 				    </div>
