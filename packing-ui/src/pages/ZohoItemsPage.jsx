@@ -183,6 +183,13 @@ function ZohoItemsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [uiAlert, setUiAlert] = useState(null);
+  const [generatedHistoryOpen, setGeneratedHistoryOpen] = useState(false);
+  const [generatedHistoryRows, setGeneratedHistoryRows] = useState([]);
+  const [generatedHistoryLoading, setGeneratedHistoryLoading] = useState(false);
+  const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
+  const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
+  const [generatedHistorySearch, setGeneratedHistorySearch] = useState("");
+  const [historyPdfPreview, setHistoryPdfPreview] = useState(null);
   const [editForm, setEditForm] = useState({
     itemName: "",
     pdNo: "",
@@ -227,6 +234,128 @@ function ZohoItemsPage() {
       setRowCount(data.length);
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const getAuthHeaders = () => ({
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  });
+
+  const formatHistoryDateTime = (value) => {
+    if (!value) return "—";
+
+    try {
+      return new Date(value).toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return value;
+    }
+  };
+
+  const openGeneratedHistory = async () => {
+    setGeneratedHistoryOpen(true);
+    setGeneratedHistorySearch("");
+    setHistoryPdfPreview(null);
+
+    await Promise.all([
+      fetchGeneratedHistoryUsers(),
+      fetchGeneratedHistory("ALL"),
+    ]);
+  };
+
+  const fetchGeneratedHistoryUsers = async () => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/stickers/generated-history/users`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+
+      setGeneratedHistoryUsers(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setGeneratedHistoryUsers([]);
+    }
+  };
+
+  const fetchGeneratedHistory = async (userFilter = generatedHistoryUserFilter) => {
+    try {
+      setGeneratedHistoryLoading(true);
+
+      const query =
+        userFilter && userFilter !== "ALL"
+          ? `?generatedBy=${encodeURIComponent(userFilter)}`
+          : "";
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/stickers/generated-history${query}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+
+      setGeneratedHistoryRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+
+      if (typeof showUiAlert === "function") {
+        showUiAlert("error", "Failed to load generated history");
+      }
+    } finally {
+      setGeneratedHistoryLoading(false);
+    }
+  };
+
+  const openHistoryPdf = async (historyId) => {
+    if (!historyId) return;
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/stickers/history/${historyId}/download-pdf`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      if (historyPdfPreview?.url) {
+        URL.revokeObjectURL(historyPdfPreview.url);
+      }
+
+      setHistoryPdfPreview({
+        historyId,
+        url,
+      });
+    } catch (e) {
+      console.error(e);
+
+      if (typeof showUiAlert === "function") {
+        showUiAlert("error", "Failed to open sticker PDF");
+      }
     }
   };
   
@@ -293,6 +422,24 @@ function ZohoItemsPage() {
       start + pageSize
     );
   }, [filteredRows, safePageNo, pageSize]);
+  
+  const filteredGeneratedHistoryRows = useMemo(() => {
+    const q = generatedHistorySearch.trim().toLowerCase();
+
+    if (!q) return generatedHistoryRows;
+
+    return generatedHistoryRows.filter((r) => {
+      return (
+        (r.itemName || "").toLowerCase().includes(q) ||
+        (r.sku || "").toLowerCase().includes(q) ||
+        (r.pdNo || "").toLowerCase().includes(q) ||
+        (r.drawingNo || "").toLowerCase().includes(q) ||
+        (r.clientName || "").toLowerCase().includes(q) ||
+        (r.stickerNumber || "").toLowerCase().includes(q) ||
+        (r.generatedBy || "").toLowerCase().includes(q)
+      );
+    });
+  }, [generatedHistoryRows, generatedHistorySearch]);
 
   const isLastPacket = (row) => {
     const key = row.masterItemId || row.itemName;
@@ -537,6 +684,12 @@ function ZohoItemsPage() {
               gap: 1.5,
             }}
           >
+		  <Button
+		      onClick={openGeneratedHistory}
+		      sx={historyHeaderButtonSx}
+		    >
+		      📜 Generated History
+		    </Button>
             <Box sx={countBadgeSx}>
               Total Items:{" "}
               <span style={{ color: "#60a5fa", fontWeight: 900 }}>
@@ -1008,11 +1161,16 @@ function ZohoItemsPage() {
 	            throw new Error("Invalid response");
 	          }
 
-	          const blob = await genRes.blob();
-	          const url = URL.createObjectURL(blob);
+			  const blob = await genRes.blob();
+			  const url = URL.createObjectURL(blob);
 
-	          setPdfUrl(url);
-	          fetchItems();
+			  setPdfUrl(url);
+
+			  await fetchItems();
+
+			  if (generatedHistoryOpen) {
+			    await fetchGeneratedHistory(generatedHistoryUserFilter);
+			  }
 	        } catch (e) {
 	          console.error(e);
 	          alert("Failed to generate sticker");
@@ -1756,6 +1914,243 @@ function ZohoItemsPage() {
 	          />
 	        );
 	      })}
+	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
+	    open={generatedHistoryOpen}
+	    onClose={() => {
+	      setGeneratedHistoryOpen(false);
+
+	      if (historyPdfPreview?.url) {
+	        URL.revokeObjectURL(historyPdfPreview.url);
+	      }
+
+	      setHistoryPdfPreview(null);
+	    }}
+	    icon="📜"
+	    title="Generated Packet History"
+	    subtitle="Items appear here only after sticker generation"
+	    width={1180}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Refresh
+	        </Button>
+
+	        <Button
+	          onClick={() => {
+	            setGeneratedHistoryOpen(false);
+
+	            if (historyPdfPreview?.url) {
+	              URL.revokeObjectURL(historyPdfPreview.url);
+	            }
+
+	            setHistoryPdfPreview(null);
+	          }}
+	          sx={premiumButton}
+	        >
+	          Close
+	        </Button>
+	      </>
+	    }
+	  >
+	    <Box sx={historyTopBarSx}>
+	      <TextField
+	        variant="standard"
+	        placeholder="Search item, SKU, client, sticker no..."
+	        value={generatedHistorySearch}
+	        onChange={(e) => setGeneratedHistorySearch(e.target.value)}
+	        InputProps={{ disableUnderline: true }}
+	        sx={historySearchInputSx}
+	      />
+
+	      <TextField
+	        select
+	        size="small"
+	        label="Generated By"
+	        value={generatedHistoryUserFilter}
+	        onChange={async (e) => {
+	          const value = e.target.value;
+	          setGeneratedHistoryUserFilter(value);
+	          await fetchGeneratedHistory(value);
+	        }}
+	        sx={historyUserSelectSx}
+	        slotProps={selectMenuSlotProps}
+	      >
+	        <MenuItem value="ALL">All Users</MenuItem>
+
+	        {generatedHistoryUsers.map((user) => (
+	          <MenuItem key={user} value={user}>
+	            {user}
+	          </MenuItem>
+	        ))}
+	      </TextField>
+
+	      <Box sx={historyCountBadgeSx}>
+	        {filteredGeneratedHistoryRows.length} Generated
+	      </Box>
+	    </Box>
+
+	    <Box sx={historyLayoutSx}>
+	      <Box sx={historyTableWrapSx}>
+	        <div style={historyTableHeader}>
+	          <div>Date / Time</div>
+	          <div>Generated By</div>
+	          <div>Item</div>
+	          <div>SKU</div>
+	          <div>PD No</div>
+	          <div>Packet</div>
+	          <div>Sticker No</div>
+	          <div>Reason</div>
+	          <div>Action</div>
+	        </div>
+
+	        <Box sx={historyTableBodySx}>
+	          {generatedHistoryLoading && (
+	            <Box sx={historyEmptySx}>
+	              Loading generated history...
+	            </Box>
+	          )}
+
+	          {!generatedHistoryLoading &&
+	            filteredGeneratedHistoryRows.length === 0 && (
+	              <Box sx={historyEmptySx}>
+	                No generated packet history found.
+	              </Box>
+	            )}
+
+	          {!generatedHistoryLoading &&
+	            filteredGeneratedHistoryRows.map((row) => (
+	              <div
+	                key={row.historyId}
+	                style={historyTableRow}
+	              >
+	                <div style={historyCellWrap}>
+	                  <span style={historyDateText}>
+	                    {formatHistoryDateTime(row.generatedAt)}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span style={historyUserText}>
+	                    {row.generatedBy || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span
+	                    style={historyMainText}
+	                    title={row.itemName}
+	                  >
+	                    {row.itemName || "—"}
+	                  </span>
+
+	                  <span
+	                    style={historySubText}
+	                    title={row.clientName}
+	                  >
+	                    {row.clientName || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span
+	                    style={historyMonoText}
+	                    title={row.sku}
+	                  >
+	                    {row.sku || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span style={historyMainText}>
+	                    {row.pdNo || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span style={historyMainText}>
+	                    {row.packetNumber || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <span
+	                    style={historyMonoText}
+	                    title={row.stickerNumber}
+	                  >
+	                    {row.stickerNumber || "—"}
+	                  </span>
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <Chip
+	                    label={
+	                      row.reason === "REPRINT"
+	                        ? `Reprint #${row.printIteration || ""}`
+	                        : "Initial"
+	                    }
+	                    size="small"
+	                    sx={
+	                      row.reason === "REPRINT"
+	                        ? historyReprintChipSx
+	                        : historyInitialChipSx
+	                    }
+	                  />
+	                </div>
+
+	                <div style={historyCellWrap}>
+	                  <Button
+	                    size="small"
+	                    onClick={() => openHistoryPdf(row.historyId)}
+	                    sx={historyViewButtonSx}
+	                  >
+	                    View PDF
+	                  </Button>
+	                </div>
+	              </div>
+	            ))}
+	        </Box>
+	      </Box>
+
+	      {historyPdfPreview?.url && (
+	        <Box sx={historyPdfPanelSx}>
+	          <Box sx={historyPdfPanelHeaderSx}>
+	            <Box sx={{ fontWeight: 900 }}>
+	              Sticker Preview
+	            </Box>
+
+	            <IconButton
+	              size="small"
+	              onClick={() => {
+	                if (historyPdfPreview?.url) {
+	                  URL.revokeObjectURL(historyPdfPreview.url);
+	                }
+
+	                setHistoryPdfPreview(null);
+	              }}
+	              sx={modalCloseButtonSx}
+	            >
+	              ×
+	            </IconButton>
+	          </Box>
+
+	          <iframe
+	            src={historyPdfPreview.url}
+	            width="100%"
+	            height="520"
+	            title="Generated Sticker Preview"
+	            style={{
+	              border: "1px solid rgba(255,255,255,.08)",
+	              borderRadius: 12,
+	              background: "#fff",
+	            }}
+	          />
+	        </Box>
+	      )}
 	    </Box>
 	  </InventoryModal>
     </div>
@@ -2805,5 +3200,247 @@ const formFieldSx = () => ({
     color: "#f87171",
   },
 });
+
+const historyHeaderButtonSx = {
+  height: 38,
+  px: 2,
+  borderRadius: "12px",
+  textTransform: "none",
+  fontWeight: 900,
+  fontSize: 12,
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,rgba(59,130,246,.22),rgba(59,130,246,.10))",
+  border:
+    "1px solid rgba(59,130,246,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,rgba(59,130,246,.34),rgba(59,130,246,.16))",
+  },
+};
+
+const historyTopBarSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1.5,
+  mb: 2,
+  p: 1.5,
+  borderRadius: "12px",
+  background: "rgba(255,255,255,.035)",
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const historySearchInputSx = {
+  flex: 1,
+
+  "& .MuiInputBase-root": {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: 700,
+  },
+
+  "& input::placeholder": {
+    color: "rgba(255,255,255,.42)",
+    opacity: 1,
+  },
+};
+
+const historyUserSelectSx = {
+  minWidth: 190,
+
+  "& .MuiInputLabel-root": {
+    color: "rgba(255,255,255,.55)",
+    fontWeight: 700,
+  },
+
+  "& .MuiOutlinedInput-root": {
+    height: 42,
+    borderRadius: "12px",
+    background: "rgba(255,255,255,.04)",
+    color: "#fff",
+
+    "& fieldset": {
+      borderColor: "rgba(255,255,255,.08)",
+    },
+
+    "&:hover fieldset": {
+      borderColor: "rgba(59,130,246,.45)",
+    },
+
+    "&.Mui-focused fieldset": {
+      borderColor: "#3b82f6",
+    },
+  },
+
+  "& .MuiSvgIcon-root": {
+    color: "#94a3b8",
+  },
+
+  "& .MuiSelect-select": {
+    color: "#fff",
+    fontWeight: 800,
+  },
+};
+
+const historyCountBadgeSx = {
+  height: 38,
+  px: 1.8,
+  borderRadius: "10px",
+  display: "flex",
+  alignItems: "center",
+  color: "#93c5fd",
+  fontWeight: 900,
+  fontSize: 12,
+  background: "rgba(59,130,246,.10)",
+  border: "1px solid rgba(59,130,246,.16)",
+  whiteSpace: "nowrap",
+};
+
+const historyLayoutSx = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 2,
+};
+
+const historyTableWrapSx = {
+  overflowX: "auto",
+  borderRadius: "12px",
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const historyGrid =
+  "155px 140px 240px 260px 110px 95px 160px 120px 100px";
+
+const historyTableHeader = {
+  display: "grid",
+  gridTemplateColumns: historyGrid,
+  minWidth: 1380,
+  padding: "12px 14px",
+  background: "#111827",
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const historyTableRow = {
+  display: "grid",
+  gridTemplateColumns: historyGrid,
+  minWidth: 1380,
+  alignItems: "center",
+  padding: "12px 14px",
+  borderTop: "1px solid rgba(255,255,255,.06)",
+  color: "#fff",
+};
+
+const historyTableBodySx = {
+  maxHeight: "46vh",
+  overflowY: "auto",
+};
+
+const historyCellWrap = {
+  minWidth: 0,
+  overflow: "hidden",
+  paddingRight: 10,
+};
+
+const historyMainText = {
+  display: "block",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 850,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const historySubText = {
+  display: "block",
+  marginTop: 3,
+  color: "rgba(255,255,255,.48)",
+  fontSize: 11,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const historyMonoText = {
+  display: "block",
+  color: "#e2e8f0",
+  fontSize: 12,
+  fontWeight: 850,
+  fontFamily: "monospace",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const historyDateText = {
+  color: "#cbd5e1",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const historyUserText = {
+  color: "#93c5fd",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const historyEmptySx = {
+  p: 3,
+  color: "#94a3b8",
+  fontWeight: 800,
+};
+
+const historyInitialChipSx = {
+  height: 24,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#4ade80",
+  background: "rgba(34,197,94,.12)",
+  border: "1px solid rgba(34,197,94,.18)",
+};
+
+const historyReprintChipSx = {
+  height: 24,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#fbbf24",
+  background: "rgba(251,191,36,.12)",
+  border: "1px solid rgba(251,191,36,.18)",
+};
+
+const historyViewButtonSx = {
+  minWidth: 82,
+  height: 28,
+  borderRadius: "8px",
+  textTransform: "none",
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#fff",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  "&:hover": {
+    background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
+};
+
+const historyPdfPanelSx = {
+  mt: 2,
+  p: 1.5,
+  borderRadius: "12px",
+  background: "rgba(255,255,255,.035)",
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const historyPdfPanelHeaderSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  color: "#fff",
+  mb: 1,
+};
 
 export default ZohoItemsPage;

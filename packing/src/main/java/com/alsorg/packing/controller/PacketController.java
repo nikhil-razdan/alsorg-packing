@@ -22,6 +22,7 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.service.PacketService;
 import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
+import com.alsorg.packing.security.JwtUtil;
 
 @RestController
 @RequestMapping("/api/packets")
@@ -155,15 +156,34 @@ public class PacketController {
     // STICKER GENERATION (FINAL FIX)
     // =====================================================
 
-    @PostMapping("/zoho/items/{zohoItemId}/generate-sticker")
-    public ResponseEntity<byte[]> generateSticker(@PathVariable String zohoItemId, @RequestParam String factoryFloor )
-            throws IOException {
+    @PostMapping("/items/{itemId}/generate-sticker")
+    public ResponseEntity<byte[]> generateStickerForItem(
+            @PathVariable UUID itemId,
+            @RequestParam String factoryFloor,
+            @RequestParam(defaultValue = "true") boolean showCompanyHeader,
+            @RequestHeader("Authorization") String auth
+    ) {
+        String token = extractToken(auth);
 
-        byte[] pdf = zohoStickerService.generateStickerForZohoItem(zohoItemId, factoryFloor);
+        String generatedBy = JwtUtil.getUsername(token);
+        String role = JwtUtil.getRole(token);
+
+        if (!"ADMIN".equalsIgnoreCase(role)
+                && !"PACKING".equalsIgnoreCase(role)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        byte[] pdf = packetService.generateStickerForPacketItem(
+                itemId,
+                factoryFloor,
+                showCompanyHeader,
+                generatedBy
+        );
+
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=STICKER_" + zohoItemId + ".pdf"
+                        "inline; filename=STICKER_" + itemId + ".pdf"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
@@ -279,5 +299,13 @@ public class PacketController {
 
         packetService.deleteItem(itemId);
         return ResponseEntity.ok("Item deleted");
+    }
+    
+    private String extractToken(String auth) {
+        if (auth == null || !auth.startsWith("Bearer ")) {
+            throw new RuntimeException("Missing or invalid Authorization header");
+        }
+
+        return auth.replace("Bearer ", "");
     }
 }

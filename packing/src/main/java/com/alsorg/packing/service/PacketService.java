@@ -273,11 +273,37 @@ public class PacketService {
         return packetItemRepository.saveAll(items);
     }
     
-    public byte[] generateStickerForPacketItem(UUID itemId, String factoryFloor, boolean showCompanyHeader) {	
+    public byte[] generateStickerForPacketItem(
+            UUID itemId,
+            String factoryFloor,
+            boolean showCompanyHeader
+    ) {
+        return generateStickerForPacketItem(
+                itemId,
+                factoryFloor,
+                showCompanyHeader,
+                "SYSTEM"
+        );
+    }
+
+    @Transactional
+    public byte[] generateStickerForPacketItem(
+            UUID itemId,
+            String factoryFloor,
+            boolean showCompanyHeader,
+            String generatedBy
+    ) {
 
         PacketItem item = packetItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
+        String actor =
+                generatedBy != null && !generatedBy.isBlank()
+                        ? generatedBy.trim()
+                        : "SYSTEM";
+
+        LocalDateTime now = LocalDateTime.now();
+        
         // ✅ BLOCK DUPLICATE PRINT
         long iteration = item.getPrintIteration() == null ? 1 : item.getPrintIteration();
 
@@ -294,7 +320,8 @@ public class PacketService {
 
         // ✅ MOVE TO FLOOR
         item.setStatus("READY");
-        item.setPackedAt(LocalDateTime.now());
+        item.setPackedAt(now);
+        item.setCreatedBy(actor);
 
         packetItemRepository.save(item);
 
@@ -305,8 +332,10 @@ public class PacketService {
         DispatchedItem d = dispatchedRepo.findById(item.getId().toString())
         	    .orElseThrow();
         d.setStatus(ItemDispatchStatus.READY);
-        d.setPackedAt(LocalDateTime.now());
-        d.setCreatedAt(LocalDateTime.now());
+        d.setPackedAt(now);
+        d.setCreatedAt(now);
+        d.setPackedBy(actor);
+        d.setCreatedBy(actor);
         dispatchedRepo.save(d);
 
         StickerPdfData pdf = new StickerPdfData();
@@ -347,7 +376,7 @@ public class PacketService {
 
         history.setPrintIteration(iteration);
 
-        history.setGeneratedBy("SYSTEM");
+        history.setGeneratedBy(actor);
 
         history.setReason(
                 iteration > 1
@@ -355,7 +384,7 @@ public class PacketService {
                         : "INITIAL"
         );
 
-        history.setGeneratedAt(LocalDateTime.now());
+        history.setGeneratedAt(now);
 
         stickerHistoryRepository.save(history);
 
