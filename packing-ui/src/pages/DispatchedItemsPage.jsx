@@ -2603,11 +2603,14 @@ function DispatchedItemsPage() {
 		    },
 		  }}
 	    >
-		    <MenuItem value="ALL">All Status</MenuItem>
-			<MenuItem value="READY">🟡 Ready (Decision Pending)</MenuItem>
-			<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
-			<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
-			<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
+		<MenuItem value="ALL">All Status</MenuItem>
+		<MenuItem value="READY">🟡 Ready (Decision Pending)</MenuItem>
+		<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
+		<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
+		<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
+		<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
+		<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
+		<MenuItem value="WAREHOUSE_RETURN_REQUESTED">↩️ Warehouse Return Requested</MenuItem>
 		  </TextField>
 
 		  <TextField
