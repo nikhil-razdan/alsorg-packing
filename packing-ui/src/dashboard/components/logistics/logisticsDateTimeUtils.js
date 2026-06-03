@@ -59,3 +59,26 @@ export const formatShiftTimeRange = (shift) => {
 
   return "";
 };
+
+export const isShiftOverSixPm = (shift) => {
+  const value =
+    shift?.shiftEnd ||
+    shift?.endTime ||
+    "";
+
+  if (!value) return false;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+
+  return (
+    hours > 18 ||
+    (hours === 18 && minutes > 0)
+  );
+};

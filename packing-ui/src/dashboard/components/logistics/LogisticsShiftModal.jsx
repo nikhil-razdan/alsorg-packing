@@ -7,6 +7,7 @@ import {
 import {
   formatShiftDate,
   formatShiftTimeRange,
+  isShiftOverSixPm,
 } from "./logisticsDateTimeUtils";
 
 import {
@@ -604,19 +605,37 @@ function LogisticsShiftModal({
 
               {paginatedHistoryRows.map(
                 (s) => (
-                  <div
-                    key={s.id}
-                    style={historyRow}
-                  >
-				  <div>
-				    <div style={historyDateText}>
-				      {formatShiftDate(s)}
-				    </div>
+					<div
+					  key={s.id}
+					  style={{
+					    ...historyRow,
+					    ...(isShiftOverSixPm(s)
+					      ? historyLateRow
+					      : {}),
+					  }}
+					>
+					<div>
+					  <div style={historyDateText}>
+					    {formatShiftDate(s)}
+					  </div>
 
-				    <div style={historyTimeText}>
-				      {formatShiftTimeRange(s)}
-				    </div>
-				  </div>
+					  <div
+					    style={{
+					      ...historyTimeText,
+					      ...(isShiftOverSixPm(s)
+					        ? historyLateTimeText
+					        : {}),
+					    }}
+					  >
+					    {formatShiftTimeRange(s)}
+					  </div>
+
+					  {isShiftOverSixPm(s) && (
+					    <div style={historyLateBadge}>
+					      After 6 PM
+					    </div>
+					  )}
+					</div>
 
                     <div>
                       {s.vehicle
@@ -1346,6 +1365,32 @@ const cancelBtn = {
   background: "#1e293b",
   color: "#fff",
   cursor: "pointer",
+};
+
+const historyLateRow = {
+  background:
+    "linear-gradient(90deg,rgba(245,158,11,.12),rgba(15,23,42,0))",
+  borderLeft:
+    "3px solid #f59e0b",
+};
+
+const historyLateTimeText = {
+  color: "#fbbf24",
+  fontWeight: 800,
+};
+
+const historyLateBadge = {
+  display: "inline-flex",
+  marginTop: 6,
+  padding: "4px 8px",
+  borderRadius: 999,
+  background:
+    "rgba(245,158,11,.16)",
+  color: "#fbbf24",
+  border:
+    "1px solid rgba(245,158,11,.28)",
+  fontSize: 10,
+  fontWeight: 900,
 };
 
 const saveBtn = {

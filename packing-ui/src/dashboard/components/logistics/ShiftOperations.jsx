@@ -9,6 +9,7 @@ import LogisticsPagination from "./LogisticsPagination";
 import {
   formatShiftDate,
   formatShiftTimeRange,
+  isShiftOverSixPm,
 } from "./logisticsDateTimeUtils";
 
 import {
@@ -280,10 +281,15 @@ function ShiftOperations({
 
         {!loading &&
           paginatedShifts.map((s) => (
-            <div
-              key={s.id}
-              style={row}
-            >
+			<div
+			  key={s.id}
+			  style={{
+			    ...row,
+			    ...(isShiftOverSixPm(s)
+			      ? lateShiftRow
+			      : {}),
+			  }}
+			>
               <div>
                 {s.driver?.name || "-"}
               </div>
@@ -298,9 +304,22 @@ function ShiftOperations({
 			      {formatShiftDate(s)}
 			    </div>
 
-			    <div style={timeText}>
+			    <div
+			      style={{
+			        ...timeText,
+			        ...(isShiftOverSixPm(s)
+			          ? lateTimeText
+			          : {}),
+			      }}
+			    >
 			      {formatShiftTimeRange(s)}
 			    </div>
+
+			    {isShiftOverSixPm(s) && (
+			      <div style={lateBadge}>
+			        After 6 PM
+			      </div>
+			    )}
 			  </div>
 
 			  <div>
@@ -516,6 +535,32 @@ const deleteBtn = {
   padding: "6px 10px",
   cursor: "pointer",
   fontWeight: 700,
+};
+
+const lateShiftRow = {
+  background:
+    "linear-gradient(90deg,rgba(245,158,11,.12),rgba(15,23,42,0))",
+  borderLeft:
+    "3px solid #f59e0b",
+};
+
+const lateTimeText = {
+  color: "#fbbf24",
+  fontWeight: 800,
+};
+
+const lateBadge = {
+  display: "inline-flex",
+  marginTop: 6,
+  padding: "4px 8px",
+  borderRadius: 999,
+  background:
+    "rgba(245,158,11,.16)",
+  color: "#fbbf24",
+  border:
+    "1px solid rgba(245,158,11,.28)",
+  fontSize: 10,
+  fontWeight: 900,
 };
 
 const statusSelect = (value) => ({
