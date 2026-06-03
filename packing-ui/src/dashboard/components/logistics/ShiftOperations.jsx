@@ -7,6 +7,11 @@ import LogisticsShiftModal from "./LogisticsShiftModal";
 import LogisticsPagination from "./LogisticsPagination";
 
 import {
+  formatShiftDate,
+  formatShiftTimeRange,
+} from "./logisticsDateTimeUtils";
+
+import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
 
@@ -15,62 +20,6 @@ import {
   deleteShift,
   updateShift,
 } from "../../api/logisticsApi";
-
-const formatShiftDate = (shift) => {
-  const value =
-    shift.shiftStart ||
-    shift.date ||
-    shift.createdAt;
-
-  if (!value) return "-";
-
-  try {
-    return new Date(value).toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
-  } catch {
-    return "-";
-  }
-};
-
-const formatShiftTime = (value) => {
-  if (!value) return "";
-
-  try {
-    return new Date(value).toLocaleTimeString(
-      "en-IN",
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
-  } catch {
-    return "";
-  }
-};
-
-const formatShiftTimeRange = (shift) => {
-  const start = formatShiftTime(
-    shift.shiftStart
-  );
-
-  const end = formatShiftTime(
-    shift.shiftEnd
-  );
-
-  if (start && end) {
-    return `${start} - ${end}`;
-  }
-
-  if (start) return start;
-
-  return "";
-};
 
 const buildShiftUpdatePayload = (
   shift,

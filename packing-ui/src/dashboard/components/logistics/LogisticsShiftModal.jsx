@@ -5,6 +5,11 @@ import {
 } from "react";
 
 import {
+  formatShiftDate,
+  formatShiftTimeRange,
+} from "./logisticsDateTimeUtils";
+
+import {
   fetchDrivers,
   fetchVehicles,
   fetchShifts,
@@ -603,12 +608,15 @@ function LogisticsShiftModal({
                     key={s.id}
                     style={historyRow}
                   >
-                    <div>
-                      {formatDateTime(
-                        s.shiftStart ||
-                          s.createdAt
-                      )}
-                    </div>
+				  <div>
+				    <div style={historyDateText}>
+				      {formatShiftDate(s)}
+				    </div>
+
+				    <div style={historyTimeText}>
+				      {formatShiftTimeRange(s)}
+				    </div>
+				  </div>
 
                     <div>
                       {s.vehicle
@@ -1009,23 +1017,6 @@ function Field({
   );
 }
 
-const formatDateTime = (value) => {
-  if (!value) return "-";
-
-  try {
-    return new Date(value)
-      .toLocaleString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-  } catch {
-    return "-";
-  }
-};
-
 const overlay = {
   position: "fixed",
   inset: 0,
@@ -1209,6 +1200,18 @@ const historyCount = {
   color: "#94a3b8",
   fontSize: 13,
   fontWeight: 700,
+};
+
+const historyDateText = {
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const historyTimeText = {
+  color: "#94a3b8",
+  fontSize: 11,
+  marginTop: 4,
 };
 
 const historyPagerRight = {

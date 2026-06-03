@@ -20,7 +20,7 @@ const tableHeader = {
   display: "grid",
 
   gridTemplateColumns:
-  "70px 350px 140px 180px 250px 100px 220px 180px 500px",
+    "70px 350px 280px 140px 180px 250px 100px 220px 180px 500px",
 
   padding: "14px 16px",
 
@@ -32,6 +32,11 @@ const tableHeader = {
   fontSize: 13,
 };
 
+const tableCellWrap = {
+  minWidth: 0,
+  overflow: "hidden",
+};
+
 const tableBody = {
   display: "flex",
   flexDirection: "column",
@@ -41,7 +46,7 @@ const tableRow = {
   display: "grid",
 
   gridTemplateColumns:
-  "70px 350px 140px 180px 250px 100px 220px 180px 500px",
+    "70px 350px 280px 140px 180px 250px 100px 220px 180px 500px",
 
   alignItems: "center",
 
@@ -55,6 +60,25 @@ const tableRow = {
   minHeight: 58,
 
   fontSize: 13,
+};
+
+const selectHeaderCellSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const selectCheckboxStyle = {
+  width: 16,
+  height: 16,
+  cursor: "pointer",
+  accentColor: "#3b82f6",
+};
+
+const selectCheckboxDisabledStyle = {
+  ...selectCheckboxStyle,
+  opacity: 0.35,
+  cursor: "not-allowed",
 };
 
 const tableActionButton = {
@@ -1271,25 +1295,66 @@ function DispatchedItemsPage() {
   const [scanCart, setScanCart] = useState([]);
   
   const filteredRows = useMemo(() => {
-  if (!Array.isArray(rows)) return [];
+    if (!Array.isArray(rows)) return [];
+
+    const q = search.trim().toLowerCase();
+
     return rows.filter((r) => {
       const name = r.name || "";
+      const sku = r.sku || "";
       const client = r.clientName || "";
+      const pdNo = r.pdNo || "";
+      const drawingNo = r.drawingNo || "";
+      const description = r.description || "";
 
       if (
-        search &&
-        !name.toLowerCase().includes(search.toLowerCase()) &&
-        !client.toLowerCase().includes(search.toLowerCase())
-      )
+        q &&
+        !name.toLowerCase().includes(q) &&
+        !sku.toLowerCase().includes(q) &&
+        !client.toLowerCase().includes(q) &&
+        !pdNo.toLowerCase().includes(q) &&
+        !drawingNo.toLowerCase().includes(q) &&
+        !description.toLowerCase().includes(q)
+      ) {
         return false;
+      }
 
-      if (statusFilter !== "ALL" && r.status !== statusFilter)
+      if (statusFilter !== "ALL" && r.status !== statusFilter) {
         return false;
+      }
 
       return true;
     });
   }, [rows, search, statusFilter]);
 
+  const filteredSelectableRows = useMemo(() => {
+    return filteredRows.filter((r) => !!r.zohoItemId);
+  }, [filteredRows]);
+
+  const filteredSelectableIds = useMemo(() => {
+    return filteredSelectableRows.map((r) => r.zohoItemId);
+  }, [filteredSelectableRows]);
+
+  const allFilteredSelected =
+    filteredSelectableIds.length > 0 &&
+    filteredSelectableIds.every((id) => selectionModel.includes(id));
+
+  const someFilteredSelected =
+    filteredSelectableIds.length > 0 &&
+    filteredSelectableIds.some((id) => selectionModel.includes(id));
+
+  const toggleSelectAllFiltered = (checked) => {
+    if (checked) {
+      setSelectionModel((prev) =>
+        Array.from(new Set([...prev, ...filteredSelectableIds]))
+      );
+    } else {
+      setSelectionModel((prev) =>
+        prev.filter((id) => !filteredSelectableIds.includes(id))
+      );
+    }
+  };
+  
   const paginatedRows = useMemo(() => {
     const start = (pageNo - 1) * pageSize;
 
@@ -1299,10 +1364,10 @@ function DispatchedItemsPage() {
     );
   }, [filteredRows, pageNo, pageSize]);
 
-  const totalPages =
-    Math.ceil(
-      filteredRows.length / pageSize
-    );
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / pageSize)
+  );
 	
   useEffect(() => {
     console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
@@ -1312,6 +1377,10 @@ function DispatchedItemsPage() {
   useEffect(() => {
     setPageNo(1);
   }, [pageSize]);
+  
+  useEffect(() => {
+    setPageNo(1);
+  }, [search, statusFilter, groupBy]);
   
   useEffect(() => {
     const maxPage =
@@ -1788,64 +1857,71 @@ function DispatchedItemsPage() {
     "READY_TO_DISPATCH",
     "WAREHOUSE_RETURN_REQUESTED" // optional if needed
   ];
-
-  const readyRows = useMemo(() => {
-    return rows.filter(r => selectableStatuses.includes(r.status));
-  }, [rows]);
   
   const columns = [
 	{
 	  field: "select",
 	  headerName: "",
-	  width: 60,
+	  width: 70,
 	  sortable: false,
 
 	  renderHeader: () => {
-	    const allSelected =
-	      readyRows.length > 0 &&
-	      readyRows.every(r => selectionModel.includes(r.zohoItemId));
-
 	    return (
-	      <input
-	        type="checkbox"
-	        checked={allSelected}
-	        onChange={(e) => {
-	          if (e.target.checked) {
-	            setSelectionModel(readyRows.map(r => r.zohoItemId));
-	          } else {
-	            setSelectionModel([]);
+	      <Box sx={selectHeaderCellSx}>
+	        <input
+	          type="checkbox"
+	          ref={(el) => {
+	            if (el) {
+	              el.indeterminate = someFilteredSelected && !allFilteredSelected;
+	            }
+	          }}
+	          checked={allFilteredSelected}
+	          disabled={filteredSelectableIds.length === 0}
+	          title="Select all filtered rows"
+	          style={
+	            filteredSelectableIds.length === 0
+	              ? selectCheckboxDisabledStyle
+	              : selectCheckboxStyle
 	          }
-	        }}
-	      />
+	          onChange={(e) => {
+	            toggleSelectAllFiltered(e.target.checked);
+	          }}
+	        />
+	      </Box>
 	    );
-	  }, 
+	  },
 
 	  renderCell: (params) => {
 	    const id = params.row.zohoItemId;
-		const isReady = selectableStatuses.includes(params.row.status);
-		
-	    return (
-	      <input
-	        type="checkbox"
-	        disabled={!isReady}
-	        checked={selectionModel.includes(id)}
-	        onChange={(e) => {
-	          if (!isReady) return;
+	    const isSelectable = !!id;
 
-	          if (e.target.checked) {
-				setSelectionModel(prev =>
-				  prev.includes(id) ? prev : [...prev, id]
-				);
-	          } else {
-	            setSelectionModel(prev =>
-	              prev.filter(item => item !== id)
-	            );
+	    return (
+	      <Box sx={selectHeaderCellSx}>
+	        <input
+	          type="checkbox"
+	          disabled={!isSelectable}
+	          checked={isSelectable && selectionModel.includes(id)}
+	          style={
+	            isSelectable
+	              ? selectCheckboxStyle
+	              : selectCheckboxDisabledStyle
 	          }
-	        }}
-			
-	      />
+	          onChange={(e) => {
+	            if (!isSelectable) return;
+
+	            if (e.target.checked) {
+	              setSelectionModel((prev) =>
+	                prev.includes(id) ? prev : [...prev, id]
+	              );
+	            } else {
+	              setSelectionModel((prev) =>
+	                prev.filter((item) => item !== id)
+	              );
+	            }
+	          }}
+	        />
+	      </Box>
 	    );
-		
 	  },
 	},
 	{
@@ -1903,6 +1979,21 @@ function DispatchedItemsPage() {
 	      </Box>
 	    );
 	  },
+	},
+	{
+	  field: "sku",
+	  headerName: "SKU",
+	  width: 280,
+
+	  renderHeader: () => (
+	    <span>SKU</span>
+	  ),
+
+	  renderCell: (params) => (
+	    <span style={simpleMonoText} title={params.value}>
+	      {params.value || "—"}
+	    </span>
+	  ),
 	},
 	{
 	  field: "pdNo",
@@ -2574,23 +2665,27 @@ function DispatchedItemsPage() {
 
 		
 		<Box sx={tableWrapper}>
-		  <div
-		    style={{
-		      minWidth: "1900px"
-		    }}
-		  >
+		<div
+		  style={{
+		    width: "max-content",
+		    minWidth: "100%",
+		  }}
+		>
 		
-		  <div style={tableHeader}>
-		    <div>Select</div>
-		    <div>Item Name</div>
-		    <div>PD No</div>
-		    <div>DWG No</div>
-		    <div>Description</div>
-		    <div>Stock</div>
-		    <div>Client</div>
-		    <div>Status</div>
-		    <div>Actions</div>
+		<div style={tableHeader}>
+		  <div>
+		    {columns[0].renderHeader()}
 		  </div>
+		  <div>Item Name</div>
+		  <div>SKU</div>
+		  <div>PD No</div>
+		  <div>DWG No</div>
+		  <div>Description</div>
+		  <div>Stock</div>
+		  <div>Client</div>
+		  <div>Status</div>
+		  <div>Actions</div>
+		</div>
 
 		  <div style={tableBody}>
 
@@ -2601,56 +2696,63 @@ function DispatchedItemsPage() {
 				  style={tableRow}
 				>
 
-				  <div>
-				    {columns[0].renderCell({ row })}
-				  </div>
+				<div>
+				  {columns[0].renderCell({ row })}
+				</div>
 
-				  <div>
-				    {columns[1].renderCell({ row })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[1].renderCell({ row })}
+				</div>
 
-				  <div>
-				    {columns[2].renderCell({
-				      value: row.pdNo,
-				      row
-				    })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[2].renderCell({
+				    value: row.sku,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[3].renderCell({
-				      value: row.drawingNo,
-				      row
-				    })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[3].renderCell({
+				    value: row.pdNo,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[4].renderCell({
-				      value: row.description,
-				      row
-				    })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[4].renderCell({
+				    value: row.drawingNo,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[5].renderCell({
-				      value: row.stock,
-				      row
-				    })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[5].renderCell({
+				    value: row.description,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[6].renderCell({
-				      value: row.clientName,
-				      row
-				    })}
-				  </div>
+				<div>
+				  {columns[6].renderCell({
+				    value: row.stock,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[7].renderCell({ row })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[7].renderCell({
+				    value: row.clientName,
+				    row,
+				  })}
+				</div>
 
-				  <div>
-				    {columns[8].renderCell({ row })}
-				  </div>
+				<div style={tableCellWrap}>
+				  {columns[8].renderCell({ row })}
+				</div>
+
+				<div style={tableCellWrap}>
+				  {columns[9].renderCell({ row })}
+				</div>
 
 				</div>
 
@@ -2854,6 +2956,11 @@ function DispatchedItemsPage() {
 		  {/* TEXT */}
 		  <span style={{ fontWeight: 600 }}>
 		    {selectionModel.length} item{selectionModel.length > 1 ? "s" : ""} selected
+		    {search || statusFilter !== "ALL" ? (
+		      <span style={{ color: "#93c5fd", marginLeft: 8 }}>
+		        from filtered result
+		      </span>
+		    ) : null}
 		  </span>
 
 		  {/* 🔵 BULK CHALAAN */}
