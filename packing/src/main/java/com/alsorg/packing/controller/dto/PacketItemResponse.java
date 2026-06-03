@@ -22,6 +22,7 @@ public class PacketItemResponse {
     private String remarks;
     private UUID masterItemId;
     private int totalPackets;
+    private String createdBy;
 
     public PacketItemResponse() {
     }
@@ -168,5 +169,13 @@ public class PacketItemResponse {
 
 		public void setTotalPackets(int totalPackets) {
 			this.totalPackets = totalPackets;
+		}
+
+		public String getCreatedBy() {
+			return createdBy;
+		}
+
+		public void setCreatedBy(String createdBy) {
+			this.createdBy = createdBy;
 		}
 }

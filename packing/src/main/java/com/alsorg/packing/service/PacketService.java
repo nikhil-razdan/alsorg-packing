@@ -175,7 +175,12 @@ public class PacketService {
     }
     
     @Transactional
-    public List<PacketItem> createItemWithPackets(CreateItemRequest req) {
+    public List<PacketItem> createItemWithPackets(
+            CreateItemRequest req,
+            String createdBy
+    ) {
+        String actor = safeActor(createdBy);
+        LocalDateTime now = LocalDateTime.now();
 
         // 🔥 1. CREATE DUMMY COMPANY (TEMP FIX)
         Company company = companyRepository.findAll()
@@ -201,8 +206,8 @@ public class PacketService {
         packet.setCompany(company); // ✅ REQUIRED
         packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
         packet.setStatus(PacketStatus.CREATED);
-        packet.setCreatedBy("SYSTEM");
-        packet.setCreatedAt(LocalDateTime.now());
+        packet.setCreatedBy(actor);
+        packet.setCreatedAt(now);
         packet.setStickerGenerated(false);
 
         packet = packetRepository.save(packet);
@@ -265,6 +270,7 @@ public class PacketService {
             item.setQuantity(1);
             item.setLocation("FLOOR");
             item.setStatus("CREATED");
+            item.setCreatedBy(actor);
 
             items.add(item);
         }
@@ -410,7 +416,21 @@ public class PacketService {
     }
     
     @Transactional
-    public List<PacketItem> addPackets(UUID masterItemId, CreateItemRequest req) {
+    public List<PacketItem> addPackets(
+            UUID masterItemId,
+            CreateItemRequest req
+    ) {
+        return addPackets(masterItemId, req, "SYSTEM");
+    }
+    
+    @Transactional
+    public List<PacketItem> addPackets(
+            UUID masterItemId,
+            CreateItemRequest req,
+            String createdBy
+    ) {
+        String actor = safeActor(createdBy);
+        LocalDateTime now = LocalDateTime.now();
 
         MasterItem master = masterItemRepository.findById(masterItemId)
                 .orElseThrow(() -> new RuntimeException("Master item not found"));
@@ -427,8 +447,8 @@ public class PacketService {
         packet.setCompany(company);
         packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
         packet.setStatus(PacketStatus.CREATED);
-        packet.setCreatedBy("SYSTEM");
-        packet.setCreatedAt(LocalDateTime.now());
+        packet.setCreatedBy(actor);
+        packet.setCreatedAt(now);
         packet.setStickerGenerated(false);
 
         packet = packetRepository.save(packet);
@@ -491,6 +511,7 @@ public class PacketService {
             item.setRemarks(remark);
             item.setSku(sku);
             item.setStatus("CREATED");
+            item.setCreatedBy(actor);
 
             items.add(item);
         }
@@ -500,6 +521,16 @@ public class PacketService {
     
     @Transactional
     public PacketItem createCustomPacket(CreateItemRequest req) {
+        return createCustomPacket(req, "SYSTEM");
+    }
+    
+    @Transactional
+    public PacketItem createCustomPacket(
+            CreateItemRequest req,
+            String createdBy
+    ) {
+        String actor = safeActor(createdBy);
+        LocalDateTime now = LocalDateTime.now();
 
         Company company = companyRepository.findAll()
                 .stream()
@@ -524,8 +555,8 @@ public class PacketService {
         packet.setCompany(company);
         packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
         packet.setStatus(PacketStatus.CREATED);
-        packet.setCreatedBy("SYSTEM");
-        packet.setCreatedAt(LocalDateTime.now());
+        packet.setCreatedBy(actor);
+        packet.setCreatedAt(now);
         packet.setStickerGenerated(false);
 
         packet = packetRepository.save(packet);
@@ -560,12 +591,27 @@ public class PacketService {
         item.setSku(req.pdNo + "/" + cleanDwg + "/Pkt-" + packetNo);
 
         item.setStatus("CREATED");
+        item.setCreatedBy(actor);
 
         return packetItemRepository.save(item);
     }
     
     @Transactional
-    public PacketItem addCustomPacket(UUID masterItemId, CreateItemRequest req) {
+    public PacketItem addCustomPacket(
+            UUID masterItemId,
+            CreateItemRequest req
+    ) {
+        return addCustomPacket(masterItemId, req, "SYSTEM");
+    }
+    
+    @Transactional
+    public PacketItem addCustomPacket(
+            UUID masterItemId,
+            CreateItemRequest req,
+            String createdBy
+    ) {
+        String actor = safeActor(createdBy);
+        LocalDateTime now = LocalDateTime.now();
 
         MasterItem master = masterItemRepository.findById(masterItemId)
                 .orElseThrow(() -> new RuntimeException("Master item not found"));
@@ -580,8 +626,8 @@ public class PacketService {
         packet.setCompany(company);
         packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
         packet.setStatus(PacketStatus.CREATED);
-        packet.setCreatedBy("SYSTEM");
-        packet.setCreatedAt(LocalDateTime.now());
+        packet.setCreatedBy(actor);
+        packet.setCreatedAt(now);
         packet.setStickerGenerated(false);
 
         packet = packetRepository.save(packet);
@@ -616,6 +662,7 @@ public class PacketService {
         item.setSku(master.getPdNo() + "/" + cleanDwg + "/Pkt-" + packetNo);
 
         item.setStatus("CREATED");
+        item.setCreatedBy(actor);
 
         return packetItemRepository.save(item);
     }
@@ -709,5 +756,11 @@ public class PacketService {
         }
 
         return weight + " kg";
+    }
+    
+    private String safeActor(String username) {
+        return username != null && !username.isBlank()
+                ? username.trim()
+                : "SYSTEM";
     }
 }

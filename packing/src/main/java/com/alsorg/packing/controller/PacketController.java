@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.alsorg.packing.security.JwtUtil;
 
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpHeaders;
@@ -172,9 +173,14 @@ public class PacketController {
     }
     
     @PostMapping("/create")
-    public ResponseEntity<?> createItem(@RequestBody CreateItemRequest req) {
+    public ResponseEntity<?> createItem(
+            @RequestBody CreateItemRequest req,
+            @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        String createdBy = currentUsernameFromTokenOrSecurity(auth);
 
-        List<PacketItem> items = packetService.createItemWithPackets(req);
+        List<PacketItem> items =
+                packetService.createItemWithPackets(req, createdBy);
 
         return ResponseEntity.ok(
                 items.stream().map(PacketItem::getId).toList()
@@ -209,6 +215,7 @@ public class PacketController {
                     dto.setDimensions(item.getDimensions());
                     dto.setWeight(item.getWeight());
                     dto.setRemarks(item.getRemarks());
+                    dto.setCreatedBy(item.getCreatedBy());
                     dto.setStickerNumber(item.getStickerNumber());
 
                     if (item.getMasterItem() != null) {
@@ -224,14 +231,17 @@ public class PacketController {
     @PostMapping("/add-more/{masterItemId}")
     public ResponseEntity<?> addMorePackets(
             @PathVariable UUID masterItemId,
-            @RequestBody CreateItemRequest req
+            @RequestBody CreateItemRequest req,
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
+        if (req.getNumberOfPackets() <= 0) {
+            throw new RuntimeException("Invalid packet count");
+        }
 
-    	if (req.getNumberOfPackets() <= 0) {
-    	    throw new RuntimeException("Invalid packet count");
-    	}
+        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+
         return ResponseEntity.ok(
-            packetService.addPackets(masterItemId, req)
+                packetService.addPackets(masterItemId, req, createdBy)
         );
     }
     
@@ -239,10 +249,11 @@ public class PacketController {
     public ResponseEntity<byte[]> generateStickerForItem(
             @PathVariable UUID itemId,
             @RequestParam String factoryFloor,
-            @RequestParam(defaultValue = "true") boolean showCompanyHeader
+            @RequestParam(defaultValue = "true") boolean showCompanyHeader,
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
 
-        String generatedBy = currentUsernameOrSystem();
+        String generatedBy = currentUsernameFromTokenOrSecurity(auth);
 
         byte[] pdf = packetService.generateStickerForPacketItem(
                 itemId,
@@ -270,17 +281,27 @@ public class PacketController {
     }
     
     @PostMapping("/create-custom")
-    public ResponseEntity<?> createCustom(@RequestBody CreateItemRequest req) {
-        return ResponseEntity.ok(packetService.createCustomPacket(req));
+    public ResponseEntity<?> createCustom(
+            @RequestBody CreateItemRequest req,
+            @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+
+        return ResponseEntity.ok(
+                packetService.createCustomPacket(req, createdBy)
+        );
     }
 
     @PostMapping("/add-custom/{masterItemId}")
     public ResponseEntity<?> addCustom(
             @PathVariable UUID masterItemId,
-            @RequestBody CreateItemRequest req
+            @RequestBody CreateItemRequest req,
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
+        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+
         return ResponseEntity.ok(
-                packetService.addCustomPacket(masterItemId, req)
+                packetService.addCustomPacket(masterItemId, req, createdBy)
         );
     }
     
@@ -291,23 +312,46 @@ public class PacketController {
         return ResponseEntity.ok("Item deleted");
     }
     
-    private String currentUsernameOrSystem() {
+    
+    private String currentUsernameFromTokenOrSecurity(String auth) {
 
+        /*
+         * FIRST PRIORITY:
+         * Read username directly from JWT token.
+         */
+        if (auth != null && auth.startsWith("Bearer ")) {
+            try {
+                String token = auth.replace("Bearer ", "").trim();
+
+                String username = JwtUtil.getUsername(token);
+
+                if (username != null
+                        && !username.isBlank()
+                        && !"anonymousUser".equalsIgnoreCase(username)) {
+                    return username.trim();
+                }
+            } catch (Exception e) {
+                System.out.println("Could not extract username from JWT: " + e.getMessage());
+            }
+        }
+
+        /*
+         * FALLBACK:
+         * Spring Security context.
+         */
         Authentication authentication =
                 SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication == null) {
-            return "SYSTEM";
+        if (authentication != null) {
+            String username = authentication.getName();
+
+            if (username != null
+                    && !username.isBlank()
+                    && !"anonymousUser".equalsIgnoreCase(username)) {
+                return username.trim();
+            }
         }
 
-        String username = authentication.getName();
-
-        if (username == null
-                || username.isBlank()
-                || "anonymousUser".equalsIgnoreCase(username)) {
-            return "SYSTEM";
-        }
-
-        return username;
+        return "SYSTEM";
     }
 }
