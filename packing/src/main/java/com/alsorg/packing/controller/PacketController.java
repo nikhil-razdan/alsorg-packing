@@ -22,7 +22,8 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.service.PacketService;
 import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
-import com.alsorg.packing.security.JwtUtil;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @RestController
 @RequestMapping("/api/packets")
@@ -156,34 +157,15 @@ public class PacketController {
     // STICKER GENERATION (FINAL FIX)
     // =====================================================
 
-    @PostMapping("/items/{itemId}/generate-sticker")
-    public ResponseEntity<byte[]> generateStickerForItem(
-            @PathVariable UUID itemId,
-            @RequestParam String factoryFloor,
-            @RequestParam(defaultValue = "true") boolean showCompanyHeader,
-            @RequestHeader("Authorization") String auth
-    ) {
-        String token = extractToken(auth);
+    @PostMapping("/zoho/items/{zohoItemId}/generate-sticker")
+    public ResponseEntity<byte[]> generateSticker(@PathVariable String zohoItemId, @RequestParam String factoryFloor )
+            throws IOException {
 
-        String generatedBy = JwtUtil.getUsername(token);
-        String role = JwtUtil.getRole(token);
-
-        if (!"ADMIN".equalsIgnoreCase(role)
-                && !"PACKING".equalsIgnoreCase(role)) {
-            return ResponseEntity.status(403).build();
-        }
-
-        byte[] pdf = packetService.generateStickerForPacketItem(
-                itemId,
-                factoryFloor,
-                showCompanyHeader,
-                generatedBy
-        );
-
+        byte[] pdf = zohoStickerService.generateStickerForZohoItem(zohoItemId, factoryFloor);
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=STICKER_" + itemId + ".pdf"
+                        "inline; filename=STICKER_" + zohoItemId + ".pdf"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
@@ -202,13 +184,13 @@ public class PacketController {
     @GetMapping("/items")
     public List<PacketItemResponse> getAllItems() {
 
-    	return packetItemRepository.findAll()
-    	        .stream()
-    	        .filter(item -> 
-    	        item.getStatus().equals("CREATED") ||
-    	        item.getStatus().equals("RESTORED")
-    	    )
-    	        .map(item -> {
+        return packetItemRepository.findAll()
+                .stream()
+                .filter(item ->
+                        "CREATED".equals(item.getStatus()) ||
+                        "RESTORED".equals(item.getStatus())
+                )
+                .map(item -> {
                     PacketItemResponse dto = new PacketItemResponse();
 
                     dto.setItemId(item.getId());
@@ -221,16 +203,19 @@ public class PacketController {
                     dto.setClientName(item.getClientName());
                     dto.setClientAddress(item.getClientAddress());
                     dto.setQuantity(
-                    	    item.getQuantity() != null ? item.getQuantity() : 1
-                    	);
+                            item.getQuantity() != null ? item.getQuantity() : 1
+                    );
                     dto.setDescription(item.getDescription());
                     dto.setDimensions(item.getDimensions());
                     dto.setWeight(item.getWeight());
                     dto.setRemarks(item.getRemarks());
                     dto.setStickerNumber(item.getStickerNumber());
-                    dto.setMasterItemId(item.getMasterItem().getId());
-                    dto.setTotalPackets(item.getMasterItem().getTotalPackets());
-                    
+
+                    if (item.getMasterItem() != null) {
+                        dto.setMasterItemId(item.getMasterItem().getId());
+                        dto.setTotalPackets(item.getMasterItem().getTotalPackets());
+                    }
+
                     return dto;
                 })
                 .toList();
@@ -257,15 +242,20 @@ public class PacketController {
             @RequestParam(defaultValue = "true") boolean showCompanyHeader
     ) {
 
-    	byte[] pdf = packetService.generateStickerForPacketItem(
-    	        itemId,
-    	        factoryFloor,
-    	        showCompanyHeader
-    	);
+        String generatedBy = currentUsernameOrSystem();
+
+        byte[] pdf = packetService.generateStickerForPacketItem(
+                itemId,
+                factoryFloor,
+                showCompanyHeader,
+                generatedBy
+        );
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=STICKER_" + itemId + ".pdf")
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=STICKER_" + itemId + ".pdf"
+                )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
@@ -301,11 +291,23 @@ public class PacketController {
         return ResponseEntity.ok("Item deleted");
     }
     
-    private String extractToken(String auth) {
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            throw new RuntimeException("Missing or invalid Authorization header");
+    private String currentUsernameOrSystem() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) {
+            return "SYSTEM";
         }
 
-        return auth.replace("Bearer ", "");
+        String username = authentication.getName();
+
+        if (username == null
+                || username.isBlank()
+                || "anonymousUser".equalsIgnoreCase(username)) {
+            return "SYSTEM";
+        }
+
+        return username;
     }
 }
