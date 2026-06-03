@@ -91,8 +91,7 @@ public class DashboardReportService {
                 .plusDays(1)
                 .atStartOfDay();
 
-        String normalizedType =
-                type != null ? type.trim().toLowerCase() : "";
+        String normalizedType = normalizeThroughputType(type);
 
         if ("packing".equals(normalizedType)) {
             return repo.fetchTodayPackingByUser(
@@ -111,5 +110,29 @@ public class DashboardReportService {
         throw new IllegalArgumentException(
                 "Invalid throughput type: " + type
         );
+    }
+
+    private String normalizeThroughputType(String type) {
+        if (type == null || type.isBlank()) {
+            return "";
+        }
+
+        String value = type.trim().toLowerCase();
+
+        if (value.equals("packing")
+                || value.equals("packed")
+                || value.equals("sticker")
+                || value.equals("stickers")) {
+            return "packing";
+        }
+
+        if (value.equals("dispatch")
+                || value.equals("dispatched")
+                || value.equals("challan")
+                || value.equals("chalaan")) {
+            return "dispatch";
+        }
+
+        return value;
     }
 }

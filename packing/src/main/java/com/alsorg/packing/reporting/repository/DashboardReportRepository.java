@@ -125,22 +125,13 @@ public class DashboardReportRepository {
     ) {
         return em.createQuery("""
             select new com.alsorg.packing.reporting.dto.DailyThroughputUserDTO(
-                case
-                    when h.generatedBy is null or h.generatedBy = ''
-                    then 'UNKNOWN'
-                    else h.generatedBy
-                end,
+                h.generatedBy,
                 count(h)
             )
             from StickerHistory h
             where h.generatedAt >= :from
               and h.generatedAt < :to
-            group by
-                case
-                    when h.generatedBy is null or h.generatedBy = ''
-                    then 'UNKNOWN'
-                    else h.generatedBy
-                end
+            group by h.generatedBy
             order by count(h) desc
         """, DailyThroughputUserDTO.class)
         .setParameter("from", from)
@@ -154,23 +145,14 @@ public class DashboardReportRepository {
     ) {
         return em.createQuery("""
             select new com.alsorg.packing.reporting.dto.DailyThroughputUserDTO(
-                case
-                    when d.dispatchedBy is null or d.dispatchedBy = ''
-                    then 'UNKNOWN'
-                    else d.dispatchedBy
-                end,
+                d.dispatchedBy,
                 count(d)
             )
             from DispatchedItem d
             where d.status = :status
               and d.dispatchedAt >= :from
               and d.dispatchedAt < :to
-            group by
-                case
-                    when d.dispatchedBy is null or d.dispatchedBy = ''
-                    then 'UNKNOWN'
-                    else d.dispatchedBy
-                end
+            group by d.dispatchedBy
             order by count(d) desc
         """, DailyThroughputUserDTO.class)
         .setParameter("status", ItemDispatchStatus.DISPATCHED)

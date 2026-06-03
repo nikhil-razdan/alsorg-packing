@@ -320,11 +320,13 @@ function DashboardPage() {
 	const [throughputUsers, setThroughputUsers] = useState([]);
 	const [throughputLoading, setThroughputLoading] = useState(false);
 	const [throughputError, setThroughputError] = useState("");
+
 	const role = String(localStorage.getItem("role") || "").toUpperCase();
 
 	const isAdmin =
 	  role === "ADMIN" ||
 	  role === "ROLE_ADMIN";
+	  
 	  
 	const inventoryTotal =
 	   Number(stats.warehouseItems || 0) +
@@ -400,7 +402,7 @@ function DashboardPage() {
       return next;
     });
   };
-  
+
   const loadThroughputUsers = async (type) => {
     if (!isAdmin) return;
 
@@ -411,6 +413,9 @@ function DashboardPage() {
 
     try {
       const data = await fetchDailyThroughputUsers(type);
+
+      console.log("User-wise throughput:", type, data);
+
       setThroughputUsers(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -419,7 +424,6 @@ function DashboardPage() {
       setThroughputLoading(false);
     }
   };
-
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
