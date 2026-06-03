@@ -115,82 +115,6 @@ import InventorySidebar from
     );
   }
 
-  function UserWorkBreakdown({
-    type,
-    users,
-    loading,
-    error,
-  }) {
-    const title =
-      type === "packing"
-        ? "Packing User Performance"
-        : "Dispatch User Performance";
-
-    const total = users.reduce(
-      (sum, user) => sum + Number(user.count || 0),
-      0
-    );
-
-    return (
-      <div style={userBreakdownBox}>
-        <div style={userBreakdownHeader}>
-          <div>
-            <div style={userBreakdownTitle}>{title}</div>
-            <div style={userBreakdownSubtitle}>
-              Today’s user-wise completed work
-            </div>
-          </div>
-
-          <div style={userBreakdownTotal}>
-            <span>Total</span>
-            <strong>{total}</strong>
-          </div>
-        </div>
-
-        {loading && (
-          <div style={userBreakdownEmpty}>
-            Loading user performance...
-          </div>
-        )}
-
-        {!loading && error && (
-          <div style={userBreakdownError}>
-            {error}
-          </div>
-        )}
-
-        {!loading && !error && users.length === 0 && (
-          <div style={userBreakdownEmpty}>
-            No user work found for today.
-          </div>
-        )}
-
-        {!loading && !error && users.length > 0 && (
-          <div style={userRows}>
-            {users.map((user, index) => (
-              <div
-                key={`${user.username}-${index}`}
-                style={userRow}
-              >
-                <div style={userRank}>
-                  {index + 1}
-                </div>
-
-                <div style={userName}>
-                  {user.username || "UNKNOWN"}
-                </div>
-
-                <div style={userCount}>
-                  {Number(user.count || 0)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
 const DonutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
@@ -288,6 +212,91 @@ const normalizeStats = (data) => {
   };
 };
 
+function ThroughputUserModal({
+  open,
+  title,
+  rows = [],
+  loading,
+  error,
+  onClose,
+}) {
+  if (!open) return null;
+
+  const total = rows.reduce(
+    (sum, row) => sum + Number(row.count || 0),
+    0
+  );
+
+  return (
+    <div style={modalOverlay}>
+      <div style={modalCard}>
+        <div style={modalHeader}>
+          <div>
+            <div style={modalTitle}>{title}</div>
+            <div style={modalSubtitle}>
+              Today’s completed work by user
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={modalCloseBtn}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={modalTotalBox}>
+          <span>Total Work</span>
+          <strong>{total}</strong>
+        </div>
+
+        {loading && (
+          <div style={modalEmpty}>
+            Loading user-wise data...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={modalError}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && rows.length === 0 && (
+          <div style={modalEmpty}>
+            No user-wise data found for today.
+          </div>
+        )}
+
+        {!loading && !error && rows.length > 0 && (
+          <div style={modalUserList}>
+            {rows.map((row, index) => (
+              <div
+                key={`${row.username}-${index}`}
+                style={modalUserRow}
+              >
+                <div style={modalRank}>
+                  {index + 1}
+                </div>
+
+                <div style={modalUserName}>
+                  {row.username || "UNKNOWN"}
+                </div>
+
+                <div style={modalCount}>
+                  {Number(row.count || 0)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
 	const [stats, setStats] = useState({
 	  totalItems: 0,
@@ -321,6 +330,15 @@ function DashboardPage() {
 	const [throughputLoading, setThroughputLoading] = useState(false);
 	const [throughputError, setThroughputError] = useState("");
 
+	const [throughputModal, setThroughputModal] = useState({
+	  open: false,
+	  type: null,
+	  title: "",
+	  rows: [],
+	  loading: false,
+	  error: "",
+	});
+
 	const role = String(localStorage.getItem("role") || "").toUpperCase();
 
 	const isAdmin =
@@ -336,9 +354,14 @@ function DashboardPage() {
 	 const finalInventoryTotal =
 	   inventoryTotal || Number(stats.totalItems || 0);
 
-	 const dailyThroughput =
-	   Number(stats.todayStickerGenerated || 0) +
-	   Number(stats.todayChallanGenerated || 0);
+	   const todayPackedItems =
+	     Number(stats.todayStickerGenerated || 0);
+
+	   const todayDispatchedItems =
+	     Number(stats.todayChallanGenerated || 0);
+
+	   const dailyThroughput =
+	     todayPackedItems + todayDispatchedItems;
 	   
 	   const pending =
 	     Number(stats.pendingItems || 0) ||
@@ -402,6 +425,61 @@ function DashboardPage() {
       return next;
     });
   };
+  
+  const openThroughputUserModal = async (type) => {
+    if (!isAdmin) return;
+
+    const title =
+      type === "packing"
+        ? "User-wise Packing Work Today"
+        : "User-wise Dispatch Work Today";
+
+    setThroughputModal({
+      open: true,
+      type,
+      title,
+      rows: [],
+      loading: true,
+      error: "",
+    });
+
+    try {
+      const data = await fetchDailyThroughputUsers(type);
+
+      console.log("Throughput user data:", type, data);
+
+      setThroughputModal({
+        open: true,
+        type,
+        title,
+        rows: Array.isArray(data) ? data : [],
+        loading: false,
+        error: "",
+      });
+    } catch (e) {
+      console.error(e);
+
+      setThroughputModal({
+        open: true,
+        type,
+        title,
+        rows: [],
+        loading: false,
+        error: "Unable to load user-wise data.",
+      });
+    }
+  };
+
+  const closeThroughputUserModal = () => {
+    setThroughputModal({
+      open: false,
+      type: null,
+      title: "",
+      rows: [],
+      loading: false,
+      error: "",
+    });
+  };
 
   const loadThroughputUsers = async (type) => {
     if (!isAdmin) return;
@@ -424,6 +502,7 @@ function DashboardPage() {
       setThroughputLoading(false);
     }
   };
+  
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
@@ -530,12 +609,9 @@ function DashboardPage() {
 				  <div style={detailCard("#06b6d4")}>
 				    <div style={detailHeader}>
 				      <div>
-				        <div style={detailTitle}>
-				          Daily Throughput Details
-				        </div>
-
+				        <div style={detailTitle}>Daily Throughput Details</div>
 				        <div style={detailSubtitle}>
-				          Today’s packing and dispatch movement
+				          Today’s operational movement
 				        </div>
 				      </div>
 
@@ -545,42 +621,49 @@ function DashboardPage() {
 				      </div>
 				    </div>
 
-				    <div style={throughputMiniGrid}>
-				      <ThroughputMiniCard
-				        accent="#34d399"
-				        title="Packed Items"
-				        value={Number(stats.todayStickerGenerated || 0)}
-				        subtle="Sticker Generated Today"
-				        active={throughputType === "packing"}
+				    <div style={detailGrid}>
+				      <button
+				        type="button"
+				        onClick={() => openThroughputUserModal("packing")}
 				        disabled={!isAdmin}
-				        onClick={() => loadThroughputUsers("packing")}
-				      />
+				        style={throughputClickCard("#34d399", isAdmin)}
+				      >
+				        <div style={detailItemLabel}>Packed Items</div>
 
-				      <ThroughputMiniCard
-				        accent="#f59e0b"
-				        title="Dispatched Items"
-				        value={Number(stats.todayChallanGenerated || 0)}
-				        subtle="Challan Generated Today"
-				        active={throughputType === "dispatch"}
+				        <div style={detailItemValue}>
+				          {todayPackedItems}
+				        </div>
+
+				        <div style={detailItemSubtle}>
+				          Sticker Generated Today
+				        </div>
+
+				        <div style={throughputCardHint}>
+				          {isAdmin ? "Click to view user-wise packing" : "Admin only"}
+				        </div>
+				      </button>
+
+				      <button
+				        type="button"
+				        onClick={() => openThroughputUserModal("dispatch")}
 				        disabled={!isAdmin}
-				        onClick={() => loadThroughputUsers("dispatch")}
-				      />
+				        style={throughputClickCard("#f59e0b", isAdmin)}
+				      >
+				        <div style={detailItemLabel}>Dispatched Items</div>
+
+				        <div style={detailItemValue}>
+				          {todayDispatchedItems}
+				        </div>
+
+				        <div style={detailItemSubtle}>
+				          Challan Generated Today
+				        </div>
+
+				        <div style={throughputCardHint}>
+				          {isAdmin ? "Click to view user-wise dispatch" : "Admin only"}
+				        </div>
+				      </button>
 				    </div>
-
-				    {!isAdmin && (
-				      <div style={adminOnlyNote}>
-				        User-wise packing and dispatch performance is visible only to ADMIN.
-				      </div>
-				    )}
-
-				    {isAdmin && throughputType && (
-				      <UserWorkBreakdown
-				        type={throughputType}
-				        users={throughputUsers}
-				        loading={throughputLoading}
-				        error={throughputError}
-				      />
-				    )}
 				  </div>
 				)}
 
@@ -945,6 +1028,14 @@ function DashboardPage() {
 	      fetchLogisticsStats()
 	        .then(setLogistics);
 	    }}
+	  />
+	  <ThroughputUserModal
+	    open={throughputModal.open}
+	    title={throughputModal.title}
+	    rows={throughputModal.rows}
+	    loading={throughputModal.loading}
+	    error={throughputModal.error}
+	    onClose={closeThroughputUserModal}
 	  />
     </div>
   );
@@ -1388,6 +1479,213 @@ const detailItem = {
   border: "1px solid rgba(255,255,255,.06)",
 };
 
+const throughputClickCard = (accent, enabled) => ({
+  padding: 16,
+
+  borderRadius: 18,
+
+  background: "rgba(255,255,255,.04)",
+
+  border: `1px solid ${accent}44`,
+
+  cursor: enabled ? "pointer" : "not-allowed",
+
+  opacity: enabled ? 1 : 0.7,
+
+  textAlign: "left",
+
+  fontFamily: "inherit",
+
+  color: "#fff",
+
+  transition: "all .25s ease",
+});
+
+const throughputCardHint = {
+  marginTop: 10,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "rgba(255,255,255,.68)",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 9999,
+
+  background: "rgba(2,6,23,.72)",
+
+  backdropFilter: "blur(12px)",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  padding: 20,
+};
+
+const modalCard = {
+  width: "min(560px, 100%)",
+
+  borderRadius: 26,
+
+  padding: 22,
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.88))",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 28px 70px rgba(2,6,23,.55)",
+
+  color: "#fff",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 14,
+  marginBottom: 16,
+};
+
+const modalTitle = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const modalSubtitle = {
+  marginTop: 5,
+  fontSize: 13,
+  color: "rgba(255,255,255,.56)",
+};
+
+const modalCloseBtn = {
+  width: 34,
+  height: 34,
+
+  borderRadius: "50%",
+
+  border:
+    "1px solid rgba(255,255,255,.10)",
+
+  background: "rgba(255,255,255,.06)",
+
+  color: "#fff",
+
+  cursor: "pointer",
+
+  fontSize: 22,
+  lineHeight: 1,
+};
+
+const modalTotalBox = {
+  marginBottom: 14,
+
+  padding: "12px 14px",
+
+  borderRadius: 18,
+
+  background: "rgba(59,130,246,.13)",
+
+  border: "1px solid rgba(59,130,246,.22)",
+
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+
+  color: "rgba(255,255,255,.72)",
+
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const modalUserList = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const modalUserRow = {
+  display: "grid",
+  gridTemplateColumns: "42px minmax(0,1fr) auto",
+  alignItems: "center",
+  gap: 12,
+
+  padding: "12px 14px",
+
+  borderRadius: 16,
+
+  background: "rgba(255,255,255,.045)",
+
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const modalRank = {
+  width: 30,
+  height: 30,
+
+  borderRadius: 999,
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  background: "rgba(59,130,246,.16)",
+
+  color: "#93c5fd",
+
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const modalUserName = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 800,
+
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const modalCount = {
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const modalEmpty = {
+  padding: 16,
+
+  borderRadius: 16,
+
+  background: "rgba(255,255,255,.04)",
+
+  color: "rgba(255,255,255,.58)",
+
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const modalError = {
+  padding: 16,
+
+  borderRadius: 16,
+
+  background: "rgba(239,68,68,.10)",
+
+  border: "1px solid rgba(239,68,68,.22)",
+
+  color: "#fca5a5",
+
+  fontSize: 13,
+  fontWeight: 800,
+};
+
 const detailItemLabel = {
   fontSize: 12,
   fontWeight: 800,
@@ -1603,12 +1901,6 @@ const inventoryMain = {
   gap: 18,
 };
 
-const throughputMiniGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 14,
-};
-
 const throughputMiniCard = (
   accent,
   active = false,
@@ -1672,176 +1964,6 @@ const throughputMiniHint = {
   fontSize: 11,
   fontWeight: 900,
   color: "rgba(255,255,255,.72)",
-};
-
-const adminOnlyNote = {
-  marginTop: 14,
-
-  padding: "12px 14px",
-
-  borderRadius: 16,
-
-  background: "rgba(245,158,11,.10)",
-
-  border: "1px solid rgba(245,158,11,.22)",
-
-  color: "#fbbf24",
-
-  fontSize: 12,
-
-  fontWeight: 800,
-};
-
-const userBreakdownBox = {
-  marginTop: 16,
-
-  padding: 16,
-
-  borderRadius: 20,
-
-  background: "rgba(15,23,42,.58)",
-
-  border: "1px solid rgba(255,255,255,.07)",
-};
-
-const userBreakdownHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 14,
-  flexWrap: "wrap",
-};
-
-const userBreakdownTitle = {
-  fontSize: 17,
-  fontWeight: 900,
-  color: "#fff",
-};
-
-const userBreakdownSubtitle = {
-  marginTop: 4,
-  fontSize: 12,
-  color: "rgba(255,255,255,.56)",
-};
-
-const userBreakdownTotal = {
-  minWidth: 100,
-
-  padding: "8px 12px",
-
-  borderRadius: 14,
-
-  background: "rgba(255,255,255,.05)",
-
-  border: "1px solid rgba(255,255,255,.07)",
-
-  display: "flex",
-
-  flexDirection: "column",
-
-  gap: 3,
-
-  color: "rgba(255,255,255,.62)",
-
-  fontSize: 11,
-
-  fontWeight: 800,
-};
-
-const userRows = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
-
-const userRow = {
-  display: "grid",
-
-  gridTemplateColumns: "42px minmax(0,1fr) auto",
-
-  alignItems: "center",
-
-  gap: 12,
-
-  padding: "12px 14px",
-
-  borderRadius: 16,
-
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025))",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-};
-
-const userRank = {
-  width: 30,
-  height: 30,
-
-  borderRadius: 999,
-
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-
-  background: "rgba(59,130,246,.16)",
-
-  color: "#93c5fd",
-
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const userName = {
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 800,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const userCount = {
-  minWidth: 44,
-
-  textAlign: "right",
-
-  color: "#fff",
-
-  fontSize: 18,
-
-  fontWeight: 900,
-};
-
-const userBreakdownEmpty = {
-  padding: "14px",
-
-  borderRadius: 16,
-
-  background: "rgba(255,255,255,.035)",
-
-  color: "rgba(255,255,255,.58)",
-
-  fontSize: 13,
-
-  fontWeight: 700,
-};
-
-const userBreakdownError = {
-  padding: "14px",
-
-  borderRadius: 16,
-
-  background: "rgba(239,68,68,.10)",
-
-  border: "1px solid rgba(239,68,68,.22)",
-
-  color: "#fca5a5",
-
-  fontSize: 13,
-
-  fontWeight: 800,
 };
 
 export default DashboardPage;
