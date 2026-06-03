@@ -38,10 +38,6 @@ public class StickerHistoryController {
         String username = JwtUtil.getUsername(token);
         String role = JwtUtil.getRole(token);
 
-        /*
-         * ADMIN can see all or filter by user.
-         * PACKING/non-admin sees only own generated sticker history.
-         */
         if ("ADMIN".equalsIgnoreCase(role)) {
 
             if (generatedBy != null
@@ -63,7 +59,6 @@ public class StickerHistoryController {
         );
     }
 
-
     @GetMapping("/generated-history/users")
     public ResponseEntity<List<String>> generatedHistoryUsers(
             @RequestHeader("Authorization") String auth
@@ -79,9 +74,7 @@ public class StickerHistoryController {
             );
         }
 
-        return ResponseEntity.ok(
-                List.of(username)
-        );
+        return ResponseEntity.ok(List.of(username));
     }
     
     @GetMapping("/{itemId}/history")
