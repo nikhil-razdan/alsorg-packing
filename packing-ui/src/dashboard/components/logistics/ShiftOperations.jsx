@@ -35,6 +35,21 @@ const statusOptions = [
   "CANCELLED",
 ];
 
+const getShiftSearchText = (shift) => {
+  return [
+    shift.driver?.name,
+    shift.vehicle?.vehicleNumber,
+    formatShiftDate(shift),
+    formatShiftTimeRange(shift),
+    shift.totalTrips,
+    shift.routeCategory,
+    normalizeStatus(shift.status),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+};
+
 function ShiftOperations({
   showAlert = () => {},
 }) {
@@ -61,6 +76,9 @@ function ShiftOperations({
 
 	const [bulkStatus, setBulkStatus] =
 	  useState("");
+	  
+	  const [search, setSearch] =
+	    useState("");
 	  
   const load = async () => {
     try {
@@ -193,9 +211,23 @@ function ShiftOperations({
 	  ].includes(status);
 	});
 
+	const searchTerm =
+	  search.trim().toLowerCase();
+
+	const filteredActiveShifts =
+	  searchTerm.length === 0
+	    ? activeShifts
+	    : activeShifts.filter((s) =>
+	        getShiftSearchText(s).includes(
+	          searchTerm
+	        )
+	      );
+
 	const totalPages = Math.max(
 	  1,
-	  Math.ceil(activeShifts.length / pageSize)
+	  Math.ceil(
+	    filteredActiveShifts.length / pageSize
+	  )
 	);
 
 	const currentPage = Math.min(
@@ -204,7 +236,7 @@ function ShiftOperations({
 	);
 
 	const paginatedShifts =
-	  activeShifts.slice(
+	  filteredActiveShifts.slice(
 	    (currentPage - 1) * pageSize,
 	    currentPage * pageSize
 	  );
@@ -324,6 +356,16 @@ function ShiftOperations({
       </div>
 	  
 	  <div style={bulkBar}>
+	  <input
+	    value={search}
+	    onChange={(e) => {
+	      setSearch(e.target.value);
+	      setPageNo(1);
+	      setSelectedIds([]);
+	    }}
+	    placeholder="Search driver, vehicle, date, route, status..."
+	    style={searchInput}
+	  />
 	    <div style={bulkInfo}>
 	      Selected:{" "}
 	      <strong>{selectedIds.length}</strong>
@@ -412,7 +454,9 @@ function ShiftOperations({
         {!loading &&
           paginatedShifts.length === 0 && (
             <div style={emptyRow}>
-              No shifts found
+			{search
+			  ? "No shifts matched your search"
+			  : "No shifts found"}
             </div>
           )}
 
@@ -530,7 +574,7 @@ function ShiftOperations({
 	    setPageNo={setPageNo}
 	    pageSize={pageSize}
 	    setPageSize={setPageSize}
-	    totalItems={activeShifts.length}
+	    totalItems={filteredActiveShifts.length}
 	  />
 
       {createOpen && (
@@ -696,6 +740,19 @@ const lateBadge = {
     "1px solid rgba(245,158,11,.28)",
   fontSize: 10,
   fontWeight: 900,
+};
+
+const searchInput = {
+  height: 38,
+  minWidth: 280,
+  borderRadius: 12,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background: "#111827",
+  color: "#fff",
+  padding: "0 12px",
+  outline: "none",
+  fontWeight: 700,
 };
 
 const bulkBar = {

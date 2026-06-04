@@ -32,6 +32,21 @@ const normalizeStatus = (status) =>
 	  "COMPLETED",
 	  "CANCELLED",
 	];
+	
+	const getShiftSearchText = (shift) => {
+	  return [
+	    shift.driver?.name,
+	    shift.vehicle?.vehicleNumber,
+	    formatShiftDate(shift),
+	    formatShiftTimeRange(shift),
+	    shift.totalTrips,
+	    shift.routeCategory,
+	    normalizeStatus(shift.status),
+	  ]
+	    .filter(Boolean)
+	    .join(" ")
+	    .toLowerCase();
+	};
 
 function ShiftHistory({
   showAlert = () => {},
@@ -53,6 +68,9 @@ function ShiftHistory({
 
 	const [bulkStatus, setBulkStatus] =
 	  useState("");
+	  
+	  const [search, setSearch] =
+	    useState("");
 
   const loadHistory = async () => {
     try {
@@ -123,9 +141,23 @@ function ShiftHistory({
     ].includes(status);
   });
 
+  const searchTerm =
+    search.trim().toLowerCase();
+
+  const filteredHistoryRows =
+    searchTerm.length === 0
+      ? historyRows
+      : historyRows.filter((s) =>
+          getShiftSearchText(s).includes(
+            searchTerm
+          )
+        );
+
   const totalPages = Math.max(
     1,
-    Math.ceil(historyRows.length / pageSize)
+    Math.ceil(
+      filteredHistoryRows.length / pageSize
+    )
   );
 
   const currentPage = Math.min(
@@ -134,7 +166,7 @@ function ShiftHistory({
   );
 
   const paginatedRows =
-    historyRows.slice(
+    filteredHistoryRows.slice(
       (currentPage - 1) * pageSize,
       currentPage * pageSize
     );
@@ -287,6 +319,16 @@ function ShiftHistory({
         </div>
       </div>
 	  <div style={bulkBar}>
+	  <input
+	    value={search}
+	    onChange={(e) => {
+	      setSearch(e.target.value);
+	      setPageNo(1);
+	      setSelectedIds([]);
+	    }}
+	    placeholder="Search driver, vehicle, date, route, status..."
+	    style={searchInput}
+	  />
 	    <div style={bulkInfo}>
 	      Selected:{" "}
 	      <strong>{selectedIds.length}</strong>
@@ -373,7 +415,9 @@ function ShiftHistory({
         {!loading &&
           paginatedRows.length === 0 && (
             <div style={emptyRow}>
-              No completed or cancelled shift history found
+			{search
+			  ? "No shift history matched your search"
+			  : "No completed or cancelled shift history found"}
             </div>
           )}
 
@@ -470,7 +514,7 @@ function ShiftHistory({
 	    setPageNo={setPageNo}
 	    pageSize={pageSize}
 	    setPageSize={setPageSize}
-	    totalItems={historyRows.length}
+	    totalItems={filteredHistoryRows.length}
 	  />
     </div>
   );
@@ -536,6 +580,19 @@ const emptyRow = {
 
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
+};
+
+const searchInput = {
+  height: 38,
+  minWidth: 280,
+  borderRadius: 12,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background: "#111827",
+  color: "#fff",
+  padding: "0 12px",
+  outline: "none",
+  fontWeight: 700,
 };
 
 const dateText = {
