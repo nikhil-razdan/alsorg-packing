@@ -769,8 +769,6 @@ function DashboardPage() {
 
 				<InventoryReports />
 
-				<InventoryReports />
-
 				{localStorage.getItem("role") === "ADMIN" && (
 				  <div style={adminPanel}>
 				    <ScheduledReports />
