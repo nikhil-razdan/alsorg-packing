@@ -543,6 +543,36 @@ function ZohoItemsPage() {
       message,
     });
   };
+  
+  const readApiErrorMessage = async (res) => {
+    const text = await res.text();
+
+    if (!text) {
+      return "Something went wrong";
+    }
+
+    try {
+      const json = JSON.parse(text);
+      return json.message || json.error || text;
+    } catch {
+      return text;
+    }
+  };
+  
+  const handleApiError = async (res, fallbackMessage) => {
+    const message = await readApiErrorMessage(res);
+
+    const isDuplicateSku =
+      message?.toLowerCase().includes("duplicate sku") ||
+      message?.toLowerCase().includes("duplicate");
+
+    showUiAlert(
+      "error",
+      isDuplicateSku
+        ? message
+        : `${fallbackMessage}: ${message}`
+    );
+  };
 
   const deletePacketItem = async () => {
     const row = deleteTarget;
@@ -637,9 +667,9 @@ function ZohoItemsPage() {
   useEffect(() => {
     if (!uiAlert) return;
 
-    const timer = setTimeout(() => {
-      setUiAlert(null);
-    }, 3500);
+	const timer = setTimeout(() => {
+	  setUiAlert(null);
+	}, uiAlert?.type === "error" ? 6500 : 3500);
 
     return () => clearTimeout(timer);
   }, [uiAlert]);
@@ -1155,11 +1185,16 @@ function ZohoItemsPage() {
 
 	          const contentType = genRes.headers.get("content-type");
 
-	          if (!contentType?.includes("pdf")) {
-	            const text = await genRes.text();
-	            console.error("NOT PDF:", text);
-	            throw new Error("Invalid response");
-	          }
+			  if (!genRes.ok || !contentType?.includes("pdf")) {
+			    const message = await readApiErrorMessage(genRes);
+
+			    showUiAlert(
+			      "error",
+			      message || "Failed to generate sticker"
+			    );
+
+			    return;
+			  }
 
 			  const blob = await genRes.blob();
 			  const url = URL.createObjectURL(blob);
@@ -1171,12 +1206,12 @@ function ZohoItemsPage() {
 			  if (generatedHistoryOpen) {
 			    await fetchGeneratedHistory(generatedHistoryUserFilter);
 			  }
-	        } catch (e) {
-	          console.error(e);
-	          alert("Failed to generate sticker");
-	        } finally {
-	          setGenerating(false);
-	        }
+		  } catch (e) {
+		    console.error(e);
+		    showUiAlert("error", "Failed to generate sticker");
+		  } finally {
+		    setGenerating(false);
+		  }
 	      }}
 	      sx={{
 	        ...premiumButton,
@@ -1288,33 +1323,41 @@ function ZohoItemsPage() {
 	          onClick={async () => {
 	            if (!validatePackets()) return;
 
-	            await fetch(`${API_BASE_URL}/api/packets/create`, {
-	              method: "POST",
-	              headers: {
-	                "Content-Type": "application/json",
-	                Authorization: `Bearer ${localStorage.getItem("token")}`,
-	              },
-	              body: JSON.stringify({
-	                ...form,
-	                descriptions,
-	                weights,
-	                dimensionsList: dimensionsList.map((d) =>
-	                  d?.l && d?.b && d?.h
-	                    ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-	                    : ""
-	                ),
-	                remarksList,
-	              }),
-	            });
+				const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
+				  method: "POST",
+				  headers: {
+				    "Content-Type": "application/json",
+				    Authorization: `Bearer ${localStorage.getItem("token")}`,
+				  },
+				  body: JSON.stringify({
+				    ...form,
+				    descriptions,
+				    weights,
+				    dimensionsList: dimensionsList.map((d) =>
+				      d?.l && d?.b && d?.h
+				        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+				        : ""
+				    ),
+				    remarksList,
+				  }),
+				});
 
-	            setActiveStep(2);
-	            setDetailsPopup(false);
-	            fetchItems();
+				if (!res.ok) {
+				  await handleApiError(res, "Create packets failed");
+				  return;
+				}
 
-	            setTimeout(() => {
-	              setCreateOpen(false);
-	              setActiveStep(0);
-	            }, 800);
+				setActiveStep(2);
+				setDetailsPopup(false);
+
+				showUiAlert("success", "Packets created successfully");
+
+				await fetchItems();
+
+				setTimeout(() => {
+				  setCreateOpen(false);
+				  setActiveStep(0);
+				}, 800);
 	          }}
 	        >
 	          Create Packets
@@ -1426,28 +1469,37 @@ function ZohoItemsPage() {
 	          }}
 	          onClick={async () => {
 	            try {
-	              await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
-	                method: "POST",
-	                headers: {
-	                  "Content-Type": "application/json",
-	                  Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                },
-	                body: JSON.stringify({
-	                  ...form,
-	                  customPacketNumber: Number(customPacketNo),
-	                  descriptions,
-	                  weights,
-	                  dimensionsList: dimensionsList.map((d) =>
-	                    d?.l && d?.b && d?.h
-	                      ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-	                      : ""
-	                  ),
-	                  remarksList,
-	                }),
-	              });
+					const res = await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
+					  method: "POST",
+					  headers: {
+					    "Content-Type": "application/json",
+					    Authorization: `Bearer ${localStorage.getItem("token")}`,
+					  },
+					  body: JSON.stringify({
+					    ...form,
+					    customPacketNumber: Number(customPacketNo),
+					    descriptions,
+					    weights,
+					    dimensionsList: dimensionsList.map((d) =>
+					      d?.l && d?.b && d?.h
+					        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+					        : ""
+					    ),
+					    remarksList,
+					  }),
+					});
 
-	              setCustomCreateOpen(false);
-	              fetchItems();
+					if (!res.ok) {
+					  await handleApiError(res, "Create custom packet failed");
+					  return;
+					}
+
+					setCustomCreateOpen(false);
+					setCustomPacketNo("");
+
+					showUiAlert("success", "Custom packet created successfully");
+
+					await fetchItems();
 	            } catch (e) {
 	              alert("Failed to create custom packet");
 	            }
@@ -1577,30 +1629,38 @@ function ZohoItemsPage() {
 	          }}
 	          onClick={async () => {
 	            try {
-	              await fetch(
-	                `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
-	                {
-	                  method: "POST",
-	                  headers: {
-	                    "Content-Type": "application/json",
-	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                  },
-	                  body: JSON.stringify({
-	                    numberOfPackets: addCount,
-	                    descriptions,
-	                    weights,
-	                    dimensionsList: dimensionsList.map((d) =>
-	                      d?.l && d?.b && d?.h
-	                        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-	                        : ""
-	                    ),
-	                    remarksList,
-	                  }),
-	                }
-	              );
+					const res = await fetch(
+					  `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
+					  {
+					    method: "POST",
+					    headers: {
+					      "Content-Type": "application/json",
+					      Authorization: `Bearer ${localStorage.getItem("token")}`,
+					    },
+					    body: JSON.stringify({
+					      numberOfPackets: addCount,
+					      descriptions,
+					      weights,
+					      dimensionsList: dimensionsList.map((d) =>
+					        d?.l && d?.b && d?.h
+					          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+					          : ""
+					      ),
+					      remarksList,
+					    }),
+					  }
+					);
 
-	              setAddMoreOpen(false);
-	              fetchItems();
+					if (!res.ok) {
+					  await handleApiError(res, "Add packets failed");
+					  return;
+					}
+
+					setAddMoreOpen(false);
+
+					showUiAlert("success", "Packets added successfully");
+
+					await fetchItems();
 	            } catch (e) {
 	              alert("Failed to add packets");
 	            }
@@ -1728,30 +1788,39 @@ function ZohoItemsPage() {
 	          }}
 	          onClick={async () => {
 	            try {
-	              await fetch(
-	                `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
-	                {
-	                  method: "POST",
-	                  headers: {
-	                    "Content-Type": "application/json",
-	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                  },
-	                  body: JSON.stringify({
-	                    customPacketNumber: Number(customPacketNo),
-	                    descriptions,
-	                    weights,
-	                    dimensionsList: dimensionsList.map((d) =>
-	                      d?.l && d?.b && d?.h
-	                        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-	                        : ""
-	                    ),
-	                    remarksList,
-	                  }),
-	                }
-	              );
+					const res = await fetch(
+					  `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+					  {
+					    method: "POST",
+					    headers: {
+					      "Content-Type": "application/json",
+					      Authorization: `Bearer ${localStorage.getItem("token")}`,
+					    },
+					    body: JSON.stringify({
+					      customPacketNumber: Number(customPacketNo),
+					      descriptions,
+					      weights,
+					      dimensionsList: dimensionsList.map((d) =>
+					        d?.l && d?.b && d?.h
+					          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+					          : ""
+					      ),
+					      remarksList,
+					    }),
+					  }
+					);
 
-	              setCustomAddOpen(false);
-	              fetchItems();
+					if (!res.ok) {
+					  await handleApiError(res, "Add custom packet failed");
+					  return;
+					}
+
+					setCustomAddOpen(false);
+					setCustomPacketNo("");
+
+					showUiAlert("success", "Custom packet added successfully");
+
+					await fetchItems();
 	            } catch (e) {
 	              alert("Failed to add custom packet");
 	            }
@@ -1860,13 +1929,20 @@ function ZohoItemsPage() {
 	                }
 	              );
 
-	              if (!res.ok) throw new Error();
+				  if (!res.ok) {
+				    await handleApiError(res, "Update failed");
+				    return;
+				  }
 
-	              setEditOpen(false);
-	              fetchItems();
-	            } catch (e) {
-	              alert("Update failed");
-	            }
+				  setEditOpen(false);
+
+				  showUiAlert("success", "Packet item updated successfully");
+
+				  await fetchItems();
+			  } catch (e) {
+			    console.error(e);
+			    showUiAlert("error", "Update failed. Please try again.");
+			  }
 	          }}
 	        >
 	          Save

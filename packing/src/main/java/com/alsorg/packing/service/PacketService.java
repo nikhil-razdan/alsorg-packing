@@ -34,6 +34,10 @@ import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.repository.StickerHistoryRepository;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import com.alsorg.packing.exception.DuplicateSkuException;
 
 @Service
 public class PacketService {
@@ -179,6 +183,16 @@ public class PacketService {
             CreateItemRequest req,
             String createdBy
     ) {
+    	
+    	 List<String> plannedSkus = new ArrayList<>();
+
+    	    for (int i = 1; i <= req.numberOfPackets; i++) {
+    	        plannedSkus.add(
+    	                buildSku(req.pdNo, req.drawingNo, i)
+    	        );
+    	    }
+
+    	    assertSkusAvailable(plannedSkus);
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
 
@@ -258,13 +272,11 @@ public class PacketService {
             item.setRemarks(remark);
             
             
-            String cleanDwg = req.drawingNo.replace("/", "-");
-
             int packetNo = i;
 
             item.setPacketNumber("Pkt-" + packetNo);
 
-            String sku = req.pdNo + "/" + cleanDwg + "/Pkt-" + packetNo;
+            String sku = plannedSkus.get(i - 1);
             item.setSku(sku);
 
             item.setQuantity(1);
@@ -459,6 +471,17 @@ public class PacketService {
 
         int start = (int) existingCount + 1;
 
+        List<String> plannedSkus = new ArrayList<>();
+
+        for (int i = 0; i < req.numberOfPackets; i++) {
+            int packetNo = start + i;
+
+            plannedSkus.add(
+                    buildSku(master.getPdNo(), master.getDrawingName(), packetNo)
+            );
+        }
+
+        assertSkusAvailable(plannedSkus);
         List<PacketItem> items = new ArrayList<>();
         List<String> descriptions = req.getDescriptions();
         List<String> weights = req.getWeights();
@@ -486,8 +509,7 @@ public class PacketService {
             item.setFloor(master.getFloor());
             item.setPacketNumber("Pkt-" + packetNo);
 
-            String cleanDwg = master.getDrawingName().replace("/", "-");
-            String sku = master.getPdNo() + "/" + cleanDwg + "/Pkt-" + packetNo;
+            String sku = plannedSkus.get(i);
 
             String desc = (descriptions != null && descriptions.size() > i)
                     ? descriptions.get(i)
@@ -587,8 +609,10 @@ public class PacketService {
 
         item.setPacketNumber("Pkt-" + packetNo);
 
-        String cleanDwg = req.drawingNo.replace("/", "-");
-        item.setSku(req.pdNo + "/" + cleanDwg + "/Pkt-" + packetNo);
+        String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
+        assertSkuAvailable(sku);
+
+        item.setSku(sku);
 
         item.setStatus("CREATED");
         item.setCreatedBy(actor);
@@ -658,8 +682,10 @@ public class PacketService {
         item.setRemarks(req.getRemarksList().get(0));
         item.setPacketNumber("Pkt-" + packetNo);
 
-        String cleanDwg = master.getDrawingName().replace("/", "-");
-        item.setSku(master.getPdNo() + "/" + cleanDwg + "/Pkt-" + packetNo);
+        String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
+        assertSkuAvailable(sku);
+
+        item.setSku(sku);
 
         item.setStatus("CREATED");
         item.setCreatedBy(actor);
@@ -708,20 +734,97 @@ public class PacketService {
              * PACKET NUMBER IS IMMUTABLE
              */
 
-            String cleanDwg =
-                    req.getDrawingNo().replace("/", "-");
+            int packetNo = extractPacketNo(
+                    item.getPacketNumber(),
+                    item.getSku()
+            );
 
-            String sku =
-                    req.getPdNo()
-                    + "/"
-                    + cleanDwg
-                    + "/"
-                    + item.getPacketNumber();
+            String sku = buildSku(
+                    req.getPdNo(),
+                    req.getDrawingNo(),
+                    packetNo
+            );
+
+            assertSkuAvailableForUpdate(sku, item.getId());
 
             item.setSku(sku);
         }
 
         return packetItemRepository.save(item);
+    }
+    
+    private String safeSkuPart(String value) {
+        if (value == null || value.trim().isBlank()) {
+            return "-";
+        }
+
+        return value.trim().replaceAll("\\s+", " ");
+    }
+
+    private String buildSku(String pdNo, String drawingNo, int packetNo) {
+        String cleanPdNo = safeSkuPart(pdNo);
+        String cleanDwg = safeSkuPart(drawingNo).replace("/", "-");
+
+        return cleanPdNo + "/" + cleanDwg + "/Pkt-" + packetNo;
+    }
+
+    private int extractPacketNo(String packetNumber, String sku) {
+        if (packetNumber != null && packetNumber.startsWith("Pkt-")) {
+            return Integer.parseInt(
+                    packetNumber.replace("Pkt-", "").trim()
+            );
+        }
+
+        if (sku != null && sku.contains("Pkt-")) {
+            String pkt = sku.substring(sku.lastIndexOf("Pkt-") + 4)
+                    .replaceAll("[^0-9]", "");
+
+            if (!pkt.isBlank()) {
+                return Integer.parseInt(pkt);
+            }
+        }
+
+        throw new RuntimeException("Packet number missing. Cannot rebuild SKU.");
+    }
+
+    private void assertSkuAvailable(String sku) {
+        if (sku == null || sku.trim().isBlank()) {
+            throw new RuntimeException("SKU cannot be blank");
+        }
+
+        if (packetItemRepository.existsSkuAlready(sku)) {
+            throw new DuplicateSkuException(sku);
+        }
+    }
+
+    private void assertSkuAvailableForUpdate(String sku, UUID currentItemId) {
+        if (sku == null || sku.trim().isBlank()) {
+            throw new RuntimeException("SKU cannot be blank");
+        }
+
+        if (packetItemRepository.existsSkuAlreadyForOtherItem(sku, currentItemId)) {
+            throw new DuplicateSkuException(sku);
+        }
+    }
+
+    private void assertSkusAvailable(List<String> skus) {
+        Set<String> requestCheck = new LinkedHashSet<>();
+
+        for (String sku : skus) {
+            if (sku == null || sku.trim().isBlank()) {
+                throw new RuntimeException("SKU cannot be blank");
+            }
+
+            String normalized = sku.trim().toLowerCase();
+
+            if (!requestCheck.add(normalized)) {
+                throw new DuplicateSkuException(sku);
+            }
+
+            if (packetItemRepository.existsSkuAlready(sku)) {
+                throw new DuplicateSkuException(sku);
+            }
+        }
     }
     
     private String formatDimensionWithVolume(String dim) {
