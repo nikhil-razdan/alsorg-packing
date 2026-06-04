@@ -8,6 +8,8 @@ import {
   formatShiftDate,
   formatShiftTimeRange,
   isShiftOverSixPm,
+  getDefaultShiftStartLocal,
+  getDefaultShiftEndLocal,
 } from "./logisticsDateTimeUtils";
 
 import {
@@ -114,8 +116,8 @@ const buildInitialForm = ({
   return {
     driverId: initialDriverId || "",
     vehicleId: "",
-    shiftStart: "",
-    shiftEnd: "",
+    shiftStart: getDefaultShiftStartLocal(),
+    shiftEnd: getDefaultShiftEndLocal(),
     overtimeHours: 0,
     totalTrips: 0,
     totalHelpers: 0,
@@ -745,9 +747,9 @@ function LogisticsShiftModal({
                   : "Create New Shift"}
               </div>
 
-              <div style={sectionSub}>
-                Fill operations details for this shift
-              </div>
+			  <div style={sectionSub}>
+			    General shift time is 09:00 AM - 06:00 PM. Change start/end only when actual timing is different.
+			  </div>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import {
 
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
+import ShiftReports from "../dashboard/components/logistics/ShiftReports";
 
 import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
@@ -92,6 +93,16 @@ function LogisticsPortalPage() {
             }
             label="Shift History"
           />
+		  
+		  <SidebarButton
+		    active={
+		      tab === "reports"
+		    }
+		    onClick={() =>
+		      setTab("reports")
+		    }
+		    label="Shift Reports"
+		  />
         </div>
 
 		{tab === "operations" && (
@@ -114,6 +125,12 @@ function LogisticsPortalPage() {
 
 		{tab === "history" && (
 		  <ShiftHistory
+		    showAlert={showAlert}
+		  />
+		)}
+		
+		{tab === "reports" && (
+		  <ShiftReports
 		    showAlert={showAlert}
 		  />
 		)}
