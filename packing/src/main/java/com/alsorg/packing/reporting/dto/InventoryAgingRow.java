@@ -16,10 +16,6 @@ public class InventoryAgingRow {
 
     private long daysInInventory;
 
-    /*
-     * Old constructor kept so existing repository queries
-     * do not break.
-     */
     public InventoryAgingRow(
             String zohoItemId,
             String itemName,
@@ -38,9 +34,7 @@ public class InventoryAgingRow {
         );
     }
 
-    /*
-     * New packet-level constructor.
-     */
+
     public InventoryAgingRow(
             String zohoItemId,
             String itemName,

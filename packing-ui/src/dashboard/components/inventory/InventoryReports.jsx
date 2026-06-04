@@ -618,99 +618,6 @@ function InventoryReports() {
     setSearch("");
   };
 
-  const kpis = useMemo(() => {
-    const totalInventory =
-      numberValue(stats.totalItems);
-
-    const pending =
-      numberValue(stats.pendingItems) ||
-      Math.max(
-        totalInventory -
-          numberValue(stats.packedItems) -
-          numberValue(
-            stats.dispatchedItems
-          ),
-        0
-      );
-
-    const uniqueClients = new Set([
-      ...packingRows.map((row) =>
-        rowValue(row, [
-          "clientName",
-          "client",
-        ])
-      ),
-      ...dispatchRows.map((row) =>
-        rowValue(row, [
-          "clientName",
-          "client",
-        ])
-      ),
-    ]);
-
-    const criticalAging =
-      agingRows.filter(
-        (row) => getAgeDays(row) > 30
-      ).length;
-
-    return {
-      totalInventory,
-      warehouseItems:
-        numberValue(stats.warehouseItems),
-      readyToDispatch:
-        numberValue(
-          stats.readyToDispatchItems
-        ),
-      readyItems:
-        numberValue(stats.readyItems),
-      packedItems:
-        numberValue(stats.packedItems),
-      dispatchedItems:
-        numberValue(
-          stats.dispatchedItems
-        ),
-      pendingItems: pending,
-      stickersGenerated:
-        numberValue(
-          stats.stickersGenerated
-        ),
-      packedInRange: packingRows.length,
-      dispatchedInRange:
-        dispatchRows.length,
-      combinedInRange:
-        combinedRows.length,
-      agingItems: agingRows.length,
-      criticalAging,
-      uniqueClients:
-        uniqueClients.size,
-      completionRate: safeDivide(
-        numberValue(stats.dispatchedItems),
-        Math.max(totalInventory, 1)
-      ),
-	  itemPacketRows:
-	    allItemPacketRows.length,
-
-	  inventoryItemPacketRows:
-	    inventoryItemPacketRows.length,
-
-	  packingItemPacketRows:
-	    packingItemPacketRows.length,
-
-	  dispatchItemPacketRows:
-	    dispatchItemPacketRows.length,
-    };
-  }, [
-    stats,
-    packingRows,
-    dispatchRows,
-    combinedRows,
-    agingRows,
-	allItemPacketRows,
-	inventoryItemPacketRows,
-	packingItemPacketRows,
-	dispatchItemPacketRows,
-  ]);
-
   const dateWiseRows = useMemo(() => {
     const map = new Map();
 
@@ -948,6 +855,117 @@ function InventoryReports() {
       ...dispatchItemPacketRows,
     ];
   }, [
+    inventoryItemPacketRows,
+    packingItemPacketRows,
+    dispatchItemPacketRows,
+  ]);
+  
+  const kpis = useMemo(() => {
+    const totalInventory =
+      numberValue(stats.totalItems);
+
+    const pending =
+      numberValue(stats.pendingItems) ||
+      Math.max(
+        totalInventory -
+          numberValue(stats.packedItems) -
+          numberValue(
+            stats.dispatchedItems
+          ),
+        0
+      );
+
+    const uniqueClients = new Set([
+      ...packingRows.map((row) =>
+        rowValue(row, [
+          "clientName",
+          "client",
+        ])
+      ),
+      ...dispatchRows.map((row) =>
+        rowValue(row, [
+          "clientName",
+          "client",
+        ])
+      ),
+    ]);
+
+    uniqueClients.delete("-");
+    uniqueClients.delete("");
+
+    const criticalAging =
+      agingRows.filter(
+        (row) => getAgeDays(row) > 30
+      ).length;
+
+    return {
+      totalInventory,
+
+      warehouseItems:
+        numberValue(stats.warehouseItems),
+
+      readyToDispatch:
+        numberValue(
+          stats.readyToDispatchItems
+        ),
+
+      readyItems:
+        numberValue(stats.readyItems),
+
+      packedItems:
+        numberValue(stats.packedItems),
+
+      dispatchedItems:
+        numberValue(
+          stats.dispatchedItems
+        ),
+
+      pendingItems: pending,
+
+      stickersGenerated:
+        numberValue(
+          stats.stickersGenerated
+        ),
+
+      packedInRange: packingRows.length,
+
+      dispatchedInRange:
+        dispatchRows.length,
+
+      combinedInRange:
+        combinedRows.length,
+
+      agingItems: agingRows.length,
+
+      criticalAging,
+
+      uniqueClients:
+        uniqueClients.size,
+
+      completionRate: safeDivide(
+        numberValue(stats.dispatchedItems),
+        Math.max(totalInventory, 1)
+      ),
+
+      itemPacketRows:
+        allItemPacketRows.length,
+
+      inventoryItemPacketRows:
+        inventoryItemPacketRows.length,
+
+      packingItemPacketRows:
+        packingItemPacketRows.length,
+
+      dispatchItemPacketRows:
+        dispatchItemPacketRows.length,
+    };
+  }, [
+    stats,
+    packingRows,
+    dispatchRows,
+    combinedRows,
+    agingRows,
+    allItemPacketRows,
     inventoryItemPacketRows,
     packingItemPacketRows,
     dispatchItemPacketRows,
@@ -1298,6 +1316,26 @@ function InventoryReports() {
         kpis.criticalAging,
         "Items older than 30 days",
       ],
+	  [
+	    "Item / Packet Detail Rows",
+	    kpis.itemPacketRows,
+	    "Total item / packet rows across inventory, packing and dispatch",
+	  ],
+	  [
+	    "Inventory Item / Packet Rows",
+	    kpis.inventoryItemPacketRows,
+	    "Current inventory packet-level rows",
+	  ],
+	  [
+	    "Packing Item / Packet Rows",
+	    kpis.packingItemPacketRows,
+	    "Packed item / packet rows in selected range",
+	  ],
+	  [
+	    "Dispatch Item / Packet Rows",
+	    kpis.dispatchItemPacketRows,
+	    "Dispatched item / packet rows in selected range",
+	  ],
       [
         "Dispatch Completion Rate",
         formatPercent(
@@ -1382,38 +1420,51 @@ function InventoryReports() {
     RAW PACKING DATA
     */
 
-    const rawPacking =
-      packingRows.map((row) => ({
-        zohoItemId: rowValue(row, [
-          "zohoItemId",
-        ]),
-        itemName: rowValue(row, [
-          "itemName",
-        ]),
-        clientName: rowValue(row, [
-          "clientName",
-          "client",
-        ]),
-        packedAt: getExcelDateTime(
-          rowValue(row, [
-            "packedAt",
-          ], null)
-        ),
-        packedBy: rowValue(row, [
-          "packedBy",
-        ]),
-      }));
+	const rawPacking =
+	  packingRows.map((row) => ({
+	    zohoItemId: rowValue(row, [
+	      "zohoItemId",
+	    ]),
+
+	    itemName: rowValue(row, [
+	      "itemName",
+	    ]),
+
+	    clientName: rowValue(row, [
+	      "clientName",
+	      "client",
+	    ]),
+
+	    packetNumber:
+	      getPacketNumber(row),
+
+	    packetName:
+	      getPacketName(row),
+
+	    packedAt: getExcelDateTime(
+	      rowValue(row, [
+	        "packedAt",
+	      ], null)
+	    ),
+
+	    packedBy: rowValue(row, [
+	      "packedBy",
+	      "createdBy",
+	    ]),
+	  }));
 
     addRowsSheet(
       "Raw Packing",
       "Raw Packing Data",
-      [
-        ["zohoItemId", "Zoho Item ID"],
-        ["itemName", "Item Name"],
-        ["clientName", "Client"],
-        ["packedAt", "Packed At"],
-        ["packedBy", "Packed By"],
-      ],
+	  [
+	    ["zohoItemId", "Zoho Item ID"],
+	    ["itemName", "Item Name"],
+	    ["clientName", "Client"],
+	    ["packetNumber", "Packet No"],
+	    ["packetName", "Packet Name"],
+	    ["packedAt", "Packed At"],
+	    ["packedBy", "Packed By"],
+	  ],
       rawPacking
     );
 
@@ -1421,38 +1472,51 @@ function InventoryReports() {
     RAW DISPATCH DATA
     */
 
-    const rawDispatch =
-      dispatchRows.map((row) => ({
-        zohoItemId: rowValue(row, [
-          "zohoItemId",
-        ]),
-        itemName: rowValue(row, [
-          "itemName",
-        ]),
-        clientName: rowValue(row, [
-          "clientName",
-          "client",
-        ]),
-        dispatchedAt: getExcelDateTime(
-          rowValue(row, [
-            "dispatchedAt",
-          ], null)
-        ),
-        dispatchedBy: rowValue(row, [
-          "dispatchedBy",
-        ]),
-      }));
+	const rawDispatch =
+	  dispatchRows.map((row) => ({
+	    zohoItemId: rowValue(row, [
+	      "zohoItemId",
+	    ]),
+
+	    itemName: rowValue(row, [
+	      "itemName",
+	    ]),
+
+	    clientName: rowValue(row, [
+	      "clientName",
+	      "client",
+	    ]),
+
+	    packetNumber:
+	      getPacketNumber(row),
+
+	    packetName:
+	      getPacketName(row),
+
+	    dispatchedAt: getExcelDateTime(
+	      rowValue(row, [
+	        "dispatchedAt",
+	      ], null)
+	    ),
+
+	    dispatchedBy: rowValue(row, [
+	      "dispatchedBy",
+	      "createdBy",
+	    ]),
+	  }));
 
     addRowsSheet(
       "Raw Dispatch",
       "Raw Dispatch Data",
-      [
-        ["zohoItemId", "Zoho Item ID"],
-        ["itemName", "Item Name"],
-        ["clientName", "Client"],
-        ["dispatchedAt", "Dispatched At"],
-        ["dispatchedBy", "Dispatched By"],
-      ],
+	  [
+	    ["zohoItemId", "Zoho Item ID"],
+	    ["itemName", "Item Name"],
+	    ["clientName", "Client"],
+	    ["packetNumber", "Packet No"],
+	    ["packetName", "Packet Name"],
+	    ["dispatchedAt", "Dispatched At"],
+	    ["dispatchedBy", "Dispatched By"],
+	  ],
       rawDispatch
     );
 
@@ -1518,6 +1582,21 @@ function InventoryReports() {
           ? "Review pending queue and ownership."
           : "Pending inventory is under control.",
       ],
+	  [
+	  	    "Item / Packet Detail Rows",
+	  	    allItemPacketRows.length,
+	  	    "Use this sheet to audit every inventory, packing and dispatch packet-level movement.",
+	  	  ],
+	  	  [
+	  	    "Packing Item / Packet Rows",
+	  	    packingItemPacketRows.length,
+	  	    "Use this for user-wise packing verification and packet traceability.",
+	  	  ],
+	  	  [
+	  	    "Dispatch Item / Packet Rows",
+	  	    dispatchItemPacketRows.length,
+	  	    "Use this to verify dispatched packets against challan and client movement.",
+	  	  ],
       [
         "Dispatch Completion Rate",
         formatPercent(
@@ -1526,22 +1605,7 @@ function InventoryReports() {
         kpis.completionRate >= 0.8
           ? "Completion rate is healthy."
           : "Completion rate needs improvement.",
-      ],
-	  [
-	    "Item / Packet Detail Rows",
-	    allItemPacketRows.length,
-	    "Use this sheet to audit every inventory, packing and dispatch packet-level movement.",
-	  ],
-	  [
-	    "Packing Item / Packet Rows",
-	    packingItemPacketRows.length,
-	    "Use this for user-wise packing verification and packet traceability.",
-	  ],
-	  [
-	    "Dispatch Item / Packet Rows",
-	    dispatchItemPacketRows.length,
-	    "Use this to verify dispatched packets against challan and client movement.",
-	  ],
+      ]
     ].forEach((row) =>
       insightsSheet.addRow(row)
     );

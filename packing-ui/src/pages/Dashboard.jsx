@@ -767,12 +767,14 @@ function DashboardPage() {
 			      </div>
 			    </div>
 
-				<InventoryReports />
+				{isAdmin && (
+				  <>
+				    <InventoryReports />
 
-				{localStorage.getItem("role") === "ADMIN" && (
-				  <div style={adminPanel}>
-				    <ScheduledReports />
-				  </div>
+				    <div style={adminPanel}>
+				      <ScheduledReports />
+				    </div>
+				  </>
 				)}
 			  </>
 			)}
