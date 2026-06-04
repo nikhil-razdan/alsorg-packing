@@ -27,6 +27,14 @@ const normalizeStatus = (status) =>
     .trim()
     .toUpperCase();
 
+const statusOptions = [
+  "WORKING",
+  "OFF",
+  "ON_LEAVE",
+  "COMPLETED",
+  "CANCELLED",
+];
+
 function ShiftOperations({
   showAlert = () => {},
 }) {
@@ -48,6 +56,12 @@ function ShiftOperations({
   const [pageSize, setPageSize] =
     useState(25);
 
+	const [selectedIds, setSelectedIds] =
+	  useState([]);
+
+	const [bulkStatus, setBulkStatus] =
+	  useState("");
+	  
   const load = async () => {
     try {
       setLoading(true);
@@ -194,6 +208,97 @@ function ShiftOperations({
 	    (currentPage - 1) * pageSize,
 	    currentPage * pageSize
 	  );
+	  
+	  const visibleIds = paginatedShifts.map(
+	    (s) => s.id
+	  );
+
+	  const allVisibleSelected =
+	    visibleIds.length > 0 &&
+	    visibleIds.every((id) =>
+	      selectedIds.includes(id)
+	    );
+
+	  const toggleOne = (id) => {
+	    setSelectedIds((prev) =>
+	      prev.includes(id)
+	        ? prev.filter((x) => x !== id)
+	        : [...prev, id]
+	    );
+	  };
+
+	  const toggleAllVisible = () => {
+	    if (allVisibleSelected) {
+	      setSelectedIds((prev) =>
+	        prev.filter(
+	          (id) => !visibleIds.includes(id)
+	        )
+	      );
+	    } else {
+	      setSelectedIds((prev) =>
+	        Array.from(
+	          new Set([
+	            ...prev,
+	            ...visibleIds,
+	          ])
+	        )
+	      );
+	    }
+	  };
+
+	  const clearSelection = () => {
+	    setSelectedIds([]);
+	    setBulkStatus("");
+	  };
+	  
+	  const bulkChangeStatus = async () => {
+	  	  if (selectedIds.length === 0) {
+	  	    showAlert(
+	  	      "Please select at least one shift",
+	  	      "error"
+	  	    );
+	  	    return;
+	  	  }
+
+	  	  if (!bulkStatus) {
+	  	    showAlert(
+	  	      "Please select a status",
+	  	      "error"
+	  	    );
+	  	    return;
+	  	  }
+
+	  	  try {
+	  	    await Promise.all(
+	  	      selectedIds.map((id) =>
+	  	        updateShiftStatus(id, bulkStatus)
+	  	      )
+	  	    );
+
+	  	    await load();
+
+	  	    showAlert(
+	  	      bulkStatus === "COMPLETED"
+	  	        ? "Selected shifts completed and moved to history"
+	  	        : bulkStatus === "CANCELLED"
+	  	        ? "Selected shifts cancelled and moved to history"
+	  	        : "Selected shifts updated successfully",
+	  	      "success"
+	  	    );
+
+	  	    clearSelection();
+	  	  } catch (e) {
+	  	    console.error(e);
+
+	  	    showAlert(
+	  	      getBackendMessage(
+	  	        e,
+	  	        "Failed to update selected shifts"
+	  	      ),
+	  	      "error"
+	  	    );
+	  	  }
+	  	};
 
   return (
     <div style={wrap}>
@@ -217,9 +322,78 @@ function ShiftOperations({
           + Create Shift
         </button>
       </div>
+	  
+	  <div style={bulkBar}>
+	    <div style={bulkInfo}>
+	      Selected:{" "}
+	      <strong>{selectedIds.length}</strong>
+	    </div>
+
+	    <select
+	      value={bulkStatus}
+	      onChange={(e) =>
+	        setBulkStatus(e.target.value)
+	      }
+	      style={bulkSelect}
+	    >
+	      <option value="">
+	        Select Status
+	      </option>
+
+	      {statusOptions.map((status) => (
+	        <option
+	          key={status}
+	          value={status}
+	        >
+	          {status}
+	        </option>
+	      ))}
+	    </select>
+
+	    <button
+	      style={{
+	        ...bulkBtn,
+	        opacity:
+	          selectedIds.length === 0 ||
+	          !bulkStatus
+	            ? 0.55
+	            : 1,
+	        cursor:
+	          selectedIds.length === 0 ||
+	          !bulkStatus
+	            ? "not-allowed"
+	            : "pointer",
+	      }}
+	      disabled={
+	        selectedIds.length === 0 ||
+	        !bulkStatus
+	      }
+	      onClick={bulkChangeStatus}
+	    >
+	      Bulk Change Status
+	    </button>
+
+	    {selectedIds.length > 0 && (
+	      <button
+	        style={clearBtn}
+	        onClick={clearSelection}
+	      >
+	        Clear
+	      </button>
+	    )}
+	  </div>
 
       <div style={table}>
 	  <div style={head}>
+	    <div>
+	      <input
+	        type="checkbox"
+	        checked={allVisibleSelected}
+	        onChange={toggleAllVisible}
+	        title="Select all visible shifts"
+	      />
+	    </div>
+
 	    <div>Driver</div>
 	    <div>Vehicle</div>
 	    <div>Date</div>
@@ -253,6 +427,17 @@ function ShiftOperations({
 			      : {}),
 			  }}
 			>
+			<div>
+			  <input
+			    type="checkbox"
+			    checked={selectedIds.includes(
+			      s.id
+			    )}
+			    onChange={() =>
+			      toggleOne(s.id)
+			    }
+			  />
+			</div>
               <div>
                 {s.driver?.name || "-"}
               </div>
@@ -306,25 +491,14 @@ function ShiftOperations({
 			      normalizeStatus(s.status)
 			    )}
 			  >
-			    <option value="WORKING">
-			      WORKING
-			    </option>
-
-			    <option value="OFF">
-			      OFF
-			    </option>
-
-			    <option value="ON_LEAVE">
-			      ON_LEAVE
-			    </option>
-
-			    <option value="COMPLETED">
-			      COMPLETED
-			    </option>
-
-			    <option value="CANCELLED">
-			      CANCELLED
-			    </option>
+			    {statusOptions.map((status) => (
+			      <option
+			        key={status}
+			        value={status}
+			      >
+			        {status}
+			      </option>
+			    ))}
 			  </select>
 			    </div>
 
@@ -433,7 +607,7 @@ const table = {
 const head = {
   display: "grid",
   gridTemplateColumns:
-    "1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
+    ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
@@ -443,7 +617,7 @@ const head = {
 const row = {
   display: "grid",
   gridTemplateColumns:
-    "1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
+    ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
   padding: 16,
   color: "#fff",
   borderTop:
@@ -522,6 +696,64 @@ const lateBadge = {
     "1px solid rgba(245,158,11,.28)",
   fontSize: 10,
   fontWeight: 900,
+};
+
+const bulkBar = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
+  padding: 12,
+  borderRadius: 16,
+  background:
+    "rgba(255,255,255,0.035)",
+  border:
+    "1px solid rgba(255,255,255,0.06)",
+};
+
+const bulkInfo = {
+  marginRight: "auto",
+  color: "#94a3b8",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const bulkSelect = {
+  height: 38,
+  borderRadius: 12,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background: "#111827",
+  color: "#fff",
+  padding: "0 12px",
+  outline: "none",
+  fontWeight: 700,
+};
+
+const bulkBtn = {
+  height: 38,
+  borderRadius: 12,
+  border: "none",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  padding: "0 14px",
+  fontWeight: 800,
+};
+
+const clearBtn = {
+  height: 38,
+  borderRadius: 12,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background:
+    "rgba(255,255,255,.04)",
+  color: "#fff",
+  padding: "0 14px",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const statusSelect = (value) => ({
