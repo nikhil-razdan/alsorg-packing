@@ -4,6 +4,9 @@ import {
   useState,
 } from "react";
 
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+
 import {
   fetchDrivers,
   fetchShifts,
@@ -14,8 +17,9 @@ import {
 } from "./logisticsAlertUtils";
 
 import {
-  calculateShiftHours,
   formatShiftDate,
+  formatShiftTimeRange,
+  getSafeShiftHours,
   getShiftDateKey,
   isShiftOverSixPm,
 } from "./logisticsDateTimeUtils";
@@ -30,6 +34,155 @@ const numberValue = (value) =>
 
 const round = (value) =>
   Math.round(numberValue(value) * 100) / 100;
+
+const safeDivide = (a, b) =>
+  b ? a / b : 0;
+
+const formatPercent = (value) =>
+  `${Math.round(value * 100)}%`;
+
+const getExcelDateTime = (value) => {
+  if (!value) return "-";
+
+  try {
+    return new Date(value).toLocaleString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+  } catch {
+    return "-";
+  }
+};
+
+const styleTitleRow = (worksheet, title) => {
+  worksheet.mergeCells("A1:L1");
+
+  const cell = worksheet.getCell("A1");
+
+  cell.value = title;
+  cell.font = {
+    bold: true,
+    size: 18,
+    color: { argb: "FFFFFFFF" },
+  };
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF0F172A" },
+  };
+  cell.alignment = {
+    vertical: "middle",
+  };
+
+  worksheet.getRow(1).height = 28;
+};
+
+const styleHeaderRow = (row) => {
+  row.eachCell((cell) => {
+    cell.font = {
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1D4ED8" },
+    };
+
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+    };
+
+    cell.border = {
+      top: {
+        style: "thin",
+        color: { argb: "FFCBD5E1" },
+      },
+      left: {
+        style: "thin",
+        color: { argb: "FFCBD5E1" },
+      },
+      bottom: {
+        style: "thin",
+        color: { argb: "FFCBD5E1" },
+      },
+      right: {
+        style: "thin",
+        color: { argb: "FFCBD5E1" },
+      },
+    };
+  });
+};
+
+const autoFitColumns = (worksheet) => {
+  worksheet.columns.forEach((column) => {
+    let maxLength = 12;
+
+    column.eachCell(
+      { includeEmpty: true },
+      (cell) => {
+        const value =
+          cell.value == null
+            ? ""
+            : String(cell.value);
+
+        maxLength = Math.max(
+          maxLength,
+          value.length + 2
+        );
+      }
+    );
+
+    column.width = Math.min(
+      Math.max(maxLength, 12),
+      32
+    );
+  });
+};
+
+const styleWorksheet = (worksheet) => {
+  worksheet.views = [
+    {
+      state: "frozen",
+      ySplit: 2,
+    },
+  ];
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= 2) return;
+
+    row.eachCell((cell) => {
+      cell.border = {
+        top: {
+          style: "thin",
+          color: { argb: "FFE2E8F0" },
+        },
+        left: {
+          style: "thin",
+          color: { argb: "FFE2E8F0" },
+        },
+        bottom: {
+          style: "thin",
+          color: { argb: "FFE2E8F0" },
+        },
+        right: {
+          style: "thin",
+          color: { argb: "FFE2E8F0" },
+        },
+      };
+    });
+  });
+
+  autoFitColumns(worksheet);
+};
 
 function ShiftReports({
   showAlert = () => {},
@@ -153,11 +306,9 @@ function ShiftReports({
         acc.totalFuel += numberValue(
           shift.fuelUsed
         );
-        acc.totalHours +=
-          numberValue(
-            shift.totalWorkingHours
-          ) ||
-          calculateShiftHours(shift);
+		
+		acc.totalHours +=
+		  getSafeShiftHours(shift);
 
         if (isShiftOverSixPm(shift)) {
           acc.overShiftCount += 1;
@@ -228,11 +379,8 @@ function ShiftReports({
       current.totalFuel += numberValue(
         shift.fuelUsed
       );
-      current.totalHours +=
-        numberValue(
-          shift.totalWorkingHours
-        ) ||
-        calculateShiftHours(shift);
+	  current.totalHours +=
+	    getSafeShiftHours(shift);
 
       if (isShiftOverSixPm(shift)) {
         current.overShiftCount += 1;
@@ -292,11 +440,8 @@ function ShiftReports({
       current.totalFuel += numberValue(
         shift.fuelUsed
       );
-      current.totalHours +=
-        numberValue(
-          shift.totalWorkingHours
-        ) ||
-        calculateShiftHours(shift);
+	  current.totalHours +=
+	    getSafeShiftHours(shift);
 
       current.drivers.add(
         shift.driver?.name ||
@@ -338,6 +483,480 @@ function ShiftReports({
     setDriverId("");
     setFromDate("");
     setToDate("");
+  };
+  
+  const downloadExcelReport = async () => {
+    const workbook = new ExcelJS.Workbook();
+
+    workbook.creator = "ALSORG Logistics Portal";
+    workbook.created = new Date();
+
+    const completed =
+      summary.statusCount.COMPLETED || 0;
+
+    const cancelled =
+      summary.statusCount.CANCELLED || 0;
+
+    const active =
+      summary.totalShifts -
+      completed -
+      cancelled;
+
+    const completionRate = safeDivide(
+      completed,
+      summary.totalShifts
+    );
+
+    const overShiftRate = safeDivide(
+      summary.overShiftCount,
+      summary.totalShifts
+    );
+
+    const avgTrips = safeDivide(
+      summary.totalTrips,
+      summary.totalShifts
+    );
+
+    const avgHours = safeDivide(
+      summary.totalHours,
+      summary.totalShifts
+    );
+
+    const avgFuel = safeDivide(
+      summary.totalFuel,
+      summary.totalShifts
+    );
+
+    const avgDistance = safeDivide(
+      summary.totalDistance,
+      summary.totalShifts
+    );
+
+    const topTripDriver =
+      [...driverWiseRows].sort(
+        (a, b) =>
+          b.totalTrips - a.totalTrips
+      )[0];
+
+    const topOverShiftDriver =
+      [...driverWiseRows].sort(
+        (a, b) =>
+          b.overShiftCount -
+          a.overShiftCount
+      )[0];
+
+    const busiestDate =
+      [...dateWiseRows].sort(
+        (a, b) =>
+          b.totalShifts - a.totalShifts
+      )[0];
+
+    const topTripDate =
+      [...dateWiseRows].sort(
+        (a, b) =>
+          b.totalTrips - a.totalTrips
+      )[0];
+
+    /*
+    ========================================
+    KPI SUMMARY SHEET
+    ========================================
+    */
+
+    const kpiSheet =
+      workbook.addWorksheet("KPI Summary");
+
+    styleTitleRow(
+      kpiSheet,
+      "Logistics Shift KPI Summary"
+    );
+
+    kpiSheet.addRow([]);
+
+    const kpiHeader = kpiSheet.addRow([
+      "KPI",
+      "Value",
+      "Insight",
+    ]);
+
+    styleHeaderRow(kpiHeader);
+
+    const kpiRows = [
+      [
+        "Total Shifts",
+        summary.totalShifts,
+        "Total shifts in selected filters",
+      ],
+      [
+        "Total Trips",
+        summary.totalTrips,
+        "Total completed/active trip count",
+      ],
+      [
+        "Helpers / Loaders",
+        summary.totalLoaders,
+        "Total manpower used in shifts",
+      ],
+      [
+        "Total Hours",
+        round(summary.totalHours),
+        "Safe hours calculation; negative values ignored",
+      ],
+      [
+        "Over Shift Count",
+        summary.overShiftCount,
+        "Shifts ending after 06:00 PM",
+      ],
+      [
+        "Completed",
+        completed,
+        "Completed shift count",
+      ],
+      [
+        "Active",
+        active,
+        "Working / Off / On Leave shifts",
+      ],
+      [
+        "Cancelled",
+        cancelled,
+        "Cancelled shift count",
+      ],
+      [
+        "Completion Rate",
+        formatPercent(completionRate),
+        "Completed shifts divided by total shifts",
+      ],
+      [
+        "Over Shift Rate",
+        formatPercent(overShiftRate),
+        "Over-shift shifts divided by total shifts",
+      ],
+      [
+        "Average Trips / Shift",
+        round(avgTrips),
+        "Trip productivity indicator",
+      ],
+      [
+        "Average Hours / Shift",
+        round(avgHours),
+        "Average working duration",
+      ],
+      [
+        "Average Fuel / Shift",
+        round(avgFuel),
+        "Fuel usage trend",
+      ],
+      [
+        "Average Distance / Shift",
+        round(avgDistance),
+        "Average route distance",
+      ],
+    ];
+
+    kpiRows.forEach((row) =>
+      kpiSheet.addRow(row)
+    );
+
+    styleWorksheet(kpiSheet);
+
+    /*
+    ========================================
+    DRIVER WISE SHEET
+    ========================================
+    */
+
+    const driverSheet =
+      workbook.addWorksheet("Driver Wise");
+
+    styleTitleRow(
+      driverSheet,
+      "Driver Wise Shift Report"
+    );
+
+    driverSheet.addRow([]);
+
+    const driverHeader = driverSheet.addRow([
+      "Driver",
+      "Total Shifts",
+      "Trips",
+      "Helpers",
+      "Hours",
+      "Distance",
+      "Fuel",
+      "Over Shift",
+      "Completed",
+      "Active",
+      "Cancelled",
+      "Trips / Shift",
+    ]);
+
+    styleHeaderRow(driverHeader);
+
+    driverWiseRows.forEach((row) => {
+      const excelRow = driverSheet.addRow([
+        row.label,
+        row.totalShifts,
+        row.totalTrips,
+        row.totalLoaders,
+        round(row.totalHours),
+        round(row.totalDistance),
+        round(row.totalFuel),
+        row.overShiftCount,
+        row.completed,
+        row.active,
+        row.cancelled,
+        round(
+          safeDivide(
+            row.totalTrips,
+            row.totalShifts
+          )
+        ),
+      ]);
+
+      if (row.overShiftCount > 0) {
+        excelRow.getCell(8).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFF3CD" },
+        };
+      }
+    });
+
+    styleWorksheet(driverSheet);
+
+    /*
+    ========================================
+    DATE WISE SHEET
+    ========================================
+    */
+
+    const dateSheet =
+      workbook.addWorksheet("Date Wise");
+
+    styleTitleRow(
+      dateSheet,
+      "Date Wise Shift Report"
+    );
+
+    dateSheet.addRow([]);
+
+    const dateHeader = dateSheet.addRow([
+      "Date",
+      "Drivers",
+      "Total Shifts",
+      "Trips",
+      "Helpers",
+      "Hours",
+      "Distance",
+      "Fuel",
+      "Over Shift",
+      "Completed",
+      "Active",
+      "Cancelled",
+    ]);
+
+    styleHeaderRow(dateHeader);
+
+    dateWiseRows.forEach((row) => {
+      const excelRow = dateSheet.addRow([
+        row.label,
+        row.driverCount,
+        row.totalShifts,
+        row.totalTrips,
+        row.totalLoaders,
+        round(row.totalHours),
+        round(row.totalDistance),
+        round(row.totalFuel),
+        row.overShiftCount,
+        row.completed,
+        row.active,
+        row.cancelled,
+      ]);
+
+      if (row.overShiftCount > 0) {
+        excelRow.getCell(9).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFF3CD" },
+        };
+      }
+    });
+
+    styleWorksheet(dateSheet);
+
+    /*
+    ========================================
+    RAW SHIFT DATA SHEET
+    ========================================
+    */
+
+    const rawSheet =
+      workbook.addWorksheet("Raw Shift Data");
+
+    styleTitleRow(
+      rawSheet,
+      "Raw Shift Data"
+    );
+
+    rawSheet.addRow([]);
+
+    const rawHeader = rawSheet.addRow([
+      "Driver",
+      "Vehicle",
+      "Date",
+      "Time Range",
+      "Shift Start",
+      "Shift End",
+      "Safe Hours",
+      "Trips",
+      "Helpers",
+      "Distance",
+      "Fuel",
+      "Route",
+      "Status",
+      "Over Shift",
+      "Remarks",
+    ]);
+
+    styleHeaderRow(rawHeader);
+
+    filteredShifts.forEach((shift) => {
+      const overShift =
+        isShiftOverSixPm(shift);
+
+      const excelRow = rawSheet.addRow([
+        shift.driver?.name || "-",
+        shift.vehicle?.vehicleNumber || "-",
+        formatShiftDate(shift),
+        formatShiftTimeRange(shift),
+        getExcelDateTime(shift.shiftStart),
+        getExcelDateTime(shift.shiftEnd),
+        round(getSafeShiftHours(shift)),
+        numberValue(shift.totalTrips),
+        numberValue(
+          shift.totalLoaders ??
+            shift.totalHelpers
+        ),
+        numberValue(shift.totalDistance),
+        numberValue(shift.fuelUsed),
+        shift.routeCategory || "-",
+        normalizeStatus(shift.status),
+        overShift ? "YES" : "NO",
+        shift.remarks || "",
+      ]);
+
+      if (overShift) {
+        excelRow.getCell(14).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFF3CD" },
+        };
+      }
+    });
+
+    styleWorksheet(rawSheet);
+
+    /*
+    ========================================
+    INSIGHTS SHEET
+    ========================================
+    */
+
+    const insightSheet =
+      workbook.addWorksheet("Insights");
+
+    styleTitleRow(
+      insightSheet,
+      "Logistics Insights"
+    );
+
+    insightSheet.addRow([]);
+
+    const insightHeader =
+      insightSheet.addRow([
+        "Insight",
+        "Value",
+        "Recommendation",
+      ]);
+
+    styleHeaderRow(insightHeader);
+
+    const insightRows = [
+      [
+        "Top Driver by Trips",
+        topTripDriver
+          ? `${topTripDriver.label} - ${topTripDriver.totalTrips} trips`
+          : "-",
+        "Use this driver as benchmark for route productivity.",
+      ],
+      [
+        "Highest Over Shift Driver",
+        topOverShiftDriver
+          ? `${topOverShiftDriver.label} - ${topOverShiftDriver.overShiftCount} over-shifts`
+          : "-",
+        "Review route allocation, waiting time, or vehicle delay for this driver.",
+      ],
+      [
+        "Busiest Date",
+        busiestDate
+          ? `${busiestDate.label} - ${busiestDate.totalShifts} shifts`
+          : "-",
+        "Check whether manpower and vehicles were planned correctly on this date.",
+      ],
+      [
+        "Highest Trip Date",
+        topTripDate
+          ? `${topTripDate.label} - ${topTripDate.totalTrips} trips`
+          : "-",
+        "Study route pattern and repeat efficient planning.",
+      ],
+      [
+        "Completion Rate",
+        formatPercent(completionRate),
+        completionRate >= 0.8
+          ? "Completion rate is healthy."
+          : "Completion rate needs attention.",
+      ],
+      [
+        "Over Shift Rate",
+        formatPercent(overShiftRate),
+        overShiftRate > 0.2
+          ? "High over-shift rate. Review dispatch timings and route planning."
+          : "Over-shift rate is under control.",
+      ],
+      [
+        "Average Trips per Shift",
+        round(avgTrips),
+        "Track this weekly to improve driver productivity.",
+      ],
+      [
+        "Average Hours per Shift",
+        round(avgHours),
+        "Compare this with standard 9-hour shift window.",
+      ],
+    ];
+
+    insightRows.forEach((row) =>
+      insightSheet.addRow(row)
+    );
+
+    styleWorksheet(insightSheet);
+
+    const buffer =
+      await workbook.xlsx.writeBuffer();
+
+    const fileName = `Logistics_Shift_Report_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    saveAs(
+      new Blob([buffer], {
+        type:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      fileName
+    );
   };
 
   return (
@@ -420,6 +1039,14 @@ function ShiftReports({
         >
           Clear Filters
         </button>
+		
+		<button
+		  style={downloadBtn}
+		  onClick={downloadExcelReport}
+		  disabled={loading}
+		>
+		  Download Excel Report
+		</button>
       </div>
 
       <div style={summaryGrid}>
@@ -731,6 +1358,18 @@ const neutralPill = {
   border:
     "1px solid rgba(148,163,184,.18)",
   fontWeight: 900,
+};
+
+const downloadBtn = {
+  height: 38,
+  borderRadius: 12,
+  border: "none",
+  background:
+    "linear-gradient(135deg,#16a34a,#22c55e)",
+  color: "#fff",
+  padding: "0 16px",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 const emptyRow = {

@@ -48,6 +48,11 @@ public class LogisticsShiftService {
                 .findById(request.getVehicleId())
                 .orElseThrow(() ->
                         new RuntimeException("Vehicle not found"));
+        
+        validateShiftTimes(
+                request.getShiftStart(),
+                request.getShiftEnd()
+        );
 
         LogisticsShift shift = new LogisticsShift();
 
@@ -170,6 +175,11 @@ public class LogisticsShiftService {
                                 "Vehicle not found"
                         ));
 
+        validateShiftTimes(
+                request.getShiftStart(),
+                request.getShiftEnd()
+        );
+        
         shift.setDriver(driver);
 
         shift.setVehicle(vehicle);
@@ -270,6 +280,29 @@ public class LogisticsShiftService {
         );
 
         return shiftRepository.save(shift);
+    }
+    
+    private void validateShiftTimes(
+            LocalDateTime shiftStart,
+            LocalDateTime shiftEnd
+    ) {
+        if (
+                shiftStart == null ||
+                shiftEnd == null
+        ) {
+            throw new RuntimeException(
+                    "Shift start and shift end are required"
+            );
+        }
+
+        if (
+                shiftEnd.isBefore(shiftStart) ||
+                shiftEnd.isEqual(shiftStart)
+        ) {
+            throw new RuntimeException(
+                    "Shift end time must be after shift start time"
+            );
+        }
     }
     /*
     ========================================

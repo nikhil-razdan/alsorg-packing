@@ -150,6 +150,21 @@ export const calculateShiftHours = (shift) => {
   return Math.max(minutes / 60, 0);
 };
 
+export const getSafeShiftHours = (shift) => {
+  const storedHours = Number(
+    shift?.totalWorkingHours
+  );
+
+  if (
+    Number.isFinite(storedHours) &&
+    storedHours >= 0
+  ) {
+    return storedHours;
+  }
+
+  return calculateShiftHours(shift);
+};
+
 export const getShiftDateKey = (shift) => {
   const value =
     shift?.shiftStart ||
