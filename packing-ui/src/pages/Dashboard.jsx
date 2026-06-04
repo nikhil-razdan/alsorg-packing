@@ -769,17 +769,13 @@ function DashboardPage() {
 
 				<InventoryReports />
 
+				<InventoryReports />
+
 				{localStorage.getItem("role") === "ADMIN" && (
 				  <div style={adminPanel}>
 				    <ScheduledReports />
 				  </div>
 				)}
-
-			    {localStorage.getItem("role") === "ADMIN" && (
-			      <div style={adminPanel}>
-			        <ScheduledReports />
-			      </div>
-			    )}
 			  </>
 			)}
 	  
@@ -933,38 +929,6 @@ function DashboardPage() {
 		  />
 		)}
 
-        <ReportViewerModal
-          open={activeReport === "packing"}
-          onClose={() => setActiveReport(null)}
-          title="Packing Report"
-          fetchUrl="/api/reports/packing"
-          exportCsvUrl="/api/reports/export/packing/csv"
-          exportExcelUrl="/api/reports/export/packing/excel"
-        />
-        <ReportViewerModal
-          open={activeReport === "dispatch"}
-          onClose={() => setActiveReport(null)}
-          title="Dispatch Report"
-          fetchUrl="/api/reports/dispatch"
-          exportCsvUrl="/api/reports/export/dispatch/csv"
-          exportExcelUrl="/api/reports/export/dispatch/excel"
-        />
-        <ReportViewerModal
-          open={activeReport === "combined"}
-          onClose={() => setActiveReport(null)}
-          title="Combined Report"
-          fetchUrl="/api/reports/combined"
-          exportCsvUrl="/api/reports/export/combined/csv"
-          exportExcelUrl="/api/reports/export/combined/excel"
-        />
-        <ReportViewerModal
-          open={activeReport === "aging"}
-          onClose={() => setActiveReport(null)}
-          title="Inventory Aging Report"
-          fetchUrl="/api/reports/inventory-aging"
-          exportCsvUrl="/api/reports/export/inventory-aging/csv"
-          exportExcelUrl="/api/reports/export/inventory-aging/excel"
-        />
       </div>
 	  <LogisticsShiftModal
 	    open={shiftModal}
@@ -1229,15 +1193,6 @@ const chartSlider = {
     "transform .35s cubic-bezier(.4,0,.2,1)",
 };
 
-const reportHeaderRow = {
-  marginBottom: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 14,
-  flexWrap: "wrap",
-};
-
 const sectionTitle = {
   fontSize: 24,
   fontWeight: 900,
@@ -1250,55 +1205,6 @@ const sectionSubtitle = {
   color: "rgba(255,255,255,.62)",
 };
 
-const reportToggleGroup = {
-  position: "relative",
-
-  display: "inline-flex",
-
-  gap: 8,
-
-  padding: 5,
-
-  borderRadius: 999,
-
-  background:
-    "rgba(15,23,42,.92)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  overflow: "hidden",
-};
-
-const reportToggleBtn = {
-  width: 110,
-  height: 32,
-  borderRadius: 999,
-  border: "none",
-  background: "transparent",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
-  zIndex: 1,
-};
-
-const reportSliderIndicator = {
-  position: "absolute",
-
-  top: 5,
-  left: 5,
-
-  width: 110,
-  height: 32,
-
-  borderRadius: 999,
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-  transition:
-    "transform .35s cubic-bezier(.4,0,.2,1)",
-};
 
 const cardAccent = (accent) => ({
   position: "absolute",
