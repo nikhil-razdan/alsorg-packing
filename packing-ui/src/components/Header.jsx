@@ -24,16 +24,71 @@ import {
   Tooltip,
 } from "@mui/material";
 
+const parseJwt = (token) => {
+  try {
+    if (!token) return null;
+
+    const base64Url = token.split(".")[1];
+
+    if (!base64Url) return null;
+
+    const base64 = base64Url
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => {
+          return `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`;
+        })
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const cleanRole = (value) => {
+  return String(value || "GUEST")
+    .replace("ROLE_", "")
+    .trim()
+    .toUpperCase();
+};
+
+const getStoredUsername = () => {
+  const token = localStorage.getItem("token");
+  const payload = parseJwt(token);
+
+  const possibleUsername =
+    localStorage.getItem("username") ||
+    localStorage.getItem("name") ||
+    localStorage.getItem("fullName") ||
+    localStorage.getItem("email") ||
+    localStorage.getItem("userName") ||
+    payload?.username ||
+    payload?.name ||
+    payload?.fullName ||
+    payload?.email ||
+    payload?.sub;
+
+  if (!possibleUsername) {
+    return "User";
+  }
+
+  return String(possibleUsername).trim() || "User";
+};
+
 function Header() {
   const navigate = useNavigate();
 
-  const role =
-    localStorage.getItem("role") || "GUEST";
+  const role = cleanRole(
+    localStorage.getItem("role")
+  );
 
-  const username =
-    localStorage.getItem("username") ||
-    localStorage.getItem("user") ||
-    "User";
+  const username = getStoredUsername();
 
   const [appsAnchor, setAppsAnchor] =
     useState(null);
@@ -446,13 +501,13 @@ function Header() {
           </Box>
 
           <Box>
-            <Box sx={profileName}>
-              {username}
-            </Box>
+		  <Box sx={profileName}>
+		    {username}
+		  </Box>
 
-            <Box sx={profileRole}>
-              {role}
-            </Box>
+		  <Box sx={profileRole}>
+		    {role === "GUEST" ? "Guest User" : role}
+		  </Box>
           </Box>
         </Box>
 
