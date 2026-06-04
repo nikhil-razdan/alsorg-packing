@@ -57,6 +57,28 @@ export async function fetchDispatchReport(from, to) {
   return res.json();
 }
 
+export async function fetchCombinedReport(
+  from,
+  to
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/reports/combined?from=${encodeURIComponent(
+      from
+    )}&to=${encodeURIComponent(to)}`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      "Combined report failed"
+    );
+  }
+
+  return res.json();
+}
+
 export async function fetchLogisticsStats() {
   const res = await fetch(`${API_BASE_URL}/api/analytics`, {
     headers: {
@@ -70,7 +92,7 @@ export async function fetchLogisticsStats() {
 
 export async function fetchDailyThroughputUsers(type) {
   const res = await fetch(
-    `${API_BASE_URL}/api/reports/dashboard/throughput/users?type=${encodeURIComponent(type)}`,
+    `${API_BASE_URL}/api/reports/dashboard/daily-throughput/users?type=${encodeURIComponent(type)}`,
     {
       headers: authHeaders(),
     }

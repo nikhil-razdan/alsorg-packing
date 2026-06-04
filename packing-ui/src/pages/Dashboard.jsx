@@ -3,7 +3,7 @@ import StatusDonutChart from "../dashboard/components/StatusDonutChart";
 import StatusLineChart from "../dashboard/components/StatusLineChart";
 import StatusBarChart from "../dashboard/components/StatusBarChart";
 import ActivityFeed from "../dashboard/components/ActivityFeed";
-import ReportViewerModal from "../dashboard/components/ReportViewerModal";
+import InventoryReports from "../dashboard/components/inventory/InventoryReports";
 import ScheduledReports from "../dashboard/components/ScheduledReports";
 import {
   fetchDashboardStats,
@@ -317,7 +317,6 @@ function DashboardPage() {
   const [activityLogs, setActivityLogs] = useState([]);
   const [logistics, setLogistics] = useState(null);
   const [chartType, setChartType] = useState("donut");
-  const [activeReport, setActiveReport] = useState(null);
   const [mode, setMode] = useState("inventory");
   const [inventorySection, setInventorySection] =
     useState("summary");
@@ -379,13 +378,6 @@ function DashboardPage() {
 		   todayPackedItems + todayDispatchedItems;
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
-  const reportIndex =
-    {
-      packing: 0,
-      dispatch: 1,
-      combined: 2,
-      aging: 3,
-    }[activeReport] ?? 0;
 
   useEffect(() => {
     fetchLogisticsStats()
@@ -775,75 +767,13 @@ function DashboardPage() {
 			      </div>
 			    </div>
 
-			    <div style={reportHeaderRow}>
-			      <div>
-			        <div style={sectionTitle}>Reports Center</div>
-			        <div style={sectionSubtitle}>
-			          View, export and analyze inventory reports
-			        </div>
-			      </div>
+				<InventoryReports />
 
-			      <div style={reportToggleGroup}>
-			        <div
-			          style={{
-			            ...reportSliderIndicator,
-			            transform: `translateX(${reportIndex * 118}px)`,
-			          }}
-			        />
-
-			        <button
-			          style={{
-			            ...reportToggleBtn,
-			            color:
-			              activeReport === "packing"
-			                ? "#fff"
-			                : "rgba(255,255,255,.72)",
-			          }}
-			          onClick={() => setActiveReport("packing")}
-			        >
-			          📦 Packing
-			        </button>
-
-			        <button
-			          style={{
-			            ...reportToggleBtn,
-			            color:
-			              activeReport === "dispatch"
-			                ? "#fff"
-			                : "rgba(255,255,255,.72)",
-			          }}
-			          onClick={() => setActiveReport("dispatch")}
-			        >
-			          🚚 Dispatch
-			        </button>
-
-			        <button
-			          style={{
-			            ...reportToggleBtn,
-			            color:
-			              activeReport === "combined"
-			                ? "#fff"
-			                : "rgba(255,255,255,.72)",
-			          }}
-			          onClick={() => setActiveReport("combined")}
-			        >
-			          📊 Combined
-			        </button>
-
-			        <button
-			          style={{
-			            ...reportToggleBtn,
-			            color:
-			              activeReport === "aging"
-			                ? "#fff"
-			                : "rgba(255,255,255,.72)",
-			          }}
-			          onClick={() => setActiveReport("aging")}
-			        >
-			          ⏳ Aging
-			        </button>
-			      </div>
-			    </div>
+				{localStorage.getItem("role") === "ADMIN" && (
+				  <div style={adminPanel}>
+				    <ScheduledReports />
+				  </div>
+				)}
 
 			    {localStorage.getItem("role") === "ADMIN" && (
 			      <div style={adminPanel}>

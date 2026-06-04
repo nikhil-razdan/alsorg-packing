@@ -43,14 +43,18 @@ public class ReportScheduleController {
         }
 
         if (s.getReportType() == null || s.getReportType().isBlank()) {
-            s.setReportType("combined");
+            s.setReportType("inventory");
         }
 
         String type = s.getReportType().trim().toLowerCase();
 
+        if ("combined".equals(type)) {
+            type = "inventory";
+        }
+
         if (!type.equals("packing")
                 && !type.equals("dispatch")
-                && !type.equals("combined")) {
+                && !type.equals("inventory")) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Invalid report type"

@@ -1,7 +1,6 @@
 package com.alsorg.packing.reporting.service;
 
 import com.alsorg.packing.reporting.dto.ReportSchedule;
-import com.alsorg.packing.reporting.export.ExcelExportUtil;
 import com.alsorg.packing.reporting.repository.ReportScheduleRepository;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,22 +17,16 @@ public class ReportSchedulerService {
     private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
 
     private final ReportScheduleRepository repo;
-    private final PackingReportService packingService;
-    private final DispatchReportService dispatchService;
-    private final CombinedReportService combinedService;
+    private final InventoryReportWorkbookService workbookService;
     private final EmailService emailService;
 
     public ReportSchedulerService(
             ReportScheduleRepository repo,
-            PackingReportService packingService,
-            DispatchReportService dispatchService,
-            CombinedReportService combinedService,
+            InventoryReportWorkbookService workbookService,
             EmailService emailService
     ) {
         this.repo = repo;
-        this.packingService = packingService;
-        this.dispatchService = dispatchService;
-        this.combinedService = combinedService;
+        this.workbookService = workbookService;
         this.emailService = emailService;
     }
 
@@ -105,39 +98,34 @@ public class ReportSchedulerService {
     }
 
     private byte[] generateExcel(String type) {
-
-        if ("packing".equals(type)) {
-            return ExcelExportUtil.exportToExcel(
-                    packingService.getPackingReport(null, null),
-                    "Packing"
-            );
-        }
-
-        if ("dispatch".equals(type)) {
-            return ExcelExportUtil.exportToExcel(
-                    dispatchService.getDispatchReport(null, null),
-                    "Dispatch"
-            );
-        }
-
-        if ("combined".equals(type)) {
-            return ExcelExportUtil.exportToExcel(
-                    combinedService.getCombinedReport(null, null),
-                    "Combined"
-            );
-        }
-
-        throw new IllegalArgumentException(
-                "Invalid report type: " + type
+        return workbookService.exportInventoryReport(
+                type,
+                null,
+                null
         );
     }
 
     private String normalizeReportType(String type) {
         if (type == null || type.isBlank()) {
-            return "combined";
+            return "inventory";
         }
 
-        return type.trim().toLowerCase();
+        String normalized =
+                type.trim().toLowerCase();
+
+        if ("combined".equals(normalized)) {
+            return "inventory";
+        }
+
+        if (
+                "inventory".equals(normalized) ||
+                "packing".equals(normalized) ||
+                "dispatch".equals(normalized)
+        ) {
+            return normalized;
+        }
+
+        return "inventory";
     }
 
     private String buildFilename(
@@ -146,7 +134,7 @@ public class ReportSchedulerService {
     ) {
         return "alsorg-"
                 + reportType
-                + "-report-"
+                + "-professional-report-"
                 + today
                 + ".xlsx";
     }

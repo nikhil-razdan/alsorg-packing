@@ -4,7 +4,7 @@ import API from "../../services/api";
 function ScheduledReports() {
   const [rows, setRows] = useState([]);
   const [email, setEmail] = useState("");
-  const [type, setType] = useState("packing");
+  const [type, setType] = useState("inventory");
   const [time, setTime] = useState("18:00");
 
   const load = async () => {
@@ -49,7 +49,7 @@ function ScheduledReports() {
         <div>
           <h3 style={title}>Scheduled Reports</h3>
           <div style={subtitle}>
-            Auto-send inventory reports to selected users
+            Auto-send professional KPI Excel reports to selected users
           </div>
         </div>
 
@@ -78,17 +78,17 @@ function ScheduledReports() {
               onChange={(e) => setType(e.target.value)}
               style={select}
             >
-              <option style={option} value="packing">
-                📦 Packing Report
-              </option>
+			<option style={option} value="inventory">
+			  📊 Inventory Professional Report
+			</option>
 
-              <option style={option} value="dispatch">
-                🚚 Dispatch Report
-              </option>
+			<option style={option} value="packing">
+			  📦 Packing Professional Report
+			</option>
 
-              <option style={option} value="combined">
-                📊 Combined Report
-              </option>
+			<option style={option} value="dispatch">
+			  🚚 Dispatch Professional Report
+			</option>
             </select>
 
             <span style={selectArrow}>⌄</span>
@@ -144,9 +144,22 @@ function ScheduledReports() {
 }
 
 const formatReportType = (value) => {
-  if (value === "packing") return "📦 Packing";
-  if (value === "dispatch") return "🚚 Dispatch";
-  if (value === "combined") return "📊 Combined";
+  if (value === "inventory") {
+    return "📊 Inventory Professional";
+  }
+
+  if (value === "packing") {
+    return "📦 Packing Professional";
+  }
+
+  if (value === "dispatch") {
+    return "🚚 Dispatch Professional";
+  }
+
+  if (value === "combined") {
+    return "📊 Inventory Professional";
+  }
+
   return value;
 };
 
