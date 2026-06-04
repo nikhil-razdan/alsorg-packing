@@ -365,7 +365,7 @@ function LogisticsShiftModal({
       form.totalTrips || 0
     ),
 
-    totalHelpers: Number(
+    totalLoaders: Number(
       form.totalHelpers || 0
     ),
 

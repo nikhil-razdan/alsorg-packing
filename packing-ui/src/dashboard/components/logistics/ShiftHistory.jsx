@@ -10,7 +10,14 @@ import {
 
 import {
   fetchShifts,
+  updateShiftStatus,
 } from "../../api/logisticsApi";
+
+import {
+  formatShiftDate,
+  formatShiftTimeRange,
+  isShiftOverSixPm,
+} from "./logisticsDateTimeUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
 
@@ -55,21 +62,97 @@ function ShiftHistory({
   };
 
   useEffect(() => {
-    loadHistory();
-  }, []);
+    let active = true;
 
-  const historyRows = useMemo(() => {
-    return shifts.filter((s) =>
-      s.status !== "WORKING"
-    );
-  }, [shifts]);
+    setLoading(true);
 
-  const paginatedRows = useMemo(() => {
-    return historyRows.slice(
-      (pageNo - 1) * pageSize,
-      pageNo * pageSize
+    fetchShifts()
+      .then((data) => {
+        if (!active) return;
+
+        setShifts(data || []);
+      })
+      .catch((e) => {
+        if (!active) return;
+
+        console.error(e);
+
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load shift history"
+          ),
+          "error"
+        );
+      })
+      .finally(() => {
+        if (!active) return;
+
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [showAlert]);
+
+  const historyRows = shifts.filter(
+    (s) =>
+      [
+        "COMPLETED",
+        "CANCELLED",
+      ].includes(s.status)
+  );
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(historyRows.length / pageSize)
+  );
+
+  const currentPage = Math.min(
+    pageNo,
+    totalPages
+  );
+
+  const paginatedRows =
+    historyRows.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
     );
-  }, [historyRows, pageNo, pageSize]);
+	
+	const quickStatusChange =
+	  async (shift, nextStatus) => {
+	    try {
+	      await updateShiftStatus(
+	        shift.id,
+	        nextStatus
+	      );
+
+	      await loadHistory();
+
+	      showAlert(
+	        nextStatus === "WORKING"
+	          ? "Shift moved back to operations"
+	          : nextStatus === "COMPLETED"
+	          ? "Shift marked completed"
+	          : nextStatus === "CANCELLED"
+	          ? "Shift marked cancelled"
+	          : "Shift status updated successfully",
+	        "success"
+	      );
+
+	    } catch (e) {
+	      console.error(e);
+
+	      showAlert(
+	        getBackendMessage(
+	          e,
+	          "Failed to update shift status"
+	        ),
+	        "error"
+	      );
+	    }
+	  };
 
   return (
     <div style={wrap}>
@@ -110,70 +193,94 @@ function ShiftHistory({
 
         {!loading &&
           paginatedRows.map((s) => (
-            <div
-              key={s.id}
-              style={row}
-            >
-              <div>
-                {s.driver?.name || "-"}
-              </div>
+			<div
+			  key={s.id}
+			  style={{
+			    ...row,
+			    ...(isShiftOverSixPm(s)
+			      ? lateShiftRow
+			      : {}),
+			  }}
+			>
+			  <div>
+			    {s.driver?.name || "-"}
+			  </div>
 
-              <div>
-                {s.vehicle?.vehicleNumber || "-"}
-              </div>
+			  <div>
+			    {s.vehicle?.vehicleNumber || "-"}
+			  </div>
 
-              <div>
-                {s.totalTrips ?? "-"}
-              </div>
+			  <div>
+			    <div style={dateText}>
+			      {formatShiftDate(s)}
+			    </div>
 
-              <div>
-                {s.routeCategory || "-"}
-              </div>
+			    <div
+			      style={{
+			        ...timeText,
+			        ...(isShiftOverSixPm(s)
+			          ? lateTimeText
+			          : {}),
+			      }}
+			    >
+			      {formatShiftTimeRange(s)}
+			    </div>
 
-              <div>
-                <span style={status(s.status)}>
-                  {s.status || "-"}
-                </span>
-              </div>
+			    {isShiftOverSixPm(s) && (
+			      <div style={lateBadge}>
+			        Over Shift
+			      </div>
+			    )}
+			  </div>
 
-              <div>
-                {formatDate(
-                  s.updatedAt ||
-                    s.createdAt ||
-                    s.date
-                )}
-              </div>
-            </div>
+			  <div>
+			    {s.totalTrips ?? "-"}
+			  </div>
+
+			  <div>
+			    {s.routeCategory || "-"}
+			  </div>
+
+			  <div>
+			    <select
+			      value={s.status || "COMPLETED"}
+			      onChange={(e) =>
+			        quickStatusChange(
+			          s,
+			          e.target.value
+			        )
+			      }
+			      style={statusSelect(
+			        s.status
+			      )}
+			    >
+			      <option value="WORKING">
+			        WORKING
+			      </option>
+
+			      <option value="COMPLETED">
+			        COMPLETED
+			      </option>
+
+			      <option value="CANCELLED">
+			        CANCELLED
+			      </option>
+			    </select>
+			  </div>
+			</div>
           ))}
       </div>
 
-      <LogisticsPagination
-        pageNo={pageNo}
-        setPageNo={setPageNo}
-        pageSize={pageSize}
-        setPageSize={setPageSize}
-        totalItems={historyRows.length}
-      />
+	  <LogisticsPagination
+	    pageNo={currentPage}
+	    setPageNo={setPageNo}
+	    pageSize={pageSize}
+	    setPageSize={setPageSize}
+	    totalItems={historyRows.length}
+	  />
     </div>
   );
 }
-
-const formatDate = (value) => {
-  if (!value) return "-";
-
-  try {
-    return new Date(value).toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
-  } catch {
-    return "-";
-  }
-};
 
 const wrap = {
   background:
@@ -208,28 +315,22 @@ const table = {
 const head = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr .7fr 1fr .8fr 1fr",
-
+    "1.05fr 1fr 1.1fr .55fr .85fr 1fr",
   padding: 16,
-
   background: "#111827",
-
   color: "#94a3b8",
-
   fontWeight: 700,
 };
 
 const row = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr .7fr 1fr .8fr 1fr",
-
+    "1.05fr 1fr 1.1fr .55fr .85fr 1fr",
   padding: 16,
-
   color: "#fff",
-
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
+  alignItems: "center",
 };
 
 const emptyRow = {
@@ -243,30 +344,69 @@ const emptyRow = {
     "1px solid rgba(255,255,255,0.06)",
 };
 
-const status = (value) => ({
-  display: "inline-flex",
+const dateText = {
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 13,
+};
 
-  padding: "6px 10px",
+const timeText = {
+  color: "#94a3b8",
+  fontSize: 11,
+  marginTop: 4,
+};
 
-  borderRadius: 999,
-
-  fontSize: 12,
-
-  fontWeight: 700,
-
+const lateShiftRow = {
   background:
-    value === "COMPLETED"
-      ? "rgba(34,197,94,0.15)"
-      : value === "CANCELLED"
-      ? "rgba(239,68,68,0.15)"
-      : "rgba(148,163,184,0.15)",
+    "linear-gradient(90deg,rgba(245,158,11,.12),rgba(15,23,42,0))",
+  borderLeft:
+    "3px solid #f59e0b",
+};
 
+const lateTimeText = {
+  color: "#fbbf24",
+  fontWeight: 800,
+};
+
+const lateBadge = {
+  display: "inline-flex",
+  marginTop: 6,
+  padding: "4px 8px",
+  borderRadius: 999,
+  background:
+    "rgba(245,158,11,.16)",
+  color: "#fbbf24",
+  border:
+    "1px solid rgba(245,158,11,.28)",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const statusSelect = (value) => ({
+  height: 32,
+  borderRadius: 999,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  padding: "0 10px",
   color:
-    value === "COMPLETED"
+    value === "WORKING"
       ? "#4ade80"
+      : value === "COMPLETED"
+      ? "#60a5fa"
       : value === "CANCELLED"
       ? "#f87171"
-      : "#cbd5e1",
+      : "#fbbf24",
+  background:
+    value === "WORKING"
+      ? "rgba(34,197,94,0.15)"
+      : value === "COMPLETED"
+      ? "rgba(59,130,246,0.15)"
+      : value === "CANCELLED"
+      ? "rgba(239,68,68,0.15)"
+      : "rgba(251,191,36,0.15)",
+  fontSize: 12,
+  fontWeight: 800,
+  outline: "none",
 });
 
 export default ShiftHistory;

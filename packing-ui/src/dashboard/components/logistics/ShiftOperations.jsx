@@ -19,62 +19,10 @@ import {
 import {
   fetchShifts,
   deleteShift,
-  updateShift,
+  updateShiftStatus,
 } from "../../api/logisticsApi";
 
-const buildShiftUpdatePayload = (
-  shift,
-  overrides = {}
-) => ({
-  driverId:
-    shift.driver?.id ||
-    shift.driverId ||
-    "",
 
-  vehicleId:
-    shift.vehicle?.id ||
-    shift.vehicleId ||
-    "",
-
-  shiftStart:
-    shift.shiftStart || "",
-
-  shiftEnd:
-    shift.shiftEnd || "",
-
-  overtimeHours: Number(
-    shift.overtimeHours || 0
-  ),
-
-  totalTrips: Number(
-    shift.totalTrips || 0
-  ),
-
-  totalHelpers: Number(
-    shift.totalHelpers ||
-      shift.totalLoaders ||
-      0
-  ),
-
-  fuelUsed: Number(
-    shift.fuelUsed || 0
-  ),
-
-  totalDistance: Number(
-    shift.totalDistance || 0
-  ),
-
-  routeCategory:
-    shift.routeCategory || "Factory",
-
-  remarks:
-    shift.remarks || "",
-
-  status:
-    shift.status || "WORKING",
-
-  ...overrides,
-});
 
 function ShiftOperations({
   showAlert = () => {},
@@ -183,23 +131,19 @@ function ShiftOperations({
   const quickStatusChange =
     async (shift, nextStatus) => {
       try {
-        const payload =
-          buildShiftUpdatePayload(
-            shift,
-            {
-              status: nextStatus,
-            }
-          );
-
-        await updateShift(
+        await updateShiftStatus(
           shift.id,
-          payload
+          nextStatus
         );
 
         await load();
 
         showAlert(
-          "Shift status updated successfully",
+          nextStatus === "COMPLETED"
+            ? "Shift completed and moved to history"
+            : nextStatus === "CANCELLED"
+            ? "Shift cancelled and moved to history"
+            : "Shift status updated successfully",
           "success"
         );
 
@@ -216,21 +160,29 @@ function ShiftOperations({
       }
     };
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(shifts.length / pageSize)
-  );
+	const activeShifts = shifts.filter(
+	  (s) =>
+	    ![
+	      "COMPLETED",
+	      "CANCELLED",
+	    ].includes(s.status)
+	);
 
-  const currentPage = Math.min(
-    pageNo,
-    totalPages
-  );
+	const totalPages = Math.max(
+	  1,
+	  Math.ceil(activeShifts.length / pageSize)
+	);
 
-  const paginatedShifts =
-    shifts.slice(
-      (currentPage - 1) * pageSize,
-      currentPage * pageSize
-    );
+	const currentPage = Math.min(
+	  pageNo,
+	  totalPages
+	);
+
+	const paginatedShifts =
+	  activeShifts.slice(
+	    (currentPage - 1) * pageSize,
+	    currentPage * pageSize
+	  );
 
   return (
     <div style={wrap}>
@@ -330,42 +282,30 @@ function ShiftOperations({
                 {s.routeCategory || "-"}
               </div>
 
-              <div>
-                <select
-                  value={
-                    s.status || "WORKING"
-                  }
-                  onChange={(e) =>
-                    quickStatusChange(
-                      s,
-                      e.target.value
-                    )
-                  }
-                  style={statusSelect(
-                    s.status
-                  )}
-                >
-                  <option value="WORKING">
-                    WORKING
-                  </option>
+			  <div>
+			      <select
+			        value={s.status || "COMPLETED"}
+			        onChange={(e) =>
+			          quickStatusChange(
+			            s,
+			            e.target.value
+			          )
+			        }
+			        style={statusSelect(s.status)}
+			      >
+			        <option value="WORKING">
+			          WORKING
+			        </option>
 
-                  <option value="COMPLETED">
-                    COMPLETED
-                  </option>
+			        <option value="COMPLETED">
+			          COMPLETED
+			        </option>
 
-                  <option value="OFF">
-                    OFF
-                  </option>
-
-                  <option value="ON_LEAVE">
-                    ON_LEAVE
-                  </option>
-
-                  <option value="CANCELLED">
-                    CANCELLED
-                  </option>
-                </select>
-              </div>
+			        <option value="CANCELLED">
+			          CANCELLED
+			        </option>
+			      </select>
+			    </div>
 
               <div style={actions}>
                 <button
@@ -390,13 +330,13 @@ function ShiftOperations({
           ))}
       </div>
 
-      <LogisticsPagination
-        pageNo={currentPage}
-        setPageNo={setPageNo}
-        pageSize={pageSize}
-        setPageSize={setPageSize}
-        totalItems={shifts.length}
-      />
+	  <LogisticsPagination
+	    pageNo={currentPage}
+	    setPageNo={setPageNo}
+	    pageSize={pageSize}
+	    setPageSize={setPageSize}
+	    totalItems={activeShifts.length}
+	  />
 
       {createOpen && (
         <LogisticsShiftModal

@@ -14,6 +14,7 @@ import com.alsorg.packing.controller.dto.logistics.CreateShiftRequest;
 import com.alsorg.packing.repository.DriverRepository;
 import com.alsorg.packing.repository.LogisticsShiftRepository;
 import com.alsorg.packing.repository.VehicleRepository;
+import com.alsorg.packing.controller.dto.logistics.UpdateShiftStatusRequest;
 
 @Service
 public class LogisticsShiftService {
@@ -141,6 +142,123 @@ public class LogisticsShiftService {
                                 ));
 
         shiftRepository.delete(shift);
+    }
+    
+    public LogisticsShift updateShift(
+            UUID id,
+            CreateShiftRequest request
+    ) {
+
+        LogisticsShift shift =
+                shiftRepository.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Shift not found"
+                                ));
+
+        Driver driver = driverRepository
+                .findById(request.getDriverId())
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Driver not found"
+                        ));
+
+        Vehicle vehicle = vehicleRepository
+                .findById(request.getVehicleId())
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Vehicle not found"
+                        ));
+
+        shift.setDriver(driver);
+
+        shift.setVehicle(vehicle);
+
+        shift.setShiftStart(
+                request.getShiftStart()
+        );
+
+        shift.setShiftEnd(
+                request.getShiftEnd()
+        );
+
+        shift.setOvertimeHours(
+                request.getOvertimeHours()
+        );
+
+        shift.setTotalTrips(
+                request.getTotalTrips()
+        );
+
+        shift.setTotalLoaders(
+                request.getTotalLoaders()
+        );
+
+        shift.setFuelUsed(
+                request.getFuelUsed()
+        );
+
+        shift.setTotalDistance(
+                request.getTotalDistance()
+        );
+
+        shift.setRouteCategory(
+                request.getRouteCategory()
+        );
+
+        shift.setRemarks(
+                request.getRemarks()
+        );
+
+        shift.setStatus(
+                request.getStatus()
+        );
+
+        if (
+                request.getShiftStart() != null &&
+                request.getShiftEnd() != null
+        ) {
+            double hours =
+                    Duration.between(
+                            request.getShiftStart(),
+                            request.getShiftEnd()
+                    ).toMinutes() / 60.0;
+
+            shift.setTotalWorkingHours(hours);
+
+            double performance =
+                    calculatePerformance(
+                            request.getTotalTrips(),
+                            request.getTotalLoaders(),
+                            hours,
+                            request.getFuelUsed()
+                    );
+
+            shift.setDriverPerformance(
+                    performance
+            );
+        }
+
+        return shiftRepository.save(shift);
+    }
+
+    public LogisticsShift updateShiftStatus(
+            UUID id,
+            UpdateShiftStatusRequest request
+    ) {
+
+        LogisticsShift shift =
+                shiftRepository.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Shift not found"
+                                ));
+
+        shift.setStatus(
+                request.getStatus()
+        );
+
+        return shiftRepository.save(shift);
     }
     /*
     ========================================

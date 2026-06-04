@@ -158,6 +158,36 @@ export async function updateShift(
   return res.json();
 }
 
+export async function updateShiftStatus(
+  id,
+  status
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/shifts/${id}/status`,
+    {
+      method: "PATCH",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        status,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(text);
+  }
+
+  return res.json();
+}
+
 
 export async function fetchVehicles() {
   const res = await fetch(
