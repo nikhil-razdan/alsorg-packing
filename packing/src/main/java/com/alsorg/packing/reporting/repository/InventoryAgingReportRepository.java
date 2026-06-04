@@ -24,16 +24,19 @@ public class InventoryAgingReportRepository {
 
     public List<InventoryAgingRow> fetchInventoryAging() {
 
-        List<DispatchedItem> items = repo.findByStatusIn(
-                List.of(
-                        ItemDispatchStatus.IN_WAREHOUSE,
-                        ItemDispatchStatus.READY_TO_STORE,
-                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                        ItemDispatchStatus.READY_TO_DISPATCH
-                )
-        );
+        List<DispatchedItem> items =
+                repo.findByStatusIn(
+                        List.of(
+                                ItemDispatchStatus.IN_WAREHOUSE,
+                                ItemDispatchStatus.READY_TO_STORE,
+                                ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                                ItemDispatchStatus.READY_TO_DISPATCH,
+                                ItemDispatchStatus.READY
+                        )
+                );
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now =
+                LocalDateTime.now();
 
         return items.stream()
                 .map(item -> {
@@ -46,13 +49,27 @@ public class InventoryAgingReportRepository {
                     long days = 0;
 
                     if (start != null) {
-                        days = ChronoUnit.DAYS.between(start, now);
+                        days = ChronoUnit.DAYS.between(
+                                start,
+                                now
+                        );
                     }
+
+                    String status =
+                            item.getStatus() != null
+                                    ? item.getStatus().name()
+                                    : "UNKNOWN";
 
                     return new InventoryAgingRow(
                             item.getZohoItemId(),
                             item.getName(),
                             item.getClientName(),
+
+                            item.getZohoItemId(),
+                            item.getName(),
+
+                            status,
+                            start,
                             days
                     );
                 })

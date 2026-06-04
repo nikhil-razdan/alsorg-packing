@@ -25,12 +25,17 @@ public class PackingReportRepository {
                 d.zohoItemId,
                 d.name,
                 d.clientName,
+
+                d.zohoItemId,
+                d.name,
+
                 d.packedAt,
-                coalesce(d.createdBy, 'SYSTEM')
+                coalesce(d.packedBy, d.createdBy, 'SYSTEM')
             )
             from DispatchedItem d
             where d.packedAt is not null
-              and d.packedAt between :from and :to
+              and (:from is null or d.packedAt >= :from)
+              and (:to is null or d.packedAt <= :to)
             order by d.packedAt desc
         """, PackingReportRow.class)
         .setParameter("from", from)

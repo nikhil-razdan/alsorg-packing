@@ -3,22 +3,13 @@ package com.alsorg.packing.reporting.repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-
 import org.springframework.stereotype.Repository;
 
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
-import com.alsorg.packing.domain.common.ItemDispatchStatus;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.time.LocalDateTime;
-import java.util.List;
-
-import com.alsorg.packing.domain.common.ItemDispatchStatus;
-import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 @Repository
 public class DashboardReportRepository {

@@ -44,6 +44,18 @@ public class InventoryReportWorkbookService {
         this.agingService = agingService;
     }
 
+    private static final String[] ITEM_PACKET_HEADERS = {
+            "Module",
+            "Zoho Item ID",
+            "Item Name",
+            "Client",
+            "Packet No",
+            "Packet Name",
+            "Status",
+            "Action At",
+            "Action By",
+            "Age Days"
+    };
     
     private List<Object> row(
             Object... values
@@ -134,6 +146,36 @@ public class InventoryReportWorkbookService {
                     buildAgingBucketRows(
                             agingRows
                     );
+            
+            List<List<Object>> packingItemPacketRows =
+                    buildPackingItemPacketRows(
+                            packingRows
+                    );
+
+            List<List<Object>> dispatchItemPacketRows =
+                    buildDispatchItemPacketRows(
+                            dispatchRows
+                    );
+
+            List<List<Object>> inventoryItemPacketRows =
+                    buildInventoryItemPacketRows(
+                            agingRows
+                    );
+
+            List<List<Object>> allItemPacketRows =
+                    new ArrayList<>();
+
+            allItemPacketRows.addAll(
+                    inventoryItemPacketRows
+            );
+
+            allItemPacketRows.addAll(
+                    packingItemPacketRows
+            );
+
+            allItemPacketRows.addAll(
+                    dispatchItemPacketRows
+            );
 
             addRowsSheet(
                     workbook,
@@ -206,6 +248,19 @@ public class InventoryReportWorkbookService {
                         warningStyle,
                         -1
                 );
+                
+                addRowsSheet(
+                        workbook,
+                        "Packing Item Packets",
+                        "Packing Item / Packet Detail",
+                        ITEM_PACKET_HEADERS,
+                        packingItemPacketRows,
+                        titleStyle,
+                        headerStyle,
+                        dataStyle,
+                        warningStyle,
+                        -1
+                );
             }
 
             if (includeDispatch) {
@@ -238,6 +293,19 @@ public class InventoryReportWorkbookService {
                                 "Dispatched By"
                         },
                         buildRawDispatchRows(dispatchRows),
+                        titleStyle,
+                        headerStyle,
+                        dataStyle,
+                        warningStyle,
+                        -1
+                );
+                
+                addRowsSheet(
+                        workbook,
+                        "Dispatch Item Packets",
+                        "Dispatch Item / Packet Detail",
+                        ITEM_PACKET_HEADERS,
+                        dispatchItemPacketRows,
                         titleStyle,
                         headerStyle,
                         dataStyle,
@@ -281,6 +349,35 @@ public class InventoryReportWorkbookService {
                         warningStyle,
                         2
                 );
+                
+                if ("inventory".equals(type)
+                        || "combined".equals(type)) {
+                    addRowsSheet(
+                            workbook,
+                            "All Item Packets",
+                            "All Item / Packet Detail",
+                            ITEM_PACKET_HEADERS,
+                            allItemPacketRows,
+                            titleStyle,
+                            headerStyle,
+                            dataStyle,
+                            warningStyle,
+                            -1
+                    );
+
+                    addRowsSheet(
+                            workbook,
+                            "Inventory Item Packets",
+                            "Inventory Item / Packet Detail",
+                            ITEM_PACKET_HEADERS,
+                            inventoryItemPacketRows,
+                            titleStyle,
+                            headerStyle,
+                            dataStyle,
+                            warningStyle,
+                            10
+                    );
+                }
 
                 addRowsSheet(
                         workbook,
@@ -318,7 +415,10 @@ public class InventoryReportWorkbookService {
                             packingUserRows,
                             dispatchUserRows,
                             dateWiseRows,
-                            agingBucketRows
+                            agingBucketRows,
+                            allItemPacketRows,
+                            packingItemPacketRows,
+                            dispatchItemPacketRows
                     ),
                     titleStyle,
                     headerStyle,
@@ -785,13 +885,105 @@ public class InventoryReportWorkbookService {
 
         return result;
     }
+    
+    private List<List<Object>> buildPackingItemPacketRows(
+            List<PackingReportRow> rows
+    ) {
+        List<List<Object>> result =
+                new ArrayList<>();
+
+        for (PackingReportRow row : rows) {
+            result.add(row(
+                    "Packing",
+                    text(row, "zohoItemId", "itemId"),
+                    text(row, "itemName", "name"),
+                    text(row, "clientName", "client"),
+                    packetNumber(row),
+                    packetName(row),
+                    "PACKED",
+                    dateTimeLabel(
+                            dateTime(row, "packedAt")
+                    ),
+                    text(row, "packedBy", "createdBy"),
+                    "-"
+            ));
+        }
+
+        return result;
+    }
+
+    private List<List<Object>> buildDispatchItemPacketRows(
+            List<DispatchReportRow> rows
+    ) {
+        List<List<Object>> result =
+                new ArrayList<>();
+
+        for (DispatchReportRow row : rows) {
+            result.add(row(
+                    "Dispatch",
+                    text(row, "zohoItemId", "itemId"),
+                    text(row, "itemName", "name"),
+                    text(row, "clientName", "client"),
+                    packetNumber(row),
+                    packetName(row),
+                    "DISPATCHED",
+                    dateTimeLabel(
+                            dateTime(row, "dispatchedAt")
+                    ),
+                    text(row, "dispatchedBy", "createdBy"),
+                    "-"
+            ));
+        }
+
+        return result;
+    }
+
+    private List<List<Object>> buildInventoryItemPacketRows(
+            List<InventoryAgingRow> rows
+    ) {
+        List<List<Object>> result =
+                new ArrayList<>();
+
+        for (InventoryAgingRow row : rows) {
+            result.add(row(
+                    "Inventory",
+                    text(row, "zohoItemId", "itemId"),
+                    text(row, "itemName", "name"),
+                    text(row, "clientName", "client"),
+                    packetNumber(row),
+                    packetName(row),
+                    text(row, "status", "itemStatus"),
+                    dateTimeLabel(
+                            dateTime(
+                                    row,
+                                    "createdAt",
+                                    "receivedAt",
+                                    "packedAt",
+                                    "date"
+                            )
+                    ),
+                    text(
+                            row,
+                            "createdBy",
+                            "packedBy",
+                            "dispatchedBy"
+                    ),
+                    getAgeDays(row)
+            ));
+        }
+
+        return result;
+    }
 
     private List<List<Object>> buildInsightRows(
             KpiData kpis,
             List<List<Object>> packingUserRows,
             List<List<Object>> dispatchUserRows,
             List<List<Object>> dateWiseRows,
-            List<List<Object>> agingBucketRows
+            List<List<Object>> agingBucketRows,
+            List<List<Object>> allItemPacketRows,
+            List<List<Object>> packingItemPacketRows,
+            List<List<Object>> dispatchItemPacketRows
     ) {
         String topPacker =
                 packingUserRows.isEmpty()
@@ -845,6 +1037,21 @@ public class InventoryReportWorkbookService {
                         "Critical Aging Bucket",
                         criticalBucket,
                         "Prioritize old inventory for dispatch or warehouse review."
+                ),
+                row(
+                        "Item / Packet Detail Rows",
+                        allItemPacketRows.size(),
+                        "Use this for full inventory, packing and dispatch packet-level traceability."
+                ),
+                row(
+                        "Packing Item / Packet Rows",
+                        packingItemPacketRows.size(),
+                        "Use this to audit packed packets and item-wise user productivity."
+                ),
+                row(
+                        "Dispatch Item / Packet Rows",
+                        dispatchItemPacketRows.size(),
+                        "Use this to validate dispatched packets against challan movement."
                 ),
                 row(
                         "Pending Items",
@@ -1312,6 +1519,31 @@ public class InventoryReportWorkbookService {
         }
 
         return null;
+    }
+    
+    private String packetNumber(
+            Object source
+    ) {
+        return text(
+                source,
+                "packetNumber",
+                "packetNo",
+                "packetCode",
+                "packetId",
+                "packetName"
+        );
+    }
+
+    private String packetName(
+            Object source
+    ) {
+        return text(
+                source,
+                "packetName",
+                "packetTitle",
+                "packetDescription",
+                "packetType"
+        );
     }
 
     private String dateKey(

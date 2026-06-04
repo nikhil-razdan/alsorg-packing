@@ -26,12 +26,18 @@ public class DispatchReportRepository {
                 d.zohoItemId,
                 d.name,
                 d.clientName,
+
+                d.zohoItemId,
+                d.name,
+
                 d.dispatchedAt,
-                d.dispatchedBy
+                coalesce(d.dispatchedBy, d.createdBy, 'SYSTEM')
             )
             from DispatchedItem d
             where d.status = :status
-              and d.dispatchedAt between :from and :to
+              and d.dispatchedAt is not null
+              and (:from is null or d.dispatchedAt >= :from)
+              and (:to is null or d.dispatchedAt <= :to)
             order by d.dispatchedAt desc
         """, DispatchReportRow.class)
         .setParameter("status", ItemDispatchStatus.DISPATCHED)

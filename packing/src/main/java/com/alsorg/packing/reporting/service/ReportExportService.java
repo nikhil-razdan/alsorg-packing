@@ -1,6 +1,5 @@
 package com.alsorg.packing.reporting.service;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -16,14 +15,16 @@ public class ReportExportService {
 
     public byte[] exportDispatchCsv(List<DispatchReportRow> rows) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Zoho Item ID,Item Name,Client,Dispatched At,Dispatched By\n");
+        sb.append("Zoho Item ID,Item Name,Client,Packet Number,Packet Name,Dispatched At,Dispatched By\n");
 
         for (DispatchReportRow r : rows) {
-            sb.append(r.getZohoItemId()).append(",")
-              .append(r.getItemName()).append(",")
-              .append(r.getClientName()).append(",")
-              .append(r.getDispatchedAt()).append(",")
-              .append(r.getDispatchedBy()).append("\n");
+        	sb.append(r.getZohoItemId()).append(",")
+        	  .append(r.getItemName()).append(",")
+        	  .append(r.getClientName()).append(",")
+        	  .append(r.getPacketNumber()).append(",")
+        	  .append(r.getPacketName()).append(",")
+        	  .append(r.getDispatchedAt()).append(",")
+        	  .append(r.getDispatchedBy()).append("\n");
         }
 
         return sb.toString().getBytes(StandardCharsets.UTF_8);
@@ -54,14 +55,16 @@ public class ReportExportService {
 
         StringBuilder sb = new StringBuilder();
 
-        sb.append("Zoho Item ID,Item Name,Client,Packed At,Packed By\n");
+        sb.append("Zoho Item ID,Item Name,Client,Packet Number,Packet Name,Packed At,Packed By\n");
 
         for (PackingReportRow r : rows) {
-            sb.append(r.getZohoItemId()).append(",")
-              .append(r.getItemName()).append(",")
-              .append(r.getClientName()).append(",")
-              .append(r.getPackedAt()).append(",")
-              .append(r.getPackedBy()).append("\n");
+        	sb.append(r.getZohoItemId()).append(",")
+        	  .append(r.getItemName()).append(",")
+        	  .append(r.getClientName()).append(",")
+        	  .append(r.getPacketNumber()).append(",")
+        	  .append(r.getPacketName()).append(",")
+        	  .append(r.getPackedAt()).append(",")
+        	  .append(r.getPackedBy()).append("\n");
         }
 
         return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
