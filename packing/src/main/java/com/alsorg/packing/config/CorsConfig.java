@@ -20,6 +20,7 @@ public class CorsConfig {
 
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173",
+                "http://localhost:3000",
                 "https://alsorg-packing-frontend.onrender.com"
         ));
 
@@ -28,7 +29,9 @@ public class CorsConfig {
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With"
+                "X-Requested-With",
+                "X-Username",
+                "x-username"
         ));
 
         config.setAllowedMethods(List.of(

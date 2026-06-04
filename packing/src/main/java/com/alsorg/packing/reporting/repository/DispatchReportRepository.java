@@ -5,6 +5,7 @@ import java.util.List;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 
 import org.springframework.stereotype.Repository;
 
@@ -21,7 +22,7 @@ public class DispatchReportRepository {
             LocalDateTime from,
             LocalDateTime to
     ) {
-        return em.createQuery("""
+        StringBuilder jpql = new StringBuilder("""
             select new com.alsorg.packing.reporting.dto.DispatchReportRow(
                 d.zohoItemId,
                 d.name,
@@ -36,13 +37,37 @@ public class DispatchReportRepository {
             from DispatchedItem d
             where d.status = :status
               and d.dispatchedAt is not null
-              and (:from is null or d.dispatchedAt >= :from)
-              and (:to is null or d.dispatchedAt <= :to)
-            order by d.dispatchedAt desc
-        """, DispatchReportRow.class)
-        .setParameter("status", ItemDispatchStatus.DISPATCHED)
-        .setParameter("from", from)
-        .setParameter("to", to)
-        .getResultList();
+        """);
+
+        if (from != null) {
+            jpql.append(" and d.dispatchedAt >= :from ");
+        }
+
+        if (to != null) {
+            jpql.append(" and d.dispatchedAt <= :to ");
+        }
+
+        jpql.append(" order by d.dispatchedAt desc ");
+
+        TypedQuery<DispatchReportRow> query =
+                em.createQuery(
+                        jpql.toString(),
+                        DispatchReportRow.class
+                );
+
+        query.setParameter(
+                "status",
+                ItemDispatchStatus.DISPATCHED
+        );
+
+        if (from != null) {
+            query.setParameter("from", from);
+        }
+
+        if (to != null) {
+            query.setParameter("to", to);
+        }
+
+        return query.getResultList();
     }
 }

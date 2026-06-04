@@ -488,15 +488,13 @@ function InventoryReports() {
     const to =
       toEndDateTime(todayDate());
 
-    Promise.all([
-      fetchDashboardStats(),
-      fetchPackingReport(from, to),
-      fetchDispatchReport(from, to),
-      fetchCombinedReport(from, to)
-        .catch(() => []),
-      fetchInventoryAging()
-        .catch(() => []),
-    ])
+	  Promise.all([
+	    fetchDashboardStats().catch(() => ({})),
+	    fetchPackingReport(from, to).catch(() => []),
+	    fetchDispatchReport(from, to).catch(() => []),
+	    fetchCombinedReport(from, to).catch(() => []),
+	    fetchInventoryAging().catch(() => []),
+	  ])
       .then(
         ([
           statsData,
@@ -562,21 +560,19 @@ function InventoryReports() {
       const to =
         toEndDateTime(toDate);
 
-      const [
-        statsData,
-        packingData,
-        dispatchData,
-        combinedData,
-        agingData,
-      ] = await Promise.all([
-        fetchDashboardStats(),
-        fetchPackingReport(from, to),
-        fetchDispatchReport(from, to),
-        fetchCombinedReport(from, to)
-          .catch(() => []),
-        fetchInventoryAging()
-          .catch(() => []),
-      ]);
+		const [
+		  statsData,
+		  packingData,
+		  dispatchData,
+		  combinedData,
+		  agingData,
+		] = await Promise.all([
+		  fetchDashboardStats().catch(() => ({})),
+		  fetchPackingReport(from, to).catch(() => []),
+		  fetchDispatchReport(from, to).catch(() => []),
+		  fetchCombinedReport(from, to).catch(() => []),
+		  fetchInventoryAging().catch(() => []),
+		]);
 
       setStats(
         normalizeStats(statsData || {})

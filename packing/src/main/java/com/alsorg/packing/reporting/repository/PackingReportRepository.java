@@ -5,6 +5,7 @@ import java.util.List;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 
 import org.springframework.stereotype.Repository;
 
@@ -20,7 +21,7 @@ public class PackingReportRepository {
             LocalDateTime from,
             LocalDateTime to
     ) {
-        return em.createQuery("""
+        StringBuilder jpql = new StringBuilder("""
             select new com.alsorg.packing.reporting.dto.PackingReportRow(
                 d.zohoItemId,
                 d.name,
@@ -34,12 +35,32 @@ public class PackingReportRepository {
             )
             from DispatchedItem d
             where d.packedAt is not null
-              and (:from is null or d.packedAt >= :from)
-              and (:to is null or d.packedAt <= :to)
-            order by d.packedAt desc
-        """, PackingReportRow.class)
-        .setParameter("from", from)
-        .setParameter("to", to)
-        .getResultList();
+        """);
+
+        if (from != null) {
+            jpql.append(" and d.packedAt >= :from ");
+        }
+
+        if (to != null) {
+            jpql.append(" and d.packedAt <= :to ");
+        }
+
+        jpql.append(" order by d.packedAt desc ");
+
+        TypedQuery<PackingReportRow> query =
+                em.createQuery(
+                        jpql.toString(),
+                        PackingReportRow.class
+                );
+
+        if (from != null) {
+            query.setParameter("from", from);
+        }
+
+        if (to != null) {
+            query.setParameter("to", to);
+        }
+
+        return query.getResultList();
     }
 }

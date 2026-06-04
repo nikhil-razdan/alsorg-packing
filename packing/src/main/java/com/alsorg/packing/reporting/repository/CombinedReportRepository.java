@@ -6,6 +6,7 @@ import java.util.List;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 
 import org.springframework.stereotype.Repository;
 
@@ -59,7 +60,7 @@ public class CombinedReportRepository {
             LocalDateTime from,
             LocalDateTime to
     ) {
-        return em.createQuery("""
+        StringBuilder jpql = new StringBuilder("""
             select new com.alsorg.packing.reporting.dto.CombinedReportRow(
                 d.zohoItemId,
                 d.name,
@@ -74,19 +75,38 @@ public class CombinedReportRepository {
             )
             from DispatchedItem d
             where d.packedAt is not null
-              and (:from is null or d.packedAt >= :from)
-              and (:to is null or d.packedAt <= :to)
-        """, CombinedReportRow.class)
-        .setParameter("from", from)
-        .setParameter("to", to)
-        .getResultList();
+        """);
+
+        if (from != null) {
+            jpql.append(" and d.packedAt >= :from ");
+        }
+
+        if (to != null) {
+            jpql.append(" and d.packedAt <= :to ");
+        }
+
+        TypedQuery<CombinedReportRow> query =
+                em.createQuery(
+                        jpql.toString(),
+                        CombinedReportRow.class
+                );
+
+        if (from != null) {
+            query.setParameter("from", from);
+        }
+
+        if (to != null) {
+            query.setParameter("to", to);
+        }
+
+        return query.getResultList();
     }
 
     private List<CombinedReportRow> fetchDispatchedRows(
             LocalDateTime from,
             LocalDateTime to
     ) {
-        return em.createQuery("""
+        StringBuilder jpql = new StringBuilder("""
             select new com.alsorg.packing.reporting.dto.CombinedReportRow(
                 d.zohoItemId,
                 d.name,
@@ -102,12 +122,35 @@ public class CombinedReportRepository {
             from DispatchedItem d
             where d.status = :status
               and d.dispatchedAt is not null
-              and (:from is null or d.dispatchedAt >= :from)
-              and (:to is null or d.dispatchedAt <= :to)
-        """, CombinedReportRow.class)
-        .setParameter("status", ItemDispatchStatus.DISPATCHED)
-        .setParameter("from", from)
-        .setParameter("to", to)
-        .getResultList();
+        """);
+
+        if (from != null) {
+            jpql.append(" and d.dispatchedAt >= :from ");
+        }
+
+        if (to != null) {
+            jpql.append(" and d.dispatchedAt <= :to ");
+        }
+
+        TypedQuery<CombinedReportRow> query =
+                em.createQuery(
+                        jpql.toString(),
+                        CombinedReportRow.class
+                );
+
+        query.setParameter(
+                "status",
+                ItemDispatchStatus.DISPATCHED
+        );
+
+        if (from != null) {
+            query.setParameter("from", from);
+        }
+
+        if (to != null) {
+            query.setParameter("to", to);
+        }
+
+        return query.getResultList();
     }
 }
