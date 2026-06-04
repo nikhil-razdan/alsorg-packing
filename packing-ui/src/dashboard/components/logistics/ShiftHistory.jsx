@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
@@ -20,6 +19,11 @@ import {
 } from "./logisticsDateTimeUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
+
+const normalizeStatus = (status) =>
+  String(status || "WORKING")
+    .trim()
+    .toUpperCase();
 
 function ShiftHistory({
   showAlert = () => {},
@@ -96,13 +100,14 @@ function ShiftHistory({
     };
   }, [showAlert]);
 
-  const historyRows = shifts.filter(
-    (s) =>
-      [
-        "COMPLETED",
-        "CANCELLED",
-      ].includes(s.status)
-  );
+  const historyRows = shifts.filter((s) => {
+    const status = normalizeStatus(s.status);
+
+    return [
+      "COMPLETED",
+      "CANCELLED",
+    ].includes(status);
+  });
 
   const totalPages = Math.max(
     1,
@@ -123,6 +128,13 @@ function ShiftHistory({
 	const quickStatusChange =
 	  async (shift, nextStatus) => {
 	    try {
+	      const currentStatus =
+	        normalizeStatus(shift.status);
+
+	      if (currentStatus === nextStatus) {
+	        return;
+	      }
+
 	      await updateShiftStatus(
 	        shift.id,
 	        nextStatus
@@ -131,12 +143,12 @@ function ShiftHistory({
 	      await loadHistory();
 
 	      showAlert(
-	        nextStatus === "WORKING"
+	        [
+	          "WORKING",
+	          "OFF",
+	          "ON_LEAVE",
+	        ].includes(nextStatus)
 	          ? "Shift moved back to operations"
-	          : nextStatus === "COMPLETED"
-	          ? "Shift marked completed"
-	          : nextStatus === "CANCELLED"
-	          ? "Shift marked cancelled"
 	          : "Shift status updated successfully",
 	        "success"
 	      );
@@ -169,14 +181,14 @@ function ShiftHistory({
       </div>
 
       <div style={table}>
-        <div style={head}>
-          <div>Driver</div>
-          <div>Vehicle</div>
-          <div>Trips</div>
-          <div>Route</div>
-          <div>Status</div>
-          <div>Date</div>
-        </div>
+	  <div style={head}>
+	    <div>Driver</div>
+	    <div>Vehicle</div>
+	    <div>Date</div>
+	    <div>Trips</div>
+	    <div>Route</div>
+	    <div>Status</div>
+	  </div>
 
         {loading && (
           <div style={emptyRow}>
@@ -187,7 +199,7 @@ function ShiftHistory({
         {!loading &&
           paginatedRows.length === 0 && (
             <div style={emptyRow}>
-              No completed shift history found
+              No completed or cancelled shift history found
             </div>
           )}
 
@@ -242,30 +254,38 @@ function ShiftHistory({
 			  </div>
 
 			  <div>
-			    <select
-			      value={s.status || "COMPLETED"}
-			      onChange={(e) =>
-			        quickStatusChange(
-			          s,
-			          e.target.value
-			        )
-			      }
-			      style={statusSelect(
-			        s.status
-			      )}
-			    >
-			      <option value="WORKING">
-			        WORKING
-			      </option>
+			  <select
+			    value={normalizeStatus(s.status)}
+			    onChange={(e) =>
+			      quickStatusChange(
+			        s,
+			        e.target.value
+			      )
+			    }
+			    style={statusSelect(
+			      normalizeStatus(s.status)
+			    )}
+			  >
+			    <option value="WORKING">
+			      WORKING
+			    </option>
 
-			      <option value="COMPLETED">
-			        COMPLETED
-			      </option>
+			    <option value="OFF">
+			      OFF
+			    </option>
 
-			      <option value="CANCELLED">
-			        CANCELLED
-			      </option>
-			    </select>
+			    <option value="ON_LEAVE">
+			      ON_LEAVE
+			    </option>
+
+			    <option value="COMPLETED">
+			      COMPLETED
+			    </option>
+
+			    <option value="CANCELLED">
+			      CANCELLED
+			    </option>
+			  </select>
 			  </div>
 			</div>
           ))}
@@ -388,6 +408,7 @@ const statusSelect = (value) => ({
   border:
     "1px solid rgba(255,255,255,.08)",
   padding: "0 10px",
+
   color:
     value === "WORKING"
       ? "#4ade80"
@@ -395,7 +416,12 @@ const statusSelect = (value) => ({
       ? "#60a5fa"
       : value === "CANCELLED"
       ? "#f87171"
-      : "#fbbf24",
+      : value === "OFF"
+      ? "#fbbf24"
+      : value === "ON_LEAVE"
+      ? "#fbbf24"
+      : "#cbd5e1",
+
   background:
     value === "WORKING"
       ? "rgba(34,197,94,0.15)"
@@ -403,7 +429,12 @@ const statusSelect = (value) => ({
       ? "rgba(59,130,246,0.15)"
       : value === "CANCELLED"
       ? "rgba(239,68,68,0.15)"
-      : "rgba(251,191,36,0.15)",
+      : value === "OFF"
+      ? "rgba(251,191,36,0.15)"
+      : value === "ON_LEAVE"
+      ? "rgba(251,191,36,0.15)"
+      : "rgba(148,163,184,0.15)",
+
   fontSize: 12,
   fontWeight: 800,
   outline: "none",
