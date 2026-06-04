@@ -12,7 +12,6 @@ import com.alsorg.packing.service.LogisticsShiftService;
 
 @RestController
 @RequestMapping("/api/logistics/shifts")
-@CrossOrigin("*")
 public class LogisticsShiftController {
 
     private final LogisticsShiftService service;

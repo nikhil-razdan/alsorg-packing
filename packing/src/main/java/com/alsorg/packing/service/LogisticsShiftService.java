@@ -254,8 +254,19 @@ public class LogisticsShiftService {
                                         "Shift not found"
                                 ));
 
+        if (
+                request.getStatus() == null ||
+                request.getStatus().trim().isEmpty()
+        ) {
+            throw new RuntimeException(
+                    "Status is required"
+            );
+        }
+
         shift.setStatus(
                 request.getStatus()
+                        .trim()
+                        .toUpperCase()
         );
 
         return shiftRepository.save(shift);
