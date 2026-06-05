@@ -1646,6 +1646,15 @@ function DispatchedItemsPage() {
      }
    };
    
+   const openMoveToFgModal = (row) => {
+     const zones = getFgZonesForRow(row);
+
+     setMoveFgModal(row);
+
+     // Set default only once while opening modal
+     setSelectedFgZone(zones.length > 0 ? zones[0] : "");
+   };
+   
    const resolveScan = async (rawScan) => {
      const res = await fetch(`${API_BASE_URL}/api/scanner/resolve`, {
        method: "POST",
@@ -2384,12 +2393,7 @@ function DispatchedItemsPage() {
 			<Button
 			  size="small"
 			  disabled={!isDispatch || row.status !== "READY"}
-			  onClick={() => {
-			    const zones = getFgZonesForRow(row);
-
-			    setMoveFgModal(row);
-			    setSelectedFgZone(zones.length > 0 ? zones[0] : "");
-			  }}
+			  onClick={() => openMoveToFgModal(row)}
 			  sx={{
 			    ...actionPrimary,
 			    ...tableActionButton,
@@ -4073,23 +4077,36 @@ function DispatchedItemsPage() {
 	          </Box>
 
 	          {getFgZonesForRow(moveFgModal).length > 0 ? (
-	            <TextField
-	              select
-	              fullWidth
-	              label="Select FG Zone"
-	              value={selectedFgZone}
-	              onChange={(e) => setSelectedFgZone(e.target.value)}
-	              sx={formFieldSx}
-	              SelectProps={{
-	                MenuProps: modalSelectMenuProps,
-	              }}
-	            >
-	              {getFgZonesForRow(moveFgModal).map((zone) => (
-	                <MenuItem key={zone} value={zone}>
-	                  {getFgZoneLabel(moveFgModal, zone)}
-	                </MenuItem>
-	              ))}
-	            </TextField>
+				<TextField
+				  select
+				  fullWidth
+				  label="Select FG Zone"
+				  value={selectedFgZone}
+				  onChange={(e) => {
+				    const value = e.target.value;
+
+				    console.log("FG ZONE SELECTED:", value);
+
+				    setSelectedFgZone(value);
+				  }}
+				  sx={formFieldSx}
+				  SelectProps={{
+				    MenuProps: modalSelectMenuProps,
+				  }}
+				>
+				  {getFgZonesForRow(moveFgModal).map((zone) => {
+				    const zoneValue = String(zone);
+
+				    return (
+				      <MenuItem
+				        key={zoneValue}
+				        value={zoneValue}
+				      >
+				        {getFgZoneLabel(moveFgModal, zoneValue)}
+				      </MenuItem>
+				    );
+				  })}
+				</TextField>
 	          ) : (
 	            <Box
 	              sx={{
@@ -4127,10 +4144,16 @@ function DispatchedItemsPage() {
 	                  return;
 	                }
 
-	                const query = selectedFgZone
-	                  ? `?fgZoneCode=${encodeURIComponent(selectedFgZone)}`
-	                  : "";
+					const finalFgZone = selectedFgZone?.trim();
 
+					if (zones.length > 0 && !finalFgZone) {
+					  alert("Please select FG zone");
+					  return;
+					}
+
+					const query = finalFgZone
+					  ? `?fgZoneCode=${encodeURIComponent(finalFgZone)}`
+					  : "";
 	                const res = await fetch(
 	                  `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
 	                    moveFgModal.zohoItemId
