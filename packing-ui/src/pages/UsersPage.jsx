@@ -51,15 +51,40 @@ function UsersPage() {
   const [deleteOpen,setDeleteOpen] = useState(false);
   const [deleteUserId,setDeleteUserId] = useState(null);
   const [createOpen,setCreateOpen] = useState(false);
+  const [plants, setPlants] = useState([]);
 
+  const [plantCodes, setPlantCodes] = useState([]);
+
+  const [editPlantCodes, setEditPlantCodes] = useState([]);
+
+  const splitPlantCodes = (value) => {
+    if (!value) return [];
+
+    return value
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  };
+
+  const joinPlantCodes = (value) => {
+    return Array.isArray(value) ? value.join(",") : "";
+  };
+
+  const plantName = (code) => {
+    const plant = plants.find((p) => p.plantCode === code);
+
+    if (!plant) return code;
+
+    return `${plant.plantCode} | ${plant.packedAreaCode} → ${plant.fgAreaCode}`;
+  };
+  
   useEffect(() => {
-
     const fetchUsers = async () => {
       setLoading(true);
 
       try {
         const res = await API.get("/users");
-        setUsers(res.data.map(u => ({ ...u, id: u.id })));
+        setUsers(res.data.map((u) => ({ ...u, id: u.id })));
       } catch (err) {
         console.error("Failed to load users", err);
       }
@@ -67,19 +92,30 @@ function UsersPage() {
       setLoading(false);
     };
 
-    fetchUsers();
+    const fetchPlants = async () => {
+      try {
+        const res = await API.get("/plants");
+        setPlants(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error("Failed to load plants", err);
+        setPlants([]);
+      }
+    };
 
+    fetchUsers();
+    fetchPlants();
   }, []);
 
   const createUser = async () => {
 
     try {
 
-      await API.post("/users",{
-        username,
-        password,
-        role
-      });
+		await API.post("/users", {
+		  username,
+		  password,
+		  role,
+		  plantCode: joinPlantCodes(plantCodes),
+		});
 
       setUsername("");
       setPassword("");
@@ -117,22 +153,27 @@ function UsersPage() {
     }
   };
 
-  const startEdit = (u)=>{
+  const startEdit = (u) => {
     setEditId(u.id);
     setEditUsername(u.username);
     setEditRole(u.role);
+    setEditPlantCodes(splitPlantCodes(u.plantCode));
   };
 
-  const cancelEdit = ()=>setEditId(null);
+  const cancelEdit = () => {
+    setEditId(null);
+    setEditPlantCodes([]);
+  };
 
   const saveEdit = async () => {
 
     try{
 
-      await API.put(`/users/${editId}`,{
-        username:editUsername,
-        role:editRole
-      });
+		await API.put(`/users/${editId}`, {
+		  username: editUsername,
+		  role: editRole,
+		  plantCode: joinPlantCodes(editPlantCodes),
+		});
 
       const res = await API.get("/users");
       setUsers(res.data.map(u => ({...u,id:u.id})));
@@ -341,6 +382,8 @@ function UsersPage() {
 
 	    <div>Role</div>
 
+	    <div>Plant Access</div>
+
 	    <div>Actions</div>
 	  </div>
 
@@ -454,6 +497,65 @@ function UsersPage() {
 	          )}
 
 	        </div>
+			
+			<div
+			  style={{
+			    display: "flex",
+			    alignItems: "center",
+			    minWidth: 0,
+			  }}
+			>
+			  {editId === u.id ? (
+			    <TextField
+			      select
+			      size="small"
+			      value={editPlantCodes}
+			      onChange={(e) => {
+			        const value = e.target.value;
+			        setEditPlantCodes(
+			          typeof value === "string" ? value.split(",") : value
+			        );
+			      }}
+			      sx={inlineInput}
+			      SelectProps={{
+			        multiple: true,
+			        renderValue: (selected) =>
+			          selected.length ? selected.join(", ") : "Select Plant",
+			      }}
+			    >
+			      {plants.map((plant) => (
+			        <MenuItem key={plant.plantCode} value={plant.plantCode}>
+			          {plantName(plant.plantCode)}
+			        </MenuItem>
+			      ))}
+			    </TextField>
+			  ) : (
+			    <Box
+			      sx={{
+			        display: "flex",
+			        gap: 0.7,
+			        flexWrap: "wrap",
+			      }}
+			    >
+			      {splitPlantCodes(u.plantCode).length === 0 ? (
+			        <Chip
+			          size="small"
+			          label="All / Legacy"
+			          sx={legacyPlantChip}
+			        />
+			      ) : (
+			        splitPlantCodes(u.plantCode).map((code) => (
+			          <Chip
+			            key={code}
+			            size="small"
+			            label={code}
+			            sx={plantChip}
+			          />
+			        ))
+			      )}
+			    </Box>
+			  )}
+			</div>
 
 	        {/* ACTIONS */}
 
@@ -841,6 +943,58 @@ function UsersPage() {
 		  <MenuItem value="WAREHOUSE">WAREHOUSE</MenuItem>
 		  <MenuItem value="DISPATCH">DISPATCH</MenuItem>
 		  <MenuItem value="LOGISTICS">LOGISTICS</MenuItem>
+		  </TextField>
+		  
+		  <TextField
+		    select
+		    label="Plant Access"
+		    value={plantCodes}
+		    onChange={(e) => {
+		      const value = e.target.value;
+		      setPlantCodes(
+		        typeof value === "string" ? value.split(",") : value
+		      );
+		    }}
+		    fullWidth
+		    sx={formFieldSx}
+		    SelectProps={{
+		      multiple: true,
+		      renderValue: (selected) =>
+		        selected.length ? selected.join(", ") : "Select Plant",
+		    }}
+		    slotProps={{
+		      select: {
+		        MenuProps: {
+		          PaperProps: {
+		            sx: {
+		              mt: 1,
+		              borderRadius: "18px",
+		              background:
+		                "linear-gradient(180deg,#0f172a,#111827)",
+		              color: "#fff",
+		              border:
+		                "1px solid rgba(255,255,255,.06)",
+
+		              "& .MuiMenuItem-root": {
+		                color: "#fff",
+		              },
+
+		              "& .Mui-selected": {
+		                background:
+		                  "rgba(59,130,246,.18) !important",
+		                color: "#fff",
+		              },
+		            },
+		          },
+		        },
+		      },
+		    }}
+		  >
+		    {plants.map((plant) => (
+		      <MenuItem key={plant.plantCode} value={plant.plantCode}>
+		        {plantName(plant.plantCode)}
+		      </MenuItem>
+		    ))}
 		  </TextField>
 
 	    </Box>
@@ -1293,7 +1447,7 @@ const tableHeader = {
   display: "grid",
 
   gridTemplateColumns:
-    "1.4fr .9fr 1.3fr",
+    "1.2fr .8fr 1.4fr 1.4fr",
 
   padding: "14px 16px",
 
@@ -1314,7 +1468,7 @@ const tableRow = {
   display: "grid",
 
   gridTemplateColumns:
-    "1.4fr .9fr 1.3fr",
+    "1.2fr .8fr 1.4fr 1.4fr",
 
   alignItems: "center",
 
@@ -1367,6 +1521,20 @@ const inlineInput = {
   "& .MuiSvgIcon-root": {
     color: "#94a3b8",
   },
+};
+
+const plantChip = {
+  fontWeight: 800,
+  color: "#93c5fd",
+  background: "rgba(59,130,246,.12)",
+  border: "1px solid rgba(59,130,246,.18)",
+};
+
+const legacyPlantChip = {
+  fontWeight: 800,
+  color: "#fbbf24",
+  background: "rgba(251,191,36,.12)",
+  border: "1px solid rgba(251,191,36,.18)",
 };
 
 export default UsersPage;

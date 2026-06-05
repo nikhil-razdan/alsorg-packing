@@ -13,14 +13,21 @@ const page = {
     "linear-gradient(135deg,#020617,#0f172a)",
 };
 
+const dispatchGrid =
+  "70px 350px 280px 140px 180px 250px 100px 220px 120px 180px 240px 540px";
+
+const dispatchMinWidth = 2670;
+
 const tableHeader = {
   position: "sticky",
   top: 0,
   zIndex: 20,
-  display: "grid",
 
-  gridTemplateColumns:
-    "70px 350px 280px 140px 180px 250px 100px 220px 120px 170px 220px 520px",
+  display: "grid",
+  gridTemplateColumns: dispatchGrid,
+  minWidth: dispatchMinWidth,
+
+  alignItems: "center",
 
   padding: "14px 16px",
 
@@ -35,6 +42,10 @@ const tableHeader = {
 const tableCellWrap = {
   minWidth: 0,
   overflow: "hidden",
+  display: "flex",
+  alignItems: "center",
+  minHeight: 36,
+  paddingRight: 12,
 };
 
 const tableBody = {
@@ -44,9 +55,8 @@ const tableBody = {
 
 const tableRow = {
   display: "grid",
-
-  gridTemplateColumns:
-    "70px 350px 280px 140px 180px 250px 100px 220px 180px 500px",
+  gridTemplateColumns: dispatchGrid,
+  minWidth: dispatchMinWidth,
 
   alignItems: "center",
 
@@ -54,8 +64,7 @@ const tableRow = {
 
   color: "#fff",
 
-  borderTop:
-    "1px solid rgba(255,255,255,.06)",
+  borderTop: "1px solid rgba(255,255,255,.06)",
 
   minHeight: 58,
 
@@ -82,15 +91,13 @@ const selectCheckboxDisabledStyle = {
 };
 
 const tableActionButton = {
-  minWidth: 120,
-
+  minWidth: 130,
   height: 34,
-
   borderRadius: 12,
-
-  fontWeight: 700,
-
+  fontWeight: 800,
+  fontSize: 11,
   textTransform: "none",
+  whiteSpace: "nowrap",
 };
 
 const simpleCellText = {
@@ -1004,6 +1011,7 @@ const subtitle = {
 
 const tableWrapper = {
   overflowX: "auto",
+  overflowY: "visible",
 
   scrollbarWidth: "thin",
   scrollbarColor: "#3b82f6 #0f172a",
@@ -1015,28 +1023,15 @@ const tableWrapper = {
   },
 
   "&::-webkit-scrollbar-track": {
-    background:
-      "linear-gradient(180deg,#0f172a,#111827)",
-
+    background: "linear-gradient(180deg,#0f172a,#111827)",
     borderRadius: 999,
   },
 
   "&::-webkit-scrollbar-thumb": {
-    background:
-      "linear-gradient(90deg,#2563eb,#60a5fa)",
-
+    background: "linear-gradient(90deg,#2563eb,#60a5fa)",
     borderRadius: 999,
-
-    border:
-      "2px solid #0f172a",
-
-    boxShadow:
-      "0 0 16px rgba(59,130,246,.55)",
-  },
-
-  "&::-webkit-scrollbar-thumb:hover": {
-    background:
-      "linear-gradient(90deg,#3b82f6,#93c5fd)",
+    border: "2px solid #0f172a",
+    boxShadow: "0 0 16px rgba(59,130,246,.55)",
   },
 };
 
@@ -1102,6 +1097,7 @@ const actionContainer = {
   alignItems: "center",
   gap: 1,
   flexWrap: "nowrap",
+  minWidth: 0,
 };
 
 const actionPrimary = {
@@ -2900,59 +2896,35 @@ function DispatchedItemsPage() {
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[2].renderCell({
-				    value: row.sku,
-				    row,
-				  })}
+				  {columns[2].renderCell({ value: row.sku, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[3].renderCell({
-				    value: row.pdNo,
-				    row,
-				  })}
+				  {columns[3].renderCell({ value: row.pdNo, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[4].renderCell({
-				    value: row.drawingNo,
-				    row,
-				  })}
+				  {columns[4].renderCell({ value: row.drawingNo, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[5].renderCell({
-				    value: row.description,
-				    row,
-				  })}
-				</div>
-
-				<div>
-				  {columns[6].renderCell({
-				    value: row.stock,
-				    row,
-				  })}
+				  {columns[5].renderCell({ value: row.description, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[7].renderCell({
-				    value: row.clientName,
-				    row,
-				  })}
+				  {columns[6].renderCell({ value: row.stock, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[8].renderCell({
-				    value: row.plantCode,
-				    row,
-				  })}
+				  {columns[7].renderCell({ value: row.clientName, row })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[9].renderCell({
-				    value: row.currentLocationCode,
-				    row,
-				  })}
+				  {columns[8].renderCell({ value: row.plantCode, row })}
+				</div>
+
+				<div style={tableCellWrap}>
+				  {columns[9].renderCell({ value: row.currentLocationCode, row })}
 				</div>
 
 				<div style={tableCellWrap}>

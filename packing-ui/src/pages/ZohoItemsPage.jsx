@@ -215,21 +215,130 @@ function ZohoItemsPage() {
         },
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
 
       const data = await res.json();
-      setMyPlants(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
 
-      if (Array.isArray(data) && data.length === 1) {
+      setMyPlants(list);
+
+      if (list.length === 1) {
         setForm((prev) => ({
           ...prev,
-          plantCode: data[0].plantCode,
+          plantCode: list[0].plantCode,
         }));
       }
     } catch (e) {
       console.error(e);
       setMyPlants([]);
     }
+  };
+
+  const plantLabel = (plant) => {
+    if (!plant) return "";
+
+    return `${plant.plantCode} | ${plant.packedAreaCode} → ${plant.fgAreaCode}`;
+  };
+
+  const plantLabelByCode = (plantCode) => {
+    if (!plantCode) return "Unassigned";
+
+    const plant = myPlants.find((p) => p.plantCode === plantCode);
+
+    return plant ? plantLabel(plant) : plantCode;
+  };
+
+  const getDefaultPlantCode = () => {
+    return myPlants.length === 1 ? myPlants[0].plantCode : "";
+  };
+
+  const getEmptyForm = () => ({
+    itemName: "",
+    pdNo: "",
+    drawingNo: "",
+    clientName: "",
+    clientAddress: "",
+    floor: "",
+    plantCode: getDefaultPlantCode(),
+    dimensions: "",
+    weight: "",
+    remarks: "",
+    numberOfPackets: 1,
+    showCompanyHeader: true,
+    factoryFloor: "",
+  });
+
+  const resetCreateForm = () => {
+    setForm(getEmptyForm());
+    setDescriptions([]);
+    setWeights([]);
+    setDimensionsList([]);
+    setRemarksList([]);
+    setErrors({});
+    setActiveStep(0);
+  };
+
+  const resetCustomCreateForm = () => {
+    setForm({
+      ...getEmptyForm(),
+      numberOfPackets: 1,
+    });
+
+    setCustomPacketNo("");
+    setDescriptions([""]);
+    setWeights([""]);
+    setDimensionsList([{}]);
+    setRemarksList([""]);
+    setErrors({});
+  };
+
+  const renderPlantSelect = () => {
+    return (
+      <TextField
+        select
+        label="Plant Location"
+        fullWidth
+        value={form.plantCode || ""}
+        onChange={(e) => {
+          setForm((prev) => ({
+            ...prev,
+            plantCode: e.target.value,
+          }));
+
+          setErrors((prev) => ({
+            ...prev,
+            plantCode: "",
+          }));
+        }}
+        disabled={myPlants.length === 0}
+        error={!!errors.plantCode}
+        helperText={
+          errors.plantCode ||
+          (myPlants.length === 0
+            ? "No plant access assigned to this user"
+            : "Select the factory plant for this item")
+        }
+        sx={formFieldSx(darkMode)}
+        slotProps={selectMenuSlotProps}
+      >
+        {myPlants.length === 0 ? (
+          <MenuItem value="">
+            No Plant Assigned
+          </MenuItem>
+        ) : (
+          myPlants.map((plant) => (
+            <MenuItem
+              key={plant.plantCode}
+              value={plant.plantCode}
+            >
+              {plantLabel(plant)}
+            </MenuItem>
+          ))
+        )}
+      </TextField>
+    );
   };
   
   const fetchItems = async () => {
@@ -412,11 +521,15 @@ function ZohoItemsPage() {
     if (q) {
       list = list.filter((r) => {
         return (
-          (r.itemName || "").toLowerCase().includes(q) ||
-          (r.sku || "").toLowerCase().includes(q) ||
-          (r.clientName || "").toLowerCase().includes(q) ||
-          (r.pdNo || "").toLowerCase().includes(q) ||
-          (r.drawingNo || "").toLowerCase().includes(q)
+			(r.itemName || "").toLowerCase().includes(q) ||
+			(r.sku || "").toLowerCase().includes(q) ||
+			(r.clientName || "").toLowerCase().includes(q) ||
+			(r.pdNo || "").toLowerCase().includes(q) ||
+			(r.drawingNo || "").toLowerCase().includes(q) ||
+			(r.plantCode || "").toLowerCase().includes(q) ||
+			(r.packedAreaCode || "").toLowerCase().includes(q) ||
+			(r.currentLocationCode || "").toLowerCase().includes(q) ||
+			(r.location || "").toLowerCase().includes(q)
         );
       });
     }
@@ -479,6 +592,7 @@ function ZohoItemsPage() {
 
     if (!form.itemName) err.itemName = "Required";
 	if (!form.plantCode) err.plantCode = "Plant location required";
+	
     if (!form.numberOfPackets || form.numberOfPackets <= 0)
       err.numberOfPackets = "Invalid";
 
@@ -754,25 +868,25 @@ function ZohoItemsPage() {
               </span>
             </Box>
 
-            <Button
-              onClick={() => {
-                setActiveStep(0);
-                setCreateOpen(true);
-              }}
-              sx={premiumButton}
-            >
-              + Create Item
-            </Button>
+			<Button
+			  onClick={() => {
+			    resetCreateForm();
+			    setCreateOpen(true);
+			  }}
+			  sx={premiumButton}
+			>
+			  + Create Item
+			</Button>
 
-            <Button
-              onClick={() => {
-                setCustomPacketNo("");
-                setCustomCreateOpen(true);
-              }}
-              sx={actionSecondary}
-            >
-              + Custom Packet
-            </Button>
+			<Button
+			  onClick={() => {
+			    resetCustomCreateForm();
+			    setCustomCreateOpen(true);
+			  }}
+			  sx={actionSecondary}
+			>
+			  + Custom Packet
+			</Button>
           </Box>
         </div>
 
@@ -814,12 +928,12 @@ function ZohoItemsPage() {
 
         <div style={wrap}>
           <Box sx={tableWrapper}>
-            <div
-              style={{
-                width: "max-content",
-                minWidth: "100%",
-              }}
-            >
+		  <div
+		    style={{
+		      width: "max-content",
+		      minWidth: inventoryMinWidth,
+		    }}
+		  >
               <div style={tableHeader}>
                 <div>Generate</div>
                 <div>Add Packets</div>
@@ -972,15 +1086,19 @@ function ZohoItemsPage() {
                       </div>
 					  
 					  <div style={tableCellWrap}>
-					    <span style={simpleMutedText}>
-					      {row.plantCode || "Unassigned"}
-					    </span>
+					    <Chip
+					      size="small"
+					      label={row.plantCode || "Unassigned"}
+					      sx={row.plantCode ? plantChipSx : unassignedPlantChipSx}
+					    />
 					  </div>
 
 					  <div style={tableCellWrap}>
-					    <span style={simpleMutedText}>
-					      {row.currentLocationCode || row.location || "—"}
-					    </span>
+					    <Chip
+					      size="small"
+					      label={row.currentLocationCode || row.location || "—"}
+					      sx={locationChipSx}
+					    />
 					  </div>
 
                       <div style={tableCellWrap}>
@@ -1166,9 +1284,14 @@ function ZohoItemsPage() {
 	      {selectedItem?.sku || "—"}
 	    </p>
 
-	    <p style={infoLineSx}>
-	      <b>Location:</b> {selectedItem?.location ?? "—"}
-	    </p>
+		<p style={infoLineSx}>
+		  <b>Plant:</b> {plantLabelByCode(selectedItem?.plantCode)}
+		</p>
+
+		<p style={infoLineSx}>
+		  <b>Location:</b>{" "}
+		  {selectedItem?.currentLocationCode || selectedItem?.location || "—"}
+		</p>
 
 	    <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.08)" }} />
 
@@ -1305,21 +1428,16 @@ function ZohoItemsPage() {
 		  "clientName",
 		  "clientAddress",
 		  "floor",
-		  "numberOfPackets",
 		].map((field) => (
 		  <TextField
 		    key={field}
 		    label={field}
 		    fullWidth
-		    type={field === "numberOfPackets" ? "number" : "text"}
 		    value={form[field]}
 		    onChange={(e) =>
 		      setForm((prev) => ({
 		        ...prev,
-		        [field]:
-		          field === "numberOfPackets"
-		            ? Number(e.target.value)
-		            : e.target.value,
+		        [field]: e.target.value,
 		      }))
 		    }
 		    error={!!errors[field]}
@@ -1328,28 +1446,23 @@ function ZohoItemsPage() {
 		  />
 		))}
 
+		{renderPlantSelect()}
+
 		<TextField
-		  select
-		  label="Plant Location"
+		  label="numberOfPackets"
 		  fullWidth
-		  value={form.plantCode || ""}
+		  type="number"
+		  value={form.numberOfPackets}
 		  onChange={(e) =>
 		    setForm((prev) => ({
 		      ...prev,
-		      plantCode: e.target.value,
+		      numberOfPackets: Number(e.target.value),
 		    }))
 		  }
-		  error={!!errors.plantCode}
-		  helperText={errors.plantCode}
+		  error={!!errors.numberOfPackets}
+		  helperText={errors.numberOfPackets}
 		  sx={formFieldSx(darkMode)}
-		  slotProps={selectMenuSlotProps}
-		>
-		  {myPlants.map((plant) => (
-		    <MenuItem key={plant.plantCode} value={plant.plantCode}>
-		      {plant.plantCode} - {plant.plantName} / {plant.packedAreaCode}
-		    </MenuItem>
-		  ))}
-		</TextField>
+		/>
 
 	    <Button
 	      onClick={() => {
@@ -1384,10 +1497,15 @@ function ZohoItemsPage() {
 
 	        <Button
 	          sx={premiumButton}
-	          onClick={async () => {
-	            if (!validatePackets()) return;
+			  onClick={async () => {
+			    if (!validatePackets()) return;
 
-				const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
+			    if (!form.plantCode) {
+			      showUiAlert("error", "Please select Plant Location");
+			      return;
+			    }
+
+			    const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
 				  method: "POST",
 				  headers: {
 				    "Content-Type": "application/json",
@@ -1526,13 +1644,18 @@ function ZohoItemsPage() {
 	        </Button>
 
 	        <Button
-	          disabled={!customPacketNo}
+	          disabled={!customPacketNo || !form.plantCode}
 	          sx={{
 	            ...premiumButton,
-	            opacity: !customPacketNo ? 0.45 : 1,
+	            opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
 	          }}
 	          onClick={async () => {
 	            try {
+					if (!form.plantCode) {
+					  showUiAlert("error", "Please select Plant Location");
+					  return;
+					}
+					
 					const res = await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
 					  method: "POST",
 					  headers: {
@@ -1580,28 +1703,30 @@ function ZohoItemsPage() {
 	          Item Details
 	        </Box>
 
-	        {[
-	          "itemName",
-	          "pdNo",
-	          "drawingNo",
-	          "clientName",
-	          "clientAddress",
-	          "floor",
-	        ].map((field) => (
-	          <TextField
-	            key={field}
-	            label={field}
-	            fullWidth
-	            value={form[field]}
-	            onChange={(e) =>
-	              setForm((prev) => ({
-	                ...prev,
-	                [field]: e.target.value,
-	              }))
-	            }
-	            sx={formFieldSx(darkMode)}
-	          />
-	        ))}
+			{[
+			  "itemName",
+			  "pdNo",
+			  "drawingNo",
+			  "clientName",
+			  "clientAddress",
+			  "floor",
+			].map((field) => (
+			  <TextField
+			    key={field}
+			    label={field}
+			    fullWidth
+			    value={form[field]}
+			    onChange={(e) =>
+			      setForm((prev) => ({
+			        ...prev,
+			        [field]: e.target.value,
+			      }))
+			    }
+			    sx={formFieldSx(darkMode)}
+			  />
+			))}
+
+			{renderPlantSelect()}
 	      </Box>
 
 	      <Box sx={sectionCardSx}>
@@ -1740,7 +1865,20 @@ function ZohoItemsPage() {
 	        <Box sx={sectionTitleSx}>
 	          Packet Count
 	        </Box>
-
+			<Box
+			  sx={{
+			    mb: 2,
+			    p: 1.4,
+			    borderRadius: "12px",
+			    background: "rgba(59,130,246,.10)",
+			    border: "1px solid rgba(59,130,246,.18)",
+			    color: "#93c5fd",
+			    fontWeight: 900,
+			    fontSize: 12,
+			  }}
+			>
+			  Plant: {plantLabelByCode(selectedItem?.plantCode)}
+			</Box>
 	        <TextField
 	          label="Number of packets"
 	          type="number"
@@ -1845,10 +1983,10 @@ function ZohoItemsPage() {
 	        </Button>
 
 	        <Button
-	          disabled={!customPacketNo}
+	          disabled={!customPacketNo || !form.plantCode}
 	          sx={{
 	            ...premiumButton,
-	            opacity: !customPacketNo ? 0.45 : 1,
+	            opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
 	          }}
 	          onClick={async () => {
 	            try {
@@ -1901,6 +2039,21 @@ function ZohoItemsPage() {
 	          Custom Packet Details
 	        </Box>
 
+			<Box
+			  sx={{
+			    mb: 2,
+			    p: 1.4,
+			    borderRadius: "12px",
+			    background: "rgba(59,130,246,.10)",
+			    border: "1px solid rgba(59,130,246,.18)",
+			    color: "#93c5fd",
+			    fontWeight: 900,
+			    fontSize: 12,
+			  }}
+			>
+			  Plant: {plantLabelByCode(selectedItem?.plantCode)}
+			</Box>
+			
 	        <TextField
 	          label="Custom Packet Number"
 	          type="number"
@@ -2338,7 +2491,9 @@ function ZohoItemsPage() {
 /* ===================== STYLES ===================== */
 
 const inventoryGrid =
-  "130px 190px 110px 110px 260px 300px 120px 150px 140px 160px 180px 260px 260px 160px";
+  "130px 190px 110px 110px 260px 300px 120px 150px 140px 170px 180px 260px 260px 180px";
+
+const inventoryMinWidth = 2760;
 
 const page = {
   minHeight: "100vh",
@@ -2525,6 +2680,8 @@ const tableHeader = {
   zIndex: 20,
   display: "grid",
   gridTemplateColumns: inventoryGrid,
+  minWidth: inventoryMinWidth,
+  alignItems: "center",
   padding: "14px 16px",
   background: "#111827",
   color: "#94a3b8",
@@ -2540,11 +2697,11 @@ const tableBody = {
 const tableRow = {
   display: "grid",
   gridTemplateColumns: inventoryGrid,
+  minWidth: inventoryMinWidth,
   alignItems: "center",
   padding: "14px 16px",
   color: "#fff",
-  borderTop:
-    "1px solid rgba(255,255,255,.06)",
+  borderTop: "1px solid rgba(255,255,255,.06)",
   minHeight: 58,
   fontSize: 13,
 };
@@ -2552,6 +2709,10 @@ const tableRow = {
 const tableCellWrap = {
   minWidth: 0,
   overflow: "hidden",
+  display: "flex",
+  alignItems: "center",
+  minHeight: 36,
+  paddingRight: 12,
 };
 
 const simpleCellText = {
@@ -3447,6 +3608,33 @@ const historyTableWrapSx = {
   overflowX: "auto",
   borderRadius: "12px",
   border: "1px solid rgba(255,255,255,.07)",
+};
+
+const plantChipSx = {
+  height: 24,
+  fontWeight: 900,
+  fontSize: 11,
+  color: "#93c5fd",
+  background: "rgba(59,130,246,.12)",
+  border: "1px solid rgba(59,130,246,.18)",
+};
+
+const unassignedPlantChipSx = {
+  height: 24,
+  fontWeight: 900,
+  fontSize: 11,
+  color: "#fbbf24",
+  background: "rgba(251,191,36,.12)",
+  border: "1px solid rgba(251,191,36,.18)",
+};
+
+const locationChipSx = {
+  height: 24,
+  fontWeight: 900,
+  fontSize: 11,
+  color: "#c4b5fd",
+  background: "rgba(139,92,246,.12)",
+  border: "1px solid rgba(139,92,246,.18)",
 };
 
 const historyGrid =
