@@ -222,18 +222,22 @@ function ZohoItemsPage() {
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
 
-      setMyPlants(list);
+	  setMyPlants(list);
 
-      if (list.length === 1) {
-        setForm((prev) => ({
-          ...prev,
-          plantCode: list[0].plantCode,
-        }));
-      }
-    } catch (e) {
-      console.error(e);
-      setMyPlants([]);
-    }
+	  if (list.length === 1) {
+	    setForm((prev) => ({
+	      ...prev,
+	      plantCode: list[0].plantCode,
+	    }));
+	  }
+
+	  return list;
+	  
+  } catch (e) {
+    console.error(e);
+    setMyPlants([]);
+    return [];
+  }
   };
 
   const plantLabel = (plant) => {
@@ -250,18 +254,59 @@ function ZohoItemsPage() {
     return plant ? plantLabel(plant) : plantCode;
   };
 
-  const getDefaultPlantCode = () => {
-    return myPlants.length === 1 ? myPlants[0].plantCode : "";
+  const normalizePacketCount = (value) => {
+    const n = Number(value);
+
+    if (!Number.isFinite(n) || n <= 0) {
+      return 1;
+    }
+
+    return n;
   };
 
-  const getEmptyForm = () => ({
+  const buildTextRows = (count) => {
+    return Array.from({ length: count }, () => "");
+  };
+
+  const buildDimensionRows = (count) => {
+    return Array.from({ length: count }, () => ({}));
+  };
+
+  const resizeTextRows = (current, count) => {
+    return Array.from({ length: count }, (_, index) => {
+      return current?.[index] !== undefined ? current[index] : "";
+    });
+  };
+
+  const resizeDimensionRows = (current, count) => {
+    return Array.from({ length: count }, (_, index) => {
+      const value = current?.[index];
+
+      return value && typeof value === "object" ? value : {};
+    });
+  };
+
+  const preparePacketDetailRows = (packetCount) => {
+    const count = normalizePacketCount(packetCount);
+
+    setDescriptions((prev) => resizeTextRows(prev, count));
+    setWeights((prev) => resizeTextRows(prev, count));
+    setDimensionsList((prev) => resizeDimensionRows(prev, count));
+    setRemarksList((prev) => resizeTextRows(prev, count));
+  };
+
+  const getDefaultPlantCode = (plants = myPlants) => {
+    return plants.length === 1 ? plants[0].plantCode : "";
+  };
+
+  const getEmptyForm = (plants = myPlants) => ({
     itemName: "",
     pdNo: "",
     drawingNo: "",
     clientName: "",
     clientAddress: "",
     floor: "",
-    plantCode: getDefaultPlantCode(),
+    plantCode: getDefaultPlantCode(plants),
     dimensions: "",
     weight: "",
     remarks: "",
@@ -270,27 +315,31 @@ function ZohoItemsPage() {
     factoryFloor: "",
   });
 
-  const resetCreateForm = () => {
-    setForm(getEmptyForm());
-    setDescriptions([]);
-    setWeights([]);
-    setDimensionsList([]);
-    setRemarksList([]);
+  const resetCreateForm = (plants = myPlants) => {
+    const count = 1;
+
+    setForm(getEmptyForm(plants));
+    setDescriptions(buildTextRows(count));
+    setWeights(buildTextRows(count));
+    setDimensionsList(buildDimensionRows(count));
+    setRemarksList(buildTextRows(count));
     setErrors({});
     setActiveStep(0);
   };
 
-  const resetCustomCreateForm = () => {
+  const resetCustomCreateForm = (plants = myPlants) => {
+    const count = 1;
+
     setForm({
-      ...getEmptyForm(),
+      ...getEmptyForm(plants),
       numberOfPackets: 1,
     });
 
     setCustomPacketNo("");
-    setDescriptions([""]);
-    setWeights([""]);
-    setDimensionsList([{}]);
-    setRemarksList([""]);
+    setDescriptions(buildTextRows(count));
+    setWeights(buildTextRows(count));
+    setDimensionsList(buildDimensionRows(count));
+    setRemarksList(buildTextRows(count));
     setErrors({});
   };
 
@@ -320,8 +369,11 @@ function ZohoItemsPage() {
             ? "No plant access assigned to this user"
             : "Select the factory plant for this item")
         }
-        sx={formFieldSx(darkMode)}
-        slotProps={selectMenuSlotProps}
+		sx={formFieldSx(darkMode)}
+		slotProps={selectMenuSlotProps}
+		SelectProps={{
+		  MenuProps: selectMenuSlotProps.select.MenuProps,
+		}}
       >
         {myPlants.length === 0 ? (
           <MenuItem value="">
@@ -604,12 +656,14 @@ function ZohoItemsPage() {
     let valid = true;
     let err = {};
 
-    weights.forEach((w, i) => {
-      if (!w) {
+    const count = normalizePacketCount(form.numberOfPackets);
+
+    for (let i = 0; i < count; i++) {
+      if (!weights[i]) {
         err[`weight-${i}`] = "Required";
         valid = false;
       }
-    });
+    }
 
     setErrors(err);
     return valid;
@@ -788,21 +842,7 @@ function ZohoItemsPage() {
   }, []);
   
   useEffect(() => {
-    const count = Number(form.numberOfPackets || 0);
-
-    const adjust = (arrSetter) => {
-      arrSetter(prev => {
-        const copy = [...prev];
-        while (copy.length < count) copy.push("");
-        return copy.slice(0, count);
-      });
-    };
-
-    adjust(setDescriptions);
-    adjust(setWeights);
-    adjust(setDimensionsList);
-    adjust(setRemarksList);
-
+    preparePacketDetailRows(form.numberOfPackets);
   }, [form.numberOfPackets]);
   
   useEffect(() => {
@@ -869,8 +909,14 @@ function ZohoItemsPage() {
             </Box>
 
 			<Button
-			  onClick={() => {
-			    resetCreateForm();
+			  onClick={async () => {
+			    let plants = myPlants;
+
+			    if (plants.length === 0) {
+			      plants = await fetchMyPlants();
+			    }
+
+			    resetCreateForm(plants);
 			    setCreateOpen(true);
 			  }}
 			  sx={premiumButton}
@@ -879,8 +925,14 @@ function ZohoItemsPage() {
 			</Button>
 
 			<Button
-			  onClick={() => {
-			    resetCustomCreateForm();
+			  onClick={async () => {
+			    let plants = myPlants;
+
+			    if (plants.length === 0) {
+			      plants = await fetchMyPlants();
+			    }
+
+			    resetCustomCreateForm(plants);
 			    setCustomCreateOpen(true);
 			  }}
 			  sx={actionSecondary}
@@ -1464,12 +1516,15 @@ function ZohoItemsPage() {
 		  sx={formFieldSx(darkMode)}
 		/>
 
-	    <Button
-	      onClick={() => {
-	        if (!validateStep1()) return;
-	        setActiveStep(1);
-	        setDetailsPopup(true);
-	      }}
+		<Button
+		  onClick={() => {
+		    if (!validateStep1()) return;
+
+		    preparePacketDetailRows(form.numberOfPackets);
+
+		    setActiveStep(1);
+		    setDetailsPopup(true);
+		  }}
 	      sx={{
 	        ...premiumButton,
 	        width: "100%",
@@ -1982,12 +2037,12 @@ function ZohoItemsPage() {
 	          Cancel
 	        </Button>
 
-	        <Button
-	          disabled={!customPacketNo || !form.plantCode}
-	          sx={{
-	            ...premiumButton,
-	            opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
-	          }}
+			<Button
+			  disabled={!customPacketNo}
+			  sx={{
+			    ...premiumButton,
+			    opacity: !customPacketNo ? 0.45 : 1,
+			  }}
 	          onClick={async () => {
 	            try {
 					const res = await fetch(
@@ -2611,6 +2666,7 @@ const selectFieldSx = {
 const selectMenuSlotProps = {
   select: {
     MenuProps: {
+      disablePortal: true,
       PaperProps: {
         sx: {
           mt: 1,
@@ -2621,6 +2677,7 @@ const selectMenuSlotProps = {
           border:
             "1px solid rgba(255,255,255,.06)",
           backdropFilter: "blur(20px)",
+          zIndex: 8000,
 
           "& .MuiMenuItem-root": {
             fontSize: 14,

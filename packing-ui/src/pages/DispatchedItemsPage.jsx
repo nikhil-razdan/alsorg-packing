@@ -136,6 +136,39 @@ const qrDispatchButtonSx = {
   },
 };
 
+const modalSelectMenuProps = {
+  disablePortal: true,
+  PaperProps: {
+    sx: {
+      mt: 1,
+      borderRadius: "14px",
+      background:
+        "linear-gradient(180deg,#0f172a,#111827)",
+      color: "#fff",
+      border:
+        "1px solid rgba(255,255,255,.06)",
+      zIndex: 8000,
+
+      "& .MuiMenuItem-root": {
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#fff",
+      },
+
+      "& .MuiMenuItem-root:hover": {
+        background: "rgba(59,130,246,.10)",
+      },
+
+      "& .Mui-selected": {
+        background:
+          "rgba(59,130,246,.18) !important",
+        color: "#60a5fa",
+        fontWeight: 900,
+      },
+    },
+  },
+};
+
 const scannerModeButtonSx = {
   flex: 1,
   height: 38,
@@ -1296,7 +1329,6 @@ function DispatchedItemsPage() {
   const [pageSize, setPageSize] = useState(25);
   const scannerInputRef = useRef(null);
   const scanTimerRef = useRef(null);
-  const [moveFgModal, setMoveFgModal] = useState(null);
   const [fgZone, setFgZone] = useState("");
   const [moveFgLoading, setMoveFgLoading] = useState(false);
   const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
@@ -1305,6 +1337,9 @@ function DispatchedItemsPage() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [scanCart, setScanCart] = useState([]);
+  const [plantConfigs, setPlantConfigs] = useState([]);
+  const [moveFgModal, setMoveFgModal] = useState(null);
+  const [selectedFgZone, setSelectedFgZone] = useState("");
   
   const filteredRows = useMemo(() => {
     if (!Array.isArray(rows)) return [];
@@ -1587,6 +1622,27 @@ function DispatchedItemsPage() {
 	   return;
      } finally {
        setLoading(false);
+     }
+   };
+   
+   const fetchPlantConfigs = async () => {
+     try {
+       const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
+         headers: {
+           Authorization: `Bearer ${localStorage.getItem("token")}`,
+         },
+       });
+
+       if (!res.ok) {
+         throw new Error(await res.text());
+       }
+
+       const data = await res.json();
+
+       setPlantConfigs(Array.isArray(data) ? data : []);
+     } catch (e) {
+       console.error("Failed to fetch plant configs", e);
+       setPlantConfigs([]);
      }
    };
    
@@ -2325,20 +2381,22 @@ function DispatchedItemsPage() {
         return (
           <Box sx={actionContainer}>
 		  {canMoveToFg(row) && (
-		    <Button
-		      size="small"
-		      onClick={() => {
-		        setMoveFgModal(row);
-		        setFgZone("");
-		      }}
-		      sx={{
-		        ...actionPrimary,
-		        ...tableActionButton,
-		        minWidth: 110,
-		      }}
-		    >
-		      Move To FG
-		    </Button>
+			<Button
+			  size="small"
+			  disabled={!isDispatch || row.status !== "READY"}
+			  onClick={() => {
+			    const zones = getFgZonesForRow(row);
+
+			    setMoveFgModal(row);
+			    setSelectedFgZone(zones.length > 0 ? zones[0] : "");
+			  }}
+			  sx={{
+			    ...actionPrimary,
+			    ...tableActionButton,
+			  }}
+			>
+			  Move to FG
+			</Button>
 		  )}
 
 		  {canChangeReadyStatus(row) && (
@@ -2506,6 +2564,7 @@ function DispatchedItemsPage() {
 
   useEffect(() => {
     fetchData();
+    fetchPlantConfigs();
   }, []);
   
 
@@ -2531,6 +2590,77 @@ function DispatchedItemsPage() {
       return { bg: "rgba(224,231,255,0.9)", color: "#3730a3" };
 
     return { bg: "rgba(243,244,246,0.9)", color: "#374151" };
+  };
+  
+  const fallbackPlantConfigs = {
+    "AL-P1": {
+      plantCode: "AL-P1",
+      packedAreaCode: "PKD-1",
+      fgAreaCode: "FG-1",
+      fgZones: ["A", "B", "C"],
+    },
+    "AL-P2": {
+      plantCode: "AL-P2",
+      packedAreaCode: "PKD-2",
+      fgAreaCode: "FG-2",
+      fgZones: [],
+    },
+    "AL-P3": {
+      plantCode: "AL-P3",
+      packedAreaCode: "PKD-3",
+      fgAreaCode: "FG-3",
+      fgZones: [],
+    },
+    "AL-P4": {
+      plantCode: "AL-P4",
+      packedAreaCode: "PKD-4",
+      fgAreaCode: "FG-4",
+      fgZones: [],
+    },
+  };
+
+  const getPlantConfigForRow = (row) => {
+    if (!row?.plantCode) return null;
+
+    return (
+      plantConfigs.find((p) => p.plantCode === row.plantCode) ||
+      fallbackPlantConfigs[row.plantCode] ||
+      null
+    );
+  };
+
+  const getFgZonesForRow = (row) => {
+    const config = getPlantConfigForRow(row);
+
+    if (!config) return [];
+
+    const zones = Array.isArray(config.fgZones)
+      ? config.fgZones
+      : [];
+
+    if (row?.plantCode === "AL-P1" && zones.length === 0) {
+      return ["A", "B", "C"];
+    }
+
+    return zones;
+  };
+
+  const getFgAreaForRow = (row) => {
+    return (
+      row?.fgAreaCode ||
+      getPlantConfigForRow(row)?.fgAreaCode ||
+      ""
+    );
+  };
+
+  const getFgZoneLabel = (row, zone) => {
+    const fgArea = getFgAreaForRow(row);
+
+    if (!zone) {
+      return fgArea || "FG";
+    }
+
+    return `${fgArea} - Zone ${zone}`;
   };
 
   const getRoleChipStyle = (role) => {
@@ -3857,6 +3987,177 @@ function DispatchedItemsPage() {
 	            sx={modalSecondaryButtonSx}
 	          >
 	            Close
+	          </Button>
+	        </Box>
+	      </Box>
+	    </Box>
+	  )}
+	  {moveFgModal && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5200 }}
+	      onClick={() => setMoveFgModal(null)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 560,
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#10b981")}>
+	              🏭
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Move to Finished Goods
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Move packed item from PKD area to FG area
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setMoveFgModal(null)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box
+	            sx={{
+	              p: 1.5,
+	              mb: 2,
+	              borderRadius: "12px",
+	              background: "rgba(255,255,255,.035)",
+	              border: "1px solid rgba(255,255,255,.07)",
+	              color: "#cbd5e1",
+	              fontWeight: 800,
+	              fontSize: 13,
+	              lineHeight: 1.7,
+	            }}
+	          >
+	            <div>
+	              Item:{" "}
+	              <span style={{ color: "#fff" }}>
+	                {moveFgModal.name || moveFgModal.itemName || "—"}
+	              </span>
+	            </div>
+
+	            <div>
+	              Plant:{" "}
+	              <span style={{ color: "#93c5fd" }}>
+	                {moveFgModal.plantCode || "—"}
+	              </span>
+	            </div>
+
+	            <div>
+	              Current Location:{" "}
+	              <span style={{ color: "#fbbf24" }}>
+	                {moveFgModal.currentLocationCode || moveFgModal.location || "—"}
+	              </span>
+	            </div>
+
+	            <div>
+	              FG Area:{" "}
+	              <span style={{ color: "#4ade80" }}>
+	                {getFgAreaForRow(moveFgModal) || "—"}
+	              </span>
+	            </div>
+	          </Box>
+
+	          {getFgZonesForRow(moveFgModal).length > 0 ? (
+	            <TextField
+	              select
+	              fullWidth
+	              label="Select FG Zone"
+	              value={selectedFgZone}
+	              onChange={(e) => setSelectedFgZone(e.target.value)}
+	              sx={formFieldSx}
+	              SelectProps={{
+	                MenuProps: modalSelectMenuProps,
+	              }}
+	            >
+	              {getFgZonesForRow(moveFgModal).map((zone) => (
+	                <MenuItem key={zone} value={zone}>
+	                  {getFgZoneLabel(moveFgModal, zone)}
+	                </MenuItem>
+	              ))}
+	            </TextField>
+	          ) : (
+	            <Box
+	              sx={{
+	                p: 1.5,
+	                borderRadius: "12px",
+	                background: "rgba(16,185,129,.10)",
+	                border: "1px solid rgba(16,185,129,.18)",
+	                color: "#6ee7b7",
+	                fontWeight: 900,
+	                fontSize: 13,
+	              }}
+	            >
+	              This plant has no FG zones. Item will be moved directly to{" "}
+	              {getFgAreaForRow(moveFgModal)}.
+	            </Box>
+	          )}
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => setMoveFgModal(null)}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Cancel
+	          </Button>
+
+	          <Button
+	            sx={premiumButton}
+	            onClick={async () => {
+	              try {
+	                const zones = getFgZonesForRow(moveFgModal);
+
+	                if (zones.length > 0 && !selectedFgZone) {
+	                  alert("Please select FG zone");
+	                  return;
+	                }
+
+	                const query = selectedFgZone
+	                  ? `?fgZoneCode=${encodeURIComponent(selectedFgZone)}`
+	                  : "";
+
+	                const res = await fetch(
+	                  `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+	                    moveFgModal.zohoItemId
+	                  )}/move-to-fg${query}`,
+	                  {
+	                    method: "POST",
+	                    headers: getAuthHeaders(),
+	                  }
+	                );
+
+	                if (!res.ok) {
+	                  const text = await res.text();
+	                  alert(text || "Move to FG failed");
+	                  return;
+	                }
+
+	                setMoveFgModal(null);
+	                setSelectedFgZone("");
+
+	                await fetchData();
+	              } catch (e) {
+	                console.error(e);
+	                alert("Move to FG failed");
+	              }
+	            }}
+	          >
+	            Move to {getFgAreaForRow(moveFgModal)}
 	          </Button>
 	        </Box>
 	      </Box>
