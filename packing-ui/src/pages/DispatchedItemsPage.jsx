@@ -84,6 +84,29 @@ const selectCheckboxStyle = {
   accentColor: "#3b82f6",
 };
 
+const nativeFgSelectSx = {
+  width: "100%",
+  height: 44,
+  px: 1.5,
+  borderRadius: "12px",
+  outline: "none",
+  color: "#fff",
+  fontWeight: 900,
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.10)",
+
+  "&:focus": {
+    borderColor: "#3b82f6",
+    boxShadow: "0 0 0 3px rgba(59,130,246,.14)",
+  },
+
+  "& option": {
+    color: "#111827",
+    background: "#fff",
+    fontWeight: 800,
+  },
+};
+
 const selectCheckboxDisabledStyle = {
   ...selectCheckboxStyle,
   opacity: 0.35,
@@ -1320,6 +1343,13 @@ function DispatchedItemsPage() {
   const [gatePassModal, setGatePassModal] = useState(null);
   const [warehouseCode, setWarehouseCode] = useState("");
   const [gatePassPreview, setGatePassPreview] = useState(null);
+  const [moveFgModal, setMoveFgModal] = useState(null);
+  const [selectedFgZone, setSelectedFgZone] = useState("");
+  const [moveFgLoading, setMoveFgLoading] = useState(false);
+
+  const [bulkMoveFgOpen, setBulkMoveFgOpen] = useState(false);
+  const [bulkSelectedFgZone, setBulkSelectedFgZone] = useState("");
+  const [bulkMoveFgLoading, setBulkMoveFgLoading] = useState(false);
   const [statusModal, setStatusModal] = useState(null);
   const [chalaanPreview, setChalaanPreview] = useState(null);
   const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
@@ -1330,7 +1360,6 @@ function DispatchedItemsPage() {
   const scannerInputRef = useRef(null);
   const scanTimerRef = useRef(null);
   const [fgZone, setFgZone] = useState("");
-  const [moveFgLoading, setMoveFgLoading] = useState(false);
   const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
   const [scanMode, setScanMode] = useState("SINGLE");
   const [scannerText, setScannerText] = useState("");
@@ -1338,8 +1367,6 @@ function DispatchedItemsPage() {
   const [scanMessage, setScanMessage] = useState("");
   const [scanCart, setScanCart] = useState([]);
   const [plantConfigs, setPlantConfigs] = useState([]);
-  const [moveFgModal, setMoveFgModal] = useState(null);
-  const [selectedFgZone, setSelectedFgZone] = useState("");
   
   const filteredRows = useMemo(() => {
     if (!Array.isArray(rows)) return [];
@@ -1582,6 +1609,7 @@ function DispatchedItemsPage() {
        sx: pendingStatusChip,
      };
    };   
+   
   const fetchData = async () => {
      try {
        setLoading(true);
@@ -1625,6 +1653,187 @@ function DispatchedItemsPage() {
      }
    };
    
+   const PLANT_LOCATION_MAP = {
+     "AL-P1": {
+       label: "AL-P1 (AKG)",
+       packedAreaCode: "PKD-1",
+       fgAreaCode: "FG-1",
+       fgZones: ["A", "B", "C"],
+     },
+     "AL-P2": {
+       label: "AL-P2 (Sofa)",
+       packedAreaCode: "PKD-2",
+       fgAreaCode: "FG-2",
+       fgZones: [],
+     },
+     "AL-P3": {
+       label: "AL-P3 (K&W)",
+       packedAreaCode: "PKD-3",
+       fgAreaCode: "FG-3",
+       fgZones: [],
+     },
+     "AL-P4": {
+       label: "AL-P4 (Basement)",
+       packedAreaCode: "PKD-4",
+       fgAreaCode: "FG-4",
+       fgZones: [],
+     },
+   };
+
+   const getPlantCodeFromRow = (row) => {
+     return (row?.plantCode || "").trim().split(" ")[0];
+   };
+
+   const getPlantConfigFromRow = (row) => {
+     const plantCode = getPlantCodeFromRow(row);
+     return PLANT_LOCATION_MAP[plantCode] || null;
+   };
+
+   const getFgAreaFromRow = (row) => {
+     const config = getPlantConfigFromRow(row);
+
+     return (
+       row?.fgAreaCode ||
+       config?.fgAreaCode ||
+       ""
+     );
+   };
+
+   const getFgZonesForRow = (row) => {
+     if (!row) return [];
+
+     if (Array.isArray(row.fgZones)) {
+       return row.fgZones
+         .map((z) =>
+           typeof z === "string"
+             ? z
+             : z?.zoneCode || z?.code || z?.name || ""
+         )
+         .filter(Boolean)
+         .map(String);
+     }
+
+     const config = getPlantConfigFromRow(row);
+
+     if (config?.fgZones?.length) {
+       return config.fgZones;
+     }
+
+     const fgArea = getFgAreaFromRow(row);
+
+     if (fgArea === "FG-1") {
+       return ["A", "B", "C"];
+     }
+
+     return [];
+   };
+
+   const getFgZonesForPlantCode = (plantCode) => {
+     const config = PLANT_LOCATION_MAP[plantCode];
+
+     return config?.fgZones || [];
+   };
+
+   const getFgZoneLabel = (row, zone) => {
+     const fgArea = getFgAreaFromRow(row) || "FG";
+
+     return `${fgArea} - Zone ${zone}`;
+   };
+
+   const isInFgLocation = (row) => {
+     const currentLocation =
+       row?.currentLocationCode ||
+       row?.location ||
+       "";
+
+     const fgArea = getFgAreaFromRow(row);
+
+     if (!currentLocation || !fgArea) return false;
+
+     return (
+       currentLocation === fgArea ||
+       currentLocation.startsWith(`${fgArea}-`) ||
+       currentLocation.startsWith(`${fgArea} `)
+     );
+   };
+
+   const openMoveToFgModal = (row) => {
+     setMoveFgModal(row);
+
+     // Important: keep blank. User must actively choose A/B/C.
+     // This stops the dropdown from snapping back to A.
+     setSelectedFgZone("");
+   };
+
+   const openBulkMoveToFgModal = () => {
+     setBulkSelectedFgZone("");
+     setBulkMoveFgOpen(true);
+   };
+   
+   const renderNativeFgZoneSelect = ({
+     row,
+     value,
+     onChange,
+   }) => {
+     const zones = getFgZonesForRow(row);
+
+     if (!zones.length) {
+       return (
+         <Box
+           sx={{
+             mb: 2,
+             p: 1.5,
+             borderRadius: "12px",
+             color: "#6ee7b7",
+             fontWeight: 900,
+             fontSize: 13,
+             background: "rgba(16,185,129,.10)",
+             border: "1px solid rgba(16,185,129,.18)",
+           }}
+         >
+           No zone required. This item will move to {getFgAreaFromRow(row)}.
+         </Box>
+       );
+     }
+
+     return (
+       <Box sx={{ mb: 2 }}>
+         <Box
+           sx={{
+             color: "#94a3b8",
+             fontSize: 12,
+             fontWeight: 800,
+             mb: 0.8,
+           }}
+         >
+           Select FG Zone
+         </Box>
+
+         <Box
+           component="select"
+           value={value}
+           onChange={(e) => {
+             onChange(e.target.value);
+           }}
+           sx={nativeFgSelectSx}
+         >
+           <option value="">
+             Select Zone
+           </option>
+
+           {zones.map((zone) => (
+             <option
+               key={zone}
+               value={zone}
+             >
+               {getFgZoneLabel(row, zone)}
+             </option>
+           ))}
+         </Box>
+       </Box>
+     );
+   };
+   
    const fetchPlantConfigs = async () => {
      try {
        const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
@@ -1644,15 +1853,6 @@ function DispatchedItemsPage() {
        console.error("Failed to fetch plant configs", e);
        setPlantConfigs([]);
      }
-   };
-   
-   const openMoveToFgModal = (row) => {
-     const zones = getFgZonesForRow(row);
-
-     setMoveFgModal(row);
-
-     // Set default only once while opening modal
-     setSelectedFgZone(zones.length > 0 ? zones[0] : "");
    };
    
    const resolveScan = async (rawScan) => {
@@ -2347,13 +2547,72 @@ function DispatchedItemsPage() {
 
 		  renderCell: (params) => {
 		    const row = params.row;
-		    const display = getDisplayStatus(row);
+
+		    const inFg = isInFgLocation(row);
+
+		    const canMoveToFg =
+		      isDispatch &&
+		      row.status === "READY" &&
+		      !inFg;
+
+		    const canChangeStatus =
+		      isDispatch &&
+		      row.status === "READY" &&
+		      inFg;
+
+		    if (canMoveToFg) {
+		      return (
+		        <Button
+		          size="small"
+		          onClick={() => openMoveToFgModal(row)}
+		          sx={{
+		            ...actionPrimary,
+		            ...tableActionButton,
+		            background:
+		              "linear-gradient(135deg,#f59e0b,#d97706)",
+		          }}
+		        >
+		          Move to FG
+		        </Button>
+		      );
+		    }
+
+		    if (canChangeStatus) {
+		      return (
+		        <Button
+		          size="small"
+		          onClick={() => setStatusModal(row)}
+		          sx={{
+		            ...actionPrimary,
+		            ...tableActionButton,
+		            background:
+		              "linear-gradient(135deg,#059669,#10b981)",
+		          }}
+		        >
+		          Change Status
+		        </Button>
+		      );
+		    }
 
 		    return (
 		      <Chip
 		        size="small"
-		        label={display.label}
-		        sx={display.sx}
+		        label={
+		          row.status === "READY" && inFg
+		            ? "PACKED - FG"
+		            : row.status === "READY"
+		              ? "PACKED - PKD"
+		              : row.status || "—"
+		        }
+		        sx={
+		          row.status === "READY" && inFg
+		            ? dispatchedStatusChip
+		            : row.status === "READY"
+		              ? pendingStatusChip
+		              : row.status === "DISPATCHED"
+		                ? dispatchedStatusChip
+		                : pendingStatusChip
+		        }
 		      />
 		    );
 		  },
@@ -2633,38 +2892,12 @@ function DispatchedItemsPage() {
     );
   };
 
-  const getFgZonesForRow = (row) => {
-    const config = getPlantConfigForRow(row);
-
-    if (!config) return [];
-
-    const zones = Array.isArray(config.fgZones)
-      ? config.fgZones
-      : [];
-
-    if (row?.plantCode === "AL-P1" && zones.length === 0) {
-      return ["A", "B", "C"];
-    }
-
-    return zones;
-  };
-
   const getFgAreaForRow = (row) => {
     return (
       row?.fgAreaCode ||
       getPlantConfigForRow(row)?.fgAreaCode ||
       ""
     );
-  };
-
-  const getFgZoneLabel = (row, zone) => {
-    const fgArea = getFgAreaForRow(row);
-
-    if (!zone) {
-      return fgArea || "FG";
-    }
-
-    return `${fgArea} - Zone ${zone}`;
   };
 
   const getRoleChipStyle = (role) => {
@@ -2705,11 +2938,13 @@ function DispatchedItemsPage() {
   /* ===== FILTERED ROWS ===== */
   console.log("🔥 selectionModel:", selectionModel);
   
-  const selectedItems = rows.filter(r =>
+  const selectedItems = rows.filter((r) =>
     selectionModel?.includes(r.zohoItemId)
   );
-  
-  const selectedStatusSet = new Set(selectedItems.map(i => i.status));
+
+  const selectedStatusSet = new Set(
+    selectedItems.map((item) => item.status)
+  );
 
   const isSingleStatus = selectedStatusSet.size === 1;
 
@@ -2717,20 +2952,61 @@ function DispatchedItemsPage() {
     ? [...selectedStatusSet][0]
     : null;
 
-  const allReadyToDispatch = selectedItems.length > 0 && selectedItems.every(
-    item => item.status === "READY_TO_DISPATCH"
-  );
-  
-  const allReadyToStore = selectedItems.length > 0 && selectedItems.every(
-    item => item.status === "READY_TO_STORE"
-  );
-  
-  const allReadyInFg =
+  const allReadyToDispatch =
     selectedItems.length > 0 &&
     selectedItems.every(
-      (item) => item.status === "READY" && isFgLocation(item)
+      (item) => item.status === "READY_TO_DISPATCH"
     );
-  
+
+  const allReadyToStore =
+    selectedItems.length > 0 &&
+    selectedItems.every(
+      (item) => item.status === "READY_TO_STORE"
+    );
+
+  const allReady =
+    selectedItems.length > 0 &&
+    selectedItems.every(
+      (item) => item.status === "READY"
+    );
+
+  const allReadyInFg =
+    allReady &&
+    selectedItems.every((item) => isInFgLocation(item));
+
+  const readyItemsNotInFg = selectedItems.filter(
+    (item) =>
+      item.status === "READY" &&
+      !isInFgLocation(item)
+  );
+
+  const selectedPlantCodes = Array.from(
+    new Set(
+      selectedItems
+        .map((item) => getPlantCodeFromRow(item))
+        .filter(Boolean)
+    )
+  );
+
+  const isSinglePlantSelection =
+    selectedPlantCodes.length === 1;
+
+  const bulkMoveFgPlantCode =
+    isSinglePlantSelection
+      ? selectedPlantCodes[0]
+      : "";
+
+  const canBulkMoveToFg =
+    isDispatch &&
+    allReady &&
+    readyItemsNotInFg.length > 0 &&
+    isSinglePlantSelection;
+
+  const canBulkChangeStatus =
+    isDispatch &&
+    allReady &&
+    allReadyInFg;
+	 
   return (
     <div style={page}>
       <div style={content}>
@@ -3263,89 +3539,136 @@ function DispatchedItemsPage() {
 			    </Box>
 			  </Box>
       </div>
-	  {Array.isArray(selectionModel) && selectionModel.length > 0 && isDispatch && (
-		<div
-		  style={bulkBar}
-		>
-		  {/* TEXT */}
-		  <span style={{ fontWeight: 600 }}>
-		    {selectionModel.length} item{selectionModel.length > 1 ? "s" : ""} selected
-		    {search || statusFilter !== "ALL" ? (
-		      <span style={{ color: "#93c5fd", marginLeft: 8 }}>
-		        from filtered result
-		      </span>
-		    ) : null}
-		  </span>
+	  {Array.isArray(selectionModel) &&
+	    selectionModel.length > 0 &&
+	    isDispatch && (
 
-		  {/* 🔵 BULK CHALAAN */}
-		  <Button
-		    size="small"
-		    disabled={!allReadyToDispatch}
-		    onClick={() => setBulkDrawerOpen(true)}
-		    sx={{
-			  px: 2.4,
-			  borderRadius: 10,
-			  fontWeight: 600,
-		      background: allReadyToDispatch
-		        ? "linear-gradient(180deg,#3b82f6,#2563eb)"
-		        : "#9ca3af",
-		      color: "#fff",
-		    }}
-		  >
-		    Generate Bulk Chalaan
-		  </Button>
+	    <div style={bulkBar}>
+	      <span style={{ fontWeight: 700 }}>
+	        {selectionModel.length} item
+	        {selectionModel.length > 1 ? "s" : ""} selected
+	      </span>
 
-		  {allReadyInFg && (
-		    <Button
-		      size="small"
-		      onClick={() => setBulkStatusModal(true)}
-		      sx={{
-				px: 2.4,
-				  borderRadius: 10,
-				  fontWeight: 600,
-		        background: "linear-gradient(180deg,#f59e0b,#d97706)",
-		        color: "#fff",
-		      }}
-		    >
-		      Change Status
-		    </Button>
-		  )}
+	      <Chip
+	        size="small"
+	        label={
+	          isSingleStatus
+	            ? selectedStatus
+	            : "Mixed Selection"
+	        }
+	        sx={{
+	          background: isSingleStatus
+	            ? "rgba(59,130,246,.14)"
+	            : "rgba(239,68,68,.14)",
+	          color: isSingleStatus
+	            ? "#93c5fd"
+	            : "#fca5a5",
+	          fontWeight: 900,
+	          border: "1px solid rgba(255,255,255,.08)",
+	        }}
+	      />
 
-		  {/* 🟢 BULK GATE PASS BUTTON (if added earlier) */}
-		  <Button
-		    size="small"
-		    disabled={!allReadyToStore}
-		    onClick={() => setBulkGatePassOpen(true)}
-		    sx={{
-				px: 2.4,
-				  borderRadius: 10,
-				  fontWeight: 600,
-		      background: allReadyToStore
-		        ? "linear-gradient(180deg,#10b981,#059669)"
-		        : "#9ca3af",
-		      color: "#fff",
-		    }}
-		  >
-		    Generate Bulk Gate Pass
-		  </Button>
+	      {!isSinglePlantSelection && (
+	        <Chip
+	          size="small"
+	          label="Select one plant only"
+	          sx={{
+	            background: "rgba(239,68,68,.14)",
+	            color: "#fca5a5",
+	            fontWeight: 900,
+	            border: "1px solid rgba(239,68,68,.22)",
+	          }}
+	        />
+	      )}
 
-		  {/* CLEAR */}
-		  <Button
-		    size="small"
-		    onClick={() => setSelectionModel([])}
-			sx={{
-			  px: 2,
-			  borderRadius: 10,
-			  background: "rgba(255,255,255,0.1)",
-			  color: "#fff",
-			  "&:hover": {
-			    background: "rgba(255,255,255,0.2)",
-			  },
-			}}
-		  >
-		    Clear
-		  </Button>
-		</div>
+	      <Button
+	        size="small"
+	        disabled={!canBulkMoveToFg || bulkMoveFgLoading}
+	        onClick={openBulkMoveToFgModal}
+	        sx={{
+	          px: 2.4,
+	          borderRadius: 10,
+	          fontWeight: 800,
+	          textTransform: "none",
+	          background: canBulkMoveToFg
+	            ? "linear-gradient(180deg,#f59e0b,#d97706)"
+	            : "#64748b",
+	          color: "#fff",
+	        }}
+	      >
+	        Move Selected To FG
+	      </Button>
+
+	      <Button
+	        size="small"
+	        disabled={!canBulkChangeStatus}
+	        onClick={() => setBulkStatusModal(true)}
+	        sx={{
+	          px: 2.4,
+	          borderRadius: 10,
+	          fontWeight: 800,
+	          textTransform: "none",
+	          background: canBulkChangeStatus
+	            ? "linear-gradient(180deg,#10b981,#059669)"
+	            : "#64748b",
+	          color: "#fff",
+	        }}
+	      >
+	        Bulk Change Status
+	      </Button>
+
+	      <Button
+	        size="small"
+	        disabled={!allReadyToDispatch}
+	        onClick={() => setBulkDrawerOpen(true)}
+	        sx={{
+	          px: 2.4,
+	          borderRadius: 10,
+	          fontWeight: 800,
+	          textTransform: "none",
+	          background: allReadyToDispatch
+	            ? "linear-gradient(180deg,#3b82f6,#2563eb)"
+	            : "#64748b",
+	          color: "#fff",
+	        }}
+	      >
+	        Generate Bulk Chalaan
+	      </Button>
+
+	      <Button
+	        size="small"
+	        disabled={!allReadyToStore}
+	        onClick={() => setBulkGatePassOpen(true)}
+	        sx={{
+	          px: 2.4,
+	          borderRadius: 10,
+	          fontWeight: 800,
+	          textTransform: "none",
+	          background: allReadyToStore
+	            ? "linear-gradient(180deg,#10b981,#059669)"
+	            : "#64748b",
+	          color: "#fff",
+	        }}
+	      >
+	        Generate Bulk Gate Pass
+	      </Button>
+
+	      <Button
+	        size="small"
+	        onClick={() => setSelectionModel([])}
+	        sx={{
+	          px: 2,
+	          borderRadius: 10,
+	          background: "rgba(255,255,255,0.1)",
+	          color: "#fff",
+	          "&:hover": {
+	            background: "rgba(255,255,255,0.2)",
+	          },
+	        }}
+	      >
+	        Clear
+	      </Button>
+	    </div>
 	  )}
 	  {qrDispatchOpen && (
 	    <Box
@@ -4154,6 +4477,7 @@ function DispatchedItemsPage() {
 					const query = finalFgZone
 					  ? `?fgZoneCode=${encodeURIComponent(finalFgZone)}`
 					  : "";
+					  
 	                const res = await fetch(
 	                  `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
 	                    moveFgModal.zohoItemId
@@ -4665,7 +4989,155 @@ function DispatchedItemsPage() {
 	        </Box>
 	      </Box>
 	    </Box>
-	  )}
+	  )}	{moveFgModal && (
+	  <Box
+	    sx={{ ...enhancedOverlaySx, zIndex: 5300 }}
+	    onClick={() => {
+	      if (!moveFgLoading) {
+	        setMoveFgModal(null);
+	        setSelectedFgZone("");
+	      }
+	    }}
+	  >
+	    <Box
+	      sx={{
+	        ...enhancedModalSx,
+	        width: 560,
+	      }}
+	      onClick={(e) => e.stopPropagation()}
+	    >
+	      <Box sx={modalHeaderSx}>
+	        <Box sx={modalTitleWrapSx}>
+	          <Box sx={modalIconBubble("#f59e0b")}>
+	            📍
+	          </Box>
+
+	          <Box>
+	            <Box sx={modalTitleSx}>
+	              Move To Finished Goods
+	            </Box>
+
+	            <Box sx={modalSubtitleSx}>
+	              Move packed item from PKD area to FG area
+	            </Box>
+	          </Box>
+	        </Box>
+
+	        <IconButton
+	          sx={modalCloseButtonSx}
+	          onClick={() => {
+	            setMoveFgModal(null);
+	            setSelectedFgZone("");
+	          }}
+	        >
+	          ×
+	        </IconButton>
+	      </Box>
+
+	      <Box sx={modalContentSx}>
+	        <Box
+	          sx={{
+	            p: 1.6,
+	            mb: 2,
+	            borderRadius: "12px",
+	            background: "rgba(255,255,255,.035)",
+	            border: "1px solid rgba(255,255,255,.07)",
+	          }}
+	        >
+	          <Box
+	            sx={{
+	              color: "#fff",
+	              fontWeight: 900,
+	              mb: 0.5,
+	            }}
+	          >
+	            {moveFgModal.name || moveFgModal.itemName || "—"}
+	          </Box>
+
+	          <Box
+	            sx={{
+	              color: "#94a3b8",
+	              fontSize: 12,
+	              fontWeight: 700,
+	            }}
+	          >
+	            Plant: {moveFgModal.plantCode || "—"} | Current Location:{" "}
+	            {moveFgModal.currentLocationCode || moveFgModal.location || "—"}
+	          </Box>
+	        </Box>
+
+	        {renderNativeFgZoneSelect({
+	          row: moveFgModal,
+	          value: selectedFgZone,
+	          onChange: setSelectedFgZone,
+	        })}
+	      </Box>
+
+	      <Box sx={modalFooterSx}>
+	        <Button
+	          disabled={moveFgLoading}
+	          onClick={() => {
+	            setMoveFgModal(null);
+	            setSelectedFgZone("");
+	          }}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Cancel
+	        </Button>
+
+	        <Button
+	          disabled={moveFgLoading}
+	          sx={premiumButton}
+	          onClick={async () => {
+	            try {
+	              const zones = getFgZonesForRow(moveFgModal);
+	              const finalZone = selectedFgZone?.trim();
+
+	              if (zones.length > 0 && !finalZone) {
+	                alert("Please select FG zone");
+	                return;
+	              }
+
+	              setMoveFgLoading(true);
+
+	              const query = finalZone
+	                ? `?fgZoneCode=${encodeURIComponent(finalZone)}`
+	                : "";
+
+	              const res = await fetch(
+	                `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+	                  moveFgModal.zohoItemId
+	                )}/move-to-fg${query}`,
+	                {
+	                  method: "POST",
+	                  headers: getAuthHeaders(),
+	                }
+	              );
+
+	              if (!res.ok) {
+	                const text = await res.text();
+	                alert(text || "Move to FG failed");
+	                return;
+	              }
+
+	              setMoveFgModal(null);
+	              setSelectedFgZone("");
+
+	              await fetchData();
+	            } catch (err) {
+	              console.error(err);
+	              alert("Move to FG failed");
+	            } finally {
+	              setMoveFgLoading(false);
+	            }
+	          }}
+	        >
+	          {moveFgLoading ? "Moving..." : "Confirm Move"}
+	        </Button>
+	      </Box>
+	    </Box>
+	  </Box>
+	)}
 	  {statusModal && (
 	    <Box
 	      sx={{ ...enhancedOverlaySx, zIndex: 5000 }}
@@ -4781,6 +5253,164 @@ function DispatchedItemsPage() {
 	              </Box>
 	            </Box>
 	          </Box>
+	        </Box>
+	      </Box>
+	    </Box>
+	  )}
+	  {bulkMoveFgOpen && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5300 }}
+	      onClick={() => {
+	        if (!bulkMoveFgLoading) {
+	          setBulkMoveFgOpen(false);
+	          setBulkSelectedFgZone("");
+	        }
+	      }}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 600,
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#f59e0b")}>
+	              📍
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Bulk Move To FG
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Move selected packed items to Finished Goods area
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => {
+	              setBulkMoveFgOpen(false);
+	              setBulkSelectedFgZone("");
+	            }}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box
+	            sx={{
+	              p: 1.6,
+	              mb: 2,
+	              borderRadius: "12px",
+	              background: "rgba(255,255,255,.035)",
+	              border: "1px solid rgba(255,255,255,.07)",
+	            }}
+	          >
+	            <Box
+	              sx={{
+	                color: "#fff",
+	                fontWeight: 900,
+	                mb: 0.5,
+	              }}
+	            >
+	              {readyItemsNotInFg.length} selected item
+	              {readyItemsNotInFg.length > 1 ? "s" : ""} will be moved to FG
+	            </Box>
+
+	            <Box
+	              sx={{
+	                color: "#94a3b8",
+	                fontSize: 12,
+	                fontWeight: 700,
+	              }}
+	            >
+	              Plant: {bulkMoveFgPlantCode || "—"}
+	            </Box>
+	          </Box>
+
+	          {renderNativeFgZoneSelect({
+	            row: readyItemsNotInFg[0],
+	            value: bulkSelectedFgZone,
+	            onChange: setBulkSelectedFgZone,
+	          })}
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            disabled={bulkMoveFgLoading}
+	            onClick={() => {
+	              setBulkMoveFgOpen(false);
+	              setBulkSelectedFgZone("");
+	            }}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Cancel
+	          </Button>
+
+	          <Button
+	            disabled={bulkMoveFgLoading}
+	            sx={premiumButton}
+	            onClick={async () => {
+	              try {
+	                if (!readyItemsNotInFg.length) {
+	                  alert("No packed PKD items selected");
+	                  return;
+	                }
+
+	                const zones = getFgZonesForRow(readyItemsNotInFg[0]);
+	                const finalZone = bulkSelectedFgZone?.trim();
+
+	                if (zones.length > 0 && !finalZone) {
+	                  alert("Please select FG zone");
+	                  return;
+	                }
+
+	                setBulkMoveFgLoading(true);
+
+	                const query = finalZone
+	                  ? `?fgZoneCode=${encodeURIComponent(finalZone)}`
+	                  : "";
+
+	                for (const item of readyItemsNotInFg) {
+	                  const res = await fetch(
+	                    `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+	                      item.zohoItemId
+	                    )}/move-to-fg${query}`,
+	                    {
+	                      method: "POST",
+	                      headers: getAuthHeaders(),
+	                    }
+	                  );
+
+	                  if (!res.ok) {
+	                    const text = await res.text();
+	                    throw new Error(
+	                      text || `Move to FG failed for ${item.sku || item.zohoItemId}`
+	                    );
+	                  }
+	                }
+
+	                setBulkMoveFgOpen(false);
+	                setBulkSelectedFgZone("");
+	                setSelectionModel([]);
+
+	                await fetchData();
+	              } catch (err) {
+	                console.error(err);
+	                alert(err.message || "Bulk move to FG failed");
+	              } finally {
+	                setBulkMoveFgLoading(false);
+	              }
+	            }}
+	          >
+	            {bulkMoveFgLoading ? "Moving..." : "Confirm Bulk Move"}
+	          </Button>
 	        </Box>
 	      </Box>
 	    </Box>
