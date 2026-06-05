@@ -23,8 +23,12 @@ public class MasterItem {
     private String floor;
     private Integer totalPackets;
 
+    private String plantCode;
+    private String packedAreaCode;
+    private String fgAreaCode;
+    private String allowedWarehouseCodes;
     private LocalDateTime createdAt = LocalDateTime.now();
-
+    
     public UUID getId() {
 		return id;
 	}
@@ -51,6 +55,38 @@ public class MasterItem {
 
 	public String getDrawingName() {
 		return drawingName;
+	}
+	
+	public String getPlantCode() {
+		return plantCode;
+	}
+
+	public void setPlantCode(String plantCode) {
+		this.plantCode = plantCode;
+	}
+
+	public String getPackedAreaCode() {
+		return packedAreaCode;
+	}
+
+	public void setPackedAreaCode(String packedAreaCode) {
+		this.packedAreaCode = packedAreaCode;
+	}
+
+	public String getFgAreaCode() {
+		return fgAreaCode;
+	}
+
+	public void setFgAreaCode(String fgAreaCode) {
+		this.fgAreaCode = fgAreaCode;
+	}
+
+	public String getAllowedWarehouseCodes() {
+		return allowedWarehouseCodes;
+	}
+
+	public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
+		this.allowedWarehouseCodes = allowedWarehouseCodes;
 	}
 
 	public void setDrawingName(String drawingName) {

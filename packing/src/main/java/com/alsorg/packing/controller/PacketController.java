@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import com.alsorg.packing.security.JwtUtil;
 
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpHeaders;
@@ -23,8 +22,8 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.service.PacketService;
 import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/packets")
@@ -35,19 +34,22 @@ public class PacketController {
     private final ZohoInventoryClient zohoInventoryClient;
     private final ZohoItemCacheService zohoItemCacheService;
     private final PacketItemRepository packetItemRepository;
+    private final CurrentUserService currentUserService;
 
     public PacketController(
             PacketService packetService,
             ZohoInventoryClient zohoInventoryClient,
             ZohoItemCacheService zohoItemCacheService,
             ZohoStickerService zohoStickerService,
-            PacketItemRepository packetItemRepository
+            PacketItemRepository packetItemRepository,
+            CurrentUserService currentUserService
     ) {
         this.packetService = packetService;
         this.zohoInventoryClient = zohoInventoryClient;
         this.zohoItemCacheService = zohoItemCacheService;
         this.zohoStickerService = zohoStickerService;
         this.packetItemRepository = packetItemRepository;
+        this.currentUserService = currentUserService;
     }
 
     // =====================================================
@@ -175,12 +177,19 @@ public class PacketController {
     @PostMapping("/create")
     public ResponseEntity<?> createItem(
             @RequestBody CreateItemRequest req,
-            @RequestHeader(value = "Authorization", required = false) String auth
+            @RequestHeader("Authorization") String auth
     ) {
-        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        String plantCode =
+                currentUserService.resolvePlantForWrite(user, req.getPlantCode());
 
         List<PacketItem> items =
-                packetService.createItemWithPackets(req, createdBy);
+                packetService.createItemWithPackets(
+                        req,
+                        user.getUsername(),
+                        plantCode
+                );
 
         return ResponseEntity.ok(
                 items.stream().map(PacketItem::getId).toList()
@@ -188,43 +197,28 @@ public class PacketController {
     }
     
     @GetMapping("/items")
-    public List<PacketItemResponse> getAllItems() {
+    public List<PacketItemResponse> getAllItems(
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        return packetItemRepository.findAll()
+        List<PacketItem> sourceItems;
+
+        if (currentUserService.isAdmin(user)) {
+            sourceItems = packetItemRepository.findAll();
+        } else {
+            sourceItems = packetItemRepository.findVisibleByPlantsIncludingLegacy(
+                    currentUserService.allowedPlants(user)
+            );
+        }
+
+        return sourceItems
                 .stream()
                 .filter(item ->
                         "CREATED".equals(item.getStatus()) ||
                         "RESTORED".equals(item.getStatus())
                 )
-                .map(item -> {
-                    PacketItemResponse dto = new PacketItemResponse();
-
-                    dto.setItemId(item.getId());
-                    dto.setItemName(item.getItemName());
-                    dto.setSku(item.getSku());
-                    dto.setLocation(item.getLocation());
-                    dto.setFloor(item.getFloor());
-                    dto.setPdNo(item.getPdNo());
-                    dto.setDrawingNo(item.getDrawingNo());
-                    dto.setClientName(item.getClientName());
-                    dto.setClientAddress(item.getClientAddress());
-                    dto.setQuantity(
-                            item.getQuantity() != null ? item.getQuantity() : 1
-                    );
-                    dto.setDescription(item.getDescription());
-                    dto.setDimensions(item.getDimensions());
-                    dto.setWeight(item.getWeight());
-                    dto.setRemarks(item.getRemarks());
-                    dto.setCreatedBy(item.getCreatedBy());
-                    dto.setStickerNumber(item.getStickerNumber());
-
-                    if (item.getMasterItem() != null) {
-                        dto.setMasterItemId(item.getMasterItem().getId());
-                        dto.setTotalPackets(item.getMasterItem().getTotalPackets());
-                    }
-
-                    return dto;
-                })
+                .map(this::toPacketItemResponse)
                 .toList();
     }
     
@@ -232,16 +226,21 @@ public class PacketController {
     public ResponseEntity<?> addMorePackets(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req,
-            @RequestHeader(value = "Authorization", required = false) String auth
+            @RequestHeader("Authorization") String auth
     ) {
         if (req.getNumberOfPackets() <= 0) {
             throw new RuntimeException("Invalid packet count");
         }
 
-        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
         return ResponseEntity.ok(
-                packetService.addPackets(masterItemId, req, createdBy)
+                packetService.addPackets(
+                        masterItemId,
+                        req,
+                        user.getUsername(),
+                        currentUserService.allowedPlants(user)
+                )
         );
     }
     
@@ -250,16 +249,16 @@ public class PacketController {
             @PathVariable UUID itemId,
             @RequestParam String factoryFloor,
             @RequestParam(defaultValue = "true") boolean showCompanyHeader,
-            @RequestHeader(value = "Authorization", required = false) String auth
+            @RequestHeader("Authorization") String auth
     ) {
-
-        String generatedBy = currentUsernameFromTokenOrSecurity(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
         byte[] pdf = packetService.generateStickerForPacketItem(
                 itemId,
                 factoryFloor,
                 showCompanyHeader,
-                generatedBy
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
         );
 
         return ResponseEntity.ok()
@@ -283,12 +282,19 @@ public class PacketController {
     @PostMapping("/create-custom")
     public ResponseEntity<?> createCustom(
             @RequestBody CreateItemRequest req,
-            @RequestHeader(value = "Authorization", required = false) String auth
+            @RequestHeader("Authorization") String auth
     ) {
-        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        String plantCode =
+                currentUserService.resolvePlantForWrite(user, req.getPlantCode());
 
         return ResponseEntity.ok(
-                packetService.createCustomPacket(req, createdBy)
+                packetService.createCustomPacket(
+                        req,
+                        user.getUsername(),
+                        plantCode
+                )
         );
     }
 
@@ -296,12 +302,17 @@ public class PacketController {
     public ResponseEntity<?> addCustom(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req,
-            @RequestHeader(value = "Authorization", required = false) String auth
+            @RequestHeader("Authorization") String auth
     ) {
-        String createdBy = currentUsernameFromTokenOrSecurity(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
         return ResponseEntity.ok(
-                packetService.addCustomPacket(masterItemId, req, createdBy)
+                packetService.addCustomPacket(
+                        masterItemId,
+                        req,
+                        user.getUsername(),
+                        currentUserService.allowedPlants(user)
+                )
         );
     }
     
@@ -312,46 +323,62 @@ public class PacketController {
         return ResponseEntity.ok("Item deleted");
     }
     
+    @PatchMapping("/items/{itemId}/plant-location")
+    public ResponseEntity<?> assignPlantLocation(
+            @PathVariable UUID itemId,
+            @RequestBody PlantAssignmentRequest req,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isAdmin(user)) {
+            return ResponseEntity.status(403)
+                    .body("Only ADMIN can assign old item plant location");
+        }
+
+        if (req.getPlantCode() == null || req.getPlantCode().isBlank()) {
+            return ResponseEntity.badRequest().body("Plant code required");
+        }
+
+        return ResponseEntity.ok(
+                packetService.assignPlantToPacketItem(
+                        itemId,
+                        req.getPlantCode()
+                )
+        );
+    }
     
-    private String currentUsernameFromTokenOrSecurity(String auth) {
+    private PacketItemResponse toPacketItemResponse(PacketItem item) {
+        PacketItemResponse dto = new PacketItemResponse();
 
-        /*
-         * FIRST PRIORITY:
-         * Read username directly from JWT token.
-         */
-        if (auth != null && auth.startsWith("Bearer ")) {
-            try {
-                String token = auth.replace("Bearer ", "").trim();
+        dto.setItemId(item.getId());
+        dto.setItemName(item.getItemName());
+        dto.setSku(item.getSku());
+        dto.setLocation(item.getLocation());
+        dto.setFloor(item.getFloor());
+        dto.setPdNo(item.getPdNo());
+        dto.setDrawingNo(item.getDrawingNo());
+        dto.setClientName(item.getClientName());
+        dto.setClientAddress(item.getClientAddress());
+        dto.setQuantity(item.getQuantity() != null ? item.getQuantity() : 1);
+        dto.setDescription(item.getDescription());
+        dto.setDimensions(item.getDimensions());
+        dto.setWeight(item.getWeight());
+        dto.setRemarks(item.getRemarks());
+        dto.setCreatedBy(item.getCreatedBy());
+        dto.setStickerNumber(item.getStickerNumber());
 
-                String username = JwtUtil.getUsername(token);
+        dto.setPlantCode(item.getPlantCode());
+        dto.setPackedAreaCode(item.getPackedAreaCode());
+        dto.setCurrentLocationCode(item.getCurrentLocationCode());
+        dto.setFgAreaCode(item.getFgAreaCode());
+        dto.setFgZoneCode(item.getFgZoneCode());
 
-                if (username != null
-                        && !username.isBlank()
-                        && !"anonymousUser".equalsIgnoreCase(username)) {
-                    return username.trim();
-                }
-            } catch (Exception e) {
-                System.out.println("Could not extract username from JWT: " + e.getMessage());
-            }
+        if (item.getMasterItem() != null) {
+            dto.setMasterItemId(item.getMasterItem().getId());
+            dto.setTotalPackets(item.getMasterItem().getTotalPackets());
         }
 
-        /*
-         * FALLBACK:
-         * Spring Security context.
-         */
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication != null) {
-            String username = authentication.getName();
-
-            if (username != null
-                    && !username.isBlank()
-                    && !"anonymousUser".equalsIgnoreCase(username)) {
-                return username.trim();
-            }
-        }
-
-        return "SYSTEM";
+        return dto;
     }
 }

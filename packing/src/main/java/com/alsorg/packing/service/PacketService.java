@@ -51,6 +51,7 @@ public class PacketService {
     private final DispatchedItemRepository dispatchedRepo;
     private final MasterItemRepository masterItemRepository;
     private final StickerHistoryRepository stickerHistoryRepository;
+    private final PlantLocationService plantLocationService;
     
     @Value("${sticker.storage.path}")
     private String stickerStoragePath;
@@ -64,7 +65,8 @@ public class PacketService {
             DispatchedItemService dispatchedItemService,
             DispatchedItemRepository dispatchedRepo,
             MasterItemRepository masterItemRepository,
-            StickerHistoryRepository stickerHistoryRepository
+            StickerHistoryRepository stickerHistoryRepository,
+            PlantLocationService plantLocationService
     ) {
         this.packetRepository = packetRepository;
         this.packetItemRepository = packetItemRepository;
@@ -75,8 +77,18 @@ public class PacketService {
         this.dispatchedRepo = dispatchedRepo;
         this.masterItemRepository = masterItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
+        this.plantLocationService = plantLocationService;
     }
 
+    private void assertPlantAccess(String plantCode, Set<String> allowedPlants) {
+        if (plantCode == null || plantCode.isBlank()) {
+            throw new RuntimeException("Plant code missing");
+        }
+
+        if (allowedPlants != null && !allowedPlants.contains(plantCode)) {
+            throw new RuntimeException("User does not have access to plant: " + plantCode);
+        }
+    }
     // =====================================================
     // PACKET CREATION (NO STICKER / PDF HERE)
     // =====================================================
@@ -181,7 +193,8 @@ public class PacketService {
     @Transactional
     public List<PacketItem> createItemWithPackets(
             CreateItemRequest req,
-            String createdBy
+            String createdBy,
+            String plantCode
     ) {
     	
     	 List<String> plannedSkus = new ArrayList<>();
@@ -195,6 +208,8 @@ public class PacketService {
     	    assertSkusAvailable(plannedSkus);
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         // 🔥 1. CREATE DUMMY COMPANY (TEMP FIX)
         Company company = companyRepository.findAll()
@@ -211,6 +226,7 @@ public class PacketService {
         master.setAddress(req.clientAddress);
         master.setTotalPackets(req.numberOfPackets);
         master.setFloor(req.floor);
+        master.setPlantCode(plantCode);
 
         master = masterItemRepository.save(master);
         
@@ -280,6 +296,11 @@ public class PacketService {
             item.setSku(sku);
 
             item.setQuantity(1);
+            item.setPlantCode(plantCode);
+            item.setPackedAreaCode(plant.packedAreaCode());
+            item.setCurrentLocationCode(null);
+            item.setFgAreaCode(plant.fgAreaCode());
+            item.setFgZoneCode(null);
             item.setLocation("FLOOR");
             item.setStatus("CREATED");
             item.setCreatedBy(actor);
@@ -299,7 +320,23 @@ public class PacketService {
                 itemId,
                 factoryFloor,
                 showCompanyHeader,
-                "SYSTEM"
+                "SYSTEM",
+                null
+        );
+    }
+
+    public byte[] generateStickerForPacketItem(
+            UUID itemId,
+            String factoryFloor,
+            boolean showCompanyHeader,
+            String generatedBy
+    ) {
+        return generateStickerForPacketItem(
+                itemId,
+                factoryFloor,
+                showCompanyHeader,
+                generatedBy,
+                null
         );
     }
 
@@ -308,11 +345,19 @@ public class PacketService {
             UUID itemId,
             String factoryFloor,
             boolean showCompanyHeader,
-            String generatedBy
+            String generatedBy,
+            Set<String> allowedPlants
     ) {
 
         PacketItem item = packetItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
+        
+        String plantCode = item.getPlantCode();
+
+        assertPlantAccess(plantCode, allowedPlants);
+
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         String actor =
                 generatedBy != null && !generatedBy.isBlank()
@@ -335,24 +380,35 @@ public class PacketService {
      item.setStickerNumber(stickerNumber);
      item.setPrintIteration(iteration);   // 🔥 IMPORTANT
 
-        // ✅ MOVE TO FLOOR
-        item.setStatus("READY");
-        item.setPackedAt(now);
-        item.setCreatedBy(actor);
+     item.setStatus("READY"); // internal status
+     item.setLocation(plant.packedAreaCode());
+     item.setPackedAreaCode(plant.packedAreaCode());
+     item.setCurrentLocationCode(plant.packedAreaCode());
+     item.setFgAreaCode(plant.fgAreaCode());
+     item.setPackedAt(now);
+     item.setCreatedBy(actor);
 
         packetItemRepository.save(item);
 
         // create dispatch entry DIRECTLY in correct state
         dispatchedItemService.createFromPacketItem(item);
 
-        // 🔥 FORCE status after creationy
         DispatchedItem d = dispatchedRepo.findById(item.getId().toString())
-        	    .orElseThrow();
+                .orElseThrow();
+
         d.setStatus(ItemDispatchStatus.READY);
+        d.setPlantCode(plantCode);
+        d.setPackedAreaCode(plant.packedAreaCode());
+        d.setCurrentLocationCode(plant.packedAreaCode());
+        d.setFgAreaCode(plant.fgAreaCode());
+        d.setFgZoneCode(null);
+        d.setLocation(plant.packedAreaCode());
+        d.setFloor(item.getFloor());
         d.setPackedAt(now);
         d.setCreatedAt(now);
         d.setPackedBy(actor);
         d.setCreatedBy(actor);
+
         dispatchedRepo.save(d);
 
         StickerPdfData pdf = new StickerPdfData();
@@ -432,20 +488,37 @@ public class PacketService {
             UUID masterItemId,
             CreateItemRequest req
     ) {
-        return addPackets(masterItemId, req, "SYSTEM");
+        return addPackets(masterItemId, req, "SYSTEM", null);
     }
-    
+
     @Transactional
     public List<PacketItem> addPackets(
             UUID masterItemId,
             CreateItemRequest req,
             String createdBy
     ) {
+        return addPackets(masterItemId, req, createdBy, null);
+    }
+    
+    @Transactional
+    public List<PacketItem> addPackets(
+            UUID masterItemId,
+            CreateItemRequest req,
+            String createdBy,
+            Set<String> allowedPlants
+    ) {
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
 
         MasterItem master = masterItemRepository.findById(masterItemId)
                 .orElseThrow(() -> new RuntimeException("Master item not found"));
+        
+        String plantCode = master.getPlantCode();
+
+        assertPlantAccess(plantCode, allowedPlants);
+
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         // ✅ GET COMPANY (same as before)
         Company company = companyRepository.findAll()
@@ -507,6 +580,11 @@ public class PacketService {
             item.setClientName(master.getClientName());
             item.setClientAddress(master.getAddress());
             item.setFloor(master.getFloor());
+            item.setPlantCode(plantCode);
+            item.setPackedAreaCode(plant.packedAreaCode());
+            item.setCurrentLocationCode(null);
+            item.setFgAreaCode(plant.fgAreaCode());
+            item.setFgZoneCode(null);
             item.setPacketNumber("Pkt-" + packetNo);
 
             String sku = plannedSkus.get(i);
@@ -532,6 +610,8 @@ public class PacketService {
             item.setDimensions(dim);
             item.setRemarks(remark);
             item.setSku(sku);
+            item.setQuantity(1);
+            item.setLocation("FLOOR");
             item.setStatus("CREATED");
             item.setCreatedBy(actor);
 
@@ -543,13 +623,22 @@ public class PacketService {
     
     @Transactional
     public PacketItem createCustomPacket(CreateItemRequest req) {
-        return createCustomPacket(req, "SYSTEM");
+        return createCustomPacket(req, "SYSTEM", req.getPlantCode());
+    }
+
+    @Transactional
+    public PacketItem createCustomPacket(
+            CreateItemRequest req,
+            String createdBy
+    ) {
+        return createCustomPacket(req, createdBy, req.getPlantCode());
     }
     
     @Transactional
     public PacketItem createCustomPacket(
             CreateItemRequest req,
-            String createdBy
+            String createdBy,
+            String plantCode
     ) {
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
@@ -558,6 +647,9 @@ public class PacketService {
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("No company found"));
+        
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         // 🔥 CREATE MASTER ITEM (same as existing)
         MasterItem master = new MasterItem();
@@ -568,7 +660,8 @@ public class PacketService {
         master.setAddress(req.clientAddress);
         master.setTotalPackets(1);
         master.setFloor(req.floor);
-
+        master.setPlantCode(plantCode);
+        
         master = masterItemRepository.save(master);
 
         // 🔥 CREATE PACKET
@@ -606,7 +699,11 @@ public class PacketService {
         item.setClientName(req.clientName);
         item.setClientAddress(req.clientAddress);
         item.setFloor(req.floor);
-
+        item.setPlantCode(plantCode);
+        item.setPackedAreaCode(plant.packedAreaCode());
+        item.setCurrentLocationCode(null);
+        item.setFgAreaCode(plant.fgAreaCode());
+        item.setFgZoneCode(null);
         item.setPacketNumber("Pkt-" + packetNo);
 
         String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
@@ -625,20 +722,37 @@ public class PacketService {
             UUID masterItemId,
             CreateItemRequest req
     ) {
-        return addCustomPacket(masterItemId, req, "SYSTEM");
+        return addCustomPacket(masterItemId, req, "SYSTEM", null);
     }
-    
+
     @Transactional
     public PacketItem addCustomPacket(
             UUID masterItemId,
             CreateItemRequest req,
             String createdBy
     ) {
+        return addCustomPacket(masterItemId, req, createdBy, null);
+    }
+    
+    @Transactional
+    public PacketItem addCustomPacket(
+            UUID masterItemId,
+            CreateItemRequest req,
+            String createdBy,
+            Set<String> allowedPlants
+    ) {
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
 
         MasterItem master = masterItemRepository.findById(masterItemId)
                 .orElseThrow(() -> new RuntimeException("Master item not found"));
+        
+        String plantCode = master.getPlantCode();
+
+        assertPlantAccess(plantCode, allowedPlants);
+
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         Company company = companyRepository.findAll()
                 .stream()
@@ -680,15 +794,22 @@ public class PacketService {
         item.setWeight(req.getWeights().get(0));
         item.setDimensions(req.getDimensionsList().get(0));
         item.setRemarks(req.getRemarksList().get(0));
+        item.setPlantCode(plantCode);
+        item.setPackedAreaCode(plant.packedAreaCode());
+        item.setCurrentLocationCode(null);
+        item.setFgAreaCode(plant.fgAreaCode());
+        item.setFgZoneCode(null);
         item.setPacketNumber("Pkt-" + packetNo);
 
         String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
         assertSkuAvailable(sku);
 
         item.setSku(sku);
-
+        item.setQuantity(1);
+        item.setLocation("FLOOR");
         item.setStatus("CREATED");
         item.setCreatedBy(actor);
+        
 
         return packetItemRepository.save(item);
     }
@@ -865,5 +986,50 @@ public class PacketService {
         return username != null && !username.isBlank()
                 ? username.trim()
                 : "SYSTEM";
+    }
+    
+    @Transactional
+    public PacketItem assignPlantToPacketItem(
+            UUID itemId,
+            String plantCode
+    ) {
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
+
+        PacketItem item = packetItemRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+        item.setPlantCode(plantCode);
+        item.setPackedAreaCode(plant.packedAreaCode());
+        item.setFgAreaCode(plant.fgAreaCode());
+
+        if (item.getStickerNumber() == null) {
+            item.setCurrentLocationCode(null);
+            item.setLocation("FLOOR");
+        } else {
+            item.setCurrentLocationCode(plant.packedAreaCode());
+            item.setLocation(plant.packedAreaCode());
+        }
+
+        if (item.getMasterItem() != null) {
+            item.getMasterItem().setPlantCode(plantCode);
+        }
+
+        PacketItem saved = packetItemRepository.save(item);
+
+        dispatchedRepo.findById(itemId.toString()).ifPresent(d -> {
+            d.setPlantCode(plantCode);
+            d.setPackedAreaCode(plant.packedAreaCode());
+            d.setFgAreaCode(plant.fgAreaCode());
+
+            if (d.getCurrentLocationCode() == null || d.getCurrentLocationCode().isBlank()) {
+                d.setCurrentLocationCode(plant.packedAreaCode());
+                d.setLocation(plant.packedAreaCode());
+            }
+
+            dispatchedRepo.save(d);
+        });
+
+        return saved;
     }
 }

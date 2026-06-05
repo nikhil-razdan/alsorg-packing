@@ -20,6 +20,8 @@ import com.alsorg.packing.domain.imports.ImportPreviewRow;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/warehouse")
@@ -27,20 +29,39 @@ public class WarehouseController {
 
     private final WarehouseService service;
     private final DispatchedItemService dservice;
+    private final CurrentUserService currentUserService;
 
-    public WarehouseController(WarehouseService service, DispatchedItemService dservice) {
+    public WarehouseController(WarehouseService service, 
+    		DispatchedItemService dservice,
+    		CurrentUserService currentUserService
+    		) {
         this.service = service;
         this.dservice = dservice;
+        this.currentUserService = currentUserService;
     }
 
     @GetMapping("/floor")
-    public List<DispatchedItem> floor() {
-        return service.getFloorItems();
+    public List<DispatchedItem> floor(
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        return service.getFloorItems(
+                currentUserService.allowedPlants(user),
+                currentUserService.isAdmin(user)
+        );
     }
 
     @GetMapping("/items")
-    public List<DispatchedItem> warehouse() {
-        return service.getWarehouseItems();
+    public List<DispatchedItem> warehouse(
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        return service.getWarehouseItems(
+                currentUserService.allowedPlants(user),
+                currentUserService.isAdmin(user)
+        );
     }
 
     
@@ -103,9 +124,24 @@ public class WarehouseController {
     public ResponseEntity<?> importExcel(
             @RequestParam MultipartFile file,
             @RequestParam String mode,
-            @RequestHeader("X-Username") String username
+            @RequestParam(required = false) String plantCode,
+            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "X-Username", required = false) String username
     ) {
-        service.processImport(file, mode, username);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        String resolvedPlant =
+                currentUserService.resolvePlantForWrite(user, plantCode);
+
+        service.processImport(
+                file,
+                mode,
+                username != null && !username.isBlank()
+                        ? username
+                        : user.getUsername(),
+                resolvedPlant
+        );
+
         return ResponseEntity.ok("Import successful");
     }
     
@@ -134,9 +170,24 @@ public class WarehouseController {
     public ResponseEntity<?> confirm(
             @RequestParam MultipartFile file,
             @RequestParam String mode,
-            @RequestHeader("X-Username") String username
+            @RequestParam(required = false) String plantCode,
+            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "X-Username", required = false) String username
     ) {
-        service.processImport(file, mode, username);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        String resolvedPlant =
+                currentUserService.resolvePlantForWrite(user, plantCode);
+
+        service.processImport(
+                file,
+                mode,
+                username != null && !username.isBlank()
+                        ? username
+                        : user.getUsername(),
+                resolvedPlant
+        );
+
         return ResponseEntity.ok("Import successful");
     }
     

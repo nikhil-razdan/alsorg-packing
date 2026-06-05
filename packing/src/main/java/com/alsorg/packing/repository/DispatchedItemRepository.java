@@ -12,6 +12,14 @@ import org.springframework.stereotype.Repository;
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
+import java.util.Collection;
+import java.util.List;
+
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.domain.dispatch.DispatchedItem;
 
 @Repository
 public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, String> {
@@ -49,4 +57,29 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
     // ===================== EXISTS =====================
 
     boolean existsByZohoItemId(String zohoItemId);
+    
+    List<DispatchedItem> findByStatusInAndPlantCodeIn(
+            List<ItemDispatchStatus> statuses,
+            Collection<String> plantCodes
+    );
+
+    List<DispatchedItem> findByStatusAndPlantCodeIn(
+            ItemDispatchStatus status,
+            Collection<String> plantCodes
+    );
+    
+    @Query("""
+    	    SELECT d
+    	    FROM DispatchedItem d
+    	    WHERE d.status IN :statuses
+    	      AND (
+    	            d.plantCode IN :plantCodes
+    	            OR d.plantCode IS NULL
+    	            OR d.plantCode = ''
+    	          )
+    	""")
+    	List<DispatchedItem> findVisibleByStatusesAndPlantsIncludingLegacy(
+    	        @Param("statuses") List<ItemDispatchStatus> statuses,
+    	        @Param("plantCodes") Collection<String> plantCodes
+    	);
 }

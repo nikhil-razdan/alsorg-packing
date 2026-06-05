@@ -156,7 +156,7 @@ function ZohoItemsPage() {
   const [weights, setWeights] = useState([]);
   const [dimensionsList, setDimensionsList] = useState([]);
   const [remarksList, setRemarksList] = useState([]);
-  
+  const [myPlants, setMyPlants] = useState([]);
   /* ===== SEARCH + FILTER ===== */
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("NONE");
@@ -171,11 +171,12 @@ function ZohoItemsPage() {
     clientName: "",
     clientAddress: "",
     floor: "",
+    plantCode: "",
     dimensions: "",
     weight: "",
     remarks: "",
     numberOfPackets: 1,
-	showCompanyHeader: true,
+    showCompanyHeader: true,
   });
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -206,7 +207,31 @@ function ZohoItemsPage() {
 
   /* ===================== COLUMNS ===================== */
  
+  const fetchMyPlants = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
+      if (!res.ok) throw new Error(await res.text());
+
+      const data = await res.json();
+      setMyPlants(Array.isArray(data) ? data : []);
+
+      if (Array.isArray(data) && data.length === 1) {
+        setForm((prev) => ({
+          ...prev,
+          plantCode: data[0].plantCode,
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+      setMyPlants([]);
+    }
+  };
+  
   const fetchItems = async () => {
     setLoading(true);
     try {
@@ -453,6 +478,7 @@ function ZohoItemsPage() {
     let err = {};
 
     if (!form.itemName) err.itemName = "Required";
+	if (!form.plantCode) err.plantCode = "Plant location required";
     if (!form.numberOfPackets || form.numberOfPackets <= 0)
       err.numberOfPackets = "Invalid";
 
@@ -644,6 +670,7 @@ function ZohoItemsPage() {
   
   useEffect(() => {
     fetchItems();
+    fetchMyPlants();
   }, []);
   
   useEffect(() => {
@@ -802,6 +829,8 @@ function ZohoItemsPage() {
                 <div>SKU</div>
                 <div>PD No</div>
                 <div>DWG No</div>
+				<div>Plant</div>
+				<div>Location</div>
                 <div>Client</div>
                 <div>Address</div>
                 <div>Description</div>
@@ -941,6 +970,18 @@ function ZohoItemsPage() {
                           {row.drawingNo || "—"}
                         </span>
                       </div>
+					  
+					  <div style={tableCellWrap}>
+					    <span style={simpleMutedText}>
+					      {row.plantCode || "Unassigned"}
+					    </span>
+					  </div>
+
+					  <div style={tableCellWrap}>
+					    <span style={simpleMutedText}>
+					      {row.currentLocationCode || row.location || "—"}
+					    </span>
+					  </div>
 
                       <div style={tableCellWrap}>
                         <span
@@ -1257,35 +1298,58 @@ function ZohoItemsPage() {
 	      <Step><StepLabel>Done</StepLabel></Step>
 	    </Stepper>
 
-	    {[
-	      "itemName",
-	      "pdNo",
-	      "drawingNo",
-	      "clientName",
-	      "clientAddress",
-	      "floor",
-	      "numberOfPackets",
-	    ].map((field) => (
-	      <TextField
-	        key={field}
-	        label={field}
-	        fullWidth
-	        type={field === "numberOfPackets" ? "number" : "text"}
-	        value={form[field]}
-	        onChange={(e) =>
-	          setForm((prev) => ({
-	            ...prev,
-	            [field]:
-	              field === "numberOfPackets"
-	                ? Number(e.target.value)
-	                : e.target.value,
-	          }))
-	        }
-	        error={!!errors[field]}
-	        helperText={errors[field]}
-	        sx={formFieldSx(darkMode)}
-	      />
-	    ))}
+		{[
+		  "itemName",
+		  "pdNo",
+		  "drawingNo",
+		  "clientName",
+		  "clientAddress",
+		  "floor",
+		  "numberOfPackets",
+		].map((field) => (
+		  <TextField
+		    key={field}
+		    label={field}
+		    fullWidth
+		    type={field === "numberOfPackets" ? "number" : "text"}
+		    value={form[field]}
+		    onChange={(e) =>
+		      setForm((prev) => ({
+		        ...prev,
+		        [field]:
+		          field === "numberOfPackets"
+		            ? Number(e.target.value)
+		            : e.target.value,
+		      }))
+		    }
+		    error={!!errors[field]}
+		    helperText={errors[field]}
+		    sx={formFieldSx(darkMode)}
+		  />
+		))}
+
+		<TextField
+		  select
+		  label="Plant Location"
+		  fullWidth
+		  value={form.plantCode || ""}
+		  onChange={(e) =>
+		    setForm((prev) => ({
+		      ...prev,
+		      plantCode: e.target.value,
+		    }))
+		  }
+		  error={!!errors.plantCode}
+		  helperText={errors.plantCode}
+		  sx={formFieldSx(darkMode)}
+		  slotProps={selectMenuSlotProps}
+		>
+		  {myPlants.map((plant) => (
+		    <MenuItem key={plant.plantCode} value={plant.plantCode}>
+		      {plant.plantCode} - {plant.plantName} / {plant.packedAreaCode}
+		    </MenuItem>
+		  ))}
+		</TextField>
 
 	    <Button
 	      onClick={() => {
@@ -2274,7 +2338,7 @@ function ZohoItemsPage() {
 /* ===================== STYLES ===================== */
 
 const inventoryGrid =
-  "130px 190px 110px 110px 260px 300px 120px 150px 180px 260px 260px 160px";
+  "130px 190px 110px 110px 260px 300px 120px 150px 140px 160px 180px 260px 260px 160px";
 
 const page = {
   minHeight: "100vh",

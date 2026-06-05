@@ -26,6 +26,12 @@ public class PacketItem {
     @Column(name = "floor")
     private String floor;
 
+    private String plantCode;
+    private String packedAreaCode;
+    private String fgAreaCode;
+    private String allowedWarehouseCodes;
+    private String currentLocationCode;
+    private String fgZoneCode;
     @Column(name = "pd_no")
     private String pdNo;
 
@@ -56,6 +62,37 @@ public class PacketItem {
     @JoinColumn(name = "master_item_id")
     private MasterItem masterItem;
     
+    public String getPlantCode() {
+		return plantCode;
+	}
+
+	public void setPlantCode(String plantCode) {
+		this.plantCode = plantCode;
+	}
+
+	public String getPackedAreaCode() {
+		return packedAreaCode;
+	}
+
+	public void setPackedAreaCode(String packedAreaCode) {
+		this.packedAreaCode = packedAreaCode;
+	}
+
+	public String getFgAreaCode() {
+		return fgAreaCode;
+	}
+
+	public void setFgAreaCode(String fgAreaCode) {
+		this.fgAreaCode = fgAreaCode;
+	}
+
+	public String getAllowedWarehouseCodes() {
+		return allowedWarehouseCodes;
+	}
+
+	public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
+		this.allowedWarehouseCodes = allowedWarehouseCodes;
+	}
     
     @ManyToOne
     @JoinColumn(name = "packet_id", nullable = false)
@@ -272,5 +309,21 @@ public class PacketItem {
 
 	public void setPackedAt(LocalDateTime packedAt) {
 		this.packedAt = packedAt;
+	}
+
+	public String getCurrentLocationCode() {
+		return currentLocationCode;
+	}
+
+	public void setCurrentLocationCode(String currentLocationCode) {
+		this.currentLocationCode = currentLocationCode;
+	}
+
+	public String getFgZoneCode() {
+		return fgZoneCode;
+	}
+
+	public void setFgZoneCode(String fgZoneCode) {
+		this.fgZoneCode = fgZoneCode;
 	}
 }

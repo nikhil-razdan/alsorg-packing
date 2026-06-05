@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.service.UserService;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/users")
@@ -33,12 +35,13 @@ public class UserController {
     /* ================= CREATE USER ================= */
 
     @PostMapping
-    public User createUser(@RequestBody Map<String,String> body) {
+    public User createUser(@RequestBody Map<String, Object> body) {
 
         return service.createUser(
-                body.get("username"),
-                body.get("password"),
-                body.get("role")
+                String.valueOf(body.get("username")),
+                String.valueOf(body.get("password")),
+                String.valueOf(body.get("role")),
+                readPlantCodes(body)
         );
     }
 
@@ -54,13 +57,14 @@ public class UserController {
     @PutMapping("/{id}")
     public User updateUser(
             @PathVariable Long id,
-            @RequestBody Map<String,String> body
+            @RequestBody Map<String, Object> body
     ) {
 
         return service.updateUser(
                 id,
-                body.get("username"),
-                body.get("role")
+                String.valueOf(body.get("username")),
+                String.valueOf(body.get("role")),
+                readPlantCodes(body)
         );
     }
 
@@ -108,4 +112,28 @@ public class UserController {
         );
     }
 
+    @SuppressWarnings("unchecked")
+    private Set<String> readPlantCodes(Map<String, Object> body) {
+        Set<String> plants = new LinkedHashSet<>();
+
+        Object plantCodesObj = body.get("plantCodes");
+
+        if (plantCodesObj instanceof List<?> list) {
+            for (Object item : list) {
+                if (item != null && !String.valueOf(item).isBlank()) {
+                    plants.add(String.valueOf(item).trim());
+                }
+            }
+        }
+
+        Object plantCodeObj = body.get("plantCode");
+
+        if (plants.isEmpty()
+                && plantCodeObj != null
+                && !String.valueOf(plantCodeObj).isBlank()) {
+            plants.add(String.valueOf(plantCodeObj).trim());
+        }
+
+        return plants;
+    }
 }

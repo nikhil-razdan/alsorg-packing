@@ -21,25 +21,49 @@ public class WarehouseService {
 
     private final DispatchedItemRepository repo;
     private final DispatchedItemService dispatchedItemService;
+    private final PlantLocationService plantLocationService;
 
     public WarehouseService(
             DispatchedItemRepository repo,
-            DispatchedItemService dispatchedItemService
+            DispatchedItemService dispatchedItemService,
+            PlantLocationService plantLocationService
     ) {
         this.repo = repo;
         this.dispatchedItemService = dispatchedItemService;
+        this.plantLocationService = plantLocationService;
     }
 
-    public List<DispatchedItem> getFloorItems() {
-        return repo.findByStatus(ItemDispatchStatus.ON_FLOOR);
+    public List<DispatchedItem> getFloorItems(
+            java.util.Set<String> allowedPlants,
+            boolean admin
+    ) {
+        if (admin) {
+            return repo.findByStatus(ItemDispatchStatus.ON_FLOOR);
+        }
+
+        return repo.findByStatusAndPlantCodeIn(
+                ItemDispatchStatus.ON_FLOOR,
+                allowedPlants
+        );
     }
 
-    public List<DispatchedItem> getWarehouseItems() {
-        return repo.findByStatusIn(
-                List.of(
-                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                        ItemDispatchStatus.IN_WAREHOUSE
-                )
+    public List<DispatchedItem> getWarehouseItems(
+            java.util.Set<String> allowedPlants,
+            boolean admin
+    ) {
+        List<ItemDispatchStatus> statuses = List.of(
+                ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                ItemDispatchStatus.IN_WAREHOUSE,
+                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
+        );
+
+        if (admin) {
+            return repo.findByStatusIn(statuses);
+        }
+
+        return repo.findByStatusInAndPlantCodeIn(
+                statuses,
+                allowedPlants
         );
     }
 
@@ -75,42 +99,70 @@ public class WarehouseService {
             String mode,
             String username
     ) {
+        throw new RuntimeException("Plant code required for warehouse import");
+    }
+    
+    public void processImport(
+            MultipartFile file,
+            String mode,
+            String username,
+            String plantCode
+    ) {
+
+        if (plantCode == null || plantCode.isBlank()) {
+            throw new RuntimeException("Plant code required");
+        }
 
         List<ImportRow> rows = parseCsv(file);
+
+        PlantLocationService.PlantConfig plant =
+                plantLocationService.getPlantConfig(plantCode);
 
         for (ImportRow row : rows) {
 
             try {
 
-                // ✅ ALWAYS CREATE NEW ITEM
                 DispatchedItem newItem = new DispatchedItem();
 
-                // ✅ Generate internal ID
                 newItem.setZohoItemId(UUID.randomUUID().toString());
 
-                // ✅ Excel fields
-                newItem.setName(row.getName());
-                newItem.setSku(row.getSku());
-                newItem.setPdNo(row.getPdNo());
-                newItem.setDrawingNo(row.getDrawingNo());
-                newItem.setDescription(row.getDescription());
-                newItem.setClientName(row.getClientName());
+                newItem.setName(clean(row.getName()));
+                newItem.setSku(clean(row.getSku()));
+                newItem.setPdNo(clean(row.getPdNo()));
+                newItem.setDrawingNo(normalizeDwg(clean(row.getDrawingNo())));
+                newItem.setDescription(clean(row.getDescription()));
+                newItem.setClientName(clean(row.getClientName()));
 
-                newItem.setLocation(row.getLocation());
-                // warehouseCode should ONLY contain actual location
-                newItem.setWarehouseCode(cleanLocation(row.getWarehouseCode()));
+                String warehouseLocation =
+                        cleanLocation(row.getWarehouseCode());
 
-                // ✅ Gate pass optional
+                if (warehouseLocation == null || warehouseLocation.isBlank()) {
+                    throw new RuntimeException("Warehouse required");
+                }
+
+                newItem.setPlantCode(plantCode);
+                newItem.setPackedAreaCode(plant.packedAreaCode());
+                newItem.setFgAreaCode(plant.fgAreaCode());
+                newItem.setFgZoneCode(null);
+
+                newItem.setLocation(warehouseLocation);
+                newItem.setCurrentLocationCode(warehouseLocation);
+                newItem.setWarehouseCode(warehouseLocation);
+
                 newItem.setGatePassNumber(
                         row.getGatePass() == null || row.getGatePass().isBlank()
                                 ? null
                                 : row.getGatePass().trim()
                 );
 
-                // ✅ Warehouse status
                 newItem.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
 
-                // ✅ Dates
+                newItem.setStock(1);
+                newItem.setCreatedBy(
+                        username != null && !username.isBlank()
+                                ? username
+                                : "SYSTEM"
+                );
                 newItem.setCreatedAt(LocalDateTime.now());
                 newItem.setStoredAt(LocalDateTime.now());
 
@@ -118,10 +170,7 @@ public class WarehouseService {
 
             } catch (Exception e) {
 
-                System.out.println(
-                        "Import failed for: " + row.getName()
-                );
-
+                System.out.println("Import failed for: " + row.getName());
                 e.printStackTrace();
             }
         }

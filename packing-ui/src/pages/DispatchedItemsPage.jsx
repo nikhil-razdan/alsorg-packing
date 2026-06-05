@@ -20,7 +20,7 @@ const tableHeader = {
   display: "grid",
 
   gridTemplateColumns:
-    "70px 350px 280px 140px 180px 250px 100px 220px 180px 500px",
+    "70px 350px 280px 140px 180px 250px 100px 220px 120px 170px 220px 520px",
 
   padding: "14px 16px",
 
@@ -401,6 +401,20 @@ const modalHeaderSx = {
 
   borderBottom:
     "1px solid rgba(255,255,255,.06)",
+};
+
+const packedYellowChip = {
+  fontWeight: 800,
+  color: "#facc15",
+  background: "rgba(250,204,21,.14)",
+  border: "1px solid rgba(250,204,21,.24)",
+};
+
+const packedGreenChip = {
+  fontWeight: 800,
+  color: "#4ade80",
+  background: "rgba(34,197,94,.14)",
+  border: "1px solid rgba(34,197,94,.24)",
 };
 
 const modalTitleWrapSx = {
@@ -1286,7 +1300,9 @@ function DispatchedItemsPage() {
   const [pageSize, setPageSize] = useState(25);
   const scannerInputRef = useRef(null);
   const scanTimerRef = useRef(null);
-
+  const [moveFgModal, setMoveFgModal] = useState(null);
+  const [fgZone, setFgZone] = useState("");
+  const [moveFgLoading, setMoveFgLoading] = useState(false);
   const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
   const [scanMode, setScanMode] = useState("SINGLE");
   const [scannerText, setScannerText] = useState("");
@@ -1414,6 +1430,127 @@ function DispatchedItemsPage() {
      };
    };
    
+   const getCurrentLocation = (row) => {
+     return row?.currentLocationCode || row?.location || "";
+   };
+
+   const isLegacyLocationMissing = (row) => {
+     return (
+       !row?.plantCode ||
+       !row?.currentLocationCode ||
+       !row?.fgAreaCode
+     );
+   };
+
+   const isPkdLocation = (row) => {
+     const loc = getCurrentLocation(row);
+     return loc?.startsWith("PKD");
+   };
+
+   const isFgLocation = (row) => {
+     const loc = getCurrentLocation(row);
+     const fg = row?.fgAreaCode;
+
+     if (!loc || !fg) return false;
+
+     return loc.startsWith(fg);
+   };
+
+   const canMoveToFg = (row) => {
+     return (
+       isDispatch &&
+       row?.status === "READY" &&
+       !isLegacyLocationMissing(row) &&
+       isPkdLocation(row)
+     );
+   };
+
+   const canChangeReadyStatus = (row) => {
+     return (
+       isDispatch &&
+       row?.status === "READY" &&
+       (
+         isLegacyLocationMissing(row) || isFgLocation(row)
+       )
+     );
+   };
+
+   const getDisplayStatus = (row) => {
+     if (row.status === "READY") {
+       if (isLegacyLocationMissing(row)) {
+         return {
+           label: "Packed",
+           sx: packedYellowChip,
+         };
+       }
+
+       if (isPkdLocation(row)) {
+         return {
+           label: `Packed - ${getCurrentLocation(row)}`,
+           sx: packedYellowChip,
+         };
+       }
+
+       if (isFgLocation(row)) {
+         return {
+           label: `Packed - ${getCurrentLocation(row)}`,
+           sx: packedGreenChip,
+         };
+       }
+
+       return {
+         label: "Packed",
+         sx: packedYellowChip,
+       };
+     }
+
+     if (row.status === "READY_TO_STORE") {
+       return {
+         label: "Ready To Store",
+         sx: pendingStatusChip,
+       };
+     }
+
+     if (row.status === "READY_TO_DISPATCH") {
+       return {
+         label: "Ready To Dispatch",
+         sx: readyStatusChip,
+       };
+     }
+
+     if (row.status === "WAREHOUSE_REQUESTED") {
+       return {
+         label: "Warehouse Requested",
+         sx: pendingStatusChip,
+       };
+     }
+
+     if (row.status === "IN_WAREHOUSE") {
+       return {
+         label: "In Warehouse",
+         sx: dispatchedStatusChip,
+       };
+     }
+
+     if (row.status === "DISPATCHED") {
+       return {
+         label: "Dispatched",
+         sx: dispatchedStatusChip,
+       };
+     }
+
+     if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
+       return {
+         label: "Warehouse Return Requested",
+         sx: pendingStatusChip,
+       };
+     }
+
+     return {
+       label: row.status || "—",
+       sx: pendingStatusChip,
+     };
+   };   
   const fetchData = async () => {
      try {
        setLoading(true);
@@ -1660,6 +1797,45 @@ function DispatchedItemsPage() {
    };
   /* ===================== ACTIONS ===================== */
 
+  const moveToFg = async () => {
+    if (!moveFgModal) return;
+
+    if (moveFgModal.plantCode === "AL-P1" && !fgZone) {
+      alert("Select FG-1 zone A, B or C");
+      return;
+    }
+
+    try {
+      setMoveFgLoading(true);
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+          moveFgModal.zohoItemId
+        )}/move-to-fg?fgZoneCode=${encodeURIComponent(fgZone || "")}`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        alert(text || "Move to FG failed");
+        return;
+      }
+
+      setMoveFgModal(null);
+      setFgZone("");
+
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("Move to FG failed");
+    } finally {
+      setMoveFgLoading(false);
+    }
+  };
+  
   const requestRestore = async (zohoItemId) => {
     try {
       const res = await fetch(
@@ -2073,69 +2249,54 @@ function DispatchedItemsPage() {
 		    </span>
 		  ),
 		},
-		  {
-		    field: "status",
-		    headerName: "Status",
-		    width: 220,
-		    renderHeader: () => (
-		      <span>Status</span>
-		    ),
-	  renderCell: (params) => {
-	    const row = params.row;
+		{
+		  field: "plantCode",
+		  headerName: "Plant",
+		  width: 120,
 
-		const canEdit =
-		  isDispatch &&
-		  ["READY", "READY_TO_STORE"].includes(row.status);
+		  renderHeader: () => <span>Plant</span>,
 
-		if (!canEdit) {
-		  const getStatusStyle = (status) => {
-		    if (status === "READY") {
-		      return {
-		        color: "#2563eb",
-		        background: "rgba(219,234,254,0.8)",
-		      };
-		    }
-		    if (status === "DISPATCHED") {
-		      return {
-		        color: "#059669",
-		        background: "rgba(209,250,229,0.8)",
-		      };
-		    }
-		    return {
-		      color: "#92400e",
-		      background: "rgba(254,243,199,0.9)",
-		    };
-		  };
+		  renderCell: (params) => (
+		    <span style={simpleMutedText} title={params.value}>
+		      {params.value || "—"}
+		    </span>
+		  ),
+		},
+		{
+		  field: "currentLocationCode",
+		  headerName: "Location",
+		  width: 170,
 
-		  return (
-		    <Chip
-		      size="small"
-		      label={row.status}
-		      sx={
-		        row.status === "READY"
-		          ? readyStatusChip
-		          : row.status === "DISPATCHED"
-		          ? dispatchedStatusChip
-		          : pendingStatusChip
-		      }
-		    />
-		  );
-		}
+		  renderHeader: () => <span>Location</span>,
 
-	    return (
-	      <Button
-	        size="small"
-	        onClick={() => setStatusModal(row)}   // 🔥 open modal
-			sx={{
-			  ...actionPrimary,
-			  ...tableActionButton,
-			}}
-	      >
-	        Change Status
-	      </Button>
-	    );
-	  },
-    },
+		  renderCell: (params) => (
+		    <span style={simpleMutedText} title={getCurrentLocation(params.row)}>
+		      {getCurrentLocation(params.row) || "—"}
+		    </span>
+		  ),
+		},
+		{
+		  field: "status",
+		  headerName: "Status",
+		  width: 220,
+
+		  renderHeader: () => (
+		    <span>Status</span>
+		  ),
+
+		  renderCell: (params) => {
+		    const row = params.row;
+		    const display = getDisplayStatus(row);
+
+		    return (
+		      <Chip
+		        size="small"
+		        label={display.label}
+		        sx={display.sx}
+		      />
+		    );
+		  },
+		},
 	{
 	  field:"actions",
 	  headerName:"Action",
@@ -2167,6 +2328,35 @@ function DispatchedItemsPage() {
 
         return (
           <Box sx={actionContainer}>
+		  {canMoveToFg(row) && (
+		    <Button
+		      size="small"
+		      onClick={() => {
+		        setMoveFgModal(row);
+		        setFgZone("");
+		      }}
+		      sx={{
+		        ...actionPrimary,
+		        ...tableActionButton,
+		        minWidth: 110,
+		      }}
+		    >
+		      Move To FG
+		    </Button>
+		  )}
+
+		  {canChangeReadyStatus(row) && (
+		    <Button
+		      size="small"
+		      onClick={() => setStatusModal(row)}
+		      sx={{
+		        ...actionPrimary,
+		        ...tableActionButton,
+		      }}
+		    >
+		      Change Status
+		    </Button>
+		  )}
 		  {row.status === "READY_TO_DISPATCH" && isDispatch && (
 		    <Button
 		      size="small"
@@ -2405,9 +2595,11 @@ function DispatchedItemsPage() {
     item => item.status === "READY_TO_STORE"
   );
   
-  const allReady = selectedItems.length > 0 && selectedItems.every(
-    item => item.status === "READY"
-  );
+  const allReadyInFg =
+    selectedItems.length > 0 &&
+    selectedItems.every(
+      (item) => item.status === "READY" && isFgLocation(item)
+    );
   
   return (
     <div style={page}>
@@ -2604,7 +2796,7 @@ function DispatchedItemsPage() {
 		  }}
 	    >
 		<MenuItem value="ALL">All Status</MenuItem>
-		<MenuItem value="READY">🟡 Ready (Decision Pending)</MenuItem>
+		<MenuItem value="READY">🟡 Packed</MenuItem>
 		<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
 		<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
 		<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
@@ -2676,9 +2868,7 @@ function DispatchedItemsPage() {
 		>
 		
 		<div style={tableHeader}>
-		  <div>
-		    {columns[0].renderHeader()}
-		  </div>
+		  <div>{columns[0].renderHeader()}</div>
 		  <div>Item Name</div>
 		  <div>SKU</div>
 		  <div>PD No</div>
@@ -2686,6 +2876,8 @@ function DispatchedItemsPage() {
 		  <div>Description</div>
 		  <div>Stock</div>
 		  <div>Client</div>
+		  <div>Plant</div>
+		  <div>Location</div>
 		  <div>Status</div>
 		  <div>Actions</div>
 		</div>
@@ -2750,13 +2942,26 @@ function DispatchedItemsPage() {
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[8].renderCell({ row })}
+				  {columns[8].renderCell({
+				    value: row.plantCode,
+				    row,
+				  })}
 				</div>
 
 				<div style={tableCellWrap}>
-				  {columns[9].renderCell({ row })}
+				  {columns[9].renderCell({
+				    value: row.currentLocationCode,
+				    row,
+				  })}
 				</div>
 
+				<div style={tableCellWrap}>
+				  {columns[10].renderCell({ row })}
+				</div>
+
+				<div style={tableCellWrap}>
+				  {columns[11].renderCell({ row })}
+				</div>
 				</div>
 
 		    ))}
@@ -2984,7 +3189,7 @@ function DispatchedItemsPage() {
 		    Generate Bulk Chalaan
 		  </Button>
 
-		  {allReady && (
+		  {allReadyInFg && (
 		    <Button
 		      size="small"
 		      onClick={() => setBulkStatusModal(true)}
@@ -4053,6 +4258,117 @@ function DispatchedItemsPage() {
 	        </Box>
 	      </div>
 	    </div>
+	  )}
+	  {moveFgModal && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5000 }}
+	      onClick={() => setMoveFgModal(null)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 520,
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#10b981")}>
+	              🏁
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Move To Finished Goods
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Move packed item from {getCurrentLocation(moveFgModal)} to FG area
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setMoveFgModal(null)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box
+	            sx={{
+	              p: 2,
+	              mb: 2,
+	              borderRadius: "12px",
+	              background: "rgba(255,255,255,.035)",
+	              border: "1px solid rgba(255,255,255,.07)",
+	            }}
+	          >
+	            <Box sx={{ color: "#fff", fontWeight: 900 }}>
+	              {moveFgModal.name || "—"}
+	            </Box>
+
+	            <Box sx={{ color: "#94a3b8", fontSize: 12, mt: 0.5 }}>
+	              Plant: {moveFgModal.plantCode || "—"} | From:{" "}
+	              {getCurrentLocation(moveFgModal) || "—"}
+	            </Box>
+	          </Box>
+
+	          {moveFgModal.plantCode === "AL-P1" ? (
+	            <TextField
+	              select
+	              fullWidth
+	              label="FG-1 Zone"
+	              value={fgZone}
+	              onChange={(e) => setFgZone(e.target.value)}
+	              sx={formFieldSx}
+	            >
+	              <MenuItem value="A">FG-1 Zone A</MenuItem>
+	              <MenuItem value="B">FG-1 Zone B</MenuItem>
+	              <MenuItem value="C">FG-1 Zone C</MenuItem>
+	            </TextField>
+	          ) : (
+	            <Box
+	              sx={{
+	                color: "#cbd5e1",
+	                fontWeight: 700,
+	                p: 2,
+	                borderRadius: "12px",
+	                background: "rgba(16,185,129,.10)",
+	                border: "1px solid rgba(16,185,129,.18)",
+	              }}
+	            >
+	              This item will move to {moveFgModal.fgAreaCode || "FG"}.
+	            </Box>
+	          )}
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => setMoveFgModal(null)}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Cancel
+	          </Button>
+
+	          <Button
+	            disabled={
+	              moveFgLoading ||
+	              (moveFgModal.plantCode === "AL-P1" && !fgZone)
+	            }
+	            onClick={moveToFg}
+	            sx={{
+	              ...premiumButton,
+	              background: "linear-gradient(135deg,#059669,#10b981)",
+	            }}
+	          >
+	            {moveFgLoading ? "Moving..." : "Move To FG"}
+	          </Button>
+	        </Box>
+	      </Box>
+	    </Box>
 	  )}
 	  {statusModal && (
 	    <Box

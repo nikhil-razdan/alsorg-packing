@@ -23,7 +23,12 @@ public class PacketItemResponse {
     private UUID masterItemId;
     private int totalPackets;
     private String createdBy;
-
+    private String plantCode;
+    private String packedAreaCode;
+    private String currentLocationCode;
+    private String fgAreaCode;
+    private String fgZoneCode;
+    
     public PacketItemResponse() {
     }
 
@@ -177,5 +182,45 @@ public class PacketItemResponse {
 
 		public void setCreatedBy(String createdBy) {
 			this.createdBy = createdBy;
+		}
+
+		public String getPlantCode() {
+			return plantCode;
+		}
+
+		public void setPlantCode(String plantCode) {
+			this.plantCode = plantCode;
+		}
+
+		public String getPackedAreaCode() {
+			return packedAreaCode;
+		}
+
+		public void setPackedAreaCode(String packedAreaCode) {
+			this.packedAreaCode = packedAreaCode;
+		}
+
+		public String getCurrentLocationCode() {
+			return currentLocationCode;
+		}
+
+		public void setCurrentLocationCode(String currentLocationCode) {
+			this.currentLocationCode = currentLocationCode;
+		}
+
+		public String getFgAreaCode() {
+			return fgAreaCode;
+		}
+
+		public void setFgAreaCode(String fgAreaCode) {
+			this.fgAreaCode = fgAreaCode;
+		}
+
+		public String getFgZoneCode() {
+			return fgZoneCode;
+		}
+
+		public void setFgZoneCode(String fgZoneCode) {
+			this.fgZoneCode = fgZoneCode;
 		}
 }

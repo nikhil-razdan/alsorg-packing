@@ -20,6 +20,16 @@ public class CreateItemRequest {
     private List<String> dimensionsList;
     private List<String> remarksList;
     private Integer customPacketNumber;
+    
+    public String plantCode;
+
+    public String getPlantCode() {
+        return plantCode;
+    }
+
+    public void setPlantCode(String plantCode) {
+        this.plantCode = plantCode;
+    }
 
     // Getters and Setters
 

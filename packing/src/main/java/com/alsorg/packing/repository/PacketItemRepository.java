@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
 
 public interface PacketItemRepository extends JpaRepository<PacketItem, UUID> {
 
@@ -17,6 +18,10 @@ public interface PacketItemRepository extends JpaRepository<PacketItem, UUID> {
     Optional<PacketItem> findByZohoItemId(String zohoItemId);
     
     Optional<PacketItem> findByStickerNumber(String stickerNumber);
+    
+    List<PacketItem> findByPlantCodeIn(Collection<String> plantCodes);
+
+    List<PacketItem> findByPlantCodeIsNull();
     
     boolean existsByMasterItemIdAndPacketNumber(UUID masterItemId, String packetNumber);
     
@@ -43,4 +48,15 @@ public interface PacketItemRepository extends JpaRepository<PacketItem, UUID> {
     	        @Param("sku") String sku,
     	        @Param("itemId") UUID itemId
     	);
+    	
+    	@Query("""
+    		    SELECT p
+    		    FROM PacketItem p
+    		    WHERE p.plantCode IN :plantCodes
+    		       OR p.plantCode IS NULL
+    		       OR p.plantCode = ''
+    		""")
+    		List<PacketItem> findVisibleByPlantsIncludingLegacy(
+    		        @Param("plantCodes") Collection<String> plantCodes
+    		);
 }

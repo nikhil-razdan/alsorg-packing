@@ -8,8 +8,10 @@ import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.security.JwtUtil;
-
+import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
 import java.util.List;
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/dispatched")
@@ -17,31 +19,67 @@ public class DispatchedItemsController {
 
     private final DispatchedItemRepository repository;
     private final DispatchedItemService dispatchedItemService;
+    private final CurrentUserService currentUserService;
 
     public DispatchedItemsController(
             DispatchedItemRepository repository,
-            DispatchedItemService dispatchedItemService
+            DispatchedItemService dispatchedItemService,
+            CurrentUserService currentUserService
     ) {
         this.repository = repository;
         this.dispatchedItemService = dispatchedItemService;
+        this.currentUserService = currentUserService;
     }
 
     /* ===================== FETCH ===================== */
 
     @GetMapping
-    public List<DispatchedItem> getDispatchedItems() {
-        return repository.findByStatusIn(
-                List.of(
-                		ItemDispatchStatus.READY,
-                        ItemDispatchStatus.READY_TO_STORE,
-                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                        ItemDispatchStatus.IN_WAREHOUSE,
-                        ItemDispatchStatus.READY_TO_DISPATCH,
-                        ItemDispatchStatus.DISPATCHED,
-                        ItemDispatchStatus.AVAILABLE,
-                        ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
-                )
+    public List<DispatchedItem> getDispatchedItems(
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        List<ItemDispatchStatus> statuses = List.of(
+                ItemDispatchStatus.READY,
+                ItemDispatchStatus.READY_TO_STORE,
+                ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                ItemDispatchStatus.IN_WAREHOUSE,
+                ItemDispatchStatus.READY_TO_DISPATCH,
+                ItemDispatchStatus.DISPATCHED,
+                ItemDispatchStatus.AVAILABLE,
+                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
         );
+
+        if (currentUserService.isAdmin(user)) {
+            return repository.findByStatusIn(statuses);
+        }
+
+        return repository.findVisibleByStatusesAndPlantsIncludingLegacy(
+                statuses,
+                currentUserService.allowedPlants(user)
+        );
+    }
+    
+    @PostMapping("/{zohoItemId:.+}/move-to-fg")
+    public ResponseEntity<?> moveToFg(
+            @PathVariable String zohoItemId,
+            @RequestParam(required = false) String fgZoneCode,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isDispatch(user)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        dispatchedItemService.movePackedItemToFg(
+                zohoItemId,
+                fgZoneCode,
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
+        );
+
+        return ResponseEntity.ok().build();
     }
 
     /* ===================== REQUEST RESTORE ===================== */
@@ -112,13 +150,11 @@ public class DispatchedItemsController {
             @RequestParam String status,
             @RequestHeader("Authorization") String auth
     ) {
-        String token = extractToken(auth);
+    	User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        System.out.println("🔥 API HIT BEFORE ROLE CHECK");
-        System.out.println("TOKEN ROLE: " + JwtUtil.getRole(token));
-        if (!"DISPATCH".equals(JwtUtil.getRole(token))) {
-            return ResponseEntity.status(403).build();
-        }
+    	if (!currentUserService.isDispatch(user)) {
+    	    return ResponseEntity.status(403).build();
+    	}
         ItemDispatchStatus parsedStatus;
 
         try {
@@ -130,7 +166,8 @@ public class DispatchedItemsController {
         dispatchedItemService.updateDispatchStatus(
                 zohoItemId,
                 parsedStatus,
-                JwtUtil.getUsername(token)
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
         );
         System.out.println("➡ CONTROLLER HIT ID: " + zohoItemId);
         System.out.println("➡ STATUS: " + status);
@@ -145,34 +182,26 @@ public class DispatchedItemsController {
             @PathVariable String zohoItemId,
             @RequestParam String warehouseCode,
             @RequestHeader("Authorization") String auth,
-            @RequestParam(required = false) String fromLocation,
-            @RequestHeader(value = "X-Username", required = false) String usernameHeader
+            @RequestParam(required = false) String fromLocation
     ) {
-        String token = extractToken(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        if (!"DISPATCH".equals(JwtUtil.getRole(token))) {
+        if (!currentUserService.isDispatch(user)) {
             return ResponseEntity.status(403).build();
         }
-
-        String username = (usernameHeader != null && !usernameHeader.isBlank())
-                ? usernameHeader
-                : JwtUtil.getUsername(token);
 
         if (warehouseCode == null || warehouseCode.isBlank()) {
             return ResponseEntity.badRequest().body("Warehouse code required");
         }
 
-        // ✅ DEBUG LOG (helps a LOT)
-        System.out.println("➡ STORE: " + zohoItemId + " → " + warehouseCode);
-
         String gatePass = dispatchedItemService.moveToWarehouse(
                 zohoItemId,
                 warehouseCode,
                 fromLocation,
-                username
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
         );
 
-        
         return ResponseEntity.ok(
                 java.util.Map.of("gatePass", gatePass)
         );
@@ -185,9 +214,9 @@ public class DispatchedItemsController {
             @RequestParam(required = false) String fromLocation,
             @RequestHeader("Authorization") String auth
     ) {
-        String token = extractToken(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        if (!"DISPATCH".equals(JwtUtil.getRole(token))) {
+        if (!currentUserService.isDispatch(user)) {
             return ResponseEntity.status(403).build();
         }
 
@@ -195,10 +224,13 @@ public class DispatchedItemsController {
                 itemIds,
                 warehouseCode,
                 fromLocation,
-                JwtUtil.getUsername(token)
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
         );
 
-        return ResponseEntity.ok(java.util.Map.of("gatePass", gatePass));
+        return ResponseEntity.ok(
+                java.util.Map.of("gatePass", gatePass)
+        );
     }
     
     @PostMapping("/bulk/status")
@@ -207,12 +239,17 @@ public class DispatchedItemsController {
             @RequestParam String status,
             @RequestHeader("Authorization") String auth
     ) {
-        String token = extractToken(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isDispatch(user)) {
+            return ResponseEntity.status(403).build();
+        }
 
         dispatchedItemService.bulkUpdateStatus(
                 ids,
                 ItemDispatchStatus.valueOf(status),
-                JwtUtil.getUsername(token)
+                user.getUsername(),
+                currentUserService.allowedPlants(user)
         );
 
         return ResponseEntity.ok().build();
@@ -274,6 +311,35 @@ public class DispatchedItemsController {
         );
 
         return ResponseEntity.ok().build();
+    }
+    
+    @PatchMapping("/{zohoItemId:.+}/plant-location")
+    public ResponseEntity<?> assignPlantLocation(
+            @PathVariable String zohoItemId,
+            @RequestBody PlantAssignmentRequest req,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isAdmin(user)) {
+            return ResponseEntity.status(403)
+                    .body("Only ADMIN can assign plant/location");
+        }
+
+        if (req.getPlantCode() == null || req.getPlantCode().isBlank()) {
+            return ResponseEntity.badRequest().body("Plant code required");
+        }
+
+        return ResponseEntity.ok(
+                dispatchedItemService.assignPlantLocationToDispatchedItem(
+                        zohoItemId,
+                        req.getPlantCode(),
+                        req.getCurrentLocationCode(),
+                        req.getFgZoneCode(),
+                        req.getWarehouseCode(),
+                        user.getUsername()
+                )
+        );
     }
     /* ===================== HELPER ===================== */
 
