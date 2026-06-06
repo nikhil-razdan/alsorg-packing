@@ -1180,6 +1180,26 @@ const actionPrimary = {
   },
 };
 
+const moveToFgButtonSx = {
+  ...tableActionButton,
+
+  background:
+    "linear-gradient(180deg,#f59e0b,#d97706)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(245,158,11,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(245,158,11,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(180deg,#fbbf24,#f59e0b)",
+  },
+};
+
 const formFieldSx = {
   "& .MuiOutlinedInput-root": {
     borderRadius: "16px",
@@ -2638,10 +2658,7 @@ function DispatchedItemsPage() {
 			  size="small"
 			  disabled={!isDispatch || row.status !== "READY"}
 			  onClick={() => openMoveToFgModal(row)}
-			  sx={{
-			    ...actionPrimary,
-			    ...tableActionButton,
-			  }}
+			  sx={moveToFgButtonSx}
 			>
 			  Move to FG
 			</Button>
