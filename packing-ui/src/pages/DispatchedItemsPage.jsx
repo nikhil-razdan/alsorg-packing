@@ -2550,69 +2550,54 @@ function DispatchedItemsPage() {
 
 		    const inFg = isInFgLocation(row);
 
-		    const canMoveToFg =
-		      isDispatch &&
-		      row.status === "READY" &&
-		      !inFg;
+		    let label = row.status || "—";
+		    let sx = pendingStatusChip;
 
-		    const canChangeStatus =
-		      isDispatch &&
-		      row.status === "READY" &&
-		      inFg;
-
-		    if (canMoveToFg) {
-		      return (
-		        <Button
-		          size="small"
-		          onClick={() => openMoveToFgModal(row)}
-		          sx={{
-		            ...actionPrimary,
-		            ...tableActionButton,
-		            background:
-		              "linear-gradient(135deg,#f59e0b,#d97706)",
-		          }}
-		        >
-		          Move to FG
-		        </Button>
-		      );
+		    if (row.status === "READY") {
+		      if (inFg) {
+		        label = "PACKED - FG";
+		        sx = dispatchedStatusChip;
+		      } else {
+		        label = "PACKED - PKD";
+		        sx = pendingStatusChip;
+		      }
 		    }
 
-		    if (canChangeStatus) {
-		      return (
-		        <Button
-		          size="small"
-		          onClick={() => setStatusModal(row)}
-		          sx={{
-		            ...actionPrimary,
-		            ...tableActionButton,
-		            background:
-		              "linear-gradient(135deg,#059669,#10b981)",
-		          }}
-		        >
-		          Change Status
-		        </Button>
-		      );
+		    if (row.status === "READY_TO_STORE") {
+		      label = "READY TO STORE";
+		      sx = readyStatusChip;
+		    }
+
+		    if (row.status === "WAREHOUSE_REQUESTED") {
+		      label = "WAREHOUSE REQUESTED";
+		      sx = pendingStatusChip;
+		    }
+
+		    if (row.status === "IN_WAREHOUSE") {
+		      label = "IN WAREHOUSE";
+		      sx = dispatchedStatusChip;
+		    }
+
+		    if (row.status === "READY_TO_DISPATCH") {
+		      label = "READY TO DISPATCH";
+		      sx = readyStatusChip;
+		    }
+
+		    if (row.status === "DISPATCHED") {
+		      label = "DISPATCHED";
+		      sx = dispatchedStatusChip;
+		    }
+
+		    if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
+		      label = "RETURN REQUESTED";
+		      sx = pendingStatusChip;
 		    }
 
 		    return (
 		      <Chip
 		        size="small"
-		        label={
-		          row.status === "READY" && inFg
-		            ? "PACKED - FG"
-		            : row.status === "READY"
-		              ? "PACKED - PKD"
-		              : row.status || "—"
-		        }
-		        sx={
-		          row.status === "READY" && inFg
-		            ? dispatchedStatusChip
-		            : row.status === "READY"
-		              ? pendingStatusChip
-		              : row.status === "DISPATCHED"
-		                ? dispatchedStatusChip
-		                : pendingStatusChip
-		        }
+		        label={label}
+		        sx={sx}
 		      />
 		    );
 		  },
