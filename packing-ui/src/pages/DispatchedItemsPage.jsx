@@ -1366,6 +1366,7 @@ function DispatchedItemsPage() {
   const [moveFgModal, setMoveFgModal] = useState(null);
   const [selectedFgZone, setSelectedFgZone] = useState("");
   const [moveFgLoading, setMoveFgLoading] = useState(false);
+  
 
   const [bulkMoveFgOpen, setBulkMoveFgOpen] = useState(false);
   const [bulkSelectedFgZone, setBulkSelectedFgZone] = useState("");
@@ -2641,15 +2642,24 @@ function DispatchedItemsPage() {
 	  renderCell:(params)=>{
         const row = params.row;
 
+		const rowAction = getDispatchRowAction(row);
+
+		const canMoveToFg =
+		  rowAction === "MOVE_TO_FG";
+
+		const canChangeStatus =
+		  rowAction === "CHANGE_STATUS";
+
+		const canGenerateGatePass =
+		  rowAction === "GATE_PASS";
+
 		const canGenerateChalaan =
-		  isDispatch && row.status === "READY_TO_DISPATCH";
+		  rowAction === "CHALAAN";
 		  
 		  const canRequestRestore =
 		    row.status === "DISPATCHED" &&
 		    row.approvalStatus !== "PENDING";
 			
-			const canGenerateGatePass =
-			  isDispatch && row.status === "READY_TO_STORE";
 
         return (
           <Box sx={actionContainer}>
@@ -2940,37 +2950,118 @@ function DispatchedItemsPage() {
   /* ===== FILTERED ROWS ===== */
   console.log("🔥 selectionModel:", selectionModel);
   
-  const selectedItems = rows.filter((r) =>
-    selectionModel?.includes(r.zohoItemId)
-  );
+  const getRowId = (row) => row?.zohoItemId || "";
 
-  const selectedStatusSet = new Set(
-    selectedItems.map((item) => item.status)
-  );
+  const getRowStatus = (row) => (row?.status || "").trim();
 
-  const isSingleStatus = selectedStatusSet.size === 1;
+  const getRowCurrentLocation = (row) =>
+    row?.currentLocationCode || row?.location || "";
 
-  const selectedStatus = isSingleStatus
-    ? [...selectedStatusSet][0]
-    : null;
+  const isRowPlantAssigned = (row) =>
+    !!row?.plantCode && !!row?.fgAreaCode;
 
-  const allReadyToDispatch =
-    selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) => item.status === "READY_TO_DISPATCH"
+  const isRowInFg = (row) => {
+    const location = getRowCurrentLocation(row);
+    const fgArea = row?.fgAreaCode || "";
+
+    if (!location || !fgArea) return false;
+
+    return location.startsWith(fgArea);
+  };
+
+  /*
+    IMPORTANT:
+    This decides what button the row should show.
+    Bulk bar will use this same function.
+  */
+  const getDispatchRowAction = (row) => {
+    const status = getRowStatus(row);
+
+    if (!isDispatch || !row) {
+      return "NONE";
+    }
+
+    /*
+      New plant-wise flow:
+      READY + plant assigned + not in FG = Move to FG
+    */
+    if (
+      status === "READY" &&
+      isRowPlantAssigned(row) &&
+      !isRowInFg(row)
+    ) {
+      return "MOVE_TO_FG";
+    }
+
+    /*
+      Old data safety:
+      If plant is not assigned, don't break old flow.
+      Let old READY/FLOOR rows continue with Change Status.
+    */
+    if (status === "READY") {
+      return "CHANGE_STATUS";
+    }
+
+    if (status === "READY_TO_STORE") {
+      return "GATE_PASS";
+    }
+
+    if (status === "READY_TO_DISPATCH") {
+      return "CHALAAN";
+    }
+
+    return "NONE";
+  };
+
+  const getBulkActionLabel = (action) => {
+    if (action === "MOVE_TO_FG") return "Move to FG";
+    if (action === "CHANGE_STATUS") return "Change Status";
+    if (action === "GATE_PASS") return "Generate Gate Pass";
+    if (action === "CHALAAN") return "Generate Chalaan";
+    return "Mixed Selection";
+  };
+  
+  const selectedItems = useMemo(() => {
+    return rows.filter((row) =>
+      selectionModel?.includes(getRowId(row))
     );
+  }, [rows, selectionModel]);
 
-  const allReadyToStore =
-    selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) => item.status === "READY_TO_STORE"
-    );
+  const selectedActionList = useMemo(() => {
+    return selectedItems.map((row) => getDispatchRowAction(row));
+  }, [selectedItems, isDispatch]);
 
-  const allReady =
+  const selectedActionSet = useMemo(() => {
+    return new Set(selectedActionList);
+  }, [selectedActionList]);
+
+  const isSingleBulkAction =
     selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) => item.status === "READY"
-    );
+    selectedActionSet.size === 1 &&
+    !selectedActionSet.has("NONE");
+
+  const selectedBulkAction = isSingleBulkAction
+    ? [...selectedActionSet][0]
+    : "MIXED";
+
+  const canBulkMoveToFg =
+    selectedBulkAction === "MOVE_TO_FG";
+
+  const canBulkChangeStatus =
+    selectedBulkAction === "CHANGE_STATUS";
+
+  const canBulkGenerateGatePass =
+    selectedBulkAction === "GATE_PASS";
+
+  const canBulkGenerateChalaan =
+    selectedBulkAction === "CHALAAN";
+
+  /*
+    Keep these old names also, so your existing code does not break.
+  */
+  const allReadyToDispatch = canBulkGenerateChalaan;
+  const allReadyToStore = canBulkGenerateGatePass;
+  const allReady = canBulkChangeStatus;
 
   const allReadyInFg =
     allReady &&
@@ -2997,17 +3088,6 @@ function DispatchedItemsPage() {
     isSinglePlantSelection
       ? selectedPlantCodes[0]
       : "";
-
-  const canBulkMoveToFg =
-    isDispatch &&
-    allReady &&
-    readyItemsNotInFg.length > 0 &&
-    isSinglePlantSelection;
-
-  const canBulkChangeStatus =
-    isDispatch &&
-    allReady &&
-    allReadyInFg;
 	 
   return (
     <div style={page}>
@@ -3546,125 +3626,232 @@ function DispatchedItemsPage() {
 	    isDispatch && (
 
 	    <div style={bulkBar}>
-	      <span style={{ fontWeight: 700 }}>
-	        {selectionModel.length} item
-	        {selectionModel.length > 1 ? "s" : ""} selected
-	      </span>
-
-	      <Chip
-	        size="small"
-	        label={
-	          isSingleStatus
-	            ? selectedStatus
-	            : "Mixed Selection"
-	        }
+	      <Box
 	        sx={{
-	          background: isSingleStatus
-	            ? "rgba(59,130,246,.14)"
-	            : "rgba(239,68,68,.14)",
-	          color: isSingleStatus
-	            ? "#93c5fd"
-	            : "#fca5a5",
-	          fontWeight: 900,
-	          border: "1px solid rgba(255,255,255,.08)",
+	          display: "flex",
+	          alignItems: "center",
+	          gap: 1.2,
+	          color: "#cbd5e1",
+	          fontWeight: 800,
+	          fontSize: 13,
 	        }}
-	      />
+	      >
+	        <span>☑️</span>
 
-	      {!isSinglePlantSelection && (
+	        <span>
+	          {selectionModel.length} item
+	          {selectionModel.length > 1 ? "s" : ""} selected
+	        </span>
+
 	        <Chip
 	          size="small"
-	          label="Select one plant only"
+	          label={getBulkActionLabel(selectedBulkAction)}
 	          sx={{
-	            background: "rgba(239,68,68,.14)",
-	            color: "#fca5a5",
+	            height: 26,
 	            fontWeight: 900,
-	            border: "1px solid rgba(239,68,68,.22)",
+	            fontSize: 11,
+
+	            color:
+	              selectedBulkAction === "MOVE_TO_FG"
+	                ? "#fbbf24"
+	                : selectedBulkAction === "CHANGE_STATUS"
+	                  ? "#93c5fd"
+	                  : selectedBulkAction === "GATE_PASS"
+	                    ? "#6ee7b7"
+	                    : selectedBulkAction === "CHALAAN"
+	                      ? "#93c5fd"
+	                      : "#fca5a5",
+
+	            background:
+	              selectedBulkAction === "MOVE_TO_FG"
+	                ? "rgba(245,158,11,.15)"
+	                : selectedBulkAction === "CHANGE_STATUS"
+	                  ? "rgba(59,130,246,.15)"
+	                  : selectedBulkAction === "GATE_PASS"
+	                    ? "rgba(16,185,129,.15)"
+	                    : selectedBulkAction === "CHALAAN"
+	                      ? "rgba(59,130,246,.15)"
+	                      : "rgba(239,68,68,.15)",
+
+	            border:
+	              selectedBulkAction === "MIXED"
+	                ? "1px solid rgba(239,68,68,.25)"
+	                : "1px solid rgba(255,255,255,.08)",
 	          }}
 	        />
+	      </Box>
+
+	      {canBulkMoveToFg && (
+	        <Button
+	          size="small"
+	          onClick={() => {
+	            /*
+	              Use your existing bulk Move to FG modal opener here.
+	              If you followed my previous fix, this should be:
+	              setBulkMoveToFgOpen(true)
+	            */
+	            setBulkMoveFgOpen(true);
+	          }}
+	          sx={{
+	            px: 2.4,
+	            height: 38,
+	            borderRadius: "12px",
+	            fontWeight: 900,
+	            textTransform: "none",
+
+	            background:
+	              "linear-gradient(180deg,#f59e0b,#d97706)",
+
+	            color: "#fff",
+
+	            border:
+	              "1px solid rgba(245,158,11,.35)",
+
+	            boxShadow:
+	              "0 10px 24px rgba(245,158,11,.28)",
+
+	            "&:hover": {
+	              background:
+	                "linear-gradient(180deg,#fbbf24,#f59e0b)",
+	            },
+	          }}
+	        >
+	          Move to FG
+	        </Button>
 	      )}
 
-	      <Button
-	        size="small"
-	        disabled={!canBulkMoveToFg || bulkMoveFgLoading}
-	        onClick={openBulkMoveToFgModal}
-	        sx={{
-	          px: 2.4,
-	          borderRadius: 10,
-	          fontWeight: 800,
-	          textTransform: "none",
-	          background: canBulkMoveToFg
-	            ? "linear-gradient(180deg,#f59e0b,#d97706)"
-	            : "#64748b",
-	          color: "#fff",
-	        }}
-	      >
-	        Move Selected To FG
-	      </Button>
+	      {canBulkChangeStatus && (
+	        <Button
+	          size="small"
+	          onClick={() => setBulkStatusModal(true)}
+	          sx={{
+	            px: 2.4,
+	            height: 38,
+	            borderRadius: "12px",
+	            fontWeight: 900,
+	            textTransform: "none",
 
-	      <Button
-	        size="small"
-	        disabled={!canBulkChangeStatus}
-	        onClick={() => setBulkStatusModal(true)}
-	        sx={{
-	          px: 2.4,
-	          borderRadius: 10,
-	          fontWeight: 800,
-	          textTransform: "none",
-	          background: canBulkChangeStatus
-	            ? "linear-gradient(180deg,#10b981,#059669)"
-	            : "#64748b",
-	          color: "#fff",
-	        }}
-	      >
-	        Bulk Change Status
-	      </Button>
+	            background:
+	              "linear-gradient(180deg,#3b82f6,#2563eb)",
 
-	      <Button
-	        size="small"
-	        disabled={!allReadyToDispatch}
-	        onClick={() => setBulkDrawerOpen(true)}
-	        sx={{
-	          px: 2.4,
-	          borderRadius: 10,
-	          fontWeight: 800,
-	          textTransform: "none",
-	          background: allReadyToDispatch
-	            ? "linear-gradient(180deg,#3b82f6,#2563eb)"
-	            : "#64748b",
-	          color: "#fff",
-	        }}
-	      >
-	        Generate Bulk Chalaan
-	      </Button>
+	            color: "#fff",
 
-	      <Button
-	        size="small"
-	        disabled={!allReadyToStore}
-	        onClick={() => setBulkGatePassOpen(true)}
-	        sx={{
-	          px: 2.4,
-	          borderRadius: 10,
-	          fontWeight: 800,
-	          textTransform: "none",
-	          background: allReadyToStore
-	            ? "linear-gradient(180deg,#10b981,#059669)"
-	            : "#64748b",
-	          color: "#fff",
-	        }}
-	      >
-	        Generate Bulk Gate Pass
-	      </Button>
+	            border:
+	              "1px solid rgba(59,130,246,.35)",
+
+	            boxShadow:
+	              "0 10px 24px rgba(37,99,235,.28)",
+
+	            "&:hover": {
+	              background:
+	                "linear-gradient(180deg,#60a5fa,#2563eb)",
+	            },
+	          }}
+	        >
+	          Change Status
+	        </Button>
+	      )}
+
+	      {canBulkGenerateChalaan && (
+	        <Button
+	          size="small"
+	          onClick={() => setBulkDrawerOpen(true)}
+	          sx={{
+	            px: 2.4,
+	            height: 38,
+	            borderRadius: "12px",
+	            fontWeight: 900,
+	            textTransform: "none",
+
+	            background:
+	              "linear-gradient(180deg,#3b82f6,#2563eb)",
+
+	            color: "#fff",
+
+	            border:
+	              "1px solid rgba(59,130,246,.35)",
+
+	            boxShadow:
+	              "0 10px 24px rgba(37,99,235,.28)",
+
+	            "&:hover": {
+	              background:
+	                "linear-gradient(180deg,#60a5fa,#2563eb)",
+	            },
+	          }}
+	        >
+	          Generate Bulk Chalaan
+	        </Button>
+	      )}
+
+	      {canBulkGenerateGatePass && (
+	        <Button
+	          size="small"
+	          onClick={() => setBulkGatePassOpen(true)}
+	          sx={{
+	            px: 2.4,
+	            height: 38,
+	            borderRadius: "12px",
+	            fontWeight: 900,
+	            textTransform: "none",
+
+	            background:
+	              "linear-gradient(180deg,#10b981,#059669)",
+
+	            color: "#fff",
+
+	            border:
+	              "1px solid rgba(16,185,129,.35)",
+
+	            boxShadow:
+	              "0 10px 24px rgba(16,185,129,.28)",
+
+	            "&:hover": {
+	              background:
+	                "linear-gradient(180deg,#34d399,#059669)",
+	            },
+	          }}
+	        >
+	          Generate Bulk Gate Pass
+	        </Button>
+	      )}
+
+	      {selectedBulkAction === "MIXED" && (
+	        <Button
+	          size="small"
+	          disabled
+	          sx={{
+	            px: 2.4,
+	            height: 38,
+	            borderRadius: "12px",
+	            fontWeight: 900,
+	            textTransform: "none",
+	            background: "#64748b",
+	            color: "#fff",
+	          }}
+	        >
+	          Select same action items
+	        </Button>
+	      )}
 
 	      <Button
 	        size="small"
 	        onClick={() => setSelectionModel([])}
 	        sx={{
 	          px: 2,
-	          borderRadius: 10,
-	          background: "rgba(255,255,255,0.1)",
+	          height: 38,
+	          borderRadius: "12px",
+	          fontWeight: 800,
+	          textTransform: "none",
+
+	          background:
+	            "rgba(255,255,255,.08)",
+
 	          color: "#fff",
+
 	          "&:hover": {
-	            background: "rgba(255,255,255,0.2)",
+	            background:
+	              "rgba(255,255,255,.14)",
 	          },
 	        }}
 	      >
