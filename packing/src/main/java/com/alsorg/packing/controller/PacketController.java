@@ -214,10 +214,7 @@ public class PacketController {
 
         return sourceItems
                 .stream()
-                .filter(item ->
-                        "CREATED".equals(item.getStatus()) ||
-                        "RESTORED".equals(item.getStatus())
-                )
+                .filter(this::showOnInventoryPage)
                 .map(this::toPacketItemResponse)
                 .toList();
     }
@@ -348,6 +345,75 @@ public class PacketController {
         );
     }
     
+    private boolean showOnInventoryPage(PacketItem item) {
+        if (item == null || item.getStatus() == null) {
+            return false;
+        }
+
+        String status = clean(item.getStatus());
+
+        // Normal newly created/restored inventory items
+        if ("CREATED".equals(status) || "RESTORED".equals(status)) {
+            return true;
+        }
+
+        /*
+         * New rule:
+         * Sticker generated item is READY.
+         * Keep it on Inventory page ONLY while it is still in PKD area.
+         * Once dispatch moves it to FG, hide it from Inventory page.
+         */
+        if ("READY".equals(status)) {
+            return isPackedPkdItem(item);
+        }
+
+        return false;
+    }
+
+    private boolean isPackedPkdItem(PacketItem item) {
+        String packedAreaCode = clean(item.getPackedAreaCode());
+        String fgAreaCode = clean(item.getFgAreaCode());
+
+        String currentLocationCode = clean(item.getCurrentLocationCode());
+        String location = clean(item.getLocation());
+
+        String finalLocation =
+                !currentLocationCode.isBlank()
+                        ? currentLocationCode
+                        : location;
+
+        if (finalLocation.isBlank()) {
+            return false;
+        }
+
+        // If already in FG, do not show in Inventory page
+        if (
+                !fgAreaCode.isBlank() &&
+                (
+                        finalLocation.equals(fgAreaCode) ||
+                        finalLocation.startsWith(fgAreaCode + "-") ||
+                        finalLocation.startsWith(fgAreaCode + " ")
+                )
+        ) {
+            return false;
+        }
+
+        // If current location is assigned packed area, show in Inventory page
+        if (!packedAreaCode.isBlank()) {
+            return
+                    finalLocation.equals(packedAreaCode) ||
+                    finalLocation.startsWith(packedAreaCode + "-") ||
+                    finalLocation.startsWith(packedAreaCode + " ");
+        }
+
+        // Safe fallback for old data
+        return finalLocation.startsWith("PKD");
+    }
+
+    private String clean(String value) {
+        return value == null ? "" : value.trim();
+    }
+    
     private PacketItemResponse toPacketItemResponse(PacketItem item) {
         PacketItemResponse dto = new PacketItemResponse();
 
@@ -380,5 +446,51 @@ public class PacketController {
         }
 
         return dto;
+    }
+    
+    @PostMapping("/items/{itemId}/preview-sticker")
+    public ResponseEntity<byte[]> previewStickerForItem(
+            @PathVariable UUID itemId,
+            @RequestParam(required = false) String factoryFloor,
+            @RequestParam(defaultValue = "true") boolean showCompanyHeader,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        byte[] pdf = packetService.previewStickerForPacketItem(
+                itemId,
+                factoryFloor,
+                showCompanyHeader,
+                currentUserService.allowedPlants(user)
+        );
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=PREVIEW_STICKER_" + itemId + ".pdf"
+                )
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+    
+    @PutMapping("/items/{itemId}/admin-sticker-details")
+    public ResponseEntity<?> adminUpdateStickerDetails(
+            @PathVariable UUID itemId,
+            @RequestBody UpdatePacketItemRequest req,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isAdmin(user)) {
+            return ResponseEntity.status(403)
+                    .body("Only ADMIN can edit sticker details");
+        }
+
+        return ResponseEntity.ok(
+                packetService.adminUpdateStickerDetails(
+                        itemId,
+                        req
+                )
+        );
     }
 }

@@ -150,6 +150,10 @@ function ZohoItemsPage() {
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
+  
+  const role = localStorage.getItem("role") || "";
+  const isAdmin = role === "ADMIN";
+  
   const [customPacketNo, setCustomPacketNo] = useState("");
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
   const [customAddOpen, setCustomAddOpen] = useState(false);
@@ -191,6 +195,10 @@ function ZohoItemsPage() {
   const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
   const [generatedHistorySearch, setGeneratedHistorySearch] = useState("");
   const [historyPdfPreview, setHistoryPdfPreview] = useState(null);
+  const [stickerReviewOpen, setStickerReviewOpen] = useState(false);
+  const [stickerReviewLoading, setStickerReviewLoading] = useState(false);
+  const [stickerReviewPdf, setStickerReviewPdf] = useState(null);
+  const [historyPdfModalOpen, setHistoryPdfModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     itemName: "",
     pdNo: "",
@@ -532,10 +540,12 @@ function ZohoItemsPage() {
         URL.revokeObjectURL(historyPdfPreview.url);
       }
 
-      setHistoryPdfPreview({
-        historyId,
-        url,
-      });
+	  setHistoryPdfPreview({
+	    historyId,
+	    url,
+	  });
+
+	  setHistoryPdfModalOpen(true);
     } catch (e) {
       console.error(e);
 
@@ -669,11 +679,81 @@ function ZohoItemsPage() {
     return valid;
   };
   
-  const openGenerateStickerPanel = (row) => {
+  const getPacketItemId = (row) => {
+    return row?.itemId || row?.id || row?.packetItemId || "";
+  };
+
+  const closeStickerReviewModal = () => {
+    if (stickerReviewPdf) {
+      URL.revokeObjectURL(stickerReviewPdf);
+    }
+
+    setStickerReviewPdf(null);
+    setStickerReviewOpen(false);
+    setStickerReviewLoading(false);
+  };
+
+  const openGenerateStickerDrawer = (row = selectedItem) => {
+    if (!row) return;
+
+    closeStickerReviewModal();
+
     setGenerating(false);
     setSelectedItem(row);
     setPdfUrl(null);
     setDrawerOpen(true);
+  };
+
+  const openStickerReviewModal = async (row) => {
+    const itemId = getPacketItemId(row);
+
+    if (!itemId) {
+      showUiAlert("error", "Packet item id missing");
+      return;
+    }
+
+    if (stickerReviewPdf) {
+      URL.revokeObjectURL(stickerReviewPdf);
+    }
+
+    setSelectedItem(row);
+    setStickerReviewPdf(null);
+    setStickerReviewOpen(true);
+    setStickerReviewLoading(true);
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/preview-sticker?factoryFloor=${encodeURIComponent(row.floor || "")}&showCompanyHeader=${form.showCompanyHeader}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      const contentType = res.headers.get("content-type");
+
+      if (!res.ok || !contentType?.includes("pdf")) {
+        const message = await readApiErrorMessage(res);
+        showUiAlert("error", message || "Preview failed");
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      setStickerReviewPdf(url);
+    } catch (e) {
+      console.error(e);
+      showUiAlert("error", "Sticker preview failed");
+    } finally {
+      setStickerReviewLoading(false);
+    }
+  };
+  
+  const openGenerateStickerPanel = (row) => {
+    openStickerReviewModal(row);
   };
 
   const openAddPacketsModal = (row) => {
@@ -1025,18 +1105,22 @@ function ZohoItemsPage() {
                     <div
                       key={row.itemId} style={tableRow}>
                       <div style={tableCellWrap}>
-                        <Button
-                          size="small"
-                          disabled={generating || !!row.stickerNumber}
-                          onClick={() => openGenerateStickerPanel(row)}
-                          sx={{
-                            ...actionPrimary,
-                            ...tableActionButton,
-                            opacity: row.stickerNumber ? 0.45 : 1,
-                          }}
-                        >
-                          {row.stickerNumber ? "Generated" : "Generate"}
-                        </Button>
+					  <Button
+					    size="small"
+					    disabled={generating || (!!row.stickerNumber && !isAdmin)}
+					    onClick={() => openGenerateStickerPanel(row)}
+					    sx={{
+					      ...actionPrimary,
+					      ...tableActionButton,
+					      opacity: row.stickerNumber && !isAdmin ? 0.45 : 1,
+					    }}
+					  >
+					    {row.stickerNumber
+					      ? isAdmin
+					        ? "Reprint"
+					        : "Generated"
+					      : "Generate"}
+					  </Button>
                       </div>
 
                       <div style={tableCellWrap}>
@@ -1321,6 +1405,63 @@ function ZohoItemsPage() {
 		      Status: {deleteTarget?.status || "—"}
 		    </Box>
 		  </Box>
+		</InventoryModal>
+		
+		<InventoryModal
+		  open={stickerReviewOpen}
+		  onClose={closeStickerReviewModal}
+		  icon="👁️"
+		  title="Preview Sticker"
+		  subtitle="Check sticker details before final generation"
+		  width={920}
+		  footer={
+		    <>
+		      <Button
+		        onClick={() => {
+		          const row = selectedItem;
+
+		          closeStickerReviewModal();
+
+		          if (row) {
+		            openEditModal(row);
+		          }
+		        }}
+		        sx={modalSecondaryButtonSx}
+		      >
+		        Not Done - Edit Details
+		      </Button>
+
+		      <Button
+		        disabled={!stickerReviewPdf || stickerReviewLoading}
+		        onClick={() => openGenerateStickerDrawer(selectedItem)}
+		        sx={premiumButton}
+		      >
+		        Done - Continue Generate
+		      </Button>
+		    </>
+		  }
+		>
+		  {stickerReviewLoading && (
+		    <Box sx={historyEmptySx}>
+		      Preparing sticker preview...
+		    </Box>
+		  )}
+
+		  {!stickerReviewLoading && stickerReviewPdf && (
+		    <Box sx={pdfModalFrameWrapSx}>
+		      <iframe
+		        src={stickerReviewPdf}
+		        width="100%"
+		        height="100%"
+		        title="Sticker Preview Before Generate"
+		        style={{
+		          border: "1px solid rgba(255,255,255,.08)",
+		          borderRadius: 12,
+		          background: "#fff",
+		        }}
+		      />
+		    </Box>
+		  )}
 		</InventoryModal>
 		
       {/* ===================== DRAWER ===================== */}
@@ -2189,8 +2330,15 @@ function ZohoItemsPage() {
 	          sx={premiumButton}
 	          onClick={async () => {
 	            try {
-	              const res = await fetch(
-	                `${API_BASE_URL}/api/packets/items/${editItem.itemId}`,
+					const editItemId = getPacketItemId(editItem);
+
+					const editUrl =
+					  isAdmin
+					    ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
+					    : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
+
+					const res = await fetch(
+					  editUrl,
 	                {
 	                  method: "PUT",
 	                  headers: {
@@ -2236,14 +2384,15 @@ function ZohoItemsPage() {
 	        "remarks",
 	        "location",
 	      ].map((field) => {
-	        const locked =
-	          editForm.stickerNumber &&
-	          [
-	            "itemName",
-	            "pdNo",
-	            "drawingNo",
-	            "clientName",
-	          ].includes(field);
+			const locked =
+			  !isAdmin &&
+			  editForm.stickerNumber &&
+			  [
+			    "itemName",
+			    "pdNo",
+			    "drawingNo",
+			    "clientName",
+			  ].includes(field);
 
 	        return (
 	          <TextField
@@ -2464,42 +2613,77 @@ function ZohoItemsPage() {
 	        </Box>
 	      </Box>
 
-	      {historyPdfPreview?.url && (
-	        <Box sx={historyPdfPanelSx}>
-	          <Box sx={historyPdfPanelHeaderSx}>
-	            <Box sx={{ fontWeight: 900 }}>
-	              Sticker Preview
-	            </Box>
-
-	            <IconButton
-	              size="small"
-	              onClick={() => {
-	                if (historyPdfPreview?.url) {
-	                  URL.revokeObjectURL(historyPdfPreview.url);
-	                }
-
-	                setHistoryPdfPreview(null);
-	              }}
-	              sx={modalCloseButtonSx}
-	            >
-	              ×
-	            </IconButton>
-	          </Box>
-
-	          <iframe
-	            src={historyPdfPreview.url}
-	            width="100%"
-	            height="520"
-	            title="Generated Sticker Preview"
-	            style={{
-	              border: "1px solid rgba(255,255,255,.08)",
-	              borderRadius: 12,
-	              background: "#fff",
-	            }}
-	          />
-	        </Box>
-	      )}
 	    </Box>
+	  </InventoryModal>
+	  <InventoryModal
+	    open={historyPdfModalOpen}
+	    onClose={() => {
+	      setHistoryPdfModalOpen(false);
+
+	      if (historyPdfPreview?.url) {
+	        URL.revokeObjectURL(historyPdfPreview.url);
+	      }
+
+	      setHistoryPdfPreview(null);
+	    }}
+	    icon="🏷️"
+	    title="Sticker PDF Preview"
+	    subtitle="Generated sticker PDF view"
+	    width={980}
+	    footer={
+	      <>
+	        <Button
+	          onClick={() => {
+	            if (!historyPdfPreview?.url) return;
+
+	            const a = document.createElement("a");
+	            a.href = historyPdfPreview.url;
+	            a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
+	            document.body.appendChild(a);
+	            a.click();
+	            a.remove();
+	          }}
+	          sx={modalSecondaryButtonSx}
+	        >
+	          Download
+	        </Button>
+
+	        <Button
+	          onClick={() => {
+	            setHistoryPdfModalOpen(false);
+
+	            if (historyPdfPreview?.url) {
+	              URL.revokeObjectURL(historyPdfPreview.url);
+	            }
+
+	            setHistoryPdfPreview(null);
+	          }}
+	          sx={premiumButton}
+	        >
+	          Close
+	        </Button>
+	      </>
+	    }
+	  >
+	    {historyPdfPreview?.url ? (
+	      <Box sx={pdfModalFrameWrapSx}>
+	        <iframe
+	          src={historyPdfPreview.url}
+	          width="100%"
+	          height="100%"
+	          title="Generated Sticker PDF Preview"
+	          style={{
+	            border: "1px solid rgba(255,255,255,.08)",
+	            borderRadius: 12,
+	            background: "#fff",
+	          }}
+	        />
+	      </Box>
+	    ) : (
+	      <Box sx={historyEmptySx}>
+	        No PDF selected.
+	      </Box>
+	    )}
 	  </InventoryModal>
     </div>
 	{uiAlert && (
@@ -3771,6 +3955,15 @@ const historyUserText = {
   color: "#93c5fd",
   fontSize: 12,
   fontWeight: 900,
+};
+
+const pdfModalFrameWrapSx = {
+  width: "100%",
+  height: "70vh",
+  borderRadius: "12px",
+  overflow: "hidden",
+  background: "#fff",
+  border: "1px solid rgba(255,255,255,.08)",
 };
 
 const historyEmptySx = {

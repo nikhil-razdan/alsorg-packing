@@ -79,6 +79,65 @@ public class PacketService {
         this.stickerHistoryRepository = stickerHistoryRepository;
         this.plantLocationService = plantLocationService;
     }
+    
+    private StickerPdfData buildStickerPdfData(
+            PacketItem item,
+            String stickerNumber,
+            String factoryFloor,
+            boolean showCompanyHeader,
+            long iteration,
+            boolean preview
+    ) {
+        StickerPdfData pdf = new StickerPdfData();
+
+        String finalStickerNumber =
+                preview ? "PREVIEW" : stickerNumber;
+
+        pdf.setStickerNumber(finalStickerNumber);
+        pdf.setBarcodeText(finalStickerNumber);
+
+        pdf.setPacketItemId(item.getId().toString());
+
+        pdf.setQrPayload(
+                preview
+                        ? "ALSORG|PREVIEW|PI=" + item.getId()
+                        : "ALSORG|PI=" + item.getId() + "|SN=" + stickerNumber
+        );
+
+        pdf.setShowCompanyHeader(showCompanyHeader);
+
+        pdf.setItemName(
+                safeForPdf(item.getItemName()) + " (" + safeForPdf(item.getSku()) + ")"
+        );
+
+        pdf.setDescription(item.getDescription());
+        pdf.setLocation(item.getLocation());
+
+        pdf.setFloor(
+                factoryFloor != null && !factoryFloor.isBlank()
+                        ? factoryFloor.trim()
+                        : item.getFloor()
+        );
+
+        pdf.setClientName(item.getClientName());
+        pdf.setClientAddress(item.getClientAddress());
+        pdf.setPdNo(item.getPdNo());
+        pdf.setDrawingNo(item.getDrawingNo());
+        pdf.setPrintIteration((int) iteration);
+        pdf.setQuantity(1);
+        pdf.setDate(java.time.LocalDate.now().toString());
+        pdf.setDimensions(formatDimensionWithVolume(item.getDimensions()));
+        pdf.setWeight(formatWeight(item.getWeight()));
+        pdf.setRemarks(item.getRemarks());
+
+        return pdf;
+    }
+
+    private String safeForPdf(String value) {
+        return value == null || value.isBlank()
+                ? "-"
+                : value.trim();
+    }
 
     private void assertPlantAccess(String plantCode, Set<String> allowedPlants) {
         if (plantCode == null || plantCode.isBlank()) {
@@ -311,6 +370,40 @@ public class PacketService {
         return packetItemRepository.saveAll(items);
     }
     
+    @Transactional(readOnly = true)
+    public byte[] previewStickerForPacketItem(
+            UUID itemId,
+            String factoryFloor,
+            boolean showCompanyHeader,
+            Set<String> allowedPlants
+    ) {
+        PacketItem item = packetItemRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+        assertPlantAccess(item.getPlantCode(), allowedPlants);
+
+        long iteration =
+                item.getPrintIteration() == null
+                        ? 1
+                        : item.getPrintIteration();
+
+        String previewStickerNumber =
+                item.getStickerNumber() != null
+                        ? item.getStickerNumber()
+                        : "PREVIEW";
+
+        StickerPdfData pdf = buildStickerPdfData(
+                item,
+                previewStickerNumber,
+                factoryFloor,
+                showCompanyHeader,
+                iteration,
+                true
+        );
+
+        return pdfService.generateSticker(pdf);
+    }
+    
     public byte[] generateStickerForPacketItem(
             UUID itemId,
             String factoryFloor,
@@ -411,33 +504,14 @@ public class PacketService {
 
         dispatchedRepo.save(d);
 
-        StickerPdfData pdf = new StickerPdfData();
-
-        pdf.setStickerNumber(stickerNumber);
-        pdf.setBarcodeText(stickerNumber);
-
-        pdf.setPacketItemId(item.getId().toString());
-
-        pdf.setQrPayload(
-                "ALSORG"
-                + "|PI=" + item.getId()
-                + "|SN=" + stickerNumber
+        StickerPdfData pdf = buildStickerPdfData(
+                item,
+                stickerNumber,
+                factoryFloor,
+                showCompanyHeader,
+                iteration,
+                false
         );
-        pdf.setShowCompanyHeader(showCompanyHeader);
-        pdf.setItemName(item.getItemName() + " (" + item.getSku() + ")");
-        pdf.setDescription(item.getDescription());
-        pdf.setLocation(item.getLocation());
-        pdf.setFloor(item.getFloor());
-        pdf.setClientName(item.getClientName());
-        pdf.setClientAddress(item.getClientAddress());
-        pdf.setPdNo(item.getPdNo());
-        pdf.setDrawingNo(item.getDrawingNo());
-        pdf.setPrintIteration((int) iteration);
-        pdf.setQuantity(1);
-        pdf.setDate(java.time.LocalDate.now().toString());
-        pdf.setDimensions(formatDimensionWithVolume(item.getDimensions()));
-        pdf.setWeight(formatWeight(item.getWeight()));
-        pdf.setRemarks(item.getRemarks());
 
         byte[] pdfBytes = pdfService.generateSticker(pdf);
 
@@ -462,6 +536,63 @@ public class PacketService {
         stickerHistoryRepository.save(history);
 
         return pdfBytes;
+    }
+    
+    @Transactional
+    public PacketItem adminUpdateStickerDetails(
+            UUID itemId,
+            UpdatePacketItemRequest req
+    ) {
+        PacketItem item = packetItemRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+        item.setItemName(keepExistingIfNull(req.getItemName(), item.getItemName()));
+        item.setPdNo(keepExistingIfNull(req.getPdNo(), item.getPdNo()));
+        item.setDrawingNo(keepExistingIfNull(req.getDrawingNo(), item.getDrawingNo()));
+        item.setClientName(keepExistingIfNull(req.getClientName(), item.getClientName()));
+        item.setClientAddress(keepExistingIfNull(req.getClientAddress(), item.getClientAddress()));
+        item.setFloor(keepExistingIfNull(req.getFloor(), item.getFloor()));
+        item.setDescription(keepExistingIfNull(req.getDescription(), item.getDescription()));
+        item.setWeight(keepExistingIfNull(req.getWeight(), item.getWeight()));
+        item.setDimensions(keepExistingIfNull(req.getDimensions(), item.getDimensions()));
+        item.setRemarks(keepExistingIfNull(req.getRemarks(), item.getRemarks()));
+        item.setLocation(keepExistingIfNull(req.getLocation(), item.getLocation()));
+
+        int packetNo = extractPacketNo(
+                item.getPacketNumber(),
+                item.getSku()
+        );
+
+        String rebuiltSku = buildSku(
+                item.getPdNo(),
+                item.getDrawingNo(),
+                packetNo
+        );
+
+        assertSkuAvailableForUpdate(rebuiltSku, item.getId());
+
+        item.setSku(rebuiltSku);
+
+        PacketItem saved = packetItemRepository.save(item);
+
+        dispatchedRepo.findById(itemId.toString()).ifPresent(d -> {
+            d.setName(saved.getItemName());
+            d.setSku(saved.getSku());
+            d.setPdNo(saved.getPdNo());
+            d.setDrawingNo(saved.getDrawingNo());
+            d.setDescription(saved.getDescription());
+            d.setClientName(saved.getClientName());
+            d.setLocation(saved.getLocation());
+            d.setFloor(saved.getFloor());
+
+            dispatchedRepo.save(d);
+        });
+
+        return saved;
+    }
+
+    private String keepExistingIfNull(String newValue, String oldValue) {
+        return newValue == null ? oldValue : newValue;
     }
     
     @Transactional

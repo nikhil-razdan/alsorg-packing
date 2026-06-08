@@ -1180,6 +1180,28 @@ const actionPrimary = {
   },
 };
 
+const actionWarning = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 800,
+
+  background:
+    "linear-gradient(135deg,#d97706,#f59e0b)",
+
+  color: "#fff",
+
+  border:
+    "1px solid rgba(245,158,11,.35)",
+
+  boxShadow:
+    "0 10px 24px rgba(245,158,11,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#b45309,#d97706)",
+  },
+};
+
 const moveToFgButtonSx = {
   ...tableActionButton,
 
@@ -1388,6 +1410,21 @@ function DispatchedItemsPage() {
   const [scanMessage, setScanMessage] = useState("");
   const [scanCart, setScanCart] = useState([]);
   const [plantConfigs, setPlantConfigs] = useState([]);
+  const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
+  const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
+  const [adminStickerEditForm, setAdminStickerEditForm] = useState({
+    itemName: "",
+    pdNo: "",
+    drawingNo: "",
+    clientName: "",
+    clientAddress: "",
+    floor: "",
+    description: "",
+    weight: "",
+    dimensions: "",
+    remarks: "",
+    location: "",
+  });
   
   const filteredRows = useMemo(() => {
     if (!Array.isArray(rows)) return [];
@@ -2786,7 +2823,18 @@ function DispatchedItemsPage() {
                 </Button>
               </>
             )}
-
+			{isAdmin && (
+			  <Button
+			    size="small"
+			    onClick={() => openAdminStickerEdit(row)}
+			    sx={{
+			      ...actionWarning,
+			      ...tableActionButton,
+			    }}
+			  >
+			    Edit Sticker
+			  </Button>
+			)}
              {canRequestRestore && (
 			  <Button
 			    size="small"
@@ -3072,6 +3120,67 @@ function DispatchedItemsPage() {
       ? selectedPlantCodes[0]
       : "";
 	 
+	  const getDispatchPacketItemId = (row) => {
+	    return row?.packetItemId || row?.itemId || row?.id || row?.zohoItemId || "";
+	  };
+
+	  const openAdminStickerEdit = (row) => {
+	    setAdminStickerEditRow(row);
+
+	    setAdminStickerEditForm({
+	      itemName: row.name || row.itemName || "",
+	      pdNo: row.pdNo || "",
+	      drawingNo: row.drawingNo || "",
+	      clientName: row.clientName || "",
+	      clientAddress: row.clientAddress || "",
+	      floor: row.floor || "",
+	      description: row.description || "",
+	      weight: row.weight || "",
+	      dimensions: row.dimensions || "",
+	      remarks: row.remarks || "",
+	      location: row.currentLocationCode || row.location || "",
+	    });
+
+	    setAdminStickerEditOpen(true);
+	  };
+
+	  const saveAdminStickerEdit = async () => {
+	    const itemId = getDispatchPacketItemId(adminStickerEditRow);
+
+	    if (!itemId) {
+	      alert("Packet item id missing");
+	      return;
+	    }
+
+	    try {
+	      const res = await fetch(
+	        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/admin-sticker-details`,
+	        {
+	          method: "PUT",
+	          headers: {
+	            "Content-Type": "application/json",
+	            ...getAuthHeaders(),
+	          },
+	          body: JSON.stringify(adminStickerEditForm),
+	        }
+	      );
+
+	      if (!res.ok) {
+	        const text = await res.text();
+	        alert(text || "Sticker edit failed");
+	        return;
+	      }
+
+	      setAdminStickerEditOpen(false);
+	      setAdminStickerEditRow(null);
+
+	      await fetchData();
+	    } catch (e) {
+	      console.error(e);
+	      alert("Sticker edit failed");
+	    }
+	  };
+	  
   return (
     <div style={page}>
       <div style={content}>
@@ -5404,6 +5513,97 @@ function DispatchedItemsPage() {
 	              </Box>
 	            </Box>
 	          </Box>
+	        </Box>
+	      </Box>
+	    </Box>
+	  )}
+	  {adminStickerEditOpen && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5400 }}
+	      onClick={() => setAdminStickerEditOpen(false)}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 620,
+	          maxHeight: "88vh",
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#f59e0b")}>
+	              ✏️
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Edit Sticker Details
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                Admin-only sticker detail correction
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            onClick={() => setAdminStickerEditOpen(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box sx={modalScrollBodySx}>
+	            {[
+	              "itemName",
+	              "pdNo",
+	              "drawingNo",
+	              "clientName",
+	              "clientAddress",
+	              "floor",
+	              "description",
+	              "weight",
+	              "dimensions",
+	              "remarks",
+	              "location",
+	            ].map((field) => (
+	              <TextField
+	                key={field}
+	                label={field}
+	                fullWidth
+	                value={adminStickerEditForm[field] || ""}
+	                onChange={(e) =>
+	                  setAdminStickerEditForm((prev) => ({
+	                    ...prev,
+	                    [field]: e.target.value,
+	                  }))
+	                }
+	                sx={{
+	                  ...formFieldSx,
+	                  mb: 2,
+	                }}
+	              />
+	            ))}
+	          </Box>
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            onClick={() => setAdminStickerEditOpen(false)}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Cancel
+	          </Button>
+
+	          <Button
+	            onClick={saveAdminStickerEdit}
+	            sx={premiumButton}
+	          >
+	            Save
+	          </Button>
 	        </Box>
 	      </Box>
 	    </Box>
