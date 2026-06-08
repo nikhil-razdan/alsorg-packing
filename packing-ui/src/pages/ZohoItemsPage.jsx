@@ -251,20 +251,40 @@ function ZohoItemsPage() {
   }
   };
 
+  const getSafeValue = (value) => {
+    return value !== undefined && value !== null && value !== ""
+      ? value
+      : "—";
+  };
+
+  const getPlantByCode = (plantCode) => {
+    if (!plantCode) return null;
+
+    return myPlants.find(
+      (p) => p.plantCode === plantCode
+    );
+  };
+
   const plantLabel = (plant) => {
     if (!plant) return "";
 
-    return `${plant.plantCode} | ${plant.packedAreaCode} → ${plant.fgAreaCode}`;
+    return plant.plantCode || "";
   };
 
   const plantLabelByCode = (plantCode) => {
     if (!plantCode) return "Unassigned";
 
-    const plant = myPlants.find((p) => p.plantCode === plantCode);
+    const plant = getPlantByCode(plantCode);
 
-    return plant ? plantLabel(plant) : plantCode;
+    return plant?.plantCode || plantCode;
   };
-  
+
+  const packingLocationByCode = (plantCode) => {
+    const plant = getPlantByCode(plantCode);
+
+    return getSafeValue(plant?.packedAreaCode);
+  };
+
   const getPlantCodeOnly = (row) => {
     return getSafeValue(row?.plantCode);
   };
@@ -272,9 +292,7 @@ function ZohoItemsPage() {
   const getPackingLocationCode = (row) => {
     if (!row) return "—";
 
-    const plant = myPlants.find(
-      (p) => p.plantCode === row.plantCode
-    );
+    const plant = getPlantByCode(row.plantCode);
 
     return getSafeValue(
       row.packedAreaCode ||
@@ -282,6 +300,20 @@ function ZohoItemsPage() {
         row.currentLocationCode ||
         row.location
     );
+  };
+
+  const getFormPlantCodeOnly = () => {
+    return getSafeValue(form.plantCode);
+  };
+
+  const getFormPackingLocationCode = () => {
+    return packingLocationByCode(form.plantCode);
+  };
+
+  const getPdfPreviewSrc = (url) => {
+    if (!url) return "";
+
+    return `${url}#toolbar=0&navpanes=0&scrollbar=1`;
   };
 
   const normalizePacketCount = (value) => {
@@ -375,51 +407,77 @@ function ZohoItemsPage() {
 
   const renderPlantSelect = () => {
     return (
-      <TextField
-        select
-        label="Plant Location"
-        fullWidth
-        value={form.plantCode || ""}
-        onChange={(e) => {
-          setForm((prev) => ({
-            ...prev,
-            plantCode: e.target.value,
-          }));
+      <>
+        <TextField
+          select
+          label="Plant"
+          fullWidth
+          value={form.plantCode || ""}
+          onChange={(e) => {
+            setForm((prev) => ({
+              ...prev,
+              plantCode: e.target.value,
+            }));
 
-          setErrors((prev) => ({
-            ...prev,
-            plantCode: "",
-          }));
-        }}
-        disabled={myPlants.length === 0}
-        error={!!errors.plantCode}
-        helperText={
-          errors.plantCode ||
-          (myPlants.length === 0
-            ? "No plant access assigned to this user"
-            : "Select the factory plant for this item")
-        }
-		sx={formFieldSx(darkMode)}
-		slotProps={selectMenuSlotProps}
-		SelectProps={{
-		  MenuProps: selectMenuSlotProps.select.MenuProps,
-		}}
-      >
-        {myPlants.length === 0 ? (
-          <MenuItem value="">
-            No Plant Assigned
-          </MenuItem>
-        ) : (
-          myPlants.map((plant) => (
-            <MenuItem
-              key={plant.plantCode}
-              value={plant.plantCode}
-            >
-              {plantLabel(plant)}
+            setErrors((prev) => ({
+              ...prev,
+              plantCode: "",
+            }));
+          }}
+          disabled={myPlants.length === 0}
+          error={!!errors.plantCode}
+          helperText={
+            errors.plantCode ||
+            (myPlants.length === 0
+              ? "No plant access assigned to this user"
+              : "Select assigned plant")
+          }
+          sx={formFieldSx(darkMode)}
+          slotProps={selectMenuSlotProps}
+          SelectProps={{
+            MenuProps: selectMenuSlotProps.select.MenuProps,
+          }}
+        >
+          {myPlants.length === 0 ? (
+            <MenuItem value="">
+              No Plant Assigned
             </MenuItem>
-          ))
+          ) : (
+            myPlants.map((plant) => (
+              <MenuItem
+                key={plant.plantCode}
+                value={plant.plantCode}
+              >
+                {plant.plantCode}
+              </MenuItem>
+            ))
+          )}
+        </TextField>
+
+        {form.plantCode && (
+          <Box sx={plantAccessInfoCardSx}>
+            <Box sx={plantAccessInfoItemSx}>
+              <Box sx={plantAccessLabelSx}>
+                Plant
+              </Box>
+
+              <Box sx={plantAccessValueSx}>
+                {getFormPlantCodeOnly()}
+              </Box>
+            </Box>
+
+            <Box sx={plantAccessInfoItemSx}>
+              <Box sx={plantAccessLabelSx}>
+                Location
+              </Box>
+
+              <Box sx={plantAccessValueSx}>
+                {getFormPackingLocationCode()}
+              </Box>
+            </Box>
+          </Box>
         )}
-      </TextField>
+      </>
     );
   };
   
@@ -605,12 +663,6 @@ function ZohoItemsPage() {
     return row?.stickerNumber ? "Sticker Printed" : "Created";
   };
 
-  const getSafeValue = (value) => {
-    return value !== undefined && value !== null && value !== ""
-      ? value
-      : "—";
-  };
-  
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -1365,7 +1417,7 @@ function ZohoItemsPage() {
 					  <div style={tableCellWrap}>
 					    <Chip
 					      size="small"
-					      label={row.currentLocationCode || row.location || "—"}
+					      label={getPackingLocationCode(row)}
 					      sx={locationChipSx}
 					    />
 					  </div>
@@ -1582,17 +1634,17 @@ function ZohoItemsPage() {
 
 		  {!stickerReviewLoading && stickerReviewPdf && (
 		    <Box sx={pdfModalFrameWrapSx}>
-		      <iframe
-		        src={stickerReviewPdf}
-		        width="100%"
-		        height="100%"
-		        title="Sticker Preview Before Generate"
-		        style={{
-		          border: "1px solid rgba(255,255,255,.08)",
-		          borderRadius: 12,
-		          background: "#fff",
-		        }}
-		      />
+			<iframe
+			  src={getPdfPreviewSrc(stickerReviewPdf)}
+			  width="100%"
+			  height="100%"
+			  title="Sticker Preview Before Generate"
+			  style={{
+			    border: "1px solid rgba(255,255,255,.08)",
+			    borderRadius: 12,
+			    background: "#fff",
+			  }}
+			/>
 		    </Box>
 		  )}
 		</InventoryModal>
@@ -2347,7 +2399,9 @@ function ZohoItemsPage() {
 			    fontSize: 12,
 			  }}
 			>
-			  Plant: {plantLabelByCode(selectedItem?.plantCode)}
+			Plant: {getPlantCodeOnly(selectedItem)}
+			<br />
+			Location: {getPackingLocationCode(selectedItem)}
 			</Box>
 	        <TextField
 	          label="Number of packets"
@@ -2521,7 +2575,9 @@ function ZohoItemsPage() {
 			    fontSize: 12,
 			  }}
 			>
-			  Plant: {plantLabelByCode(selectedItem?.plantCode)}
+			Plant: {getPlantCodeOnly(selectedItem)}
+			<br />
+			Location: {getPackingLocationCode(selectedItem)}
 			</Box>
 			
 	        <TextField
@@ -4233,6 +4289,41 @@ const packetTitleSx = {
   fontWeight: 900,
   fontSize: 14,
   mb: 1.5,
+};
+
+const plantAccessInfoCardSx = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 1,
+  mb: 2,
+  p: 1.2,
+  borderRadius: "16px",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(15,23,42,.62))",
+  border: "1px solid rgba(59,130,246,.18)",
+};
+
+const plantAccessInfoItemSx = {
+  p: 1.1,
+  borderRadius: "12px",
+  background: "rgba(15,23,42,.62)",
+  border: "1px solid rgba(255,255,255,.06)",
+};
+
+const plantAccessLabelSx = {
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
+const plantAccessValueSx = {
+  mt: 0.5,
+  color: "#f8fafc",
+  fontSize: 13,
+  fontWeight: 900,
+  wordBreak: "break-word",
 };
 
 const stepperSx = {
