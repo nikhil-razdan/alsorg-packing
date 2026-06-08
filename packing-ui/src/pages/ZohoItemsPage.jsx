@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   Button,
-  Divider,
   TextField,
   MenuItem,
   Box,
@@ -12,7 +11,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
-import { FormControlLabel, Switch } from "@mui/material";
+import { Switch } from "@mui/material";
 
 function InventoryModal({
   open,
@@ -580,12 +579,18 @@ function ZohoItemsPage() {
   }, [rows]);
   
   const getStickerStatusKey = (row) => {
-      return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
-    };
+    return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
+  };
 
-    const getStickerStatusLabel = (row) => {
-      return row?.stickerNumber ? "Sticker Printed" : "Created";
-    };
+  const getStickerStatusLabel = (row) => {
+    return row?.stickerNumber ? "Sticker Printed" : "Created";
+  };
+
+  const getSafeValue = (value) => {
+    return value !== undefined && value !== null && value !== ""
+      ? value
+      : "—";
+  };
   
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1578,27 +1583,116 @@ function ZohoItemsPage() {
 	    open={drawerOpen}
 	    onClose={closeGenerateStickerDrawer}
 	    icon="🏷️"
-	    title={selectedItem?.itemName || "Generate Sticker"}
-	    subtitle="Generate and preview sticker PDF"
+	    title="Sticker Generation"
+	    subtitle="Generate, download and preview packet sticker"
 	  >
-	    <p style={infoLineSx}>
-	      <b>SKU:</b><br />
-	      {selectedItem?.sku || "—"}
-	    </p>
+	    <Box sx={stickerHeroCardSx}>
+	      <Box sx={stickerHeroTopSx}>
+	        <Box sx={stickerHeroIconSx}>
+	          🏷️
+	        </Box>
 
-		<p style={infoLineSx}>
-		  <b>Plant:</b> {plantLabelByCode(selectedItem?.plantCode)}
-		</p>
+	        <Chip
+	          label={getStickerStatusLabel(selectedItem)}
+	          size="small"
+	          sx={
+	            selectedItem?.stickerNumber
+	              ? printedChipSx
+	              : createdChipSx
+	          }
+	        />
+	      </Box>
 
-		<p style={infoLineSx}>
-		  <b>Location:</b>{" "}
-		  {selectedItem?.currentLocationCode || selectedItem?.location || "—"}
-		</p>
+	      <Box sx={stickerSkuSx}>
+	        {getSafeValue(selectedItem?.sku)}
+	      </Box>
 
-	    <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.08)" }} />
+	      <Box sx={stickerItemNameSx}>
+	        {getSafeValue(selectedItem?.itemName)}
+	      </Box>
 
-	    <FormControlLabel
-	      control={
+	      <Box sx={stickerClientMiniSx}>
+	        Client: {getSafeValue(selectedItem?.clientName)}
+	      </Box>
+	    </Box>
+
+	    <Box sx={drawerSectionCardSx}>
+	      <Box sx={drawerSectionTitleSx}>
+	        Packet Details
+	      </Box>
+
+	      <Box sx={detailGridSx}>
+	        <Box sx={detailMiniCardSx}>
+	          <Box sx={detailLabelSx}>
+	            Plant
+	          </Box>
+
+	          <Box sx={detailValueSx}>
+	            {plantLabelByCode(selectedItem?.plantCode)}
+	          </Box>
+	        </Box>
+
+	        <Box sx={detailMiniCardSx}>
+	          <Box sx={detailLabelSx}>
+	            Location
+	          </Box>
+
+	          <Box sx={detailValueSx}>
+	            {getSafeValue(
+	              selectedItem?.currentLocationCode ||
+	                selectedItem?.location
+	            )}
+	          </Box>
+	        </Box>
+
+	        <Box sx={detailMiniCardSx}>
+	          <Box sx={detailLabelSx}>
+	            PD No
+	          </Box>
+
+	          <Box sx={detailValueSx}>
+	            {getSafeValue(selectedItem?.pdNo)}
+	          </Box>
+	        </Box>
+
+	        <Box sx={detailMiniCardSx}>
+	          <Box sx={detailLabelSx}>
+	            Drawing No
+	          </Box>
+
+	          <Box sx={detailValueSx}>
+	            {getSafeValue(selectedItem?.drawingNo)}
+	          </Box>
+	        </Box>
+	      </Box>
+
+	      <Box sx={descriptionBoxSx}>
+	        <Box sx={detailLabelSx}>
+	          Description
+	        </Box>
+
+	        <Box sx={descriptionTextSx}>
+	          {getSafeValue(selectedItem?.description)}
+	        </Box>
+	      </Box>
+	    </Box>
+
+	    <Box sx={drawerSectionCardSx}>
+	      <Box sx={drawerSectionTitleSx}>
+	        Sticker Appearance
+	      </Box>
+
+	      <Box sx={stickerOptionRowSx}>
+	        <Box>
+	          <Box sx={optionMainTextSx}>
+	            Company Header
+	          </Box>
+
+	          <Box sx={optionSubTextSx}>
+	            Show ALSORG company header on sticker PDF
+	          </Box>
+	        </Box>
+
 	        <Switch
 	          checked={form.showCompanyHeader}
 	          onChange={(e) =>
@@ -1608,161 +1702,159 @@ function ZohoItemsPage() {
 	            }))
 	          }
 	        />
-	      }
-	      label="Show Company Header"
-	      sx={{
-	        mb: 1,
-	        color: "#cbd5e1",
-	        "& .MuiFormControlLabel-label": {
-	          fontWeight: 700,
-	          fontSize: 13,
-	        },
-	      }}
-	    />
+	      </Box>
+	    </Box>
 
 	    <Button
 	      disabled={generating}
-		  onClick={async () => {
-		    const itemId = getPacketItemId(selectedItem);
+	      onClick={async () => {
+	        const itemId = getPacketItemId(selectedItem);
 
-		    if (!itemId) {
-		      showUiAlert("error", "Packet item id missing");
-		      return;
-		    }
+	        if (!itemId) {
+	          showUiAlert("error", "Packet item id missing");
+	          return;
+	        }
 
-		    try {
-		      setGenerating(true);
+	        try {
+	          setGenerating(true);
 
-		      const genRes = await fetch(
-		        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/generate-sticker?factoryFloor=${encodeURIComponent(form.factoryFloor || "")}&showCompanyHeader=${form.showCompanyHeader}`,
-		        {
-		          method: "POST",
-		          headers: {
-		            Authorization: `Bearer ${localStorage.getItem("token")}`,
-		          },
-		        }
-		      );
+	          const genRes = await fetch(
+	            `${API_BASE_URL}/api/packets/items/${encodeURIComponent(
+	              itemId
+	            )}/generate-sticker?factoryFloor=${encodeURIComponent(
+	              selectedItem?.floor || ""
+	            )}&showCompanyHeader=${form.showCompanyHeader}`,
+	            {
+	              method: "POST",
+	              headers: {
+	                Authorization: `Bearer ${localStorage.getItem("token")}`,
+	              },
+	            }
+	          );
 
-		      const contentType =
-		        genRes.headers.get("content-type");
+	          const contentType =
+	            genRes.headers.get("content-type");
 
-		      if (!genRes.ok || !contentType?.includes("pdf")) {
-		        const message =
-		          await readApiErrorMessage(genRes);
+	          if (!genRes.ok || !contentType?.includes("pdf")) {
+	            const message =
+	              await readApiErrorMessage(genRes);
 
-		        showUiAlert(
-		          "error",
-		          message || "Failed to generate sticker"
-		        );
+	            showUiAlert(
+	              "error",
+	              message || "Failed to generate sticker"
+	            );
 
-		        return;
-		      }
+	            return;
+	          }
 
-		      const blob = await genRes.blob();
+	          const blob = await genRes.blob();
 
-		      if (pdfUrl) {
-		        URL.revokeObjectURL(pdfUrl);
-		      }
+	          if (pdfUrl) {
+	            URL.revokeObjectURL(pdfUrl);
+	          }
 
-		      const previewUrl =
-		        URL.createObjectURL(blob);
+	          const previewUrl =
+	            URL.createObjectURL(blob);
 
-		      setPdfUrl(previewUrl);
+	          setPdfUrl(previewUrl);
 
-		      triggerDownloadFromBlob(
-		        blob,
-		        getStickerFileName(selectedItem)
-		      );
+	          triggerDownloadFromBlob(
+	            blob,
+	            getStickerFileName(selectedItem)
+	          );
 
-		      showUiAlert(
-		        "success",
-		        "Sticker generated and downloaded successfully"
-		      );
+	          showUiAlert(
+	            "success",
+	            "Sticker generated and downloaded successfully"
+	          );
 
-		      await fetchItems();
+	          await fetchItems();
 
-		      if (generatedHistoryOpen) {
-		        await fetchGeneratedHistory(
-		          generatedHistoryUserFilter
-		        );
-		      }
-		    } catch (e) {
-		      console.error(e);
-		      showUiAlert(
-		        "error",
-		        "Failed to generate sticker"
-		      );
-		    } finally {
-		      setGenerating(false);
-		    }
-		  }}
-	      sx={{
-	        ...premiumButton,
-	        width: "100%",
-	        height: 42,
-	        mt: 1,
+	          if (generatedHistoryOpen) {
+	            await fetchGeneratedHistory(
+	              generatedHistoryUserFilter
+	            );
+	          }
+	        } catch (e) {
+	          console.error(e);
+
+	          showUiAlert(
+	            "error",
+	            "Failed to generate sticker"
+	          );
+	        } finally {
+	          setGenerating(false);
+	        }
 	      }}
+	      sx={generateStickerMainButtonSx}
 	    >
-	      {generating ? "Generating..." : "Generate Sticker"}
+	      {generating
+	        ? "Generating Sticker..."
+	        : selectedItem?.stickerNumber && isAdmin
+	        ? "Reprint & Download Sticker"
+	        : "Generate & Download Sticker"}
 	    </Button>
 
-		{pdfUrl && (
-		  <>
-		    <Divider
-		      sx={{
-		        my: 2,
-		        borderColor: "rgba(255,255,255,.08)",
-		      }}
-		    />
+	    <Box sx={autoDownloadHintSx}>
+	      Sticker PDF will automatically download after generation.
+	    </Box>
 
-		    <Box
-		      sx={{
-		        display: "flex",
-		        gap: 1,
-		        mb: 1.5,
-		      }}
-		    >
-		      <Button
-		        onClick={() =>
-		          triggerDownloadFromUrl(
-		            pdfUrl,
-		            getStickerFileName(selectedItem)
-		          )
-		        }
-		        sx={{
-		          ...premiumButton,
-		          height: 38,
-		          px: 2,
-		        }}
-		      >
-		        Download Sticker
-		      </Button>
+	    {pdfUrl && (
+	      <>
+	        <Box sx={resultSuccessCardSx}>
+	          <Box sx={resultSuccessIconSx}>
+	            ✅
+	          </Box>
 
-		      <Button
-		        onClick={() => {
-		          if (pdfUrl) {
-		            window.open(pdfUrl, "_blank");
-		          }
-		        }}
-		        sx={modalSecondaryButtonSx}
-		      >
-		        Open PDF
-		      </Button>
-		    </Box>
+	          <Box sx={{ minWidth: 0 }}>
+	            <Box sx={resultSuccessTitleSx}>
+	              Sticker generated successfully
+	            </Box>
 
-		    <iframe
-		      src={pdfUrl}
-		      width="100%"
-		      height="480"
-		      style={{
-		        borderRadius: 12,
-		        border: "1px solid rgba(255,255,255,.08)",
-		        background: "#fff",
-		      }}
-		      title="Sticker Preview"
-		    />
-		  </>
-		)}
+	            <Box sx={resultSuccessTextSx}>
+	              The PDF has been downloaded. You can download again or open it in a new tab.
+	            </Box>
+	          </Box>
+	        </Box>
+
+	        <Box sx={resultActionsSx}>
+	          <Button
+	            onClick={() =>
+	              triggerDownloadFromUrl(
+	                pdfUrl,
+	                getStickerFileName(selectedItem)
+	              )
+	            }
+	            sx={downloadAgainButtonSx}
+	          >
+	            Download Again
+	          </Button>
+
+	          <Button
+	            onClick={() => {
+	              if (pdfUrl) {
+	                window.open(pdfUrl, "_blank");
+	              }
+	            }}
+	            sx={openPdfButtonSx}
+	          >
+	            Open PDF
+	          </Button>
+	        </Box>
+
+	        <Box sx={pdfPreviewHeaderSx}>
+	          Sticker PDF Preview
+	        </Box>
+
+	        <iframe
+	          src={pdfUrl}
+	          width="100%"
+	          height="480"
+	          style={pdfFrameSx}
+	          title="Sticker Preview"
+	        />
+	      </>
+	    )}
 	  </InventorySidePanel>
 	  <InventorySidePanel
 	    open={createOpen}
@@ -3787,10 +3879,294 @@ const sidePanelBodySx = {
   overflowY: "auto",
 };
 
-const infoLineSx = {
+const stickerHeroCardSx = {
+  position: "relative",
+  overflow: "hidden",
+  p: 2.2,
+  mb: 2,
+  borderRadius: "22px",
+  background:
+    "radial-gradient(circle at top left, rgba(59,130,246,.35), transparent 38%), linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.92))",
+  border: "1px solid rgba(96,165,250,.28)",
+  boxShadow:
+    "0 22px 50px rgba(2,6,23,.42), inset 0 1px 0 rgba(255,255,255,.08)",
+};
+
+const stickerHeroTopSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 1.5,
+  mb: 1.6,
+};
+
+const stickerHeroIconSx = {
+  width: 44,
+  height: 44,
+  borderRadius: "16px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 22,
+  background:
+    "linear-gradient(135deg,#2563eb,#60a5fa)",
+  boxShadow:
+    "0 14px 32px rgba(37,99,235,.42)",
+};
+
+const stickerSkuSx = {
+  color: "#fff",
+  fontSize: 24,
+  fontWeight: 950,
+  letterSpacing: ".03em",
+  lineHeight: 1.15,
+  wordBreak: "break-word",
+};
+
+const stickerItemNameSx = {
+  mt: 0.7,
   color: "#cbd5e1",
+  fontSize: 14,
+  fontWeight: 800,
+  lineHeight: 1.35,
+};
+
+const stickerClientMiniSx = {
+  mt: 1,
+  display: "inline-flex",
+  px: 1.2,
+  py: 0.6,
+  borderRadius: "999px",
+  color: "#93c5fd",
+  background: "rgba(59,130,246,.12)",
+  border: "1px solid rgba(59,130,246,.18)",
+  fontSize: 12,
+  fontWeight: 900,
+  maxWidth: "100%",
+};
+
+const drawerSectionCardSx = {
+  p: 1.7,
+  mb: 2,
+  borderRadius: "20px",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.08)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
+};
+
+const drawerSectionTitleSx = {
+  mb: 1.3,
+  color: "#fff",
   fontSize: 13,
-  lineHeight: 1.6,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
+const detailGridSx = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 1,
+};
+
+const detailMiniCardSx = {
+  p: 1.2,
+  minHeight: 68,
+  borderRadius: "14px",
+  background: "rgba(15,23,42,.62)",
+  border: "1px solid rgba(255,255,255,.06)",
+};
+
+const detailLabelSx = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
+const detailValueSx = {
+  mt: 0.6,
+  color: "#f8fafc",
+  fontSize: 13,
+  fontWeight: 850,
+  lineHeight: 1.35,
+  wordBreak: "break-word",
+};
+
+const descriptionBoxSx = {
+  mt: 1,
+  p: 1.2,
+  borderRadius: "14px",
+  background: "rgba(15,23,42,.62)",
+  border: "1px solid rgba(255,255,255,.06)",
+};
+
+const descriptionTextSx = {
+  mt: 0.6,
+  color: "#e5e7eb",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.45,
+  wordBreak: "break-word",
+};
+
+const stickerOptionRowSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 2,
+  p: 1.2,
+  borderRadius: "16px",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(15,23,42,.45))",
+  border: "1px solid rgba(59,130,246,.16)",
+};
+
+const optionMainTextSx = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const optionSubTextSx = {
+  mt: 0.4,
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.4,
+};
+
+const generateStickerMainButtonSx = {
+  width: "100%",
+  height: 50,
+  mb: 1,
+  borderRadius: "16px",
+  textTransform: "none",
+  fontSize: 14,
+  fontWeight: 950,
+  letterSpacing: ".02em",
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6,#60a5fa)",
+  boxShadow:
+    "0 18px 42px rgba(37,99,235,.42)",
+  border: "1px solid rgba(147,197,253,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb,#3b82f6)",
+    boxShadow:
+      "0 20px 48px rgba(37,99,235,.52)",
+    transform: "translateY(-1px)",
+  },
+
+  "&.Mui-disabled": {
+    color: "rgba(255,255,255,.55)",
+    background: "rgba(148,163,184,.16)",
+    boxShadow: "none",
+  },
+};
+
+const autoDownloadHintSx = {
+  mb: 2,
+  color: "#93c5fd",
+  fontSize: 12,
+  fontWeight: 800,
+  textAlign: "center",
+};
+
+const resultSuccessCardSx = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 1.4,
+  p: 1.5,
+  mb: 1.4,
+  borderRadius: "18px",
+  background:
+    "linear-gradient(135deg, rgba(34,197,94,.15), rgba(15,23,42,.72))",
+  border: "1px solid rgba(34,197,94,.22)",
+};
+
+const resultSuccessIconSx = {
+  width: 36,
+  height: 36,
+  borderRadius: "14px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(34,197,94,.14)",
+  fontSize: 18,
+  flexShrink: 0,
+};
+
+const resultSuccessTitleSx = {
+  color: "#bbf7d0",
+  fontSize: 14,
+  fontWeight: 950,
+};
+
+const resultSuccessTextSx = {
+  mt: 0.4,
+  color: "#cbd5e1",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.45,
+};
+
+const resultActionsSx = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 1,
+  mb: 1.5,
+};
+
+const downloadAgainButtonSx = {
+  height: 40,
+  borderRadius: "14px",
+  textTransform: "none",
+  fontWeight: 900,
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,#16a34a,#22c55e)",
+  boxShadow:
+    "0 12px 26px rgba(22,163,74,.28)",
+
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#15803d,#16a34a)",
+  },
+};
+
+const openPdfButtonSx = {
+  height: 40,
+  borderRadius: "14px",
+  textTransform: "none",
+  fontWeight: 900,
+  color: "#dbeafe",
+  background: "rgba(59,130,246,.10)",
+  border: "1px solid rgba(59,130,246,.22)",
+
+  "&:hover": {
+    background: "rgba(59,130,246,.18)",
+  },
+};
+
+const pdfPreviewHeaderSx = {
+  mb: 1,
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
+const pdfFrameSx = {
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,.10)",
+  background: "#fff",
+  boxShadow:
+    "0 18px 38px rgba(0,0,0,.28)",
 };
 
 const packetCardSx = {
@@ -4192,20 +4568,5 @@ const historyViewButtonSx = {
   },
 };
 
-const historyPdfPanelSx = {
-  mt: 2,
-  p: 1.5,
-  borderRadius: "12px",
-  background: "rgba(255,255,255,.035)",
-  border: "1px solid rgba(255,255,255,.07)",
-};
-
-const historyPdfPanelHeaderSx = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  color: "#fff",
-  mb: 1,
-};
 
 export default ZohoItemsPage;
