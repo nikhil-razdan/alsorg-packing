@@ -6,7 +6,6 @@ import org.apache.pdfbox.pdmodel.font.*;
 
 import org.springframework.stereotype.Service;
 
-import com.alsorg.packing.domain.sticker.ZohoSticker;
 import com.alsorg.packing.repository.ZohoStickerRepository;
 
 import java.io.ByteArrayOutputStream;
@@ -14,6 +13,8 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Service
 public class ChalaanPdfService {
@@ -32,14 +33,19 @@ public class ChalaanPdfService {
     	        ? data.getItems().get(0)
     	        : null;
 
-    	String pdNo = "-";
+    	String pdNo = buildAllPdNos(data.getItems());
     	String clientName = "-";
 
-    	if (firstItem != null) {
+    	// Existing voucherNo will now print as Challan No
+    	String challanNo = safe(data.getVoucherNo());
 
-    		pdNo = safe(firstItem.getPdNo());
-    		clientName = safe(firstItem.getClientName());
-    		data.setAddress(safe(firstItem.getClientAddress()));
+    	// These will be integrated later
+    	String driverName = "-";
+    	String vehicleNo = "-";
+
+    	if (firstItem != null) {
+    	    clientName = safe(firstItem.getClientName());
+    	    data.setAddress(safe(firstItem.getClientAddress()));
     	}
 
         try (PDDocument doc = new PDDocument()) {
@@ -60,16 +66,22 @@ public class ChalaanPdfService {
 
             /* ================= HEADER ================= */
 
-            drawText(cs, regular, 10, 40, 710, "P.D. No: " + pdNo);
-            drawText(cs, regular, 10, 40, 690, "Client Name: " + clientName);
-            drawText(cs, regular, 10, 40, 670, "Address: " + safe(data.getAddress()));
+            /* ================= HEADER ================= */
 
             String date = LocalDate.now(ZoneId.of("Asia/Kolkata"))
                     .format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
 
-            drawText(cs, regular, 10, 350, 710, "Date: " + date);
-            drawText(cs, regular, 10, 350, 690, "D. Name: " + safe(data.getDesignerName()));
-            drawText(cs, regular, 10, 350, 670, "V. No: " + safe(data.getVoucherNo()));
+            drawChallanHeader(
+                    cs,
+                    regular,
+                    pdNo,
+                    clientName,
+                    safe(data.getAddress()),
+                    date,
+                    challanNo,
+                    driverName,
+                    vehicleNo
+            );
 
             drawLine(cs, 40, 640, 560, 640);
 
@@ -116,16 +128,20 @@ public class ChalaanPdfService {
                     drawText(cs, bold, 20, 180, 760, "External Movement Challan");
                     drawLine(cs, 40, 740, 560, 740);
 
-                    drawText(cs, regular, 10, 40, 710, "P.D. No: " + pdNo);
-                    drawText(cs, regular, 10, 40, 690, "Client Name: " + clientName);
-                    drawText(cs, regular, 10, 40, 670, "Address: " + safe(data.getAddress()));
-
                     date = LocalDate.now(ZoneId.of("Asia/Kolkata"))
                             .format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
 
-                    drawText(cs, regular, 10, 350, 710, "Date: " + date);
-                    drawText(cs, regular, 10, 350, 690, "D. Name: ");
-                    drawText(cs, regular, 10, 350, 670, "V. No: ");
+                    drawChallanHeader(
+                            cs,
+                            regular,
+                            pdNo,
+                            clientName,
+                            safe(data.getAddress()),
+                            date,
+                            challanNo,
+                            driverName,
+                            vehicleNo
+                    );
 
                     drawLine(cs, 40, 640, 560, 640);
 
@@ -160,9 +176,10 @@ public class ChalaanPdfService {
                 drawText(cs, regular, 10, 50, startY, String.valueOf(sr));
 
                 String fullDesc =
-                        safe(item.getItemName()) + " | " +
-                        safe(item.getDrawingNo()) + " | " +
-                        safe(item.getDescription());
+                        "PD No: " + safe(item.getPdNo()) + " | " +
+                        "Item: " + safe(item.getItemName()) + " | " +
+                        "Dwg No: " + safe(item.getDrawingNo()) + " | " +
+                        "Desc: " + safe(item.getDescription());
 
                 y = drawWrappedText(
                         cs,
@@ -230,6 +247,51 @@ public class ChalaanPdfService {
 
     /* ================= UTIL ================= */
 
+    private void drawChallanHeader(
+            PDPageContentStream cs,
+            PDFont regular,
+            String pdNo,
+            String clientName,
+            String address,
+            String date,
+            String challanNo,
+            String driverName,
+            String vehicleNo
+    ) throws IOException {
+
+        /*
+         * LEFT SIDE HEADER
+         * P.D. No may contain multiple PD numbers, so it is wrapped.
+         */
+        drawText(cs, regular, 10, 40, 710, "P.D. No:");
+
+        float headerPdTextEndY = drawWrappedText(
+                cs,
+                regular,
+                9,
+                95,
+                710,
+                245,
+                pdNo
+        );
+
+        float headerClientY = Math.min(690, headerPdTextEndY - 18);
+        float headerAddressY = headerClientY - 20;
+
+        drawText(cs, regular, 10, 40, headerClientY, "Client Name: " + safe(clientName));
+        drawText(cs, regular, 10, 40, headerAddressY, "Address: " + safe(address));
+
+        /*
+         * RIGHT SIDE HEADER
+         * Voucher No is now displayed as Challan No.
+         * Driver Name and Vehicle No are placeholders for future integration.
+         */
+        drawText(cs, regular, 10, 350, 710, "Date: " + safe(date));
+        drawText(cs, regular, 10, 350, 690, "Challan No: " + safe(challanNo));
+        drawText(cs, regular, 10, 350, 670, "Driver Name: " + safe(driverName));
+        drawText(cs, regular, 10, 350, 650, "Vehicle No: " + safe(vehicleNo));
+    }
+    
     private void drawText(PDPageContentStream cs, PDFont font, int size,
                           float x, float y, String text) throws IOException {
 
@@ -298,6 +360,29 @@ public class ChalaanPdfService {
         return y;
     }
 
+    private String buildAllPdNos(List<ChalaanItem> items) {
+
+        Set<String> pdNos = new LinkedHashSet<>();
+
+        if (items != null) {
+            for (ChalaanItem item : items) {
+                if (item == null) continue;
+
+                String pd = safe(item.getPdNo());
+
+                if (!"-".equals(pd)) {
+                    pdNos.add(pd);
+                }
+            }
+        }
+
+        if (pdNos.isEmpty()) {
+            return "-";
+        }
+
+        return String.join(", ", pdNos);
+    }
+    
     private String safe(Object v) {
         if (v == null) return "-";
         String s = v.toString().trim();
