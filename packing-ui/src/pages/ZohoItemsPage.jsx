@@ -635,6 +635,9 @@ function ZohoItemsPage() {
         (r.pdNo || "").toLowerCase().includes(q) ||
         (r.drawingNo || "").toLowerCase().includes(q) ||
         (r.clientName || "").toLowerCase().includes(q) ||
+        (r.clientAddress || "").toLowerCase().includes(q) ||
+        (r.description || "").toLowerCase().includes(q) ||
+        (r.remarks || "").toLowerCase().includes(q) ||
         (r.stickerNumber || "").toLowerCase().includes(q) ||
         (r.generatedBy || "").toLowerCase().includes(q)
       );
@@ -2457,7 +2460,7 @@ function ZohoItemsPage() {
 	    <Box sx={historyTopBarSx}>
 	      <TextField
 	        variant="standard"
-	        placeholder="Search item, SKU, client, sticker no..."
+	        placeholder="Search item, SKU, client, description, sticker no..."
 	        value={generatedHistorySearch}
 	        onChange={(e) => setGeneratedHistorySearch(e.target.value)}
 	        InputProps={{ disableUnderline: true }}
