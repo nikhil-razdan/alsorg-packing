@@ -404,6 +404,75 @@ function ZohoItemsPage() {
     setRemarksList(buildTextRows(count));
     setErrors({});
   };
+  
+  const itemInfoFields = [
+    {
+      key: "itemName",
+      label: "Item Name",
+      placeholder: "Enter item/product name",
+    },
+    {
+      key: "pdNo",
+      label: "PD No.",
+      placeholder: "Enter production/design number",
+    },
+    {
+      key: "drawingNo",
+      label: "Drawing No.",
+      placeholder: "Enter drawing reference number",
+    },
+    {
+      key: "clientName",
+      label: "Client Name",
+      placeholder: "Enter client/customer name",
+    },
+    {
+      key: "clientAddress",
+      label: "Client Address",
+      placeholder: "Enter client delivery/address details",
+    },
+    {
+      key: "floor",
+      label: "Floor / Area",
+      placeholder: "Enter floor or area detail",
+    },
+  ];
+
+  const packetDetailLabels = {
+    description: "Packet Description",
+    weight: "Packet Weight",
+    remarks: "Packet Remarks",
+    length: "Length",
+    breadth: "Breadth",
+    height: "Height",
+  };
+
+  const renderFormTextField = ({
+    key,
+    label,
+    placeholder,
+    type = "text",
+  }) => {
+    return (
+      <TextField
+        key={key}
+        label={label}
+        placeholder={placeholder}
+        fullWidth
+        type={type}
+        value={form[key] || ""}
+        onChange={(e) =>
+          setForm((prev) => ({
+            ...prev,
+            [key]: e.target.value,
+          }))
+        }
+        error={!!errors[key]}
+        helperText={errors[key]}
+        sx={formFieldSx(darkMode)}
+      />
+    );
+  };
 
   const renderPlantSelect = () => {
     return (
@@ -1940,35 +2009,27 @@ function ZohoItemsPage() {
 	      <Step><StepLabel>Done</StepLabel></Step>
 	    </Stepper>
 
-		{[
-		  "itemName",
-		  "pdNo",
-		  "drawingNo",
-		  "clientName",
-		  "clientAddress",
-		  "floor",
-		].map((field) => (
-		  <TextField
-		    key={field}
-		    label={field}
-		    fullWidth
-		    value={form[field]}
-		    onChange={(e) =>
-		      setForm((prev) => ({
-		        ...prev,
-		        [field]: e.target.value,
-		      }))
-		    }
-		    error={!!errors[field]}
-		    helperText={errors[field]}
-		    sx={formFieldSx(darkMode)}
-		  />
-		))}
+		<Box sx={formSectionHeaderSx}>
+		  Basic Item Information
+		</Box>
+
+		{itemInfoFields.map((field) =>
+		  renderFormTextField(field)
+		)}
+
+		<Box sx={formSectionHeaderSx}>
+		  Plant Assignment
+		</Box>
 
 		{renderPlantSelect()}
 
+		<Box sx={formSectionHeaderSx}>
+		  Packet Setup
+		</Box>
+
 		<TextField
-		  label="numberOfPackets"
+		  label="Number of Packets"
+		  placeholder="Enter total packet count"
 		  fullWidth
 		  type="number"
 		  value={form.numberOfPackets}
@@ -2221,73 +2282,65 @@ function ZohoItemsPage() {
 	  >
 	    <Box sx={modalScrollBodySx}>
 	      <Box sx={sectionCardSx}>
-	        <Box sx={sectionTitleSx}>
-	          Item Details
-	        </Box>
+		  <Box sx={sectionTitleSx}>
+		    Basic Item Information
+		  </Box>
 
-			{[
-			  "itemName",
-			  "pdNo",
-			  "drawingNo",
-			  "clientName",
-			  "clientAddress",
-			  "floor",
-			].map((field) => (
-			  <TextField
-			    key={field}
-			    label={field}
-			    fullWidth
-			    value={form[field]}
-			    onChange={(e) =>
-			      setForm((prev) => ({
-			        ...prev,
-			        [field]: e.target.value,
-			      }))
-			    }
-			    sx={formFieldSx(darkMode)}
-			  />
-			))}
+		  {itemInfoFields.map((field) =>
+		    renderFormTextField(field)
+		  )}
 
-			{renderPlantSelect()}
+		  <Box sx={sectionTitleSx}>
+		    Plant Assignment
+		  </Box>
+
+		  {renderPlantSelect()}
 	      </Box>
 
 	      <Box sx={sectionCardSx}>
-	        <Box sx={sectionTitleSx}>
-	          Custom Packet Details
-	        </Box>
+		  <Box sx={sectionTitleSx}>
+		    Custom Packet Information
+		  </Box>
 
-	        <TextField
-	          label="Custom Packet Number"
-	          type="number"
-	          fullWidth
-	          value={customPacketNo}
-	          onChange={(e) => setCustomPacketNo(e.target.value)}
-	          sx={formFieldSx(darkMode)}
-	        />
+		  <TextField
+		    label="Packet Number"
+		    placeholder="Enter custom packet number"
+		    type="number"
+		    fullWidth
+		    value={customPacketNo}
+		    onChange={(e) => setCustomPacketNo(e.target.value)}
+		    sx={formFieldSx(darkMode)}
+		  />
 
-	        <TextField
-	          label="Description"
-	          fullWidth
-	          value={descriptions[0] || ""}
-	          onChange={(e) => setDescriptions([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
+		  <TextField
+		    label={packetDetailLabels.description}
+		    placeholder="Enter packet-wise description"
+		    fullWidth
+		    value={descriptions[0] || ""}
+		    onChange={(e) => setDescriptions([e.target.value])}
+		    sx={formFieldSx(darkMode)}
+		  />
 
-	        <TextField
-	          label="Weight"
-	          fullWidth
-	          value={weights[0] || ""}
-	          onChange={(e) => setWeights([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
+		  <TextField
+		    label={packetDetailLabels.weight}
+		    placeholder="Enter packet weight"
+		    fullWidth
+		    value={weights[0] || ""}
+		    onChange={(e) => setWeights([e.target.value])}
+		    sx={formFieldSx(darkMode)}
+		  />
 
 	        <Box sx={dimensionRowSx}>
-	          {["l", "b", "h"].map((key) => (
-	            <TextField
-	              key={key}
-	              label={key.toUpperCase()}
-	              type="number"
-	              value={dimensionsList[0]?.[key] || ""}
+			{[
+			  ["l", packetDetailLabels.length],
+			  ["b", packetDetailLabels.breadth],
+			  ["h", packetDetailLabels.height],
+			].map(([key, label]) => (
+			  <TextField
+			    key={key}
+			    label={label}
+			    type="number"
+			    value={dimensionsList[0]?.[key] || ""}
 	              onChange={(e) => {
 	                const copy = [...dimensionsList];
 	                copy[0] = { ...copy[0], [key]: e.target.value };
@@ -2306,13 +2359,14 @@ function ZohoItemsPage() {
 	          </span>
 	        </Box>
 
-	        <TextField
-	          label="Remarks"
-	          fullWidth
-	          value={remarksList[0] || ""}
-	          onChange={(e) => setRemarksList([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
+			<TextField
+			  label={packetDetailLabels.remarks}
+			  placeholder="Enter handling notes or remarks"
+			  fullWidth
+			  value={remarksList[0] || ""}
+			  onChange={(e) => setRemarksList([e.target.value])}
+			  sx={formFieldSx(darkMode)}
+			/>
 	      </Box>
 	    </Box>
 	  </InventoryModal>
@@ -2425,8 +2479,8 @@ function ZohoItemsPage() {
 	              Packet {i + 1}
 	            </Box>
 
-	            <TextField
-	              label="Description"
+				<TextField
+				  label={packetDetailLabels.description}
 	              fullWidth
 	              value={descriptions[i] || ""}
 	              onChange={(e) => {
@@ -2437,8 +2491,8 @@ function ZohoItemsPage() {
 	              sx={formFieldSx(darkMode)}
 	            />
 
-	            <TextField
-	              label="Weight"
+				<TextField
+				  label={packetDetailLabels.weight}
 	              fullWidth
 	              value={weights[i] || ""}
 	              onChange={(e) => {
@@ -2453,7 +2507,13 @@ function ZohoItemsPage() {
 	              {["l", "b", "h"].map((key) => (
 	                <TextField
 	                  key={key}
-	                  label={key.toUpperCase()}
+					  label={
+					    key === "l"
+					      ? "Length"
+					      : key === "b"
+					      ? "Breadth"
+					      : "Height"
+					  }
 	                  type="number"
 	                  value={dimensionsList[i]?.[key] || ""}
 	                  onChange={(e) => {
@@ -2474,8 +2534,8 @@ function ZohoItemsPage() {
 	              </span>
 	            </Box>
 
-	            <TextField
-	              label="Remarks"
+				<TextField
+				  label={packetDetailLabels.remarks}
 	              fullWidth
 	              value={remarksList[i] || ""}
 	              onChange={(e) => {
@@ -4146,6 +4206,22 @@ const autoDownloadHintSx = {
   fontSize: 12,
   fontWeight: 800,
   textAlign: "center",
+};
+
+const formSectionHeaderSx = {
+  mt: 1,
+  mb: 1.4,
+  px: 1.2,
+  py: 0.9,
+  borderRadius: "12px",
+  color: "#93c5fd",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,.12), rgba(15,23,42,.42))",
+  border: "1px solid rgba(59,130,246,.18)",
+  fontSize: 12,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".09em",
 };
 
 const resultSuccessCardSx = {
