@@ -206,15 +206,37 @@ public class PacketController {
 
         if (currentUserService.isAdmin(user)) {
             sourceItems = packetItemRepository.findAll();
-        } else {
-            sourceItems = packetItemRepository.findVisibleByPlantsIncludingLegacy(
-                    currentUserService.allowedPlants(user)
-            );
+
+            /*
+             * ADMIN:
+             * Keep Inventory Page behavior same as existing.
+             */
+            return sourceItems
+                    .stream()
+                    .filter(item ->
+                            "CREATED".equals(item.getStatus()) ||
+                            "RESTORED".equals(item.getStatus()) ||
+                            item.getStickerNumber() != null
+                    )
+                    .map(this::toPacketItemResponse)
+                    .toList();
         }
 
+        sourceItems = packetItemRepository.findVisibleByPlantsIncludingLegacy(
+                currentUserService.allowedPlants(user)
+        );
+
+        /*
+         * NON-ADMIN:
+         * Show only fresh newly-created inventory items.
+         * Hide anything where sticker is already generated.
+         */
         return sourceItems
                 .stream()
-                .filter(this::showOnInventoryPage)
+                .filter(item ->
+                        "CREATED".equals(item.getStatus()) &&
+                        item.getStickerNumber() == null
+                )
                 .map(this::toPacketItemResponse)
                 .toList();
     }
