@@ -264,6 +264,25 @@ function ZohoItemsPage() {
 
     return plant ? plantLabel(plant) : plantCode;
   };
+  
+  const getPlantCodeOnly = (row) => {
+    return getSafeValue(row?.plantCode);
+  };
+
+  const getPackingLocationCode = (row) => {
+    if (!row) return "—";
+
+    const plant = myPlants.find(
+      (p) => p.plantCode === row.plantCode
+    );
+
+    return getSafeValue(
+      row.packedAreaCode ||
+        plant?.packedAreaCode ||
+        row.currentLocationCode ||
+        row.location
+    );
+  };
 
   const normalizePacketCount = (value) => {
     const n = Number(value);
@@ -1628,7 +1647,7 @@ function ZohoItemsPage() {
 	          </Box>
 
 	          <Box sx={detailValueSx}>
-	            {plantLabelByCode(selectedItem?.plantCode)}
+	            {getPlantCodeOnly(selectedItem)}
 	          </Box>
 	        </Box>
 
@@ -1638,10 +1657,7 @@ function ZohoItemsPage() {
 	          </Box>
 
 	          <Box sx={detailValueSx}>
-	            {getSafeValue(
-	              selectedItem?.currentLocationCode ||
-	                selectedItem?.location
-	            )}
+	            {getPackingLocationCode(selectedItem)}
 	          </Box>
 	        </Box>
 
