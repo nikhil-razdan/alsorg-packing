@@ -324,10 +324,6 @@ function DashboardPage() {
   const [activeStatCard, setActiveStatCard] = useState(null);
   const [shiftModal, setShiftModal] =
     useState(false);
-	const [throughputType, setThroughputType] = useState(null);
-	const [throughputUsers, setThroughputUsers] = useState([]);
-	const [throughputLoading, setThroughputLoading] = useState(false);
-	const [throughputError, setThroughputError] = useState("");
 
 	const [throughputModal, setThroughputModal] = useState({
 	  open: false,
@@ -411,17 +407,9 @@ function DashboardPage() {
  
 
   const toggleStatCard = (key) => {
-    setActiveStatCard((current) => {
-      const next = current === key ? null : key;
-
-      if (next !== "dailyThroughput") {
-        setThroughputType(null);
-        setThroughputUsers([]);
-        setThroughputError("");
-      }
-
-      return next;
-    });
+    setActiveStatCard((current) =>
+      current === key ? null : key
+    );
   };
   
   const openThroughputUserModal = async (type) => {
@@ -477,28 +465,6 @@ function DashboardPage() {
       loading: false,
       error: "",
     });
-  };
-
-  const loadThroughputUsers = async (type) => {
-    if (!isAdmin) return;
-
-    setThroughputType(type);
-    setThroughputUsers([]);
-    setThroughputError("");
-    setThroughputLoading(true);
-
-    try {
-      const data = await fetchDailyThroughputUsers(type);
-
-      console.log("User-wise throughput:", type, data);
-
-      setThroughputUsers(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setThroughputError("Unable to load user-wise throughput.");
-    } finally {
-      setThroughputLoading(false);
-    }
   };
   
   return (
@@ -704,63 +670,81 @@ function DashboardPage() {
 			    )}
 
 			    <div style={workspaceGrid}>
-			      <div style={panelSurface}>
-			        <div style={chartToggleWrap}>
-			          <div
-			            style={{
-			              ...chartSlider,
-			              transform: `translateX(${chartIndex * 40}px)`,
-			            }}
-			          />
+				<div style={chartPanelSurface}>
+				  <div style={chartPanelTop}>
+				    <div>
+				      <div style={chartPanelTitle}>
+				        Inventory Visualization
+				      </div>
 
-			          <button
-			            style={chartToggleBtn}
-			            onClick={() => setChartType("donut")}
-			          >
-			            <DonutIcon />
-			          </button>
+				      <div style={chartPanelSubtitle}>
+				        Switch between donut, flow and volume charts
+				      </div>
+				    </div>
 
-			          <button
-			            style={chartToggleBtn}
-			            onClick={() => setChartType("line")}
-			          >
-			            <LineIcon />
-			          </button>
+				    <div style={chartToggleWrap}>
+				      <div
+				        style={{
+				          ...chartSlider,
+				          transform: `translateX(${chartIndex * 40}px)`,
+				        }}
+				      />
 
-			          <button
-			            style={chartToggleBtn}
-			            onClick={() => setChartType("bar")}
-			          >
-			            <BarIcon />
-			          </button>
-			        </div>
+				      <button
+				        type="button"
+				        title="Donut chart"
+				        style={chartToggleBtn}
+				        onClick={() => setChartType("donut")}
+				      >
+				        <DonutIcon />
+				      </button>
 
-			        <div style={panelBody}>
-			          {chartType === "donut" && (
-			            <StatusDonutChart
-			              warehouse={stats.warehouseItems}
-			              readyToDispatch={stats.readyToDispatchItems}
-			              ready={stats.readyItems}
-			            />
-			          )}
+				      <button
+				        type="button"
+				        title="Line chart"
+				        style={chartToggleBtn}
+				        onClick={() => setChartType("line")}
+				      >
+				        <LineIcon />
+				      </button>
 
-			          {chartType === "line" && (
-			            <StatusLineChart
-			              warehouse={stats.warehouseItems}
-			              readyToDispatch={stats.readyToDispatchItems}
-			              ready={stats.readyItems}
-			            />
-			          )}
+				      <button
+				        type="button"
+				        title="Bar chart"
+				        style={chartToggleBtn}
+				        onClick={() => setChartType("bar")}
+				      >
+				        <BarIcon />
+				      </button>
+				    </div>
+				  </div>
 
-			          {chartType === "bar" && (
-			            <StatusBarChart
-			              warehouse={stats.warehouseItems}
-			              readyToDispatch={stats.readyToDispatchItems}
-			              ready={stats.readyItems}
-			            />
-			          )}
-			        </div>
-			      </div>
+				  <div style={chartPanelBody}>
+				    {chartType === "donut" && (
+				      <StatusDonutChart
+				        warehouse={stats.warehouseItems}
+				        readyToDispatch={stats.readyToDispatchItems}
+				        ready={stats.readyItems}
+				      />
+				    )}
+
+				    {chartType === "line" && (
+				      <StatusLineChart
+				        warehouse={stats.warehouseItems}
+				        readyToDispatch={stats.readyToDispatchItems}
+				        ready={stats.readyItems}
+				      />
+				    )}
+
+				    {chartType === "bar" && (
+				      <StatusBarChart
+				        warehouse={stats.warehouseItems}
+				        readyToDispatch={stats.readyToDispatchItems}
+				        ready={stats.readyItems}
+				      />
+				    )}
+				  </div>
+				</div>
 
 			      <div style={panelSurface}>
 			        <ActivityFeed logs={activityLogs} />
@@ -1124,12 +1108,6 @@ const panelSurface = {
   overflow: "hidden",
 
   backdropFilter: "blur(18px)",
-};
-
-const panelBody = {
-  flex: 1,
-  overflow: "hidden",
-  marginTop: 8,
 };
 
 const chartToggleWrap = {
@@ -1817,6 +1795,63 @@ const throughputMiniHint = {
   fontSize: 11,
   fontWeight: 900,
   color: "rgba(255,255,255,.72)",
+};
+
+const chartPanelSurface = {
+  position: "relative",
+
+  minHeight: 420,
+
+  padding: 22,
+
+  borderRadius: 28,
+
+  background:
+    "radial-gradient(circle at top left, rgba(37,99,235,.18), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.68))",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
+  boxShadow:
+    "0 22px 55px rgba(2,6,23,.36)",
+
+  backdropFilter: "blur(18px)",
+
+  overflow: "hidden",
+};
+
+const chartPanelTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 18,
+};
+
+const chartPanelTitle = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const chartPanelSubtitle = {
+  marginTop: 5,
+  fontSize: 12,
+  color: "rgba(255,255,255,.56)",
+};
+
+const chartPanelBody = {
+  minHeight: 330,
+
+  padding: 18,
+
+  borderRadius: 24,
+
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022))",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
 
 export default DashboardPage;

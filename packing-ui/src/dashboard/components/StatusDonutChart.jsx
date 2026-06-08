@@ -1,130 +1,296 @@
-function StatusDonutChart({ warehouse = 0, readyToDispatch = 0, ready = 0 }) {
-  const total = warehouse + readyToDispatch + ready || 1;
+function StatusDonutChart({
+  warehouse = 0,
+  readyToDispatch = 0,
+  ready = 0,
+}) {
+  const values = [
+    {
+      key: "warehouse",
+      label: "Warehouse",
+      value: Number(warehouse || 0),
+      color: "#60a5fa",
+      soft: "rgba(96,165,250,.16)",
+    },
+    {
+      key: "readyToDispatch",
+      label: "Ready to Dispatch",
+      value: Number(readyToDispatch || 0),
+      color: "#f59e0b",
+      soft: "rgba(245,158,11,.16)",
+    },
+    {
+      key: "ready",
+      label: "Ready",
+      value: Number(ready || 0),
+      color: "#34d399",
+      soft: "rgba(52,211,153,.16)",
+    },
+  ];
 
-  const radius = 70;
-  const stroke = 16;
+  const total = values.reduce((sum, item) => sum + item.value, 0);
+
+  const radius = 74;
+  const stroke = 18;
   const circumference = 2 * Math.PI * radius;
 
-  const warehouseLen = (warehouse / total) * circumference;
-  const readyToDispatchLen = (readyToDispatch / total) * circumference;
-  const readyLen = (ready / total) * circumference;
+  let offset = 0;
 
   return (
-    <div style={card}>
-      <h3 style={title}>Inventory Status</h3>
+    <div style={chartCard}>
+      <div style={chartHeader}>
+        <div>
+          <div style={chartTitle}>Inventory Status</div>
+          <div style={chartSubtitle}>
+            Live operational stock distribution
+          </div>
+        </div>
 
-      <svg width="200" height="200" viewBox="0 0 200 200">
-        <g transform="rotate(-90 100 100)">
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            fill="none"
-            stroke="rgba(96,165,250,0.95)"
-            strokeWidth={stroke}
-            strokeDasharray={`${warehouseLen} ${circumference}`}
-            strokeDashoffset={0}
-          />
+        <div style={chartBadge}>
+          {total}
+        </div>
+      </div>
 
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            fill="none"
-            stroke="rgba(251,191,36,0.95)"
-            strokeWidth={stroke}
-            strokeDasharray={`${readyToDispatchLen} ${circumference}`}
-            strokeDashoffset={-warehouseLen}
-          />
+      <div style={donutLayout}>
+        <div style={donutWrap}>
+          <svg width="220" height="220" viewBox="0 0 220 220">
+            <defs>
+              <filter id="donutGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
 
-          <circle
-            cx="100"
-            cy="100"
-            r={radius}
-            fill="none"
-            stroke="rgba(52,211,153,0.95)"
-            strokeWidth={stroke}
-            strokeDasharray={`${readyLen} ${circumference}`}
-            strokeDashoffset={-(warehouseLen + readyToDispatchLen)}
-          />
-        </g>
-      </svg>
+            <circle
+              cx="110"
+              cy="110"
+              r={radius}
+              fill="none"
+              stroke="rgba(255,255,255,.07)"
+              strokeWidth={stroke}
+            />
 
-      <div style={legend}>
-        <Legend
-          color="rgba(96,165,250,0.95)"
-          label={`Warehouse (${warehouse})`}
-        />
+            <g transform="rotate(-90 110 110)">
+              {total > 0 &&
+                values.map((item) => {
+                  const length =
+                    (item.value / total) * circumference;
 
-        <Legend
-          color="rgba(251,191,36,0.95)"
-          label={`Ready to Dispatch (${readyToDispatch})`}
-        />
+                  const dashOffset = -offset;
 
-        <Legend
-          color="rgba(52,211,153,0.95)"
-          label={`Ready (${ready})`}
-        />
+                  offset += length;
+
+                  return (
+                    <circle
+                      key={item.key}
+                      cx="110"
+                      cy="110"
+                      r={radius}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth={stroke}
+                      strokeLinecap="round"
+                      strokeDasharray={`${Math.max(length - 6, 0)} ${circumference}`}
+                      strokeDashoffset={dashOffset}
+                      filter="url(#donutGlow)"
+                    />
+                  );
+                })}
+            </g>
+          </svg>
+
+          <div style={donutCenter}>
+            <div style={donutCenterValue}>
+              {total}
+            </div>
+            <div style={donutCenterLabel}>
+              Total Items
+            </div>
+          </div>
+        </div>
+
+        <div style={legendPanel}>
+          {values.map((item) => {
+            const percentage =
+              total > 0
+                ? Math.round((item.value / total) * 100)
+                : 0;
+
+            return (
+              <div key={item.key} style={legendRow}>
+                <div style={legendLeft}>
+                  <span
+                    style={{
+                      ...legendDot,
+                      background: item.color,
+                      boxShadow: `0 0 18px ${item.color}66`,
+                    }}
+                  />
+
+                  <div>
+                    <div style={legendLabel}>
+                      {item.label}
+                    </div>
+
+                    <div style={legendPercent}>
+                      {percentage}% of inventory
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    ...legendValue,
+                    background: item.soft,
+                    color: item.color,
+                  }}
+                >
+                  {item.value}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-function Legend({ color, label}) {
-  return (
-    <div style={legendItem}>
-      <span style={{ ...dot, background: color }} />
-      <span style={{ color: "rgba(255,255,255,.72)" }}>{label}</span>
-    </div>
-  );
-}
-
-const card = {
+const chartCard = {
   width: "100%",
   height: "100%",
+  color: "#fff",
+};
 
+const chartHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 18,
+};
+
+const chartTitle = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#fff",
+};
+
+const chartSubtitle = {
+  marginTop: 5,
+  fontSize: 12,
+  color: "rgba(255,255,255,.56)",
+};
+
+const chartBadge = {
+  minWidth: 44,
+  height: 44,
+  borderRadius: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow: "0 14px 30px rgba(37,99,235,.32)",
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 900,
+};
+
+const donutLayout = {
+  display: "grid",
+  gridTemplateColumns: "230px minmax(0,1fr)",
+  gap: 18,
+  alignItems: "center",
+};
+
+const donutWrap = {
+  position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const donutCenter = {
+  position: "absolute",
+  inset: 0,
   display: "flex",
   flexDirection: "column",
-
   alignItems: "center",
   justifyContent: "center",
-
-  textAlign: "center",
-
-  color: "#fff",
 };
 
-const title = {
-  marginBottom: 20,
-
-  fontSize: 22,
-
+const donutCenterValue = {
+  fontSize: 34,
   fontWeight: 900,
-
   color: "#fff",
-
-  letterSpacing: 0.3,
 };
 
-const legend = {
-  marginTop: 12,
+const donutCenterLabel = {
+  marginTop: 3,
+  fontSize: 11,
+  fontWeight: 800,
+  color: "rgba(255,255,255,.52)",
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
+const legendPanel = {
   display: "flex",
-  justifyContent: "center",
-  gap: 14,
-  fontSize: 12,
-  flexWrap: "wrap",
+  flexDirection: "column",
+  gap: 10,
 };
 
-const legendItem = {
+const legendRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: "12px 14px",
+  borderRadius: 18,
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025))",
+  border: "1px solid rgba(255,255,255,.07)",
+};
+
+const legendLeft = {
   display: "flex",
   alignItems: "center",
-  gap: 6,
+  gap: 10,
+  minWidth: 0,
 };
 
-const dot = {
-  width: 10,
-  height: 10,
-  borderRadius: "50%",
+const legendDot = {
+  width: 11,
+  height: 11,
+  borderRadius: 999,
+  flex: "0 0 auto",
+};
+
+const legendLabel = {
+  fontSize: 13,
+  fontWeight: 900,
+  color: "#fff",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const legendPercent = {
+  marginTop: 3,
+  fontSize: 11,
+  color: "rgba(255,255,255,.48)",
+  fontWeight: 700,
+};
+
+const legendValue = {
+  minWidth: 48,
+  padding: "6px 10px",
+  borderRadius: 999,
+  textAlign: "center",
+  fontSize: 13,
+  fontWeight: 900,
 };
 
 export default StatusDonutChart;
