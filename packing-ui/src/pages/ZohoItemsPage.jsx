@@ -584,16 +584,51 @@ function ZohoItemsPage() {
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
 
+  const normalizeUtcDateTime = (value) => {
+    if (!value) return null;
+
+    let text = String(value).trim();
+
+    // If backend already sends timezone, keep it.
+    const hasTimezone =
+      text.endsWith("Z") ||
+      /[+-]\d{2}:\d{2}$/.test(text);
+
+    // Java LocalDateTime sometimes sends micro/nano seconds.
+    // JS Date works best with milliseconds.
+    text = text.replace(
+      /\.(\d{3})\d+/,
+      ".$1"
+    );
+
+    if (!hasTimezone) {
+      text = `${text}Z`;
+    }
+
+    return text;
+  };
+
   const formatHistoryDateTime = (value) => {
     if (!value) return "—";
 
     try {
-      return new Date(value).toLocaleString("en-IN", {
+      const normalized =
+        normalizeUtcDateTime(value);
+
+      const date = new Date(normalized);
+
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+
+      return date.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
         day: "2-digit",
         month: "short",
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       });
     } catch {
       return value;
