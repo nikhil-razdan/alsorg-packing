@@ -70,11 +70,11 @@ function StatusLineChart({
     <div style={chartCard}>
       <div style={chartHeader}>
         <div>
-          <div style={chartTitle}>Status Flow</div>
+		<div style={chartTitle}>Status Flow</div>
 
-          <div style={chartSubtitle}>
-            Inventory movement across stages
-          </div>
+		<div style={chartSubtitle}>
+		  Movement trend across warehouse, ready, and dispatch stages
+		</div>
         </div>
 
         <div style={chartBadge}>

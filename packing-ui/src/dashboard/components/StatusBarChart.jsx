@@ -47,11 +47,11 @@ function StatusBarChart({
     <div style={chartCard}>
       <div style={chartHeader}>
         <div>
-          <div style={chartTitle}>Status Volume</div>
+		<div style={chartTitle}>Status Volume</div>
 
-          <div style={chartSubtitle}>
-            Inventory count comparison by stage
-          </div>
+		<div style={chartSubtitle}>
+		  Stage-wise count comparison across current stock status
+		</div>
         </div>
 
         <div style={chartBadge}>

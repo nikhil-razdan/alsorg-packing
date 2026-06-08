@@ -42,11 +42,11 @@ function StatusDonutChart({
     <div style={chartCard}>
       <div style={chartHeader}>
         <div>
-          <div style={chartTitle}>Inventory Status</div>
+		<div style={chartTitle}>Status Overview</div>
 
-          <div style={chartSubtitle}>
-            Live operational stock distribution
-          </div>
+		<div style={chartSubtitle}>
+		  Live stock distribution across operational stages
+		</div>
         </div>
 
         <div style={chartBadge}>
