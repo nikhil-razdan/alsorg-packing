@@ -579,6 +579,14 @@ function ZohoItemsPage() {
     return map;
   }, [rows]);
   
+  const getStickerStatusKey = (row) => {
+      return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
+    };
+
+    const getStickerStatusLabel = (row) => {
+      return row?.stickerNumber ? "Sticker Printed" : "Created";
+    };
+  
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -707,14 +715,6 @@ function ZohoItemsPage() {
   
   const getPacketItemId = (row) => {
     return row?.itemId || row?.id || row?.packetItemId || "";
-  };
-
-  const getStickerStatusKey = (row) => {
-    return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
-  };
-
-  const getStickerStatusLabel = (row) => {
-    return row?.stickerNumber ? "Sticker Printed" : "Created";
   };
 
   const safeFileName = (value) => {
@@ -1618,19 +1618,6 @@ function ZohoItemsPage() {
 	          fontSize: 13,
 	        },
 	      }}
-	    />
-
-	    <TextField
-	      label="Packing Floor"
-	      fullWidth
-	      value={form.factoryFloor || ""}
-	      onChange={(e) =>
-	        setForm((prev) => ({
-	          ...prev,
-	          factoryFloor: e.target.value,
-	        }))
-	      }
-	      sx={formFieldSx(darkMode)}
 	    />
 
 	    <Button
