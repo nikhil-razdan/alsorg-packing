@@ -765,20 +765,20 @@ function ZohoItemsPage() {
     if (stickerReviewPdf) {
       URL.revokeObjectURL(stickerReviewPdf);
     }
-	
-	const closeGenerateStickerDrawer = () => {
-	  if (pdfUrl) {
-	    URL.revokeObjectURL(pdfUrl);
-	  }
-
-	  setPdfUrl(null);
-	  setDrawerOpen(false);
-	  setGenerating(false);
-	};
 
     setStickerReviewPdf(null);
     setStickerReviewOpen(false);
     setStickerReviewLoading(false);
+  };
+
+  const closeGenerateStickerDrawer = () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+    }
+
+    setPdfUrl(null);
+    setDrawerOpen(false);
+    setGenerating(false);
   };
 
   const openGenerateStickerDrawer = (row = selectedItem) => {
