@@ -151,7 +151,10 @@ function ZohoItemsPage() {
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
   
-  const role = localStorage.getItem("role") || "";
+  const role = String(localStorage.getItem("role") || "")
+    .replace("ROLE_", "")
+    .toUpperCase();
+
   const isAdmin = role === "ADMIN";
   
   const [customPacketNo, setCustomPacketNo] = useState("");
@@ -164,6 +167,7 @@ function ZohoItemsPage() {
   /* ===== SEARCH + FILTER ===== */
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("NONE");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [createOpen, setCreateOpen] = useState(false);
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -583,29 +587,48 @@ function ZohoItemsPage() {
     if (q) {
       list = list.filter((r) => {
         return (
-			(r.itemName || "").toLowerCase().includes(q) ||
-			(r.sku || "").toLowerCase().includes(q) ||
-			(r.clientName || "").toLowerCase().includes(q) ||
-			(r.pdNo || "").toLowerCase().includes(q) ||
-			(r.drawingNo || "").toLowerCase().includes(q) ||
-			(r.plantCode || "").toLowerCase().includes(q) ||
-			(r.packedAreaCode || "").toLowerCase().includes(q) ||
-			(r.currentLocationCode || "").toLowerCase().includes(q) ||
-			(r.location || "").toLowerCase().includes(q)
+          (r.itemName || "").toLowerCase().includes(q) ||
+          (r.sku || "").toLowerCase().includes(q) ||
+          (r.clientName || "").toLowerCase().includes(q) ||
+          (r.pdNo || "").toLowerCase().includes(q) ||
+          (r.drawingNo || "").toLowerCase().includes(q) ||
+          (r.description || "").toLowerCase().includes(q) ||
+          (r.remarks || "").toLowerCase().includes(q) ||
+          (r.plantCode || "").toLowerCase().includes(q) ||
+          (r.packedAreaCode || "").toLowerCase().includes(q) ||
+          (r.currentLocationCode || "").toLowerCase().includes(q) ||
+          (r.location || "").toLowerCase().includes(q) ||
+          getStickerStatusLabel(r).toLowerCase().includes(q)
         );
       });
     }
 
+    if (isAdmin && statusFilter !== "ALL") {
+      list = list.filter((r) => {
+        return getStickerStatusKey(r) === statusFilter;
+      });
+    }
+
     if (groupBy === "SKU") {
-      list.sort((a, b) => (a.sku || "").localeCompare(b.sku || ""));
+      list.sort((a, b) =>
+        (a.sku || "").localeCompare(b.sku || "")
+      );
     }
 
     if (groupBy === "NAME") {
-      list.sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
+      list.sort((a, b) =>
+        (a.itemName || "").localeCompare(b.itemName || "")
+      );
     }
 
     return list;
-  }, [rows, search, groupBy]);
+  }, [
+    rows,
+    search,
+    groupBy,
+    statusFilter,
+    isAdmin,
+  ]);
 
   const totalPages = Math.max(
     1,
@@ -686,10 +709,72 @@ function ZohoItemsPage() {
     return row?.itemId || row?.id || row?.packetItemId || "";
   };
 
+  const getStickerStatusKey = (row) => {
+    return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
+  };
+
+  const getStickerStatusLabel = (row) => {
+    return row?.stickerNumber ? "Sticker Printed" : "Created";
+  };
+
+  const safeFileName = (value) => {
+    return String(value || "STICKER")
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/_+/g, "_")
+      .slice(0, 80);
+  };
+
+  const getStickerFileName = (row) => {
+    const sku =
+      row?.sku ||
+      row?.stickerNumber ||
+      row?.itemId ||
+      row?.id ||
+      "packet";
+
+    return `STICKER_${safeFileName(sku)}.pdf`;
+  };
+
+  const triggerDownloadFromUrl = (url, filename) => {
+    if (!url) return;
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "STICKER.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const triggerDownloadFromBlob = (blob, filename) => {
+    if (!blob) return;
+
+    const downloadUrl = URL.createObjectURL(blob);
+
+    triggerDownloadFromUrl(
+      downloadUrl,
+      filename || "STICKER.pdf"
+    );
+
+    setTimeout(() => {
+      URL.revokeObjectURL(downloadUrl);
+    }, 1000);
+  }; 
+  
   const closeStickerReviewModal = () => {
     if (stickerReviewPdf) {
       URL.revokeObjectURL(stickerReviewPdf);
     }
+	
+	const closeGenerateStickerDrawer = () => {
+	  if (pdfUrl) {
+	    URL.revokeObjectURL(pdfUrl);
+	  }
+
+	  setPdfUrl(null);
+	  setDrawerOpen(false);
+	  setGenerating(false);
+	};
 
     setStickerReviewPdf(null);
     setStickerReviewOpen(false);
@@ -700,6 +785,10 @@ function ZohoItemsPage() {
     if (!row) return;
 
     closeStickerReviewModal();
+
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+    }
 
     setGenerating(false);
     setSelectedItem(row);
@@ -1059,6 +1148,23 @@ function ZohoItemsPage() {
             <MenuItem value="SKU">Group by SKU</MenuItem>
             <MenuItem value="NAME">Group by Name</MenuItem>
           </TextField>
+		  {isAdmin && (
+		    <TextField
+		      select
+		      size="small"
+		      value={statusFilter}
+		      onChange={(e) => {
+		        setStatusFilter(e.target.value);
+		        setPageNo(1);
+		      }}
+		      sx={selectFieldSx}
+		      slotProps={selectMenuSlotProps}
+		    >
+		      <MenuItem value="ALL">All Status</MenuItem>
+		      <MenuItem value="CREATED">Created</MenuItem>
+		      <MenuItem value="STICKER_PRINTED">Sticker Printed</MenuItem>
+		    </TextField>
+		  )}
         </Box>
 
         <div style={wrap}>
@@ -1268,11 +1374,11 @@ function ZohoItemsPage() {
                       </div>
 
                       <div style={tableCellWrap}>
-                        <Chip
-                          label={row.stickerNumber ? "Sticker Printed" : row.status || "CREATED"}
-                          size="small"
-                          sx={row.stickerNumber ? printedChipSx : createdChipSx}
-                        />
+					  <Chip
+					    label={getStickerStatusLabel(row)}
+					    size="small"
+					    sx={row.stickerNumber ? printedChipSx : createdChipSx}
+					  />
                       </div>
                     </div>
                   );
@@ -1470,7 +1576,7 @@ function ZohoItemsPage() {
       {/* ===================== DRAWER ===================== */}
 	  <InventorySidePanel
 	    open={drawerOpen}
-	    onClose={() => setDrawerOpen(false)}
+	    onClose={closeGenerateStickerDrawer}
 	    icon="🏷️"
 	    title={selectedItem?.itemName || "Generate Sticker"}
 	    subtitle="Generate and preview sticker PDF"
@@ -1529,50 +1635,80 @@ function ZohoItemsPage() {
 
 	    <Button
 	      disabled={generating}
-	      onClick={async () => {
-	        try {
-	          setGenerating(true);
+		  onClick={async () => {
+		    const itemId = getPacketItemId(selectedItem);
 
-	          const genRes = await fetch(
-	            `${API_BASE_URL}/api/packets/items/${selectedItem.itemId}/generate-sticker?factoryFloor=${encodeURIComponent(form.factoryFloor)}&showCompanyHeader=${form.showCompanyHeader}`,
-	            {
-	              method: "POST",
-	              headers: {
-	                Authorization: `Bearer ${localStorage.getItem("token")}`,
-	              },
-	            }
-	          );
+		    if (!itemId) {
+		      showUiAlert("error", "Packet item id missing");
+		      return;
+		    }
 
-	          const contentType = genRes.headers.get("content-type");
+		    try {
+		      setGenerating(true);
 
-			  if (!genRes.ok || !contentType?.includes("pdf")) {
-			    const message = await readApiErrorMessage(genRes);
+		      const genRes = await fetch(
+		        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/generate-sticker?factoryFloor=${encodeURIComponent(form.factoryFloor || "")}&showCompanyHeader=${form.showCompanyHeader}`,
+		        {
+		          method: "POST",
+		          headers: {
+		            Authorization: `Bearer ${localStorage.getItem("token")}`,
+		          },
+		        }
+		      );
 
-			    showUiAlert(
-			      "error",
-			      message || "Failed to generate sticker"
-			    );
+		      const contentType =
+		        genRes.headers.get("content-type");
 
-			    return;
-			  }
+		      if (!genRes.ok || !contentType?.includes("pdf")) {
+		        const message =
+		          await readApiErrorMessage(genRes);
 
-			  const blob = await genRes.blob();
-			  const url = URL.createObjectURL(blob);
+		        showUiAlert(
+		          "error",
+		          message || "Failed to generate sticker"
+		        );
 
-			  setPdfUrl(url);
+		        return;
+		      }
 
-			  await fetchItems();
+		      const blob = await genRes.blob();
 
-			  if (generatedHistoryOpen) {
-			    await fetchGeneratedHistory(generatedHistoryUserFilter);
-			  }
-		  } catch (e) {
-		    console.error(e);
-		    showUiAlert("error", "Failed to generate sticker");
-		  } finally {
-		    setGenerating(false);
-		  }
-	      }}
+		      if (pdfUrl) {
+		        URL.revokeObjectURL(pdfUrl);
+		      }
+
+		      const previewUrl =
+		        URL.createObjectURL(blob);
+
+		      setPdfUrl(previewUrl);
+
+		      triggerDownloadFromBlob(
+		        blob,
+		        getStickerFileName(selectedItem)
+		      );
+
+		      showUiAlert(
+		        "success",
+		        "Sticker generated and downloaded successfully"
+		      );
+
+		      await fetchItems();
+
+		      if (generatedHistoryOpen) {
+		        await fetchGeneratedHistory(
+		          generatedHistoryUserFilter
+		        );
+		      }
+		    } catch (e) {
+		      console.error(e);
+		      showUiAlert(
+		        "error",
+		        "Failed to generate sticker"
+		      );
+		    } finally {
+		      setGenerating(false);
+		    }
+		  }}
 	      sx={{
 	        ...premiumButton,
 	        width: "100%",
@@ -1583,23 +1719,63 @@ function ZohoItemsPage() {
 	      {generating ? "Generating..." : "Generate Sticker"}
 	    </Button>
 
-	    {pdfUrl && (
-	      <>
-	        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.08)" }} />
+		{pdfUrl && (
+		  <>
+		    <Divider
+		      sx={{
+		        my: 2,
+		        borderColor: "rgba(255,255,255,.08)",
+		      }}
+		    />
 
-	        <iframe
-	          src={pdfUrl}
-	          width="100%"
-	          height="480"
-	          style={{
-	            borderRadius: 12,
-	            border: "1px solid rgba(255,255,255,.08)",
-	            background: "#fff",
-	          }}
-	          title="Sticker Preview"
-	        />
-	      </>
-	    )}
+		    <Box
+		      sx={{
+		        display: "flex",
+		        gap: 1,
+		        mb: 1.5,
+		      }}
+		    >
+		      <Button
+		        onClick={() =>
+		          triggerDownloadFromUrl(
+		            pdfUrl,
+		            getStickerFileName(selectedItem)
+		          )
+		        }
+		        sx={{
+		          ...premiumButton,
+		          height: 38,
+		          px: 2,
+		        }}
+		      >
+		        Download Sticker
+		      </Button>
+
+		      <Button
+		        onClick={() => {
+		          if (pdfUrl) {
+		            window.open(pdfUrl, "_blank");
+		          }
+		        }}
+		        sx={modalSecondaryButtonSx}
+		      >
+		        Open PDF
+		      </Button>
+		    </Box>
+
+		    <iframe
+		      src={pdfUrl}
+		      width="100%"
+		      height="480"
+		      style={{
+		        borderRadius: 12,
+		        border: "1px solid rgba(255,255,255,.08)",
+		        background: "#fff",
+		      }}
+		      title="Sticker Preview"
+		    />
+		  </>
+		)}
 	  </InventorySidePanel>
 	  <InventorySidePanel
 	    open={createOpen}
