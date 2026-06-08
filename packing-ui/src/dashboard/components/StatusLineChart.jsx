@@ -6,29 +6,40 @@ function StatusLineChart({
   const points = [
     {
       label: "Warehouse",
+      short: "Warehouse",
       value: Number(warehouse || 0),
       color: "#60a5fa",
     },
     {
       label: "Ready to Dispatch",
+      short: "Dispatch",
       value: Number(readyToDispatch || 0),
       color: "#f59e0b",
     },
     {
       label: "Ready",
+      short: "Ready",
       value: Number(ready || 0),
       color: "#34d399",
     },
   ];
 
-  const max = Math.max(...points.map((item) => item.value), 1);
+  const total = points.reduce(
+    (sum, item) => sum + item.value,
+    0
+  );
+
+  const max = Math.max(
+    ...points.map((item) => item.value),
+    1
+  );
 
   const scaleY = (value) =>
-    150 - (value / max) * 105;
+    160 - (value / max) * 110;
 
   const coords = [
     {
-      x: 52,
+      x: 56,
       y: scaleY(points[0].value),
       ...points[0],
     },
@@ -38,121 +49,172 @@ function StatusLineChart({
       ...points[1],
     },
     {
-      x: 308,
+      x: 304,
       y: scaleY(points[2].value),
       ...points[2],
     },
   ];
 
-  const path = `M ${coords[0].x} ${coords[0].y}
-    C 105 ${coords[0].y}, 120 ${coords[1].y}, ${coords[1].x} ${coords[1].y}
-    C 230 ${coords[1].y}, 250 ${coords[2].y}, ${coords[2].x} ${coords[2].y}`;
+  const path = `
+    M ${coords[0].x} ${coords[0].y}
+    C 100 ${coords[0].y}, 118 ${coords[1].y}, ${coords[1].x} ${coords[1].y}
+    C 232 ${coords[1].y}, 250 ${coords[2].y}, ${coords[2].x} ${coords[2].y}
+  `;
 
-  const areaPath = `${path} L 308 160 L 52 160 Z`;
+  const areaPath = `${path} L 304 170 L 56 170 Z`;
 
   return (
     <div style={chartCard}>
       <div style={chartHeader}>
         <div>
-          <div style={chartTitle}>Status Flow</div>
+          <div style={chartTitle}>
+            Status Flow
+          </div>
+
           <div style={chartSubtitle}>
-            Movement distribution across inventory stages
+            Inventory movement across stages
           </div>
         </div>
 
-        <div style={flowBadge}>
-          Live
+        <div style={topBadge}>
+          {total}
         </div>
       </div>
 
-      <svg
-        width="100%"
-        height="205"
-        viewBox="0 0 360 205"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <linearGradient id="lineAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(96,165,250,.36)" />
-            <stop offset="100%" stopColor="rgba(96,165,250,0)" />
-          </linearGradient>
+      <div style={chartCanvas}>
+        <svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 360 215"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient
+              id="lineAreaGradient"
+              x1="0"
+              x2="0"
+              y1="0"
+              y2="1"
+            >
+              <stop
+                offset="0%"
+                stopColor="rgba(96,165,250,.30)"
+              />
 
-          <linearGradient id="statusLineGradient" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="#60a5fa" />
-            <stop offset="55%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#34d399" />
-          </linearGradient>
+              <stop
+                offset="100%"
+                stopColor="rgba(96,165,250,0)"
+              />
+            </linearGradient>
 
-          <filter id="lineGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+            <linearGradient
+              id="statusLineGradient"
+              x1="0"
+              x2="1"
+              y1="0"
+              y2="0"
+            >
+              <stop offset="0%" stopColor="#60a5fa" />
+              <stop offset="52%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#34d399" />
+            </linearGradient>
 
-        {[55, 90, 125, 160].map((y) => (
-          <line
-            key={y}
-            x1="32"
-            y1={y}
-            x2="330"
-            y2={y}
-            stroke="rgba(255,255,255,.07)"
-            strokeDasharray="5 7"
-          />
-        ))}
+            <filter
+              id="lineGlow"
+              x="-30%"
+              y="-30%"
+              width="160%"
+              height="160%"
+            >
+              <feGaussianBlur
+                stdDeviation="4"
+                result="blur"
+              />
 
-        <path
-          d={areaPath}
-          fill="url(#lineAreaGradient)"
-        />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
 
-        <path
-          d={path}
-          fill="none"
-          stroke="url(#statusLineGradient)"
-          strokeWidth="5"
-          strokeLinecap="round"
-          filter="url(#lineGlow)"
-        />
-
-        {coords.map((point) => (
-          <g key={point.label}>
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r="8"
-              fill={point.color}
-              stroke="#0f172a"
-              strokeWidth="4"
+          {[55, 90, 125, 160].map((y) => (
+            <line
+              key={y}
+              x1="34"
+              y1={y}
+              x2="328"
+              y2={y}
+              stroke="rgba(255,255,255,.075)"
+              strokeDasharray="5 7"
             />
+          ))}
 
-            <text
-              x={point.x}
-              y={point.y - 16}
-              textAnchor="middle"
-              fill="#ffffff"
-              fontSize="14"
-              fontWeight="900"
-            >
-              {point.value}
-            </text>
+          <line
+            x1="34"
+            y1="170"
+            x2="328"
+            y2="170"
+            stroke="rgba(255,255,255,.16)"
+          />
 
-            <text
-              x={point.x}
-              y="195"
-              textAnchor="middle"
-              fill="rgba(255,255,255,.62)"
-              fontSize="11"
-              fontWeight="800"
-            >
-              {shortLabel(point.label)}
-            </text>
-          </g>
-        ))}
-      </svg>
+          <path
+            d={areaPath}
+            fill="url(#lineAreaGradient)"
+          />
+
+          <path
+            d={path}
+            fill="none"
+            stroke="url(#statusLineGradient)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            filter="url(#lineGlow)"
+          />
+
+          {coords.map((point) => (
+            <g key={point.label}>
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="12"
+                fill="rgba(15,23,42,.96)"
+                stroke={point.color}
+                strokeWidth="4"
+              />
+
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="5"
+                fill={point.color}
+              />
+
+              <text
+                x={point.x}
+                y={point.y - 18}
+                textAnchor="middle"
+                fill="#ffffff"
+                fontSize="15"
+                fontWeight="900"
+              >
+                {point.value}
+              </text>
+
+              <text
+                x={point.x}
+                y="202"
+                textAnchor="middle"
+                fill="rgba(255,255,255,.62)"
+                fontSize="12"
+                fontWeight="800"
+              >
+                {point.short}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
 
       <div style={summaryStrip}>
         {points.map((item) => (
@@ -161,8 +223,10 @@ function StatusLineChart({
               style={{
                 ...summaryDot,
                 background: item.color,
+                boxShadow: `0 0 16px ${item.color}66`,
               }}
             />
+
             <span>{item.label}</span>
           </div>
         ))}
@@ -171,14 +235,13 @@ function StatusLineChart({
   );
 }
 
-const shortLabel = (label) => {
-  if (label === "Ready to Dispatch") return "Dispatch";
-  return label;
-};
-
 const chartCard = {
   width: "100%",
   height: "100%",
+
+  display: "flex",
+  flexDirection: "column",
+
   color: "#fff",
 };
 
@@ -187,7 +250,7 @@ const chartHeader = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 16,
-  marginBottom: 14,
+  marginBottom: 16,
 };
 
 const chartTitle = {
@@ -202,33 +265,70 @@ const chartSubtitle = {
   color: "rgba(255,255,255,.56)",
 };
 
-const flowBadge = {
-  padding: "8px 12px",
-  borderRadius: 999,
-  background: "rgba(34,197,94,.12)",
-  border: "1px solid rgba(34,197,94,.22)",
-  color: "#86efac",
-  fontSize: 12,
+const topBadge = {
+  minWidth: 44,
+  height: 44,
+
+  borderRadius: 16,
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  boxShadow:
+    "0 14px 30px rgba(37,99,235,.32)",
+
+  color: "#fff",
+
+  fontSize: 15,
+
   fontWeight: 900,
+};
+
+const chartCanvas = {
+  flex: 1,
+
+  minHeight: 235,
+
+  borderRadius: 22,
+
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.015))",
+
+  border:
+    "1px solid rgba(255,255,255,.045)",
+
+  padding: 8,
 };
 
 const summaryStrip = {
   display: "flex",
   flexWrap: "wrap",
   gap: 10,
-  marginTop: 8,
+  marginTop: 14,
 };
 
 const summaryItem = {
   display: "flex",
   alignItems: "center",
   gap: 7,
+
   padding: "7px 10px",
+
   borderRadius: 999,
+
   background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.07)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
+
   color: "rgba(255,255,255,.72)",
+
   fontSize: 12,
+
   fontWeight: 800,
 };
 
