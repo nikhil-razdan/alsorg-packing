@@ -2639,42 +2639,42 @@ function DispatchedItemsPage() {
 	    </Box>
 	  ),
 
-	  renderCell:(params)=>{
-        const row = params.row;
+	  renderCell: (params) => {
+	    const row = params.row;
 
-		const rowAction = getDispatchRowAction(row);
+	    const rowAction = getDispatchRowAction(row);
 
-		const canMoveToFg =
-		  rowAction === "MOVE_TO_FG";
+	    const showMoveToFg =
+	      rowAction === "MOVE_TO_FG";
 
-		const canChangeStatus =
-		  rowAction === "CHANGE_STATUS";
+	    const showChangeStatus =
+	      rowAction === "CHANGE_STATUS";
 
-		const canGenerateGatePass =
-		  rowAction === "GATE_PASS";
+	    const showGenerateGatePass =
+	      rowAction === "GATE_PASS";
 
-		const canGenerateChalaan =
-		  rowAction === "CHALAAN";
-		  
-		  const canRequestRestore =
-		    row.status === "DISPATCHED" &&
-		    row.approvalStatus !== "PENDING";
+	    const showGenerateChalaan =
+	      rowAction === "CHALAAN";
+
+	    const canRequestRestore =
+	      row.status === "DISPATCHED" &&
+	      row.approvalStatus !== "PENDING";
 			
 
         return (
           <Box sx={actionContainer}>
-		  {canMoveToFg(row) && (
-			<Button
-			  size="small"
-			  disabled={!isDispatch || row.status !== "READY"}
-			  onClick={() => openMoveToFgModal(row)}
-			  sx={moveToFgButtonSx}
-			>
-			  Move to FG
-			</Button>
+		  {showMoveToFg && (
+		    <Button
+		      size="small"
+		      disabled={!isDispatch}
+		      onClick={() => openMoveToFgModal(row)}
+		      sx={moveToFgButtonSx}
+		    >
+		      Move to FG
+		    </Button>
 		  )}
 
-		  {canChangeReadyStatus(row) && (
+		  {showChangeStatus && (
 		    <Button
 		      size="small"
 		      onClick={() => setStatusModal(row)}
@@ -2686,7 +2686,7 @@ function DispatchedItemsPage() {
 		      Change Status
 		    </Button>
 		  )}
-		  {row.status === "READY_TO_DISPATCH" && isDispatch && (
+		  {showGenerateChalaan && (
 		    <Button
 		      size="small"
 			  onClick={async () => {
@@ -2741,7 +2741,7 @@ function DispatchedItemsPage() {
 		      Generate Chalaan
 		    </Button>
 		  )}
-		  {canGenerateGatePass && (
+		  {showGenerateGatePass && (
 		    <Button
 		      size="small"
 		      onClick={() => {
@@ -2974,44 +2974,29 @@ function DispatchedItemsPage() {
     This decides what button the row should show.
     Bulk bar will use this same function.
   */
-  const getDispatchRowAction = (row) => {
-    const status = getRowStatus(row);
+	const getDispatchRowAction = (row) => {
+	  if (!isDispatch || !row) {
+	    return "NONE";
+	  }
 
-    if (!isDispatch || !row) {
-      return "NONE";
-    }
+	  if (canMoveToFg(row)) {
+	    return "MOVE_TO_FG";
+	  }
 
-    /*
-      New plant-wise flow:
-      READY + plant assigned + not in FG = Move to FG
-    */
-    if (
-      status === "READY" &&
-      isRowPlantAssigned(row) &&
-      !isRowInFg(row)
-    ) {
-      return "MOVE_TO_FG";
-    }
+	  if (canChangeReadyStatus(row)) {
+	    return "CHANGE_STATUS";
+	  }
 
-    /*
-      Old data safety:
-      If plant is not assigned, don't break old flow.
-      Let old READY/FLOOR rows continue with Change Status.
-    */
-    if (status === "READY") {
-      return "CHANGE_STATUS";
-    }
+	  if (row.status === "READY_TO_STORE") {
+	    return "GATE_PASS";
+	  }
 
-    if (status === "READY_TO_STORE") {
-      return "GATE_PASS";
-    }
+	  if (row.status === "READY_TO_DISPATCH") {
+	    return "CHALAAN";
+	  }
 
-    if (status === "READY_TO_DISPATCH") {
-      return "CHALAAN";
-    }
-
-    return "NONE";
-  };
+	  return "NONE";
+	};
 
   const getBulkActionLabel = (action) => {
     if (action === "MOVE_TO_FG") return "Move to FG";
@@ -3067,11 +3052,9 @@ function DispatchedItemsPage() {
     allReady &&
     selectedItems.every((item) => isInFgLocation(item));
 
-  const readyItemsNotInFg = selectedItems.filter(
-    (item) =>
-      item.status === "READY" &&
-      !isInFgLocation(item)
-  );
+	const readyItemsNotInFg = selectedItems.filter(
+	  (item) => getDispatchRowAction(item) === "MOVE_TO_FG"
+	);
 
   const selectedPlantCodes = Array.from(
     new Set(
@@ -4508,197 +4491,6 @@ function DispatchedItemsPage() {
 	      </Box>
 	    </Box>
 	  )}
-	  {moveFgModal && (
-	    <Box
-	      sx={{ ...enhancedOverlaySx, zIndex: 5200 }}
-	      onClick={() => setMoveFgModal(null)}
-	    >
-	      <Box
-	        sx={{
-	          ...enhancedModalSx,
-	          width: 560,
-	        }}
-	        onClick={(e) => e.stopPropagation()}
-	      >
-	        <Box sx={modalHeaderSx}>
-	          <Box sx={modalTitleWrapSx}>
-	            <Box sx={modalIconBubble("#10b981")}>
-	              🏭
-	            </Box>
-
-	            <Box>
-	              <Box sx={modalTitleSx}>
-	                Move to Finished Goods
-	              </Box>
-
-	              <Box sx={modalSubtitleSx}>
-	                Move packed item from PKD area to FG area
-	              </Box>
-	            </Box>
-	          </Box>
-
-	          <IconButton
-	            sx={modalCloseButtonSx}
-	            onClick={() => setMoveFgModal(null)}
-	          >
-	            ×
-	          </IconButton>
-	        </Box>
-
-	        <Box sx={modalContentSx}>
-	          <Box
-	            sx={{
-	              p: 1.5,
-	              mb: 2,
-	              borderRadius: "12px",
-	              background: "rgba(255,255,255,.035)",
-	              border: "1px solid rgba(255,255,255,.07)",
-	              color: "#cbd5e1",
-	              fontWeight: 800,
-	              fontSize: 13,
-	              lineHeight: 1.7,
-	            }}
-	          >
-	            <div>
-	              Item:{" "}
-	              <span style={{ color: "#fff" }}>
-	                {moveFgModal.name || moveFgModal.itemName || "—"}
-	              </span>
-	            </div>
-
-	            <div>
-	              Plant:{" "}
-	              <span style={{ color: "#93c5fd" }}>
-	                {moveFgModal.plantCode || "—"}
-	              </span>
-	            </div>
-
-	            <div>
-	              Current Location:{" "}
-	              <span style={{ color: "#fbbf24" }}>
-	                {moveFgModal.currentLocationCode || moveFgModal.location || "—"}
-	              </span>
-	            </div>
-
-	            <div>
-	              FG Area:{" "}
-	              <span style={{ color: "#4ade80" }}>
-	                {getFgAreaForRow(moveFgModal) || "—"}
-	              </span>
-	            </div>
-	          </Box>
-
-	          {getFgZonesForRow(moveFgModal).length > 0 ? (
-				<TextField
-				  select
-				  fullWidth
-				  label="Select FG Zone"
-				  value={selectedFgZone}
-				  onChange={(e) => {
-				    const value = e.target.value;
-
-				    console.log("FG ZONE SELECTED:", value);
-
-				    setSelectedFgZone(value);
-				  }}
-				  sx={formFieldSx}
-				  SelectProps={{
-				    MenuProps: modalSelectMenuProps,
-				  }}
-				>
-				  {getFgZonesForRow(moveFgModal).map((zone) => {
-				    const zoneValue = String(zone);
-
-				    return (
-				      <MenuItem
-				        key={zoneValue}
-				        value={zoneValue}
-				      >
-				        {getFgZoneLabel(moveFgModal, zoneValue)}
-				      </MenuItem>
-				    );
-				  })}
-				</TextField>
-	          ) : (
-	            <Box
-	              sx={{
-	                p: 1.5,
-	                borderRadius: "12px",
-	                background: "rgba(16,185,129,.10)",
-	                border: "1px solid rgba(16,185,129,.18)",
-	                color: "#6ee7b7",
-	                fontWeight: 900,
-	                fontSize: 13,
-	              }}
-	            >
-	              This plant has no FG zones. Item will be moved directly to{" "}
-	              {getFgAreaForRow(moveFgModal)}.
-	            </Box>
-	          )}
-	        </Box>
-
-	        <Box sx={modalFooterSx}>
-	          <Button
-	            onClick={() => setMoveFgModal(null)}
-	            sx={modalSecondaryButtonSx}
-	          >
-	            Cancel
-	          </Button>
-
-	          <Button
-	            sx={premiumButton}
-	            onClick={async () => {
-	              try {
-	                const zones = getFgZonesForRow(moveFgModal);
-
-	                if (zones.length > 0 && !selectedFgZone) {
-	                  alert("Please select FG zone");
-	                  return;
-	                }
-
-					const finalFgZone = selectedFgZone?.trim();
-
-					if (zones.length > 0 && !finalFgZone) {
-					  alert("Please select FG zone");
-					  return;
-					}
-
-					const query = finalFgZone
-					  ? `?fgZoneCode=${encodeURIComponent(finalFgZone)}`
-					  : "";
-					  
-	                const res = await fetch(
-	                  `${API_BASE_URL}/api/dispatched/${encodeURIComponent(
-	                    moveFgModal.zohoItemId
-	                  )}/move-to-fg${query}`,
-	                  {
-	                    method: "POST",
-	                    headers: getAuthHeaders(),
-	                  }
-	                );
-
-	                if (!res.ok) {
-	                  const text = await res.text();
-	                  alert(text || "Move to FG failed");
-	                  return;
-	                }
-
-	                setMoveFgModal(null);
-	                setSelectedFgZone("");
-
-	                await fetchData();
-	              } catch (e) {
-	                console.error(e);
-	                alert("Move to FG failed");
-	              }
-	            }}
-	          >
-	            Move to {getFgAreaForRow(moveFgModal)}
-	          </Button>
-	        </Box>
-	      </Box>
-	    </Box>
-	  )}
 	  {bulkDrawerOpen && (
 	    <div
 	      style={{
@@ -5069,116 +4861,6 @@ function DispatchedItemsPage() {
 	    </div>
 	  )}
 	  {moveFgModal && (
-	    <Box
-	      sx={{ ...enhancedOverlaySx, zIndex: 5000 }}
-	      onClick={() => setMoveFgModal(null)}
-	    >
-	      <Box
-	        sx={{
-	          ...enhancedModalSx,
-	          width: 520,
-	        }}
-	        onClick={(e) => e.stopPropagation()}
-	      >
-	        <Box sx={modalHeaderSx}>
-	          <Box sx={modalTitleWrapSx}>
-	            <Box sx={modalIconBubble("#10b981")}>
-	              🏁
-	            </Box>
-
-	            <Box>
-	              <Box sx={modalTitleSx}>
-	                Move To Finished Goods
-	              </Box>
-
-	              <Box sx={modalSubtitleSx}>
-	                Move packed item from {getCurrentLocation(moveFgModal)} to FG area
-	              </Box>
-	            </Box>
-	          </Box>
-
-	          <IconButton
-	            sx={modalCloseButtonSx}
-	            onClick={() => setMoveFgModal(null)}
-	          >
-	            ×
-	          </IconButton>
-	        </Box>
-
-	        <Box sx={modalContentSx}>
-	          <Box
-	            sx={{
-	              p: 2,
-	              mb: 2,
-	              borderRadius: "12px",
-	              background: "rgba(255,255,255,.035)",
-	              border: "1px solid rgba(255,255,255,.07)",
-	            }}
-	          >
-	            <Box sx={{ color: "#fff", fontWeight: 900 }}>
-	              {moveFgModal.name || "—"}
-	            </Box>
-
-	            <Box sx={{ color: "#94a3b8", fontSize: 12, mt: 0.5 }}>
-	              Plant: {moveFgModal.plantCode || "—"} | From:{" "}
-	              {getCurrentLocation(moveFgModal) || "—"}
-	            </Box>
-	          </Box>
-
-	          {moveFgModal.plantCode === "AL-P1" ? (
-	            <TextField
-	              select
-	              fullWidth
-	              label="FG-1 Zone"
-	              value={fgZone}
-	              onChange={(e) => setFgZone(e.target.value)}
-	              sx={formFieldSx}
-	            >
-	              <MenuItem value="A">FG-1 Zone A</MenuItem>
-	              <MenuItem value="B">FG-1 Zone B</MenuItem>
-	              <MenuItem value="C">FG-1 Zone C</MenuItem>
-	            </TextField>
-	          ) : (
-	            <Box
-	              sx={{
-	                color: "#cbd5e1",
-	                fontWeight: 700,
-	                p: 2,
-	                borderRadius: "12px",
-	                background: "rgba(16,185,129,.10)",
-	                border: "1px solid rgba(16,185,129,.18)",
-	              }}
-	            >
-	              This item will move to {moveFgModal.fgAreaCode || "FG"}.
-	            </Box>
-	          )}
-	        </Box>
-
-	        <Box sx={modalFooterSx}>
-	          <Button
-	            onClick={() => setMoveFgModal(null)}
-	            sx={modalSecondaryButtonSx}
-	          >
-	            Cancel
-	          </Button>
-
-	          <Button
-	            disabled={
-	              moveFgLoading ||
-	              (moveFgModal.plantCode === "AL-P1" && !fgZone)
-	            }
-	            onClick={moveToFg}
-	            sx={{
-	              ...premiumButton,
-	              background: "linear-gradient(135deg,#059669,#10b981)",
-	            }}
-	          >
-	            {moveFgLoading ? "Moving..." : "Move To FG"}
-	          </Button>
-	        </Box>
-	      </Box>
-	    </Box>
-	  )}	{moveFgModal && (
 	  <Box
 	    sx={{ ...enhancedOverlaySx, zIndex: 5300 }}
 	    onClick={() => {
