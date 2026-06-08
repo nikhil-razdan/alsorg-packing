@@ -27,9 +27,12 @@ function StatusDonutChart({
     },
   ];
 
-  const total = values.reduce((sum, item) => sum + item.value, 0);
+  const total = values.reduce(
+    (sum, item) => sum + item.value,
+    0
+  );
 
-  const radius = 74;
+  const radius = 70;
   const stroke = 18;
   const circumference = 2 * Math.PI * radius;
 
@@ -40,6 +43,7 @@ function StatusDonutChart({
       <div style={chartHeader}>
         <div>
           <div style={chartTitle}>Inventory Status</div>
+
           <div style={chartSubtitle}>
             Live operational stock distribution
           </div>
@@ -52,9 +56,20 @@ function StatusDonutChart({
 
       <div style={donutLayout}>
         <div style={donutWrap}>
-          <svg width="220" height="220" viewBox="0 0 220 220">
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 220 220"
+            preserveAspectRatio="xMidYMid meet"
+          >
             <defs>
-              <filter id="donutGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <filter
+                id="donutGlow"
+                x="-30%"
+                y="-30%"
+                width="160%"
+                height="160%"
+              >
                 <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
@@ -105,6 +120,7 @@ function StatusDonutChart({
             <div style={donutCenterValue}>
               {total}
             </div>
+
             <div style={donutCenterLabel}>
               Total Items
             </div>
@@ -129,7 +145,7 @@ function StatusDonutChart({
                     }}
                   />
 
-                  <div>
+                  <div style={legendTextWrap}>
                     <div style={legendLabel}>
                       {item.label}
                     </div>
@@ -161,7 +177,14 @@ function StatusDonutChart({
 const chartCard = {
   width: "100%",
   height: "100%",
+
+  minHeight: 0,
+
   color: "#fff",
+
+  display: "flex",
+
+  flexDirection: "column",
 };
 
 const chartHeader = {
@@ -187,37 +210,67 @@ const chartSubtitle = {
 const chartBadge = {
   minWidth: 44,
   height: 44,
+
   borderRadius: 16,
+
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-  boxShadow: "0 14px 30px rgba(37,99,235,.32)",
+
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+  boxShadow:
+    "0 14px 30px rgba(37,99,235,.32)",
+
   color: "#fff",
+
   fontSize: 15,
+
   fontWeight: 900,
 };
 
 const donutLayout = {
+  flex: 1,
+
+  minHeight: 0,
+
   display: "grid",
-  gridTemplateColumns: "230px minmax(0,1fr)",
-  gap: 18,
+
+  gridTemplateColumns: "minmax(210px,240px) minmax(0,1fr)",
+
+  gap: 24,
+
   alignItems: "center",
 };
 
 const donutWrap = {
   position: "relative",
+
+  width: "100%",
+
+  aspectRatio: "1 / 1",
+
+  maxHeight: 260,
+
   display: "flex",
+
   alignItems: "center",
+
   justifyContent: "center",
 };
 
 const donutCenter = {
   position: "absolute",
+
   inset: 0,
+
   display: "flex",
+
   flexDirection: "column",
+
   alignItems: "center",
+
   justifyContent: "center",
 };
 
@@ -229,35 +282,54 @@ const donutCenterValue = {
 
 const donutCenterLabel = {
   marginTop: 3,
+
   fontSize: 11,
+
   fontWeight: 800,
+
   color: "rgba(255,255,255,.52)",
+
   textTransform: "uppercase",
+
   letterSpacing: ".08em",
 };
 
 const legendPanel = {
   display: "flex",
+
   flexDirection: "column",
-  gap: 10,
+
+  gap: 12,
 };
 
 const legendRow = {
   display: "flex",
+
   justifyContent: "space-between",
+
   alignItems: "center",
+
   gap: 12,
-  padding: "12px 14px",
+
+  padding: "14px 14px",
+
   borderRadius: 18,
+
   background:
     "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025))",
-  border: "1px solid rgba(255,255,255,.07)",
+
+  border:
+    "1px solid rgba(255,255,255,.07)",
 };
 
 const legendLeft = {
   display: "flex",
   alignItems: "center",
   gap: 10,
+  minWidth: 0,
+};
+
+const legendTextWrap = {
   minWidth: 0,
 };
 
@@ -285,11 +357,16 @@ const legendPercent = {
 };
 
 const legendValue = {
-  minWidth: 48,
-  padding: "6px 10px",
+  minWidth: 50,
+
+  padding: "7px 11px",
+
   borderRadius: 999,
+
   textAlign: "center",
+
   fontSize: 13,
+
   fontWeight: 900,
 };
 

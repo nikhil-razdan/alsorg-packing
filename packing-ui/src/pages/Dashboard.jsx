@@ -1079,13 +1079,6 @@ const kpiGrid = {
   gap: 14,
 };
 
-const workspaceGrid = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 0.85fr)",
-  gap: 14,
-  alignItems: "stretch",
-};
-
 const panelSurface = {
   display: "flex",
   flexDirection: "column",
@@ -1797,10 +1790,19 @@ const throughputMiniHint = {
   color: "rgba(255,255,255,.72)",
 };
 
+const workspaceGrid = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0,1.35fr) minmax(420px,.95fr)",
+  gap: 14,
+  alignItems: "stretch",
+};
+
 const chartPanelSurface = {
   position: "relative",
 
-  minHeight: 420,
+  height: "100%",
+
+  minHeight: 520,
 
   padding: 22,
 
@@ -1818,6 +1820,9 @@ const chartPanelSurface = {
   backdropFilter: "blur(18px)",
 
   overflow: "hidden",
+
+  display: "flex",
+  flexDirection: "column",
 };
 
 const chartPanelTop = {
@@ -1825,7 +1830,7 @@ const chartPanelTop = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 16,
-  marginBottom: 18,
+  marginBottom: 16,
 };
 
 const chartPanelTitle = {
@@ -1841,7 +1846,9 @@ const chartPanelSubtitle = {
 };
 
 const chartPanelBody = {
-  minHeight: 330,
+  flex: 1,
+
+  minHeight: 0,
 
   padding: 18,
 
@@ -1852,6 +1859,12 @@ const chartPanelBody = {
 
   border:
     "1px solid rgba(255,255,255,.06)",
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "center",
 };
 
 export default DashboardPage;

@@ -69,7 +69,6 @@ function ActivityFeed({ logs = [] }) {
       timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "short",
-      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
@@ -106,16 +105,72 @@ function ActivityFeed({ logs = [] }) {
     return `${diffDays} days ago`;
   };
 
-  const activityMeta = (action = "") => {
-    const value = action.toLowerCase();
+  const normalizeActionLabel = (action = "") => {
+    const value = String(action || "").trim();
 
-    if (value.includes("dispatch")) {
+    if (!value) return "Activity";
+
+    const lower = value.toLowerCase();
+
+    if (lower.includes("item packed")) {
+      return "Item Packed";
+    }
+
+    if (lower.includes("sticker reprinted")) {
+      return "Sticker Reprinted";
+    }
+
+    if (lower === "dispatched") {
+      return "Item Dispatched";
+    }
+
+    if (lower.includes("ready_to_dispatch")) {
+      return "Ready To Dispatch";
+    }
+
+    if (lower.includes("warehouse approved")) {
+      return "Warehouse Approved";
+    }
+
+    if (lower.includes("warehouse requested")) {
+      return "Warehouse Requested";
+    }
+
+    return value
+      .replaceAll("_", " ")
+      .replaceAll("→", "→")
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const activityMeta = (action = "", role = "") => {
+    const value = `${action} ${role}`.toLowerCase();
+
+    if (
+      value.includes("item packed") ||
+      value.includes("sticker") ||
+      value.includes("packing")
+    ) {
+      return {
+        icon: "📦",
+        label: "Packing",
+        accent: "#34d399",
+        soft: "rgba(52,211,153,.13)",
+        border: "rgba(52,211,153,.28)",
+      };
+    }
+
+    if (
+      value.includes("dispatch") ||
+      value.includes("chalaan") ||
+      value.includes("challan")
+    ) {
       return {
         icon: "🚚",
         label: "Dispatch",
         accent: "#f59e0b",
-        soft: "rgba(245,158,11,.14)",
-        border: "rgba(245,158,11,.24)",
+        soft: "rgba(245,158,11,.13)",
+        border: "rgba(245,158,11,.28)",
       };
     }
 
@@ -124,18 +179,8 @@ function ActivityFeed({ logs = [] }) {
         icon: "🏬",
         label: "Warehouse",
         accent: "#60a5fa",
-        soft: "rgba(96,165,250,.14)",
-        border: "rgba(96,165,250,.24)",
-      };
-    }
-
-    if (value.includes("sticker")) {
-      return {
-        icon: "🏷️",
-        label: "Sticker",
-        accent: "#f472b6",
-        soft: "rgba(244,114,182,.14)",
-        border: "rgba(244,114,182,.24)",
+        soft: "rgba(96,165,250,.13)",
+        border: "rgba(96,165,250,.28)",
       };
     }
 
@@ -144,8 +189,8 @@ function ActivityFeed({ logs = [] }) {
         icon: "↩️",
         label: "Restore",
         accent: "#a78bfa",
-        soft: "rgba(167,139,250,.14)",
-        border: "rgba(167,139,250,.24)",
+        soft: "rgba(167,139,250,.13)",
+        border: "rgba(167,139,250,.28)",
       };
     }
 
@@ -154,17 +199,17 @@ function ActivityFeed({ logs = [] }) {
         icon: "🔁",
         label: "Return",
         accent: "#22c55e",
-        soft: "rgba(34,197,94,.14)",
-        border: "rgba(34,197,94,.24)",
+        soft: "rgba(34,197,94,.13)",
+        border: "rgba(34,197,94,.28)",
       };
     }
 
     return {
-      icon: "📦",
+      icon: "⚙️",
       label: "Inventory",
       accent: "#38bdf8",
-      soft: "rgba(56,189,248,.14)",
-      border: "rgba(56,189,248,.24)",
+      soft: "rgba(56,189,248,.13)",
+      border: "rgba(56,189,248,.28)",
     };
   };
 
@@ -187,11 +232,14 @@ function ActivityFeed({ logs = [] }) {
         <div>
           <div style={headingRow}>
             <span style={headingIcon}>⚡</span>
-            <div style={heading}>Recent Activity</div>
-          </div>
 
-          <div style={subHeading}>
-            Latest inventory and warehouse operations
+            <div>
+              <div style={heading}>Recent Activity</div>
+
+              <div style={subHeading}>
+                Packing, warehouse and dispatch movement
+              </div>
+            </div>
           </div>
         </div>
 
@@ -209,108 +257,88 @@ function ActivityFeed({ logs = [] }) {
 
       <div style={feedArea}>
         {paginatedLogs.map((log, index) => {
-          const meta = activityMeta(log.action);
+          const meta = activityMeta(
+            log.action,
+            log.role
+          );
 
           return (
             <div
               key={log.id || `${log.createdAt}-${index}`}
-              style={timelineItem}
+              style={{
+                ...activityCard,
+                border: `1px solid ${meta.border}`,
+              }}
             >
-              <div style={timelineRail}>
-                <div
-                  style={{
-                    ...timelineDot,
-                    background: meta.accent,
-                    boxShadow: `0 0 22px ${meta.accent}88`,
-                  }}
-                />
-
-                {index < paginatedLogs.length - 1 && (
-                  <div style={timelineLine} />
-                )}
-              </div>
+              <div
+                style={{
+                  ...leftGlow,
+                  background: meta.accent,
+                  boxShadow: `0 0 28px ${meta.accent}77`,
+                }}
+              />
 
               <div
                 style={{
-                  ...card,
+                  ...iconBubble,
+                  background: meta.soft,
                   border: `1px solid ${meta.border}`,
-                  background:
-                    `radial-gradient(circle at top left, ${meta.soft}, transparent 34%), ` +
-                    "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.025))",
                 }}
               >
-                <div
-                  style={{
-                    ...accentBar,
-                    background: meta.accent,
-                    boxShadow: `0 0 24px ${meta.accent}66`,
-                  }}
-                />
+                {meta.icon}
+              </div>
 
-                <div
-                  style={{
-                    ...iconBubble,
-                    background: meta.soft,
-                    border: `1px solid ${meta.border}`,
-                  }}
-                >
-                  {meta.icon}
-                </div>
-
-                <div style={middle}>
-                  <div style={cardTopLine}>
-                    <div style={action}>
-                      {log.action || "Activity"}
-                    </div>
-
-                    <div
-                      style={{
-                        ...typeChip,
-                        color: meta.accent,
-                        background: meta.soft,
-                        border: `1px solid ${meta.border}`,
-                      }}
-                    >
-                      {meta.label}
-                    </div>
+              <div style={contentArea}>
+                <div style={actionRow}>
+                  <div style={actionText}>
+                    {normalizeActionLabel(log.action)}
                   </div>
 
-                  <div style={itemName}>
-                    {log.itemName || "Unknown Item"}
-                  </div>
-
-                  <div style={timeRow}>
-                    <span
-                      style={{
-                        ...relativeTime,
-                        color: meta.accent,
-                        background: meta.soft,
-                        border: `1px solid ${meta.border}`,
-                      }}
-                    >
-                      {formatRelativeTime(log.createdAt)}
-                    </span>
-
-                    <span style={absoluteTime}>
-                      {formatDate(log.createdAt)}
-                    </span>
+                  <div
+                    style={{
+                      ...typeChip,
+                      color: meta.accent,
+                      background: meta.soft,
+                      border: `1px solid ${meta.border}`,
+                    }}
+                  >
+                    {meta.label}
                   </div>
                 </div>
 
-                <div style={right}>
-                  <div style={userAvatar}>
-                    {initials(log.performedBy)}
-                  </div>
+                <div style={itemName}>
+                  {log.itemName || "Unknown Item"}
+                </div>
 
-                  <div style={userBlock}>
-                    <div style={userName}>
-                      {log.performedBy || "SYSTEM"}
-                    </div>
+                <div style={timeRow}>
+                  <span
+                    style={{
+                      ...relativeTime,
+                      color: meta.accent,
+                      background: meta.soft,
+                      border: `1px solid ${meta.border}`,
+                    }}
+                  >
+                    {formatRelativeTime(log.createdAt)}
+                  </span>
 
-                    <div style={roleChip}>
-                      {log.role || "SYSTEM"}
-                    </div>
-                  </div>
+                  <span style={absoluteTime}>
+                    {formatDate(log.createdAt)}
+                  </span>
+                </div>
+              </div>
+
+              <div style={userArea}>
+                <div style={userAvatar}>
+                  {initials(log.performedBy)}
+                </div>
+
+                <div style={userName}>
+                  {log.performedBy || "SYSTEM"}
+                </div>
+
+                <div style={roleChip}>
+                  {log.role || "SYSTEM"}
                 </div>
               </div>
             </div>
@@ -326,7 +354,7 @@ function ActivityFeed({ logs = [] }) {
             </div>
 
             <div style={emptyText}>
-              Activity will appear here when packing, warehouse or dispatch actions are performed.
+              Packing, warehouse and dispatch actions will appear here.
             </div>
           </div>
         )}
@@ -394,14 +422,14 @@ const topBar = {
 const headingRow = {
   display: "flex",
   alignItems: "center",
-  gap: 10,
+  gap: 12,
 };
 
 const headingIcon = {
-  width: 34,
-  height: 34,
+  width: 38,
+  height: 38,
 
-  borderRadius: 14,
+  borderRadius: 16,
 
   display: "flex",
   alignItems: "center",
@@ -416,7 +444,7 @@ const headingIcon = {
   boxShadow:
     "0 12px 28px rgba(37,99,235,.22)",
 
-  fontSize: 16,
+  fontSize: 17,
 };
 
 const heading = {
@@ -429,7 +457,7 @@ const heading = {
 const subHeading = {
   fontSize: 12,
   color: "rgba(255,255,255,.58)",
-  marginTop: 6,
+  marginTop: 4,
 };
 
 const headerRight = {
@@ -495,63 +523,35 @@ const feedArea = {
   paddingRight: 4,
 };
 
-const timelineItem = {
-  display: "grid",
-  gridTemplateColumns: "24px minmax(0,1fr)",
-  gap: 10,
-};
-
-const timelineRail = {
-  position: "relative",
-  display: "flex",
-  justifyContent: "center",
-};
-
-const timelineDot = {
-  width: 11,
-  height: 11,
-  borderRadius: 999,
-  marginTop: 24,
-  zIndex: 2,
-};
-
-const timelineLine = {
-  position: "absolute",
-  top: 38,
-  bottom: -10,
-  width: 1,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.03))",
-};
-
-const card = {
+const activityCard = {
   position: "relative",
 
   display: "grid",
 
-  gridTemplateColumns: "44px minmax(0,1fr) auto",
+  gridTemplateColumns: "44px minmax(0,1fr) 108px",
 
   gap: 12,
 
   alignItems: "center",
 
-  padding: "15px 16px 15px 18px",
+  padding: "15px 15px 15px 18px",
 
   borderRadius: 22,
 
   marginBottom: 12,
 
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.025))",
+
   boxShadow:
-    "0 16px 34px rgba(2,6,23,.22)",
+    "0 16px 34px rgba(2,6,23,.20)",
 
   backdropFilter: "blur(16px)",
 
   overflow: "hidden",
-
-  transition: "transform .22s ease, border .22s ease, box-shadow .22s ease",
 };
 
-const accentBar = {
+const leftGlow = {
   position: "absolute",
   left: 0,
   top: 14,
@@ -576,18 +576,18 @@ const iconBubble = {
     "inset 0 1px 0 rgba(255,255,255,.08)",
 };
 
-const middle = {
+const contentArea = {
   minWidth: 0,
 };
 
-const cardTopLine = {
+const actionRow = {
   display: "flex",
   alignItems: "center",
   gap: 8,
   minWidth: 0,
 };
 
-const action = {
+const actionText = {
   fontWeight: 900,
   fontSize: 14,
   color: "#fff",
@@ -639,10 +639,12 @@ const absoluteTime = {
   fontWeight: 700,
 };
 
-const right = {
+const userArea = {
   display: "flex",
-  alignItems: "center",
-  gap: 9,
+  flexDirection: "column",
+  alignItems: "flex-end",
+  gap: 5,
+  minWidth: 0,
 };
 
 const userAvatar = {
@@ -668,25 +670,25 @@ const userAvatar = {
   fontWeight: 900,
 };
 
-const userBlock = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-end",
-  gap: 5,
-  minWidth: 0,
-};
-
 const userName = {
-  maxWidth: 120,
+  maxWidth: 100,
+
   color: "#fff",
+
   fontSize: 11,
+
   fontWeight: 900,
+
   whiteSpace: "nowrap",
+
   overflow: "hidden",
+
   textOverflow: "ellipsis",
 };
 
 const roleChip = {
+  maxWidth: 95,
+
   padding: "4px 8px",
 
   borderRadius: 999,
@@ -702,6 +704,12 @@ const roleChip = {
   fontSize: 9,
 
   fontWeight: 900,
+
+  whiteSpace: "nowrap",
+
+  overflow: "hidden",
+
+  textOverflow: "ellipsis",
 };
 
 const pagination = {
@@ -714,21 +722,35 @@ const pagination = {
 
 const pageBtn = {
   padding: "8px 14px",
+
   borderRadius: 999,
-  border: "1px solid rgba(255,255,255,.08)",
+
+  border:
+    "1px solid rgba(255,255,255,.08)",
+
   background:
     "linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.055))",
+
   color: "#fff",
+
   fontWeight: 900,
 };
 
 const pageIndicator = {
   padding: "7px 11px",
+
   borderRadius: 999,
-  background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "rgba(255,255,255,.045)",
+
+  border:
+    "1px solid rgba(255,255,255,.06)",
+
   fontSize: 11,
+
   color: "rgba(255,255,255,.66)",
+
   fontWeight: 900,
 };
 
@@ -763,7 +785,8 @@ const emptyIcon = {
   alignItems: "center",
   justifyContent: "center",
 
-  background: "rgba(59,130,246,.14)",
+  background:
+    "rgba(59,130,246,.14)",
 
   border:
     "1px solid rgba(59,130,246,.22)",

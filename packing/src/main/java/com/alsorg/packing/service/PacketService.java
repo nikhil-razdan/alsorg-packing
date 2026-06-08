@@ -52,6 +52,7 @@ public class PacketService {
     private final MasterItemRepository masterItemRepository;
     private final StickerHistoryRepository stickerHistoryRepository;
     private final PlantLocationService plantLocationService;
+    private final ActivityLogService activityLogService;
     
     @Value("${sticker.storage.path}")
     private String stickerStoragePath;
@@ -66,6 +67,7 @@ public class PacketService {
             DispatchedItemRepository dispatchedRepo,
             MasterItemRepository masterItemRepository,
             StickerHistoryRepository stickerHistoryRepository,
+            ActivityLogService activityLogService,
             PlantLocationService plantLocationService
     ) {
         this.packetRepository = packetRepository;
@@ -78,6 +80,7 @@ public class PacketService {
         this.masterItemRepository = masterItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
         this.plantLocationService = plantLocationService;
+        this.activityLogService = activityLogService;
     }
     
     private StickerPdfData buildStickerPdfData(
@@ -459,6 +462,11 @@ public class PacketService {
 
         LocalDateTime now = LocalDateTime.now();
         
+        String previousStatus =
+                item.getStatus() != null && !item.getStatus().isBlank()
+                        ? item.getStatus()
+                        : "CREATED";
+        
         // ✅ BLOCK DUPLICATE PRINT
         long iteration = item.getPrintIteration() == null ? 1 : item.getPrintIteration();
 
@@ -534,6 +542,16 @@ public class PacketService {
         history.setGeneratedAt(now);
 
         stickerHistoryRepository.save(history);
+
+        activityLogService.log(
+                item.getId().toString(),
+                iteration > 1 ? "STICKER REPRINTED" : "ITEM PACKED",
+                actor,
+                "PACKING",
+                previousStatus,
+                "READY",
+                null
+        );
 
         return pdfBytes;
     }
