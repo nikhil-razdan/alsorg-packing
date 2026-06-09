@@ -154,8 +154,11 @@ public class PdfStickerService {
                 /* ================= BODY GRID ================= */
                 float leftX = 18;
 
-                // QR panel made wider so scanner can become bigger.
-                float qrX = 452;
+                /*
+                 * QR panel widened and left content adjusted.
+                 * QR will now fit fully inside its border.
+                 */
+                float qrX = 448;
                 float leftW = qrX - leftX - 12;
 
                 /* ================= TOP ITEM SECTION ================= */
@@ -168,7 +171,7 @@ public class PdfStickerService {
                 /* ================= QR PANEL ================= */
                 float qrPanelX = qrX;
                 float qrPanelY = 154;
-                float qrPanelW = 129;
+                float qrPanelW = 133;
                 float qrPanelH = 138;
 
                 drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 8, WHITE, BLACK, 1.1f);
@@ -187,33 +190,22 @@ public class PdfStickerService {
                 PDImageXObject qrImage = PDImageXObject.createFromByteArray(document, qrBytes, "qr");
 
                 /*
-                 * Scanner made bigger:
-                 * - no SCAN heading
-                 * - smaller border padding
-                 * - QR nearly fills the available panel area
+                 * QR made bigger and centered.
+                 * Text below QR removed so the QR can use the full panel safely.
                  */
-                cs.drawImage(qrImage, qrPanelX + 6, qrPanelY + 27, 117, 117);
-
-                drawCenteredText(
-                        cs,
-                        bold,
-                        8.8f,
-                        qrPanelX,
-                        qrPanelY + 8,
-                        qrPanelW,
-                        14,
-                        "Scan for Info",
-                        BLACK
-                );
+                float qrSize = 124;
+                float qrImageX = qrPanelX + ((qrPanelW - qrSize) / 2);
+                float qrImageY = qrPanelY + ((qrPanelH - qrSize) / 2);
+                cs.drawImage(qrImage, qrImageX, qrImageY, qrSize, qrSize);
 
                 /* ================= INFO CARDS ================= */
                 float cardY = 207;
                 float cardH = 36;
 
-                drawInfoCard(cs, bold, leftX, cardY, 86, cardH, "PD NO.", pdNo);
-                drawInfoCard(cs, bold, leftX + 96, cardY, 86, cardH, "DRAWING", drawingNo);
-                drawInfoCard(cs, bold, leftX + 192, cardY, 112, cardH, "PACKING DATE", packingDate);
-                drawInfoCard(cs, bold, leftX + 314, cardY, leftW - 314, cardH, "CODE / SKU", codeSku);
+                drawInfoCard(cs, bold, leftX, cardY, 84, cardH, "PD NO.", pdNo);
+                drawInfoCard(cs, bold, leftX + 94, cardY, 84, cardH, "DRAWING", drawingNo);
+                drawInfoCard(cs, bold, leftX + 188, cardY, 112, cardH, "PACKING DATE", packingDate);
+                drawInfoCard(cs, bold, leftX + 310, cardY, leftW - 310, cardH, "CODE / SKU", codeSku);
 
                 /* ================= CLIENT / SITE ================= */
                 drawRoundRect(cs, leftX, 155, leftW, 43, 6, WHITE, BLACK, 1.1f);
@@ -228,16 +220,18 @@ public class PdfStickerService {
                 float serialX = 28;
 
                 /*
-                 * Description now starts more left,
-                 * only a bit right from SNO / TRACKING ID section.
+                 * Description starts more to the left now,
+                 * closer to SNO / TRACKING ID.
                  */
-                float dividerX = 272;
-                float descriptionX = 286;
+                float dividerX = 230;
+                float descriptionX = 244;
 
                 drawTextWithFont(cs, bold, 8.2f, serialX, 132, "SNO / TRACKING ID", BLACK);
 
-                // SNo kept smaller.
-                drawFitText(cs, bold, 12.0f, 7.3f, serialX, 114, 232, stickerNo, BLACK);
+                /*
+                 * Sticker number made smaller.
+                 */
+                drawFitText(cs, bold, 10.4f, 7.0f, serialX, 114, 190, stickerNo, BLACK);
 
                 drawLine(cs, dividerX, 105, dividerX, 140, BLACK, 0.8f);
 
@@ -250,7 +244,7 @@ public class PdfStickerService {
                         6.6f,
                         descriptionX,
                         117,
-                        282,
+                        324,
                         23,
                         description,
                         BLACK
@@ -268,23 +262,11 @@ public class PdfStickerService {
                 drawRoundRect(cs, 18, 18, 563, 32, 6, WHITE, BLACK, 1.1f);
 
                 /*
-                 * Signature underline moved down, closer to lower border.
+                 * Lines lifted slightly from the bottom border.
                  */
-                drawSignatureBlock(cs, bold, 42, 37, 22, 135, "Prepared By");
-                drawSignatureBlock(cs, bold, 232, 37, 22, 135, "Checked By");
-                drawSignatureBlock(cs, bold, 423, 37, 22, 135, "Delivered By");
-
-                drawCenteredText(
-                        cs,
-                        regular,
-                        6.7f,
-                        18,
-                        8,
-                        563,
-                        8,
-                        "Keep sticker visible on outer packing. Verify SNo, packet and floor before dispatch.",
-                        BLACK
-                );
+                drawSignatureBlock(cs, bold, 42, 37, 25.5f, 135, "Prepared By");
+                drawSignatureBlock(cs, bold, 232, 37, 25.5f, 135, "Checked By");
+                drawSignatureBlock(cs, bold, 423, 37, 25.5f, 135, "Delivered By");
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -348,8 +330,6 @@ public class PdfStickerService {
         float labelX = x + ((w - labelWidth) / 2);
 
         drawTextWithFont(cs, font, 8.4f, labelX, labelY, label, BLACK);
-
-        // Underline moved lower toward the section border.
         drawLine(cs, x + 12, lineY, x + w - 12, lineY, BLACK, 0.9f);
     }
 
