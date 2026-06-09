@@ -393,7 +393,7 @@ function DashboardPage() {
       })
       .catch(console.error);
 
-    fetchDashboardActivity(10)
+    fetchDashboardActivity(12)
       .then((logs) => {
         if (!active) return;
         setActivityLogs(logs || []);
