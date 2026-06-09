@@ -153,11 +153,6 @@ public class PdfStickerService {
 
                 /* ================= BODY GRID ================= */
                 float leftX = 18;
-
-                /*
-                 * QR panel widened and left content adjusted.
-                 * QR will now fit fully inside its border.
-                 */
                 float qrX = 448;
                 float leftW = qrX - leftX - 12;
 
@@ -189,10 +184,6 @@ public class PdfStickerService {
 
                 PDImageXObject qrImage = PDImageXObject.createFromByteArray(document, qrBytes, "qr");
 
-                /*
-                 * QR made bigger and centered.
-                 * Text below QR removed so the QR can use the full panel safely.
-                 */
                 float qrSize = 124;
                 float qrImageX = qrPanelX + ((qrPanelW - qrSize) / 2);
                 float qrImageY = qrPanelY + ((qrPanelH - qrSize) / 2);
@@ -214,38 +205,52 @@ public class PdfStickerService {
                 drawFitText(cs, bold, 14.2f, 9, leftX + 8, 170, leftW - 16, clientName, BLACK);
                 drawFitText(cs, regular, 12.2f, 8, leftX + 8, 158, leftW - 16, clientAddress, BLACK);
 
-                /* ================= SERIAL NO + DESCRIPTION ================= */
+                /* ================= SNO + DESCRIPTION ================= */
                 drawRoundRect(cs, 18, 100, 563, 45, 6, WHITE, BLACK, 1.1f);
 
                 float serialX = 28;
 
                 /*
-                 * Description starts more to the left now,
-                 * closer to SNO / TRACKING ID.
+                 * Description starts more from the left now.
+                 * SNO block is intentionally smaller so big descriptions get more space.
                  */
-                float dividerX = 230;
-                float descriptionX = 244;
+                float dividerX = 176;
+                float descriptionX = 190;
+                float descriptionMaxWidth = 378;
 
-                drawTextWithFont(cs, bold, 8.2f, serialX, 132, "SNO / TRACKING ID", BLACK);
+                drawTextWithFont(cs, bold, 7.7f, serialX, 132, "SNO / TRACKING ID", BLACK);
 
-                /*
-                 * Sticker number made smaller.
-                 */
-                drawFitText(cs, bold, 10.4f, 7.0f, serialX, 114, 190, stickerNo, BLACK);
+                drawFitText(
+                        cs,
+                        bold,
+                        8.9f,
+                        6.4f,
+                        serialX,
+                        114,
+                        dividerX - serialX - 12,
+                        stickerNo,
+                        BLACK
+                );
 
                 drawLine(cs, dividerX, 105, dividerX, 140, BLACK, 0.8f);
 
                 drawTextWithFont(cs, bold, 8.2f, descriptionX, 132, "DESCRIPTION", BLACK);
 
+                /*
+                 * Handles larger descriptions:
+                 * - wraps into multiple lines
+                 * - auto-reduces font size
+                 * - safely truncates with ellipsis if still too long
+                 */
                 drawWrappedFitText(
                         cs,
                         bold,
-                        9.2f,
-                        6.6f,
+                        8.7f,
+                        5.7f,
                         descriptionX,
-                        117,
-                        324,
-                        23,
+                        119,
+                        descriptionMaxWidth,
+                        30,
                         description,
                         BLACK
                 );
@@ -261,9 +266,6 @@ public class PdfStickerService {
                 /* ================= SIGNATURE SECTION ================= */
                 drawRoundRect(cs, 18, 18, 563, 32, 6, WHITE, BLACK, 1.1f);
 
-                /*
-                 * Lines lifted slightly from the bottom border.
-                 */
                 drawSignatureBlock(cs, bold, 42, 37, 25.5f, 135, "Prepared By");
                 drawSignatureBlock(cs, bold, 232, 37, 25.5f, 135, "Checked By");
                 drawSignatureBlock(cs, bold, 423, 37, 25.5f, 135, "Delivered By");
@@ -457,7 +459,7 @@ public class PdfStickerService {
         float fontSize = startFont;
 
         while (fontSize >= minFont) {
-            float leading = fontSize + 2;
+            float leading = fontSize + 1.8f;
             int maxLines = Math.max(1, (int) Math.floor(maxHeight / leading));
 
             List<String> lines = wrapLines(font, fontSize, text, maxWidth);
@@ -472,7 +474,7 @@ public class PdfStickerService {
             fontSize -= 0.5f;
         }
 
-        float leading = minFont + 2;
+        float leading = minFont + 1.8f;
         int maxLines = Math.max(1, (int) Math.floor(maxHeight / leading));
         List<String> lines = wrapLines(font, minFont, text, maxWidth);
 
@@ -505,10 +507,21 @@ public class PdfStickerService {
         StringBuilder line = new StringBuilder();
 
         for (String word : words) {
-            String candidate = line.length() == 0 ? word : line + " " + word;
-            float width = font.getStringWidth(candidate) / 1000 * fontSize;
+            if (word == null || word.isBlank()) continue;
 
-            if (width <= maxWidth) {
+            if (textWidth(font, fontSize, word) > maxWidth) {
+                if (line.length() > 0) {
+                    lines.add(line.toString());
+                    line = new StringBuilder();
+                }
+
+                lines.addAll(splitLongWord(font, fontSize, word, maxWidth));
+                continue;
+            }
+
+            String candidate = line.length() == 0 ? word : line + " " + word;
+
+            if (textWidth(font, fontSize, candidate) <= maxWidth) {
                 line = new StringBuilder(candidate);
             } else {
                 if (line.length() > 0) {
@@ -523,6 +536,40 @@ public class PdfStickerService {
         }
 
         return lines;
+    }
+
+    private List<String> splitLongWord(
+            PDFont font,
+            float fontSize,
+            String word,
+            float maxWidth
+    ) throws IOException {
+
+        List<String> result = new ArrayList<>();
+        StringBuilder part = new StringBuilder();
+
+        for (int i = 0; i < word.length(); i++) {
+            String candidate = part.toString() + word.charAt(i);
+
+            if (textWidth(font, fontSize, candidate) <= maxWidth) {
+                part.append(word.charAt(i));
+            } else {
+                if (part.length() > 0) {
+                    result.add(part.toString());
+                }
+                part = new StringBuilder(String.valueOf(word.charAt(i)));
+            }
+        }
+
+        if (part.length() > 0) {
+            result.add(part.toString());
+        }
+
+        return result;
+    }
+
+    private float textWidth(PDFont font, float fontSize, String text) throws IOException {
+        return font.getStringWidth(cleanPdfText(text)) / 1000 * fontSize;
     }
 
     private String truncateToWidth(
@@ -729,7 +776,6 @@ public class PdfStickerService {
 
         String cleaned = itemName.trim();
 
-        // Removes trailing code like: (W-149/4-8/Pkt-40)
         cleaned = cleaned.replaceAll("\\s*\\([^)]*Pkt[-\\s]*[0-9]+[^)]*\\)\\s*$", "");
 
         return cleaned.isBlank() ? itemName : cleaned;
