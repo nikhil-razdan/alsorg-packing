@@ -32,13 +32,8 @@ public class PdfStickerService {
     private static final float PAGE_WIDTH = 600;
     private static final float PAGE_HEIGHT = 350;
 
-    private static final Color DARK = new Color(13, 17, 23);
-    private static final Color ORANGE = new Color(245, 158, 11);
-    private static final Color BLUE = new Color(37, 99, 235);
-    private static final Color LIGHT_GREY = new Color(248, 250, 252);
-    private static final Color BORDER_GREY = new Color(203, 213, 225);
-    private static final Color LABEL_GREY = new Color(100, 116, 139);
-    private static final Color TEXT_DARK = new Color(15, 23, 42);
+    private static final Color BLACK = Color.BLACK;
+    private static final Color WHITE = Color.WHITE;
 
     public byte[] generateSticker(StickerPdfData data) {
 
@@ -85,7 +80,7 @@ public class PdfStickerService {
                 String clientName = safe(data.getClientName());
                 String clientAddress = safe(data.getClientAddress());
 
-                String contents = firstNonBlank(
+                String description = firstNonBlank(
                         reflectValue(data, "getPackingContents", "getContents"),
                         safe(data.getDescription()),
                         "-"
@@ -109,72 +104,72 @@ public class PdfStickerService {
                 );
 
                 /* ================= BACKGROUND ================= */
-                cs.setNonStrokingColor(Color.WHITE);
+                cs.setNonStrokingColor(WHITE);
                 cs.addRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
                 cs.fill();
 
                 /* ================= OUTER BORDER ================= */
-                drawRoundRect(cs, 6, 5, PAGE_WIDTH - 12, PAGE_HEIGHT - 10, 14, null, Color.BLACK, 1.6f);
+                drawRoundRect(cs, 5, 5, PAGE_WIDTH - 10, PAGE_HEIGHT - 10, 14, null, BLACK, 1.8f);
 
                 /* ================= HEADER ================= */
-                float headerX = 16;
-                float headerY = 305;
-                float headerW = 568;
-                float headerH = 37;
+                float headerX = 14;
+                float headerY = 306;
+                float headerW = 572;
+                float headerH = 36;
 
-                drawRoundRect(cs, headerX, headerY, headerW, headerH, 7, DARK, null, 0);
+                drawRoundRect(cs, headerX, headerY, headerW, headerH, 7, BLACK, BLACK, 1.2f);
 
                 if (data.isShowCompanyHeader()) {
-                    drawTextWithFont(cs, bold, 23.5f, headerX + 16, headerY + 12, "ALSORG", Color.WHITE);
+                    drawTextWithFont(cs, bold, 23.5f, headerX + 16, headerY + 11, "ALSORG", WHITE);
                 }
 
                 if (data.getPrintIteration() > 1) {
                     drawTextWithFont(
                             cs,
                             bold,
-                            15,
-                            headerX + 120,
+                            14,
+                            headerX + 122,
                             headerY + 13,
                             String.valueOf(data.getPrintIteration()),
-                            ORANGE
+                            WHITE
                     );
                 }
 
                 String topBadge = "PACKET " + packetNo + " | FLOOR " + floor;
 
-                drawRoundRect(cs, 424, 319, 145, 23, 7, ORANGE, null, 0);
+                drawRoundRect(cs, 420, 316, 150, 24, 7, WHITE, BLACK, 1.2f);
                 drawCenteredFitText(
                         cs,
                         bold,
-                        10.5f,
-                        7.5f,
-                        424,
-                        319,
-                        145,
-                        23,
+                        10.4f,
+                        7.2f,
+                        420,
+                        316,
+                        150,
+                        24,
                         topBadge,
-                        DARK
+                        BLACK
                 );
 
                 /* ================= BODY GRID ================= */
-                float leftX = 20;
-                float qrX = 470;
+                float leftX = 18;
+                float qrX = 465;
                 float leftW = qrX - leftX - 12;
 
-                /* ================= ITEM SECTION - TOP ================= */
-                drawRoundRect(cs, leftX, 248, leftW, 40, 5, Color.WHITE, BORDER_GREY, 1.1f);
-                drawLine(cs, leftX + 2, 288, leftX + leftW - 2, 288, BLUE, 1.8f);
+                /* ================= TOP ITEM SECTION ================= */
+                drawRoundRect(cs, leftX, 250, leftW, 42, 5, WHITE, BLACK, 1.1f);
+                drawLine(cs, leftX + 2, 292, leftX + leftW - 2, 292, BLACK, 1.5f);
 
-                drawTextWithFont(cs, bold, 9.5f, leftX + 8, 272, "ITEM", LABEL_GREY);
-                drawFitText(cs, bold, 23.5f, 13, leftX + 8, 254, leftW - 16, itemName, TEXT_DARK);
+                drawTextWithFont(cs, bold, 9.2f, leftX + 8, 276, "ITEM", BLACK);
+                drawFitText(cs, bold, 23.5f, 13, leftX + 8, 257, leftW - 16, itemName, BLACK);
 
                 /* ================= QR PANEL ================= */
                 float qrPanelX = qrX;
-                float qrPanelY = 151;
-                float qrPanelW = 112;
-                float qrPanelH = 137;
+                float qrPanelY = 154;
+                float qrPanelW = 116;
+                float qrPanelH = 138;
 
-                drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 7, LIGHT_GREY, BORDER_GREY, 1.1f);
+                drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 8, WHITE, BLACK, 1.1f);
 
                 String qrData = data.getQrPayload() != null && !data.getQrPayload().isBlank()
                         ? data.getQrPayload()
@@ -189,24 +184,24 @@ public class PdfStickerService {
 
                 PDImageXObject qrImage = PDImageXObject.createFromByteArray(document, qrBytes, "qr");
 
-                // SCAN heading removed. QR enlarged and moved up.
-                cs.drawImage(qrImage, qrPanelX + 7, qrPanelY + 32, 98, 98);
+                // No SCAN heading. QR made bigger with smaller padding, like your reference image.
+                cs.drawImage(qrImage, qrPanelX + 8, qrPanelY + 32, 100, 100);
 
                 drawCenteredText(
                         cs,
                         bold,
                         8.8f,
                         qrPanelX,
-                        qrPanelY + 11,
+                        qrPanelY + 10,
                         qrPanelW,
                         14,
                         "Scan for Info",
-                        TEXT_DARK
+                        BLACK
                 );
 
                 /* ================= INFO CARDS ================= */
-                float cardY = 204;
-                float cardH = 37;
+                float cardY = 207;
+                float cardH = 36;
 
                 drawInfoCard(cs, bold, leftX, cardY, 90, cardH, "PD NO.", pdNo);
                 drawInfoCard(cs, bold, leftX + 100, cardY, 90, cardH, "DRAWING", drawingNo);
@@ -214,62 +209,66 @@ public class PdfStickerService {
                 drawInfoCard(cs, bold, leftX + 325, cardY, leftW - 325, cardH, "CODE / SKU", codeSku);
 
                 /* ================= CLIENT / SITE ================= */
-                drawRoundRect(cs, leftX, 151, leftW, 43, 6, Color.WHITE, BORDER_GREY, 1.1f);
+                drawRoundRect(cs, leftX, 155, leftW, 43, 6, WHITE, BLACK, 1.1f);
 
-                drawTextWithFont(cs, bold, 8.5f, leftX + 8, 181, "CLIENT / SITE", BLUE);
-                drawFitText(cs, bold, 14.5f, 9, leftX + 8, 167, leftW - 16, clientName, TEXT_DARK);
-                drawFitText(cs, regular, 12.3f, 8, leftX + 8, 155, leftW - 16, clientAddress, TEXT_DARK);
+                drawTextWithFont(cs, bold, 8.4f, leftX + 8, 184, "CLIENT / SITE", BLACK);
+                drawFitText(cs, bold, 14.2f, 9, leftX + 8, 170, leftW - 16, clientName, BLACK);
+                drawFitText(cs, regular, 12.2f, 8, leftX + 8, 158, leftW - 16, clientAddress, BLACK);
 
-                /* ================= SERIAL NO + CONTENTS ================= */
-                drawRoundRect(cs, 20, 98, 560, 45, 6, LIGHT_GREY, BORDER_GREY, 1.1f);
+                /* ================= SERIAL NO + DESCRIPTION ================= */
+                drawRoundRect(cs, 18, 100, 563, 45, 6, WHITE, BLACK, 1.1f);
 
                 float serialX = 28;
-                float contentsX = 350;
+                float descriptionX = 370;
 
-                drawTextWithFont(cs, bold, 8.5f, serialX, 130, "SNO / TRACKING ID", BLUE);
-                drawFitText(cs, bold, 14.5f, 8, serialX, 111, 300, stickerNo, TEXT_DARK);
+                drawTextWithFont(cs, bold, 8.2f, serialX, 132, "SNO / TRACKING ID", BLACK);
 
-                drawLine(cs, 335, 103, 335, 138, BORDER_GREY, 0.8f);
+                // SNo made smaller as requested.
+                drawFitText(cs, bold, 12.2f, 7.5f, serialX, 114, 315, stickerNo, BLACK);
 
-                drawTextWithFont(cs, bold, 8.5f, contentsX, 130, "CONTENTS", BLUE);
+                drawLine(cs, 352, 105, 352, 140, BLACK, 0.8f);
+
+                // CONTENTS changed to DESCRIPTION and moved more right.
+                drawTextWithFont(cs, bold, 8.2f, descriptionX, 132, "DESCRIPTION", BLACK);
+
                 drawWrappedFitText(
                         cs,
                         bold,
-                        9.5f,
-                        6.8f,
-                        contentsX,
-                        116,
-                        218,
-                        22,
-                        contents,
-                        TEXT_DARK
+                        9.2f,
+                        6.6f,
+                        descriptionX,
+                        117,
+                        198,
+                        23,
+                        description,
+                        BLACK
                 );
 
                 /* ================= DIMENSION / VOLUME / WEIGHT ================= */
-                float bottomInfoY = 58;
+                float bottomInfoY = 60;
                 float bottomInfoH = 30;
 
-                drawBottomInfoCard(cs, bold, 20, bottomInfoY, 250, bottomInfoH, "DIMENSION", dimensions);
-                drawBottomInfoCard(cs, bold, 280, bottomInfoY, 100, bottomInfoH, "VOLUME", volume);
-                drawBottomInfoCard(cs, bold, 390, bottomInfoY, 190, bottomInfoH, "WEIGHT", weight);
+                drawBottomInfoCard(cs, bold, 18, bottomInfoY, 250, bottomInfoH, "DIMENSION", dimensions);
+                drawBottomInfoCard(cs, bold, 278, bottomInfoY, 100, bottomInfoH, "VOLUME", volume);
+                drawBottomInfoCard(cs, bold, 388, bottomInfoY, 193, bottomInfoH, "WEIGHT", weight);
 
                 /* ================= SIGNATURE SECTION ================= */
-                drawRoundRect(cs, 20, 17, 560, 32, 6, LIGHT_GREY, BORDER_GREY, 1.1f);
+                drawRoundRect(cs, 18, 18, 563, 32, 6, WHITE, BLACK, 1.1f);
 
-                drawSignatureBlock(cs, bold, 45, 31, 130, "Prepared By");
-                drawSignatureBlock(cs, bold, 235, 31, 130, "Checked By");
-                drawSignatureBlock(cs, bold, 425, 31, 130, "Delivered By");
+                drawSignatureBlock(cs, bold, 42, 32, 135, "Prepared By");
+                drawSignatureBlock(cs, bold, 232, 32, 135, "Checked By");
+                drawSignatureBlock(cs, bold, 423, 32, 135, "Delivered By");
 
                 drawCenteredText(
                         cs,
                         regular,
-                        6.8f,
-                        20,
+                        6.7f,
+                        18,
                         8,
-                        560,
+                        563,
                         8,
                         "Keep sticker visible on outer packing. Verify SNo, packet and floor before dispatch.",
-                        LABEL_GREY
+                        BLACK
                 );
             }
 
@@ -295,11 +294,11 @@ public class PdfStickerService {
             String value
     ) throws IOException {
 
-        drawRoundRect(cs, x, y, w, h, 5, Color.WHITE, BORDER_GREY, 1.1f);
-        drawLine(cs, x + 2, y + h, x + w - 2, y + h, Color.BLACK, 1.5f);
+        drawRoundRect(cs, x, y, w, h, 5, WHITE, BLACK, 1.1f);
+        drawLine(cs, x + 2, y + h, x + w - 2, y + h, BLACK, 1.3f);
 
-        drawTextWithFont(cs, bold, 8.2f, x + 7, y + h - 13, label, LABEL_GREY);
-        drawFitText(cs, bold, 13.2f, 7.5f, x + 7, y + 8, w - 14, value, TEXT_DARK);
+        drawTextWithFont(cs, bold, 8.1f, x + 7, y + h - 13, label, BLACK);
+        drawFitText(cs, bold, 12.8f, 7.2f, x + 7, y + 8, w - 14, value, BLACK);
     }
 
     private void drawBottomInfoCard(
@@ -313,11 +312,11 @@ public class PdfStickerService {
             String value
     ) throws IOException {
 
-        drawRoundRect(cs, x, y, w, h, 5, Color.WHITE, BORDER_GREY, 1.1f);
-        drawLine(cs, x + 2, y + h, x + w - 2, y + h, Color.BLACK, 1.5f);
+        drawRoundRect(cs, x, y, w, h, 5, WHITE, BLACK, 1.1f);
+        drawLine(cs, x + 2, y + h, x + w - 2, y + h, BLACK, 1.3f);
 
-        drawTextWithFont(cs, bold, 8.1f, x + 7, y + h - 12, label, LABEL_GREY);
-        drawFitText(cs, bold, 11.2f, 7, x + 7, y + 8, w - 14, value, TEXT_DARK);
+        drawTextWithFont(cs, bold, 8f, x + 7, y + h - 12, label, BLACK);
+        drawFitText(cs, bold, 10.8f, 7, x + 7, y + 8, w - 14, value, BLACK);
     }
 
     private void drawSignatureBlock(
@@ -329,11 +328,11 @@ public class PdfStickerService {
             String label
     ) throws IOException {
 
-        float labelWidth = font.getStringWidth(label) / 1000 * 8.5f;
+        float labelWidth = font.getStringWidth(label) / 1000 * 8.4f;
         float labelX = x + ((w - labelWidth) / 2);
 
-        drawTextWithFont(cs, font, 8.5f, labelX, y + 8, label, LABEL_GREY);
-        drawLine(cs, x + 12, y - 3, x + w - 12, y - 3, Color.BLACK, 0.9f);
+        drawTextWithFont(cs, font, 8.4f, labelX, y + 8, label, BLACK);
+        drawLine(cs, x + 12, y - 3, x + w - 12, y - 3, BLACK, 0.9f);
     }
 
     private void drawTextWithFont(
@@ -392,10 +391,12 @@ public class PdfStickerService {
 
         while (fontSize >= minFont) {
             float textWidth = font.getStringWidth(text) / 1000 * fontSize;
+
             if (textWidth <= w - 12) {
                 drawCenteredText(cs, font, fontSize, x, y, w, h, text, color);
                 return;
             }
+
             fontSize -= 0.5f;
         }
 
@@ -429,10 +430,12 @@ public class PdfStickerService {
 
         while (fontSize >= minFont) {
             float textWidth = font.getStringWidth(text) / 1000 * fontSize;
+
             if (textWidth <= maxWidth) {
                 drawTextWithFont(cs, font, fontSize, x, y, text, color);
                 return;
             }
+
             fontSize -= 0.5f;
         }
 
@@ -453,7 +456,6 @@ public class PdfStickerService {
     ) throws IOException {
 
         text = cleanPdfText(text);
-
         float fontSize = startFont;
 
         while (fontSize >= minFont) {
@@ -480,7 +482,7 @@ public class PdfStickerService {
             String line = lines.get(i);
 
             if (i == maxLines - 1 && lines.size() > maxLines) {
-                line = truncateToWidth(font, minFont, line + "...", maxWidth);
+                line = truncateToWidth(font, minFont, line, maxWidth);
             }
 
             drawTextWithFont(cs, font, minFont, x, y - (i * leading), line, color);
