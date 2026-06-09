@@ -199,11 +199,21 @@ public class PdfStickerService {
                 drawInfoCard(cs, bold, leftX + 310, cardY, leftW - 310, cardH, "CODE / SKU", codeSku);
 
                 /* ================= CLIENT / SITE ================= */
-                drawRoundRect(cs, leftX, 155, leftW, 43, 6, WHITE, BLACK, 1.1f);
-
-                drawTextWithFont(cs, bold, 8.4f, leftX + 8, 184, "CLIENT / SITE", BLACK);
-                drawFitText(cs, bold, 14.2f, 9, leftX + 8, 170, leftW - 16, clientName, BLACK);
-                drawFitText(cs, regular, 12.2f, 8, leftX + 8, 158, leftW - 16, clientAddress, BLACK);
+                /*
+                 * Increased height and better Y-spacing so client name/address
+                 * do not look congested.
+                 */
+                drawClientSiteBox(
+                        cs,
+                        bold,
+                        regular,
+                        leftX,
+                        151,
+                        leftW,
+                        47,
+                        clientName,
+                        clientAddress
+                );
 
                 /* ================= SNO + DESCRIPTION ================= */
                 drawRoundRect(cs, 18, 100, 563, 45, 6, WHITE, BLACK, 1.1f);
@@ -211,8 +221,8 @@ public class PdfStickerService {
                 float serialX = 28;
 
                 /*
-                 * Description starts more from the left now.
-                 * SNO block is intentionally smaller so big descriptions get more space.
+                 * Description starts more from the left.
+                 * SNO block is smaller so large descriptions get wider area.
                  */
                 float dividerX = 176;
                 float descriptionX = 190;
@@ -236,12 +246,6 @@ public class PdfStickerService {
 
                 drawTextWithFont(cs, bold, 8.2f, descriptionX, 132, "DESCRIPTION", BLACK);
 
-                /*
-                 * Handles larger descriptions:
-                 * - wraps into multiple lines
-                 * - auto-reduces font size
-                 * - safely truncates with ellipsis if still too long
-                 */
                 drawWrappedFitText(
                         cs,
                         bold,
@@ -256,19 +260,23 @@ public class PdfStickerService {
                 );
 
                 /* ================= DIMENSION / VOLUME / WEIGHT ================= */
-                float bottomInfoY = 60;
-                float bottomInfoH = 30;
+                /*
+                 * Slightly taller and better aligned cards.
+                 * Label is kept at top; value is given more breathing space.
+                 */
+                float bottomInfoY = 58;
+                float bottomInfoH = 34;
 
                 drawBottomInfoCard(cs, bold, 18, bottomInfoY, 250, bottomInfoH, "DIMENSION", dimensions);
                 drawBottomInfoCard(cs, bold, 278, bottomInfoY, 100, bottomInfoH, "VOLUME", volume);
                 drawBottomInfoCard(cs, bold, 388, bottomInfoY, 193, bottomInfoH, "WEIGHT", weight);
 
                 /* ================= SIGNATURE SECTION ================= */
-                drawRoundRect(cs, 18, 18, 563, 32, 6, WHITE, BLACK, 1.1f);
+                drawRoundRect(cs, 18, 17, 563, 33, 6, WHITE, BLACK, 1.1f);
 
-                drawSignatureBlock(cs, bold, 42, 37, 25.5f, 135, "Prepared By");
-                drawSignatureBlock(cs, bold, 232, 37, 25.5f, 135, "Checked By");
-                drawSignatureBlock(cs, bold, 423, 37, 25.5f, 135, "Delivered By");
+                drawSignatureBlock(cs, bold, 42, 36, 24.5f, 135, "Prepared By");
+                drawSignatureBlock(cs, bold, 232, 36, 24.5f, 135, "Checked By");
+                drawSignatureBlock(cs, bold, 423, 36, 24.5f, 135, "Delivered By");
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -281,6 +289,31 @@ public class PdfStickerService {
     }
 
     /* ================= DRAW HELPERS ================= */
+
+    private void drawClientSiteBox(
+            PDPageContentStream cs,
+            PDFont bold,
+            PDFont regular,
+            float x,
+            float y,
+            float w,
+            float h,
+            String clientName,
+            String clientAddress
+    ) throws IOException {
+
+        drawRoundRect(cs, x, y, w, h, 6, WHITE, BLACK, 1.1f);
+
+        drawTextWithFont(cs, bold, 8.4f, x + 8, y + h - 14, "CLIENT / SITE", BLACK);
+
+        /*
+         * Client name and address are separated clearly:
+         * - name slightly smaller than before
+         * - address aligned below with enough gap
+         */
+        drawFitText(cs, bold, 13.2f, 8.2f, x + 8, y + 20, w - 16, clientName, BLACK);
+        drawFitText(cs, regular, 10.6f, 7.2f, x + 8, y + 8, w - 16, clientAddress, BLACK);
+    }
 
     private void drawInfoCard(
             PDPageContentStream cs,
@@ -314,8 +347,8 @@ public class PdfStickerService {
         drawRoundRect(cs, x, y, w, h, 5, WHITE, BLACK, 1.1f);
         drawLine(cs, x + 2, y + h, x + w - 2, y + h, BLACK, 1.3f);
 
-        drawTextWithFont(cs, bold, 8f, x + 7, y + h - 12, label, BLACK);
-        drawFitText(cs, bold, 10.8f, 7, x + 7, y + 8, w - 14, value, BLACK);
+        drawTextWithFont(cs, bold, 7.8f, x + 7, y + h - 12, label, BLACK);
+        drawFitText(cs, bold, 10.5f, 7, x + 7, y + 9, w - 14, value, BLACK);
     }
 
     private void drawSignatureBlock(
