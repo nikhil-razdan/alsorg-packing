@@ -34,10 +34,7 @@ import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.repository.StickerHistoryRepository;
-import java.util.LinkedHashSet;
 import java.util.Set;
-
-import com.alsorg.packing.exception.DuplicateSkuException;
 
 @Service
 public class PacketService {
@@ -259,15 +256,7 @@ public class PacketService {
             String plantCode
     ) {
     	
-    	 List<String> plannedSkus = new ArrayList<>();
-
-    	    for (int i = 1; i <= req.numberOfPackets; i++) {
-    	        plannedSkus.add(
-    	                buildSku(req.pdNo, req.drawingNo, i)
-    	        );
-    	    }
-
-    	    assertSkusAvailable(plannedSkus);
+    	
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
         PlantLocationService.PlantConfig plant =
@@ -354,7 +343,7 @@ public class PacketService {
 
             item.setPacketNumber("Pkt-" + packetNo);
 
-            String sku = plannedSkus.get(i - 1);
+            String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
             item.setSku(sku);
 
             item.setQuantity(1);
@@ -587,8 +576,6 @@ public class PacketService {
                 packetNo
         );
 
-        assertSkuAvailableForUpdate(rebuiltSku, item.getId());
-
         item.setSku(rebuiltSku);
 
         PacketItem saved = packetItemRepository.save(item);
@@ -693,17 +680,7 @@ public class PacketService {
 
         int start = (int) existingCount + 1;
 
-        List<String> plannedSkus = new ArrayList<>();
-
-        for (int i = 0; i < req.numberOfPackets; i++) {
-            int packetNo = start + i;
-
-            plannedSkus.add(
-                    buildSku(master.getPdNo(), master.getDrawingName(), packetNo)
-            );
-        }
-
-        assertSkusAvailable(plannedSkus);
+        
         List<PacketItem> items = new ArrayList<>();
         List<String> descriptions = req.getDescriptions();
         List<String> weights = req.getWeights();
@@ -736,7 +713,7 @@ public class PacketService {
             item.setFgZoneCode(null);
             item.setPacketNumber("Pkt-" + packetNo);
 
-            String sku = plannedSkus.get(i);
+            String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
 
             String desc = (descriptions != null && descriptions.size() > i)
                     ? descriptions.get(i)
@@ -856,7 +833,6 @@ public class PacketService {
         item.setPacketNumber("Pkt-" + packetNo);
 
         String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
-        assertSkuAvailable(sku);
 
         item.setSku(sku);
 
@@ -890,6 +866,7 @@ public class PacketService {
             String createdBy,
             Set<String> allowedPlants
     ) {
+    	
         String actor = safeActor(createdBy);
         LocalDateTime now = LocalDateTime.now();
 
@@ -951,7 +928,6 @@ public class PacketService {
         item.setPacketNumber("Pkt-" + packetNo);
 
         String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
-        assertSkuAvailable(sku);
 
         item.setSku(sku);
         item.setQuantity(1);
@@ -1015,8 +991,6 @@ public class PacketService {
                     packetNo
             );
 
-            assertSkuAvailableForUpdate(sku, item.getId());
-
             item.setSku(sku);
         }
 
@@ -1055,46 +1029,6 @@ public class PacketService {
         }
 
         throw new RuntimeException("Packet number missing. Cannot rebuild SKU.");
-    }
-
-    private void assertSkuAvailable(String sku) {
-        if (sku == null || sku.trim().isBlank()) {
-            throw new RuntimeException("SKU cannot be blank");
-        }
-
-        if (packetItemRepository.existsSkuAlready(sku)) {
-            throw new DuplicateSkuException(sku);
-        }
-    }
-
-    private void assertSkuAvailableForUpdate(String sku, UUID currentItemId) {
-        if (sku == null || sku.trim().isBlank()) {
-            throw new RuntimeException("SKU cannot be blank");
-        }
-
-        if (packetItemRepository.existsSkuAlreadyForOtherItem(sku, currentItemId)) {
-            throw new DuplicateSkuException(sku);
-        }
-    }
-
-    private void assertSkusAvailable(List<String> skus) {
-        Set<String> requestCheck = new LinkedHashSet<>();
-
-        for (String sku : skus) {
-            if (sku == null || sku.trim().isBlank()) {
-                throw new RuntimeException("SKU cannot be blank");
-            }
-
-            String normalized = sku.trim().toLowerCase();
-
-            if (!requestCheck.add(normalized)) {
-                throw new DuplicateSkuException(sku);
-            }
-
-            if (packetItemRepository.existsSkuAlready(sku)) {
-                throw new DuplicateSkuException(sku);
-            }
-        }
     }
     
     private String formatDimensionWithVolume(String dim) {
