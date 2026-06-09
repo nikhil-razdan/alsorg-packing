@@ -4,9 +4,14 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -27,15 +32,14 @@ public class PdfStickerService {
     private static final float PAGE_WIDTH = 600;
     private static final float PAGE_HEIGHT = 350;
 
-    private static final float HEADER_H = 44;
-    private static final float FOOTER_H = 42;
-
     private static final Color DARK = new Color(13, 17, 23);
     private static final Color ORANGE = new Color(245, 158, 11);
-    private static final Color LIGHT_ORANGE = new Color(255, 248, 235);
-    private static final Color LIGHT_GREY = new Color(249, 250, 251);
-    private static final Color LABEL_GREY = new Color(107, 114, 128);
-    private static final Color TEXT_DARK = new Color(17, 24, 39);
+    private static final Color BLUE = new Color(37, 99, 235);
+    private static final Color LIGHT_BLUE = new Color(239, 246, 255);
+    private static final Color LIGHT_GREY = new Color(248, 250, 252);
+    private static final Color BORDER_GREY = new Color(203, 213, 225);
+    private static final Color LABEL_GREY = new Color(100, 116, 139);
+    private static final Color TEXT_DARK = new Color(15, 23, 42);
 
     public byte[] generateSticker(StickerPdfData data) {
 
@@ -55,33 +59,37 @@ public class PdfStickerService {
                     true
             )) {
 
-                String today = LocalDateTime.now(ZoneId.of("Asia/Kolkata"))
-                        .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-
                 String stickerNo = safe(data.getStickerNumber());
                 String pdNo = safe(data.getPdNo());
                 String drawingNo = safe(data.getDrawingNo());
-                String itemName = safe(data.getItemName());
-
-                /*
-                 * Box fallback:
-                 * 1. Uses getBoxNo() / getBoxNumber() / getBox() if your DTO has it.
-                 * 2. Otherwise uses remarks, because your current DTO already has remarks.
-                 */
-                String boxNo = firstNonBlank(
-                        reflectValue(data, "getBoxNo", "getBoxNumber", "getBox"),
-                        normalizeBoxValue(safe(data.getRemarks())),
-                        "-"
-                );
-
-                String floor = compactFloor(firstNonBlank(safe(data.getFloor()), "-"));
 
                 String packetNo = firstNonBlank(
                         reflectValue(data, "getPacketNo", "getPacketNumber", "getPacket"),
-                        extractPacketNo(itemName),
+                        extractPacketNo(safe(data.getItemName())),
                         extractPacketNo(safe(data.getDescription())),
                         "-"
                 );
+                packetNo = cleanPacket(packetNo);
+
+                String boxNo = firstNonBlank(
+                        reflectValue(data, "getBoxNo", "getBoxNumber", "getBox"),
+                        "-"
+                );
+
+                String floor = compactFloor(firstNonBlank(
+                        safe(data.getFloor()),
+                        "-"
+                ));
+
+                String packingDate = firstNonBlank(
+                        normalizeDate(reflectValue(data, "getPackingDate", "getPackedDate", "getCreatedAt")),
+                        todayIndia()
+                );
+
+                String clientName = safe(data.getClientName());
+                String clientAddress = safe(data.getClientAddress());
+
+                String itemName = cleanItemName(safe(data.getItemName()));
 
                 String contents = firstNonBlank(
                         reflectValue(data, "getPackingContents", "getContents"),
@@ -89,66 +97,80 @@ public class PdfStickerService {
                         "-"
                 );
 
-                String destination = joinClientAndAddress(
-                        safe(data.getClientName()),
-                        safe(data.getClientAddress())
-                );
+                String dimensions = cleanDimensionValue(safe(data.getDimensions()));
 
                 String volume = firstNonBlank(
                         reflectValue(data, "getVolume", "getVolumeCbm", "getCbm"),
+                        extractVolumeFromText(safe(data.getDimensions())),
                         "-"
                 );
+                volume = cleanVolume(volume);
 
-                String dimensions = safe(data.getDimensions());
-                String weight = safe(data.getWeight());
+                String weight = cleanWeight(safe(data.getWeight()));
+
+                String workCode = buildWorkCode(pdNo, drawingNo, packetNo);
 
                 /* ================= BACKGROUND ================= */
                 cs.setNonStrokingColor(Color.WHITE);
                 cs.addRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
                 cs.fill();
 
+                /* ================= OUTER BORDER ================= */
+                drawRoundRect(cs, 8, 7, PAGE_WIDTH - 16, PAGE_HEIGHT - 14, 14, null, Color.BLACK, 1.6f);
+
                 /* ================= HEADER ================= */
-                cs.setNonStrokingColor(DARK);
-                cs.addRect(0, PAGE_HEIGHT - HEADER_H, PAGE_WIDTH, HEADER_H);
-                cs.fill();
+                drawRoundRect(cs, 15, 304, 570, 38, 8, DARK, DARK, 0);
 
                 if (data.isShowCompanyHeader()) {
-                    drawTextWithFont(cs, bold, 21, 18, 321, "ALSORG", Color.WHITE);
+                    drawTextWithFont(cs, bold, 24, 30, 321, "ALSORG", Color.WHITE);
                 }
 
                 if (data.getPrintIteration() > 1) {
                     drawTextWithFont(
                             cs,
                             bold,
-                            18,
-                            112,
-                            322,
+                            16,
+                            132,
+                            323,
                             String.valueOf(data.getPrintIteration()),
-                            Color.WHITE
+                            ORANGE
                     );
                 }
 
-                drawRoundRect(cs, 408, 316, 168, 25, 8, ORANGE, ORANGE, 1.5f);
+                drawRoundRect(cs, 440, 319, 125, 24, 7, ORANGE, ORANGE, 0);
                 drawCenteredText(
                         cs,
                         bold,
-                        12.5f,
-                        408,
-                        316,
-                        168,
-                        25,
-                        "BOX " + boxNo + "  |  FLOOR " + floor,
+                        10.5f,
+                        440,
+                        319,
+                        125,
+                        24,
+                        "BOX " + boxNo + " | FLOOR " + floor,
                         DARK
                 );
 
-                /* ================= QR PANEL ================= */
-                float qrPanelX = 18;
-                float qrPanelY = 130;
-                float qrPanelW = 124;
-                float qrPanelH = 160;
+                /* ================= TOP LAYOUT ================= */
+                float leftX = 20;
+                float rightQrX = 470;
+                float gap = 12;
+                float leftW = rightQrX - leftX - gap;
 
-                drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 9, LIGHT_GREY, DARK, 1.4f);
-                drawCenteredText(cs, bold, 12, qrPanelX, qrPanelY + qrPanelH - 27, qrPanelW, 20, "SCAN", TEXT_DARK);
+                /* ================= SNO / TRACKING ID ================= */
+                drawRoundRect(cs, leftX, 248, leftW, 40, 5, Color.WHITE, BORDER_GREY, 1.1f);
+                drawLine(cs, leftX + 2, 288, leftX + leftW - 2, 288, BLUE, 1.8f);
+
+                drawTextWithFont(cs, bold, 9.5f, leftX + 8, 272, "SNO / TRACKING ID", LABEL_GREY);
+                drawFitText(cs, bold, 23.5f, 15, leftX + 8, 254, leftW - 16, stickerNo, TEXT_DARK);
+
+                /* ================= QR PANEL ================= */
+                float qrPanelX = rightQrX;
+                float qrPanelY = 151;
+                float qrPanelW = 112;
+                float qrPanelH = 137;
+
+                drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 7, LIGHT_GREY, BORDER_GREY, 1.1f);
+                drawCenteredText(cs, bold, 10.5f, qrPanelX, qrPanelY + qrPanelH - 20, qrPanelW, 16, "SCAN", LABEL_GREY);
 
                 String qrData = data.getQrPayload() != null && !data.getQrPayload().isBlank()
                         ? data.getQrPayload()
@@ -163,88 +185,76 @@ public class PdfStickerService {
 
                 PDImageXObject qrImage = PDImageXObject.createFromByteArray(document, qrBytes, "qr");
 
-                // Bigger QR with smaller padding
-                cs.drawImage(qrImage, qrPanelX + 8, qrPanelY + 36, 108, 108);
+                // Bigger QR with smaller border padding
+                cs.drawImage(qrImage, qrPanelX + 11, qrPanelY + 33, 90, 90);
 
-                drawCenteredText(cs, bold, 9.5f, qrPanelX, qrPanelY + 12, qrPanelW, 16, "Scan for Info", LABEL_GREY);
-
-                /* ================= MAIN CONTENT ================= */
-                float mainX = 154;
-                float mainW = 422;
-
-                drawTextWithFont(cs, bold, 10.5f, mainX, 290, "SNO / TRACKING ID", LABEL_GREY);
-
-                drawRoundRect(cs, mainX, 248, mainW, 38, 2, Color.WHITE, DARK, 1.4f);
-                drawFitText(cs, bold, 27, 18, mainX + 12, 263, mainW - 24, stickerNo, TEXT_DARK);
+                drawCenteredText(cs, bold, 8.5f, qrPanelX, qrPanelY + 11, qrPanelW, 14, "Scan for Info", TEXT_DARK);
 
                 /* ================= INFO CARDS ================= */
-                float cardY = 202;
-                float cardH = 38;
-                float gap = 8;
-                float cardW = (mainW - (gap * 3)) / 4;
+                float cardY = 204;
+                float cardH = 37;
 
-                drawInfoCard(cs, bold, regular, mainX, cardY, cardW, cardH, "PD NO", pdNo, false);
-                drawInfoCard(cs, bold, regular, mainX + cardW + gap, cardY, cardW, cardH, "DWG NO", drawingNo, false);
-                drawInfoCard(cs, bold, regular, mainX + ((cardW + gap) * 2), cardY, cardW, cardH, "PACKET", cleanPacket(packetNo), true);
-                drawInfoCard(cs, bold, regular, mainX + ((cardW + gap) * 3), cardY, cardW, cardH, "PACKING DATE", today, false);
+                drawInfoCard(cs, bold, leftX, cardY, 88, cardH, "PACKET", "Pkt-" + packetNo);
+                drawInfoCard(cs, bold, leftX + 99, cardY, 88, cardH, "DRAWING", drawingNo);
+                drawInfoCard(cs, bold, leftX + 198, cardY, 116, cardH, "PACKING DATE", packingDate);
+                drawInfoCard(cs, bold, leftX + 326, cardY, leftW - 326, cardH, "PD NO.", pdNo);
 
-                /* ================= CLIENT / DESTINATION ================= */
-                drawSectionBox(
+                /* ================= CLIENT / SITE + WORK REFERENCE ================= */
+                drawRoundRect(cs, leftX, 151, 280, 43, 6, Color.WHITE, BORDER_GREY, 1.1f);
+                drawTextWithFont(cs, bold, 8.3f, leftX + 8, 181, "CLIENT / SITE", BLUE);
+                drawFitText(cs, bold, 14.5f, 9, leftX + 8, 168, 264, clientName, TEXT_DARK);
+                drawFitText(cs, regular, 12.5f, 8, leftX + 8, 156, 264, clientAddress, TEXT_DARK);
+
+                drawRoundRect(cs, leftX + 292, 151, leftW - 292, 43, 6, Color.WHITE, BORDER_GREY, 1.1f);
+                drawTextWithFont(cs, bold, 8.3f, leftX + 300, 181, "WORK REFERENCE", BLUE);
+                drawTextWithFont(cs, bold, 8.5f, leftX + 300, 166, "PD No.", LABEL_GREY);
+                drawFitText(cs, bold, 11.5f, 8, leftX + 342, 166, leftW - 350, pdNo, TEXT_DARK);
+                drawTextWithFont(cs, bold, 8.5f, leftX + 300, 154, "Code", LABEL_GREY);
+                drawFitText(cs, bold, 10.5f, 7, leftX + 342, 154, leftW - 350, workCode, TEXT_DARK);
+
+                /* ================= ITEM + CONTENTS COMBINED ROW ================= */
+                drawRoundRect(cs, 20, 98, 560, 45, 6, LIGHT_GREY, BORDER_GREY, 1.1f);
+
+                drawTextWithFont(cs, bold, 8.5f, 28, 130, "ITEM", BLUE);
+                drawFitText(cs, bold, 15.5f, 9, 28, 111, 245, itemName, TEXT_DARK);
+
+                drawTextWithFont(cs, bold, 8.5f, 275, 130, "CONTENTS", BLUE);
+                drawContentsChips(cs, bold, contents, 275, 109, 295);
+
+                /* ================= DIMENSION / VOLUME / WEIGHT ================= */
+                float bottomInfoY = 58;
+                float bottomInfoH = 30;
+
+                drawBottomInfoCard(cs, bold, 20, bottomInfoY, 250, bottomInfoH, "DIMENSION", dimensions);
+                drawBottomInfoCard(cs, bold, 280, bottomInfoY, 100, bottomInfoH, "VOLUME", volume);
+                drawBottomInfoCard(cs, bold, 390, bottomInfoY, 190, bottomInfoH, "WEIGHT", weight);
+
+                /* ================= QC + SIGNATURE ================= */
+                drawRoundRect(cs, 20, 17, 560, 32, 6, LIGHT_GREY, BORDER_GREY, 1.1f);
+
+                drawTextWithFont(cs, bold, 8.3f, 28, 40, "QC CHECK", BLUE);
+
+                drawCheckBox(cs, 28, 24, "Cleaned", bold);
+                drawCheckBox(cs, 96, 24, "Edge Protected", bold);
+                drawCheckBox(cs, 178, 24, "Wrapped", bold);
+                drawCheckBox(cs, 252, 24, "Label Matched", bold);
+                drawCheckBox(cs, 342, 24, "Photo Taken", bold);
+
+                drawSignature(cs, bold, 425, 41, "Prepared By");
+                drawSignature(cs, bold, 492, 41, "Checked By");
+                drawSignature(cs, bold, 557, 41, "Loaded By");
+
+                drawCenteredText(
                         cs,
-                        bold,
                         regular,
-                        mainX,
-                        151,
-                        mainW,
-                        40,
-                        "CLIENT / DESTINATION",
-                        destination,
-                        false
+                        6.8f,
+                        20,
+                        8,
+                        560,
+                        8,
+                        "Keep sticker visible on outer packing. Verify SNo, packet, box and floor before dispatch.",
+                        LABEL_GREY
                 );
-
-                /* ================= ITEM ================= */
-                drawSectionBox(
-                        cs,
-                        bold,
-                        regular,
-                        18,
-                        101,
-                        558,
-                        38,
-                        "ITEM",
-                        itemNameWithCode(itemName, pdNo, drawingNo, cleanPacket(packetNo)),
-                        false
-                );
-
-                /* ================= PACKING CONTENTS ================= */
-                drawSectionBox(
-                        cs,
-                        bold,
-                        regular,
-                        18,
-                        52,
-                        558,
-                        37,
-                        "PACKING CONTENTS",
-                        contents,
-                        true
-                );
-
-                /* ================= FOOTER ================= */
-                cs.setNonStrokingColor(DARK);
-                cs.addRect(0, 0, PAGE_WIDTH, FOOTER_H);
-                cs.fill();
-
-                String footerLeft = "SIZE: " + dimensions + "   |   VOLUME: " + volume + " m3   |   WEIGHT: " + weight;
-                drawFitText(cs, bold, 11.5f, 9, 18, 20, 365, footerLeft, Color.WHITE);
-
-                drawTextWithFont(cs, bold, 7.5f, 413, 26, "PREPARED", new Color(209, 213, 219));
-                drawTextWithFont(cs, bold, 7.5f, 486, 26, "CHECKED", new Color(209, 213, 219));
-                drawTextWithFont(cs, bold, 7.5f, 551, 26, "LOADED", new Color(209, 213, 219));
-
-                drawLine(cs, 413, 12, 466, 12, Color.WHITE, 1);
-                drawLine(cs, 486, 12, 535, 12, Color.WHITE, 1);
-                drawLine(cs, 551, 12, 595, 12, Color.WHITE, 1);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -261,57 +271,104 @@ public class PdfStickerService {
     private void drawInfoCard(
             PDPageContentStream cs,
             PDFont bold,
-            PDFont regular,
             float x,
             float y,
             float w,
             float h,
             String label,
-            String value,
-            boolean highlight
+            String value
     ) throws IOException {
 
-        drawRoundRect(cs, x, y, w, h, 6, highlight ? LIGHT_ORANGE : LIGHT_GREY, DARK, 1.2f);
-        drawTextWithFont(cs, bold, 8.5f, x + 7, y + h - 14, label, LABEL_GREY);
-        drawFitText(cs, bold, 14, 10, x + 7, y + 9, w - 14, value, TEXT_DARK);
+        drawRoundRect(cs, x, y, w, h, 5, Color.WHITE, BORDER_GREY, 1.1f);
+        drawLine(cs, x + 2, y + h, x + w - 2, y + h, Color.BLACK, 1.5f);
+        drawTextWithFont(cs, bold, 8.2f, x + 7, y + h - 13, label, LABEL_GREY);
+        drawFitText(cs, bold, 14.5f, 9, x + 7, y + 8, w - 14, value, TEXT_DARK);
     }
 
-    private void drawSectionBox(
+    private void drawBottomInfoCard(
             PDPageContentStream cs,
             PDFont bold,
-            PDFont regular,
             float x,
             float y,
             float w,
             float h,
             String label,
-            String value,
-            boolean orangeBorder
+            String value
     ) throws IOException {
 
-        drawRoundRect(
-                cs,
-                x,
-                y,
-                w,
-                h,
-                6,
-                orangeBorder ? new Color(255, 252, 241) : Color.WHITE,
-                orangeBorder ? ORANGE : DARK,
-                orangeBorder ? 1.8f : 1.2f
-        );
+        drawRoundRect(cs, x, y, w, h, 5, Color.WHITE, BORDER_GREY, 1.1f);
+        drawLine(cs, x + 2, y + h, x + w - 2, y + h, Color.BLACK, 1.5f);
+        drawTextWithFont(cs, bold, 8.1f, x + 7, y + h - 12, label, LABEL_GREY);
+        drawFitText(cs, bold, 11.2f, 7, x + 7, y + 8, w - 14, value, TEXT_DARK);
+    }
 
-        drawTextWithFont(
-                cs,
-                bold,
-                8.5f,
-                x + 10,
-                y + h - 15,
-                label,
-                orangeBorder ? new Color(146, 64, 14) : LABEL_GREY
-        );
+    private void drawContentsChips(
+            PDPageContentStream cs,
+            PDFont bold,
+            String contents,
+            float x,
+            float y,
+            float maxWidth
+    ) throws IOException {
 
-        drawFitText(cs, bold, 15.5f, 10, x + 10, y + 9, w - 20, value, TEXT_DARK);
+        List<String> parts = splitContents(contents);
+
+        float cursorX = x;
+        float cursorY = y;
+        float chipH = 14;
+        float gap = 6;
+
+        for (String part : parts) {
+            String text = cleanPdfText(part);
+            if (text.isBlank()) continue;
+
+            float textW = bold.getStringWidth(text) / 1000 * 7.8f;
+            float chipW = Math.min(textW + 14, maxWidth);
+
+            if (cursorX + chipW > x + maxWidth) {
+                cursorX = x;
+                cursorY -= 16;
+            }
+
+            if (cursorY < 101) {
+                drawFitText(cs, bold, 7.5f, 6, cursorX, cursorY + 4, x + maxWidth - cursorX, text, TEXT_DARK);
+                return;
+            }
+
+            drawRoundRect(cs, cursorX, cursorY, chipW, chipH, 4, LIGHT_BLUE, new Color(147, 197, 253), 0.8f);
+            drawFitText(cs, bold, 7.8f, 6, cursorX + 6, cursorY + 4, chipW - 12, text, TEXT_DARK);
+
+            cursorX += chipW + gap;
+        }
+    }
+
+    private void drawCheckBox(
+            PDPageContentStream cs,
+            float x,
+            float y,
+            String label,
+            PDFont font
+    ) throws IOException {
+
+        cs.setStrokingColor(Color.BLACK);
+        cs.setLineWidth(0.8f);
+        cs.addRect(x, y, 7, 7);
+        cs.stroke();
+
+        drawTextWithFont(cs, font, 7.8f, x + 11, y + 1, label, TEXT_DARK);
+    }
+
+    private void drawSignature(
+            PDPageContentStream cs,
+            PDFont font,
+            float centerX,
+            float labelY,
+            String label
+    ) throws IOException {
+
+        float labelW = font.getStringWidth(label) / 1000 * 6.8f;
+        drawTextWithFont(cs, font, 6.8f, centerX - (labelW / 2), labelY, label, LABEL_GREY);
+        drawLine(cs, centerX - 25, 24, centerX + 25, 24, Color.BLACK, 0.8f);
     }
 
     private void drawTextWithFont(
@@ -347,7 +404,7 @@ public class PdfStickerService {
         text = cleanPdfText(text);
         float textWidth = font.getStringWidth(text) / 1000 * fontSize;
         float tx = x + ((w - textWidth) / 2);
-        float ty = y + ((h - fontSize) / 2) + 3;
+        float ty = y + ((h - fontSize) / 2) + 2;
         drawTextWithFont(cs, font, fontSize, tx, ty, text, color);
     }
 
@@ -490,32 +547,32 @@ public class PdfStickerService {
                     if (!text.isBlank()) return cleanPdfText(text);
                 }
             } catch (Exception ignored) {
-                // DTO method may not exist yet. Fallbacks handle it.
+                // Optional DTO getter may not exist yet.
             }
         }
 
         return "";
     }
 
-    private String joinClientAndAddress(String client, String address) {
-        boolean hasClient = client != null && !client.equals("-");
-        boolean hasAddress = address != null && !address.equals("-");
-
-        if (hasClient && hasAddress) return client + " - " + address;
-        if (hasClient) return client;
-        if (hasAddress) return address;
-
-        return "-";
+    private String todayIndia() {
+        return LocalDateTime.now(ZoneId.of("Asia/Kolkata"))
+                .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
     }
 
-    private String normalizeBoxValue(String value) {
-        if (value == null || value.equals("-")) return "";
+    private String normalizeDate(String value) {
+        if (value == null || value.isBlank() || value.equals("-")) return "";
 
-        String cleaned = value
-                .replaceAll("(?i)^\\s*box\\s*(no\\.?|number)?\\s*[:\\-]?", "")
-                .trim();
+        String cleaned = value.trim();
 
-        return cleaned.isBlank() || cleaned.equals("-") ? "" : cleaned;
+        try {
+            if (cleaned.length() >= 10 && cleaned.charAt(4) == '-') {
+                LocalDate date = LocalDate.parse(cleaned.substring(0, 10));
+                return date.format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+            }
+        } catch (Exception ignored) {
+        }
+
+        return cleaned;
     }
 
     private String compactFloor(String floor) {
@@ -533,12 +590,11 @@ public class PdfStickerService {
     private String extractPacketNo(String text) {
         if (text == null || text.equals("-")) return "";
 
-        String[] parts = text.split("[\\s/()|,]+");
+        Pattern pattern = Pattern.compile("(?i)Pkt[-\\s]*([0-9]+)");
+        Matcher matcher = pattern.matcher(text);
 
-        for (String part : parts) {
-            if (part.toLowerCase().startsWith("pkt-")) {
-                return part;
-            }
+        if (matcher.find()) {
+            return matcher.group(1);
         }
 
         return "";
@@ -546,17 +602,122 @@ public class PdfStickerService {
 
     private String cleanPacket(String packetNo) {
         if (packetNo == null || packetNo.equals("-")) return "-";
-        return packetNo.replaceAll("(?i)^pkt-", "").trim();
+
+        String cleaned = packetNo
+                .replaceAll("(?i)^pkt[-\\s]*", "")
+                .trim();
+
+        return cleaned.isBlank() ? "-" : cleaned;
     }
 
-    private String itemNameWithCode(String itemName, String pdNo, String drawingNo, String packetNo) {
-        String code = "";
-
-        if (!pdNo.equals("-") && !drawingNo.equals("-") && !packetNo.equals("-")) {
-            code = " (" + pdNo + "/" + drawingNo.replace("/", "-") + "/Pkt-" + packetNo + ")";
+    private String buildWorkCode(String pdNo, String drawingNo, String packetNo) {
+        if (pdNo.equals("-") || drawingNo.equals("-") || packetNo.equals("-")) {
+            return "-";
         }
 
-        return itemName + code;
+        return pdNo + "/" + drawingNo.replace("/", "-") + "/Pkt-" + packetNo;
+    }
+
+    private String cleanItemName(String itemName) {
+        if (itemName == null || itemName.equals("-")) return "-";
+
+        String cleaned = itemName.trim();
+
+        // Removes trailing code like: (W-149/4-8/Pkt-40)
+        cleaned = cleaned.replaceAll("\\s*\\([^)]*Pkt[-\\s]*[0-9]+[^)]*\\)\\s*$", "");
+
+        return cleaned.isBlank() ? itemName : cleaned;
+    }
+
+    private String cleanDimensionValue(String dimensions) {
+        if (dimensions == null || dimensions.equals("-")) return "-";
+
+        String cleaned = dimensions
+                .replaceAll("\\([^)]*m3[^)]*\\)", "")
+                .replaceAll("\\([^)]*m³[^)]*\\)", "")
+                .replace("³", "3")
+                .trim();
+
+        return cleaned.isBlank() ? "-" : cleaned;
+    }
+
+    private String extractVolumeFromText(String text) {
+        if (text == null || text.equals("-")) return "";
+
+        Pattern pattern = Pattern.compile("\\(?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*m[³3]\\s*\\)?", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(text);
+
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return "";
+    }
+
+    private String cleanVolume(String volume) {
+        if (volume == null || volume.equals("-")) return "-";
+
+        String cleaned = volume
+                .replace("m³", "")
+                .replace("m3", "")
+                .trim();
+
+        if (cleaned.isBlank()) return "-";
+
+        return cleaned + " m3";
+    }
+
+    private String cleanWeight(String weight) {
+        if (weight == null || weight.equals("-") || weight.isBlank()) {
+            return "Pending / ____ kg";
+        }
+
+        String cleaned = weight.trim();
+
+        if (cleaned.toLowerCase().contains("kg")) {
+            return cleaned;
+        }
+
+        return cleaned + " kg";
+    }
+
+    private List<String> splitContents(String contents) {
+        List<String> result = new ArrayList<>();
+
+        if (contents == null || contents.equals("-")) {
+            result.add("-");
+            return result;
+        }
+
+        String cleaned = cleanPdfText(contents);
+
+        if (cleaned.contains("|")) {
+            for (String part : cleaned.split("\\|")) {
+                if (!part.trim().isBlank()) result.add(part.trim());
+            }
+            return result.isEmpty() ? List.of(cleaned) : result;
+        }
+
+        if (cleaned.contains(";")) {
+            for (String part : cleaned.split(";")) {
+                if (!part.trim().isBlank()) result.add(part.trim());
+            }
+            return result.isEmpty() ? List.of(cleaned) : result;
+        }
+
+        Pattern pattern = Pattern.compile("[A-Za-z0-9 /&.]+?\\s*-\\s*[0-9]+(?:\\.[0-9]+)?");
+        Matcher matcher = pattern.matcher(cleaned);
+
+        while (matcher.find()) {
+            String part = matcher.group().trim();
+            if (!part.isBlank()) result.add(part);
+        }
+
+        if (result.isEmpty()) {
+            result.add(cleaned);
+        }
+
+        return result;
     }
 
     private String cleanPdfText(String text) {
