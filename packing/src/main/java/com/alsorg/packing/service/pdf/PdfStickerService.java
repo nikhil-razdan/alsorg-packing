@@ -153,7 +153,9 @@ public class PdfStickerService {
 
                 /* ================= BODY GRID ================= */
                 float leftX = 18;
-                float qrX = 465;
+
+                // QR panel made wider so scanner can become bigger.
+                float qrX = 452;
                 float leftW = qrX - leftX - 12;
 
                 /* ================= TOP ITEM SECTION ================= */
@@ -166,7 +168,7 @@ public class PdfStickerService {
                 /* ================= QR PANEL ================= */
                 float qrPanelX = qrX;
                 float qrPanelY = 154;
-                float qrPanelW = 116;
+                float qrPanelW = 129;
                 float qrPanelH = 138;
 
                 drawRoundRect(cs, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 8, WHITE, BLACK, 1.1f);
@@ -184,15 +186,20 @@ public class PdfStickerService {
 
                 PDImageXObject qrImage = PDImageXObject.createFromByteArray(document, qrBytes, "qr");
 
-                // No SCAN heading. QR made bigger with smaller padding, like your reference image.
-                cs.drawImage(qrImage, qrPanelX + 8, qrPanelY + 32, 100, 100);
+                /*
+                 * Scanner made bigger:
+                 * - no SCAN heading
+                 * - smaller border padding
+                 * - QR nearly fills the available panel area
+                 */
+                cs.drawImage(qrImage, qrPanelX + 6, qrPanelY + 27, 117, 117);
 
                 drawCenteredText(
                         cs,
                         bold,
                         8.8f,
                         qrPanelX,
-                        qrPanelY + 10,
+                        qrPanelY + 8,
                         qrPanelW,
                         14,
                         "Scan for Info",
@@ -203,10 +210,10 @@ public class PdfStickerService {
                 float cardY = 207;
                 float cardH = 36;
 
-                drawInfoCard(cs, bold, leftX, cardY, 90, cardH, "PD NO.", pdNo);
-                drawInfoCard(cs, bold, leftX + 100, cardY, 90, cardH, "DRAWING", drawingNo);
-                drawInfoCard(cs, bold, leftX + 200, cardY, 115, cardH, "PACKING DATE", packingDate);
-                drawInfoCard(cs, bold, leftX + 325, cardY, leftW - 325, cardH, "CODE / SKU", codeSku);
+                drawInfoCard(cs, bold, leftX, cardY, 86, cardH, "PD NO.", pdNo);
+                drawInfoCard(cs, bold, leftX + 96, cardY, 86, cardH, "DRAWING", drawingNo);
+                drawInfoCard(cs, bold, leftX + 192, cardY, 112, cardH, "PACKING DATE", packingDate);
+                drawInfoCard(cs, bold, leftX + 314, cardY, leftW - 314, cardH, "CODE / SKU", codeSku);
 
                 /* ================= CLIENT / SITE ================= */
                 drawRoundRect(cs, leftX, 155, leftW, 43, 6, WHITE, BLACK, 1.1f);
@@ -219,16 +226,21 @@ public class PdfStickerService {
                 drawRoundRect(cs, 18, 100, 563, 45, 6, WHITE, BLACK, 1.1f);
 
                 float serialX = 28;
-                float descriptionX = 370;
+
+                /*
+                 * Description now starts more left,
+                 * only a bit right from SNO / TRACKING ID section.
+                 */
+                float dividerX = 272;
+                float descriptionX = 286;
 
                 drawTextWithFont(cs, bold, 8.2f, serialX, 132, "SNO / TRACKING ID", BLACK);
 
-                // SNo made smaller as requested.
-                drawFitText(cs, bold, 12.2f, 7.5f, serialX, 114, 315, stickerNo, BLACK);
+                // SNo kept smaller.
+                drawFitText(cs, bold, 12.0f, 7.3f, serialX, 114, 232, stickerNo, BLACK);
 
-                drawLine(cs, 352, 105, 352, 140, BLACK, 0.8f);
+                drawLine(cs, dividerX, 105, dividerX, 140, BLACK, 0.8f);
 
-                // CONTENTS changed to DESCRIPTION and moved more right.
                 drawTextWithFont(cs, bold, 8.2f, descriptionX, 132, "DESCRIPTION", BLACK);
 
                 drawWrappedFitText(
@@ -238,7 +250,7 @@ public class PdfStickerService {
                         6.6f,
                         descriptionX,
                         117,
-                        198,
+                        282,
                         23,
                         description,
                         BLACK
@@ -255,9 +267,12 @@ public class PdfStickerService {
                 /* ================= SIGNATURE SECTION ================= */
                 drawRoundRect(cs, 18, 18, 563, 32, 6, WHITE, BLACK, 1.1f);
 
-                drawSignatureBlock(cs, bold, 42, 32, 135, "Prepared By");
-                drawSignatureBlock(cs, bold, 232, 32, 135, "Checked By");
-                drawSignatureBlock(cs, bold, 423, 32, 135, "Delivered By");
+                /*
+                 * Signature underline moved down, closer to lower border.
+                 */
+                drawSignatureBlock(cs, bold, 42, 37, 22, 135, "Prepared By");
+                drawSignatureBlock(cs, bold, 232, 37, 22, 135, "Checked By");
+                drawSignatureBlock(cs, bold, 423, 37, 22, 135, "Delivered By");
 
                 drawCenteredText(
                         cs,
@@ -323,7 +338,8 @@ public class PdfStickerService {
             PDPageContentStream cs,
             PDFont font,
             float x,
-            float y,
+            float labelY,
+            float lineY,
             float w,
             String label
     ) throws IOException {
@@ -331,8 +347,10 @@ public class PdfStickerService {
         float labelWidth = font.getStringWidth(label) / 1000 * 8.4f;
         float labelX = x + ((w - labelWidth) / 2);
 
-        drawTextWithFont(cs, font, 8.4f, labelX, y + 8, label, BLACK);
-        drawLine(cs, x + 12, y - 3, x + w - 12, y - 3, BLACK, 0.9f);
+        drawTextWithFont(cs, font, 8.4f, labelX, labelY, label, BLACK);
+
+        // Underline moved lower toward the section border.
+        drawLine(cs, x + 12, lineY, x + w - 12, lineY, BLACK, 0.9f);
     }
 
     private void drawTextWithFont(
