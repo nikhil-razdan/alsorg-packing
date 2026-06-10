@@ -171,7 +171,9 @@ public class PdfStickerService {
                 drawLine(cs, leftX + 2, 292, leftX + leftW - 2, 292, BLACK, 1.5f);
 
                 drawTextWithFont(cs, bold, 9.2f, leftX + 8, 276, "ITEM", BLACK);
-                drawFitText(cs, bold, 23.5f, 13, leftX + 8, 257, leftW - 16, itemName, BLACK);
+
+                // Only this part is changed: item name now auto-fits inside its box.
+                drawItemNameAdaptive(cs, bold, leftX + 8, 257, leftW - 16, itemName);
 
                 /* ================= QR PANEL ================= */
                 float qrPanelX = qrX;
@@ -319,6 +321,48 @@ public class PdfStickerService {
     }
 
     /* ================= DRAW HELPERS ================= */
+
+    private void drawItemNameAdaptive(
+            PDPageContentStream cs,
+            PDFont font,
+            float x,
+            float y,
+            float maxWidth,
+            String itemName
+    ) throws IOException {
+
+        itemName = cleanPdfText(itemName);
+
+        /*
+         * First try: keep the current big one-line style.
+         */
+        float fontSize = 23.5f;
+
+        while (fontSize >= 13f) {
+            if (textWidth(font, fontSize, itemName) <= maxWidth) {
+                drawTextWithFont(cs, font, fontSize, x, y, itemName, BLACK);
+                return;
+            }
+            fontSize -= 0.5f;
+        }
+
+        /*
+         * Second try: for very long item names, wrap inside the same item box.
+         * This does not change the box size or layout.
+         */
+        drawWrappedFitText(
+                cs,
+                font,
+                10.2f,
+                6.4f,
+                x,
+                y + 8,
+                maxWidth,
+                21,
+                itemName,
+                BLACK
+        );
+    }
 
     private void drawRemarksBox(
             PDPageContentStream cs,
