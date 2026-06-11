@@ -14,7 +14,81 @@ public class ScanResolveResponse {
     private String status;
     private boolean dispatchAllowed;
     private String message;
+    private String plantCode;
+    private String packedAreaCode;
+    private String currentLocationCode;
+    private String fgAreaCode;
+    private String fgZoneCode;
 
+    private boolean moveToFgRequired;
+    private boolean fgZoneRequired;
+
+    private java.util.List<String> fgZones;
+    
+    public String getPlantCode() {
+        return plantCode;
+    }
+
+    public void setPlantCode(String plantCode) {
+        this.plantCode = plantCode;
+    }
+
+    public String getPackedAreaCode() {
+        return packedAreaCode;
+    }
+
+    public void setPackedAreaCode(String packedAreaCode) {
+        this.packedAreaCode = packedAreaCode;
+    }
+
+    public String getCurrentLocationCode() {
+        return currentLocationCode;
+    }
+
+    public void setCurrentLocationCode(String currentLocationCode) {
+        this.currentLocationCode = currentLocationCode;
+    }
+
+    public String getFgAreaCode() {
+        return fgAreaCode;
+    }
+
+    public void setFgAreaCode(String fgAreaCode) {
+        this.fgAreaCode = fgAreaCode;
+    }
+
+    public String getFgZoneCode() {
+        return fgZoneCode;
+    }
+
+    public void setFgZoneCode(String fgZoneCode) {
+        this.fgZoneCode = fgZoneCode;
+    }
+
+    public boolean isMoveToFgRequired() {
+        return moveToFgRequired;
+    }
+
+    public void setMoveToFgRequired(boolean moveToFgRequired) {
+        this.moveToFgRequired = moveToFgRequired;
+    }
+
+    public boolean isFgZoneRequired() {
+        return fgZoneRequired;
+    }
+
+    public void setFgZoneRequired(boolean fgZoneRequired) {
+        this.fgZoneRequired = fgZoneRequired;
+    }
+
+    public java.util.List<String> getFgZones() {
+        return fgZones;
+    }
+
+    public void setFgZones(java.util.List<String> fgZones) {
+        this.fgZones = fgZones;
+    }
+    
     public String getPacketItemId() {
         return packetItemId;
     }

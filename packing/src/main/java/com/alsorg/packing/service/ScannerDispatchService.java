@@ -30,19 +30,22 @@ public class ScannerDispatchService {
     private final DispatchedItemRepository dispatchedItemRepository;
     private final DispatchedItemService dispatchedItemService;
     private final ChalaanPdfService chalaanPdfService;
+    private final PlantLocationService plantLocationService;
 
     public ScannerDispatchService(
             PacketItemRepository packetItemRepository,
             StickerHistoryRepository stickerHistoryRepository,
             DispatchedItemRepository dispatchedItemRepository,
             DispatchedItemService dispatchedItemService,
-            ChalaanPdfService chalaanPdfService
+            ChalaanPdfService chalaanPdfService,
+            PlantLocationService plantLocationService
     ) {
         this.packetItemRepository = packetItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
         this.dispatchedItemRepository = dispatchedItemRepository;
         this.dispatchedItemService = dispatchedItemService;
         this.chalaanPdfService = chalaanPdfService;
+        this.plantLocationService = plantLocationService;
     }
 
     /* =====================================================
@@ -50,12 +53,21 @@ public class ScannerDispatchService {
        ===================================================== */
 
     @Transactional(readOnly = true)
-    public ScanResolveResponse resolveScan(String rawScanText) {
-
+    public ScanResolveResponse resolveScan(
+            String rawScanText,
+            Set<String> allowedPlants
+    ) {
         ResolvedScan resolved = resolve(rawScanText);
 
         PacketItem packetItem = resolved.packetItem;
         DispatchedItem dispatchedItem = resolved.dispatchedItem;
+
+        assertScanPlantAccess(dispatchedItem, allowedPlants);
+
+        boolean moveToFgRequired = requiresMoveToFg(dispatchedItem);
+        boolean dispatchAllowed = canQrDispatchNow(dispatchedItem);
+
+        List<String> fgZones = getFgZones(dispatchedItem);
 
         ScanResolveResponse dto = new ScanResolveResponse();
 
@@ -68,15 +80,32 @@ public class ScannerDispatchService {
         dto.setDrawingNo(packetItem.getDrawingNo());
         dto.setClientName(packetItem.getClientName());
         dto.setDescription(packetItem.getDescription());
-        dto.setStatus(dispatchedItem.getStatus() != null ? dispatchedItem.getStatus().name() : "");
 
-        boolean allowed =
-                dispatchedItem.getStatus() == ItemDispatchStatus.READY
-                        || dispatchedItem.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH;
+        dto.setPlantCode(dispatchedItem.getPlantCode());
+        dto.setPackedAreaCode(dispatchedItem.getPackedAreaCode());
+        dto.setCurrentLocationCode(dispatchedItem.getCurrentLocationCode());
+        dto.setFgAreaCode(dispatchedItem.getFgAreaCode());
+        dto.setFgZoneCode(dispatchedItem.getFgZoneCode());
 
-        dto.setDispatchAllowed(allowed);
+        dto.setFgZones(fgZones);
+        dto.setMoveToFgRequired(moveToFgRequired);
+        dto.setFgZoneRequired(moveToFgRequired && !fgZones.isEmpty());
 
-        if (allowed) {
+        dto.setStatus(
+                dispatchedItem.getStatus() != null
+                        ? dispatchedItem.getStatus().name()
+                        : ""
+        );
+
+        dto.setDispatchAllowed(dispatchAllowed);
+
+        if (moveToFgRequired) {
+            dto.setMessage(
+                    fgZones.isEmpty()
+                            ? "Move item to FG before QR dispatch"
+                            : "Move item to FG before QR dispatch. Select FG zone."
+            );
+        } else if (dispatchAllowed) {
             dto.setMessage("Item ready for QR dispatch");
         } else if (dispatchedItem.getStatus() == ItemDispatchStatus.DISPATCHED) {
             dto.setMessage("Item already dispatched");
@@ -92,11 +121,19 @@ public class ScannerDispatchService {
        ===================================================== */
 
     @Transactional
-    public byte[] dispatchSingleByScan(String rawScanText, String username) {
-
+    public byte[] dispatchSingleByScan(
+            String rawScanText,
+            String username,
+            Set<String> allowedPlants
+    ) {
         ResolvedScan resolved = resolve(rawScanText);
 
-        DispatchedItem item = prepareForDispatch(resolved.dispatchedItem, username);
+        assertScanPlantAccess(resolved.dispatchedItem, allowedPlants);
+
+        DispatchedItem item = prepareForDispatch(
+                resolved.dispatchedItem,
+                username
+        );
 
         String chalaanNo = generateChalaanNumber();
 
@@ -106,6 +143,7 @@ public class ScannerDispatchService {
         data.setOt("-");
 
         ChalaanItem chalaanItem = buildChalaanItem(item, resolved.packetItem);
+
         data.setItems(List.of(chalaanItem));
         data.setAddress(safe(chalaanItem.getClientAddress()));
 
@@ -127,8 +165,11 @@ public class ScannerDispatchService {
        ===================================================== */
 
     @Transactional
-    public byte[] dispatchBulkByScans(List<String> rawScanTexts, String username) {
-
+    public byte[] dispatchBulkByScans(
+            List<String> rawScanTexts,
+            String username,
+            Set<String> allowedPlants
+    ) {
         if (rawScanTexts == null || rawScanTexts.isEmpty()) {
             throw new RuntimeException("No QR scans provided");
         }
@@ -137,6 +178,8 @@ public class ScannerDispatchService {
 
         for (String scanText : rawScanTexts) {
             ResolvedScan resolved = resolve(scanText);
+
+            assertScanPlantAccess(resolved.dispatchedItem, allowedPlants);
 
             String id = resolved.dispatchedItem.getZohoItemId();
 
@@ -155,7 +198,10 @@ public class ScannerDispatchService {
 
         for (ResolvedScan resolved : resolvedList) {
             DispatchedItem prepared =
-                    prepareForDispatch(resolved.dispatchedItem, username);
+                    prepareForDispatch(
+                            resolved.dispatchedItem,
+                            username
+                    );
 
             preparedItems.add(prepared);
         }
@@ -218,6 +264,22 @@ public class ScannerDispatchService {
             );
         }
 
+        /*
+         * New QR rule:
+         * If item is packed and still in PKD, QR dispatch cannot continue.
+         * User must move it to FG first.
+         */
+        if (requiresMoveToFg(item)) {
+            throw new RuntimeException(
+                    "Move item to FG before QR dispatch"
+            );
+        }
+
+        /*
+         * READY is allowed only when:
+         * - old legacy item has missing plant/location data, or
+         * - item is already physically moved to FG
+         */
         if (item.getStatus() == ItemDispatchStatus.READY) {
             dispatchedItemService.updateDispatchStatus(
                     item.getZohoItemId(),
@@ -479,6 +541,126 @@ public class ScannerDispatchService {
         );
 
         return ci;
+    }
+    
+    private void assertScanPlantAccess(
+            DispatchedItem item,
+            Set<String> allowedPlants
+    ) {
+        if (item == null) {
+            throw new RuntimeException("Dispatch item missing");
+        }
+
+        if (allowedPlants == null || allowedPlants.isEmpty()) {
+            return;
+        }
+
+        /*
+         * Legacy safety:
+         * Old records may not have plantCode.
+         */
+        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+            return;
+        }
+
+        if (!allowedPlants.contains(item.getPlantCode())) {
+            throw new RuntimeException(
+                    "User does not have access to plant: " + item.getPlantCode()
+            );
+        }
+    }
+
+    private boolean isLegacyLocationMissing(DispatchedItem item) {
+        return item.getPlantCode() == null || item.getPlantCode().isBlank()
+                || item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()
+                || item.getFgAreaCode() == null || item.getFgAreaCode().isBlank();
+    }
+
+    private String currentLocation(DispatchedItem item) {
+        if (item.getCurrentLocationCode() != null && !item.getCurrentLocationCode().isBlank()) {
+            return item.getCurrentLocationCode().trim();
+        }
+
+        if (item.getLocation() != null && !item.getLocation().isBlank()) {
+            return item.getLocation().trim();
+        }
+
+        return "";
+    }
+
+    private boolean isPkdLocation(DispatchedItem item) {
+        String loc = currentLocation(item);
+
+        if (loc.isBlank()) {
+            return false;
+        }
+
+        String packedArea = item.getPackedAreaCode();
+
+        if (packedArea != null && !packedArea.isBlank()) {
+            return loc.equals(packedArea)
+                    || loc.startsWith(packedArea + "-")
+                    || loc.startsWith(packedArea + " ");
+        }
+
+        return loc.startsWith("PKD");
+    }
+
+    private boolean isFgLocation(DispatchedItem item) {
+        String loc = currentLocation(item);
+        String fg = item.getFgAreaCode();
+
+        if (loc.isBlank() || fg == null || fg.isBlank()) {
+            return false;
+        }
+
+        return loc.equals(fg)
+                || loc.startsWith(fg + "-")
+                || loc.startsWith(fg + " ");
+    }
+
+    private boolean requiresMoveToFg(DispatchedItem item) {
+        return item.getStatus() == ItemDispatchStatus.READY
+                && !isLegacyLocationMissing(item)
+                && isPkdLocation(item)
+                && !isFgLocation(item);
+    }
+
+    private boolean canQrDispatchNow(DispatchedItem item) {
+        if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
+            return true;
+        }
+
+        if (item.getStatus() == ItemDispatchStatus.READY) {
+            return isLegacyLocationMissing(item) || isFgLocation(item);
+        }
+
+        return false;
+    }
+
+    private List<String> getFgZones(DispatchedItem item) {
+        if (item == null || item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+            return List.of();
+        }
+
+        try {
+            PlantLocationService.PlantConfig plant =
+                    plantLocationService.getPlantConfig(item.getPlantCode());
+
+            return plant.fgZones() != null
+                    ? plant.fgZones()
+                    : List.of();
+
+        } catch (Exception e) {
+            /*
+             * Fallback for safety.
+             */
+            if ("FG-1".equals(item.getFgAreaCode())) {
+                return List.of("A", "B", "C");
+            }
+
+            return List.of();
+        }
     }
 
     private String generateChalaanNumber() {

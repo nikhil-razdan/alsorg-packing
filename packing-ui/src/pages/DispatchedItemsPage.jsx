@@ -1409,6 +1409,9 @@ function DispatchedItemsPage() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [scanCart, setScanCart] = useState([]);
+  const [pendingQrFgItem, setPendingQrFgItem] = useState(null);
+  const [pendingQrFgZone, setPendingQrFgZone] = useState("");
+  const [qrMoveFgLoading, setQrMoveFgLoading] = useState(false);
   const [plantConfigs, setPlantConfigs] = useState([]);
   const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
   const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
@@ -1932,6 +1935,138 @@ function DispatchedItemsPage() {
 
      return await res.json();
    };
+   
+   const getScanFgZones = (item) => {
+     return Array.isArray(item?.fgZones)
+       ? item.fgZones.filter(Boolean)
+       : [];
+   };
+
+   const isScanFgZoneRequired = (item) => {
+     return Boolean(item?.fgZoneRequired) || getScanFgZones(item).length > 0;
+   };
+
+   const moveScannedItemToFg = async (item, fgZoneCode = "") => {
+     if (!item?.zohoItemId) {
+       throw new Error("Scanned item id missing");
+     }
+
+     const zones = getScanFgZones(item);
+     const finalZone = fgZoneCode?.trim();
+
+     if (zones.length > 0 && !finalZone) {
+       throw new Error("Please select FG zone");
+     }
+
+     const query = finalZone
+       ? `?fgZoneCode=${encodeURIComponent(finalZone)}`
+       : "";
+
+     const res = await fetch(
+       `${API_BASE_URL}/api/dispatched/${encodeURIComponent(item.zohoItemId)}/move-to-fg${query}`,
+       {
+         method: "POST",
+         headers: getAuthHeaders(),
+       }
+     );
+
+     if (!res.ok) {
+       const text = await res.text();
+       throw new Error(text || "Move to FG failed");
+     }
+   };
+
+   const handleSingleQrScan = async (rawScan) => {
+     try {
+       setScanLoading(true);
+       setScanMessage("Reading scanned QR...");
+
+       const item = await resolveScan(rawScan);
+
+       if (item.moveToFgRequired) {
+         setPendingQrFgItem({
+           ...item,
+           rawScan,
+         });
+
+         setPendingQrFgZone("");
+         setScannerText("");
+
+         setScanMessage(
+           item.message || "Move item to FG before QR dispatch"
+         );
+
+         return;
+       }
+
+       if (!item.dispatchAllowed) {
+         setScanMessage(item.message || "Item cannot be dispatched");
+         alert(item.message || "Item cannot be dispatched");
+         return;
+       }
+
+       await dispatchSingleByScan(rawScan);
+     } catch (err) {
+       console.error(err);
+       setScanMessage(err.message || "QR scan failed");
+       alert(err.message || "QR scan failed");
+     } finally {
+       setScanLoading(false);
+     }
+   };
+
+   const confirmSingleQrMoveToFgAndDispatch = async () => {
+     if (!pendingQrFgItem) return;
+
+     try {
+       setQrMoveFgLoading(true);
+       setScanMessage("Moving scanned item to FG...");
+
+       await moveScannedItemToFg(
+         pendingQrFgItem,
+         pendingQrFgZone
+       );
+
+       setScanMessage("Item moved to FG. Generating challan...");
+
+       const rawScan = pendingQrFgItem.rawScan;
+
+       setPendingQrFgItem(null);
+       setPendingQrFgZone("");
+
+       await dispatchSingleByScan(rawScan);
+     } catch (err) {
+       console.error(err);
+       setScanMessage(err.message || "Move to FG failed");
+       alert(err.message || "Move to FG failed");
+     } finally {
+       setQrMoveFgLoading(false);
+     }
+   };
+
+   const updateScanCartFgZone = (zohoItemId, fgZoneCode) => {
+     setScanCart((prev) =>
+       prev.map((item) =>
+         item.zohoItemId === zohoItemId
+           ? {
+               ...item,
+               fgZoneCode,
+             }
+           : item
+       )
+     );
+   };
+
+   const moveQrCartItemsToFgIfNeeded = async (items) => {
+     for (const item of items) {
+       if (!item.moveToFgRequired) continue;
+
+       await moveScannedItemToFg(
+         item,
+         item.fgZoneCode || ""
+       );
+     }
+   };
 
    const dispatchSingleByScan = async (rawScan) => {
      try {
@@ -1986,11 +2121,11 @@ function DispatchedItemsPage() {
 
        const item = await resolveScan(rawScan);
 
-       if (!item.dispatchAllowed) {
-         setScanMessage(item.message || "Item cannot be dispatched");
-         alert(item.message || "Item cannot be dispatched");
-         return;
-       }
+	   if (!item.dispatchAllowed && !item.moveToFgRequired) {
+	     setScanMessage(item.message || "Item cannot be dispatched");
+	     alert(item.message || "Item cannot be dispatched");
+	     return;
+	   }
 
        const alreadyAdded = scanCart.some(
          (x) => x.zohoItemId === item.zohoItemId
@@ -2002,16 +2137,21 @@ function DispatchedItemsPage() {
          return;
        }
 
-       setScanCart((prev) => [
-         ...prev,
-         {
-           ...item,
-           rawScan,
-         },
-       ]);
+	   setScanCart((prev) => [
+	     ...prev,
+	     {
+	       ...item,
+	       rawScan,
+	       fgZoneCode: "",
+	     },
+	   ]);
 
        setScannerText("");
-       setScanMessage(`Added: ${item.itemName}`);
+	   setScanMessage(
+	     item.moveToFgRequired
+	       ? `Added: ${item.itemName}. Move to FG required.`
+	       : `Added: ${item.itemName}`
+	   );
      } catch (err) {
        console.error(err);
        setScanMessage(err.message || "Failed to add scanned item");
@@ -2031,7 +2171,7 @@ function DispatchedItemsPage() {
      if (!rawScan || scanLoading) return;
 
      if (scanMode === "SINGLE") {
-       await dispatchSingleByScan(rawScan);
+       await handleSingleQrScan(rawScan);
      } else {
        await addBulkScanToCart(rawScan);
      }
@@ -2072,6 +2212,25 @@ function DispatchedItemsPage() {
      try {
        setScanLoading(true);
        setScanMessage("Generating bulk challan...");
+	   
+	   const missingZoneItem = scanCart.find((item) => {
+	     return (
+	       item.moveToFgRequired &&
+	       isScanFgZoneRequired(item) &&
+	       !item.fgZoneCode
+	     );
+	   });
+
+	   if (missingZoneItem) {
+	     alert(`Select FG zone for ${missingZoneItem.itemName}`);
+	     setScanLoading(false);
+	     return;
+	   }
+
+	   setScanMessage("Moving scanned PKD items to FG...");
+	   await moveQrCartItemsToFgIfNeeded(scanCart);
+
+	   setScanMessage("Generating bulk challan...");
 
        const res = await fetch(
          `${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
@@ -3242,13 +3401,15 @@ function DispatchedItemsPage() {
 
 		  {isDispatch && (
 		    <Button
-		      onClick={() => {
-		        setQrDispatchOpen(true);
-		        setScanMode("SINGLE");
-		        setScannerText("");
-		        setScanMessage("");
-		        setScanCart([]);
-		      }}
+			onClick={() => {
+			  setQrDispatchOpen(true);
+			  setScanMode("SINGLE");
+			  setScannerText("");
+			  setScanMessage("");
+			  setScanCart([]);
+			  setPendingQrFgItem(null);
+			  setPendingQrFgZone("");
+			}}
 		      sx={qrDispatchButtonSx}
 		    >
 		      📷 QR Dispatch
@@ -4002,12 +4163,14 @@ function DispatchedItemsPage() {
 	            }}
 	          >
 	            <Button
-	              onClick={() => {
-	                setScanMode("SINGLE");
-	                setScanCart([]);
-	                setScannerText("");
-	                setScanMessage("");
-	              }}
+				onClick={() => {
+				  setScanMode("SINGLE");
+				  setScanCart([]);
+				  setScannerText("");
+				  setScanMessage("");
+				  setPendingQrFgItem(null);
+				  setPendingQrFgZone("");
+				}}
 	              sx={{
 	                ...scannerModeButtonSx,
 	                ...(scanMode === "SINGLE" ? scannerModeActiveSx : {}),
@@ -4017,11 +4180,13 @@ function DispatchedItemsPage() {
 	            </Button>
 
 	            <Button
-	              onClick={() => {
-	                setScanMode("BULK");
-	                setScannerText("");
-	                setScanMessage("");
-	              }}
+				onClick={() => {
+				  setScanMode("BULK");
+				  setScannerText("");
+				  setScanMessage("");
+				  setPendingQrFgItem(null);
+				  setPendingQrFgZone("");
+				}}
 	              sx={{
 	                ...scannerModeButtonSx,
 	                ...(scanMode === "BULK" ? scannerModeActiveSx : {}),
@@ -4077,7 +4242,103 @@ function DispatchedItemsPage() {
 	            disabled={scanLoading}
 	            sx={scannerInputSx}
 	          />
+			  {scanMode === "SINGLE" && pendingQrFgItem && (
+			    <Box
+			      sx={{
+			        mt: 2,
+			        p: 2,
+			        borderRadius: "14px",
+			        background: "rgba(245,158,11,.12)",
+			        border: "1px solid rgba(245,158,11,.25)",
+			      }}
+			    >
+			      <Box
+			        sx={{
+			          color: "#fff",
+			          fontWeight: 900,
+			          mb: 0.5,
+			        }}
+			      >
+			        Move to FG Required
+			      </Box>
 
+			      <Box
+			        sx={{
+			          color: "#fcd34d",
+			          fontSize: 12,
+			          fontWeight: 700,
+			          mb: 1.5,
+			        }}
+			      >
+			        {pendingQrFgItem.itemName || "—"} is currently at{" "}
+			        {pendingQrFgItem.currentLocationCode || "PKD"}.
+			        Move it to FG before QR dispatch.
+			      </Box>
+
+			      {getScanFgZones(pendingQrFgItem).length > 0 && (
+			        <Box
+			          component="select"
+			          value={pendingQrFgZone}
+			          onChange={(e) => setPendingQrFgZone(e.target.value)}
+			          sx={nativeFgSelectSx}
+			        >
+			          <option value="">
+			            Select FG Zone
+			          </option>
+
+			          {getScanFgZones(pendingQrFgItem).map((zone) => (
+			            <option key={zone} value={zone}>
+			              {pendingQrFgItem.fgAreaCode || "FG"} - Zone {zone}
+			            </option>
+			          ))}
+			        </Box>
+			      )}
+
+			      {getScanFgZones(pendingQrFgItem).length === 0 && (
+			        <Box
+			          sx={{
+			            color: "#6ee7b7",
+			            fontSize: 12,
+			            fontWeight: 800,
+			            mb: 1.5,
+			          }}
+			        >
+			          No FG zone required for this plant.
+			        </Box>
+			      )}
+
+			      <Box
+			        sx={{
+			          display: "flex",
+			          justifyContent: "flex-end",
+			          gap: 1,
+			          mt: 1.5,
+			        }}
+			      >
+			        <Button
+			          disabled={qrMoveFgLoading}
+			          onClick={() => {
+			            setPendingQrFgItem(null);
+			            setPendingQrFgZone("");
+			            setScanMessage("");
+			          }}
+			          sx={modalSecondaryButtonSx}
+			        >
+			          Cancel
+			        </Button>
+
+			        <Button
+			          disabled={qrMoveFgLoading}
+			          onClick={confirmSingleQrMoveToFgAndDispatch}
+			          sx={moveToFgButtonSx}
+			        >
+			          {qrMoveFgLoading
+			            ? "Moving..."
+			            : "Move to FG & Generate Challan"}
+			        </Button>
+			      </Box>
+			    </Box>
+			  )}
 	          <Box
 	            sx={{
 	              display: "flex",
@@ -4127,13 +4388,23 @@ function DispatchedItemsPage() {
 	                  Scanned Items: {scanCart.length}
 	                </Box>
 
-	                <Button
-	                  disabled={scanCart.length === 0 || scanLoading}
-	                  onClick={generateBulkChalaanFromScans}
-	                  sx={scannerGenerateButtonSx}
-	                >
-	                  Generate Bulk Challan
-	                </Button>
+					<Button
+					  disabled={
+					    scanCart.length === 0 ||
+					    scanLoading ||
+					    scanCart.some((item) => {
+					      return (
+					        item.moveToFgRequired &&
+					        isScanFgZoneRequired(item) &&
+					        !item.fgZoneCode
+					      );
+					    })
+					  }
+					  onClick={generateBulkChalaanFromScans}
+					  sx={scannerGenerateButtonSx}
+					>
+					  Generate Bulk Challan
+					</Button>
 	              </Box>
 
 	              {scanCart.length === 0 && (
@@ -4173,6 +4444,62 @@ function DispatchedItemsPage() {
 	                        >
 	                          {item.pdNo || "—"} • {item.clientName || "—"} • {item.status}
 	                        </Box>
+							{item.moveToFgRequired && (
+							  <Box
+							    sx={{
+							      mt: 1,
+							      p: 1,
+							      borderRadius: "10px",
+							      background: "rgba(245,158,11,.10)",
+							      border: "1px solid rgba(245,158,11,.18)",
+							    }}
+							  >
+							    <Box
+							      sx={{
+							        color: "#fcd34d",
+							        fontSize: 11,
+							        fontWeight: 900,
+							        mb: 0.8,
+							      }}
+							    >
+							      Move to FG required
+							    </Box>
+
+							    {getScanFgZones(item).length > 0 ? (
+							      <Box
+							        component="select"
+							        value={item.fgZoneCode || ""}
+							        onChange={(e) =>
+							          updateScanCartFgZone(
+							            item.zohoItemId,
+							            e.target.value
+							          )
+							        }
+							        sx={nativeFgSelectSx}
+							      >
+							        <option value="">
+							          Select FG Zone
+							        </option>
+
+							        {getScanFgZones(item).map((zone) => (
+							          <option key={zone} value={zone}>
+							            {item.fgAreaCode || "FG"} - Zone {zone}
+							          </option>
+							        ))}
+							      </Box>
+							    ) : (
+							      <Box
+							        sx={{
+							          color: "#6ee7b7",
+							          fontSize: 11,
+							          fontWeight: 800,
+							        }}
+							      >
+							        No zone required. It will move to {item.fgAreaCode || "FG"}.
+							      </Box>
+							    )}
+							  </Box>
+							)}
 	                      </Box>
 
 	                      <Button
