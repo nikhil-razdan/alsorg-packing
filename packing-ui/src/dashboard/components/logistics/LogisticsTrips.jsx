@@ -6,8 +6,9 @@ import {
 
 import {
   fetchLogisticsTrips,
+  fetchLogisticsTripItems,
   endLogisticsTrip,
-} from "../../api/logisticsApi";
+} from "../../api/logisticsApi.jsx";
 
 function getNowDateTimeLocal() {
   const d = new Date();
@@ -32,6 +33,15 @@ function LogisticsTrips({
 
   const [trips, setTrips] =
     useState([]);
+	
+	const [itemsModalTrip, setItemsModalTrip] =
+	  useState(null);
+
+	const [tripItems, setTripItems] =
+	  useState([]);
+
+	const [tripItemsLoading, setTripItemsLoading] =
+	  useState(false);
 
   const [endModal, setEndModal] =
     useState(null);
@@ -80,6 +90,28 @@ function LogisticsTrips({
         "DELIVERED"
     );
   }, [trips]);
+  
+  const openTripItems = async (trip) => {
+    try {
+      setItemsModalTrip(trip);
+      setTripItems([]);
+      setTripItemsLoading(true);
+
+      const data =
+        await fetchLogisticsTripItems(trip.id);
+
+      setTripItems(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+
+      showAlert(
+        e.message || "Failed to load trip items",
+        "error"
+      );
+    } finally {
+      setTripItemsLoading(false);
+    }
+  };
 
   const submitEndTrip = async () => {
     if (!endModal) return;
@@ -168,20 +200,27 @@ function LogisticsTrips({
                 OUT FOR DELIVERY
               </span>
             </div>
-            <div>
-              <button
-                style={endBtn}
-                onClick={() => {
-                  setEndModal(trip);
-                  setEndForm({
-                    tripEnd: getNowDateTimeLocal(),
-                    remarks: "",
-                  });
-                }}
-              >
-                End Trip
-              </button>
-            </div>
+			<div style={actionGroup}>
+			  <button
+			    style={viewBtn}
+			    onClick={() => openTripItems(trip)}
+			  >
+			    View Items
+			  </button>
+
+			  <button
+			    style={endBtn}
+			    onClick={() => {
+			      setEndModal(trip);
+			      setEndForm({
+			        tripEnd: getNowDateTimeLocal(),
+			        remarks: "",
+			      });
+			    }}
+			  >
+			    End Trip
+			  </button>
+			</div>
           </div>
         ))}
       </div>
@@ -189,15 +228,16 @@ function LogisticsTrips({
       <SectionTitle text="Completed Trips" />
 
       <div style={table}>
-        <div style={headCompleted}>
-          <div>Challan</div>
-          <div>Driver</div>
-          <div>Vehicle</div>
-          <div>Start</div>
-          <div>End</div>
-          <div>Items</div>
-          <div>Status</div>
-        </div>
+	  <div style={headCompleted}>
+	    <div>Challan</div>
+	    <div>Driver</div>
+	    <div>Vehicle</div>
+	    <div>Start</div>
+	    <div>End</div>
+	    <div>Items</div>
+	    <div>Status</div>
+	    <div>Action</div>
+	  </div>
 
         {completedTrips.length === 0 && (
           <div style={emptyRow}>
@@ -229,10 +269,113 @@ function LogisticsTrips({
                 DELIVERED
               </span>
             </div>
+			<div>
+			  <button
+			    style={viewBtn}
+			    onClick={() => openTripItems(trip)}
+			  >
+			    View Items
+			  </button>
+			</div>
           </div>
         ))}
       </div>
+	  {itemsModalTrip && (
+	    <div
+	      style={overlay}
+	      onClick={() => {
+	        setItemsModalTrip(null);
+	        setTripItems([]);
+	      }}
+	    >
+	      <div
+	        style={{
+	          ...modal,
+	          width: 860,
+	          maxHeight: "86vh",
+	          overflow: "hidden",
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <div style={modalTitle}>
+	          Trip Items
+	        </div>
 
+	        <div style={modalSub}>
+	          Challan: {itemsModalTrip.challanNumber || "—"} | Driver:{" "}
+	          {itemsModalTrip.driver?.name || "—"} | Vehicle:{" "}
+	          {itemsModalTrip.vehicle?.vehicleNumber || "—"}
+	        </div>
+
+	        <div style={tripItemsTable}>
+	          <div style={tripItemsHead}>
+	            <div>Item</div>
+	            <div>SKU</div>
+	            <div>PD No</div>
+	            <div>DWG No</div>
+	            <div>Client</div>
+	            <div>Description</div>
+	          </div>
+
+	          {tripItemsLoading && (
+	            <div style={emptyRow}>
+	              Loading trip items...
+	            </div>
+	          )}
+
+	          {!tripItemsLoading && tripItems.length === 0 && (
+	            <div style={emptyRow}>
+	              No items found for this trip.
+	            </div>
+	          )}
+
+	          {!tripItemsLoading &&
+	            tripItems.map((item) => (
+	              <div
+	                key={item.id}
+	                style={tripItemsRow}
+	              >
+	                <div title={item.itemName}>
+	                  {item.itemName || "—"}
+	                </div>
+
+	                <div title={item.sku}>
+	                  {item.sku || "—"}
+	                </div>
+
+	                <div title={item.pdNo}>
+	                  {item.pdNo || "—"}
+	                </div>
+
+	                <div title={item.drawingNo}>
+	                  {item.drawingNo || "—"}
+	                </div>
+
+	                <div title={item.clientName}>
+	                  {item.clientName || "—"}
+	                </div>
+
+	                <div title={item.description}>
+	                  {item.description || "—"}
+	                </div>
+	              </div>
+	            ))}
+	        </div>
+
+	        <div style={footer}>
+	          <button
+	            style={cancelBtn}
+	            onClick={() => {
+	              setItemsModalTrip(null);
+	              setTripItems([]);
+	            }}
+	          >
+	            Close
+	          </button>
+	        </div>
+	      </div>
+	    </div>
+	  )}
       {endModal && (
         <div
           style={overlay}
@@ -368,7 +511,7 @@ const row = {
 
 const headCompleted = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr .8fr",
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
@@ -377,7 +520,7 @@ const headCompleted = {
 
 const rowCompleted = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr .8fr",
   padding: 16,
   color: "#fff",
   borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -502,6 +645,53 @@ const saveBtn = {
   padding: "10px 16px",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const actionGroup = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+};
+
+const viewBtn = {
+  border: "1px solid rgba(96,165,250,.25)",
+  borderRadius: 10,
+  padding: "8px 12px",
+  color: "#93c5fd",
+  fontWeight: 800,
+  cursor: "pointer",
+  background: "rgba(59,130,246,.12)",
+};
+
+const tripItemsTable = {
+  borderRadius: 16,
+  overflow: "auto",
+  maxHeight: "56vh",
+  border: "1px solid rgba(255,255,255,.06)",
+};
+
+const tripItemsHead = {
+  display: "grid",
+  gridTemplateColumns:
+    "1.2fr 1.2fr .7fr .8fr 1fr 1.4fr",
+  padding: 14,
+  background: "#111827",
+  color: "#94a3b8",
+  fontWeight: 900,
+  fontSize: 12,
+  minWidth: 980,
+};
+
+const tripItemsRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "1.2fr 1.2fr .7fr .8fr 1fr 1.4fr",
+  padding: 14,
+  color: "#fff",
+  borderTop: "1px solid rgba(255,255,255,0.06)",
+  alignItems: "center",
+  fontSize: 13,
+  minWidth: 980,
 };
 
 export default LogisticsTrips;

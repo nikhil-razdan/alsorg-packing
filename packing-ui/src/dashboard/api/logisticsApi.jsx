@@ -313,3 +313,22 @@ export async function deleteVehicle(id) {
     throw new Error(text);
   }
 }
+
+export async function fetchLogisticsTripItems(id) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/trips/${id}/items`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(
+      text || "Failed to fetch trip items"
+    );
+  }
+
+  return res.json();
+}

@@ -1,6 +1,7 @@
 package com.alsorg.packing.service;
 
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
+import com.alsorg.packing.controller.dto.logistics.LogisticsTripItemResponse;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.PacketItem;
@@ -403,6 +404,45 @@ public class LogisticsDispatchTripService {
         );
 
         return ci;
+    }
+    
+    @Transactional(readOnly = true)
+    public List<LogisticsTripItemResponse> getTripItems(
+            UUID tripId
+    ) {
+        if (tripId == null) {
+            throw new RuntimeException("Trip id is required");
+        }
+
+        if (!tripRepository.existsById(tripId)) {
+            throw new RuntimeException("Trip not found");
+        }
+
+        return tripItemRepository.findByTripId(tripId)
+                .stream()
+                .map(item -> {
+                    LogisticsTripItemResponse dto =
+                            new LogisticsTripItemResponse();
+
+                    dto.setId(item.getId());
+
+                    if (item.getTrip() != null) {
+                        dto.setTripId(item.getTrip().getId());
+                    }
+
+                    dto.setZohoItemId(item.getZohoItemId());
+                    dto.setPacketItemId(item.getPacketItemId());
+                    dto.setItemName(item.getItemName());
+                    dto.setSku(item.getSku());
+                    dto.setPdNo(item.getPdNo());
+                    dto.setDrawingNo(item.getDrawingNo());
+                    dto.setClientName(item.getClientName());
+                    dto.setDescription(item.getDescription());
+                    dto.setRemarks(item.getRemarks());
+
+                    return dto;
+                })
+                .toList();
     }
 
     private String generateChallanNumber() {

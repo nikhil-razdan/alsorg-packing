@@ -1,6 +1,7 @@
 package com.alsorg.packing.controller;
 
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
+import com.alsorg.packing.controller.dto.logistics.LogisticsTripItemResponse;
 import com.alsorg.packing.controller.dto.logistics.DispatchTripRequest;
 import com.alsorg.packing.controller.dto.logistics.EndTripRequest;
 import com.alsorg.packing.domain.logistics.LogisticsTrip;
@@ -91,6 +92,26 @@ public class LogisticsDispatchController {
         return tripService.getAllTrips();
     }
 
+    @GetMapping("/trips/{tripId}/items")
+    public List<LogisticsTripItemResponse> getTripItems(
+            @PathVariable UUID tripId,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (
+                !currentUserService.isAdmin(user) &&
+                !currentUserService.isDispatch(user) &&
+                !currentUserService.isLogistics(user)
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN, DISPATCH or LOGISTICS can view trip items"
+            );
+        }
+        return tripService.getTripItems(tripId);
+    }
+    
     @PostMapping("/trips/{tripId}/end")
     public LogisticsTrip endTrip(
             @PathVariable UUID tripId,
