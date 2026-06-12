@@ -112,6 +112,36 @@ const nativeFgSelectSx = {
   },
 };
 
+const dispatchTripNativeSelectSx = {
+  width: "100%",
+  height: 46,
+  px: 1.5,
+  borderRadius: "14px",
+  outline: "none",
+  color: "#fff",
+  fontWeight: 800,
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.10)",
+
+  "&:focus": {
+    borderColor: "#3b82f6",
+    boxShadow: "0 0 0 3px rgba(59,130,246,.14)",
+  },
+
+  "& option": {
+    color: "#111827",
+    background: "#fff",
+    fontWeight: 800,
+  },
+};
+
+const dispatchTripFieldLabelSx = {
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 900,
+  mb: 0.8,
+};
+
 const selectCheckboxDisabledStyle = {
   ...selectCheckboxStyle,
   opacity: 0.35,
@@ -6159,59 +6189,67 @@ function DispatchedItemsPage() {
 	            </Box>
 	          </Box>
 
-	          <TextField
-	            select
-	            fullWidth
-	            label="Driver"
-	            value={dispatchTripForm.driverId}
-	            onChange={(e) =>
-	              setDispatchTripForm((prev) => ({
-	                ...prev,
-	                driverId: e.target.value,
-	              }))
-	            }
-	            sx={{
-	              ...formFieldSx,
-	              mb: 2,
-	            }}
-	          >
-	            <MenuItem value="">
-	              Select Driver
-	            </MenuItem>
+			  <Box sx={{ mb: 2 }}>
+			    <Box sx={dispatchTripFieldLabelSx}>
+			      Driver
+			    </Box>
 
-	            {logisticsDrivers.map((d) => (
-	              <MenuItem key={d.id} value={d.id}>
-	                {d.name}
-	              </MenuItem>
-	            ))}
-	          </TextField>
+			    <Box
+			      component="select"
+			      value={dispatchTripForm.driverId}
+			      onChange={(e) =>
+			        setDispatchTripForm((prev) => ({
+			          ...prev,
+			          driverId: e.target.value,
+			        }))
+			      }
+			      sx={dispatchTripNativeSelectSx}
+			    >
+			      <option value="">
+			        Select Driver
+			      </option>
 
-	          <TextField
-	            select
-	            fullWidth
-	            label="Vehicle"
-	            value={dispatchTripForm.vehicleId}
-	            onChange={(e) =>
-	              setDispatchTripForm((prev) => ({
-	                ...prev,
-	                vehicleId: e.target.value,
-	              }))
-	            }
-	            sx={{
-	              ...formFieldSx,
-	              mb: 2,
-	            }}
-	          >
-	            <MenuItem value="">
-	              Select Vehicle
-	            </MenuItem>
+			      {logisticsDrivers.map((d) => (
+			        <option
+			          key={d.id}
+			          value={d.id}
+			        >
+			          {d.name}
+			        </option>
+			      ))}
+			    </Box>
+			  </Box>
 
-	            {logisticsVehicles.map((v) => (
-	              <MenuItem key={v.id} value={v.id}>
-	                {v.vehicleNumber}
-	              </MenuItem>
-	            ))}
-	          </TextField>
+			  <Box sx={{ mb: 2 }}>
+			    <Box sx={dispatchTripFieldLabelSx}>
+			      Vehicle
+			    </Box>
+
+			    <Box
+			      component="select"
+			      value={dispatchTripForm.vehicleId}
+			      onChange={(e) =>
+			        setDispatchTripForm((prev) => ({
+			          ...prev,
+			          vehicleId: e.target.value,
+			        }))
+			      }
+			      sx={dispatchTripNativeSelectSx}
+			    >
+			      <option value="">
+			        Select Vehicle
+			      </option>
+
+			      {logisticsVehicles.map((v) => (
+			        <option
+			          key={v.id}
+			          value={v.id}
+			        >
+			          {v.vehicleNumber}
+			        </option>
+			      ))}
+			    </Box>
+			  </Box>
 
 	          <TextField
 	            fullWidth
