@@ -6,6 +6,7 @@ import java.util.UUID;
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import jakarta.persistence.*;
+import jakarta.persistence.Column;
 
 @Entity
 @Table(name = "dispatched_items")
@@ -129,6 +130,21 @@ public class DispatchedItem {
     private LocalDateTime tripEndedAt;
 
     private LocalDateTime deliveredAt;
+    
+    private String receiverName;
+
+    private String receiverPhone;
+
+    private String podUrl;
+
+    private Double deliveryLatitude;
+
+    private Double deliveryLongitude;
+
+    private Double deliveryLocationAccuracy;
+
+    @Column(length = 1500)
+    private String deliveryRemarks;
     
     public DispatchedItem() {
     }
@@ -556,5 +572,61 @@ public class DispatchedItem {
 
 	public void setDeliveredAt(LocalDateTime deliveredAt) {
 		this.deliveredAt = deliveredAt;
+	}
+
+	public String getReceiverName() {
+		return receiverName;
+	}
+
+	public void setReceiverName(String receiverName) {
+		this.receiverName = receiverName;
+	}
+
+	public String getReceiverPhone() {
+		return receiverPhone;
+	}
+
+	public void setReceiverPhone(String receiverPhone) {
+		this.receiverPhone = receiverPhone;
+	}
+
+	public String getPodUrl() {
+		return podUrl;
+	}
+
+	public void setPodUrl(String podUrl) {
+		this.podUrl = podUrl;
+	}
+
+	public Double getDeliveryLatitude() {
+		return deliveryLatitude;
+	}
+
+	public void setDeliveryLatitude(Double deliveryLatitude) {
+		this.deliveryLatitude = deliveryLatitude;
+	}
+
+	public Double getDeliveryLongitude() {
+		return deliveryLongitude;
+	}
+
+	public void setDeliveryLongitude(Double deliveryLongitude) {
+		this.deliveryLongitude = deliveryLongitude;
+	}
+
+	public Double getDeliveryLocationAccuracy() {
+		return deliveryLocationAccuracy;
+	}
+
+	public void setDeliveryLocationAccuracy(Double deliveryLocationAccuracy) {
+		this.deliveryLocationAccuracy = deliveryLocationAccuracy;
+	}
+	
+	public String getDeliveryRemarks() {
+	    return deliveryRemarks;
+	}
+
+	public void setDeliveryRemarks(String deliveryRemarks) {
+	    this.deliveryRemarks = deliveryRemarks;
 	}
 }

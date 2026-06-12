@@ -110,7 +110,7 @@ public class LogisticsDispatchController {
             );
         }
         return tripService.getTripItems(tripId);
-    }
+      }
     
     @PostMapping("/trips/{tripId}/end")
     public LogisticsTrip endTrip(
@@ -135,7 +135,14 @@ public class LogisticsDispatchController {
                 tripId,
                 request.getTripEnd(),
                 user.getUsername(),
-                request.getRemarks()
+                request.getRemarks(),
+                request.getReceiverName(),
+                request.getReceiverPhone(),
+                request.getPodUrl(),
+                request.getDeliveryRemarks(),
+                request.getDeliveryLatitude(),
+                request.getDeliveryLongitude(),
+                request.getDeliveryLocationAccuracy()
         );
     }
 }

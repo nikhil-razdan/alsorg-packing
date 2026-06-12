@@ -46,11 +46,18 @@ function LogisticsTrips({
   const [endModal, setEndModal] =
     useState(null);
 
-  const [endForm, setEndForm] =
-    useState({
-      tripEnd: getNowDateTimeLocal(),
-      remarks: "",
-    });
+	const [endForm, setEndForm] =
+	  useState({
+	    tripEnd: getNowDateTimeLocal(),
+	    remarks: "",
+	    receiverName: "",
+	    receiverPhone: "",
+	    podUrl: "",
+	    deliveryRemarks: "",
+	    deliveryLatitude: "",
+	    deliveryLongitude: "",
+	    deliveryLocationAccuracy: "",
+	  });
 
   const load = async () => {
     try {
@@ -112,18 +119,70 @@ function LogisticsTrips({
       setTripItemsLoading(false);
     }
   };
+  
+  const captureCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showAlert(
+        "Location capture is not supported on this device",
+        "error"
+      );
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setEndForm((prev) => ({
+          ...prev,
+          deliveryLatitude: position.coords.latitude,
+          deliveryLongitude: position.coords.longitude,
+          deliveryLocationAccuracy: position.coords.accuracy,
+        }));
+
+        showAlert(
+          "Location captured successfully",
+          "success"
+        );
+      },
+      (error) => {
+        console.error(error);
+
+        showAlert(
+          "Unable to capture location. Please allow location permission.",
+          "error"
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
 
   const submitEndTrip = async () => {
     if (!endModal) return;
 
     try {
-      await endLogisticsTrip(
-        endModal.id,
-        {
-          tripEnd: endForm.tripEnd,
-          remarks: endForm.remarks,
-        }
-      );
+		await endLogisticsTrip(
+		  endModal.id,
+		  {
+		    tripEnd: endForm.tripEnd,
+		    remarks: endForm.remarks,
+		    receiverName: endForm.receiverName,
+		    receiverPhone: endForm.receiverPhone,
+		    podUrl: endForm.podUrl,
+		    deliveryRemarks: endForm.deliveryRemarks,
+		    deliveryLatitude: endForm.deliveryLatitude
+		      ? Number(endForm.deliveryLatitude)
+		      : null,
+		    deliveryLongitude: endForm.deliveryLongitude
+		      ? Number(endForm.deliveryLongitude)
+		      : null,
+		    deliveryLocationAccuracy: endForm.deliveryLocationAccuracy
+		      ? Number(endForm.deliveryLocationAccuracy)
+		      : null,
+		  }
+		);
 
       showAlert(
         "Trip ended and items marked delivered",
@@ -212,10 +271,17 @@ function LogisticsTrips({
 			    style={endBtn}
 			    onClick={() => {
 			      setEndModal(trip);
-			      setEndForm({
-			        tripEnd: getNowDateTimeLocal(),
-			        remarks: "",
-			      });
+				  setEndForm({
+				    tripEnd: getNowDateTimeLocal(),
+				    remarks: "",
+				    receiverName: "",
+				    receiverPhone: "",
+				    podUrl: "",
+				    deliveryRemarks: "",
+				    deliveryLatitude: "",
+				    deliveryLongitude: "",
+				    deliveryLocationAccuracy: "",
+				  });
 			    }}
 			  >
 			    End Trip
@@ -264,11 +330,18 @@ function LogisticsTrips({
                 : "—"}
             </div>
             <div>{trip.totalItems || 0}</div>
-            <div>
-              <span style={doneChip}>
-                DELIVERED
-              </span>
-            </div>
+			<div>
+			  <span style={doneChip}>
+			    DELIVERED
+			  </span>
+
+			  {(trip.receiverName || trip.podUrl) && (
+			    <div style={podMiniText}>
+			      {trip.receiverName || "POD"}{" "}
+			      {trip.podUrl ? "• POD Attached" : ""}
+			    </div>
+			  )}
+			</div>
 			<div>
 			  <button
 			    style={viewBtn}
@@ -306,7 +379,47 @@ function LogisticsTrips({
 	          {itemsModalTrip.driver?.name || "—"} | Vehicle:{" "}
 	          {itemsModalTrip.vehicle?.vehicleNumber || "—"}
 	        </div>
+			{itemsModalTrip.status === "DELIVERED" && (
+			  <div style={podSummaryBox}>
+			    <div>
+			      <strong>Receiver:</strong>{" "}
+			      {itemsModalTrip.receiverName || "—"}
+			    </div>
 
+			    <div>
+			      <strong>Phone:</strong>{" "}
+			      {itemsModalTrip.receiverPhone || "—"}
+			    </div>
+
+			    <div>
+			      <strong>POD:</strong>{" "}
+			      {itemsModalTrip.podUrl ? (
+			        <a
+			          href={itemsModalTrip.podUrl}
+			          target="_blank"
+			          rel="noreferrer"
+			          style={podLink}
+			        >
+			          Open POD
+			        </a>
+			      ) : (
+			        "—"
+			      )}
+			    </div>
+
+			    <div>
+			      <strong>Location:</strong>{" "}
+			      {itemsModalTrip.deliveryLatitude && itemsModalTrip.deliveryLongitude
+			        ? `${itemsModalTrip.deliveryLatitude}, ${itemsModalTrip.deliveryLongitude}`
+			        : "—"}
+			    </div>
+
+			    <div>
+			      <strong>Delivery Remarks:</strong>{" "}
+			      {itemsModalTrip.deliveryRemarks || "—"}
+			    </div>
+			  </div>
+			)}
 	        <div style={tripItemsTable}>
 	          <div style={tripItemsHead}>
 	            <div>Item</div>
@@ -407,6 +520,91 @@ function LogisticsTrips({
                 style={input}
               />
             </label>
+			
+			<label style={field}>
+			  Receiver Name
+			  <input
+			    value={endForm.receiverName}
+			    onChange={(e) =>
+			      setEndForm((prev) => ({
+			        ...prev,
+			        receiverName: e.target.value,
+			      }))
+			    }
+			    placeholder="Person who received the material"
+			    style={input}
+			  />
+			</label>
+
+			<label style={field}>
+			  Receiver Phone
+			  <input
+			    value={endForm.receiverPhone}
+			    onChange={(e) =>
+			      setEndForm((prev) => ({
+			        ...prev,
+			        receiverPhone: e.target.value,
+			      }))
+			    }
+			    placeholder="Receiver phone number"
+			    style={input}
+			  />
+			</label>
+
+			<label style={field}>
+			  POD Photo URL
+			  <input
+			    value={endForm.podUrl}
+			    onChange={(e) =>
+			      setEndForm((prev) => ({
+			        ...prev,
+			        podUrl: e.target.value,
+			      }))
+			    }
+			    placeholder="Paste POD image/file URL"
+			    style={input}
+			  />
+			</label>
+
+			<label style={field}>
+			  Delivery Remarks
+			  <textarea
+			    rows={3}
+			    value={endForm.deliveryRemarks}
+			    onChange={(e) =>
+			      setEndForm((prev) => ({
+			        ...prev,
+			        deliveryRemarks: e.target.value,
+			      }))
+			    }
+			    placeholder="Damage, shortage, receiver comments, unloading details..."
+			    style={textarea}
+			  />
+			</label>
+
+			<div style={locationBox}>
+			  <div>
+			    <div style={locationTitle}>
+			      Delivery Location
+			    </div>
+
+			    <div style={locationSub}>
+			      {endForm.deliveryLatitude && endForm.deliveryLongitude
+			        ? `${endForm.deliveryLatitude}, ${endForm.deliveryLongitude} | Accuracy: ${Math.round(
+			            Number(endForm.deliveryLocationAccuracy || 0)
+			          )}m`
+			        : "No location captured yet"}
+			    </div>
+			  </div>
+
+			  <button
+			    type="button"
+			    style={locationBtn}
+			    onClick={captureCurrentLocation}
+			  >
+			    Capture Location
+			  </button>
+			</div>
 
             <label style={field}>
               Remarks
@@ -692,6 +890,69 @@ const tripItemsRow = {
   alignItems: "center",
   fontSize: 13,
   minWidth: 980,
+};
+
+const locationBox = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+  padding: 14,
+  borderRadius: 14,
+  background: "rgba(59,130,246,.10)",
+  border: "1px solid rgba(59,130,246,.18)",
+  marginBottom: 14,
+};
+
+const locationTitle = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 13,
+};
+
+const podMiniText = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 700,
+  marginTop: 6,
+};
+
+const locationSub = {
+  color: "#94a3b8",
+  fontSize: 12,
+  marginTop: 4,
+  fontWeight: 700,
+};
+
+const locationBtn = {
+  border: "none",
+  borderRadius: 10,
+  padding: "9px 12px",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  whiteSpace: "nowrap",
+};
+
+const podSummaryBox = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  padding: 14,
+  borderRadius: 14,
+  background: "rgba(16,185,129,.10)",
+  border: "1px solid rgba(16,185,129,.18)",
+  color: "#cbd5e1",
+  fontSize: 13,
+  fontWeight: 700,
+  marginBottom: 14,
+};
+
+const podLink = {
+  color: "#60a5fa",
+  fontWeight: 900,
+  textDecoration: "none",
 };
 
 export default LogisticsTrips;

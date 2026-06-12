@@ -279,7 +279,14 @@ public class LogisticsDispatchTripService {
             UUID tripId,
             LocalDateTime tripEnd,
             String username,
-            String remarks
+            String remarks,
+            String receiverName,
+            String receiverPhone,
+            String podUrl,
+            String deliveryRemarks,
+            Double deliveryLatitude,
+            Double deliveryLongitude,
+            Double deliveryLocationAccuracy
     ) {
         LogisticsTrip trip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
@@ -305,10 +312,25 @@ public class LogisticsDispatchTripService {
         if (remarks != null && !remarks.isBlank()) {
             trip.setRemarks(remarks.trim());
         }
+        
+        trip.setReceiverName(cleanOrNull(receiverName));
+        trip.setReceiverPhone(cleanOrNull(receiverPhone));
+        trip.setPodUrl(cleanOrNull(podUrl));
+        trip.setDeliveryRemarks(cleanOrNull(deliveryRemarks));
+        trip.setDeliveryLatitude(deliveryLatitude);
+        trip.setDeliveryLongitude(deliveryLongitude);
+        trip.setDeliveryLocationAccuracy(deliveryLocationAccuracy);
 
         List<LogisticsTripItem> tripItems =
                 tripItemRepository.findByTripId(tripId);
-
+        final String finalReceiverName = cleanOrNull(receiverName);
+        final String finalReceiverPhone = cleanOrNull(receiverPhone);
+        final String finalPodUrl = cleanOrNull(podUrl);
+        final String finalDeliveryRemarks = cleanOrNull(deliveryRemarks);
+        final Double finalDeliveryLatitude = deliveryLatitude;
+        final Double finalDeliveryLongitude = deliveryLongitude;
+        final Double finalDeliveryLocationAccuracy = deliveryLocationAccuracy;
+        
         for (LogisticsTripItem tripItem : tripItems) {
             dispatchedItemRepository
                     .findById(tripItem.getZohoItemId())
@@ -317,7 +339,14 @@ public class LogisticsDispatchTripService {
                             item.setStatus(ItemDispatchStatus.DELIVERED);
                             item.setTripEndedAt(finalEnd);
                             item.setDeliveredAt(finalEnd);
-
+                            item.setReceiverName(finalReceiverName);
+                            item.setReceiverPhone(finalReceiverPhone);
+                            item.setPodUrl(finalPodUrl);
+                            item.setDeliveryRemarks(finalDeliveryRemarks);
+                            item.setDeliveryLatitude(finalDeliveryLatitude);
+                            item.setDeliveryLongitude(finalDeliveryLongitude);
+                            item.setDeliveryLocationAccuracy(finalDeliveryLocationAccuracy);
+                            
                             dispatchedItemRepository.save(item);
 
                             auditLogService.log(
@@ -449,6 +478,14 @@ public class LogisticsDispatchTripService {
         return "CH-" + System.currentTimeMillis();
     }
 
+    private String cleanOrNull(String value) {
+        if (value == null || value.trim().isBlank()) {
+            return null;
+        }
+
+        return value.trim();
+    }
+    
     private String safe(Object value) {
         if (value == null) return "-";
 
