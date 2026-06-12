@@ -50,6 +50,16 @@ public class CurrentUserService {
     public boolean isDispatch(User user) {
         return user != null && "DISPATCH".equalsIgnoreCase(user.getRole());
     }
+    
+    public boolean isLogistics(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+
+        return "LOGISTICS".equalsIgnoreCase(
+                String.valueOf(user.getRole()).trim()
+        );
+    }
 
     public Set<String> allowedPlants(User user) {
         if (user == null) {

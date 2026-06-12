@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/logistics")
@@ -75,8 +77,15 @@ public class LogisticsDispatchController {
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        if (!currentUserService.isDispatch(user) && !currentUserService.isAdmin(user)) {
-            throw new RuntimeException("Access denied");
+        if (
+                !currentUserService.isAdmin(user) &&
+                !currentUserService.isDispatch(user) &&
+                !currentUserService.isLogistics(user)
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN, DISPATCH or LOGISTICS can view trips"
+            );
         }
 
         return tripService.getAllTrips();
@@ -90,8 +99,15 @@ public class LogisticsDispatchController {
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        if (!currentUserService.isDispatch(user) && !currentUserService.isAdmin(user)) {
-            throw new RuntimeException("Access denied");
+        if (
+                !currentUserService.isAdmin(user) &&
+                !currentUserService.isDispatch(user) &&
+                !currentUserService.isLogistics(user)
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN, DISPATCH or LOGISTICS can end trips"
+            );
         }
 
         return tripService.endTrip(
