@@ -11,6 +11,10 @@ public class ChalaanPdfData {
     private String designerName;
     private String voucherNo;
     private String ot;
+    
+    private String driverName;
+
+    private String vehicleNumber;
 
     private List<ChalaanItem> items;
 
@@ -73,4 +77,20 @@ public class ChalaanPdfData {
     public void setItems(List<ChalaanItem> items) {
         this.items = items;
     }
+
+	public String getDriverName() {
+		return driverName;
+	}
+
+	public void setDriverName(String driverName) {
+		this.driverName = driverName;
+	}
+
+	public String getVehicleNumber() {
+		return vehicleNumber;
+	}
+
+	public void setVehicleNumber(String vehicleNumber) {
+		this.vehicleNumber = vehicleNumber;
+	}
 }

@@ -5,6 +5,11 @@ import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon
 from "@mui/icons-material/DescriptionOutlined";
+import {
+  fetchDrivers,
+  fetchVehicles,
+  createDispatchChallan,
+} from "../api/logisticsApi";
 
 const page = {
   minHeight: "100vh",
@@ -1413,6 +1418,25 @@ function DispatchedItemsPage() {
   const [pendingQrFgZone, setPendingQrFgZone] = useState("");
   const [qrMoveFgLoading, setQrMoveFgLoading] = useState(false);
   const [plantConfigs, setPlantConfigs] = useState([]);
+  const [logisticsDrivers, setLogisticsDrivers] = useState([]);
+  const [logisticsVehicles, setLogisticsVehicles] = useState([]);
+
+  const [dispatchTripOpen, setDispatchTripOpen] = useState(false);
+  const [dispatchTripLoading, setDispatchTripLoading] = useState(false);
+
+  const [dispatchTripContext, setDispatchTripContext] = useState({
+    mode: "",
+    itemIds: [],
+    scanTexts: [],
+    qrCart: [],
+    title: "",
+  });
+
+  const [dispatchTripForm, setDispatchTripForm] = useState({
+    driverId: "",
+    vehicleId: "",
+    tripStart: "",
+  });
   const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
   const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
   const [adminStickerEditForm, setAdminStickerEditForm] = useState({
@@ -1671,6 +1695,16 @@ function DispatchedItemsPage() {
      };
    };   
    
+   const getNowDateTimeLocal = () => {
+     const d = new Date();
+
+     d.setMinutes(
+       d.getMinutes() - d.getTimezoneOffset()
+     );
+
+     return d.toISOString().slice(0, 16);
+   };
+   
   const fetchData = async () => {
      try {
        setLoading(true);
@@ -1916,6 +1950,21 @@ function DispatchedItemsPage() {
      }
    };
    
+   const fetchLogisticsMasters = async () => {
+     try {
+       const [drivers, vehicles] = await Promise.all([
+         fetchDrivers(),
+         fetchVehicles(),
+       ]);
+
+       setLogisticsDrivers(Array.isArray(drivers) ? drivers : []);
+       setLogisticsVehicles(Array.isArray(vehicles) ? vehicles : []);
+     } catch (e) {
+       console.error("Failed to load logistics masters", e);
+       alert("Failed to load drivers/vehicles");
+     }
+   };
+   
    const resolveScan = async (rawScan) => {
      const res = await fetch(`${API_BASE_URL}/api/scanner/resolve`, {
        method: "POST",
@@ -2069,49 +2118,14 @@ function DispatchedItemsPage() {
    };
 
    const dispatchSingleByScan = async (rawScan) => {
-     try {
-       setScanLoading(true);
-       setScanMessage("Generating challan from scanned QR...");
+     setScannerText("");
+     setScanMessage("Select driver and vehicle to create trip");
 
-       const res = await fetch(
-         `${API_BASE_URL}/api/scanner/dispatch-single?preview=true`,
-         {
-           method: "POST",
-           headers: {
-             "Content-Type": "application/json",
-             ...getAuthHeaders(),
-           },
-           body: JSON.stringify({
-             scanText: rawScan,
-           }),
-         }
-       );
-
-       if (!res.ok) {
-         const text = await res.text();
-         throw new Error(text || "QR dispatch failed");
-       }
-
-       const blob = await res.blob();
-       const url = URL.createObjectURL(blob);
-
-       setChalaanPreview({
-         url,
-         id: "QR_SINGLE",
-       });
-
-       setScannerText("");
-       setScanMessage("Challan generated successfully");
-       setQrDispatchOpen(false);
-
-       await fetchData();
-     } catch (err) {
-       console.error(err);
-       setScanMessage(err.message || "QR dispatch failed");
-       alert(err.message || "QR dispatch failed");
-     } finally {
-       setScanLoading(false);
-     }
+     openDispatchTripModal({
+       mode: "QR_SINGLE",
+       scanTexts: [rawScan],
+       title: "QR Single Dispatch",
+     });
    };
 
    const addBulkScanToCart = async (rawScan) => {
@@ -2209,69 +2223,25 @@ function DispatchedItemsPage() {
        return;
      }
 
-     try {
-       setScanLoading(true);
-       setScanMessage("Generating bulk challan...");
-	   
-	   const missingZoneItem = scanCart.find((item) => {
-	     return (
-	       item.moveToFgRequired &&
-	       isScanFgZoneRequired(item) &&
-	       !item.fgZoneCode
-	     );
-	   });
-
-	   if (missingZoneItem) {
-	     alert(`Select FG zone for ${missingZoneItem.itemName}`);
-	     setScanLoading(false);
-	     return;
-	   }
-
-	   setScanMessage("Moving scanned PKD items to FG...");
-	   await moveQrCartItemsToFgIfNeeded(scanCart);
-
-	   setScanMessage("Generating bulk challan...");
-
-       const res = await fetch(
-         `${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
-         {
-           method: "POST",
-           headers: {
-             "Content-Type": "application/json",
-             ...getAuthHeaders(),
-           },
-           body: JSON.stringify({
-             scanTexts: scanCart.map((x) => x.rawScan),
-           }),
-         }
+     const missingZoneItem = scanCart.find((item) => {
+       return (
+         item.moveToFgRequired &&
+         isScanFgZoneRequired(item) &&
+         !item.fgZoneCode
        );
+     });
 
-       if (!res.ok) {
-         const text = await res.text();
-         throw new Error(text || "Bulk QR dispatch failed");
-       }
-
-       const blob = await res.blob();
-       const url = URL.createObjectURL(blob);
-
-       setChalaanPreview({
-         url,
-         id: "QR_BULK",
-       });
-
-       setScanCart([]);
-       setScannerText("");
-       setQrDispatchOpen(false);
-       setScanMessage("Bulk challan generated successfully");
-
-       await fetchData();
-     } catch (err) {
-       console.error(err);
-       setScanMessage(err.message || "Bulk QR dispatch failed");
-       alert(err.message || "Bulk QR dispatch failed");
-     } finally {
-       setScanLoading(false);
+     if (missingZoneItem) {
+       alert(`Select FG zone for ${missingZoneItem.itemName}`);
+       return;
      }
+
+     openDispatchTripModal({
+       mode: "QR_BULK",
+       scanTexts: scanCart.map((x) => x.rawScan),
+       qrCart: scanCart,
+       title: "QR Bulk Dispatch",
+     });
    };
   /* ===================== ACTIONS ===================== */
 
@@ -2756,7 +2726,7 @@ function DispatchedItemsPage() {
 		{
 		  field: "status",
 		  headerName: "Status",
-		  width: 220,
+		  width: 280,
 
 		  renderHeader: () => (
 		    <span>Status</span>
@@ -2805,17 +2775,45 @@ function DispatchedItemsPage() {
 		      sx = dispatchedStatusChip;
 		    }
 
+			if (row.status === "OUT_FOR_DELIVERY") {
+			  label = "DISPATCHED - OUT FOR DELIVERY";
+			  sx = readyStatusChip;
+			}
+
+			if (row.status === "DELIVERED") {
+			  label = "DELIVERED";
+			  sx = dispatchedStatusChip;
+			}
+			
 		    if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 		      label = "RETURN REQUESTED";
 		      sx = pendingStatusChip;
 		    }
 
 		    return (
-		      <Chip
-		        size="small"
-		        label={label}
-		        sx={sx}
-		      />
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.6 }}>
+				  <Chip
+				    size="small"
+				    label={label}
+				    sx={sx}
+				  />
+
+				  {(row.driverName || row.vehicleNumber) && (
+				    <Box
+				      sx={{
+				        color: "#94a3b8",
+				        fontSize: 11,
+				        fontWeight: 700,
+				        whiteSpace: "nowrap",
+				        overflow: "hidden",
+				        textOverflow: "ellipsis",
+				      }}
+				      title={`${row.driverName || "—"} • ${row.vehicleNumber || "—"}`}
+				    >
+				      {row.driverName || "—"} • {row.vehicleNumber || "—"}
+				    </Box>
+				  )}
+				</Box>
 		    );
 		  },
 		},
@@ -2852,9 +2850,9 @@ function DispatchedItemsPage() {
 	    const showGenerateChalaan =
 	      rowAction === "CHALAAN";
 
-	    const canRequestRestore =
-	      row.status === "DISPATCHED" &&
-	      row.approvalStatus !== "PENDING";
+		  const canRequestRestore =
+		    ["DISPATCHED", "DELIVERED"].includes(row.status) &&
+		    row.approvalStatus !== "PENDING";
 			
 
         return (
@@ -2898,35 +2896,14 @@ function DispatchedItemsPage() {
 			        return;
 			      }
 
-			      const res = await fetch(
-			        `${API_BASE_URL}/api/chalaan/${row.zohoItemId}/download?preview=true`,
-			        {
-			          method: "GET",
-			          headers: getAuthHeaders(),
-			        }
-			      );
-
-			      const contentType = res.headers.get("content-type");
-
-				  if (!res.ok) {
-				    const text = await res.text();
-				    console.error("❌ Chalaan failed:", text);
-				    alert(text || "Failed to generate chalaan");
-				    return;
-				  }
-
-			      const blob = await res.blob();
-			      const url = URL.createObjectURL(blob);
-
-			      // 🔥 THIS IS THE MAIN CHANGE
-			      setChalaanPreview({
-			        url,
-			        id: row.zohoItemId
+			      openDispatchTripModal({
+			        mode: "UI_SINGLE",
+			        itemIds: [row.zohoItemId],
+			        title: row.name || row.itemName || "Single Chalaan",
 			      });
-
 			    } catch (err) {
 			      console.error(err);
-			      alert("Failed to preview chalaan");
+			      alert("Failed to prepare logistics dispatch");
 			    }
 			  }}
 			  sx={{
@@ -3047,6 +3024,7 @@ function DispatchedItemsPage() {
   useEffect(() => {
     fetchData();
     fetchPlantConfigs();
+    fetchLogisticsMasters();
   }, []);
   
 
@@ -3248,9 +3226,6 @@ function DispatchedItemsPage() {
   const canBulkGenerateChalaan =
     selectedBulkAction === "CHALAAN";
 
-  /*
-    Keep these old names also, so your existing code does not break.
-  */
   const allReadyToDispatch = canBulkGenerateChalaan;
   const allReadyToStore = canBulkGenerateGatePass;
   const allReady = canBulkChangeStatus;
@@ -3337,6 +3312,174 @@ function DispatchedItemsPage() {
 	    } catch (e) {
 	      console.error(e);
 	      alert("Sticker edit failed");
+	    }
+	  };
+	  
+	  const openDispatchTripModal = ({
+	    mode,
+	    itemIds = [],
+	    scanTexts = [],
+	    qrCart = [],
+	    title = "",
+	  }) => {
+	    setDispatchTripContext({
+	      mode,
+	      itemIds,
+	      scanTexts,
+	      qrCart,
+	      title,
+	    });
+
+	    setDispatchTripForm({
+	      driverId: "",
+	      vehicleId: "",
+	      tripStart: getNowDateTimeLocal(),
+	    });
+
+	    setDispatchTripOpen(true);
+	  };
+	  
+	  const submitDispatchTrip = async () => {
+	    if (!dispatchTripForm.driverId) {
+	      alert("Please select driver");
+	      return;
+	    }
+
+	    if (!dispatchTripForm.vehicleId) {
+	      alert("Please select vehicle");
+	      return;
+	    }
+
+	    if (!dispatchTripForm.tripStart) {
+	      alert("Please select dispatch time");
+	      return;
+	    }
+
+	    try {
+	      setDispatchTripLoading(true);
+
+	      const payloadBase = {
+	        driverId: dispatchTripForm.driverId,
+	        vehicleId: dispatchTripForm.vehicleId,
+	        tripStart: dispatchTripForm.tripStart,
+	      };
+
+	      let blob;
+	      let previewId = "CHALAAN";
+
+	      if (
+	        dispatchTripContext.mode === "UI_SINGLE" ||
+	        dispatchTripContext.mode === "UI_BULK"
+	      ) {
+	        const result = await createDispatchChallan({
+	          itemIds: dispatchTripContext.itemIds,
+	          ...payloadBase,
+	        });
+
+	        blob = result.blob;
+	        previewId =
+	          result.challanNo ||
+	          dispatchTripContext.itemIds?.[0] ||
+	          "CHALAAN";
+	      }
+
+	      if (dispatchTripContext.mode === "QR_SINGLE") {
+	        const res = await fetch(
+	          `${API_BASE_URL}/api/scanner/dispatch-single?preview=true`,
+	          {
+	            method: "POST",
+	            headers: {
+	              "Content-Type": "application/json",
+	              ...getAuthHeaders(),
+	            },
+	            body: JSON.stringify({
+	              scanText: dispatchTripContext.scanTexts[0],
+	              ...payloadBase,
+	            }),
+	          }
+	        );
+
+	        if (!res.ok) {
+	          const text = await res.text();
+	          throw new Error(text || "QR dispatch failed");
+	        }
+
+	        blob = await res.blob();
+	        previewId = "QR_SINGLE";
+	      }
+
+	      if (dispatchTripContext.mode === "QR_BULK") {
+	        const missingZoneItem = dispatchTripContext.qrCart.find((item) => {
+	          return (
+	            item.moveToFgRequired &&
+	            isScanFgZoneRequired(item) &&
+	            !item.fgZoneCode
+	          );
+	        });
+
+	        if (missingZoneItem) {
+	          alert(`Select FG zone for ${missingZoneItem.itemName}`);
+	          return;
+	        }
+
+	        await moveQrCartItemsToFgIfNeeded(dispatchTripContext.qrCart);
+
+	        const res = await fetch(
+	          `${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
+	          {
+	            method: "POST",
+	            headers: {
+	              "Content-Type": "application/json",
+	              ...getAuthHeaders(),
+	            },
+	            body: JSON.stringify({
+	              scanTexts: dispatchTripContext.scanTexts,
+	              ...payloadBase,
+	            }),
+	          }
+	        );
+
+	        if (!res.ok) {
+	          const text = await res.text();
+	          throw new Error(text || "Bulk QR dispatch failed");
+	        }
+
+	        blob = await res.blob();
+	        previewId = "QR_BULK";
+	      }
+
+	      if (!blob) {
+	        throw new Error("No challan PDF generated");
+	      }
+
+	      const url = URL.createObjectURL(blob);
+
+	      setChalaanPreview({
+	        url,
+	        id: previewId,
+	      });
+
+	      setDispatchTripOpen(false);
+
+	      setDispatchTripContext({
+	        mode: "",
+	        itemIds: [],
+	        scanTexts: [],
+	        qrCart: [],
+	        title: "",
+	      });
+
+	      setScanCart([]);
+	      setScannerText("");
+	      setQrDispatchOpen(false);
+	      setSelectionModel([]);
+
+	      await fetchData();
+	    } catch (e) {
+	      console.error(e);
+	      alert(e.message || "Dispatch trip failed");
+	    } finally {
+	      setDispatchTripLoading(false);
 	    }
 	  };
 	  
@@ -3543,6 +3686,8 @@ function DispatchedItemsPage() {
 		<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
 		<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
 		<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
+		<MenuItem value="OUT_FOR_DELIVERY">🚚 Out For Delivery</MenuItem>
+		<MenuItem value="DELIVERED">✅ Delivered</MenuItem>
 		<MenuItem value="WAREHOUSE_RETURN_REQUESTED">↩️ Warehouse Return Requested</MenuItem>
 		  </TextField>
 
@@ -4008,7 +4153,13 @@ function DispatchedItemsPage() {
 	      {canBulkGenerateChalaan && (
 	        <Button
 	          size="small"
-	          onClick={() => setBulkDrawerOpen(true)}
+			  onClick={() => {
+			    openDispatchTripModal({
+			      mode: "UI_BULK",
+			      itemIds: selectionModel,
+			      title: "Bulk Chalaan",
+			    });
+			  }}
 	          sx={{
 	            px: 2.4,
 	            height: 38,
@@ -5930,6 +6081,176 @@ function DispatchedItemsPage() {
 	            sx={premiumButton}
 	          >
 	            Save
+	          </Button>
+	        </Box>
+	      </Box>
+	    </Box>
+	  )}
+	  {dispatchTripOpen && (
+	    <Box
+	      sx={{ ...enhancedOverlaySx, zIndex: 5600 }}
+	      onClick={() => {
+	        if (!dispatchTripLoading) {
+	          setDispatchTripOpen(false);
+	        }
+	      }}
+	    >
+	      <Box
+	        sx={{
+	          ...enhancedModalSx,
+	          width: 620,
+	        }}
+	        onClick={(e) => e.stopPropagation()}
+	      >
+	        <Box sx={modalHeaderSx}>
+	          <Box sx={modalTitleWrapSx}>
+	            <Box sx={modalIconBubble("#10b981")}>
+	              🚚
+	            </Box>
+
+	            <Box>
+	              <Box sx={modalTitleSx}>
+	                Create Dispatch Trip
+	              </Box>
+
+	              <Box sx={modalSubtitleSx}>
+	                {dispatchTripContext.title || "Select driver, vehicle and dispatch time"}
+	              </Box>
+	            </Box>
+	          </Box>
+
+	          <IconButton
+	            sx={modalCloseButtonSx}
+	            disabled={dispatchTripLoading}
+	            onClick={() => setDispatchTripOpen(false)}
+	          >
+	            ×
+	          </IconButton>
+	        </Box>
+
+	        <Box sx={modalContentSx}>
+	          <Box
+	            sx={{
+	              p: 1.6,
+	              mb: 2,
+	              borderRadius: "12px",
+	              background: "rgba(255,255,255,.035)",
+	              border: "1px solid rgba(255,255,255,.07)",
+	            }}
+	          >
+	            <Box sx={{ color: "#fff", fontWeight: 900 }}>
+	              Items:{" "}
+	              {dispatchTripContext.mode === "QR_SINGLE"
+	                ? 1
+	                : dispatchTripContext.mode === "QR_BULK"
+	                  ? dispatchTripContext.scanTexts.length
+	                  : dispatchTripContext.itemIds.length}
+	            </Box>
+
+	            <Box
+	              sx={{
+	                color: "#94a3b8",
+	                fontSize: 12,
+	                fontWeight: 700,
+	                mt: 0.5,
+	              }}
+	            >
+	              Mode: {dispatchTripContext.mode || "—"}
+	            </Box>
+	          </Box>
+
+	          <TextField
+	            select
+	            fullWidth
+	            label="Driver"
+	            value={dispatchTripForm.driverId}
+	            onChange={(e) =>
+	              setDispatchTripForm((prev) => ({
+	                ...prev,
+	                driverId: e.target.value,
+	              }))
+	            }
+	            sx={{
+	              ...formFieldSx,
+	              mb: 2,
+	            }}
+	          >
+	            <MenuItem value="">
+	              Select Driver
+	            </MenuItem>
+
+	            {logisticsDrivers.map((d) => (
+	              <MenuItem key={d.id} value={d.id}>
+	                {d.name}
+	              </MenuItem>
+	            ))}
+	          </TextField>
+
+	          <TextField
+	            select
+	            fullWidth
+	            label="Vehicle"
+	            value={dispatchTripForm.vehicleId}
+	            onChange={(e) =>
+	              setDispatchTripForm((prev) => ({
+	                ...prev,
+	                vehicleId: e.target.value,
+	              }))
+	            }
+	            sx={{
+	              ...formFieldSx,
+	              mb: 2,
+	            }}
+	          >
+	            <MenuItem value="">
+	              Select Vehicle
+	            </MenuItem>
+
+	            {logisticsVehicles.map((v) => (
+	              <MenuItem key={v.id} value={v.id}>
+	                {v.vehicleNumber}
+	              </MenuItem>
+	            ))}
+	          </TextField>
+
+	          <TextField
+	            fullWidth
+	            label="Dispatch / Trip Start Time"
+	            type="datetime-local"
+	            value={dispatchTripForm.tripStart}
+	            onChange={(e) =>
+	              setDispatchTripForm((prev) => ({
+	                ...prev,
+	                tripStart: e.target.value,
+	              }))
+	            }
+	            InputLabelProps={{
+	              shrink: true,
+	            }}
+	            sx={{
+	              ...formFieldSx,
+	              mb: 2,
+	            }}
+	          />
+	        </Box>
+
+	        <Box sx={modalFooterSx}>
+	          <Button
+	            disabled={dispatchTripLoading}
+	            onClick={() => setDispatchTripOpen(false)}
+	            sx={modalSecondaryButtonSx}
+	          >
+	            Cancel
+	          </Button>
+
+	          <Button
+	            disabled={dispatchTripLoading}
+	            onClick={submitDispatchTrip}
+	            sx={premiumButton}
+	          >
+	            {dispatchTripLoading
+	              ? "Creating Trip..."
+	              : "Create Trip & Generate Challan"}
 	          </Button>
 	        </Box>
 	      </Box>

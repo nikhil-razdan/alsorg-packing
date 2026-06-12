@@ -8,6 +8,8 @@ public enum ItemDispatchStatus {
     IN_WAREHOUSE,
     READY_TO_DISPATCH,
     DISPATCHED,
+    OUT_FOR_DELIVERY,
+    DELIVERED,
     RESTORE_REQUESTED,
     READY_TO_STORE,
     READY,

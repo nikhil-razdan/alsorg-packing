@@ -39,9 +39,8 @@ public class ChalaanPdfService {
     	// Existing voucherNo will now print as Challan No
     	String challanNo = safe(data.getVoucherNo());
 
-    	// These will be integrated later
-    	String driverName = "-";
-    	String vehicleNo = "-";
+    	String driverName = safe(data.getDriverName());
+    	String vehicleNo = safe(data.getVehicleNumber());
 
     	if (firstItem != null) {
     	    clientName = safe(firstItem.getClientName());

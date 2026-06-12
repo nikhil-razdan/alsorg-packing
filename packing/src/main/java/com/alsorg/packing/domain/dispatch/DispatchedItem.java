@@ -114,7 +114,21 @@ public class DispatchedItem {
     private String gatePassNumber;
     private String fromLocation;
     private String createdBy;
-    
+    private UUID logisticsTripId;
+
+    private UUID driverId;
+
+    private String driverName;
+
+    private UUID vehicleId;
+
+    private String vehicleNumber;
+
+    private LocalDateTime tripStartedAt;
+
+    private LocalDateTime tripEndedAt;
+
+    private LocalDateTime deliveredAt;
     
     public DispatchedItem() {
     }
@@ -478,5 +492,69 @@ public class DispatchedItem {
 
 	public void setFgZoneCode(String fgZoneCode) {
 		this.fgZoneCode = fgZoneCode;
+	}
+
+	public UUID getLogisticsTripId() {
+		return logisticsTripId;
+	}
+
+	public void setLogisticsTripId(UUID logisticsTripId) {
+		this.logisticsTripId = logisticsTripId;
+	}
+
+	public UUID getDriverId() {
+		return driverId;
+	}
+
+	public void setDriverId(UUID driverId) {
+		this.driverId = driverId;
+	}
+
+	public String getDriverName() {
+		return driverName;
+	}
+
+	public void setDriverName(String driverName) {
+		this.driverName = driverName;
+	}
+
+	public UUID getVehicleId() {
+		return vehicleId;
+	}
+
+	public void setVehicleId(UUID vehicleId) {
+		this.vehicleId = vehicleId;
+	}
+
+	public String getVehicleNumber() {
+		return vehicleNumber;
+	}
+
+	public void setVehicleNumber(String vehicleNumber) {
+		this.vehicleNumber = vehicleNumber;
+	}
+
+	public LocalDateTime getTripStartedAt() {
+		return tripStartedAt;
+	}
+
+	public void setTripStartedAt(LocalDateTime tripStartedAt) {
+		this.tripStartedAt = tripStartedAt;
+	}
+
+	public LocalDateTime getTripEndedAt() {
+		return tripEndedAt;
+	}
+
+	public void setTripEndedAt(LocalDateTime tripEndedAt) {
+		this.tripEndedAt = tripEndedAt;
+	}
+
+	public LocalDateTime getDeliveredAt() {
+		return deliveredAt;
+	}
+
+	public void setDeliveredAt(LocalDateTime deliveredAt) {
+		this.deliveredAt = deliveredAt;
 	}
 }

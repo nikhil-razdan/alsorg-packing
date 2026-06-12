@@ -55,11 +55,20 @@ public class DispatchedItemService {
 
         // ================= RULES =================
 
-     // ✅ ONLY ALLOW RESTORE AFTER DISPATCH
-        if (item.getStatus() != ItemDispatchStatus.DISPATCHED) {
+        if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Restore allowed only after dispatch"
+                    "Cannot restore while trip is out for delivery. End the trip first."
+            );
+        }
+
+        if (
+                item.getStatus() != ItemDispatchStatus.DISPATCHED &&
+                item.getStatus() != ItemDispatchStatus.DELIVERED
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Restore allowed only after delivery"
             );
         }
 

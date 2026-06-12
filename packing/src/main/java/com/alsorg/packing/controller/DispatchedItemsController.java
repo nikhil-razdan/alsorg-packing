@@ -46,6 +46,8 @@ public class DispatchedItemsController {
                 ItemDispatchStatus.IN_WAREHOUSE,
                 ItemDispatchStatus.READY_TO_DISPATCH,
                 ItemDispatchStatus.DISPATCHED,
+                ItemDispatchStatus.OUT_FOR_DELIVERY,
+                ItemDispatchStatus.DELIVERED,
                 ItemDispatchStatus.AVAILABLE,
                 ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
         );

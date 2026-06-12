@@ -230,6 +230,74 @@ export async function createVehicle(
   return res.json();
 }
 
+export async function createDispatchChallan(payload) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/dispatch/chalaan?preview=true`,
+    {
+      method: "POST",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to create dispatch trip");
+  }
+
+  const blob = await res.blob();
+
+  return {
+    blob,
+    tripId: res.headers.get("X-Trip-Id"),
+    challanNo: res.headers.get("X-Challan-No"),
+  };
+}
+
+export async function fetchLogisticsTrips() {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/trips`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to fetch trips");
+  }
+
+  return res.json();
+}
+
+export async function endLogisticsTrip(id, payload) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/trips/${id}/end`,
+    {
+      method: "POST",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to end trip");
+  }
+
+  return res.json();
+}
+
 export async function deleteVehicle(id) {
   const res = await fetch(
     `${API_BASE_URL}/api/logistics/vehicles/${id}`,

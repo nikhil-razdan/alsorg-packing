@@ -69,7 +69,10 @@ public class ScannerDispatchController {
     	        scannerDispatchService.dispatchSingleByScan(
     	                request.getScanText(),
     	                user.getUsername(),
-    	                currentUserService.allowedPlants(user)
+    	                currentUserService.allowedPlants(user),
+    	                request.getDriverId(),
+    	                request.getVehicleId(),
+    	                request.getTripStart()
     	        );
 
         return ResponseEntity.ok()
@@ -104,7 +107,10 @@ public class ScannerDispatchController {
     	        scannerDispatchService.dispatchBulkByScans(
     	                request.getScanTexts(),
     	                user.getUsername(),
-    	                currentUserService.allowedPlants(user)
+    	                currentUserService.allowedPlants(user),
+    	                request.getDriverId(),
+    	                request.getVehicleId(),
+    	                request.getTripStart()
     	        );
 
         return ResponseEntity.ok()

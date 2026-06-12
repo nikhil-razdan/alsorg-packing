@@ -31,6 +31,7 @@ public class ScannerDispatchService {
     private final DispatchedItemService dispatchedItemService;
     private final ChalaanPdfService chalaanPdfService;
     private final PlantLocationService plantLocationService;
+    private final LogisticsDispatchTripService logisticsDispatchTripService;
 
     public ScannerDispatchService(
             PacketItemRepository packetItemRepository,
@@ -38,7 +39,8 @@ public class ScannerDispatchService {
             DispatchedItemRepository dispatchedItemRepository,
             DispatchedItemService dispatchedItemService,
             ChalaanPdfService chalaanPdfService,
-            PlantLocationService plantLocationService
+            PlantLocationService plantLocationService,
+            LogisticsDispatchTripService logisticsDispatchTripService
     ) {
         this.packetItemRepository = packetItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
@@ -46,6 +48,7 @@ public class ScannerDispatchService {
         this.dispatchedItemService = dispatchedItemService;
         this.chalaanPdfService = chalaanPdfService;
         this.plantLocationService = plantLocationService;
+        this.logisticsDispatchTripService = logisticsDispatchTripService;
     }
 
     /* =====================================================
@@ -124,7 +127,10 @@ public class ScannerDispatchService {
     public byte[] dispatchSingleByScan(
             String rawScanText,
             String username,
-            Set<String> allowedPlants
+            Set<String> allowedPlants,
+            UUID driverId,
+            UUID vehicleId,
+            LocalDateTime tripStart
     ) {
         ResolvedScan resolved = resolve(rawScanText);
 
@@ -135,29 +141,16 @@ public class ScannerDispatchService {
                 username
         );
 
-        String chalaanNo = generateChalaanNumber();
-
-        ChalaanPdfData data = new ChalaanPdfData();
-        data.setVoucherNo(chalaanNo);
-        data.setDesignerName("-");
-        data.setOt("-");
-
-        ChalaanItem chalaanItem = buildChalaanItem(item, resolved.packetItem);
-
-        data.setItems(List.of(chalaanItem));
-        data.setAddress(safe(chalaanItem.getClientAddress()));
-
-        byte[] pdf = chalaanPdfService.generateChalaan(data);
-
-        item.setChalaanNumber(chalaanNo);
-        dispatchedItemRepository.save(item);
-
-        dispatchedItemService.markDispatchedFromChalaan(
-                item.getZohoItemId(),
-                username
-        );
-
-        return pdf;
+        return logisticsDispatchTripService
+                .createTripAndGenerateChallan(
+                        List.of(item.getZohoItemId()),
+                        driverId,
+                        vehicleId,
+                        tripStart,
+                        username,
+                        "QR_SINGLE"
+                )
+                .getPdfBytes();
     }
 
     /* =====================================================
@@ -168,7 +161,10 @@ public class ScannerDispatchService {
     public byte[] dispatchBulkByScans(
             List<String> rawScanTexts,
             String username,
-            Set<String> allowedPlants
+            Set<String> allowedPlants,
+            UUID driverId,
+            UUID vehicleId,
+            LocalDateTime tripStart
     ) {
         if (rawScanTexts == null || rawScanTexts.isEmpty()) {
             throw new RuntimeException("No QR scans provided");
@@ -192,61 +188,28 @@ public class ScannerDispatchService {
             unique.put(id, resolved);
         }
 
-        List<ResolvedScan> resolvedList = new ArrayList<>(unique.values());
+        List<String> preparedIds = new ArrayList<>();
 
-        List<DispatchedItem> preparedItems = new ArrayList<>();
-
-        for (ResolvedScan resolved : resolvedList) {
+        for (ResolvedScan resolved : unique.values()) {
             DispatchedItem prepared =
                     prepareForDispatch(
                             resolved.dispatchedItem,
                             username
                     );
 
-            preparedItems.add(prepared);
+            preparedIds.add(prepared.getZohoItemId());
         }
 
-        String chalaanNo = generateChalaanNumber();
-
-        ChalaanPdfData data = new ChalaanPdfData();
-        data.setVoucherNo(chalaanNo);
-        data.setDesignerName("-");
-        data.setOt("-");
-
-        List<ChalaanItem> chalaanItems = new ArrayList<>();
-
-        for (ResolvedScan resolved : resolvedList) {
-            DispatchedItem latest =
-                    dispatchedItemRepository.findById(resolved.dispatchedItem.getZohoItemId())
-                            .orElseThrow(() -> new RuntimeException("Item missing after status update"));
-
-            chalaanItems.add(
-                    buildChalaanItem(latest, resolved.packetItem)
-            );
-        }
-
-        data.setItems(chalaanItems);
-
-        if (!chalaanItems.isEmpty()) {
-            data.setAddress(safe(chalaanItems.get(0).getClientAddress()));
-        }
-
-        byte[] pdf = chalaanPdfService.generateChalaan(data);
-
-        for (DispatchedItem item : preparedItems) {
-            item.setChalaanNumber(chalaanNo);
-        }
-
-        dispatchedItemRepository.saveAll(preparedItems);
-
-        for (DispatchedItem item : preparedItems) {
-            dispatchedItemService.markDispatchedFromChalaan(
-                    item.getZohoItemId(),
-                    username
-            );
-        }
-
-        return pdf;
+        return logisticsDispatchTripService
+                .createTripAndGenerateChallan(
+                        preparedIds,
+                        driverId,
+                        vehicleId,
+                        tripStart,
+                        username,
+                        "QR_BULK"
+                )
+                .getPdfBytes();
     }
 
     /* =====================================================

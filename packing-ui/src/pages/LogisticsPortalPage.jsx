@@ -11,6 +11,7 @@ import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
 import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
+import LogisticsTrips from "../dashboard/components/logistics/LogisticsTrip";
 
 function LogisticsPortalPage() {
   const [tab, setTab] =
@@ -63,7 +64,13 @@ function LogisticsPortalPage() {
             }
             label="Shift Operations"
           />
-
+		  
+		  <SidebarButton
+		    active={tab === "trips"}
+		    onClick={() => setTab("trips")}
+		    label="Trips / Delivery"
+		  />
+		  
           <SidebarButton
             active={
               tab === "drivers"
@@ -113,6 +120,12 @@ function LogisticsPortalPage() {
 
 		{tab === "drivers" && (
 		  <DriverManagement
+		    showAlert={showAlert}
+		  />
+		)}
+		
+		{tab === "trips" && (
+		  <LogisticsTrips
 		    showAlert={showAlert}
 		  />
 		)}
