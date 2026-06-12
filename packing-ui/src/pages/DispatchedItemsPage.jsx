@@ -9,7 +9,7 @@ import {
   fetchDrivers,
   fetchVehicles,
   createDispatchChallan,
-} from "..dashboard/api/lo";
+} from "..dashboard/api/logisticsApi";
 
 const page = {
   minHeight: "100vh",
