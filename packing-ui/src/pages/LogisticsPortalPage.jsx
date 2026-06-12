@@ -11,7 +11,7 @@ import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
 import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
-import LogisticsTrips from "../dashboard/components/logistics/LogisticsTrip";
+import LogisticsTrips from "../dashboard/components/logistics/LogisticsTrips";
 
 function LogisticsPortalPage() {
   const [tab, setTab] =
