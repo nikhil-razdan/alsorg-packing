@@ -225,11 +225,11 @@ function Header() {
 
             <div>
               <div style={title}>
-                AES
+                PackFlow
               </div>
 
               <div style={subtitle}>
-                Inventory • Warehousing • Logistics
+                Alsorg Inventory Suite
               </div>
             </div>
           </div>

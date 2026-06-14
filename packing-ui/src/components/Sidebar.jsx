@@ -138,7 +138,7 @@ function Sidebar() {
 	          </div>
 
 	          <div style={logoSub}>
-	            Enterprise Suite
+	            Inventory Suite
 	          </div>
 	        </div>
 	      )}

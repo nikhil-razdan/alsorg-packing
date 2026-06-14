@@ -576,7 +576,7 @@ function DashboardPage() {
 				        <div style={detailTitle}>
 				          Daily Throughput Details
 				        </div>
-
+						
 				        <div style={detailSubtitle}>
 				          Today’s packed and dispatched work summary
 				        </div>
