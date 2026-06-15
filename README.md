@@ -1,4 +1,4 @@
-# Alsorg Inventory Suite
+# PackFlow
 
 A complete inventory, packing, warehouse, dispatch and logistics management platform built for a home-interior manufacturing workflow. The system helps teams track every item from packing to warehouse movement, ready-to-dispatch status, challan generation, dispatch, delivery and audit history.
 
