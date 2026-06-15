@@ -261,18 +261,14 @@ function LogisticsTrips({
               </span>
             </div>
             <div style={actionGroup}>
-              <Button
-                size="small"
-                variant="outlined"
+              <button
+                style={challanBtn}
                 onClick={() =>
-                  downloadTripChallan(
-                    trip.id,
-                    localStorage.getItem("token")
-                  )
+                  downloadTripChallan(trip.id)
                 }
               >
                 Download Challan
-              </Button>
+              </button>
               <button
                 style={viewBtn}
                 onClick={() => openTripItems(trip)}
@@ -356,18 +352,14 @@ function LogisticsTrips({
               )}
             </div>
             <div>
-            <Button
-                size="small"
-                variant="outlined"
+              <button
+                style={challanBtn}
                 onClick={() =>
-                  downloadTripChallan(
-                    trip.id,
-                    localStorage.getItem("token")
-                  )
+                  downloadTripChallan(trip.id)
                 }
               >
                 Download Challan
-              </Button>
+              </button>
               <button
                 style={viewBtn}
                 onClick={() => openTripItems(trip)}
@@ -717,7 +709,7 @@ const table = {
 
 const head = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr .8fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr 1.4fr",
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
@@ -726,7 +718,7 @@ const head = {
 
 const row = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr .8fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr 1.4fr",
   padding: 16,
   color: "#fff",
   borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -735,7 +727,7 @@ const row = {
 
 const headCompleted = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr .8fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
@@ -744,7 +736,7 @@ const headCompleted = {
 
 const rowCompleted = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr .8fr",
+ gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
   padding: 16,
   color: "#fff",
   borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -979,6 +971,17 @@ const podLink = {
   color: "#60a5fa",
   fontWeight: 900,
   textDecoration: "none",
+};
+
+const challanBtn = {
+  border: "1px solid rgba(251,191,36,.28)",
+  borderRadius: 10,
+  padding: "8px 12px",
+  color: "#facc15",
+  fontWeight: 800,
+  cursor: "pointer",
+  background: "rgba(251,191,36,.12)",
+  whiteSpace: "nowrap",
 };
 
 export default LogisticsTrips;
