@@ -8,6 +8,7 @@ import {
   fetchLogisticsTrips,
   fetchLogisticsTripItems,
   endLogisticsTrip,
+  downloadTripChallan
 } from "../../api/logisticsApi.jsx";
 
 function getNowDateTimeLocal() {
@@ -26,38 +27,38 @@ const normalizeStatus = (value) =>
     .toUpperCase();
 
 function LogisticsTrips({
-  showAlert = () => {},
+  showAlert = () => { },
 }) {
   const [loading, setLoading] =
     useState(false);
 
   const [trips, setTrips] =
     useState([]);
-	
-	const [itemsModalTrip, setItemsModalTrip] =
-	  useState(null);
 
-	const [tripItems, setTripItems] =
-	  useState([]);
+  const [itemsModalTrip, setItemsModalTrip] =
+    useState(null);
 
-	const [tripItemsLoading, setTripItemsLoading] =
-	  useState(false);
+  const [tripItems, setTripItems] =
+    useState([]);
+
+  const [tripItemsLoading, setTripItemsLoading] =
+    useState(false);
 
   const [endModal, setEndModal] =
     useState(null);
 
-	const [endForm, setEndForm] =
-	  useState({
-	    tripEnd: getNowDateTimeLocal(),
-	    remarks: "",
-	    receiverName: "",
-	    receiverPhone: "",
-	    podUrl: "",
-	    deliveryRemarks: "",
-	    deliveryLatitude: "",
-	    deliveryLongitude: "",
-	    deliveryLocationAccuracy: "",
-	  });
+  const [endForm, setEndForm] =
+    useState({
+      tripEnd: getNowDateTimeLocal(),
+      remarks: "",
+      receiverName: "",
+      receiverPhone: "",
+      podUrl: "",
+      deliveryRemarks: "",
+      deliveryLatitude: "",
+      deliveryLongitude: "",
+      deliveryLocationAccuracy: "",
+    });
 
   const load = async () => {
     try {
@@ -97,7 +98,7 @@ function LogisticsTrips({
         "DELIVERED"
     );
   }, [trips]);
-  
+
   const openTripItems = async (trip) => {
     try {
       setItemsModalTrip(trip);
@@ -119,7 +120,7 @@ function LogisticsTrips({
       setTripItemsLoading(false);
     }
   };
-  
+
   const captureCurrentLocation = () => {
     if (!navigator.geolocation) {
       showAlert(
@@ -163,26 +164,26 @@ function LogisticsTrips({
     if (!endModal) return;
 
     try {
-		await endLogisticsTrip(
-		  endModal.id,
-		  {
-		    tripEnd: endForm.tripEnd,
-		    remarks: endForm.remarks,
-		    receiverName: endForm.receiverName,
-		    receiverPhone: endForm.receiverPhone,
-		    podUrl: endForm.podUrl,
-		    deliveryRemarks: endForm.deliveryRemarks,
-		    deliveryLatitude: endForm.deliveryLatitude
-		      ? Number(endForm.deliveryLatitude)
-		      : null,
-		    deliveryLongitude: endForm.deliveryLongitude
-		      ? Number(endForm.deliveryLongitude)
-		      : null,
-		    deliveryLocationAccuracy: endForm.deliveryLocationAccuracy
-		      ? Number(endForm.deliveryLocationAccuracy)
-		      : null,
-		  }
-		);
+      await endLogisticsTrip(
+        endModal.id,
+        {
+          tripEnd: endForm.tripEnd,
+          remarks: endForm.remarks,
+          receiverName: endForm.receiverName,
+          receiverPhone: endForm.receiverPhone,
+          podUrl: endForm.podUrl,
+          deliveryRemarks: endForm.deliveryRemarks,
+          deliveryLatitude: endForm.deliveryLatitude
+            ? Number(endForm.deliveryLatitude)
+            : null,
+          deliveryLongitude: endForm.deliveryLongitude
+            ? Number(endForm.deliveryLongitude)
+            : null,
+          deliveryLocationAccuracy: endForm.deliveryLocationAccuracy
+            ? Number(endForm.deliveryLocationAccuracy)
+            : null,
+        }
+      );
 
       showAlert(
         "Trip ended and items marked delivered",
@@ -259,34 +260,46 @@ function LogisticsTrips({
                 OUT FOR DELIVERY
               </span>
             </div>
-			<div style={actionGroup}>
-			  <button
-			    style={viewBtn}
-			    onClick={() => openTripItems(trip)}
-			  >
-			    View Items
-			  </button>
+            <div style={actionGroup}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() =>
+                  downloadTripChallan(
+                    trip.id,
+                    localStorage.getItem("token")
+                  )
+                }
+              >
+                Download Challan
+              </Button>
+              <button
+                style={viewBtn}
+                onClick={() => openTripItems(trip)}
+              >
+                View Items
+              </button>
 
-			  <button
-			    style={endBtn}
-			    onClick={() => {
-			      setEndModal(trip);
-				  setEndForm({
-				    tripEnd: getNowDateTimeLocal(),
-				    remarks: "",
-				    receiverName: "",
-				    receiverPhone: "",
-				    podUrl: "",
-				    deliveryRemarks: "",
-				    deliveryLatitude: "",
-				    deliveryLongitude: "",
-				    deliveryLocationAccuracy: "",
-				  });
-			    }}
-			  >
-			    End Trip
-			  </button>
-			</div>
+              <button
+                style={endBtn}
+                onClick={() => {
+                  setEndModal(trip);
+                  setEndForm({
+                    tripEnd: getNowDateTimeLocal(),
+                    remarks: "",
+                    receiverName: "",
+                    receiverPhone: "",
+                    podUrl: "",
+                    deliveryRemarks: "",
+                    deliveryLatitude: "",
+                    deliveryLongitude: "",
+                    deliveryLocationAccuracy: "",
+                  });
+                }}
+              >
+                End Trip
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -294,16 +307,16 @@ function LogisticsTrips({
       <SectionTitle text="Completed Trips" />
 
       <div style={table}>
-	  <div style={headCompleted}>
-	    <div>Challan</div>
-	    <div>Driver</div>
-	    <div>Vehicle</div>
-	    <div>Start</div>
-	    <div>End</div>
-	    <div>Items</div>
-	    <div>Status</div>
-	    <div>Action</div>
-	  </div>
+        <div style={headCompleted}>
+          <div>Challan</div>
+          <div>Driver</div>
+          <div>Vehicle</div>
+          <div>Start</div>
+          <div>End</div>
+          <div>Items</div>
+          <div>Status</div>
+          <div>Action</div>
+        </div>
 
         {completedTrips.length === 0 && (
           <div style={emptyRow}>
@@ -330,165 +343,178 @@ function LogisticsTrips({
                 : "—"}
             </div>
             <div>{trip.totalItems || 0}</div>
-			<div>
-			  <span style={doneChip}>
-			    DELIVERED
-			  </span>
+            <div>
+              <span style={doneChip}>
+                DELIVERED
+              </span>
 
-			  {(trip.receiverName || trip.podUrl) && (
-			    <div style={podMiniText}>
-			      {trip.receiverName || "POD"}{" "}
-			      {trip.podUrl ? "• POD Attached" : ""}
-			    </div>
-			  )}
-			</div>
-			<div>
-			  <button
-			    style={viewBtn}
-			    onClick={() => openTripItems(trip)}
-			  >
-			    View Items
-			  </button>
-			</div>
+              {(trip.receiverName || trip.podUrl) && (
+                <div style={podMiniText}>
+                  {trip.receiverName || "POD"}{" "}
+                  {trip.podUrl ? "• POD Attached" : ""}
+                </div>
+              )}
+            </div>
+            <div>
+            <Button
+                size="small"
+                variant="outlined"
+                onClick={() =>
+                  downloadTripChallan(
+                    trip.id,
+                    localStorage.getItem("token")
+                  )
+                }
+              >
+                Download Challan
+              </Button>
+              <button
+                style={viewBtn}
+                onClick={() => openTripItems(trip)}
+              >
+                View Items
+              </button>
+
+            </div>
           </div>
         ))}
       </div>
-	  {itemsModalTrip && (
-	    <div
-	      style={overlay}
-	      onClick={() => {
-	        setItemsModalTrip(null);
-	        setTripItems([]);
-	      }}
-	    >
-	      <div
-	        style={{
-	          ...modal,
-	          width: 860,
-	          maxHeight: "86vh",
-	          overflow: "hidden",
-	        }}
-	        onClick={(e) => e.stopPropagation()}
-	      >
-	        <div style={modalTitle}>
-	          Trip Items
-	        </div>
+      {itemsModalTrip && (
+        <div
+          style={overlay}
+          onClick={() => {
+            setItemsModalTrip(null);
+            setTripItems([]);
+          }}
+        >
+          <div
+            style={{
+              ...modal,
+              width: 860,
+              maxHeight: "86vh",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={modalTitle}>
+              Trip Items
+            </div>
 
-	        <div style={modalSub}>
-	          Challan: {itemsModalTrip.challanNumber || "—"} | Driver:{" "}
-	          {itemsModalTrip.driver?.name || "—"} | Vehicle:{" "}
-	          {itemsModalTrip.vehicle?.vehicleNumber || "—"}
-	        </div>
-			{itemsModalTrip.status === "DELIVERED" && (
-			  <div style={podSummaryBox}>
-			    <div>
-			      <strong>Receiver:</strong>{" "}
-			      {itemsModalTrip.receiverName || "—"}
-			    </div>
+            <div style={modalSub}>
+              Challan: {itemsModalTrip.challanNumber || "—"} | Driver:{" "}
+              {itemsModalTrip.driver?.name || "—"} | Vehicle:{" "}
+              {itemsModalTrip.vehicle?.vehicleNumber || "—"}
+            </div>
+            {itemsModalTrip.status === "DELIVERED" && (
+              <div style={podSummaryBox}>
+                <div>
+                  <strong>Receiver:</strong>{" "}
+                  {itemsModalTrip.receiverName || "—"}
+                </div>
 
-			    <div>
-			      <strong>Phone:</strong>{" "}
-			      {itemsModalTrip.receiverPhone || "—"}
-			    </div>
+                <div>
+                  <strong>Phone:</strong>{" "}
+                  {itemsModalTrip.receiverPhone || "—"}
+                </div>
 
-			    <div>
-			      <strong>POD:</strong>{" "}
-			      {itemsModalTrip.podUrl ? (
-			        <a
-			          href={itemsModalTrip.podUrl}
-			          target="_blank"
-			          rel="noreferrer"
-			          style={podLink}
-			        >
-			          Open POD
-			        </a>
-			      ) : (
-			        "—"
-			      )}
-			    </div>
+                <div>
+                  <strong>POD:</strong>{" "}
+                  {itemsModalTrip.podUrl ? (
+                    <a
+                      href={itemsModalTrip.podUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={podLink}
+                    >
+                      Open POD
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </div>
 
-			    <div>
-			      <strong>Location:</strong>{" "}
-			      {itemsModalTrip.deliveryLatitude && itemsModalTrip.deliveryLongitude
-			        ? `${itemsModalTrip.deliveryLatitude}, ${itemsModalTrip.deliveryLongitude}`
-			        : "—"}
-			    </div>
+                <div>
+                  <strong>Location:</strong>{" "}
+                  {itemsModalTrip.deliveryLatitude && itemsModalTrip.deliveryLongitude
+                    ? `${itemsModalTrip.deliveryLatitude}, ${itemsModalTrip.deliveryLongitude}`
+                    : "—"}
+                </div>
 
-			    <div>
-			      <strong>Delivery Remarks:</strong>{" "}
-			      {itemsModalTrip.deliveryRemarks || "—"}
-			    </div>
-			  </div>
-			)}
-	        <div style={tripItemsTable}>
-	          <div style={tripItemsHead}>
-	            <div>Item</div>
-	            <div>SKU</div>
-	            <div>PD No</div>
-	            <div>DWG No</div>
-	            <div>Client</div>
-	            <div>Description</div>
-	          </div>
+                <div>
+                  <strong>Delivery Remarks:</strong>{" "}
+                  {itemsModalTrip.deliveryRemarks || "—"}
+                </div>
+              </div>
+            )}
+            <div style={tripItemsTable}>
+              <div style={tripItemsHead}>
+                <div>Item</div>
+                <div>SKU</div>
+                <div>PD No</div>
+                <div>DWG No</div>
+                <div>Client</div>
+                <div>Description</div>
+              </div>
 
-	          {tripItemsLoading && (
-	            <div style={emptyRow}>
-	              Loading trip items...
-	            </div>
-	          )}
+              {tripItemsLoading && (
+                <div style={emptyRow}>
+                  Loading trip items...
+                </div>
+              )}
 
-	          {!tripItemsLoading && tripItems.length === 0 && (
-	            <div style={emptyRow}>
-	              No items found for this trip.
-	            </div>
-	          )}
+              {!tripItemsLoading && tripItems.length === 0 && (
+                <div style={emptyRow}>
+                  No items found for this trip.
+                </div>
+              )}
 
-	          {!tripItemsLoading &&
-	            tripItems.map((item) => (
-	              <div
-	                key={item.id}
-	                style={tripItemsRow}
-	              >
-	                <div title={item.itemName}>
-	                  {item.itemName || "—"}
-	                </div>
+              {!tripItemsLoading &&
+                tripItems.map((item) => (
+                  <div
+                    key={item.id}
+                    style={tripItemsRow}
+                  >
+                    <div title={item.itemName}>
+                      {item.itemName || "—"}
+                    </div>
 
-	                <div title={item.sku}>
-	                  {item.sku || "—"}
-	                </div>
+                    <div title={item.sku}>
+                      {item.sku || "—"}
+                    </div>
 
-	                <div title={item.pdNo}>
-	                  {item.pdNo || "—"}
-	                </div>
+                    <div title={item.pdNo}>
+                      {item.pdNo || "—"}
+                    </div>
 
-	                <div title={item.drawingNo}>
-	                  {item.drawingNo || "—"}
-	                </div>
+                    <div title={item.drawingNo}>
+                      {item.drawingNo || "—"}
+                    </div>
 
-	                <div title={item.clientName}>
-	                  {item.clientName || "—"}
-	                </div>
+                    <div title={item.clientName}>
+                      {item.clientName || "—"}
+                    </div>
 
-	                <div title={item.description}>
-	                  {item.description || "—"}
-	                </div>
-	              </div>
-	            ))}
-	        </div>
+                    <div title={item.description}>
+                      {item.description || "—"}
+                    </div>
+                  </div>
+                ))}
+            </div>
 
-	        <div style={footer}>
-	          <button
-	            style={cancelBtn}
-	            onClick={() => {
-	              setItemsModalTrip(null);
-	              setTripItems([]);
-	            }}
-	          >
-	            Close
-	          </button>
-	        </div>
-	      </div>
-	    </div>
-	  )}
+            <div style={footer}>
+              <button
+                style={cancelBtn}
+                onClick={() => {
+                  setItemsModalTrip(null);
+                  setTripItems([]);
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {endModal && (
         <div
           style={overlay}
@@ -520,91 +546,91 @@ function LogisticsTrips({
                 style={input}
               />
             </label>
-			
-			<label style={field}>
-			  Receiver Name
-			  <input
-			    value={endForm.receiverName}
-			    onChange={(e) =>
-			      setEndForm((prev) => ({
-			        ...prev,
-			        receiverName: e.target.value,
-			      }))
-			    }
-			    placeholder="Person who received the material"
-			    style={input}
-			  />
-			</label>
 
-			<label style={field}>
-			  Receiver Phone
-			  <input
-			    value={endForm.receiverPhone}
-			    onChange={(e) =>
-			      setEndForm((prev) => ({
-			        ...prev,
-			        receiverPhone: e.target.value,
-			      }))
-			    }
-			    placeholder="Receiver phone number"
-			    style={input}
-			  />
-			</label>
+            <label style={field}>
+              Receiver Name
+              <input
+                value={endForm.receiverName}
+                onChange={(e) =>
+                  setEndForm((prev) => ({
+                    ...prev,
+                    receiverName: e.target.value,
+                  }))
+                }
+                placeholder="Person who received the material"
+                style={input}
+              />
+            </label>
 
-			<label style={field}>
-			  POD Photo URL
-			  <input
-			    value={endForm.podUrl}
-			    onChange={(e) =>
-			      setEndForm((prev) => ({
-			        ...prev,
-			        podUrl: e.target.value,
-			      }))
-			    }
-			    placeholder="Paste POD image/file URL"
-			    style={input}
-			  />
-			</label>
+            <label style={field}>
+              Receiver Phone
+              <input
+                value={endForm.receiverPhone}
+                onChange={(e) =>
+                  setEndForm((prev) => ({
+                    ...prev,
+                    receiverPhone: e.target.value,
+                  }))
+                }
+                placeholder="Receiver phone number"
+                style={input}
+              />
+            </label>
 
-			<label style={field}>
-			  Delivery Remarks
-			  <textarea
-			    rows={3}
-			    value={endForm.deliveryRemarks}
-			    onChange={(e) =>
-			      setEndForm((prev) => ({
-			        ...prev,
-			        deliveryRemarks: e.target.value,
-			      }))
-			    }
-			    placeholder="Damage, shortage, receiver comments, unloading details..."
-			    style={textarea}
-			  />
-			</label>
+            <label style={field}>
+              POD Photo URL
+              <input
+                value={endForm.podUrl}
+                onChange={(e) =>
+                  setEndForm((prev) => ({
+                    ...prev,
+                    podUrl: e.target.value,
+                  }))
+                }
+                placeholder="Paste POD image/file URL"
+                style={input}
+              />
+            </label>
 
-			<div style={locationBox}>
-			  <div>
-			    <div style={locationTitle}>
-			      Delivery Location
-			    </div>
+            <label style={field}>
+              Delivery Remarks
+              <textarea
+                rows={3}
+                value={endForm.deliveryRemarks}
+                onChange={(e) =>
+                  setEndForm((prev) => ({
+                    ...prev,
+                    deliveryRemarks: e.target.value,
+                  }))
+                }
+                placeholder="Damage, shortage, receiver comments, unloading details..."
+                style={textarea}
+              />
+            </label>
 
-			    <div style={locationSub}>
-			      {endForm.deliveryLatitude && endForm.deliveryLongitude
-			        ? `${endForm.deliveryLatitude}, ${endForm.deliveryLongitude} | Accuracy: ${Math.round(
-			            Number(endForm.deliveryLocationAccuracy || 0)
-			          )}m`
-			        : "No location captured yet"}
-			    </div>
-			  </div>
+            <div style={locationBox}>
+              <div>
+                <div style={locationTitle}>
+                  Delivery Location
+                </div>
 
-			  <button
-			    type="button"
-			    style={locationBtn}
-			    onClick={captureCurrentLocation}
-			  >
-			    Capture Location
-			  </button>
-			</div>
+                <div style={locationSub}>
+                  {endForm.deliveryLatitude && endForm.deliveryLongitude
+                    ? `${endForm.deliveryLatitude}, ${endForm.deliveryLongitude} | Accuracy: ${Math.round(
+                      Number(endForm.deliveryLocationAccuracy || 0)
+                    )}m`
+                    : "No location captured yet"}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                style={locationBtn}
+                onClick={captureCurrentLocation}
+              >
+                Capture Location
+              </button>
+            </div>
 
             <label style={field}>
               Remarks

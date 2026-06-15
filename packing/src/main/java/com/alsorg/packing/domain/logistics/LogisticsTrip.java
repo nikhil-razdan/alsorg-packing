@@ -59,6 +59,14 @@ public class LogisticsTrip {
     private Double deliveryLongitude;
 
     private Double deliveryLocationAccuracy;
+    
+    private Double currentLatitude;
+    private Double currentLongitude;
+    private Double currentLocationAccuracy;
+    private LocalDateTime currentLocationAt;
+    private String currentLocationBy;
+
+    private LocalDateTime queuedAt;
 
     public UUID getId() {
         return id;
@@ -227,4 +235,52 @@ public class LogisticsTrip {
     public void setDeliveryLocationAccuracy(Double deliveryLocationAccuracy) {
         this.deliveryLocationAccuracy = deliveryLocationAccuracy;
     }
+
+	public Double getCurrentLatitude() {
+		return currentLatitude;
+	}
+
+	public void setCurrentLatitude(Double currentLatitude) {
+		this.currentLatitude = currentLatitude;
+	}
+
+	public Double getCurrentLongitude() {
+		return currentLongitude;
+	}
+
+	public void setCurrentLongitude(Double currentLongitude) {
+		this.currentLongitude = currentLongitude;
+	}
+
+	public Double getCurrentLocationAccuracy() {
+		return currentLocationAccuracy;
+	}
+
+	public void setCurrentLocationAccuracy(Double currentLocationAccuracy) {
+		this.currentLocationAccuracy = currentLocationAccuracy;
+	}
+
+	public LocalDateTime getCurrentLocationAt() {
+		return currentLocationAt;
+	}
+
+	public void setCurrentLocationAt(LocalDateTime currentLocationAt) {
+		this.currentLocationAt = currentLocationAt;
+	}
+
+	public String getCurrentLocationBy() {
+		return currentLocationBy;
+	}
+
+	public void setCurrentLocationBy(String currentLocationBy) {
+		this.currentLocationBy = currentLocationBy;
+	}
+
+	public LocalDateTime getQueuedAt() {
+		return queuedAt;
+	}
+
+	public void setQueuedAt(LocalDateTime queuedAt) {
+		this.queuedAt = queuedAt;
+	}
 }

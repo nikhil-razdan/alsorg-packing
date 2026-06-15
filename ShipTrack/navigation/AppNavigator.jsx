@@ -76,7 +76,7 @@ export default function AppNavigator() {
               name="Home"
               component={DispatchHomeScreen}
               options={{
-                title: "Dispatch Mobile",
+                title: "",
               }}
             />
 
@@ -84,7 +84,7 @@ export default function AppNavigator() {
               name="ScanDispatch"
               component={ScanDispatchScreen}
               options={{
-                title: "Single QR Dispatch",
+                title: "",
               }}
             />
 
@@ -92,7 +92,7 @@ export default function AppNavigator() {
               name="BulkScan"
               component={BulkScanScreen}
               options={{
-                title: "Bulk QR Dispatch",
+                title: "",
               }}
             />
 
@@ -108,7 +108,7 @@ export default function AppNavigator() {
               name="Trips"
               component={TripsScreen}
               options={{
-                title: "Trips / Delivery",
+                title: "",
               }}
             />
 

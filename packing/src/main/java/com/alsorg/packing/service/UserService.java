@@ -26,7 +26,8 @@ public class UserService {
             String username,
             String password,
             String role,
-            Set<String> plantCodes
+            Set<String> plantCodes,
+            java.util.UUID driverId
     ) {
 
         User user = new User();
@@ -43,6 +44,16 @@ public class UserService {
             user.setPlantCode(cleanPlants.iterator().next());
         }
 
+        if ("DRIVER".equalsIgnoreCase(role)) {
+            if (driverId == null) {
+                throw new RuntimeException("Driver profile required for DRIVER user");
+            }
+
+            user.setDriverId(driverId);
+        } else {
+            user.setDriverId(null);
+        }
+
         return repo.save(user);
     }
 
@@ -56,7 +67,8 @@ public class UserService {
             Long id,
             String username,
             String role,
-            Set<String> plantCodes
+            Set<String> plantCodes,
+            java.util.UUID driverId
     ) {
 
         Optional<User> optional = repo.findById(id);
@@ -78,6 +90,16 @@ public class UserService {
             user.setPlantCode(cleanPlants.iterator().next());
         } else {
             user.setPlantCode(null);
+        }
+
+        if ("DRIVER".equalsIgnoreCase(role)) {
+            if (driverId == null) {
+                throw new RuntimeException("Driver profile required for DRIVER user");
+            }
+
+            user.setDriverId(driverId);
+        } else {
+            user.setDriverId(null);
         }
 
         return repo.save(user);

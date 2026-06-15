@@ -21,11 +21,6 @@ public class ChalaanPdfService {
 
     private static final float PAGE_WIDTH = 600;
     private static final float PAGE_HEIGHT = 800;
-    private final ZohoStickerRepository stickerRepo;
-    
-    public ChalaanPdfService(ZohoStickerRepository stickerRepo) {
-        this.stickerRepo = stickerRepo;
-    }
 
     public byte[] generateChalaan(ChalaanPdfData data) {
 

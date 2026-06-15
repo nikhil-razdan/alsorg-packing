@@ -60,6 +60,23 @@ public class CurrentUserService {
                 String.valueOf(user.getRole()).trim()
         );
     }
+    
+    public boolean isDriver(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+
+        return "DRIVER".equalsIgnoreCase(
+                String.valueOf(user.getRole()).trim()
+        );
+    }
+
+    public boolean canViewTrips(User user) {
+        return isAdmin(user)
+                || isDispatch(user)
+                || isLogistics(user)
+                || isDriver(user);
+    }
 
     public Set<String> allowedPlants(User user) {
         if (user == null) {
@@ -80,7 +97,6 @@ public class CurrentUserService {
         if (plants.isEmpty()) {
             return plantLocationService.getAllPlantCodes();
         }
-
         return plants;
     }
 

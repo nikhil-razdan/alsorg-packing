@@ -109,7 +109,7 @@ export default function LoginScreen() {
       </Text>
 
       <Text style={styles.sub}>
-        Mobile logistics control
+        Alsorg Logistics
       </Text>
 
       <TextInput

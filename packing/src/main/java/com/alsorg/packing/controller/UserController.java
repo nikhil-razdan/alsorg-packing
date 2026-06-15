@@ -3,6 +3,9 @@ package com.alsorg.packing.controller;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -11,8 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.service.UserService;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/users")
@@ -32,8 +33,6 @@ public class UserController {
         this.passwordEncoder = passwordEncoder;
     }
 
-    /* ================= CREATE USER ================= */
-
     @PostMapping
     public User createUser(@RequestBody Map<String, Object> body) {
 
@@ -41,18 +40,15 @@ public class UserController {
                 String.valueOf(body.get("username")),
                 String.valueOf(body.get("password")),
                 String.valueOf(body.get("role")),
-                readPlantCodes(body)
+                readPlantCodes(body),
+                readDriverId(body)
         );
     }
-
-    /* ================= GET USERS ================= */
 
     @GetMapping
     public List<User> getUsers() {
         return service.getAllUsers();
     }
-
-    /* ================= UPDATE USER ================= */
 
     @PutMapping("/{id}")
     public User updateUser(
@@ -64,11 +60,10 @@ public class UserController {
                 id,
                 String.valueOf(body.get("username")),
                 String.valueOf(body.get("role")),
-                readPlantCodes(body)
+                readPlantCodes(body),
+                readDriverId(body)
         );
     }
-
-    /* ================= DELETE USER ================= */
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
@@ -76,29 +71,27 @@ public class UserController {
         service.deleteUser(id);
 
         return ResponseEntity.ok(
-                Map.of("message","User deleted")
+                Map.of("message", "User deleted")
         );
     }
-
-    /* ================= RESET PASSWORD ================= */
 
     @PutMapping("/{id}/password")
     public ResponseEntity<?> updatePassword(
             @PathVariable Long id,
-            @RequestBody Map<String,String> body
+            @RequestBody Map<String, String> body
     ) {
 
         Optional<User> optionalUser = userRepository.findById(id);
 
-        if(optionalUser.isEmpty()) {
+        if (optionalUser.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
         String newPassword = body.get("password");
 
-        if(newPassword == null || newPassword.isBlank()) {
+        if (newPassword == null || newPassword.isBlank()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message","Password cannot be empty"));
+                    .body(Map.of("message", "Password cannot be empty"));
         }
 
         User user = optionalUser.get();
@@ -108,11 +101,10 @@ public class UserController {
         userRepository.save(user);
 
         return ResponseEntity.ok(
-                Map.of("message","Password updated successfully")
+                Map.of("message", "Password updated successfully")
         );
     }
 
-    @SuppressWarnings("unchecked")
     private Set<String> readPlantCodes(Map<String, Object> body) {
         Set<String> plants = new LinkedHashSet<>();
 
@@ -135,5 +127,25 @@ public class UserController {
         }
 
         return plants;
+    }
+
+    private UUID readDriverId(Map<String, Object> body) {
+        Object driverIdObj = body.get("driverId");
+
+        if (driverIdObj == null) {
+            return null;
+        }
+
+        String text = String.valueOf(driverIdObj).trim();
+
+        if (text.isBlank() || "null".equalsIgnoreCase(text)) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(text);
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid driverId: " + text);
+        }
     }
 }

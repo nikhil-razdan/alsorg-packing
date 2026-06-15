@@ -13,7 +13,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
+import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -134,7 +137,7 @@ public class LogisticsDispatchController {
         return tripService.endTrip(
                 tripId,
                 request.getTripEnd(),
-                user.getUsername(),
+                user,
                 request.getRemarks(),
                 request.getReceiverName(),
                 request.getReceiverPhone(),
@@ -144,5 +147,46 @@ public class LogisticsDispatchController {
                 request.getDeliveryLongitude(),
                 request.getDeliveryLocationAccuracy()
         );
+    }
+    
+    @GetMapping(
+            value = "/trips/{tripId}/challan",
+            produces = MediaType.APPLICATION_PDF_VALUE
+    )
+    public ResponseEntity<byte[]> downloadTripChallan(
+            @PathVariable UUID tripId,
+            @RequestHeader("Authorization") String auth
+    ) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.canViewTrips(user)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        DispatchTripPdfResult result =
+                tripService.generateChallanPdfForTrip(
+                        tripId,
+                        user
+                );
+
+        String filename =
+                result.getChallanNumber() == null
+                        || result.getChallanNumber().isBlank()
+                        ? "challan.pdf"
+                        : result.getChallanNumber() + ".pdf";
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=" + filename
+                )
+                .header("X-Trip-Id", result.getTripId().toString())
+                .header("X-Challan-No", result.getChallanNumber())
+                .header(
+                        "Access-Control-Expose-Headers",
+                        "X-Trip-Id, X-Challan-No, Content-Disposition"
+                )
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(result.getPdfBytes());
     }
 }

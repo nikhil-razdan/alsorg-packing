@@ -70,8 +70,15 @@ public class DispatchedItemsController {
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
+        System.out.println(
+                "MOVE_TO_FG USER = " + user.getUsername()
+                + " | ROLE = " + user.getRole()
+        );
+        
         if (!currentUserService.isDispatch(user)) {
-            return ResponseEntity.status(403).build();
+            return ResponseEntity
+                    .status(403)
+                    .body("Only DISPATCH user can move item to FG");
         }
 
         dispatchedItemService.movePackedItemToFg(

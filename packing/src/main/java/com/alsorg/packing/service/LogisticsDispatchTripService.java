@@ -20,6 +20,13 @@ import com.alsorg.packing.service.pdf.ChalaanItem;
 import com.alsorg.packing.service.pdf.ChalaanPdfData;
 import com.alsorg.packing.service.pdf.ChalaanPdfService;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.domain.logistics.LogisticsTripLocation;
+import com.alsorg.packing.repository.LogisticsTripLocationRepository;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +47,8 @@ public class LogisticsDispatchTripService {
     private final ChalaanPdfService chalaanPdfService;
     private final AuditLogService auditLogService;
     private final ActivityLogService activityLogService;
+    private final CurrentUserService currentUserService;
+    private final LogisticsTripLocationRepository tripLocationRepository;
 
     public LogisticsDispatchTripService(
             LogisticsTripRepository tripRepository,
@@ -50,7 +59,9 @@ public class LogisticsDispatchTripService {
             PacketItemRepository packetItemRepository,
             ChalaanPdfService chalaanPdfService,
             AuditLogService auditLogService,
-            ActivityLogService activityLogService
+            ActivityLogService activityLogService,
+            CurrentUserService currentUserService,
+            LogisticsTripLocationRepository tripLocationRepository
     ) {
         this.tripRepository = tripRepository;
         this.tripItemRepository = tripItemRepository;
@@ -61,6 +72,8 @@ public class LogisticsDispatchTripService {
         this.chalaanPdfService = chalaanPdfService;
         this.auditLogService = auditLogService;
         this.activityLogService = activityLogService;
+        this.currentUserService = currentUserService;
+        this.tripLocationRepository = tripLocationRepository;
     }
 
     @Transactional
@@ -90,11 +103,6 @@ public class LogisticsDispatchTripService {
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
-        LocalDateTime finalTripStart =
-                tripStart != null
-                        ? tripStart
-                        : LocalDateTime.now();
-
         List<DispatchedItem> items =
                 dispatchedItemRepository.findAllById(itemIds);
 
@@ -103,6 +111,12 @@ public class LogisticsDispatchTripService {
         }
 
         for (DispatchedItem item : items) {
+            if (item.getStatus() == ItemDispatchStatus.LOADED) {
+                throw new RuntimeException(
+                        "Item is already loaded / assigned to driver: " + safe(item.getName())
+                );
+            }
+
             if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
                 throw new RuntimeException(
                         "Item is already out for delivery: " + safe(item.getName())
@@ -123,7 +137,7 @@ public class LogisticsDispatchTripService {
 
             if (item.getStatus() != ItemDispatchStatus.READY_TO_DISPATCH) {
                 throw new RuntimeException(
-                        "Item must be READY_TO_DISPATCH before trip creation: "
+                        "Item must be READY_TO_DISPATCH before loading trip: "
                                 + safe(item.getName())
                                 + " | Current: "
                                 + item.getStatus()
@@ -165,17 +179,28 @@ public class LogisticsDispatchTripService {
 
         byte[] pdf = chalaanPdfService.generateChalaan(data);
 
+        LocalDateTime now = LocalDateTime.now();
+
         LogisticsTrip trip = new LogisticsTrip();
         trip.setDriver(driver);
         trip.setVehicle(vehicle);
         trip.setChallanNumber(challanNo);
-        trip.setTripStart(finalTripStart);
+
+        /*
+         * IMPORTANT:
+         * Dispatch user is only loading / assigning the trip.
+         * Driver has not started the trip yet.
+         */
+        trip.setQueuedAt(now);
+        trip.setTripStart(null);
         trip.setTripEnd(null);
-        trip.setStatus(LogisticsTripStatus.OUT_FOR_DELIVERY);
+        trip.setStatus(LogisticsTripStatus.QUEUED);
+
         trip.setTotalItems(items.size());
         trip.setSource(source);
         trip.setCreatedBy(safeActor(username));
-        trip.setCreatedAt(LocalDateTime.now());
+        trip.setCreatedAt(now);
+        trip.setUpdatedAt(now);
 
         trip = tripRepository.save(trip);
 
@@ -194,36 +219,43 @@ public class LogisticsDispatchTripService {
             tripItem.setTrip(trip);
             tripItem.setZohoItemId(item.getZohoItemId());
             tripItem.setPacketItemId(item.getPacketItemId());
+
             tripItem.setItemName(
                     packetItem != null && packetItem.getItemName() != null
                             ? packetItem.getItemName()
                             : item.getName()
             );
+
             tripItem.setSku(
                     packetItem != null && packetItem.getSku() != null
                             ? packetItem.getSku()
                             : item.getSku()
             );
+
             tripItem.setPdNo(
                     packetItem != null && packetItem.getPdNo() != null
                             ? packetItem.getPdNo()
                             : item.getPdNo()
             );
+
             tripItem.setDrawingNo(
                     packetItem != null && packetItem.getDrawingNo() != null
                             ? packetItem.getDrawingNo()
                             : item.getDrawingNo()
             );
+
             tripItem.setClientName(
                     packetItem != null && packetItem.getClientName() != null
                             ? packetItem.getClientName()
                             : item.getClientName()
             );
+
             tripItem.setDescription(
                     packetItem != null && packetItem.getDescription() != null
                             ? packetItem.getDescription()
                             : item.getDescription()
             );
+
             tripItem.setRemarks(
                     packetItem != null && packetItem.getRemarks() != null
                             ? packetItem.getRemarks()
@@ -232,16 +264,31 @@ public class LogisticsDispatchTripService {
 
             tripItems.add(tripItem);
 
-            item.setStatus(ItemDispatchStatus.OUT_FOR_DELIVERY);
+            /*
+             * IMPORTANT:
+             * Item is loaded/assigned only.
+             * It is NOT out for delivery yet.
+             */
+            item.setStatus(ItemDispatchStatus.LOADED);
             item.setChalaanNumber(challanNo);
             item.setLogisticsTripId(trip.getId());
+
             item.setDriverId(driver.getId());
             item.setDriverName(driver.getName());
+
             item.setVehicleId(vehicle.getId());
             item.setVehicleNumber(vehicle.getVehicleNumber());
-            item.setTripStartedAt(finalTripStart);
-            item.setDispatchedAt(finalTripStart);
-            item.setDispatchedBy(safeActor(username));
+
+            item.setTripStartedAt(null);
+            item.setTripEndedAt(null);
+            item.setDeliveredAt(null);
+
+            item.setDispatchedAt(null);
+            item.setDispatchedBy(null);
+
+            /*
+             * Loaded item should not count as available dispatch stock.
+             */
             item.setStock(0);
         }
 
@@ -251,18 +298,18 @@ public class LogisticsDispatchTripService {
         for (DispatchedItem item : items) {
             auditLogService.log(
                     item.getZohoItemId(),
-                    "Trip started | Challan: " + challanNo,
+                    "Loaded / assigned to driver | Challan: " + challanNo,
                     safeActor(username),
                     "DISPATCH"
             );
 
             activityLogService.log(
                     item.getZohoItemId(),
-                    "OUT FOR DELIVERY",
+                    "LOADED / ASSIGNED TO DRIVER",
                     safeActor(username),
                     "DISPATCH",
                     "READY_TO_DISPATCH",
-                    "OUT_FOR_DELIVERY",
+                    "LOADED",
                     challanNo
             );
         }
@@ -273,12 +320,196 @@ public class LogisticsDispatchTripService {
                 pdf
         );
     }
+    
+    @Transactional
+    public LogisticsTrip startTrip(
+            UUID tripId,
+            User user,
+            LocalDateTime requestedStart
+    ) {
+        if (!currentUserService.isDriver(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only DRIVER user can start trip"
+            );
+        }
+
+        if (user.getDriverId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Driver profile not linked with this user"
+            );
+        }
+
+        LogisticsTrip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Trip not found"
+                ));
+
+        if (trip.getDriver() == null || trip.getDriver().getId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trip driver missing"
+            );
+        }
+
+        if (!trip.getDriver().getId().equals(user.getDriverId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This trip is not assigned to your driver profile"
+            );
+        }
+
+        if (trip.getStatus() != LogisticsTripStatus.QUEUED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Only queued trips can be started"
+            );
+        }
+
+        LocalDateTime start =
+                requestedStart != null
+                        ? requestedStart
+                        : LocalDateTime.now();
+
+        trip.setStatus(LogisticsTripStatus.OUT_FOR_DELIVERY);
+        trip.setTripStart(start);
+        trip.setUpdatedAt(LocalDateTime.now());
+
+        tripRepository.save(trip);
+
+        List<LogisticsTripItem> tripItems =
+                tripItemRepository.findByTripId(tripId);
+
+        for (LogisticsTripItem tripItem : tripItems) {
+            if (tripItem.getZohoItemId() == null) {
+                continue;
+            }
+
+            dispatchedItemRepository.findById(tripItem.getZohoItemId())
+                    .ifPresent(item -> {
+                        if (item.getStatus() != ItemDispatchStatus.LOADED) {
+                            throw new ResponseStatusException(
+                                    HttpStatus.BAD_REQUEST,
+                                    "Only LOADED items can be started for delivery"
+                            );
+                        }
+
+                        item.setStatus(ItemDispatchStatus.OUT_FOR_DELIVERY);
+                        item.setTripStartedAt(start);
+                        item.setDispatchedAt(start);
+                        item.setDispatchedBy(user.getUsername());
+
+                        dispatchedItemRepository.save(item);
+
+                        auditLogService.log(
+                                item.getZohoItemId(),
+                                "Driver started trip",
+                                safeActor(user.getUsername()),
+                                "DRIVER"
+                        );
+
+                        activityLogService.log(
+                                item.getZohoItemId(),
+                                "OUT FOR DELIVERY",
+                                safeActor(user.getUsername()),
+                                "DRIVER",
+                                "LOADED",
+                                "OUT_FOR_DELIVERY",
+                                item.getChalaanNumber()
+                        );
+                    });
+        }
+
+        return trip;
+    }
+    
+    @Transactional
+    public LogisticsTrip updateTripLocation(
+            UUID tripId,
+            User user,
+            Double latitude,
+            Double longitude,
+            Double accuracy
+    ) {
+        if (!currentUserService.isDriver(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only DRIVER user can update live location"
+            );
+        }
+
+        if (user.getDriverId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Driver profile not linked with this user"
+            );
+        }
+
+        if (latitude == null || longitude == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Latitude and longitude required"
+            );
+        }
+
+        LogisticsTrip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Trip not found"
+                ));
+
+        if (trip.getDriver() == null || trip.getDriver().getId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trip driver missing"
+            );
+        }
+
+        if (!trip.getDriver().getId().equals(user.getDriverId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This trip is not assigned to your driver profile"
+            );
+        }
+
+        if (trip.getStatus() != LogisticsTripStatus.OUT_FOR_DELIVERY) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Live location allowed only for active trips"
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        trip.setCurrentLatitude(latitude);
+        trip.setCurrentLongitude(longitude);
+        trip.setCurrentLocationAccuracy(accuracy);
+        trip.setCurrentLocationAt(now);
+        trip.setCurrentLocationBy(user.getUsername());
+        trip.setUpdatedAt(now);
+
+        tripRepository.save(trip);
+
+        LogisticsTripLocation location = new LogisticsTripLocation();
+        location.setTrip(trip);
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
+        location.setAccuracy(accuracy);
+        location.setRecordedAt(now);
+        location.setRecordedBy(user.getUsername());
+
+        tripLocationRepository.save(location);
+
+        return trip;
+    }
 
     @Transactional
     public LogisticsTrip endTrip(
             UUID tripId,
             LocalDateTime tripEnd,
-            String username,
+            User user,
             String remarks,
             String receiverName,
             String receiverPhone,
@@ -288,11 +519,45 @@ public class LogisticsDispatchTripService {
             Double deliveryLongitude,
             Double deliveryLocationAccuracy
     ) {
+        if (!currentUserService.isDriver(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only DRIVER user can end trip"
+            );
+        }
+
+        if (user.getDriverId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Driver profile not linked with this user"
+            );
+        }
+
         LogisticsTrip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new RuntimeException("Trip not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Trip not found"
+                ));
+
+        if (trip.getDriver() == null || trip.getDriver().getId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trip driver missing"
+            );
+        }
+
+        if (!trip.getDriver().getId().equals(user.getDriverId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This trip is not assigned to your driver profile"
+            );
+        }
 
         if (trip.getStatus() != LogisticsTripStatus.OUT_FOR_DELIVERY) {
-            throw new RuntimeException("Only active out-for-delivery trips can be ended");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Only active out-for-delivery trips can be ended"
+            );
         }
 
         LocalDateTime finalEnd =
@@ -301,18 +566,21 @@ public class LogisticsDispatchTripService {
                         : LocalDateTime.now();
 
         if (trip.getTripStart() != null && finalEnd.isBefore(trip.getTripStart())) {
-            throw new RuntimeException("Trip end time cannot be before trip start time");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trip end time cannot be before trip start time"
+            );
         }
 
         trip.setTripEnd(finalEnd);
         trip.setStatus(LogisticsTripStatus.DELIVERED);
-        trip.setEndedBy(safeActor(username));
+        trip.setEndedBy(safeActor(user.getUsername()));
         trip.setUpdatedAt(LocalDateTime.now());
 
         if (remarks != null && !remarks.isBlank()) {
             trip.setRemarks(remarks.trim());
         }
-        
+
         trip.setReceiverName(cleanOrNull(receiverName));
         trip.setReceiverPhone(cleanOrNull(receiverPhone));
         trip.setPodUrl(cleanOrNull(podUrl));
@@ -323,6 +591,7 @@ public class LogisticsDispatchTripService {
 
         List<LogisticsTripItem> tripItems =
                 tripItemRepository.findByTripId(tripId);
+
         final String finalReceiverName = cleanOrNull(receiverName);
         final String finalReceiverPhone = cleanOrNull(receiverPhone);
         final String finalPodUrl = cleanOrNull(podUrl);
@@ -330,7 +599,7 @@ public class LogisticsDispatchTripService {
         final Double finalDeliveryLatitude = deliveryLatitude;
         final Double finalDeliveryLongitude = deliveryLongitude;
         final Double finalDeliveryLocationAccuracy = deliveryLocationAccuracy;
-        
+
         for (LogisticsTripItem tripItem : tripItems) {
             dispatchedItemRepository
                     .findById(tripItem.getZohoItemId())
@@ -339,6 +608,7 @@ public class LogisticsDispatchTripService {
                             item.setStatus(ItemDispatchStatus.DELIVERED);
                             item.setTripEndedAt(finalEnd);
                             item.setDeliveredAt(finalEnd);
+
                             item.setReceiverName(finalReceiverName);
                             item.setReceiverPhone(finalReceiverPhone);
                             item.setPodUrl(finalPodUrl);
@@ -346,21 +616,21 @@ public class LogisticsDispatchTripService {
                             item.setDeliveryLatitude(finalDeliveryLatitude);
                             item.setDeliveryLongitude(finalDeliveryLongitude);
                             item.setDeliveryLocationAccuracy(finalDeliveryLocationAccuracy);
-                            
+
                             dispatchedItemRepository.save(item);
 
                             auditLogService.log(
                                     item.getZohoItemId(),
-                                    "Trip ended / Delivered",
-                                    safeActor(username),
-                                    "DISPATCH"
+                                    "Driver ended trip / Delivered",
+                                    safeActor(user.getUsername()),
+                                    "DRIVER"
                             );
 
                             activityLogService.log(
                                     item.getZohoItemId(),
                                     "DELIVERED",
-                                    safeActor(username),
-                                    "DISPATCH",
+                                    safeActor(user.getUsername()),
+                                    "DRIVER",
                                     "OUT_FOR_DELIVERY",
                                     "DELIVERED",
                                     item.getChalaanNumber()
@@ -372,6 +642,135 @@ public class LogisticsDispatchTripService {
         return tripRepository.save(trip);
     }
 
+    @Transactional(readOnly = true)
+    public DispatchTripPdfResult generateChallanPdfForTrip(
+            UUID tripId,
+            User user
+    ) {
+        if (tripId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trip id is required"
+            );
+        }
+
+        LogisticsTrip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Trip not found"
+                ));
+
+        /*
+         * DRIVER can download only his own assigned trip challan.
+         * ADMIN / DISPATCH / LOGISTICS checks should be done in controller
+         * or CurrentUserService, but driver ownership is safest here too.
+         */
+        if (
+                user != null
+                && "DRIVER".equalsIgnoreCase(String.valueOf(user.getRole()))
+        ) {
+            if (user.getDriverId() == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Driver profile not linked with this user"
+                );
+            }
+
+            if (
+                    trip.getDriver() == null
+                    || trip.getDriver().getId() == null
+                    || !trip.getDriver().getId().equals(user.getDriverId())
+            ) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "This challan does not belong to your driver profile"
+                );
+            }
+        }
+
+        String challanNo = safe(trip.getChallanNumber());
+
+        ChalaanPdfData data = new ChalaanPdfData();
+        data.setVoucherNo(challanNo);
+
+        if (trip.getDriver() != null) {
+            data.setDriverName(trip.getDriver().getName());
+        }
+
+        if (trip.getVehicle() != null) {
+            data.setVehicleNumber(trip.getVehicle().getVehicleNumber());
+        }
+
+        data.setOt("-");
+
+        List<LogisticsTripItem> tripItems =
+                tripItemRepository.findByTripId(tripId);
+
+        if (tripItems == null || tripItems.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "No items found for this trip"
+            );
+        }
+
+        List<ChalaanItem> chalaanItems = new ArrayList<>();
+
+        for (LogisticsTripItem tripItem : tripItems) {
+            DispatchedItem dispatchedItem = null;
+            PacketItem packetItem = null;
+
+            if (tripItem.getZohoItemId() != null) {
+                dispatchedItem = dispatchedItemRepository
+                        .findById(tripItem.getZohoItemId())
+                        .orElse(null);
+            }
+
+            if (
+                    dispatchedItem != null
+                    && dispatchedItem.getPacketItemId() != null
+            ) {
+                packetItem = packetItemRepository
+                        .findById(dispatchedItem.getPacketItemId())
+                        .orElse(null);
+            }
+
+            if (dispatchedItem != null) {
+                chalaanItems.add(
+                        buildChalaanItem(dispatchedItem, packetItem)
+                );
+            } else {
+                ChalaanItem ci = new ChalaanItem();
+
+                ci.setZohoItemId(tripItem.getZohoItemId());
+                ci.setItemName(tripItem.getItemName());
+                ci.setPdNo(tripItem.getPdNo());
+                ci.setDrawingNo(tripItem.getDrawingNo());
+                ci.setClientName(tripItem.getClientName());
+                ci.setDescription(tripItem.getDescription());
+                ci.setRemarks(tripItem.getRemarks());
+                ci.setQty("1");
+
+                chalaanItems.add(ci);
+            }
+        }
+
+        data.setItems(chalaanItems);
+
+        if (!chalaanItems.isEmpty()) {
+            data.setAddress(
+                    safe(chalaanItems.get(0).getClientAddress())
+            );
+        }
+
+        byte[] pdf = chalaanPdfService.generateChalaan(data);
+
+        return new DispatchTripPdfResult(
+                trip.getId(),
+                challanNo,
+                pdf
+        );
+    }
+    
     public List<LogisticsTrip> getAllTrips() {
         return tripRepository.findAllByOrderByTripStartDesc();
     }

@@ -15,6 +15,11 @@ import {
 
 import * as Location from "expo-location";
 
+import {
+    safeDownloadPodImage,
+    safeOpenPodImage,
+} from "../api/podDownloadApi";
+
 import * as ImagePicker from "expo-image-picker";
 
 import {
@@ -469,6 +474,35 @@ export default function EndTripScreen({
                         Uploaded URL: {form.podUrl}
                     </Text>
                 ) : null}
+                {form.podUrl ? (
+                    <View style={styles.podDownloadActions}>
+                        <TouchableOpacity
+                            style={styles.podOpenBtn}
+                            onPress={() =>
+                                safeOpenPodImage(
+                                    podPhotoUri || form.podUrl
+                                )
+                            }
+                        >
+                            <Text style={styles.podOpenText}>
+                                Open in Gallery
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.podDownloadBtn}
+                            onPress={() =>
+                                safeDownloadPodImage(
+                                    podPhotoUri || form.podUrl
+                                )
+                            }
+                        >
+                            <Text style={styles.podDownloadText}>
+                                Download POD
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
             </Field>
 
             <Field label="Delivery Remarks">
@@ -823,5 +857,46 @@ const styles = {
         fontWeight: "700",
         marginTop: 8,
         lineHeight: 16,
+    },
+    podDownloadActions: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 10,
+    },
+
+    podOpenBtn: {
+        flex: 1,
+        minHeight: 44,
+        borderRadius: 14,
+        backgroundColor: "rgba(59,130,246,.12)",
+        borderWidth: 1,
+        borderColor: "rgba(59,130,246,.25)",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 10,
+    },
+
+    podOpenText: {
+        color: "#93c5fd",
+        fontWeight: "900",
+        fontSize: 12,
+    },
+
+    podDownloadBtn: {
+        flex: 1,
+        minHeight: 44,
+        borderRadius: 14,
+        backgroundColor: "rgba(16,185,129,.14)",
+        borderWidth: 1,
+        borderColor: "rgba(16,185,129,.28)",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 10,
+    },
+
+    podDownloadText: {
+        color: "#6ee7b7",
+        fontWeight: "900",
+        fontSize: 12,
     },
 };

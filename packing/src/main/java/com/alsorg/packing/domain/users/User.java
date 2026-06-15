@@ -3,6 +3,7 @@ package com.alsorg.packing.domain.users;
 import jakarta.persistence.*;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -44,6 +45,15 @@ public class User {
     
     private String allowedWarehouseCodes;
     
+    private UUID driverId;
+
+    public UUID getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(java.util.UUID driverId) {
+        this.driverId = driverId;
+    }
     
     public Long getId() {
         return id;

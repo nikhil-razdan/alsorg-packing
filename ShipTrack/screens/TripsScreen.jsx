@@ -18,6 +18,16 @@ import {
 } from "@react-navigation/native";
 
 import {
+  safeOpenChallanPdf,
+} from "../api/challanDownloadApi";
+
+import {
+  hasValidCoordinates,
+  safeOpenCoordinatesInMaps,
+  safeOpenCurrentLocationInMaps,
+} from "../api/locationApi";
+
+import {
   fetchTrips,
 } from "../api/logisticsApi";
 
@@ -243,6 +253,7 @@ function TripCard({
               ? "OUT FOR DELIVERY"
               : "DELIVERED"}
           </Text>
+
         </View>
       </View>
 
@@ -252,8 +263,8 @@ function TripCard({
           value={
             trip.tripStart
               ? new Date(
-                  trip.tripStart
-                ).toLocaleString()
+                trip.tripStart
+              ).toLocaleString()
               : "—"
           }
         />
@@ -263,8 +274,8 @@ function TripCard({
           value={
             trip.tripEnd
               ? new Date(
-                  trip.tripEnd
-                ).toLocaleString()
+                trip.tripEnd
+              ).toLocaleString()
               : "—"
           }
         />
@@ -296,9 +307,22 @@ function TripCard({
                 ? "Attached"
                 : "—"}
             </Text>
+
           </View>
         )}
-
+      <TouchableOpacity
+        style={styles.secondaryBtn}
+        onPress={() =>
+          safeOpenChallanPdf(
+            trip.id,
+            trip.challanNumber
+          )
+        }
+      >
+        <Text style={styles.secondaryText}>
+          Challan
+        </Text>
+      </TouchableOpacity>
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.secondaryBtn}
@@ -315,6 +339,39 @@ function TripCard({
             View Items
           </Text>
         </TouchableOpacity>
+
+
+        {isActive ? (
+          <TouchableOpacity
+            style={styles.locationBtn}
+            onPress={safeOpenCurrentLocationInMaps}
+          >
+            <Text style={styles.locationText}>
+              Live Location
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {!isActive &&
+          hasValidCoordinates(
+            trip.deliveryLatitude,
+            trip.deliveryLongitude
+          ) ? (
+          <TouchableOpacity
+            style={styles.locationBtn}
+            onPress={() =>
+              safeOpenCoordinatesInMaps(
+                trip.deliveryLatitude,
+                trip.deliveryLongitude,
+                trip.challanNumber || "Delivery Location"
+              )
+            }
+          >
+            <Text style={styles.locationText}>
+              Open Location
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         {isActive && (
           <TouchableOpacity
@@ -536,5 +593,21 @@ const styles = {
   primaryText: {
     color: "#fff",
     fontWeight: "900",
+  },
+  locationBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.28)",
+    backgroundColor: "rgba(16,185,129,.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  locationText: {
+    color: "#6ee7b7",
+    fontWeight: "900",
+    fontSize: 12,
   },
 };

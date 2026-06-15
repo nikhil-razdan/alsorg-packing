@@ -1,14 +1,15 @@
 package com.alsorg.packing.controller;
 
+import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.controller.dto.scan.BulkScanRequest;
 import com.alsorg.packing.controller.dto.scan.ScanRequest;
 import com.alsorg.packing.controller.dto.scan.ScanResolveResponse;
-import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.ScannerDispatchService;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
 
@@ -48,7 +49,7 @@ public class ScannerDispatchController {
         );
     }
 
-    /* ===================== SINGLE QR DISPATCH ===================== */
+    /* ===================== SINGLE QR LOAD / ASSIGN ===================== */
 
     @PostMapping(
             value = "/dispatch-single",
@@ -59,34 +60,40 @@ public class ScannerDispatchController {
             @RequestHeader("Authorization") String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
-    	User user = currentUserService.getCurrentUserFromAuth(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
-    	if (!currentUserService.isDispatch(user)) {
-    	    return ResponseEntity.status(403).build();
-    	}
+        if (!currentUserService.isDispatch(user)) {
+            return ResponseEntity.status(403).build();
+        }
 
-    	byte[] pdf =
-    	        scannerDispatchService.dispatchSingleByScan(
-    	                request.getScanText(),
-    	                user.getUsername(),
-    	                currentUserService.allowedPlants(user),
-    	                request.getDriverId(),
-    	                request.getVehicleId(),
-    	                request.getTripStart()
-    	        );
+        DispatchTripPdfResult result =
+                scannerDispatchService.dispatchSingleByScan(
+                        request.getScanText(),
+                        user.getUsername(),
+                        currentUserService.allowedPlants(user),
+                        request.getDriverId(),
+                        request.getVehicleId(),
+                        request.getTripStart()
+                );
 
         return ResponseEntity.ok()
                 .header(
                         "Content-Disposition",
                         preview
-                                ? "inline; filename=qr-chalaan.pdf"
-                                : "attachment; filename=qr-chalaan.pdf"
+                                ? "inline; filename=" + result.getChallanNumber() + ".pdf"
+                                : "attachment; filename=" + result.getChallanNumber() + ".pdf"
+                )
+                .header("X-Trip-Id", result.getTripId().toString())
+                .header("X-Challan-No", result.getChallanNumber())
+                .header(
+                        "Access-Control-Expose-Headers",
+                        "X-Trip-Id, X-Challan-No, Content-Disposition"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
-                .body(pdf);
+                .body(result.getPdfBytes());
     }
 
-    /* ===================== BULK QR DISPATCH ===================== */
+    /* ===================== BULK QR LOAD / ASSIGN ===================== */
 
     @PostMapping(
             value = "/dispatch-bulk",
@@ -97,38 +104,36 @@ public class ScannerDispatchController {
             @RequestHeader("Authorization") String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
-    	User user = currentUserService.getCurrentUserFromAuth(auth);
+        User user = currentUserService.getCurrentUserFromAuth(auth);
 
-    	if (!currentUserService.isDispatch(user)) {
-    	    return ResponseEntity.status(403).build();
-    	}
+        if (!currentUserService.isDispatch(user)) {
+            return ResponseEntity.status(403).build();
+        }
 
-    	byte[] pdf =
-    	        scannerDispatchService.dispatchBulkByScans(
-    	                request.getScanTexts(),
-    	                user.getUsername(),
-    	                currentUserService.allowedPlants(user),
-    	                request.getDriverId(),
-    	                request.getVehicleId(),
-    	                request.getTripStart()
-    	        );
+        DispatchTripPdfResult result =
+                scannerDispatchService.dispatchBulkByScans(
+                        request.getScanTexts(),
+                        user.getUsername(),
+                        currentUserService.allowedPlants(user),
+                        request.getDriverId(),
+                        request.getVehicleId(),
+                        request.getTripStart()
+                );
 
         return ResponseEntity.ok()
                 .header(
                         "Content-Disposition",
                         preview
-                                ? "inline; filename=qr-bulk-chalaan.pdf"
-                                : "attachment; filename=qr-bulk-chalaan.pdf"
+                                ? "inline; filename=" + result.getChallanNumber() + ".pdf"
+                                : "attachment; filename=" + result.getChallanNumber() + ".pdf"
+                )
+                .header("X-Trip-Id", result.getTripId().toString())
+                .header("X-Challan-No", result.getChallanNumber())
+                .header(
+                        "Access-Control-Expose-Headers",
+                        "X-Trip-Id, X-Challan-No, Content-Disposition"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
-                .body(pdf);
-    }
-
-    private String extractToken(String auth) {
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            throw new RuntimeException("Missing or invalid Authorization header");
-        }
-
-        return auth.replace("Bearer ", "");
+                .body(result.getPdfBytes());
     }
 }

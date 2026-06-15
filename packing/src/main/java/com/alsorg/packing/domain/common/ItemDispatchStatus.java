@@ -7,6 +7,7 @@ public enum ItemDispatchStatus {
     WAREHOUSE_REQUESTED,
     IN_WAREHOUSE,
     READY_TO_DISPATCH,
+    LOADED,
     DISPATCHED,
     OUT_FOR_DELIVERY,
     DELIVERED,

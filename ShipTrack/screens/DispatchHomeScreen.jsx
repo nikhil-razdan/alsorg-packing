@@ -10,6 +10,12 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+function normalizeRole(role) {
+  return String(role || "")
+    .trim()
+    .toUpperCase();
+}
+
 export default function DispatchHomeScreen({
   navigation,
 }) {
@@ -19,42 +25,69 @@ export default function DispatchHomeScreen({
     logout,
   } = useAuth();
 
+  const normalizedRole =
+    normalizeRole(role);
+
+  const isDispatch =
+    normalizedRole === "DISPATCH";
+
+  const canViewTrips =
+    normalizedRole === "DISPATCH" ||
+    normalizedRole === "LOGISTICS" ||
+    normalizedRole === "ADMIN";
+
   return (
     <View style={styles.page}>
       <Text style={styles.title}>
-        Dispatch Mobile
+        ShipTrack
       </Text>
 
       <Text style={styles.sub}>
         {username || "User"} •{" "}
-        {role || "ROLE"}
+        {normalizedRole || "ROLE"}
       </Text>
 
-      <Action
-        label="Single QR Dispatch"
-        icon="📷"
-        onPress={() =>
-          navigation.navigate(
-            "ScanDispatch"
-          )
-        }
-      />
+      {isDispatch ? (
+        <>
+          <Action
+            label="Single QR Dispatch"
+            icon="📷"
+            onPress={() =>
+              navigation.navigate(
+                "ScanDispatch"
+              )
+            }
+          />
 
-      <Action
-        label="Bulk QR Dispatch"
-        icon="📦"
-        onPress={() =>
-          navigation.navigate("BulkScan")
-        }
-      />
+          <Action
+            label="Bulk QR Dispatch"
+            icon="📦"
+            onPress={() =>
+              navigation.navigate("BulkScan")
+            }
+          />
+        </>
+      ) : (
+        <View style={styles.permissionBox}>
+          <Text style={styles.permissionTitle}>
+            Dispatch actions restricted
+          </Text>
 
-      <Action
-        label="Trips / Delivery"
-        icon="🚚"
-        onPress={() =>
-          navigation.navigate("Trips")
-        }
-      />
+          <Text style={styles.permissionText}>
+            QR dispatch and Move to FG are allowed only for DISPATCH users.
+          </Text>
+        </View>
+      )}
+
+      {canViewTrips ? (
+        <Action
+          label="Trips / Delivery"
+          icon="🚚"
+          onPress={() =>
+            navigation.navigate("Trips")
+          }
+        />
+      ) : null}
 
       <TouchableOpacity
         style={styles.logout}
@@ -131,6 +164,28 @@ const styles = {
     color: "#fff",
     fontSize: 17,
     fontWeight: "900",
+  },
+
+  permissionBox: {
+    backgroundColor: "rgba(245,158,11,.10)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.25)",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+  },
+
+  permissionTitle: {
+    color: "#facc15",
+    fontWeight: "900",
+    fontSize: 15,
+    marginBottom: 6,
+  },
+
+  permissionText: {
+    color: "#cbd5e1",
+    fontWeight: "700",
+    lineHeight: 19,
   },
 
   logout: {

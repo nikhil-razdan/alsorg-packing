@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 
 @Service
 public class ScannerDispatchService {
@@ -124,7 +125,7 @@ public class ScannerDispatchService {
        ===================================================== */
 
     @Transactional
-    public byte[] dispatchSingleByScan(
+    public DispatchTripPdfResult dispatchSingleByScan(
             String rawScanText,
             String username,
             Set<String> allowedPlants,
@@ -149,8 +150,7 @@ public class ScannerDispatchService {
                         tripStart,
                         username,
                         "QR_SINGLE"
-                )
-                .getPdfBytes();
+                );
     }
 
     /* =====================================================
@@ -158,7 +158,7 @@ public class ScannerDispatchService {
        ===================================================== */
 
     @Transactional
-    public byte[] dispatchBulkByScans(
+    public DispatchTripPdfResult dispatchBulkByScans(
             List<String> rawScanTexts,
             String username,
             Set<String> allowedPlants,
@@ -208,8 +208,7 @@ public class ScannerDispatchService {
                         tripStart,
                         username,
                         "QR_BULK"
-                )
-                .getPdfBytes();
+                );
     }
 
     /* =====================================================
@@ -217,51 +216,62 @@ public class ScannerDispatchService {
        ===================================================== */
 
     private DispatchedItem prepareForDispatch(
-            DispatchedItem item,
-            String username
-    ) {
-        if (item.getStatus() == ItemDispatchStatus.DISPATCHED) {
-            throw new RuntimeException(
-                    "Item already dispatched. Challan: "
-                            + safe(item.getChalaanNumber())
-            );
-        }
-
-        /*
-         * New QR rule:
-         * If item is packed and still in PKD, QR dispatch cannot continue.
-         * User must move it to FG first.
-         */
-        if (requiresMoveToFg(item)) {
-            throw new RuntimeException(
-                    "Move item to FG before QR dispatch"
-            );
-        }
-
-        /*
-         * READY is allowed only when:
-         * - old legacy item has missing plant/location data, or
-         * - item is already physically moved to FG
-         */
-        if (item.getStatus() == ItemDispatchStatus.READY) {
-            dispatchedItemService.updateDispatchStatus(
-                    item.getZohoItemId(),
-                    ItemDispatchStatus.READY_TO_DISPATCH,
-                    username
-            );
-
-            return dispatchedItemRepository.findById(item.getZohoItemId())
-                    .orElseThrow(() -> new RuntimeException("Item missing after status update"));
-        }
-
-        if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
-            return item;
-        }
-
+        DispatchedItem item,
+        String username
+) {
+    if (item.getStatus() == ItemDispatchStatus.LOADED) {
         throw new RuntimeException(
-                "Item cannot be dispatched from current status: " + item.getStatus()
+                "Item is already loaded / assigned to driver. Challan: "
+                        + safe(item.getChalaanNumber())
         );
     }
+
+    if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
+        throw new RuntimeException(
+                "Item is already out for delivery. Challan: "
+                        + safe(item.getChalaanNumber())
+        );
+    }
+
+    if (item.getStatus() == ItemDispatchStatus.DELIVERED) {
+        throw new RuntimeException(
+                "Item is already delivered. Challan: "
+                        + safe(item.getChalaanNumber())
+        );
+    }
+
+    if (item.getStatus() == ItemDispatchStatus.DISPATCHED) {
+        throw new RuntimeException(
+                "Item already dispatched in old flow. Challan: "
+                        + safe(item.getChalaanNumber())
+        );
+    }
+
+    if (requiresMoveToFg(item)) {
+        throw new RuntimeException(
+                "Move item to FG before QR loading"
+        );
+    }
+
+    if (item.getStatus() == ItemDispatchStatus.READY) {
+        dispatchedItemService.updateDispatchStatus(
+                item.getZohoItemId(),
+                ItemDispatchStatus.READY_TO_DISPATCH,
+                username
+        );
+
+        return dispatchedItemRepository.findById(item.getZohoItemId())
+                .orElseThrow(() -> new RuntimeException("Item missing after status update"));
+    }
+
+    if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
+        return item;
+    }
+
+    throw new RuntimeException(
+            "Item cannot be loaded from current status: " + item.getStatus()
+    );
+}
 
     /* =====================================================
        SCAN RESOLUTION
