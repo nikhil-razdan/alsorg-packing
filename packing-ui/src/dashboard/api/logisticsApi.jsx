@@ -332,3 +332,60 @@ export async function fetchLogisticsTripItems(id) {
 
   return res.json();
 }
+
+export async function downloadTripChallan(id) {
+  if (!id) {
+    throw new Error("Trip id missing");
+  }
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/trips/${id}/challan`,
+    {
+      method: "GET",
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(
+      text || "Failed to download challan"
+    );
+  }
+
+  const blob = await res.blob();
+
+  const disposition =
+    res.headers.get("Content-Disposition") || "";
+
+  let filename = "challan.pdf";
+
+  const match =
+    disposition.match(/filename="?([^"]+)"?/);
+
+  if (match && match[1]) {
+    filename = match[1];
+  }
+
+  const url =
+    window.URL.createObjectURL(blob);
+
+  const a =
+    document.createElement("a");
+
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+
+  a.click();
+
+  a.remove();
+
+  window.URL.revokeObjectURL(url);
+
+  return {
+    filename,
+  };
+}
