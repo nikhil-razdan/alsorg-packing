@@ -141,7 +141,7 @@ function ZohoItemsPage() {
   const [errors, setErrors] = useState({});
   const [addMoreOpen, setAddMoreOpen] = useState(false);
   const [addCount, setAddCount] = useState(1);
-  
+
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -149,13 +149,13 @@ function ZohoItemsPage() {
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
-  
+
   const role = String(localStorage.getItem("role") || "")
     .replace("ROLE_", "")
     .toUpperCase();
 
   const isAdmin = role === "ADMIN";
-  
+
   const [customPacketNo, setCustomPacketNo] = useState("");
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
   const [customAddOpen, setCustomAddOpen] = useState(false);
@@ -217,7 +217,7 @@ function ZohoItemsPage() {
   });
 
   /* ===================== COLUMNS ===================== */
- 
+
   const fetchMyPlants = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
@@ -233,22 +233,22 @@ function ZohoItemsPage() {
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
 
-	  setMyPlants(list);
+      setMyPlants(list);
 
-	  if (list.length === 1) {
-	    setForm((prev) => ({
-	      ...prev,
-	      plantCode: list[0].plantCode,
-	    }));
-	  }
+      if (list.length === 1) {
+        setForm((prev) => ({
+          ...prev,
+          plantCode: list[0].plantCode,
+        }));
+      }
 
-	  return list;
-	  
-  } catch (e) {
-    console.error(e);
-    setMyPlants([]);
-    return [];
-  }
+      return list;
+
+    } catch (e) {
+      console.error(e);
+      setMyPlants([]);
+      return [];
+    }
   };
 
   const getSafeValue = (value) => {
@@ -296,9 +296,9 @@ function ZohoItemsPage() {
 
     return getSafeValue(
       row.packedAreaCode ||
-        plant?.packedAreaCode ||
-        row.currentLocationCode ||
-        row.location
+      plant?.packedAreaCode ||
+      row.currentLocationCode ||
+      row.location
     );
   };
 
@@ -404,7 +404,7 @@ function ZohoItemsPage() {
     setRemarksList(buildTextRows(count));
     setErrors({});
   };
-  
+
   const itemInfoFields = [
     {
       key: "itemName",
@@ -549,37 +549,37 @@ function ZohoItemsPage() {
       </>
     );
   };
-  
+
   const fetchItems = async () => {
     setLoading(true);
     try {
-		const res = await fetch(`${API_BASE_URL}/api/packets/items`, {
-		  headers: {
-		    Authorization: `Bearer ${localStorage.getItem("token")}`,
-		  },
-		});
+      const res = await fetch(`${API_BASE_URL}/api/packets/items`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
-		if (!res.ok) {
-		  const text = await res.text();
-		  console.error("API ERROR:", text);
-		  throw new Error("Failed to fetch items");
-		}
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API ERROR:", text);
+        throw new Error("Failed to fetch items");
+      }
 
-		const data = await res.json();
+      const data = await res.json();
 
-		if (!Array.isArray(data)) {
-		  console.error("Invalid API:", data);
-		  setRows([]);
-		  return;
-		}
+      if (!Array.isArray(data)) {
+        console.error("Invalid API:", data);
+        setRows([]);
+        return;
+      }
 
-		setRows(data);
+      setRows(data);
       setRowCount(data.length);
     } finally {
       setLoading(false);
     }
   };
-  
+
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
@@ -724,12 +724,12 @@ function ZohoItemsPage() {
         URL.revokeObjectURL(historyPdfPreview.url);
       }
 
-	  setHistoryPdfPreview({
-	    historyId,
-	    url,
-	  });
+      setHistoryPdfPreview({
+        historyId,
+        url,
+      });
 
-	  setHistoryPdfModalOpen(true);
+      setHistoryPdfModalOpen(true);
     } catch (e) {
       console.error(e);
 
@@ -738,12 +738,12 @@ function ZohoItemsPage() {
       }
     }
   };
-  
+
   const getPacketNumber = (sku) => {
     const match = sku?.match(/Pkt-(\d+)/);
     return match ? Number(match[1]) : 0;
   };
-  
+
   const maxPacketMap = useMemo(() => {
     const map = {};
 
@@ -758,7 +758,7 @@ function ZohoItemsPage() {
 
     return map;
   }, [rows]);
-  
+
   const getStickerStatusKey = (row) => {
     return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
   };
@@ -833,7 +833,7 @@ function ZohoItemsPage() {
       start + pageSize
     );
   }, [filteredRows, safePageNo, pageSize]);
-  
+
   const filteredGeneratedHistoryRows = useMemo(() => {
     const q = generatedHistorySearch.trim().toLowerCase();
 
@@ -862,13 +862,13 @@ function ZohoItemsPage() {
 
     return current >= max;
   };
-  
+
   const validateStep1 = () => {
     let err = {};
 
     if (!form.itemName) err.itemName = "Required";
-	if (!form.plantCode) err.plantCode = "Plant location required";
-	
+    if (!form.plantCode) err.plantCode = "Plant location required";
+
     if (!form.numberOfPackets || form.numberOfPackets <= 0)
       err.numberOfPackets = "Invalid";
 
@@ -892,7 +892,7 @@ function ZohoItemsPage() {
     setErrors(err);
     return valid;
   };
-  
+
   const getPacketItemId = (row) => {
     return row?.itemId || row?.id || row?.packetItemId || "";
   };
@@ -939,8 +939,8 @@ function ZohoItemsPage() {
     setTimeout(() => {
       URL.revokeObjectURL(downloadUrl);
     }, 1000);
-  }; 
-  
+  };
+
   const closeStickerReviewModal = () => {
     if (stickerReviewPdf) {
       URL.revokeObjectURL(stickerReviewPdf);
@@ -1023,7 +1023,7 @@ function ZohoItemsPage() {
       setStickerReviewLoading(false);
     }
   };
-  
+
   const openGenerateStickerPanel = (row) => {
     openStickerReviewModal(row);
   };
@@ -1089,7 +1089,7 @@ function ZohoItemsPage() {
       message,
     });
   };
-  
+
   const readApiErrorMessage = async (res) => {
     const text = await res.text();
 
@@ -1104,7 +1104,7 @@ function ZohoItemsPage() {
       return text;
     }
   };
-  
+
   const handleApiError = async (res, fallbackMessage) => {
     const message = await readApiErrorMessage(res);
 
@@ -1187,22 +1187,22 @@ function ZohoItemsPage() {
       setDeleteLoading(false);
     }
   };
-  
+
   useEffect(() => {
     fetchItems();
     fetchMyPlants();
   }, []);
-  
+
   useEffect(() => {
     preparePacketDetailRows(form.numberOfPackets);
   }, [form.numberOfPackets]);
-  
+
   useEffect(() => {
     if (!uiAlert) return;
 
-	const timer = setTimeout(() => {
-	  setUiAlert(null);
-	}, uiAlert?.type === "error" ? 6500 : 3500);
+    const timer = setTimeout(() => {
+      setUiAlert(null);
+    }, uiAlert?.type === "error" ? 6500 : 3500);
 
     return () => clearTimeout(timer);
   }, [uiAlert]);
@@ -1247,12 +1247,12 @@ function ZohoItemsPage() {
               gap: 1.5,
             }}
           >
-		  <Button
-		      onClick={openGeneratedHistory}
-		      sx={historyHeaderButtonSx}
-		    >
-		      📜 Generated History
-		    </Button>
+            <Button
+              onClick={openGeneratedHistory}
+              sx={historyHeaderButtonSx}
+            >
+              📜 Generated History
+            </Button>
             <Box sx={countBadgeSx}>
               Total Items:{" "}
               <span style={{ color: "#60a5fa", fontWeight: 900 }}>
@@ -1260,37 +1260,37 @@ function ZohoItemsPage() {
               </span>
             </Box>
 
-			<Button
-			  onClick={async () => {
-			    let plants = myPlants;
+            <Button
+              onClick={async () => {
+                let plants = myPlants;
 
-			    if (plants.length === 0) {
-			      plants = await fetchMyPlants();
-			    }
+                if (plants.length === 0) {
+                  plants = await fetchMyPlants();
+                }
 
-			    resetCreateForm(plants);
-			    setCreateOpen(true);
-			  }}
-			  sx={premiumButton}
-			>
-			  + Create Item
-			</Button>
+                resetCreateForm(plants);
+                setCreateOpen(true);
+              }}
+              sx={premiumButton}
+            >
+              + Create Item
+            </Button>
 
-			<Button
-			  onClick={async () => {
-			    let plants = myPlants;
+            <Button
+              onClick={async () => {
+                let plants = myPlants;
 
-			    if (plants.length === 0) {
-			      plants = await fetchMyPlants();
-			    }
+                if (plants.length === 0) {
+                  plants = await fetchMyPlants();
+                }
 
-			    resetCustomCreateForm(plants);
-			    setCustomCreateOpen(true);
-			  }}
-			  sx={actionSecondary}
-			>
-			  + Custom Packet
-			</Button>
+                resetCustomCreateForm(plants);
+                setCustomCreateOpen(true);
+              }}
+              sx={actionSecondary}
+            >
+              + Custom Packet
+            </Button>
           </Box>
         </div>
 
@@ -1328,33 +1328,33 @@ function ZohoItemsPage() {
             <MenuItem value="SKU">Group by SKU</MenuItem>
             <MenuItem value="NAME">Group by Name</MenuItem>
           </TextField>
-		  {isAdmin && (
-		    <TextField
-		      select
-		      size="small"
-		      value={statusFilter}
-		      onChange={(e) => {
-		        setStatusFilter(e.target.value);
-		        setPageNo(1);
-		      }}
-		      sx={selectFieldSx}
-		      slotProps={selectMenuSlotProps}
-		    >
-		      <MenuItem value="ALL">All Status</MenuItem>
-		      <MenuItem value="CREATED">Created</MenuItem>
-		      <MenuItem value="STICKER_PRINTED">Sticker Printed</MenuItem>
-		    </TextField>
-		  )}
+          {isAdmin && (
+            <TextField
+              select
+              size="small"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPageNo(1);
+              }}
+              sx={selectFieldSx}
+              slotProps={selectMenuSlotProps}
+            >
+              <MenuItem value="ALL">All Status</MenuItem>
+              <MenuItem value="CREATED">Created</MenuItem>
+              <MenuItem value="STICKER_PRINTED">Sticker Printed</MenuItem>
+            </TextField>
+          )}
         </Box>
 
         <div style={wrap}>
           <Box sx={tableWrapper}>
-		  <div
-		    style={{
-		      width: "max-content",
-		      minWidth: inventoryMinWidth,
-		    }}
-		  >
+            <div
+              style={{
+                width: "max-content",
+                minWidth: inventoryMinWidth,
+              }}
+            >
               <div style={tableHeader}>
                 <div>Generate</div>
                 <div>Add Packets</div>
@@ -1364,8 +1364,8 @@ function ZohoItemsPage() {
                 <div>SKU</div>
                 <div>PD No</div>
                 <div>DWG No</div>
-				<div>Plant</div>
-				<div>Location</div>
+                <div>Plant</div>
+                <div>Location</div>
                 <div>Client</div>
                 <div>Address</div>
                 <div>Description</div>
@@ -1387,29 +1387,29 @@ function ZohoItemsPage() {
 
                 {!loading && paginatedRows.map((row) => {
                   const lastPacket = isLastPacket(row);
-				  const rowDeleteId =
-				    row.itemId || row.id || row.packetItemId;
+                  const rowDeleteId =
+                    row.itemId || row.id || row.packetItemId;
 
                   return (
                     <div
                       key={row.itemId} style={tableRow}>
                       <div style={tableCellWrap}>
-					  <Button
-					    size="small"
-					    disabled={generating || (!!row.stickerNumber && !isAdmin)}
-					    onClick={() => openGenerateStickerPanel(row)}
-					    sx={{
-					      ...actionPrimary,
-					      ...tableActionButton,
-					      opacity: row.stickerNumber && !isAdmin ? 0.45 : 1,
-					    }}
-					  >
-					    {row.stickerNumber
-					      ? isAdmin
-					        ? "Reprint"
-					        : "Generated"
-					      : "Generate"}
-					  </Button>
+                        <Button
+                          size="small"
+                          disabled={generating || (!!row.stickerNumber && !isAdmin)}
+                          onClick={() => openGenerateStickerPanel(row)}
+                          sx={{
+                            ...actionPrimary,
+                            ...tableActionButton,
+                            opacity: row.stickerNumber && !isAdmin ? 0.45 : 1,
+                          }}
+                        >
+                          {row.stickerNumber
+                            ? isAdmin
+                              ? "Reprint"
+                              : "Generated"
+                            : "Generate"}
+                        </Button>
                       </div>
 
                       <div style={tableCellWrap}>
@@ -1457,22 +1457,22 @@ function ZohoItemsPage() {
                         </Button>
                       </div>
 
-					  <div style={tableCellWrap}>
-					    <Button
-					      type="button"
-					      size="small"
-					      onClick={() => openDeleteConfirm(row)}
-					      sx={{
-					        ...actionDanger,
-					        ...tableActionButton,
-					        opacity: 1,
-					        pointerEvents: "auto",
-					        cursor: "pointer",
-					      }}
-					    >
-					      Delete
-					    </Button>
-					  </div>
+                      <div style={tableCellWrap}>
+                        <Button
+                          type="button"
+                          size="small"
+                          onClick={() => openDeleteConfirm(row)}
+                          sx={{
+                            ...actionDanger,
+                            ...tableActionButton,
+                            opacity: 1,
+                            pointerEvents: "auto",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
 
                       <div style={tableCellWrap}>
                         <span
@@ -1509,22 +1509,22 @@ function ZohoItemsPage() {
                           {row.drawingNo || "—"}
                         </span>
                       </div>
-					  
-					  <div style={tableCellWrap}>
-					    <Chip
-					      size="small"
-					      label={row.plantCode || "Unassigned"}
-					      sx={row.plantCode ? plantChipSx : unassignedPlantChipSx}
-					    />
-					  </div>
 
-					  <div style={tableCellWrap}>
-					    <Chip
-					      size="small"
-					      label={getPackingLocationCode(row)}
-					      sx={locationChipSx}
-					    />
-					  </div>
+                      <div style={tableCellWrap}>
+                        <Chip
+                          size="small"
+                          label={row.plantCode || "Unassigned"}
+                          sx={row.plantCode ? plantChipSx : unassignedPlantChipSx}
+                        />
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        <Chip
+                          size="small"
+                          label={getPackingLocationCode(row)}
+                          sx={locationChipSx}
+                        />
+                      </div>
 
                       <div style={tableCellWrap}>
                         <span
@@ -1554,11 +1554,11 @@ function ZohoItemsPage() {
                       </div>
 
                       <div style={tableCellWrap}>
-					  <Chip
-					    label={getStickerStatusLabel(row)}
-					    size="small"
-					    sx={row.stickerNumber ? printedChipSx : createdChipSx}
-					  />
+                        <Chip
+                          label={getStickerStatusLabel(row)}
+                          size="small"
+                          sx={row.stickerNumber ? printedChipSx : createdChipSx}
+                        />
                       </div>
                     </div>
                   );
@@ -1624,1547 +1624,1547 @@ function ZohoItemsPage() {
             </Box>
           </Box>
         </div>
-		<InventoryModal
-		  open={deleteConfirmOpen}
-		  onClose={closeDeleteConfirm}
-		  icon="🗑️"
-		  title="Delete Inventory Item"
-		  subtitle="This action will remove the selected packet item from inventory"
-		  width={560}
-		  footer={
-		    <>
-		      <Button
-		        disabled={deleteLoading}
-		        onClick={closeDeleteConfirm}
-		        sx={modalSecondaryButtonSx}
-		      >
-		        Cancel
-		      </Button>
-
-		      <Button
-		        disabled={deleteLoading}
-		        onClick={deletePacketItem}
-		        sx={{
-		          ...actionDanger,
-		          height: 36,
-		          px: 2.4,
-		          borderRadius: "8px",
-		          opacity: deleteLoading ? 0.6 : 1,
-		        }}
-		      >
-		        {deleteLoading ? "Deleting..." : "Yes, Delete"}
-		      </Button>
-		    </>
-		  }
-		>
-		  <Box sx={deleteWarningBoxSx}>
-		    <Box sx={deleteWarningIconSx}>
-		      ⚠️
-		    </Box>
-
-		    <Box>
-		      <Box sx={deleteWarningTitleSx}>
-		        Are you sure you want to delete this item?
-		      </Box>
-
-		      <Box sx={deleteWarningTextSx}>
-		        Once deleted, this item will be removed from the Inventory page.
-		      </Box>
-		    </Box>
-		  </Box>
-
-		  <Box sx={deleteItemCardSx}>
-		    <Box sx={deleteItemLabelSx}>
-		      Item Name
-		    </Box>
-
-		    <Box sx={deleteItemValueSx}>
-		      {deleteTarget?.itemName || "—"}
-		    </Box>
-
-		    <Box sx={deleteItemMetaSx}>
-		      SKU: {deleteTarget?.sku || "—"}
-		    </Box>
-
-		    <Box sx={deleteItemMetaSx}>
-		      Client: {deleteTarget?.clientName || "—"}
-		    </Box>
-
-		    <Box sx={deleteItemMetaSx}>
-		      Status: {deleteTarget?.status || "—"}
-		    </Box>
-		  </Box>
-		</InventoryModal>
-		
-		<InventoryModal
-		  open={stickerReviewOpen}
-		  onClose={closeStickerReviewModal}
-		  icon="👁️"
-		  title="Preview Sticker"
-		  subtitle="Check sticker details before final generation"
-		  width={920}
-		  footer={
-		    <>
-		      <Button
-		        onClick={() => {
-		          const row = selectedItem;
-
-		          closeStickerReviewModal();
-
-		          if (row) {
-		            openEditModal(row);
-		          }
-		        }}
-		        sx={modalSecondaryButtonSx}
-		      >
-		        Not Done - Edit Details
-		      </Button>
-
-		      <Button
-		        disabled={!stickerReviewPdf || stickerReviewLoading}
-		        onClick={() => openGenerateStickerDrawer(selectedItem)}
-		        sx={premiumButton}
-		      >
-		        Done - Continue Generate
-		      </Button>
-		    </>
-		  }
-		>
-		  {stickerReviewLoading && (
-		    <Box sx={historyEmptySx}>
-		      Preparing sticker preview...
-		    </Box>
-		  )}
-
-		  {!stickerReviewLoading && stickerReviewPdf && (
-		    <Box sx={pdfModalFrameWrapSx}>
-			<iframe
-			  src={getPdfPreviewSrc(stickerReviewPdf)}
-			  width="100%"
-			  height="100%"
-			  title="Sticker Preview Before Generate"
-			  style={{
-			    border: "1px solid rgba(255,255,255,.08)",
-			    borderRadius: 12,
-			    background: "#fff",
-			  }}
-			/>
-		    </Box>
-		  )}
-		</InventoryModal>
-		
-      {/* ===================== DRAWER ===================== */}
-	  <InventorySidePanel
-	    open={drawerOpen}
-	    onClose={closeGenerateStickerDrawer}
-	    icon="🏷️"
-	    title="Sticker Generation"
-	    subtitle="Generate, download and preview packet sticker"
-	  >
-	    <Box sx={stickerHeroCardSx}>
-	      <Box sx={stickerHeroTopSx}>
-	        <Box sx={stickerHeroIconSx}>
-	          🏷️
-	        </Box>
-
-	        <Chip
-	          label={getStickerStatusLabel(selectedItem)}
-	          size="small"
-	          sx={
-	            selectedItem?.stickerNumber
-	              ? printedChipSx
-	              : createdChipSx
-	          }
-	        />
-	      </Box>
-
-	      <Box sx={stickerSkuSx}>
-	        {getSafeValue(selectedItem?.sku)}
-	      </Box>
-
-	      <Box sx={stickerItemNameSx}>
-	        {getSafeValue(selectedItem?.itemName)}
-	      </Box>
-
-	      <Box sx={stickerClientMiniSx}>
-	        Client: {getSafeValue(selectedItem?.clientName)}
-	      </Box>
-	    </Box>
-
-	    <Box sx={drawerSectionCardSx}>
-	      <Box sx={drawerSectionTitleSx}>
-	        Packet Details
-	      </Box>
-
-	      <Box sx={detailGridSx}>
-	        <Box sx={detailMiniCardSx}>
-	          <Box sx={detailLabelSx}>
-	            Plant
-	          </Box>
-
-	          <Box sx={detailValueSx}>
-	            {getPlantCodeOnly(selectedItem)}
-	          </Box>
-	        </Box>
-
-	        <Box sx={detailMiniCardSx}>
-	          <Box sx={detailLabelSx}>
-	            Location
-	          </Box>
-
-	          <Box sx={detailValueSx}>
-	            {getPackingLocationCode(selectedItem)}
-	          </Box>
-	        </Box>
-
-	        <Box sx={detailMiniCardSx}>
-	          <Box sx={detailLabelSx}>
-	            PD No
-	          </Box>
-
-	          <Box sx={detailValueSx}>
-	            {getSafeValue(selectedItem?.pdNo)}
-	          </Box>
-	        </Box>
-
-	        <Box sx={detailMiniCardSx}>
-	          <Box sx={detailLabelSx}>
-	            Drawing No
-	          </Box>
-
-	          <Box sx={detailValueSx}>
-	            {getSafeValue(selectedItem?.drawingNo)}
-	          </Box>
-	        </Box>
-	      </Box>
-
-	      <Box sx={descriptionBoxSx}>
-	        <Box sx={detailLabelSx}>
-	          Description
-	        </Box>
-
-	        <Box sx={descriptionTextSx}>
-	          {getSafeValue(selectedItem?.description)}
-	        </Box>
-	      </Box>
-	    </Box>
-
-	    <Box sx={drawerSectionCardSx}>
-	      <Box sx={drawerSectionTitleSx}>
-	        Sticker Appearance
-	      </Box>
-
-	      <Box sx={stickerOptionRowSx}>
-	        <Box>
-	          <Box sx={optionMainTextSx}>
-	            Company Header
-	          </Box>
-
-	          <Box sx={optionSubTextSx}>
-	            Show ALSORG company header on sticker PDF
-	          </Box>
-	        </Box>
-
-	        <Switch
-	          checked={form.showCompanyHeader}
-	          onChange={(e) =>
-	            setForm((prev) => ({
-	              ...prev,
-	              showCompanyHeader: e.target.checked,
-	            }))
-	          }
-	        />
-	      </Box>
-	    </Box>
-
-	    <Button
-	      disabled={generating}
-	      onClick={async () => {
-	        const itemId = getPacketItemId(selectedItem);
-
-	        if (!itemId) {
-	          showUiAlert("error", "Packet item id missing");
-	          return;
-	        }
-
-	        try {
-	          setGenerating(true);
-
-	          const genRes = await fetch(
-	            `${API_BASE_URL}/api/packets/items/${encodeURIComponent(
-	              itemId
-	            )}/generate-sticker?factoryFloor=${encodeURIComponent(
-	              selectedItem?.floor || ""
-	            )}&showCompanyHeader=${form.showCompanyHeader}`,
-	            {
-	              method: "POST",
-	              headers: {
-	                Authorization: `Bearer ${localStorage.getItem("token")}`,
-	              },
-	            }
-	          );
-
-	          const contentType =
-	            genRes.headers.get("content-type");
-
-	          if (!genRes.ok || !contentType?.includes("pdf")) {
-	            const message =
-	              await readApiErrorMessage(genRes);
-
-	            showUiAlert(
-	              "error",
-	              message || "Failed to generate sticker"
-	            );
-
-	            return;
-	          }
-
-	          const blob = await genRes.blob();
-
-	          if (pdfUrl) {
-	            URL.revokeObjectURL(pdfUrl);
-	          }
-
-	          const previewUrl =
-	            URL.createObjectURL(blob);
-
-	          setPdfUrl(previewUrl);
-
-	          triggerDownloadFromBlob(
-	            blob,
-	            getStickerFileName(selectedItem)
-	          );
-
-	          showUiAlert(
-	            "success",
-	            "Sticker generated and downloaded successfully"
-	          );
-
-	          await fetchItems();
-
-	          if (generatedHistoryOpen) {
-	            await fetchGeneratedHistory(
-	              generatedHistoryUserFilter
-	            );
-	          }
-	        } catch (e) {
-	          console.error(e);
-
-	          showUiAlert(
-	            "error",
-	            "Failed to generate sticker"
-	          );
-	        } finally {
-	          setGenerating(false);
-	        }
-	      }}
-	      sx={generateStickerMainButtonSx}
-	    >
-	      {generating
-	        ? "Generating Sticker..."
-	        : selectedItem?.stickerNumber && isAdmin
-	        ? "Reprint & Download Sticker"
-	        : "Generate & Download Sticker"}
-	    </Button>
-
-	    <Box sx={autoDownloadHintSx}>
-	      Sticker PDF will automatically download after generation.
-	    </Box>
-
-	    {pdfUrl && (
-	      <>
-	        <Box sx={resultSuccessCardSx}>
-	          <Box sx={resultSuccessIconSx}>
-	            ✅
-	          </Box>
-
-	          <Box sx={{ minWidth: 0 }}>
-	            <Box sx={resultSuccessTitleSx}>
-	              Sticker generated successfully
-	            </Box>
-
-	            <Box sx={resultSuccessTextSx}>
-	              The PDF has been downloaded. You can download again or open it in a new tab.
-	            </Box>
-	          </Box>
-	        </Box>
-
-	        <Box sx={resultActionsSx}>
-	          <Button
-	            onClick={() =>
-	              triggerDownloadFromUrl(
-	                pdfUrl,
-	                getStickerFileName(selectedItem)
-	              )
-	            }
-	            sx={downloadAgainButtonSx}
-	          >
-	            Download Again
-	          </Button>
-
-	          <Button
-	            onClick={() => {
-	              if (pdfUrl) {
-	                window.open(pdfUrl, "_blank");
-	              }
-	            }}
-	            sx={openPdfButtonSx}
-	          >
-	            Open PDF
-	          </Button>
-	        </Box>
-
-	        <Box sx={pdfPreviewHeaderSx}>
-	          Sticker PDF Preview
-	        </Box>
-
-	        <iframe
-	          src={pdfUrl}
-	          width="100%"
-	          height="480"
-	          style={pdfFrameSx}
-	          title="Sticker Preview"
-	        />
-	      </>
-	    )}
-	  </InventorySidePanel>
-	  <InventorySidePanel
-	    open={createOpen}
-	    onClose={() => setCreateOpen(false)}
-	    icon="➕"
-	    title="Create Item"
-	    subtitle="Create master item and packet details"
-	  >
-	    <Stepper
-	      activeStep={activeStep}
-	      sx={stepperSx}
-	    >
-	      <Step><StepLabel>Item Info</StepLabel></Step>
-	      <Step><StepLabel>Packet Details</StepLabel></Step>
-	      <Step><StepLabel>Done</StepLabel></Step>
-	    </Stepper>
-
-		<Box sx={formSectionHeaderSx}>
-		  Basic Item Information
-		</Box>
-
-		{itemInfoFields.map((field) =>
-		  renderFormTextField(field)
-		)}
-
-		<Box sx={formSectionHeaderSx}>
-		  Plant Assignment
-		</Box>
-
-		{renderPlantSelect()}
-
-		<Box sx={formSectionHeaderSx}>
-		  Packet Setup
-		</Box>
-
-		<TextField
-		  label="Number of Packets"
-		  placeholder="Enter total packet count"
-		  fullWidth
-		  type="number"
-		  value={form.numberOfPackets}
-		  onChange={(e) =>
-		    setForm((prev) => ({
-		      ...prev,
-		      numberOfPackets: Number(e.target.value),
-		    }))
-		  }
-		  error={!!errors.numberOfPackets}
-		  helperText={errors.numberOfPackets}
-		  sx={formFieldSx(darkMode)}
-		/>
-
-		<Button
-		  onClick={() => {
-		    if (!validateStep1()) return;
-
-		    preparePacketDetailRows(form.numberOfPackets);
-
-		    setActiveStep(1);
-		    setDetailsPopup(true);
-		  }}
-	      sx={{
-	        ...premiumButton,
-	        width: "100%",
-	        height: 42,
-	      }}
-	    >
-	      Continue →
-	    </Button>
-	  </InventorySidePanel>
-	  <InventoryModal
-	    open={detailsPopup}
-	    onClose={() => setDetailsPopup(false)}
-	    icon="📋"
-	    title="Packet Details"
-	    subtitle="Add packet-wise description, weight, dimensions and remarks"
-	    width={720}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => setDetailsPopup(false)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Cancel
-	        </Button>
-
-	        <Button
-	          sx={premiumButton}
-			  onClick={async () => {
-			    if (!validatePackets()) return;
-
-			    if (!form.plantCode) {
-			      showUiAlert("error", "Please select Plant Location");
-			      return;
-			    }
-
-			    const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
-				  method: "POST",
-				  headers: {
-				    "Content-Type": "application/json",
-				    Authorization: `Bearer ${localStorage.getItem("token")}`,
-				  },
-				  body: JSON.stringify({
-				    ...form,
-				    descriptions,
-				    weights,
-				    dimensionsList: dimensionsList.map((d) =>
-				      d?.l && d?.b && d?.h
-				        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-				        : ""
-				    ),
-				    remarksList,
-				  }),
-				});
-
-				if (!res.ok) {
-				  await handleApiError(res, "Create packets failed");
-				  return;
-				}
-
-				setActiveStep(2);
-				setDetailsPopup(false);
-
-				showUiAlert("success", "Packets created successfully");
-
-				await fetchItems();
-
-				setTimeout(() => {
-				  setCreateOpen(false);
-				  setActiveStep(0);
-				}, 800);
-	          }}
-	        >
-	          Create Packets
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={modalScrollBodySx}>
-	      {descriptions.map((_, i) => (
-	        <motion.div
-	          key={i}
-	          initial={{ opacity: 0, y: 14 }}
-	          animate={{ opacity: 1, y: 0 }}
-	          transition={{ delay: i * 0.04 }}
-	        >
-	          <Box sx={packetCardSx}>
-	            <Box sx={packetTitleSx}>
-	              Packet {i + 1}
-	            </Box>
-
-	            <TextField
-	              label="Description"
-	              fullWidth
-	              value={descriptions[i]}
-	              onChange={(e) => {
-	                const copy = [...descriptions];
-	                copy[i] = e.target.value;
-	                setDescriptions(copy);
-	              }}
-	              sx={formFieldSx(darkMode)}
-	            />
-
-	            <TextField
-	              label="Weight"
-	              fullWidth
-	              value={weights[i]}
-	              onChange={(e) => {
-	                const copy = [...weights];
-	                copy[i] = e.target.value;
-	                setWeights(copy);
-	              }}
-	              error={!!errors[`weight-${i}`]}
-	              helperText={errors[`weight-${i}`]}
-	              sx={formFieldSx(darkMode)}
-	            />
-
-	            <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
-	              {["l", "b", "h"].map((key) => (
-	                <TextField
-	                  key={key}
-	                  label={key.toUpperCase()}
-	                  type="number"
-	                  value={dimensionsList[i]?.[key] || ""}
-	                  onChange={(e) => {
-	                    const copy = [...dimensionsList];
-	                    copy[i] = { ...copy[i], [key]: e.target.value };
-	                    setDimensionsList(copy);
-	                  }}
-	                  sx={{
-	                    ...formFieldSx(darkMode),
-	                    width: 90,
-	                    mb: 0,
-	                  }}
-	                />
-	              ))}
-
-	              <span style={{ color: "#94a3b8", fontWeight: 700 }}>
-	                inches
-	              </span>
-	            </Box>
-
-	            <TextField
-	              label="Remarks"
-	              fullWidth
-	              value={remarksList[i]}
-	              onChange={(e) => {
-	                const copy = [...remarksList];
-	                copy[i] = e.target.value;
-	                setRemarksList(copy);
-	              }}
-	              sx={formFieldSx(darkMode)}
-	            />
-	          </Box>
-	        </motion.div>
-	      ))}
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={customCreateOpen}
-	    onClose={() => setCustomCreateOpen(false)}
-	    icon="📦"
-	    title="Create Custom Packet"
-	    subtitle="Create a single custom packet with selected packet number"
-	    width={640}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => setCustomCreateOpen(false)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Cancel
-	        </Button>
-
-	        <Button
-	          disabled={!customPacketNo || !form.plantCode}
-	          sx={{
-	            ...premiumButton,
-	            opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
-	          }}
-	          onClick={async () => {
-	            try {
-					if (!form.plantCode) {
-					  showUiAlert("error", "Please select Plant Location");
-					  return;
-					}
-					
-					const res = await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
-					  method: "POST",
-					  headers: {
-					    "Content-Type": "application/json",
-					    Authorization: `Bearer ${localStorage.getItem("token")}`,
-					  },
-					  body: JSON.stringify({
-					    ...form,
-					    customPacketNumber: Number(customPacketNo),
-					    descriptions,
-					    weights,
-					    dimensionsList: dimensionsList.map((d) =>
-					      d?.l && d?.b && d?.h
-					        ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-					        : ""
-					    ),
-					    remarksList,
-					  }),
-					});
-
-					if (!res.ok) {
-					  await handleApiError(res, "Create custom packet failed");
-					  return;
-					}
-
-					setCustomCreateOpen(false);
-					setCustomPacketNo("");
-
-					showUiAlert("success", "Custom packet created successfully");
-
-					await fetchItems();
-	            } catch (e) {
-	              alert("Failed to create custom packet");
-	            }
-	          }}
-	        >
-	          Create
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={modalScrollBodySx}>
-	      <Box sx={sectionCardSx}>
-		  <Box sx={sectionTitleSx}>
-		    Basic Item Information
-		  </Box>
-
-		  {itemInfoFields.map((field) =>
-		    renderFormTextField(field)
-		  )}
-
-		  <Box sx={sectionTitleSx}>
-		    Plant Assignment
-		  </Box>
-
-		  {renderPlantSelect()}
-	      </Box>
-
-	      <Box sx={sectionCardSx}>
-		  <Box sx={sectionTitleSx}>
-		    Custom Packet Information
-		  </Box>
-
-		  <TextField
-		    label="Packet Number"
-		    placeholder="Enter custom packet number"
-		    type="number"
-		    fullWidth
-		    value={customPacketNo}
-		    onChange={(e) => setCustomPacketNo(e.target.value)}
-		    sx={formFieldSx(darkMode)}
-		  />
-
-		  <TextField
-		    label={packetDetailLabels.description}
-		    placeholder="Enter packet-wise description"
-		    fullWidth
-		    value={descriptions[0] || ""}
-		    onChange={(e) => setDescriptions([e.target.value])}
-		    sx={formFieldSx(darkMode)}
-		  />
-
-		  <TextField
-		    label={packetDetailLabels.weight}
-		    placeholder="Enter packet weight"
-		    fullWidth
-		    value={weights[0] || ""}
-		    onChange={(e) => setWeights([e.target.value])}
-		    sx={formFieldSx(darkMode)}
-		  />
-
-	        <Box sx={dimensionRowSx}>
-			{[
-			  ["l", packetDetailLabels.length],
-			  ["b", packetDetailLabels.breadth],
-			  ["h", packetDetailLabels.height],
-			].map(([key, label]) => (
-			  <TextField
-			    key={key}
-			    label={label}
-			    type="number"
-			    value={dimensionsList[0]?.[key] || ""}
-	              onChange={(e) => {
-	                const copy = [...dimensionsList];
-	                copy[0] = { ...copy[0], [key]: e.target.value };
-	                setDimensionsList(copy);
-	              }}
-	              sx={{
-	                ...formFieldSx(darkMode),
-	                width: 90,
-	                mb: 0,
-	              }}
-	            />
-	          ))}
-
-	          <span style={dimensionUnitText}>
-	            inches
-	          </span>
-	        </Box>
-
-			<TextField
-			  label={packetDetailLabels.remarks}
-			  placeholder="Enter handling notes or remarks"
-			  fullWidth
-			  value={remarksList[0] || ""}
-			  onChange={(e) => setRemarksList([e.target.value])}
-			  sx={formFieldSx(darkMode)}
-			/>
-	      </Box>
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={addMoreOpen}
-	    onClose={() => setAddMoreOpen(false)}
-	    icon="➕"
-	    title="Add More Packets"
-	    subtitle={selectedItem?.itemName ? `Add packets to ${selectedItem.itemName}` : "Add packets to selected item"}
-	    width={720}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => setAddMoreOpen(false)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Cancel
-	        </Button>
-
-	        <Button
-	          disabled={!addCount || addCount <= 0}
-	          sx={{
-	            ...premiumButton,
-	            opacity: !addCount || addCount <= 0 ? 0.45 : 1,
-	          }}
-	          onClick={async () => {
-	            try {
-					const res = await fetch(
-					  `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
-					  {
-					    method: "POST",
-					    headers: {
-					      "Content-Type": "application/json",
-					      Authorization: `Bearer ${localStorage.getItem("token")}`,
-					    },
-					    body: JSON.stringify({
-					      numberOfPackets: addCount,
-					      descriptions,
-					      weights,
-					      dimensionsList: dimensionsList.map((d) =>
-					        d?.l && d?.b && d?.h
-					          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-					          : ""
-					      ),
-					      remarksList,
-					    }),
-					  }
-					);
-
-					if (!res.ok) {
-					  await handleApiError(res, "Add packets failed");
-					  return;
-					}
-
-					setAddMoreOpen(false);
-
-					showUiAlert("success", "Packets added successfully");
-
-					await fetchItems();
-	            } catch (e) {
-	              alert("Failed to add packets");
-	            }
-	          }}
-	        >
-	          Add Packets
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={modalScrollBodySx}>
-	      <Box sx={sectionCardSx}>
-	        <Box sx={sectionTitleSx}>
-	          Packet Count
-	        </Box>
-			<Box
-			  sx={{
-			    mb: 2,
-			    p: 1.4,
-			    borderRadius: "12px",
-			    background: "rgba(59,130,246,.10)",
-			    border: "1px solid rgba(59,130,246,.18)",
-			    color: "#93c5fd",
-			    fontWeight: 900,
-			    fontSize: 12,
-			  }}
-			>
-			Plant: {getPlantCodeOnly(selectedItem)}
-			<br />
-			Location: {getPackingLocationCode(selectedItem)}
-			</Box>
-	        <TextField
-	          label="Number of packets"
-	          type="number"
-	          value={addCount}
-	          onChange={(e) => setAddCount(Number(e.target.value))}
-	          fullWidth
-	          sx={formFieldSx(darkMode)}
-	        />
-	      </Box>
-
-	      {[...Array(addCount)].map((_, i) => (
-	        <motion.div
-	          key={i}
-	          initial={{ opacity: 0, y: 14 }}
-	          animate={{ opacity: 1, y: 0 }}
-	          transition={{ delay: i * 0.04 }}
-	        >
-	          <Box sx={packetCardSx}>
-	            <Box sx={packetTitleSx}>
-	              Packet {i + 1}
-	            </Box>
-
-				<TextField
-				  label={packetDetailLabels.description}
-	              fullWidth
-	              value={descriptions[i] || ""}
-	              onChange={(e) => {
-	                const copy = [...descriptions];
-	                copy[i] = e.target.value;
-	                setDescriptions(copy);
-	              }}
-	              sx={formFieldSx(darkMode)}
-	            />
-
-				<TextField
-				  label={packetDetailLabels.weight}
-	              fullWidth
-	              value={weights[i] || ""}
-	              onChange={(e) => {
-	                const copy = [...weights];
-	                copy[i] = e.target.value;
-	                setWeights(copy);
-	              }}
-	              sx={formFieldSx(darkMode)}
-	            />
-
-	            <Box sx={dimensionRowSx}>
-	              {["l", "b", "h"].map((key) => (
-	                <TextField
-	                  key={key}
-					  label={
-					    key === "l"
-					      ? "Length"
-					      : key === "b"
-					      ? "Breadth"
-					      : "Height"
-					  }
-	                  type="number"
-	                  value={dimensionsList[i]?.[key] || ""}
-	                  onChange={(e) => {
-	                    const copy = [...dimensionsList];
-	                    copy[i] = { ...copy[i], [key]: e.target.value };
-	                    setDimensionsList(copy);
-	                  }}
-	                  sx={{
-	                    ...formFieldSx(darkMode),
-	                    width: 90,
-	                    mb: 0,
-	                  }}
-	                />
-	              ))}
-
-	              <span style={dimensionUnitText}>
-	                inches
-	              </span>
-	            </Box>
-
-				<TextField
-				  label={packetDetailLabels.remarks}
-	              fullWidth
-	              value={remarksList[i] || ""}
-	              onChange={(e) => {
-	                const copy = [...remarksList];
-	                copy[i] = e.target.value;
-	                setRemarksList(copy);
-	              }}
-	              sx={formFieldSx(darkMode)}
-	            />
-	          </Box>
-	        </motion.div>
-	      ))}
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={customAddOpen}
-	    onClose={() => setCustomAddOpen(false)}
-	    icon="🧩"
-	    title="Add Custom Packet"
-	    subtitle={selectedItem?.itemName ? `Add custom packet to ${selectedItem.itemName}` : "Add one custom packet"}
-	    width={640}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => setCustomAddOpen(false)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Cancel
-	        </Button>
-
-			<Button
-			  disabled={!customPacketNo}
-			  sx={{
-			    ...premiumButton,
-			    opacity: !customPacketNo ? 0.45 : 1,
-			  }}
-	          onClick={async () => {
-	            try {
-					const res = await fetch(
-					  `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
-					  {
-					    method: "POST",
-					    headers: {
-					      "Content-Type": "application/json",
-					      Authorization: `Bearer ${localStorage.getItem("token")}`,
-					    },
-					    body: JSON.stringify({
-					      customPacketNumber: Number(customPacketNo),
-					      descriptions,
-					      weights,
-					      dimensionsList: dimensionsList.map((d) =>
-					        d?.l && d?.b && d?.h
-					          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-					          : ""
-					      ),
-					      remarksList,
-					    }),
-					  }
-					);
-
-					if (!res.ok) {
-					  await handleApiError(res, "Add custom packet failed");
-					  return;
-					}
-
-					setCustomAddOpen(false);
-					setCustomPacketNo("");
-
-					showUiAlert("success", "Custom packet added successfully");
-
-					await fetchItems();
-	            } catch (e) {
-	              alert("Failed to add custom packet");
-	            }
-	          }}
-	        >
-	          Add
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={modalScrollBodySx}>
-	      <Box sx={sectionCardSx}>
-	        <Box sx={sectionTitleSx}>
-	          Custom Packet Details
-	        </Box>
-
-			<Box
-			  sx={{
-			    mb: 2,
-			    p: 1.4,
-			    borderRadius: "12px",
-			    background: "rgba(59,130,246,.10)",
-			    border: "1px solid rgba(59,130,246,.18)",
-			    color: "#93c5fd",
-			    fontWeight: 900,
-			    fontSize: 12,
-			  }}
-			>
-			Plant: {getPlantCodeOnly(selectedItem)}
-			<br />
-			Location: {getPackingLocationCode(selectedItem)}
-			</Box>
-			
-	        <TextField
-	          label="Custom Packet Number"
-	          type="number"
-	          fullWidth
-	          value={customPacketNo}
-	          onChange={(e) => setCustomPacketNo(e.target.value)}
-	          sx={formFieldSx(darkMode)}
-	        />
-
-	        <TextField
-	          label="Description"
-	          fullWidth
-	          value={descriptions[0] || ""}
-	          onChange={(e) => setDescriptions([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
-
-	        <TextField
-	          label="Weight"
-	          fullWidth
-	          value={weights[0] || ""}
-	          onChange={(e) => setWeights([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
-
-	        <Box sx={dimensionRowSx}>
-	          {["l", "b", "h"].map((key) => (
-	            <TextField
-	              key={key}
-	              label={key.toUpperCase()}
-	              type="number"
-	              value={dimensionsList[0]?.[key] || ""}
-	              onChange={(e) => {
-	                const copy = [...dimensionsList];
-	                copy[0] = { ...copy[0], [key]: e.target.value };
-	                setDimensionsList(copy);
-	              }}
-	              sx={{
-	                ...formFieldSx(darkMode),
-	                width: 90,
-	                mb: 0,
-	              }}
-	            />
-	          ))}
-
-	          <span style={dimensionUnitText}>
-	            inches
-	          </span>
-	        </Box>
-
-	        <TextField
-	          label="Remarks"
-	          fullWidth
-	          value={remarksList[0] || ""}
-	          onChange={(e) => setRemarksList([e.target.value])}
-	          sx={formFieldSx(darkMode)}
-	        />
-	      </Box>
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={editOpen}
-	    onClose={() => setEditOpen(false)}
-	    icon="✏️"
-	    title="Edit Packet Item"
-	    subtitle="Update editable packet information"
-	    width={620}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => setEditOpen(false)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Cancel
-	        </Button>
-
-	        <Button
-	          sx={premiumButton}
-	          onClick={async () => {
-	            try {
-					const editItemId = getPacketItemId(editItem);
-
-					const editUrl =
-					  isAdmin
-					    ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
-					    : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
-
-					const res = await fetch(
-					  editUrl,
-	                {
-	                  method: "PUT",
-	                  headers: {
-	                    "Content-Type": "application/json",
-	                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-	                  },
-	                  body: JSON.stringify(editForm),
-	                }
-	              );
-
-				  if (!res.ok) {
-				    await handleApiError(res, "Update failed");
-				    return;
-				  }
-
-				  setEditOpen(false);
-
-				  showUiAlert("success", "Packet item updated successfully");
-
-				  await fetchItems();
-			  } catch (e) {
-			    console.error(e);
-			    showUiAlert("error", "Update failed. Please try again.");
-			  }
-	          }}
-	        >
-	          Save
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={modalScrollBodySx}>
-	      {[
-	        "itemName",
-	        "pdNo",
-	        "drawingNo",
-	        "clientName",
-	        "clientAddress",
-	        "floor",
-	        "description",
-	        "weight",
-	        "dimensions",
-	        "remarks",
-	        "location",
-	      ].map((field) => {
-			const locked =
-			  !isAdmin &&
-			  editForm.stickerNumber &&
-			  [
-			    "itemName",
-			    "pdNo",
-			    "drawingNo",
-			    "clientName",
-			  ].includes(field);
-
-	        return (
-	          <TextField
-	            key={field}
-	            label={field}
-	            fullWidth
-	            disabled={locked}
-	            value={editForm[field] || ""}
-	            onChange={(e) =>
-	              setEditForm((prev) => ({
-	                ...prev,
-	                [field]: e.target.value,
-	              }))
-	            }
-	            sx={formFieldSx(darkMode)}
-	          />
-	        );
-	      })}
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={generatedHistoryOpen}
-	    onClose={() => {
-	      setGeneratedHistoryOpen(false);
-
-	      if (historyPdfPreview?.url) {
-	        URL.revokeObjectURL(historyPdfPreview.url);
-	      }
-
-	      setHistoryPdfPreview(null);
-	    }}
-	    icon="📜"
-	    title="Generated Packet History"
-	    subtitle="Items appear here only after sticker generation"
-	    width={1320}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Refresh
-	        </Button>
-
-	        <Button
-	          onClick={() => {
-	            setGeneratedHistoryOpen(false);
-
-	            if (historyPdfPreview?.url) {
-	              URL.revokeObjectURL(historyPdfPreview.url);
-	            }
-
-	            setHistoryPdfPreview(null);
-	          }}
-	          sx={premiumButton}
-	        >
-	          Close
-	        </Button>
-	      </>
-	    }
-	  >
-	    <Box sx={historyTopBarSx}>
-	      <TextField
-	        variant="standard"
-	        placeholder="Search item, SKU, client, description, sticker no..."
-	        value={generatedHistorySearch}
-	        onChange={(e) => setGeneratedHistorySearch(e.target.value)}
-	        InputProps={{ disableUnderline: true }}
-	        sx={historySearchInputSx}
-	      />
-
-	      <TextField
-	        select
-	        size="small"
-	        label="Generated By"
-	        value={generatedHistoryUserFilter}
-	        onChange={async (e) => {
-	          const value = e.target.value;
-	          setGeneratedHistoryUserFilter(value);
-	          await fetchGeneratedHistory(value);
-	        }}
-	        sx={historyUserSelectSx}
-	        slotProps={selectMenuSlotProps}
-	      >
-	        <MenuItem value="ALL">All Users</MenuItem>
-
-	        {generatedHistoryUsers.map((user) => (
-	          <MenuItem key={user} value={user}>
-	            {user}
-	          </MenuItem>
-	        ))}
-	      </TextField>
-
-	      <Box sx={historyCountBadgeSx}>
-	        {filteredGeneratedHistoryRows.length} Generated
-	      </Box>
-	    </Box>
-
-	    <Box sx={historyLayoutSx}>
-	      <Box sx={historyTableWrapSx}>
-		  <div style={historyTableHeader}>
-		    <div>Date / Time</div>
-		    <div>Generated By</div>
-		    <div>Item</div>
-		    <div>Description</div>
-		    <div>SKU</div>
-		    <div>PD No</div>
-		    <div>Packet</div>
-		    <div>Sticker No</div>
-		    <div>Reason</div>
-		    <div>Action</div>
-		  </div>
-
-	        <Box sx={historyTableBodySx}>
-	          {generatedHistoryLoading && (
-	            <Box sx={historyEmptySx}>
-	              Loading generated history...
-	            </Box>
-	          )}
-
-	          {!generatedHistoryLoading &&
-	            filteredGeneratedHistoryRows.length === 0 && (
-	              <Box sx={historyEmptySx}>
-	                No generated packet history found.
-	              </Box>
-	            )}
-
-	          {!generatedHistoryLoading &&
-	            filteredGeneratedHistoryRows.map((row) => (
-	              <div
-	                key={row.historyId}
-	                style={historyTableRow}
-	              >
-	                <div style={historyCellWrap}>
-	                  <span style={historyDateText}>
-	                    {formatHistoryDateTime(row.generatedAt)}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <span style={historyUserText}>
-	                    {row.generatedBy || "—"}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <span
-	                    style={historyMainText}
-	                    title={row.itemName}
-	                  >
-	                    {row.itemName || "—"}
-	                  </span>
-
-	                  <span
-	                    style={historySubText}
-	                    title={row.clientName}
-	                  >
-	                    {row.clientName || "—"}
-	                  </span>
-	                </div>
-					
-					<div style={historyCellWrap}>
-					  <span
-					    style={historyMainText}
-					    title={row.description}
-					  >
-					    {row.description || "—"}
-					  </span>
-
-					  {row.remarks && (
-					    <span
-					      style={historySubText}
-					      title={row.remarks}
-					    >
-					      Remarks: {row.remarks}
-					    </span>
-					  )}
-					</div>
-
-	                <div style={historyCellWrap}>
-	                  <span
-	                    style={historyMonoText}
-	                    title={row.sku}
-	                  >
-	                    {row.sku || "—"}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <span style={historyMainText}>
-	                    {row.pdNo || "—"}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <span style={historyMainText}>
-	                    {row.packetNumber || "—"}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <span
-	                    style={historyMonoText}
-	                    title={row.stickerNumber}
-	                  >
-	                    {row.stickerNumber || "—"}
-	                  </span>
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <Chip
-	                    label={
-	                      row.reason === "REPRINT"
-	                        ? `Reprint #${row.printIteration || ""}`
-	                        : "Initial"
-	                    }
-	                    size="small"
-	                    sx={
-	                      row.reason === "REPRINT"
-	                        ? historyReprintChipSx
-	                        : historyInitialChipSx
-	                    }
-	                  />
-	                </div>
-
-	                <div style={historyCellWrap}>
-	                  <Button
-	                    size="small"
-	                    onClick={() => openHistoryPdf(row.historyId)}
-	                    sx={historyViewButtonSx}
-	                  >
-	                    View PDF
-	                  </Button>
-	                </div>
-	              </div>
-	            ))}
-	        </Box>
-	      </Box>
-
-	    </Box>
-	  </InventoryModal>
-	  <InventoryModal
-	    open={historyPdfModalOpen}
-	    onClose={() => {
-	      setHistoryPdfModalOpen(false);
-
-	      if (historyPdfPreview?.url) {
-	        URL.revokeObjectURL(historyPdfPreview.url);
-	      }
-
-	      setHistoryPdfPreview(null);
-	    }}
-	    icon="🏷️"
-	    title="Sticker PDF Preview"
-	    subtitle="Generated sticker PDF view"
-	    width={980}
-	    footer={
-	      <>
-	        <Button
-	          onClick={() => {
-	            if (!historyPdfPreview?.url) return;
-
-	            const a = document.createElement("a");
-	            a.href = historyPdfPreview.url;
-	            a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
-	            document.body.appendChild(a);
-	            a.click();
-	            a.remove();
-	          }}
-	          sx={modalSecondaryButtonSx}
-	        >
-	          Download
-	        </Button>
-
-	        <Button
-	          onClick={() => {
-	            setHistoryPdfModalOpen(false);
-
-	            if (historyPdfPreview?.url) {
-	              URL.revokeObjectURL(historyPdfPreview.url);
-	            }
-
-	            setHistoryPdfPreview(null);
-	          }}
-	          sx={premiumButton}
-	        >
-	          Close
-	        </Button>
-	      </>
-	    }
-	  >
-	    {historyPdfPreview?.url ? (
-	      <Box sx={pdfModalFrameWrapSx}>
-	        <iframe
-	          src={historyPdfPreview.url}
-	          width="100%"
-	          height="100%"
-	          title="Generated Sticker PDF Preview"
-	          style={{
-	            border: "1px solid rgba(255,255,255,.08)",
-	            borderRadius: 12,
-	            background: "#fff",
-	          }}
-	        />
-	      </Box>
-	    ) : (
-	      <Box sx={historyEmptySx}>
-	        No PDF selected.
-	      </Box>
-	    )}
-	  </InventoryModal>
+        <InventoryModal
+          open={deleteConfirmOpen}
+          onClose={closeDeleteConfirm}
+          icon="🗑️"
+          title="Delete Inventory Item"
+          subtitle="This action will remove the selected packet item from inventory"
+          width={560}
+          footer={
+            <>
+              <Button
+                disabled={deleteLoading}
+                onClick={closeDeleteConfirm}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={deleteLoading}
+                onClick={deletePacketItem}
+                sx={{
+                  ...actionDanger,
+                  height: 36,
+                  px: 2.4,
+                  borderRadius: "8px",
+                  opacity: deleteLoading ? 0.6 : 1,
+                }}
+              >
+                {deleteLoading ? "Deleting..." : "Yes, Delete"}
+              </Button>
+            </>
+          }
+        >
+          <Box sx={deleteWarningBoxSx}>
+            <Box sx={deleteWarningIconSx}>
+              ⚠️
+            </Box>
+
+            <Box>
+              <Box sx={deleteWarningTitleSx}>
+                Are you sure you want to delete this item?
+              </Box>
+
+              <Box sx={deleteWarningTextSx}>
+                Once deleted, this item will be removed from the Inventory page.
+              </Box>
+            </Box>
+          </Box>
+
+          <Box sx={deleteItemCardSx}>
+            <Box sx={deleteItemLabelSx}>
+              Item Name
+            </Box>
+
+            <Box sx={deleteItemValueSx}>
+              {deleteTarget?.itemName || "—"}
+            </Box>
+
+            <Box sx={deleteItemMetaSx}>
+              SKU: {deleteTarget?.sku || "—"}
+            </Box>
+
+            <Box sx={deleteItemMetaSx}>
+              Client: {deleteTarget?.clientName || "—"}
+            </Box>
+
+            <Box sx={deleteItemMetaSx}>
+              Status: {deleteTarget?.status || "—"}
+            </Box>
+          </Box>
+        </InventoryModal>
+
+        <InventoryModal
+          open={stickerReviewOpen}
+          onClose={closeStickerReviewModal}
+          icon="👁️"
+          title="Preview Sticker"
+          subtitle="Check sticker details before final generation"
+          width={920}
+          footer={
+            <>
+              <Button
+                onClick={() => {
+                  const row = selectedItem;
+
+                  closeStickerReviewModal();
+
+                  if (row) {
+                    openEditModal(row);
+                  }
+                }}
+                sx={modalSecondaryButtonSx}
+              >
+                Not Done - Edit Details
+              </Button>
+
+              <Button
+                disabled={!stickerReviewPdf || stickerReviewLoading}
+                onClick={() => openGenerateStickerDrawer(selectedItem)}
+                sx={premiumButton}
+              >
+                Done - Continue Generate
+              </Button>
+            </>
+          }
+        >
+          {stickerReviewLoading && (
+            <Box sx={historyEmptySx}>
+              Preparing sticker preview...
+            </Box>
+          )}
+
+          {!stickerReviewLoading && stickerReviewPdf && (
+            <Box sx={pdfModalFrameWrapSx}>
+              <iframe
+                src={getPdfPreviewSrc(stickerReviewPdf)}
+                width="100%"
+                height="100%"
+                title="Sticker Preview Before Generate"
+                style={{
+                  border: "1px solid rgba(255,255,255,.08)",
+                  borderRadius: 12,
+                  background: "#fff",
+                }}
+              />
+            </Box>
+          )}
+        </InventoryModal>
+
+        {/* ===================== DRAWER ===================== */}
+        <InventorySidePanel
+          open={drawerOpen}
+          onClose={closeGenerateStickerDrawer}
+          icon="🏷️"
+          title="Sticker Generation"
+          subtitle="Generate, download and preview packet sticker"
+        >
+          <Box sx={stickerHeroCardSx}>
+            <Box sx={stickerHeroTopSx}>
+              <Box sx={stickerHeroIconSx}>
+                🏷️
+              </Box>
+
+              <Chip
+                label={getStickerStatusLabel(selectedItem)}
+                size="small"
+                sx={
+                  selectedItem?.stickerNumber
+                    ? printedChipSx
+                    : createdChipSx
+                }
+              />
+            </Box>
+
+            <Box sx={stickerSkuSx}>
+              {getSafeValue(selectedItem?.sku)}
+            </Box>
+
+            <Box sx={stickerItemNameSx}>
+              {getSafeValue(selectedItem?.itemName)}
+            </Box>
+
+            <Box sx={stickerClientMiniSx}>
+              Client: {getSafeValue(selectedItem?.clientName)}
+            </Box>
+          </Box>
+
+          <Box sx={drawerSectionCardSx}>
+            <Box sx={drawerSectionTitleSx}>
+              Packet Details
+            </Box>
+
+            <Box sx={detailGridSx}>
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  Plant
+                </Box>
+
+                <Box sx={detailValueSx}>
+                  {getPlantCodeOnly(selectedItem)}
+                </Box>
+              </Box>
+
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  Location
+                </Box>
+
+                <Box sx={detailValueSx}>
+                  {getPackingLocationCode(selectedItem)}
+                </Box>
+              </Box>
+
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  PD No
+                </Box>
+
+                <Box sx={detailValueSx}>
+                  {getSafeValue(selectedItem?.pdNo)}
+                </Box>
+              </Box>
+
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  Drawing No
+                </Box>
+
+                <Box sx={detailValueSx}>
+                  {getSafeValue(selectedItem?.drawingNo)}
+                </Box>
+              </Box>
+            </Box>
+
+            <Box sx={descriptionBoxSx}>
+              <Box sx={detailLabelSx}>
+                Description
+              </Box>
+
+              <Box sx={descriptionTextSx}>
+                {getSafeValue(selectedItem?.description)}
+              </Box>
+            </Box>
+          </Box>
+
+          <Box sx={drawerSectionCardSx}>
+            <Box sx={drawerSectionTitleSx}>
+              Sticker Appearance
+            </Box>
+
+            <Box sx={stickerOptionRowSx}>
+              <Box>
+                <Box sx={optionMainTextSx}>
+                  Company Header
+                </Box>
+
+                <Box sx={optionSubTextSx}>
+                  Show ALSORG company header on sticker PDF
+                </Box>
+              </Box>
+
+              <Switch
+                checked={form.showCompanyHeader}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    showCompanyHeader: e.target.checked,
+                  }))
+                }
+              />
+            </Box>
+          </Box>
+
+          <Button
+            disabled={generating}
+            onClick={async () => {
+              const itemId = getPacketItemId(selectedItem);
+
+              if (!itemId) {
+                showUiAlert("error", "Packet item id missing");
+                return;
+              }
+
+              try {
+                setGenerating(true);
+
+                const genRes = await fetch(
+                  `${API_BASE_URL}/api/packets/items/${encodeURIComponent(
+                    itemId
+                  )}/generate-sticker?factoryFloor=${encodeURIComponent(
+                    selectedItem?.floor || ""
+                  )}&showCompanyHeader=${form.showCompanyHeader}`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                  }
+                );
+
+                const contentType =
+                  genRes.headers.get("content-type");
+
+                if (!genRes.ok || !contentType?.includes("pdf")) {
+                  const message =
+                    await readApiErrorMessage(genRes);
+
+                  showUiAlert(
+                    "error",
+                    message || "Failed to generate sticker"
+                  );
+
+                  return;
+                }
+
+                const blob = await genRes.blob();
+
+                if (pdfUrl) {
+                  URL.revokeObjectURL(pdfUrl);
+                }
+
+                const previewUrl =
+                  URL.createObjectURL(blob);
+
+                setPdfUrl(previewUrl);
+
+                triggerDownloadFromBlob(
+                  blob,
+                  getStickerFileName(selectedItem)
+                );
+
+                showUiAlert(
+                  "success",
+                  "Sticker generated and downloaded successfully"
+                );
+
+                await fetchItems();
+
+                if (generatedHistoryOpen) {
+                  await fetchGeneratedHistory(
+                    generatedHistoryUserFilter
+                  );
+                }
+              } catch (e) {
+                console.error(e);
+
+                showUiAlert(
+                  "error",
+                  "Failed to generate sticker"
+                );
+              } finally {
+                setGenerating(false);
+              }
+            }}
+            sx={generateStickerMainButtonSx}
+          >
+            {generating
+              ? "Generating Sticker..."
+              : selectedItem?.stickerNumber && isAdmin
+                ? "Reprint & Download Sticker"
+                : "Generate & Download Sticker"}
+          </Button>
+
+          <Box sx={autoDownloadHintSx}>
+            Sticker PDF will automatically download after generation.
+          </Box>
+
+          {pdfUrl && (
+            <>
+              <Box sx={resultSuccessCardSx}>
+                <Box sx={resultSuccessIconSx}>
+                  ✅
+                </Box>
+
+                <Box sx={{ minWidth: 0 }}>
+                  <Box sx={resultSuccessTitleSx}>
+                    Sticker generated successfully
+                  </Box>
+
+                  <Box sx={resultSuccessTextSx}>
+                    The PDF has been downloaded. You can download again or open it in a new tab.
+                  </Box>
+                </Box>
+              </Box>
+
+              <Box sx={resultActionsSx}>
+                <Button
+                  onClick={() =>
+                    triggerDownloadFromUrl(
+                      pdfUrl,
+                      getStickerFileName(selectedItem)
+                    )
+                  }
+                  sx={downloadAgainButtonSx}
+                >
+                  Download Again
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    if (pdfUrl) {
+                      window.open(pdfUrl, "_blank");
+                    }
+                  }}
+                  sx={openPdfButtonSx}
+                >
+                  Open PDF
+                </Button>
+              </Box>
+
+              <Box sx={pdfPreviewHeaderSx}>
+                Sticker PDF Preview
+              </Box>
+
+              <iframe
+                src={pdfUrl}
+                width="100%"
+                height="480"
+                style={pdfFrameSx}
+                title="Sticker Preview"
+              />
+            </>
+          )}
+        </InventorySidePanel>
+        <InventorySidePanel
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          icon="➕"
+          title="Create Item"
+          subtitle="Create master item and packet details"
+        >
+          <Stepper
+            activeStep={activeStep}
+            sx={stepperSx}
+          >
+            <Step><StepLabel>Item Info</StepLabel></Step>
+            <Step><StepLabel>Packet Details</StepLabel></Step>
+            <Step><StepLabel>Done</StepLabel></Step>
+          </Stepper>
+
+          <Box sx={formSectionHeaderSx}>
+            Basic Item Information
+          </Box>
+
+          {itemInfoFields.map((field) =>
+            renderFormTextField(field)
+          )}
+
+          <Box sx={formSectionHeaderSx}>
+            Plant Assignment
+          </Box>
+
+          {renderPlantSelect()}
+
+          <Box sx={formSectionHeaderSx}>
+            Packet Setup
+          </Box>
+
+          <TextField
+            label="Number of Packets"
+            placeholder="Enter total packet count"
+            fullWidth
+            type="number"
+            value={form.numberOfPackets}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                numberOfPackets: Number(e.target.value),
+              }))
+            }
+            error={!!errors.numberOfPackets}
+            helperText={errors.numberOfPackets}
+            sx={formFieldSx(darkMode)}
+          />
+
+          <Button
+            onClick={() => {
+              if (!validateStep1()) return;
+
+              preparePacketDetailRows(form.numberOfPackets);
+
+              setActiveStep(1);
+              setDetailsPopup(true);
+            }}
+            sx={{
+              ...premiumButton,
+              width: "100%",
+              height: 42,
+            }}
+          >
+            Continue →
+          </Button>
+        </InventorySidePanel>
+        <InventoryModal
+          open={detailsPopup}
+          onClose={() => setDetailsPopup(false)}
+          icon="📋"
+          title="Packet Details"
+          subtitle="Add packet-wise description, weight, dimensions and remarks"
+          width={720}
+          footer={
+            <>
+              <Button
+                onClick={() => setDetailsPopup(false)}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                sx={premiumButton}
+                onClick={async () => {
+                  if (!validatePackets()) return;
+
+                  if (!form.plantCode) {
+                    showUiAlert("error", "Please select Plant Location");
+                    return;
+                  }
+
+                  const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                    body: JSON.stringify({
+                      ...form,
+                      descriptions,
+                      weights,
+                      dimensionsList: dimensionsList.map((d) =>
+                        d?.l && d?.b && d?.h
+                          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                          : ""
+                      ),
+                      remarksList,
+                    }),
+                  });
+
+                  if (!res.ok) {
+                    await handleApiError(res, "Create packets failed");
+                    return;
+                  }
+
+                  setActiveStep(2);
+                  setDetailsPopup(false);
+
+                  showUiAlert("success", "Packets created successfully");
+
+                  await fetchItems();
+
+                  setTimeout(() => {
+                    setCreateOpen(false);
+                    setActiveStep(0);
+                  }, 800);
+                }}
+              >
+                Create Packets
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            {descriptions.map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <Box sx={packetCardSx}>
+                  <Box sx={packetTitleSx}>
+                    Packet {i + 1}
+                  </Box>
+
+                  <TextField
+                    label="Description"
+                    fullWidth
+                    value={descriptions[i]}
+                    onChange={(e) => {
+                      const copy = [...descriptions];
+                      copy[i] = e.target.value;
+                      setDescriptions(copy);
+                    }}
+                    sx={formFieldSx(darkMode)}
+                  />
+
+                  <TextField
+                    label="Weight"
+                    fullWidth
+                    value={weights[i]}
+                    onChange={(e) => {
+                      const copy = [...weights];
+                      copy[i] = e.target.value;
+                      setWeights(copy);
+                    }}
+                    error={!!errors[`weight-${i}`]}
+                    helperText={errors[`weight-${i}`]}
+                    sx={formFieldSx(darkMode)}
+                  />
+
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
+                    {["l", "b", "h"].map((key) => (
+                      <TextField
+                        key={key}
+                        label={key.toUpperCase()}
+                        type="number"
+                        value={dimensionsList[i]?.[key] || ""}
+                        onChange={(e) => {
+                          const copy = [...dimensionsList];
+                          copy[i] = { ...copy[i], [key]: e.target.value };
+                          setDimensionsList(copy);
+                        }}
+                        sx={{
+                          ...formFieldSx(darkMode),
+                          width: 90,
+                          mb: 0,
+                        }}
+                      />
+                    ))}
+
+                    <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+                      inches
+                    </span>
+                  </Box>
+
+                  <TextField
+                    label="Remarks"
+                    fullWidth
+                    value={remarksList[i]}
+                    onChange={(e) => {
+                      const copy = [...remarksList];
+                      copy[i] = e.target.value;
+                      setRemarksList(copy);
+                    }}
+                    sx={formFieldSx(darkMode)}
+                  />
+                </Box>
+              </motion.div>
+            ))}
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={customCreateOpen}
+          onClose={() => setCustomCreateOpen(false)}
+          icon="📦"
+          title="Create Custom Packet"
+          subtitle="Create a single custom packet with selected packet number"
+          width={640}
+          footer={
+            <>
+              <Button
+                onClick={() => setCustomCreateOpen(false)}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={!customPacketNo || !form.plantCode}
+                sx={{
+                  ...premiumButton,
+                  opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
+                }}
+                onClick={async () => {
+                  try {
+                    if (!form.plantCode) {
+                      showUiAlert("error", "Please select Plant Location");
+                      return;
+                    }
+
+                    const res = await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                      },
+                      body: JSON.stringify({
+                        ...form,
+                        customPacketNumber: Number(customPacketNo),
+                        descriptions,
+                        weights,
+                        dimensionsList: dimensionsList.map((d) =>
+                          d?.l && d?.b && d?.h
+                            ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                            : ""
+                        ),
+                        remarksList,
+                      }),
+                    });
+
+                    if (!res.ok) {
+                      await handleApiError(res, "Create custom packet failed");
+                      return;
+                    }
+
+                    setCustomCreateOpen(false);
+                    setCustomPacketNo("");
+
+                    showUiAlert("success", "Custom packet created successfully");
+
+                    await fetchItems();
+                  } catch (e) {
+                    alert("Failed to create custom packet");
+                  }
+                }}
+              >
+                Create
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            <Box sx={sectionCardSx}>
+              <Box sx={sectionTitleSx}>
+                Basic Item Information
+              </Box>
+
+              {itemInfoFields.map((field) =>
+                renderFormTextField(field)
+              )}
+
+              <Box sx={sectionTitleSx}>
+                Plant Assignment
+              </Box>
+
+              {renderPlantSelect()}
+            </Box>
+
+            <Box sx={sectionCardSx}>
+              <Box sx={sectionTitleSx}>
+                Custom Packet Information
+              </Box>
+
+              <TextField
+                label="Packet Number"
+                placeholder="Enter custom packet number"
+                type="number"
+                fullWidth
+                value={customPacketNo}
+                onChange={(e) => setCustomPacketNo(e.target.value)}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label={packetDetailLabels.description}
+                placeholder="Enter packet-wise description"
+                fullWidth
+                value={descriptions[0] || ""}
+                onChange={(e) => setDescriptions([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label={packetDetailLabels.weight}
+                placeholder="Enter packet weight"
+                fullWidth
+                value={weights[0] || ""}
+                onChange={(e) => setWeights([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <Box sx={dimensionRowSx}>
+                {[
+                  ["l", packetDetailLabels.length],
+                  ["b", packetDetailLabels.breadth],
+                  ["h", packetDetailLabels.height],
+                ].map(([key, label]) => (
+                  <TextField
+                    key={key}
+                    label={label}
+                    type="number"
+                    value={dimensionsList[0]?.[key] || ""}
+                    onChange={(e) => {
+                      const copy = [...dimensionsList];
+                      copy[0] = { ...copy[0], [key]: e.target.value };
+                      setDimensionsList(copy);
+                    }}
+                    sx={{
+                      ...formFieldSx(darkMode),
+                      width: 90,
+                      mb: 0,
+                    }}
+                  />
+                ))}
+
+                <span style={dimensionUnitText}>
+                  inches
+                </span>
+              </Box>
+
+              <TextField
+                label={packetDetailLabels.remarks}
+                placeholder="Enter handling notes or remarks"
+                fullWidth
+                value={remarksList[0] || ""}
+                onChange={(e) => setRemarksList([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+            </Box>
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={addMoreOpen}
+          onClose={() => setAddMoreOpen(false)}
+          icon="➕"
+          title="Add More Packets"
+          subtitle={selectedItem?.itemName ? `Add packets to ${selectedItem.itemName}` : "Add packets to selected item"}
+          width={720}
+          footer={
+            <>
+              <Button
+                onClick={() => setAddMoreOpen(false)}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={!addCount || addCount <= 0}
+                sx={{
+                  ...premiumButton,
+                  opacity: !addCount || addCount <= 0 ? 0.45 : 1,
+                }}
+                onClick={async () => {
+                  try {
+                    const res = await fetch(
+                      `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        },
+                        body: JSON.stringify({
+                          numberOfPackets: addCount,
+                          descriptions,
+                          weights,
+                          dimensionsList: dimensionsList.map((d) =>
+                            d?.l && d?.b && d?.h
+                              ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                              : ""
+                          ),
+                          remarksList,
+                        }),
+                      }
+                    );
+
+                    if (!res.ok) {
+                      await handleApiError(res, "Add packets failed");
+                      return;
+                    }
+
+                    setAddMoreOpen(false);
+
+                    showUiAlert("success", "Packets added successfully");
+
+                    await fetchItems();
+                  } catch (e) {
+                    alert("Failed to add packets");
+                  }
+                }}
+              >
+                Add Packets
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            <Box sx={sectionCardSx}>
+              <Box sx={sectionTitleSx}>
+                Packet Count
+              </Box>
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 1.4,
+                  borderRadius: "12px",
+                  background: "rgba(59,130,246,.10)",
+                  border: "1px solid rgba(59,130,246,.18)",
+                  color: "#93c5fd",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                Plant: {getPlantCodeOnly(selectedItem)}
+                <br />
+                Location: {getPackingLocationCode(selectedItem)}
+              </Box>
+              <TextField
+                label="Number of packets"
+                type="number"
+                value={addCount}
+                onChange={(e) => setAddCount(Number(e.target.value))}
+                fullWidth
+                sx={formFieldSx(darkMode)}
+              />
+            </Box>
+
+            {[...Array(addCount)].map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <Box sx={packetCardSx}>
+                  <Box sx={packetTitleSx}>
+                    Packet {i + 1}
+                  </Box>
+
+                  <TextField
+                    label={packetDetailLabels.description}
+                    fullWidth
+                    value={descriptions[i] || ""}
+                    onChange={(e) => {
+                      const copy = [...descriptions];
+                      copy[i] = e.target.value;
+                      setDescriptions(copy);
+                    }}
+                    sx={formFieldSx(darkMode)}
+                  />
+
+                  <TextField
+                    label={packetDetailLabels.weight}
+                    fullWidth
+                    value={weights[i] || ""}
+                    onChange={(e) => {
+                      const copy = [...weights];
+                      copy[i] = e.target.value;
+                      setWeights(copy);
+                    }}
+                    sx={formFieldSx(darkMode)}
+                  />
+
+                  <Box sx={dimensionRowSx}>
+                    {["l", "b", "h"].map((key) => (
+                      <TextField
+                        key={key}
+                        label={
+                          key === "l"
+                            ? "Length"
+                            : key === "b"
+                              ? "Breadth"
+                              : "Height"
+                        }
+                        type="number"
+                        value={dimensionsList[i]?.[key] || ""}
+                        onChange={(e) => {
+                          const copy = [...dimensionsList];
+                          copy[i] = { ...copy[i], [key]: e.target.value };
+                          setDimensionsList(copy);
+                        }}
+                        sx={{
+                          ...formFieldSx(darkMode),
+                          width: 90,
+                          mb: 0,
+                        }}
+                      />
+                    ))}
+
+                    <span style={dimensionUnitText}>
+                      inches
+                    </span>
+                  </Box>
+
+                  <TextField
+                    label={packetDetailLabels.remarks}
+                    fullWidth
+                    value={remarksList[i] || ""}
+                    onChange={(e) => {
+                      const copy = [...remarksList];
+                      copy[i] = e.target.value;
+                      setRemarksList(copy);
+                    }}
+                    sx={formFieldSx(darkMode)}
+                  />
+                </Box>
+              </motion.div>
+            ))}
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={customAddOpen}
+          onClose={() => setCustomAddOpen(false)}
+          icon="🧩"
+          title="Add Custom Packet"
+          subtitle={selectedItem?.itemName ? `Add custom packet to ${selectedItem.itemName}` : "Add one custom packet"}
+          width={640}
+          footer={
+            <>
+              <Button
+                onClick={() => setCustomAddOpen(false)}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={!customPacketNo}
+                sx={{
+                  ...premiumButton,
+                  opacity: !customPacketNo ? 0.45 : 1,
+                }}
+                onClick={async () => {
+                  try {
+                    const res = await fetch(
+                      `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        },
+                        body: JSON.stringify({
+                          customPacketNumber: Number(customPacketNo),
+                          descriptions,
+                          weights,
+                          dimensionsList: dimensionsList.map((d) =>
+                            d?.l && d?.b && d?.h
+                              ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                              : ""
+                          ),
+                          remarksList,
+                        }),
+                      }
+                    );
+
+                    if (!res.ok) {
+                      await handleApiError(res, "Add custom packet failed");
+                      return;
+                    }
+
+                    setCustomAddOpen(false);
+                    setCustomPacketNo("");
+
+                    showUiAlert("success", "Custom packet added successfully");
+
+                    await fetchItems();
+                  } catch (e) {
+                    alert("Failed to add custom packet");
+                  }
+                }}
+              >
+                Add
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            <Box sx={sectionCardSx}>
+              <Box sx={sectionTitleSx}>
+                Custom Packet Details
+              </Box>
+
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 1.4,
+                  borderRadius: "12px",
+                  background: "rgba(59,130,246,.10)",
+                  border: "1px solid rgba(59,130,246,.18)",
+                  color: "#93c5fd",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                Plant: {getPlantCodeOnly(selectedItem)}
+                <br />
+                Location: {getPackingLocationCode(selectedItem)}
+              </Box>
+
+              <TextField
+                label="Custom Packet Number"
+                type="number"
+                fullWidth
+                value={customPacketNo}
+                onChange={(e) => setCustomPacketNo(e.target.value)}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Description"
+                fullWidth
+                value={descriptions[0] || ""}
+                onChange={(e) => setDescriptions([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Weight"
+                fullWidth
+                value={weights[0] || ""}
+                onChange={(e) => setWeights([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <Box sx={dimensionRowSx}>
+                {["l", "b", "h"].map((key) => (
+                  <TextField
+                    key={key}
+                    label={key.toUpperCase()}
+                    type="number"
+                    value={dimensionsList[0]?.[key] || ""}
+                    onChange={(e) => {
+                      const copy = [...dimensionsList];
+                      copy[0] = { ...copy[0], [key]: e.target.value };
+                      setDimensionsList(copy);
+                    }}
+                    sx={{
+                      ...formFieldSx(darkMode),
+                      width: 90,
+                      mb: 0,
+                    }}
+                  />
+                ))}
+
+                <span style={dimensionUnitText}>
+                  inches
+                </span>
+              </Box>
+
+              <TextField
+                label="Remarks"
+                fullWidth
+                value={remarksList[0] || ""}
+                onChange={(e) => setRemarksList([e.target.value])}
+                sx={formFieldSx(darkMode)}
+              />
+            </Box>
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          icon="✏️"
+          title="Edit Packet Item"
+          subtitle="Update editable packet information"
+          width={620}
+          footer={
+            <>
+              <Button
+                onClick={() => setEditOpen(false)}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                sx={premiumButton}
+                onClick={async () => {
+                  try {
+                    const editItemId = getPacketItemId(editItem);
+
+                    const editUrl =
+                      isAdmin
+                        ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
+                        : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
+
+                    const res = await fetch(
+                      editUrl,
+                      {
+                        method: "PUT",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        },
+                        body: JSON.stringify(editForm),
+                      }
+                    );
+
+                    if (!res.ok) {
+                      await handleApiError(res, "Update failed");
+                      return;
+                    }
+
+                    setEditOpen(false);
+
+                    showUiAlert("success", "Packet item updated successfully");
+
+                    await fetchItems();
+                  } catch (e) {
+                    console.error(e);
+                    showUiAlert("error", "Update failed. Please try again.");
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            {[
+              "itemName",
+              "pdNo",
+              "drawingNo",
+              "clientName",
+              "clientAddress",
+              "floor",
+              "description",
+              "weight",
+              "dimensions",
+              "remarks",
+              "location",
+            ].map((field) => {
+              const locked =
+                !isAdmin &&
+                editForm.stickerNumber &&
+                [
+                  "itemName",
+                  "pdNo",
+                  "drawingNo",
+                  "clientName",
+                ].includes(field);
+
+              return (
+                <TextField
+                  key={field}
+                  label={field}
+                  fullWidth
+                  disabled={locked}
+                  value={editForm[field] || ""}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      [field]: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+              );
+            })}
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={generatedHistoryOpen}
+          onClose={() => {
+            setGeneratedHistoryOpen(false);
+
+            if (historyPdfPreview?.url) {
+              URL.revokeObjectURL(historyPdfPreview.url);
+            }
+
+            setHistoryPdfPreview(null);
+          }}
+          icon="📜"
+          title="Generated Packet History"
+          subtitle="Items appear here only after sticker generation"
+          width={1320}
+          footer={
+            <>
+              <Button
+                onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
+                sx={modalSecondaryButtonSx}
+              >
+                Refresh
+              </Button>
+
+              <Button
+                onClick={() => {
+                  setGeneratedHistoryOpen(false);
+
+                  if (historyPdfPreview?.url) {
+                    URL.revokeObjectURL(historyPdfPreview.url);
+                  }
+
+                  setHistoryPdfPreview(null);
+                }}
+                sx={premiumButton}
+              >
+                Close
+              </Button>
+            </>
+          }
+        >
+          <Box sx={historyTopBarSx}>
+            <TextField
+              variant="standard"
+              placeholder="Search item, SKU, client, description, sticker no..."
+              value={generatedHistorySearch}
+              onChange={(e) => setGeneratedHistorySearch(e.target.value)}
+              InputProps={{ disableUnderline: true }}
+              sx={historySearchInputSx}
+            />
+
+            <TextField
+              select
+              size="small"
+              label="Generated By"
+              value={generatedHistoryUserFilter}
+              onChange={async (e) => {
+                const value = e.target.value;
+                setGeneratedHistoryUserFilter(value);
+                await fetchGeneratedHistory(value);
+              }}
+              sx={historyUserSelectSx}
+              slotProps={selectMenuSlotProps}
+            >
+              <MenuItem value="ALL">All Users</MenuItem>
+
+              {generatedHistoryUsers.map((user) => (
+                <MenuItem key={user} value={user}>
+                  {user}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Box sx={historyCountBadgeSx}>
+              {filteredGeneratedHistoryRows.length} Generated
+            </Box>
+          </Box>
+
+          <Box sx={historyLayoutSx}>
+            <Box sx={historyTableWrapSx}>
+              <div style={historyTableHeader}>
+                <div>Date / Time</div>
+                <div>Generated By</div>
+                <div>Item</div>
+                <div>Description</div>
+                <div>SKU</div>
+                <div>PD No</div>
+                <div>Packet</div>
+                <div>Sticker No</div>
+                <div>Reason</div>
+                <div>Action</div>
+              </div>
+
+              <Box sx={historyTableBodySx}>
+                {generatedHistoryLoading && (
+                  <Box sx={historyEmptySx}>
+                    Loading generated history...
+                  </Box>
+                )}
+
+                {!generatedHistoryLoading &&
+                  filteredGeneratedHistoryRows.length === 0 && (
+                    <Box sx={historyEmptySx}>
+                      No generated packet history found.
+                    </Box>
+                  )}
+
+                {!generatedHistoryLoading &&
+                  filteredGeneratedHistoryRows.map((row) => (
+                    <div
+                      key={row.historyId}
+                      style={historyTableRow}
+                    >
+                      <div style={historyCellWrap}>
+                        <span style={historyDateText}>
+                          {formatHistoryDateTime(row.generatedAt)}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span style={historyUserText}>
+                          {row.generatedBy || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span
+                          style={historyMainText}
+                          title={row.itemName}
+                        >
+                          {row.itemName || "—"}
+                        </span>
+
+                        <span
+                          style={historySubText}
+                          title={row.clientName}
+                        >
+                          {row.clientName || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span
+                          style={historyMainText}
+                          title={row.description}
+                        >
+                          {row.description || "—"}
+                        </span>
+
+                        {row.remarks && (
+                          <span
+                            style={historySubText}
+                            title={row.remarks}
+                          >
+                            Remarks: {row.remarks}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span
+                          style={historyMonoText}
+                          title={row.sku}
+                        >
+                          {row.sku || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span style={historyMainText}>
+                          {row.pdNo || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span style={historyMainText}>
+                          {row.packetNumber || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <span
+                          style={historyMonoText}
+                          title={row.stickerNumber}
+                        >
+                          {row.stickerNumber || "—"}
+                        </span>
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <Chip
+                          label={
+                            row.reason === "REPRINT"
+                              ? `Reprint #${row.printIteration || ""}`
+                              : "Initial"
+                          }
+                          size="small"
+                          sx={
+                            row.reason === "REPRINT"
+                              ? historyReprintChipSx
+                              : historyInitialChipSx
+                          }
+                        />
+                      </div>
+
+                      <div style={historyCellWrap}>
+                        <Button
+                          size="small"
+                          onClick={() => openHistoryPdf(row.historyId)}
+                          sx={historyViewButtonSx}
+                        >
+                          View PDF
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </Box>
+            </Box>
+
+          </Box>
+        </InventoryModal>
+        <InventoryModal
+          open={historyPdfModalOpen}
+          onClose={() => {
+            setHistoryPdfModalOpen(false);
+
+            if (historyPdfPreview?.url) {
+              URL.revokeObjectURL(historyPdfPreview.url);
+            }
+
+            setHistoryPdfPreview(null);
+          }}
+          icon="🏷️"
+          title="Sticker PDF Preview"
+          subtitle="Generated sticker PDF view"
+          width={980}
+          footer={
+            <>
+              <Button
+                onClick={() => {
+                  if (!historyPdfPreview?.url) return;
+
+                  const a = document.createElement("a");
+                  a.href = historyPdfPreview.url;
+                  a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                }}
+                sx={modalSecondaryButtonSx}
+              >
+                Download
+              </Button>
+
+              <Button
+                onClick={() => {
+                  setHistoryPdfModalOpen(false);
+
+                  if (historyPdfPreview?.url) {
+                    URL.revokeObjectURL(historyPdfPreview.url);
+                  }
+
+                  setHistoryPdfPreview(null);
+                }}
+                sx={premiumButton}
+              >
+                Close
+              </Button>
+            </>
+          }
+        >
+          {historyPdfPreview?.url ? (
+            <Box sx={pdfModalFrameWrapSx}>
+              <iframe
+                src={historyPdfPreview.url}
+                width="100%"
+                height="100%"
+                title="Generated Sticker PDF Preview"
+                style={{
+                  border: "1px solid rgba(255,255,255,.08)",
+                  borderRadius: 12,
+                  background: "#fff",
+                }}
+              />
+            </Box>
+          ) : (
+            <Box sx={historyEmptySx}>
+              No PDF selected.
+            </Box>
+          )}
+        </InventoryModal>
+      </div>
+      {uiAlert && (
+        <Box sx={uiAlertWrapSx}>
+          <Box
+            sx={{
+              ...uiAlertBoxSx,
+              ...(uiAlert.type === "success"
+                ? uiAlertSuccessSx
+                : uiAlertErrorSx),
+            }}
+          >
+            <Box sx={uiAlertIconSx}>
+              {uiAlert.type === "success" ? "✅" : "❌"}
+            </Box>
+
+            <Box sx={{ minWidth: 0 }}>
+              <Box sx={uiAlertTitleSx}>
+                {uiAlert.type === "success" ? "Success" : "Error"}
+              </Box>
+
+              <Box sx={uiAlertMessageSx}>
+                {uiAlert.message}
+              </Box>
+            </Box>
+
+            <IconButton
+              size="small"
+              onClick={() => setUiAlert(null)}
+              sx={uiAlertCloseSx}
+            >
+              ×
+            </IconButton>
+          </Box>
+        </Box>
+      )}
     </div>
-	{uiAlert && (
-	  <Box sx={uiAlertWrapSx}>
-	    <Box
-	      sx={{
-	        ...uiAlertBoxSx,
-	        ...(uiAlert.type === "success"
-	          ? uiAlertSuccessSx
-	          : uiAlertErrorSx),
-	      }}
-	    >
-	      <Box sx={uiAlertIconSx}>
-	        {uiAlert.type === "success" ? "✅" : "❌"}
-	      </Box>
-
-	      <Box sx={{ minWidth: 0 }}>
-	        <Box sx={uiAlertTitleSx}>
-	          {uiAlert.type === "success" ? "Success" : "Error"}
-	        </Box>
-
-	        <Box sx={uiAlertMessageSx}>
-	          {uiAlert.message}
-	        </Box>
-	      </Box>
-
-	      <IconButton
-	        size="small"
-	        onClick={() => setUiAlert(null)}
-	        sx={uiAlertCloseSx}
-	      >
-	        ×
-	      </IconButton>
-	    </Box>
-	  </Box>
-	)}
-</div>
   );
 }
 

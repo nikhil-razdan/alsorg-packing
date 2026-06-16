@@ -70,57 +70,57 @@ function LoginPage() {
       <div style={rightPanel}>
         <div style={glassCard}>
           <div style={cardHighlight} />
-		  <div style={topBar}>
-		    <div style={statusDot} />
+          <div style={topBar}>
+            <div style={statusDot} />
 
-		    <span style={topBarText}>
-		      ENTERPRISE ACCESS PORTAL
-		    </span>
-		  </div>
+            <span style={topBarText}>
+              ENTERPRISE ACCESS PORTAL
+            </span>
+          </div>
           <h3 style={cardTitle}>Welcome back</h3>
           <p style={cardSubtitle}>Log in to continue</p>
 
           <form onSubmit={submit}>
-		  <input
-		    placeholder="Username"
-		    value={username}
-		    onChange={(e) =>
-		      setUsername(e.target.value)
-		    }
+            <input
+              placeholder="Username"
+              value={username}
+              onChange={(e) =>
+                setUsername(e.target.value)
+              }
 
-		    onFocus={(e) => {
-		      e.target.style.border =
-		        "1px solid rgba(59,130,246,.55)";
-		    }}
+              onFocus={(e) => {
+                e.target.style.border =
+                  "1px solid rgba(59,130,246,.55)";
+              }}
 
-		    onBlur={(e) => {
-		      e.target.style.border =
-		        "1px solid rgba(255,255,255,.08)";
-		    }}
+              onBlur={(e) => {
+                e.target.style.border =
+                  "1px solid rgba(255,255,255,.08)";
+              }}
 
-		    style={glassInput}
-		  />
+              style={glassInput}
+            />
 
-		  <input
-		    type="password"
-		    placeholder="Password"
-		    value={password}
-		    onChange={(e) =>
-		      setPassword(e.target.value)
-		    }
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
 
-		    onFocus={(e) => {
-		      e.target.style.border =
-		        "1px solid rgba(59,130,246,.55)";
-		    }}
+              onFocus={(e) => {
+                e.target.style.border =
+                  "1px solid rgba(59,130,246,.55)";
+              }}
 
-		    onBlur={(e) => {
-		      e.target.style.border =
-		        "1px solid rgba(255,255,255,.08)";
-		    }}
+              onBlur={(e) => {
+                e.target.style.border =
+                  "1px solid rgba(255,255,255,.08)";
+              }}
 
-		    style={glassInput}
-		  />
+              style={glassInput}
+            />
 
             {error && <p style={errorText}>{error}</p>}
 
@@ -450,10 +450,10 @@ const glassInput = {
   marginBottom: 18,
 
   borderRadius: 16,
-  
+
   boxShadow:
     "inset 0 1px 1px rgba(255,255,255,.04)",
-	
+
   border:
     "1px solid rgba(255,255,255,.08)",
 

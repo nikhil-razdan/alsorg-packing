@@ -20,6 +20,10 @@ import {
     safeOpenPodImage,
 } from "../api/podDownloadApi";
 
+import {
+    stopLiveLocation,
+} from "../api/liveLocationTracker";
+
 import * as ImagePicker from "expo-image-picker";
 
 import {
@@ -246,6 +250,18 @@ export default function EndTripScreen({
             return;
         }
 
+        if (
+            !form.deliveryLatitude ||
+            !form.deliveryLongitude
+        ) {
+            Alert.alert(
+                "GPS Required",
+                "Please capture delivery GPS location before ending the trip."
+            );
+
+            return;
+        }
+
         try {
             setSaving(true);
 
@@ -294,6 +310,8 @@ export default function EndTripScreen({
                             : null,
                 }
             );
+
+            await stopLiveLocation();
 
             Alert.alert(
                 "Trip delivered",

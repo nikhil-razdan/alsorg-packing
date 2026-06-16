@@ -45,3 +45,27 @@ export async function endTrip(
 
   return res.data;
 }
+
+export async function startTrip(
+  tripId,
+  payload = {}
+) {
+  const res = await api.post(
+    `/api/logistics/trips/${tripId}/start`,
+    payload
+  );
+
+  return res.data;
+}
+
+export async function updateTripLocation(
+  tripId,
+  payload
+) {
+  const res = await api.post(
+    `/api/logistics/trips/${tripId}/location`,
+    payload
+  );
+
+  return res.data;
+}

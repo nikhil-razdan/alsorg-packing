@@ -26,17 +26,17 @@ function LogisticsPortalPage() {
   const [snackType, setSnackType] =
     useState("success");
 
-	const showAlert = useCallback(
-	  (
-	    message,
-	    type = "success"
-	  ) => {
-	    setSnackMsg(message);
-	    setSnackType(type);
-	    setSnackOpen(true);
-	  },
-	  []
-	);
+  const showAlert = useCallback(
+    (
+      message,
+      type = "success"
+    ) => {
+      setSnackMsg(message);
+      setSnackType(type);
+      setSnackOpen(true);
+    },
+    []
+  );
 
   return (
     <div style={page}>
@@ -64,13 +64,13 @@ function LogisticsPortalPage() {
             }
             label="Shift Operations"
           />
-		  
-		  <SidebarButton
-		    active={tab === "trips"}
-		    onClick={() => setTab("trips")}
-		    label="Trips / Delivery"
-		  />
-		  
+
+          <SidebarButton
+            active={tab === "trips"}
+            onClick={() => setTab("trips")}
+            label="Trips / Delivery"
+          />
+
           <SidebarButton
             active={
               tab === "drivers"
@@ -100,80 +100,80 @@ function LogisticsPortalPage() {
             }
             label="Shift History"
           />
-		  
-		  <SidebarButton
-		    active={
-		      tab === "reports"
-		    }
-		    onClick={() =>
-		      setTab("reports")
-		    }
-		    label="Shift Reports"
-		  />
+
+          <SidebarButton
+            active={
+              tab === "reports"
+            }
+            onClick={() =>
+              setTab("reports")
+            }
+            label="Shift Reports"
+          />
         </div>
 
-		{tab === "operations" && (
-		  <ShiftOperations
-		    showAlert={showAlert}
-		  />
-		)}
+        {tab === "operations" && (
+          <ShiftOperations
+            showAlert={showAlert}
+          />
+        )}
 
-		{tab === "drivers" && (
-		  <DriverManagement
-		    showAlert={showAlert}
-		  />
-		)}
-		
-		{tab === "trips" && (
-		  <LogisticsTrips
-		    showAlert={showAlert}
-		  />
-		)}
+        {tab === "drivers" && (
+          <DriverManagement
+            showAlert={showAlert}
+          />
+        )}
 
-		{tab === "vehicles" && (
-		  <VehicleManagement
-		    showAlert={showAlert}
-		  />
-		)}
+        {tab === "trips" && (
+          <LogisticsTrips
+            showAlert={showAlert}
+          />
+        )}
 
-		{tab === "history" && (
-		  <ShiftHistory
-		    showAlert={showAlert}
-		  />
-		)}
-		
-		{tab === "reports" && (
-		  <ShiftReports
-		    showAlert={showAlert}
-		  />
-		)}
-		<Snackbar
-		  open={snackOpen}
-		  autoHideDuration={3000}
-		  onClose={() =>
-		    setSnackOpen(false)
-		  }
-		  anchorOrigin={{
-		    vertical: "top",
-		    horizontal: "center",
-		  }}
-		>
-		  <Alert
-		    severity={snackType}
-		    variant="filled"
-		    onClose={() =>
-		      setSnackOpen(false)
-		    }
-		    sx={{
-		      borderRadius: "14px",
-		      fontWeight: 700,
-		      boxShadow:
-		        "0 18px 45px rgba(0,0,0,.35)",
-		    }}
-		  >
-		    {snackMsg}
-		  </Alert>
-		</Snackbar>
+        {tab === "vehicles" && (
+          <VehicleManagement
+            showAlert={showAlert}
+          />
+        )}
+
+        {tab === "history" && (
+          <ShiftHistory
+            showAlert={showAlert}
+          />
+        )}
+
+        {tab === "reports" && (
+          <ShiftReports
+            showAlert={showAlert}
+          />
+        )}
+        <Snackbar
+          open={snackOpen}
+          autoHideDuration={3000}
+          onClose={() =>
+            setSnackOpen(false)
+          }
+          anchorOrigin={{
+            vertical: "top",
+            horizontal: "center",
+          }}
+        >
+          <Alert
+            severity={snackType}
+            variant="filled"
+            onClose={() =>
+              setSnackOpen(false)
+            }
+            sx={{
+              borderRadius: "14px",
+              fontWeight: 700,
+              boxShadow:
+                "0 18px 45px rgba(0,0,0,.35)",
+            }}
+          >
+            {snackMsg}
+          </Alert>
+        </Snackbar>
       </div>
     </div>
   );

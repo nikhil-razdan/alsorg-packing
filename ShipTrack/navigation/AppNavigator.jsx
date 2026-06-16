@@ -17,6 +17,7 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+import DispatchItemsScreen from "../screens/DispatchItemsScreen";
 import LoginScreen from "../screens/LoginScreen";
 import DispatchHomeScreen from "../screens/DispatchHomeScreen";
 import ScanDispatchScreen from "../screens/ScanDispatchScreen";
@@ -93,6 +94,18 @@ export default function AppNavigator() {
               component={BulkScanScreen}
               options={{
                 title: "",
+              }}
+            />
+
+            <Stack.Screen
+              name="DispatchItems"
+              component={DispatchItemsScreen}
+              options={{
+                title: "Dispatch Items",
+                headerStyle: {
+                  backgroundColor: "#020617",
+                },
+                headerTintColor: "#fff",
               }}
             />
 

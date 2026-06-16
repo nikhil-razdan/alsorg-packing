@@ -14,4 +14,7 @@ public interface LogisticsTripRepository extends JpaRepository<LogisticsTrip, UU
     );
 
     List<LogisticsTrip> findAllByOrderByTripStartDesc();
+    List<LogisticsTrip> findAllByOrderByQueuedAtDesc();
+
+List<LogisticsTrip> findByDriverIdOrderByQueuedAtDesc(UUID driverId);
 }

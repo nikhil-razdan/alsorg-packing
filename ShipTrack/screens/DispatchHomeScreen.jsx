@@ -31,10 +31,24 @@ export default function DispatchHomeScreen({
   const isDispatch =
     normalizedRole === "DISPATCH";
 
-  const canViewTrips =
-    normalizedRole === "DISPATCH" ||
-    normalizedRole === "LOGISTICS" ||
+  const isDriver =
+    normalizedRole === "DRIVER";
+
+  const isLogistics =
+    normalizedRole === "LOGISTICS";
+
+  const isAdmin =
     normalizedRole === "ADMIN";
+
+  const canViewTrips =
+    isDispatch ||
+    isLogistics ||
+    isAdmin ||
+    isDriver;
+
+  const canViewDispatchItems =
+    isDispatch ||
+    isAdmin;
 
   return (
     <View style={styles.page}>
@@ -50,7 +64,7 @@ export default function DispatchHomeScreen({
       {isDispatch ? (
         <>
           <Action
-            label="Single QR Dispatch"
+            label="Single QR Load"
             icon="📷"
             onPress={() =>
               navigation.navigate(
@@ -60,24 +74,24 @@ export default function DispatchHomeScreen({
           />
 
           <Action
-            label="Bulk QR Dispatch"
+            label="Bulk QR Load"
             icon="📦"
             onPress={() =>
               navigation.navigate("BulkScan")
             }
           />
         </>
-      ) : (
-        <View style={styles.permissionBox}>
-          <Text style={styles.permissionTitle}>
-            Dispatch actions restricted
-          </Text>
+      ) : null}
 
-          <Text style={styles.permissionText}>
-            QR dispatch and Move to FG are allowed only for DISPATCH users.
-          </Text>
-        </View>
-      )}
+      {canViewDispatchItems ? (
+        <Action
+          label="Dispatch Items"
+          icon="📋"
+          onPress={() =>
+            navigation.navigate("DispatchItems")
+          }
+        />
+      ) : null}
 
       {canViewTrips ? (
         <Action

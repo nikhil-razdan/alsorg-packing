@@ -33,7 +33,9 @@ function buildMapUrls(
   const lng = cleanNumber(longitude);
 
   if (lat === null || lng === null) {
-    throw new Error("Location coordinates missing");
+    throw new Error(
+      "Location coordinates missing"
+    );
   }
 
   const safeLabel =
@@ -98,13 +100,10 @@ export async function openCurrentLocationInMaps() {
       accuracy: Location.Accuracy.High,
     });
 
-  const lat = current.coords.latitude;
-  const lng = current.coords.longitude;
-
   await openCoordinatesInMaps(
-    lat,
-    lng,
-    "My Live Location"
+    current.coords.latitude,
+    current.coords.longitude,
+    "My Current Location"
   );
 }
 
@@ -136,46 +135,4 @@ export async function safeOpenCurrentLocationInMaps() {
       e?.message || "Unable to open live location"
     );
   }
-}
-
-export async function downloadTripChallan(tripId, token) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/trips/${tripId}/challan`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  if (!res.ok) {
-    const msg = await res.text();
-    throw new Error(msg || "Unable to download challan");
-  }
-
-  const blob = await res.blob();
-
-  const disposition =
-    res.headers.get("Content-Disposition") || "";
-
-  let filename = "challan.pdf";
-
-  const match =
-    disposition.match(/filename="?([^"]+)"?/);
-
-  if (match?.[1]) {
-    filename = match[1];
-  }
-
-  const url = window.URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-
-  a.remove();
-  window.URL.revokeObjectURL(url);
 }

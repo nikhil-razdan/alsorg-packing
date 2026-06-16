@@ -17,103 +17,103 @@ import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashb
 import InventorySidebar from
   "../dashboard/components/inventory/InventorySidebar";
 
-  function StatCard({
-    title,
-    value,
-    subtle,
-    accent = "#60a5fa",
-    onClick,
-    active = false,
-  }) {
-    const clickable = Boolean(onClick);
+function StatCard({
+  title,
+  value,
+  subtle,
+  accent = "#60a5fa",
+  onClick,
+  active = false,
+}) {
+  const clickable = Boolean(onClick);
 
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        style={statCard(accent, clickable, active)}
-      >
-        <div style={cardAccent(accent)} />
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={statCard(accent, clickable, active)}
+    >
+      <div style={cardAccent(accent)} />
 
-        <p style={statTitle}>{title}</p>
+      <p style={statTitle}>{title}</p>
 
-        <h2 style={statValue}>{value}</h2>
+      <h2 style={statValue}>{value}</h2>
 
-        {subtle && <div style={statSubtle}>{subtle}</div>}
+      {subtle && <div style={statSubtle}>{subtle}</div>}
 
-        {clickable && (
-          <div style={statClickHint}>
-            {active ? "Hide details" : "View details"}
+      {clickable && (
+        <div style={statClickHint}>
+          {active ? "Hide details" : "View details"}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function DetailStatCard({
+  title,
+  subtitle,
+  accent = "#60a5fa",
+  rows = [],
+  totalLabel,
+  totalValue,
+}) {
+  return (
+    <div style={detailCard(accent)}>
+      <div style={detailHeader}>
+        <div>
+          <div style={detailTitle}>{title}</div>
+          {subtitle && <div style={detailSubtitle}>{subtitle}</div>}
+        </div>
+
+        {totalLabel && (
+          <div style={detailTotalBox}>
+            <span>{totalLabel}</span>
+            <strong>{totalValue}</strong>
           </div>
         )}
-      </button>
-    );
-  }
-  
-  function DetailStatCard({
-    title,
-    subtitle,
-    accent = "#60a5fa",
-    rows = [],
-    totalLabel,
-    totalValue,
-  }) {
-    return (
-      <div style={detailCard(accent)}>
-        <div style={detailHeader}>
-          <div>
-            <div style={detailTitle}>{title}</div>
-            {subtitle && <div style={detailSubtitle}>{subtitle}</div>}
-          </div>
-
-          {totalLabel && (
-            <div style={detailTotalBox}>
-              <span>{totalLabel}</span>
-              <strong>{totalValue}</strong>
-            </div>
-          )}
-        </div>
-
-        <div style={detailGrid}>
-          {rows.map((row) => (
-            <div key={row.label} style={detailItem}>
-              <div style={detailItemLabel}>{row.label}</div>
-              <div style={detailItemValue}>{row.value}</div>
-              {row.subtle && (
-                <div style={detailItemSubtle}>{row.subtle}</div>
-              )}
-            </div>
-          ))}
-        </div>
       </div>
-    );
-  }
-  
-  function ThroughputMiniCard({
-    title,
-    value,
-    subtle,
-    accent,
-    active,
-    disabled,
-    onClick,
-  }) {
-    return (
-      <button
-        type="button"
-        onClick={disabled ? undefined : onClick}
-        style={throughputMiniCard(accent, active, disabled)}
-      >
-        <div style={throughputMiniTitle}>{title}</div>
-        <div style={throughputMiniValue}>{value}</div>
-        <div style={throughputMiniSubtle}>{subtle}</div>
 
-        <div style={throughputMiniHint}>
-          {disabled ? "Admin only" : active ? "Selected" : "View users"}
-        </div>
-      </button>
-    );
-  }
+      <div style={detailGrid}>
+        {rows.map((row) => (
+          <div key={row.label} style={detailItem}>
+            <div style={detailItemLabel}>{row.label}</div>
+            <div style={detailItemValue}>{row.value}</div>
+            {row.subtle && (
+              <div style={detailItemSubtle}>{row.subtle}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThroughputMiniCard({
+  title,
+  value,
+  subtle,
+  accent,
+  active,
+  disabled,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      style={throughputMiniCard(accent, active, disabled)}
+    >
+      <div style={throughputMiniTitle}>{title}</div>
+      <div style={throughputMiniValue}>{value}</div>
+      <div style={throughputMiniSubtle}>{subtle}</div>
+
+      <div style={throughputMiniHint}>
+        {disabled ? "Admin only" : active ? "Selected" : "View users"}
+      </div>
+    </button>
+  );
+}
 
 const DonutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -148,21 +148,21 @@ const normalizeStats = (data) => {
 
   const warehouseItems = toNumber(
     data?.warehouseItems ??
-      data?.warehouse ??
-      data?.warehouseStock ??
-      data?.inWarehouse
+    data?.warehouse ??
+    data?.warehouseStock ??
+    data?.inWarehouse
   );
 
   const readyToDispatchItems = toNumber(
     data?.readyToDispatchItems ??
-      data?.readyToDispatch ??
-      data?.readyToDispatchCount
+    data?.readyToDispatch ??
+    data?.readyToDispatchCount
   );
 
   const readyItems = toNumber(
     data?.readyItems ??
-      data?.ready ??
-      data?.readyCount
+    data?.ready ??
+    data?.readyCount
   );
 
   const inventoryTotal =
@@ -179,35 +179,35 @@ const normalizeStats = (data) => {
 
     packedItems: toNumber(
       data?.packedItems ??
-        data?.packed ??
-        data?.stickersGenerated
+      data?.packed ??
+      data?.stickersGenerated
     ),
 
     dispatchedItems: toNumber(
       data?.dispatchedItems ??
-        data?.dispatched
+      data?.dispatched
     ),
 
     pendingItems: toNumber(
       data?.pendingItems ??
-        data?.pending
+      data?.pending
     ),
 
     stickersGenerated: toNumber(
       data?.stickersGenerated ??
-        data?.stickers
+      data?.stickers
     ),
 
     todayStickerGenerated: toNumber(
       data?.todayStickerGenerated ??
-        data?.todayStickersGenerated ??
-        data?.stickersGeneratedToday
+      data?.todayStickersGenerated ??
+      data?.stickersGeneratedToday
     ),
 
     todayChallanGenerated: toNumber(
       data?.todayChallanGenerated ??
-        data?.todayChallansGenerated ??
-        data?.challansGeneratedToday
+      data?.todayChallansGenerated ??
+      data?.challansGeneratedToday
     ),
   };
 };
@@ -298,21 +298,21 @@ function ThroughputUserModal({
 }
 
 function DashboardPage() {
-	const [stats, setStats] = useState({
-	  totalItems: 0,
+  const [stats, setStats] = useState({
+    totalItems: 0,
 
-	  warehouseItems: 0,
-	  readyToDispatchItems: 0,
-	  readyItems: 0,
+    warehouseItems: 0,
+    readyToDispatchItems: 0,
+    readyItems: 0,
 
-	  packedItems: 0,
-	  dispatchedItems: 0,
-	  pendingItems: 0,
-	  stickersGenerated: 0,
+    packedItems: 0,
+    dispatchedItems: 0,
+    pendingItems: 0,
+    stickersGenerated: 0,
 
-	  todayStickerGenerated: 0,
-	  todayChallanGenerated: 0,
-	});
+    todayStickerGenerated: 0,
+    todayChallanGenerated: 0,
+  });
 
   const [activityLogs, setActivityLogs] = useState([]);
   const [logistics, setLogistics] = useState(null);
@@ -320,58 +320,58 @@ function DashboardPage() {
   const [mode, setMode] = useState("inventory");
   const [inventorySection, setInventorySection] =
     useState("summary");
-	
+
   const [activeStatCard, setActiveStatCard] = useState(null);
   const [shiftModal, setShiftModal] =
     useState(false);
 
-	const [throughputModal, setThroughputModal] = useState({
-	  open: false,
-	  type: null,
-	  title: "",
-	  rows: [],
-	  loading: false,
-	  error: "",
-	});
+  const [throughputModal, setThroughputModal] = useState({
+    open: false,
+    type: null,
+    title: "",
+    rows: [],
+    loading: false,
+    error: "",
+  });
 
-	const role = String(localStorage.getItem("role") || "").toUpperCase();
+  const role = String(localStorage.getItem("role") || "").toUpperCase();
 
-	const isAdmin =
-	  role === "ADMIN" ||
-	  role === "ROLE_ADMIN";
-	  
-	  
-	const inventoryTotal =
-	   Number(stats.warehouseItems || 0) +
-	   Number(stats.readyToDispatchItems || 0) +
-	   Number(stats.readyItems || 0);
+  const isAdmin =
+    role === "ADMIN" ||
+    role === "ROLE_ADMIN";
 
-	 const finalInventoryTotal =
-	   inventoryTotal || Number(stats.totalItems || 0);
 
-	   const throughputPackedItems =
-	     Number(stats.packedItems || 0);
+  const inventoryTotal =
+    Number(stats.warehouseItems || 0) +
+    Number(stats.readyToDispatchItems || 0) +
+    Number(stats.readyItems || 0);
 
-	   const throughputDispatchedItems =
-	     Number(stats.dispatchedItems || 0);
-		 
-	   const pending =
-	     Number(stats.pendingItems || 0) ||
-	     Math.max(
-	       finalInventoryTotal -
-	         Number(stats.packedItems || 0) -
-	         Number(stats.dispatchedItems || 0),
-	       0
-	     );
-		 
-		 const todayPackedItems =
-		   Number(stats.todayStickerGenerated || 0);
+  const finalInventoryTotal =
+    inventoryTotal || Number(stats.totalItems || 0);
 
-		 const todayDispatchedItems =
-		   Number(stats.todayChallanGenerated || 0);
+  const throughputPackedItems =
+    Number(stats.packedItems || 0);
 
-		 const dailyThroughput =
-		   todayPackedItems + todayDispatchedItems;
+  const throughputDispatchedItems =
+    Number(stats.dispatchedItems || 0);
+
+  const pending =
+    Number(stats.pendingItems || 0) ||
+    Math.max(
+      finalInventoryTotal -
+      Number(stats.packedItems || 0) -
+      Number(stats.dispatchedItems || 0),
+      0
+    );
+
+  const todayPackedItems =
+    Number(stats.todayStickerGenerated || 0);
+
+  const todayDispatchedItems =
+    Number(stats.todayChallanGenerated || 0);
+
+  const dailyThroughput =
+    todayPackedItems + todayDispatchedItems;
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
 
@@ -404,14 +404,14 @@ function DashboardPage() {
       active = false;
     };
   }, []);
- 
+
 
   const toggleStatCard = (key) => {
     setActiveStatCard((current) =>
       current === key ? null : key
     );
   };
-  
+
   const openThroughputUserModal = async (type) => {
     if (!isAdmin) return;
 
@@ -466,7 +466,7 @@ function DashboardPage() {
       error: "",
     });
   };
-  
+
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
@@ -497,441 +497,441 @@ function DashboardPage() {
           </div>
         </div>
 
-		{mode === "inventory" && (
-		  <div style={inventoryLayout}>
-		    <InventorySidebar
-		      section={inventorySection}
-		      setSection={setInventorySection}
-		    />
+        {mode === "inventory" && (
+          <div style={inventoryLayout}>
+            <InventorySidebar
+              section={inventorySection}
+              setSection={setInventorySection}
+            />
 
-		    <div style={inventoryMain}>
-			{inventorySection === "summary" && (
-			  <>
-			    <div style={kpiGrid}>
-			      <StatCard
-			        accent="#60a5fa"
-			        title="Inventory Items"
-			        value={finalInventoryTotal}
-			        subtle="Warehouse + Ready To Dispatch + Ready"
-			        active={activeStatCard === "inventoryItems"}
-			        onClick={() => toggleStatCard("inventoryItems")}
-			      />
+            <div style={inventoryMain}>
+              {inventorySection === "summary" && (
+                <>
+                  <div style={kpiGrid}>
+                    <StatCard
+                      accent="#60a5fa"
+                      title="Inventory Items"
+                      value={finalInventoryTotal}
+                      subtle="Warehouse + Ready To Dispatch + Ready"
+                      active={activeStatCard === "inventoryItems"}
+                      onClick={() => toggleStatCard("inventoryItems")}
+                    />
 
-			      <StatCard
-			        accent="#f472b6"
-			        title="Stickers Generated"
-			        value={Number(stats.stickersGenerated || 0)}
-			        subtle="Labels Printed"
-			      />
+                    <StatCard
+                      accent="#f472b6"
+                      title="Stickers Generated"
+                      value={Number(stats.stickersGenerated || 0)}
+                      subtle="Labels Printed"
+                    />
 
-			      <StatCard
-			        accent="#34d399"
-			        title="Packed Items"
-			        value={Number(stats.packedItems || 0)}
-			        subtle="Sticker Generated"
-			      />
+                    <StatCard
+                      accent="#34d399"
+                      title="Packed Items"
+                      value={Number(stats.packedItems || 0)}
+                      subtle="Sticker Generated"
+                    />
 
-			      <StatCard
-			        accent="#f59e0b"
-			        title="Pending Items"
-			        value={pending}
-			        subtle="Awaiting Processing"
-			      />
+                    <StatCard
+                      accent="#f59e0b"
+                      title="Pending Items"
+                      value={pending}
+                      subtle="Awaiting Processing"
+                    />
 
-			      <StatCard
-			        accent="#8b5cf6"
-			        title="Inventory Accuracy"
-			        value="98.4%"
-			        subtle="Warehouse Precision"
-			      />
+                    <StatCard
+                      accent="#8b5cf6"
+                      title="Inventory Accuracy"
+                      value="98.4%"
+                      subtle="Warehouse Precision"
+                    />
 
-			      <StatCard
-			        accent="#06b6d4"
-			        title="Daily Throughput"
-			        value={dailyThroughput}
-			        subtle="Today’s Sticker + Challan"
-			        active={activeStatCard === "dailyThroughput"}
-			        onClick={() => toggleStatCard("dailyThroughput")}
-			      />
+                    <StatCard
+                      accent="#06b6d4"
+                      title="Daily Throughput"
+                      value={dailyThroughput}
+                      subtle="Today’s Sticker + Challan"
+                      active={activeStatCard === "dailyThroughput"}
+                      onClick={() => toggleStatCard("dailyThroughput")}
+                    />
 
-			      <StatCard
-			        accent="#ef4444"
-			        title="Ready to Dispatch"
-			        value={Number(stats.readyToDispatchItems || 0)}
-			        subtle="Dispatch action pending"
-			      />
+                    <StatCard
+                      accent="#ef4444"
+                      title="Ready to Dispatch"
+                      value={Number(stats.readyToDispatchItems || 0)}
+                      subtle="Dispatch action pending"
+                    />
 
-			      <StatCard
-			        accent="#22c55e"
-			        title="Operational Efficiency"
-			        value="94%"
-			        subtle="AI Optimized"
-			      />
-			    </div>
+                    <StatCard
+                      accent="#22c55e"
+                      title="Operational Efficiency"
+                      value="94%"
+                      subtle="AI Optimized"
+                    />
+                  </div>
 
-				{activeStatCard === "dailyThroughput" && (
-				  <div style={detailCard("#06b6d4")}>
-				    <div style={detailHeader}>
-				      <div>
-				        <div style={detailTitle}>
-				          Daily Throughput Details
-				        </div>
-						
-				        <div style={detailSubtitle}>
-				          Today’s packed and dispatched work summary
-				        </div>
-				      </div>
+                  {activeStatCard === "dailyThroughput" && (
+                    <div style={detailCard("#06b6d4")}>
+                      <div style={detailHeader}>
+                        <div>
+                          <div style={detailTitle}>
+                            Daily Throughput Details
+                          </div>
 
-				      <div style={detailTotalBox}>
-				        <span>Total Today</span>
-				        <strong>{dailyThroughput}</strong>
-				      </div>
-				    </div>
+                          <div style={detailSubtitle}>
+                            Today’s packed and dispatched work summary
+                          </div>
+                        </div>
 
-				    <div style={detailGrid}>
-				      <button
-				        type="button"
-				        onClick={() => openThroughputUserModal("packing")}
-				        disabled={!isAdmin}
-				        style={throughputClickCard("#34d399", isAdmin)}
-				      >
-				        <div style={detailItemLabel}>
-				          Packed Items
-				        </div>
+                        <div style={detailTotalBox}>
+                          <span>Total Today</span>
+                          <strong>{dailyThroughput}</strong>
+                        </div>
+                      </div>
 
-				        <div style={detailItemValue}>
-				          {todayPackedItems}
-				        </div>
+                      <div style={detailGrid}>
+                        <button
+                          type="button"
+                          onClick={() => openThroughputUserModal("packing")}
+                          disabled={!isAdmin}
+                          style={throughputClickCard("#34d399", isAdmin)}
+                        >
+                          <div style={detailItemLabel}>
+                            Packed Items
+                          </div>
 
-				        <div style={detailItemSubtle}>
-				          Packed Today / Sticker Generated Today
-				        </div>
+                          <div style={detailItemValue}>
+                            {todayPackedItems}
+                          </div>
 
-				        <div style={throughputCardHint}>
-				          {isAdmin
-				            ? "Click to view user-wise packing"
-				            : "Admin only"}
-				        </div>
-				      </button>
+                          <div style={detailItemSubtle}>
+                            Packed Today / Sticker Generated Today
+                          </div>
 
-				      <button
-				        type="button"
-				        onClick={() => openThroughputUserModal("dispatch")}
-				        disabled={!isAdmin}
-				        style={throughputClickCard("#f59e0b", isAdmin)}
-				      >
-				        <div style={detailItemLabel}>
-				          Dispatched Items
-				        </div>
+                          <div style={throughputCardHint}>
+                            {isAdmin
+                              ? "Click to view user-wise packing"
+                              : "Admin only"}
+                          </div>
+                        </button>
 
-				        <div style={detailItemValue}>
-				          {todayDispatchedItems}
-				        </div>
+                        <button
+                          type="button"
+                          onClick={() => openThroughputUserModal("dispatch")}
+                          disabled={!isAdmin}
+                          style={throughputClickCard("#f59e0b", isAdmin)}
+                        >
+                          <div style={detailItemLabel}>
+                            Dispatched Items
+                          </div>
 
-				        <div style={detailItemSubtle}>
-				          Dispatched Today / Chalaan Generated Today
-				        </div>
+                          <div style={detailItemValue}>
+                            {todayDispatchedItems}
+                          </div>
 
-				        <div style={throughputCardHint}>
-				          {isAdmin
-				            ? "Click to view user-wise dispatch"
-				            : "Admin only"}
-				        </div>
-				      </button>
-				    </div>
-				  </div>
-				)}
+                          <div style={detailItemSubtle}>
+                            Dispatched Today / Chalaan Generated Today
+                          </div>
 
-			    {activeStatCard === "inventoryItems" && (
-			      <DetailStatCard
-			        accent="#60a5fa"
-			        title="Inventory Item Breakdown"
-			        subtitle="Live stock position by operational status"
-			        totalLabel="Inventory Total"
-			        totalValue={finalInventoryTotal}
-			        rows={[
-			          {
-			            label: "Warehouse Items",
-			            value: Number(stats.warehouseItems || 0),
-			            subtle: "Currently inside warehouse",
-			          },
-			          {
-			            label: "Ready to Dispatch",
-			            value: Number(stats.readyToDispatchItems || 0),
-			            subtle: "Waiting for dispatch",
-			          },
-			          {
-			            label: "Ready Items",
-			            value: Number(stats.readyItems || 0),
-			            subtle: "Ready / processed stock",
-			          },
-			        ]}
-			      />
-			    )}
+                          <div style={throughputCardHint}>
+                            {isAdmin
+                              ? "Click to view user-wise dispatch"
+                              : "Admin only"}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-			    <div style={workspaceGrid}>
-				<div style={chartPanelSurface}>
-				  <div style={chartPanelTop}>
-				    <div>
-				      <div style={chartPanelTitle}>
-				        Inventory Visualization
-				      </div>
+                  {activeStatCard === "inventoryItems" && (
+                    <DetailStatCard
+                      accent="#60a5fa"
+                      title="Inventory Item Breakdown"
+                      subtitle="Live stock position by operational status"
+                      totalLabel="Inventory Total"
+                      totalValue={finalInventoryTotal}
+                      rows={[
+                        {
+                          label: "Warehouse Items",
+                          value: Number(stats.warehouseItems || 0),
+                          subtle: "Currently inside warehouse",
+                        },
+                        {
+                          label: "Ready to Dispatch",
+                          value: Number(stats.readyToDispatchItems || 0),
+                          subtle: "Waiting for dispatch",
+                        },
+                        {
+                          label: "Ready Items",
+                          value: Number(stats.readyItems || 0),
+                          subtle: "Ready / processed stock",
+                        },
+                      ]}
+                    />
+                  )}
 
-				      <div style={chartPanelSubtitle}>
-				        Switch between donut, flow and volume charts
-				      </div>
-				    </div>
+                  <div style={workspaceGrid}>
+                    <div style={chartPanelSurface}>
+                      <div style={chartPanelTop}>
+                        <div>
+                          <div style={chartPanelTitle}>
+                            Inventory Visualization
+                          </div>
 
-				    <div style={chartToggleWrap}>
-				      <div
-				        style={{
-				          ...chartSlider,
-				          transform: `translateX(${chartIndex * 40}px)`,
-				        }}
-				      />
+                          <div style={chartPanelSubtitle}>
+                            Switch between donut, flow and volume charts
+                          </div>
+                        </div>
 
-				      <button
-				        type="button"
-				        title="Donut chart"
-				        style={chartToggleBtn}
-				        onClick={() => setChartType("donut")}
-				      >
-				        <DonutIcon />
-				      </button>
+                        <div style={chartToggleWrap}>
+                          <div
+                            style={{
+                              ...chartSlider,
+                              transform: `translateX(${chartIndex * 40}px)`,
+                            }}
+                          />
 
-				      <button
-				        type="button"
-				        title="Line chart"
-				        style={chartToggleBtn}
-				        onClick={() => setChartType("line")}
-				      >
-				        <LineIcon />
-				      </button>
+                          <button
+                            type="button"
+                            title="Donut chart"
+                            style={chartToggleBtn}
+                            onClick={() => setChartType("donut")}
+                          >
+                            <DonutIcon />
+                          </button>
 
-				      <button
-				        type="button"
-				        title="Bar chart"
-				        style={chartToggleBtn}
-				        onClick={() => setChartType("bar")}
-				      >
-				        <BarIcon />
-				      </button>
-				    </div>
-				  </div>
+                          <button
+                            type="button"
+                            title="Line chart"
+                            style={chartToggleBtn}
+                            onClick={() => setChartType("line")}
+                          >
+                            <LineIcon />
+                          </button>
 
-				  <div style={chartPanelBody}>
-				    {chartType === "donut" && (
-				      <StatusDonutChart
-				        warehouse={stats.warehouseItems}
-				        readyToDispatch={stats.readyToDispatchItems}
-				        ready={stats.readyItems}
-				      />
-				    )}
+                          <button
+                            type="button"
+                            title="Bar chart"
+                            style={chartToggleBtn}
+                            onClick={() => setChartType("bar")}
+                          >
+                            <BarIcon />
+                          </button>
+                        </div>
+                      </div>
 
-				    {chartType === "line" && (
-				      <StatusLineChart
-				        warehouse={stats.warehouseItems}
-				        readyToDispatch={stats.readyToDispatchItems}
-				        ready={stats.readyItems}
-				      />
-				    )}
+                      <div style={chartPanelBody}>
+                        {chartType === "donut" && (
+                          <StatusDonutChart
+                            warehouse={stats.warehouseItems}
+                            readyToDispatch={stats.readyToDispatchItems}
+                            ready={stats.readyItems}
+                          />
+                        )}
 
-				    {chartType === "bar" && (
-				      <StatusBarChart
-				        warehouse={stats.warehouseItems}
-				        readyToDispatch={stats.readyToDispatchItems}
-				        ready={stats.readyItems}
-				      />
-				    )}
-				  </div>
-				</div>
+                        {chartType === "line" && (
+                          <StatusLineChart
+                            warehouse={stats.warehouseItems}
+                            readyToDispatch={stats.readyToDispatchItems}
+                            ready={stats.readyItems}
+                          />
+                        )}
 
-			      <div style={panelSurface}>
-			        <ActivityFeed logs={activityLogs} />
-			      </div>
-			    </div>
+                        {chartType === "bar" && (
+                          <StatusBarChart
+                            warehouse={stats.warehouseItems}
+                            readyToDispatch={stats.readyToDispatchItems}
+                            ready={stats.readyItems}
+                          />
+                        )}
+                      </div>
+                    </div>
 
-				{isAdmin && (
-				  <>
-				    <InventoryReports />
+                    <div style={panelSurface}>
+                      <ActivityFeed logs={activityLogs} />
+                    </div>
+                  </div>
 
-				    <div style={adminPanel}>
-				      <ScheduledReports />
-				    </div>
-				  </>
-				)}
-			  </>
-			)}
-	  
-			{inventorySection === "analytics" && (
-			<div style={analyticsSection}>
-			  <div style={analyticsHeader}>
-			    <div>
-			      <div style={sectionTitle}>
-			        Inventory Intelligence
-			      </div>
+                  {isAdmin && (
+                    <>
+                      <InventoryReports />
 
-			      <div style={sectionSubtitle}>
-			        Advanced warehouse analytics and operational insights
-			      </div>
-			    </div>
-			  </div>
+                      <div style={adminPanel}>
+                        <ScheduledReports />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
 
-			  <div style={analyticsGridLayout}>
-			    <div style={analyticsCardLarge}>
-			      <div style={analyticsCardTitle}>
-			        Inventory Aging Analysis
-			      </div>
+              {inventorySection === "analytics" && (
+                <div style={analyticsSection}>
+                  <div style={analyticsHeader}>
+                    <div>
+                      <div style={sectionTitle}>
+                        Inventory Intelligence
+                      </div>
 
-			      <div style={agingGrid}>
-			        <div style={agingItem("#22c55e")}>
-			          <h2>62%</h2>
-			          <span>0-7 Days</span>
-			        </div>
+                      <div style={sectionSubtitle}>
+                        Advanced warehouse analytics and operational insights
+                      </div>
+                    </div>
+                  </div>
 
-			        <div style={agingItem("#3b82f6")}>
-			          <h2>24%</h2>
-			          <span>7-30 Days</span>
-			        </div>
+                  <div style={analyticsGridLayout}>
+                    <div style={analyticsCardLarge}>
+                      <div style={analyticsCardTitle}>
+                        Inventory Aging Analysis
+                      </div>
 
-			        <div style={agingItem("#f59e0b")}>
-			          <h2>11%</h2>
-			          <span>30-90 Days</span>
-			        </div>
+                      <div style={agingGrid}>
+                        <div style={agingItem("#22c55e")}>
+                          <h2>62%</h2>
+                          <span>0-7 Days</span>
+                        </div>
 
-			        <div style={agingItem("#ef4444")}>
-			          <h2>3%</h2>
-			          <span>90+ Days</span>
-			        </div>
-			      </div>
-			    </div>
+                        <div style={agingItem("#3b82f6")}>
+                          <h2>24%</h2>
+                          <span>7-30 Days</span>
+                        </div>
 
-			    <div style={analyticsCard}>
-			      <div style={analyticsCardTitle}>
-			        Warehouse Utilization
-			      </div>
+                        <div style={agingItem("#f59e0b")}>
+                          <h2>11%</h2>
+                          <span>30-90 Days</span>
+                        </div>
 
-			      <div style={metricValue}>
-			        86%
-			      </div>
+                        <div style={agingItem("#ef4444")}>
+                          <h2>3%</h2>
+                          <span>90+ Days</span>
+                        </div>
+                      </div>
+                    </div>
 
-			      <div style={metricSubtle}>
-			        Rack occupancy across all zones
-			      </div>
-			    </div>
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Warehouse Utilization
+                      </div>
 
-			    <div style={analyticsCard}>
-			      <div style={analyticsCardTitle}>
-			        Average Packing Time
-			      </div>
+                      <div style={metricValue}>
+                        86%
+                      </div>
 
-			      <div style={metricValue}>
-			        2.4m
-			      </div>
+                      <div style={metricSubtle}>
+                        Rack occupancy across all zones
+                      </div>
+                    </div>
 
-			      <div style={metricSubtle}>
-			        Per inventory item
-			      </div>
-			    </div>
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Average Packing Time
+                      </div>
 
-			    <div style={analyticsCard}>
-			      <div style={analyticsCardTitle}>
-			        Sticker Failure Rate
-			      </div>
+                      <div style={metricValue}>
+                        2.4m
+                      </div>
 
-			      <div style={metricValue}>
-			        0.8%
-			      </div>
+                      <div style={metricSubtle}>
+                        Per inventory item
+                      </div>
+                    </div>
 
-			      <div style={metricSubtle}>
-			        Printer & scan errors
-			      </div>
-			    </div>
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Sticker Failure Rate
+                      </div>
 
-			    <div style={analyticsCardWide}>
-			      <div style={analyticsCardTitle}>
-			        AI Operational Insights
-			      </div>
+                      <div style={metricValue}>
+                        0.8%
+                      </div>
 
-			      <div style={insightsList}>
-			        <div style={insightItem}>
-			          Dispatch volume increased by 14%
-			        </div>
+                      <div style={metricSubtle}>
+                        Printer & scan errors
+                      </div>
+                    </div>
 
-			        <div style={insightItem}>
-			          Packing efficiency improved this week
-			        </div>
+                    <div style={analyticsCardWide}>
+                      <div style={analyticsCardTitle}>
+                        AI Operational Insights
+                      </div>
 
-			        <div style={insightItem}>
-			          Warehouse Zone B nearing capacity
-			        </div>
+                      <div style={insightsList}>
+                        <div style={insightItem}>
+                          Dispatch volume increased by 14%
+                        </div>
 
-			        <div style={insightItem}>
-			          Sticker print failures reduced significantly
-			        </div>
-			      </div>
-			    </div>
-			  </div>
-			</div>
-			)}
-			
-			{inventorySection === "alerts" && (
-			  <div style={analyticsCard}>
-			    <div style={analyticsCardTitle}>
-			      Live Inventory Alerts
-			    </div>
+                        <div style={insightItem}>
+                          Packing efficiency improved this week
+                        </div>
 
-			    <div style={insightsList}>
-			      <div style={insightItem}>
-			        ⚠ Warehouse Zone B near capacity
-			      </div>
+                        <div style={insightItem}>
+                          Warehouse Zone B nearing capacity
+                        </div>
 
-			      <div style={insightItem}>
-			        ⚠ Dispatch delays detected
-			      </div>
+                        <div style={insightItem}>
+                          Sticker print failures reduced significantly
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-			      <div style={insightItem}>
-			        ⚠ Sticker printer maintenance due
-			      </div>
+              {inventorySection === "alerts" && (
+                <div style={analyticsCard}>
+                  <div style={analyticsCardTitle}>
+                    Live Inventory Alerts
+                  </div>
 
-			      <div style={insightItem}>
-			        ⚠ Packing queue exceeding threshold
-			      </div>
-			    </div>
-			  </div>
-			)}			
-			  </div>
-			</div>
+                  <div style={insightsList}>
+                    <div style={insightItem}>
+                      ⚠ Warehouse Zone B near capacity
+                    </div>
+
+                    <div style={insightItem}>
+                      ⚠ Dispatch delays detected
+                    </div>
+
+                    <div style={insightItem}>
+                      ⚠ Sticker printer maintenance due
+                    </div>
+
+                    <div style={insightItem}>
+                      ⚠ Packing queue exceeding threshold
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
-		{mode === "logistics" && (
-		  <LogisticsDashboard
-		    logistics={logistics ?? emptyLogistics}
-		    setShiftModal={setShiftModal}
-		    StatCard={StatCard}
-		    AnalyticsGrid={AnalyticsGrid}
-		  />
-		)}
+        {mode === "logistics" && (
+          <LogisticsDashboard
+            logistics={logistics ?? emptyLogistics}
+            setShiftModal={setShiftModal}
+            StatCard={StatCard}
+            AnalyticsGrid={AnalyticsGrid}
+          />
+        )}
 
       </div>
-	  <LogisticsShiftModal
-	    open={shiftModal}
-	    onClose={() =>
-	      setShiftModal(false)
-	    }
-	    onCreated={() => {
-	      fetchLogisticsStats()
-	        .then(setLogistics);
-	    }}
-	  />
-	  <ThroughputUserModal
-	    open={throughputModal.open}
-	    title={throughputModal.title}
-	    rows={throughputModal.rows}
-	    loading={throughputModal.loading}
-	    error={throughputModal.error}
-	    onClose={closeThroughputUserModal}
-	  />
+      <LogisticsShiftModal
+        open={shiftModal}
+        onClose={() =>
+          setShiftModal(false)
+        }
+        onCreated={() => {
+          fetchLogisticsStats()
+            .then(setLogistics);
+        }}
+      />
+      <ThroughputUserModal
+        open={throughputModal.open}
+        title={throughputModal.title}
+        rows={throughputModal.rows}
+        loading={throughputModal.loading}
+        error={throughputModal.error}
+        onClose={closeThroughputUserModal}
+      />
     </div>
   );
 }

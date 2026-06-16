@@ -24,21 +24,49 @@ import {
 import {
   hasValidCoordinates,
   safeOpenCoordinatesInMaps,
-  safeOpenCurrentLocationInMaps,
 } from "../api/locationApi";
 
 import {
+  useAuth,
+} from "../auth/AuthContext";
+
+import {
   fetchTrips,
+  startTrip,
 } from "../api/logisticsApi";
+
+import {
+  startLiveLocationForTrip,
+} from "../api/liveLocationTracker";
 
 const normalizeStatus = (value) =>
   String(value || "")
     .trim()
     .toUpperCase();
 
+function getBackendNowDateTime() {
+  const d = new Date();
+
+  d.setMinutes(
+    d.getMinutes() - d.getTimezoneOffset()
+  );
+
+  return d.toISOString().slice(0, 19);
+}
+
 export default function TripsScreen({
   navigation,
 }) {
+  const {
+    role,
+  } = useAuth();
+
+  const normalizedRole =
+    normalizeStatus(role);
+
+  const isDriver =
+    normalizedRole === "DRIVER";
+
   const [loading, setLoading] =
     useState(false);
 
@@ -52,7 +80,8 @@ export default function TripsScreen({
     try {
       setLoading(true);
 
-      const data = await fetchTrips();
+      const data =
+        await fetchTrips();
 
       setTrips(
         Array.isArray(data)
@@ -64,7 +93,10 @@ export default function TripsScreen({
 
       Alert.alert(
         "Trips failed",
-        e?.message || "Failed to load trips"
+        e?.response?.data?.message ||
+          e?.response?.data ||
+          e?.message ||
+          "Failed to load trips"
       );
     } finally {
       setLoading(false);
@@ -75,7 +107,8 @@ export default function TripsScreen({
     try {
       setRefreshing(true);
 
-      const data = await fetchTrips();
+      const data =
+        await fetchTrips();
 
       setTrips(
         Array.isArray(data)
@@ -85,7 +118,10 @@ export default function TripsScreen({
     } catch (e) {
       Alert.alert(
         "Refresh failed",
-        e?.message || "Failed to refresh trips"
+        e?.response?.data?.message ||
+          e?.response?.data ||
+          e?.message ||
+          "Failed to refresh trips"
       );
     } finally {
       setRefreshing(false);
@@ -97,6 +133,13 @@ export default function TripsScreen({
       loadTrips();
     }, [])
   );
+
+  const queuedTrips =
+    trips.filter(
+      (t) =>
+        normalizeStatus(t.status) ===
+        "QUEUED"
+    );
 
   const activeTrips =
     trips.filter(
@@ -115,6 +158,17 @@ export default function TripsScreen({
   const rows = [
     {
       type: "section",
+      id: "queued-section",
+      title: "Queued Trips",
+    },
+    ...queuedTrips.map((x) => ({
+      type: "trip",
+      tripType: "queued",
+      ...x,
+    })),
+
+    {
+      type: "section",
       id: "active-section",
       title: "Active Trips",
     },
@@ -123,6 +177,7 @@ export default function TripsScreen({
       tripType: "active",
       ...x,
     })),
+
     {
       type: "section",
       id: "delivered-section",
@@ -155,14 +210,15 @@ export default function TripsScreen({
         </Text>
 
         <Text style={styles.sub}>
-          Active and completed dispatch trips
+          Queued, active and completed dispatch trips
         </Text>
       </View>
 
       <FlatList
         data={rows}
         keyExtractor={(item, index) =>
-          item.id || `${item.challanNumber}-${index}`
+          item.id ||
+          `${item.type}-${item.challanNumber}-${index}`
         }
         refreshControl={
           <RefreshControl
@@ -187,6 +243,8 @@ export default function TripsScreen({
             <TripCard
               trip={item}
               navigation={navigation}
+              isDriver={isDriver}
+              refresh={refresh}
             />
           );
         }}
@@ -203,12 +261,32 @@ export default function TripsScreen({
 function TripCard({
   trip,
   navigation,
+  isDriver,
+  refresh,
 }) {
   const status =
     normalizeStatus(trip.status);
 
+  const isQueued =
+    status === "QUEUED";
+
   const isActive =
     status === "OUT_FOR_DELIVERY";
+
+  const isDelivered =
+    status === "DELIVERED";
+
+  const hasLiveLocation =
+    hasValidCoordinates(
+      trip.currentLatitude,
+      trip.currentLongitude
+    );
+
+  const hasDeliveryLocation =
+    hasValidCoordinates(
+      trip.deliveryLatitude,
+      trip.deliveryLongitude
+    );
 
   const driverName =
     trip.driver?.name ||
@@ -219,6 +297,67 @@ function TripCard({
     trip.vehicle?.vehicleNumber ||
     trip.vehicleNumber ||
     "—";
+
+  const statusLabel =
+    isQueued
+      ? "QUEUED"
+      : isActive
+        ? "OUT FOR DELIVERY"
+        : "DELIVERED";
+
+  const handleStartTrip = async () => {
+    try {
+      await startTrip(
+        trip.id,
+        {
+          tripStart:
+            getBackendNowDateTime(),
+        }
+      );
+
+      await startLiveLocationForTrip(
+        trip.id
+      );
+
+      Alert.alert(
+        "Trip Started",
+        "Live location tracking has started."
+      );
+
+      await refresh();
+    } catch (e) {
+      Alert.alert(
+        "Start failed",
+        e?.response?.data?.message ||
+          e?.response?.data ||
+          e?.message ||
+          "Unable to start trip"
+      );
+    }
+  };
+
+  const handleRestartLiveTracking = async () => {
+    try {
+      await startLiveLocationForTrip(
+        trip.id
+      );
+
+      Alert.alert(
+        "Live Tracking",
+        "Live location tracking is running for this trip."
+      );
+
+      await refresh();
+    } catch (e) {
+      Alert.alert(
+        "Tracking failed",
+        e?.response?.data?.message ||
+          e?.response?.data ||
+          e?.message ||
+          "Unable to start live tracking"
+      );
+    }
+  };
 
   return (
     <View style={styles.card}>
@@ -236,24 +375,25 @@ function TripCard({
         <View
           style={[
             styles.statusBadge,
-            isActive
-              ? styles.activeBadge
-              : styles.doneBadge,
+            isQueued
+              ? styles.queuedBadge
+              : isActive
+                ? styles.activeBadge
+                : styles.doneBadge,
           ]}
         >
           <Text
             style={[
               styles.statusText,
-              isActive
-                ? styles.activeText
-                : styles.doneText,
+              isQueued
+                ? styles.queuedText
+                : isActive
+                  ? styles.activeText
+                  : styles.doneText,
             ]}
           >
-            {isActive
-              ? "OUT FOR DELIVERY"
-              : "DELIVERED"}
+            {statusLabel}
           </Text>
-
         </View>
       </View>
 
@@ -263,8 +403,8 @@ function TripCard({
           value={
             trip.tripStart
               ? new Date(
-                trip.tripStart
-              ).toLocaleString()
+                  trip.tripStart
+                ).toLocaleString()
               : "—"
           }
         />
@@ -274,8 +414,8 @@ function TripCard({
           value={
             trip.tripEnd
               ? new Date(
-                trip.tripEnd
-              ).toLocaleString()
+                  trip.tripEnd
+                ).toLocaleString()
               : "—"
           }
         />
@@ -293,7 +433,7 @@ function TripCard({
         />
       </View>
 
-      {status === "DELIVERED" &&
+      {isDelivered &&
         (trip.receiverName || trip.podUrl) && (
           <View style={styles.podBox}>
             <Text style={styles.podText}>
@@ -307,11 +447,11 @@ function TripCard({
                 ? "Attached"
                 : "—"}
             </Text>
-
           </View>
         )}
+
       <TouchableOpacity
-        style={styles.secondaryBtn}
+        style={styles.challanBtn}
         onPress={() =>
           safeOpenChallanPdf(
             trip.id,
@@ -319,11 +459,23 @@ function TripCard({
           )
         }
       >
-        <Text style={styles.secondaryText}>
-          Challan
+        <Text style={styles.challanText}>
+          Open Challan
         </Text>
       </TouchableOpacity>
+
       <View style={styles.actions}>
+        {isQueued && isDriver ? (
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={handleStartTrip}
+          >
+            <Text style={styles.primaryText}>
+              Start Trip
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity
           style={styles.secondaryBtn}
           onPress={() =>
@@ -340,11 +492,17 @@ function TripCard({
           </Text>
         </TouchableOpacity>
 
-
-        {isActive ? (
+        {isActive && hasLiveLocation ? (
           <TouchableOpacity
             style={styles.locationBtn}
-            onPress={safeOpenCurrentLocationInMaps}
+            onPress={() =>
+              safeOpenCoordinatesInMaps(
+                trip.currentLatitude,
+                trip.currentLongitude,
+                trip.challanNumber ||
+                  "Live Trip Location"
+              )
+            }
           >
             <Text style={styles.locationText}>
               Live Location
@@ -352,18 +510,27 @@ function TripCard({
           </TouchableOpacity>
         ) : null}
 
-        {!isActive &&
-          hasValidCoordinates(
-            trip.deliveryLatitude,
-            trip.deliveryLongitude
-          ) ? (
+        {isActive && isDriver ? (
+          <TouchableOpacity
+            style={styles.locationBtn}
+            onPress={handleRestartLiveTracking}
+          >
+            <Text style={styles.locationText}>
+              Track Live
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {isDelivered &&
+        hasDeliveryLocation ? (
           <TouchableOpacity
             style={styles.locationBtn}
             onPress={() =>
               safeOpenCoordinatesInMaps(
                 trip.deliveryLatitude,
                 trip.deliveryLongitude,
-                trip.challanNumber || "Delivery Location"
+                trip.challanNumber ||
+                  "Delivery Location"
               )
             }
           >
@@ -373,7 +540,7 @@ function TripCard({
           </TouchableOpacity>
         ) : null}
 
-        {isActive && (
+        {isActive && isDriver ? (
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() =>
@@ -389,7 +556,7 @@ function TripCard({
               End Trip
             </Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -499,6 +666,10 @@ const styles = {
     borderRadius: 999,
   },
 
+  queuedBadge: {
+    backgroundColor: "rgba(251,191,36,.14)",
+  },
+
   activeBadge: {
     backgroundColor: "rgba(59,130,246,.14)",
   },
@@ -510,6 +681,10 @@ const styles = {
   statusText: {
     fontSize: 10,
     fontWeight: "900",
+  },
+
+  queuedText: {
+    color: "#facc15",
   },
 
   activeText: {
@@ -559,14 +734,32 @@ const styles = {
     fontWeight: "700",
   },
 
+  challanBtn: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,.28)",
+    backgroundColor: "rgba(251,191,36,.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+
+  challanText: {
+    color: "#facc15",
+    fontWeight: "900",
+  },
+
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginTop: 14,
   },
 
   secondaryBtn: {
     flex: 1,
+    minWidth: "30%",
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
@@ -579,10 +772,12 @@ const styles = {
   secondaryText: {
     color: "#93c5fd",
     fontWeight: "900",
+    fontSize: 12,
   },
 
   primaryBtn: {
     flex: 1,
+    minWidth: "30%",
     height: 44,
     borderRadius: 12,
     backgroundColor: "#2563eb",
@@ -593,9 +788,12 @@ const styles = {
   primaryText: {
     color: "#fff",
     fontWeight: "900",
+    fontSize: 12,
   },
+
   locationBtn: {
     flex: 1,
+    minWidth: "30%",
     height: 44,
     borderRadius: 12,
     borderWidth: 1,

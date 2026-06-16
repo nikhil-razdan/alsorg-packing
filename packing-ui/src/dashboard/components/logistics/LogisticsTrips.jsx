@@ -60,6 +60,16 @@ function LogisticsTrips({
       deliveryLocationAccuracy: "",
     });
 
+  const role =
+    String(localStorage.getItem("role") || "")
+      .trim()
+      .toUpperCase();
+
+  const isDriver = role === "DRIVER";
+  const isDispatch = role === "DISPATCH";
+  const isLogistics = role === "LOGISTICS";
+  const isAdmin = role === "ADMIN";
+
   const load = async () => {
     try {
       setLoading(true);
@@ -276,25 +286,27 @@ function LogisticsTrips({
                 View Items
               </button>
 
-              <button
-                style={endBtn}
-                onClick={() => {
-                  setEndModal(trip);
-                  setEndForm({
-                    tripEnd: getNowDateTimeLocal(),
-                    remarks: "",
-                    receiverName: "",
-                    receiverPhone: "",
-                    podUrl: "",
-                    deliveryRemarks: "",
-                    deliveryLatitude: "",
-                    deliveryLongitude: "",
-                    deliveryLocationAccuracy: "",
-                  });
-                }}
-              >
-                End Trip
-              </button>
+              {isDriver && (
+                <button
+                  style={endBtn}
+                  onClick={() => {
+                    setEndModal(trip);
+                    setEndForm({
+                      tripEnd: getNowDateTimeLocal(),
+                      remarks: "",
+                      receiverName: "",
+                      receiverPhone: "",
+                      podUrl: "",
+                      deliveryRemarks: "",
+                      deliveryLatitude: "",
+                      deliveryLongitude: "",
+                      deliveryLocationAccuracy: "",
+                    });
+                  }}
+                >
+                  End Trip
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -736,7 +748,7 @@ const headCompleted = {
 
 const rowCompleted = {
   display: "grid",
- gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
+  gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
   padding: 16,
   color: "#fff",
   borderTop: "1px solid rgba(255,255,255,0.06)",
