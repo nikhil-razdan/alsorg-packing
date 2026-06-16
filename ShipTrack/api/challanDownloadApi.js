@@ -5,10 +5,11 @@ import {
 
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
-import * as SecureStore from "expo-secure-store";
 
 import {
   API_BASE_URL,
+  buildBearerToken,
+  getStoredToken,
 } from "./client";
 
 function cleanFilename(value) {
@@ -21,12 +22,13 @@ function cleanFilename(value) {
     : `${text}.pdf`;
 }
 
+function cleanBaseUrl(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
 async function readErrorBody(uri) {
   try {
-    const text =
-      await FileSystem.readAsStringAsync(uri);
-
-    return text;
+    return await FileSystem.readAsStringAsync(uri);
   } catch (e) {
     return "";
   }
@@ -44,7 +46,8 @@ async function assertPdfFile(uri) {
     );
 
   if (!String(base64 || "").startsWith("JVBER")) {
-    const text = await readErrorBody(uri);
+    const text =
+      await readErrorBody(uri);
 
     throw new Error(
       text ||
@@ -77,7 +80,16 @@ export async function downloadChallanPdf(
   }
 
   const token =
-    await SecureStore.getItemAsync("token");
+    await getStoredToken();
+
+  const bearer =
+    buildBearerToken(token);
+
+  if (!bearer) {
+    throw new Error(
+      "Login token missing in mobile. Please logout and login again."
+    );
+  }
 
   const filename =
     cleanFilename(
@@ -85,21 +97,26 @@ export async function downloadChallanPdf(
     );
 
   const url =
-    `${API_BASE_URL}/api/logistics/trips/${cleanTripId}/challan`;
+    `${cleanBaseUrl(API_BASE_URL)}/api/logistics/trips/${cleanTripId}/challan`;
 
   const fileUri =
     FileSystem.documentDirectory + filename;
+
+  console.log("CHALLAN DOWNLOAD URL:", url);
+  console.log(
+    "CHALLAN AUTH HEADER:",
+    bearer ? "Authorization present" : "Authorization missing"
+  );
 
   const result =
     await FileSystem.downloadAsync(
       url,
       fileUri,
       {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {},
+        headers: {
+          Authorization: bearer,
+          Accept: "application/pdf",
+        },
       }
     );
 

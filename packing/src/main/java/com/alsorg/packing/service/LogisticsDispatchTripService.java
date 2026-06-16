@@ -1,4 +1,4 @@
-        package com.alsorg.packing.service;
+package com.alsorg.packing.service;
 
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.controller.dto.logistics.LogisticsTripItemResponse;

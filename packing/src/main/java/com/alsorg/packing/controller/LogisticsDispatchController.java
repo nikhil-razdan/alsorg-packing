@@ -13,14 +13,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-
-import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/logistics")
@@ -150,43 +147,63 @@ public class LogisticsDispatchController {
     }
     
     @GetMapping(
-            value = "/trips/{tripId}/challan",
-            produces = MediaType.APPLICATION_PDF_VALUE
-    )
-    public ResponseEntity<byte[]> downloadTripChallan(
-            @PathVariable UUID tripId,
-            @RequestHeader("Authorization") String auth
-    ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
-
-        if (!currentUserService.canViewTrips(user)) {
-            return ResponseEntity.status(403).build();
-        }
-
-        DispatchTripPdfResult result =
-                tripService.generateChallanPdfForTrip(
-                        tripId,
-                        user
+        value = "/trips/{tripId}/challan",
+        produces = MediaType.APPLICATION_PDF_VALUE
+)
+public ResponseEntity<byte[]> downloadTripChallan(
+        @PathVariable UUID tripId,
+        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth
+) {
+    if (auth == null || !auth.startsWith("Bearer ")) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(
+                        "Missing Authorization header for challan download"
+                                .getBytes(StandardCharsets.UTF_8)
                 );
-
-        String filename =
-                result.getChallanNumber() == null
-                        || result.getChallanNumber().isBlank()
-                        ? "challan.pdf"
-                        : result.getChallanNumber() + ".pdf";
-
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=" + filename
-                )
-                .header("X-Trip-Id", result.getTripId().toString())
-                .header("X-Challan-No", result.getChallanNumber())
-                .header(
-                        "Access-Control-Expose-Headers",
-                        "X-Trip-Id, X-Challan-No, Content-Disposition"
-                )
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(result.getPdfBytes());
     }
+
+    User user = currentUserService.getCurrentUserFromAuth(auth);
+
+    if (!currentUserService.canViewTrips(user)) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(
+                        "You do not have permission to download this challan"
+                                .getBytes(StandardCharsets.UTF_8)
+                );
+    }
+
+    DispatchTripPdfResult result =
+            tripService.generateChallanPdfForTrip(
+                    tripId,
+                    user
+            );
+
+    String challanNo =
+            result.getChallanNumber() != null
+                    ? result.getChallanNumber()
+                    : result.getChallanNumber();
+
+    String filename =
+            challanNo == null || challanNo.isBlank()
+                    ? "challan.pdf"
+                    : challanNo + ".pdf";
+
+    return ResponseEntity.ok()
+            .header(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=" + filename
+            )
+            .header("X-Trip-Id", result.getTripId().toString())
+            .header("X-Challan-No", challanNo)
+            .header(
+                    "Access-Control-Expose-Headers",
+                    "X-Trip-Id, X-Challan-No, Content-Disposition"
+            )
+            .contentType(MediaType.APPLICATION_PDF)
+            .body(result.getPdfBytes());
+}
 }
