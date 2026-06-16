@@ -28,6 +28,10 @@ public class LogisticsTripLocation {
 
     private String recordedBy;
 
+    private Double speed;
+    private Double heading;
+    private Double altitude;
+
     @PrePersist
     public void prePersist() {
         if (id == null) {
@@ -77,6 +81,30 @@ public class LogisticsTripLocation {
 
     public void setAccuracy(Double accuracy) {
         this.accuracy = accuracy;
+    }
+
+    public Double getSpeed() {
+        return speed;
+    }
+
+    public void setSpeed(Double speed) {
+        this.speed = speed;
+    }
+
+    public Double getHeading() {
+        return heading;
+    }
+
+    public void setHeading(Double heading) {
+        this.heading = heading;
+    }
+
+    public Double getAltitude() {
+        return altitude;
+    }
+
+    public void setAltitude(Double altitude) {
+        this.altitude = altitude;
     }
 
     public LocalDateTime getRecordedAt() {

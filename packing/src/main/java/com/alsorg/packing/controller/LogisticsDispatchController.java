@@ -161,13 +161,19 @@ public class LogisticsDispatchController {
                 Double latitude = readDouble(body.get("latitude"));
                 Double longitude = readDouble(body.get("longitude"));
                 Double accuracy = readDouble(body.get("accuracy"));
+                Double speed = readDouble(body.get("speed"));
+                Double heading = readDouble(body.get("heading"));
+                Double altitude = readDouble(body.get("altitude"));
 
                 return tripService.updateTripLocation(
                                 tripId,
                                 user,
                                 latitude,
                                 longitude,
-                                accuracy);
+                                accuracy,
+                                speed,
+                                heading,
+                                altitude);
         }
 
         /*

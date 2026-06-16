@@ -4,6 +4,8 @@ import {
   AuthProvider,
 } from "./auth/AuthContext";
 
+import "./api/liveLocationTracker";
+
 import AppNavigator from "./navigation/AppNavigator";
 
 export default function App() {

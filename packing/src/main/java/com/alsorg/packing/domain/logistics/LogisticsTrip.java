@@ -44,7 +44,7 @@ public class LogisticsTrip {
 
     @Column(length = 1000)
     private String remarks;
-    
+
     private String receiverName;
 
     private String receiverPhone;
@@ -59,7 +59,7 @@ public class LogisticsTrip {
     private Double deliveryLongitude;
 
     private Double deliveryLocationAccuracy;
-    
+
     private Double currentLatitude;
     private Double currentLongitude;
     private Double currentLocationAccuracy;
@@ -67,6 +67,10 @@ public class LogisticsTrip {
     private String currentLocationBy;
 
     private LocalDateTime queuedAt;
+
+    private Double currentSpeed;
+    private Double currentHeading;
+    private Double currentAltitude;
 
     public UUID getId() {
         return id;
@@ -179,7 +183,7 @@ public class LogisticsTrip {
     public void setRemarks(String remarks) {
         this.remarks = remarks;
     }
-    
+
     public String getReceiverName() {
         return receiverName;
     }
@@ -236,51 +240,75 @@ public class LogisticsTrip {
         this.deliveryLocationAccuracy = deliveryLocationAccuracy;
     }
 
-	public Double getCurrentLatitude() {
-		return currentLatitude;
-	}
+    public Double getCurrentLatitude() {
+        return currentLatitude;
+    }
 
-	public void setCurrentLatitude(Double currentLatitude) {
-		this.currentLatitude = currentLatitude;
-	}
+    public void setCurrentLatitude(Double currentLatitude) {
+        this.currentLatitude = currentLatitude;
+    }
 
-	public Double getCurrentLongitude() {
-		return currentLongitude;
-	}
+    public Double getCurrentLongitude() {
+        return currentLongitude;
+    }
 
-	public void setCurrentLongitude(Double currentLongitude) {
-		this.currentLongitude = currentLongitude;
-	}
+    public void setCurrentLongitude(Double currentLongitude) {
+        this.currentLongitude = currentLongitude;
+    }
 
-	public Double getCurrentLocationAccuracy() {
-		return currentLocationAccuracy;
-	}
+    public Double getCurrentLocationAccuracy() {
+        return currentLocationAccuracy;
+    }
 
-	public void setCurrentLocationAccuracy(Double currentLocationAccuracy) {
-		this.currentLocationAccuracy = currentLocationAccuracy;
-	}
+    public void setCurrentLocationAccuracy(Double currentLocationAccuracy) {
+        this.currentLocationAccuracy = currentLocationAccuracy;
+    }
 
-	public LocalDateTime getCurrentLocationAt() {
-		return currentLocationAt;
-	}
+    public LocalDateTime getCurrentLocationAt() {
+        return currentLocationAt;
+    }
 
-	public void setCurrentLocationAt(LocalDateTime currentLocationAt) {
-		this.currentLocationAt = currentLocationAt;
-	}
+    public void setCurrentLocationAt(LocalDateTime currentLocationAt) {
+        this.currentLocationAt = currentLocationAt;
+    }
 
-	public String getCurrentLocationBy() {
-		return currentLocationBy;
-	}
+    public String getCurrentLocationBy() {
+        return currentLocationBy;
+    }
 
-	public void setCurrentLocationBy(String currentLocationBy) {
-		this.currentLocationBy = currentLocationBy;
-	}
+    public void setCurrentLocationBy(String currentLocationBy) {
+        this.currentLocationBy = currentLocationBy;
+    }
 
-	public LocalDateTime getQueuedAt() {
-		return queuedAt;
-	}
+    public LocalDateTime getQueuedAt() {
+        return queuedAt;
+    }
 
-	public void setQueuedAt(LocalDateTime queuedAt) {
-		this.queuedAt = queuedAt;
-	}
+    public void setQueuedAt(LocalDateTime queuedAt) {
+        this.queuedAt = queuedAt;
+    }
+
+    public Double getCurrentSpeed() {
+        return currentSpeed;
+    }
+
+    public void setCurrentSpeed(Double currentSpeed) {
+        this.currentSpeed = currentSpeed;
+    }
+
+    public Double getCurrentHeading() {
+        return currentHeading;
+    }
+
+    public void setCurrentHeading(Double currentHeading) {
+        this.currentHeading = currentHeading;
+    }
+
+    public Double getCurrentAltitude() {
+        return currentAltitude;
+    }
+
+    public void setCurrentAltitude(Double currentAltitude) {
+        this.currentAltitude = currentAltitude;
+    }
 }

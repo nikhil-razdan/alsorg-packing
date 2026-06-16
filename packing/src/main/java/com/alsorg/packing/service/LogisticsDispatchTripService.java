@@ -399,7 +399,10 @@ public class LogisticsDispatchTripService {
                         User user,
                         Double latitude,
                         Double longitude,
-                        Double accuracy) {
+                        Double accuracy,
+                        Double speed,
+                        Double heading,
+                        Double altitude) {
                 if (!currentUserService.isDriver(user)) {
                         throw new ResponseStatusException(
                                         HttpStatus.FORBIDDEN,
@@ -446,6 +449,9 @@ public class LogisticsDispatchTripService {
                 trip.setCurrentLatitude(latitude);
                 trip.setCurrentLongitude(longitude);
                 trip.setCurrentLocationAccuracy(accuracy);
+                trip.setCurrentSpeed(speed);
+                trip.setCurrentHeading(heading);
+                trip.setCurrentAltitude(altitude);
                 trip.setCurrentLocationAt(now);
                 trip.setCurrentLocationBy(user.getUsername());
                 trip.setUpdatedAt(now);
@@ -457,6 +463,9 @@ public class LogisticsDispatchTripService {
                 location.setLatitude(latitude);
                 location.setLongitude(longitude);
                 location.setAccuracy(accuracy);
+                location.setSpeed(speed);
+                location.setHeading(heading);
+                location.setAltitude(altitude);
                 location.setRecordedAt(now);
                 location.setRecordedBy(user.getUsername());
 
