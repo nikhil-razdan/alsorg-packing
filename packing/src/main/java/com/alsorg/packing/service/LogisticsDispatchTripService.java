@@ -1,4 +1,4 @@
-package com.alsorg.packing.service;
+        package com.alsorg.packing.service;
 
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.controller.dto.logistics.LogisticsTripItemResponse;
@@ -643,78 +643,68 @@ public class LogisticsDispatchTripService {
     }
 
     @Transactional(readOnly = true)
-    public DispatchTripPdfResult generateChallanPdfForTrip(
-            UUID tripId,
-            User user
-    ) {
-        if (tripId == null) {
+public DispatchTripPdfResult generateChallanPdfForTrip(
+        UUID tripId,
+        User user
+) {
+    if (tripId == null) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Trip id is required"
+        );
+    }
+
+    LogisticsTrip trip = tripRepository.findById(tripId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Trip not found"
+            ));
+
+    if (user != null && currentUserService.isDriver(user)) {
+        if (user.getDriverId() == null) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Trip id is required"
+                    HttpStatus.FORBIDDEN,
+                    "Driver profile not linked with this user"
             );
         }
 
-        LogisticsTrip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Trip not found"
-                ));
-
-        /*
-         * DRIVER can download only his own assigned trip challan.
-         * ADMIN / DISPATCH / LOGISTICS checks should be done in controller
-         * or CurrentUserService, but driver ownership is safest here too.
-         */
         if (
-                user != null
-                && "DRIVER".equalsIgnoreCase(String.valueOf(user.getRole()))
+                trip.getDriver() == null ||
+                trip.getDriver().getId() == null ||
+                !trip.getDriver().getId().equals(user.getDriverId())
         ) {
-            if (user.getDriverId() == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "Driver profile not linked with this user"
-                );
-            }
-
-            if (
-                    trip.getDriver() == null
-                    || trip.getDriver().getId() == null
-                    || !trip.getDriver().getId().equals(user.getDriverId())
-            ) {
-                throw new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "This challan does not belong to your driver profile"
-                );
-            }
-        }
-
-        String challanNo = safe(trip.getChallanNumber());
-
-        ChalaanPdfData data = new ChalaanPdfData();
-        data.setVoucherNo(challanNo);
-
-        if (trip.getDriver() != null) {
-            data.setDriverName(trip.getDriver().getName());
-        }
-
-        if (trip.getVehicle() != null) {
-            data.setVehicleNumber(trip.getVehicle().getVehicleNumber());
-        }
-
-        data.setOt("-");
-
-        List<LogisticsTripItem> tripItems =
-                tripItemRepository.findByTripId(tripId);
-
-        if (tripItems == null || tripItems.isEmpty()) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "No items found for this trip"
+                    HttpStatus.FORBIDDEN,
+                    "This challan does not belong to your driver profile"
             );
         }
+    }
 
-        List<ChalaanItem> chalaanItems = new ArrayList<>();
+    String challanNo = safe(trip.getChallanNumber());
 
+    ChalaanPdfData data = new ChalaanPdfData();
+    data.setVoucherNo(challanNo);
+
+    if (trip.getDriver() != null) {
+        data.setDriverName(trip.getDriver().getName());
+    }
+
+    if (trip.getVehicle() != null) {
+        data.setVehicleNumber(trip.getVehicle().getVehicleNumber());
+    }
+
+    data.setOt("-");
+
+    List<ChalaanItem> chalaanItems = new ArrayList<>();
+
+    /*
+     * First source:
+     * logistics_trip_items table
+     */
+    List<LogisticsTripItem> tripItems =
+            tripItemRepository.findByTripId(tripId);
+
+    if (tripItems != null && !tripItems.isEmpty()) {
         for (LogisticsTripItem tripItem : tripItems) {
             DispatchedItem dispatchedItem = null;
             PacketItem packetItem = null;
@@ -726,8 +716,8 @@ public class LogisticsDispatchTripService {
             }
 
             if (
-                    dispatchedItem != null
-                    && dispatchedItem.getPacketItemId() != null
+                    dispatchedItem != null &&
+                    dispatchedItem.getPacketItemId() != null
             ) {
                 packetItem = packetItemRepository
                         .findById(dispatchedItem.getPacketItemId())
@@ -753,23 +743,58 @@ public class LogisticsDispatchTripService {
                 chalaanItems.add(ci);
             }
         }
+    }
 
-        data.setItems(chalaanItems);
+    /*
+     * Fallback source:
+     * dispatched_items table by logisticsTripId.
+     * This protects older/current trips where logistics_trip_items
+     * lookup does not return rows for any reason.
+     */
+    if (chalaanItems.isEmpty()) {
+        List<DispatchedItem> dispatchedItems =
+                dispatchedItemRepository.findByLogisticsTripId(tripId);
 
-        if (!chalaanItems.isEmpty()) {
-            data.setAddress(
-                    safe(chalaanItems.get(0).getClientAddress())
-            );
+        if (dispatchedItems != null && !dispatchedItems.isEmpty()) {
+            for (DispatchedItem item : dispatchedItems) {
+                PacketItem packetItem = null;
+
+                if (item.getPacketItemId() != null) {
+                    packetItem = packetItemRepository
+                            .findById(item.getPacketItemId())
+                            .orElse(null);
+                }
+
+                chalaanItems.add(
+                        buildChalaanItem(item, packetItem)
+                );
+            }
         }
+    }
 
-        byte[] pdf = chalaanPdfService.generateChalaan(data);
-
-        return new DispatchTripPdfResult(
-                trip.getId(),
-                challanNo,
-                pdf
+    if (chalaanItems.isEmpty()) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "No items found for this trip challan"
         );
     }
+
+    data.setItems(chalaanItems);
+
+    if (!chalaanItems.isEmpty()) {
+        data.setAddress(
+                safe(chalaanItems.get(0).getClientAddress())
+        );
+    }
+
+    byte[] pdf = chalaanPdfService.generateChalaan(data);
+
+    return new DispatchTripPdfResult(
+            trip.getId(),
+            challanNo,
+            pdf
+    );
+}
     
     public List<LogisticsTrip> getAllTrips() {
         return tripRepository.findAllByOrderByTripStartDesc();

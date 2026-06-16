@@ -21,6 +21,17 @@ function cleanFilename(value) {
     : `${text}.pdf`;
 }
 
+async function readErrorBody(uri) {
+  try {
+    const text =
+      await FileSystem.readAsStringAsync(uri);
+
+    return text;
+  } catch (e) {
+    return "";
+  }
+}
+
 async function assertPdfFile(uri) {
   const base64 =
     await FileSystem.readAsStringAsync(
@@ -32,13 +43,12 @@ async function assertPdfFile(uri) {
       }
     );
 
-  /*
-   * PDF files start with "%PDF".
-   * In base64, "%PDF" starts as "JVBER".
-   */
   if (!String(base64 || "").startsWith("JVBER")) {
+    const text = await readErrorBody(uri);
+
     throw new Error(
-      "Downloaded file is not a valid PDF. Backend may have returned an error instead of challan PDF."
+      text ||
+        "Downloaded file is not a valid PDF. Backend returned an error instead of challan PDF."
     );
   }
 }
@@ -48,7 +58,22 @@ export async function downloadChallanPdf(
   challanNo
 ) {
   if (!tripId) {
-    throw new Error("Trip id missing");
+    throw new Error(
+      "Trip id missing. Mobile is not passing trip.id correctly."
+    );
+  }
+
+  const cleanTripId =
+    String(tripId).trim();
+
+  if (
+    cleanTripId === "undefined" ||
+    cleanTripId === "null" ||
+    cleanTripId.length < 20
+  ) {
+    throw new Error(
+      `Invalid trip id sent from mobile: ${cleanTripId}`
+    );
   }
 
   const token =
@@ -56,11 +81,11 @@ export async function downloadChallanPdf(
 
   const filename =
     cleanFilename(
-      challanNo || `challan-${tripId}`
+      challanNo || `challan-${cleanTripId}`
     );
 
   const url =
-    `${API_BASE_URL}/api/logistics/trips/${tripId}/challan`;
+    `${API_BASE_URL}/api/logistics/trips/${cleanTripId}/challan`;
 
   const fileUri =
     FileSystem.documentDirectory + filename;
@@ -86,8 +111,12 @@ export async function downloadChallanPdf(
     result.status &&
     result.status >= 400
   ) {
+    const text =
+      await readErrorBody(result.uri);
+
     throw new Error(
-      `Challan download failed. Backend returned ${result.status}.`
+      text ||
+        `Challan download failed. Backend returned ${result.status}. URL: ${url}`
     );
   }
 

@@ -82,4 +82,6 @@ public interface DispatchedItemRepository extends JpaRepository<DispatchedItem, 
     	        @Param("statuses") List<ItemDispatchStatus> statuses,
     	        @Param("plantCodes") Collection<String> plantCodes
     	);
+
+        List<DispatchedItem> findByLogisticsTripId(UUID logisticsTripId);
 }

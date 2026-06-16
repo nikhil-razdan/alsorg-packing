@@ -14,6 +14,10 @@ import {
 } from "react-native";
 
 import {
+    safeOpenChallanPdf,
+} from "../api/challanDownloadApi";
+
+import {
     useFocusEffect,
 } from "@react-navigation/native";
 
@@ -211,8 +215,21 @@ export default function TripItemScreen({
                                 : "—"
                         }
                     />
-                </View>
 
+                </View>
+                <TouchableOpacity
+                    style={styles.openLocationBtn}
+                    onPress={() =>
+                        safeOpenChallanPdf(
+                            trip?.id,
+                            trip?.challanNumber
+                        )
+                    }
+                >
+                    <Text style={styles.openLocationText}>
+                        Open Challan
+                    </Text>
+                </TouchableOpacity>
                 {status === "DELIVERED" && (
                     <View style={styles.podBox}>
                         <Text style={styles.podTitle}>
