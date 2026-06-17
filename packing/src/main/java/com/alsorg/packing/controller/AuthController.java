@@ -56,23 +56,34 @@ public class AuthController {
                     .body(Map.of("message", "Invalid credentials"));
         }
 
-        return ok(user.getUsername(), user.getRole(), session);
+        return ok(user, session);
     }
 
     /* ===================== SUCCESS LOGIN ===================== */
 
-    private ResponseEntity<?> ok(String username, String role, HttpSession session) {
+    private ResponseEntity<?> ok(User user, HttpSession session) {
+
+        String username = user.getUsername();
+        String role = user.getRole();
+
+        boolean warehouseAccess =
+                user.isWarehouseAccess()
+                        || "ADMIN".equalsIgnoreCase(role)
+                        || "WAREHOUSE".equalsIgnoreCase(role);
 
         // Session for Safari/iOS compatibility
         session.setAttribute("USER", username);
         session.setAttribute("ROLE", role);
+        session.setAttribute("WAREHOUSE_ACCESS", warehouseAccess);
 
         // JWT token for API usage
         String token = JwtUtil.generateToken(username, role);
 
         return ResponseEntity.ok(Map.of(
                 "token", token,
-                "role", role
+                "username", username,
+                "role", role,
+                "warehouseAccess", warehouseAccess
         ));
     }
 
@@ -84,28 +95,53 @@ public class AuthController {
             HttpSession session
     ) {
 
-        Object user = session.getAttribute("USER");
-        Object role = session.getAttribute("ROLE");
+        String username = null;
 
-        if (user != null && role != null) {
-            return ResponseEntity.ok(Map.of(
-                    "username", user,
-                    "role", role
-            ));
+        Object sessionUser = session.getAttribute("USER");
+
+        if (sessionUser != null) {
+            username = String.valueOf(sessionUser);
         }
 
         // JWT fallback
-        if (auth != null && auth.startsWith("Bearer ")) {
+        if ((username == null || username.isBlank())
+                && auth != null
+                && auth.startsWith("Bearer ")) {
 
-            String token = auth.replace("Bearer ", "");
-
-            return ResponseEntity.ok(Map.of(
-                    "username", JwtUtil.getUsername(token),
-                    "role", JwtUtil.getRole(token)
-            ));
+            String token = auth.replace("Bearer ", "").trim();
+            username = JwtUtil.getUsername(token);
         }
 
-        return ResponseEntity.status(401).build();
+        if (username == null || username.isBlank()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        Optional<User> optionalUser = userRepository.findByUsername(username);
+
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        User user = optionalUser.get();
+
+        String role = user.getRole();
+
+        boolean warehouseAccess =
+                user.isWarehouseAccess()
+                        || "ADMIN".equalsIgnoreCase(role)
+                        || "WAREHOUSE".equalsIgnoreCase(role);
+
+        // Keep session updated with latest DB values
+        session.setAttribute("USER", user.getUsername());
+        session.setAttribute("ROLE", role);
+        session.setAttribute("WAREHOUSE_ACCESS", warehouseAccess);
+
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(),
+                "username", user.getUsername(),
+                "role", role,
+                "warehouseAccess", warehouseAccess
+        ));
     }
 
     /* ===================== LOGOUT ===================== */
