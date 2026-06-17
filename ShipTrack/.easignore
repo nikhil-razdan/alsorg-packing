@@ -1,0 +1,8 @@
+/android/
+/ios/
+android-local-backup/
+android-local-backup-1/
+android-local-backup-old/
+ios-local-backup/
+android/local.properties
+local.properties

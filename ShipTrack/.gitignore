@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+/android/
+/ios/
+android/local.properties
+local.properties
+android-local-backup/
+android-local-backup-1/
+android-local-backup-old/
+ios-local-backup/
