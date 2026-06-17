@@ -48,7 +48,7 @@ public class WarehouseController {
 
                 return service.getFloorItems(
                                 currentUserService.allowedPlants(user),
-                                currentUserService.isAdmin(user));
+                                currentUserService.canViewAllWarehouseData(user));
         }
 
         @GetMapping("/items")
@@ -60,7 +60,7 @@ public class WarehouseController {
 
                 return service.getWarehouseItems(
                                 currentUserService.allowedPlants(user),
-                                currentUserService.isAdmin(user));
+                                currentUserService.canViewAllWarehouseData(user));
         }
 
         @PostMapping("/{zohoItemId}/store")

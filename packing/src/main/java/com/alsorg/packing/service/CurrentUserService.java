@@ -160,7 +160,12 @@ public class CurrentUserService {
 
     public boolean canAccessWarehouse(User user) {
         return isAdmin(user)
+                || isDispatch(user)
                 || isWarehouse(user)
                 || Boolean.TRUE.equals(user.isWarehouseAccess());
+    }
+
+    public boolean canViewAllWarehouseData(User user) {
+        return isAdmin(user) || isDispatch(user);
     }
 }

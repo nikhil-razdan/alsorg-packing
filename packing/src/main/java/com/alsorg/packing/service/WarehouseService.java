@@ -35,9 +35,9 @@ public class WarehouseService {
 
     public List<DispatchedItem> getFloorItems(
             java.util.Set<String> allowedPlants,
-            boolean admin
+            boolean viewallWarehouseData
     ) {
-        if (admin) {
+        if (viewallWarehouseData) {
             return repo.findByStatus(ItemDispatchStatus.ON_FLOOR);
         }
 
@@ -49,7 +49,7 @@ public class WarehouseService {
 
     public List<DispatchedItem> getWarehouseItems(
             java.util.Set<String> allowedPlants,
-            boolean admin
+            boolean viewallWarehouseData
     ) {
         List<ItemDispatchStatus> statuses = List.of(
                 ItemDispatchStatus.WAREHOUSE_REQUESTED,
@@ -57,7 +57,7 @@ public class WarehouseService {
                 ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
         );
 
-        if (admin) {
+        if (viewallWarehouseData) {
             return repo.findByStatusIn(statuses);
         }
 
