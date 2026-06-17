@@ -431,6 +431,37 @@ function WarehousePage() {
 		return Boolean(getAssignmentDraft(row));
 	};
 
+	const startAssignmentEdit = (row) => {
+	if (!isAdmin) {
+		return;
+	}
+
+	const id = getWarehouseRowId(row);
+
+	if (!id) {
+		alert("Row ID missing. Cannot edit location.");
+		return;
+	}
+
+	setAssignmentDrafts((prev) => ({
+		...prev,
+		[id]: {
+			plantCode: row.plantCode || "",
+			currentLocationCode:
+				row.currentLocationCode && row.currentLocationCode !== "-"
+					? row.currentLocationCode
+					: row.location && row.location !== "-"
+						? row.location
+						: "",
+			warehouseCode:
+				row.warehouseCode && row.warehouseCode !== "-"
+					? row.warehouseCode
+					: "",
+			fgZoneCode: row.fgZoneCode || "",
+		},
+	}));
+};
+
 	const updateAssignmentDraft = (row, key, value) => {
 		const id = getWarehouseRowId(row);
 
