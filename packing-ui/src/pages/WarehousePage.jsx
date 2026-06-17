@@ -31,7 +31,31 @@ function WarehousePage() {
 	const [bulkGatePassNumber, setBulkGatePassNumber] = useState("");
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(20);
+	const isAdmin = role === "ADMIN";
+
+	const [plants, setPlants] = useState([]);
+	const [assignmentDrafts, setAssignmentDrafts] = useState({});
+	const [savingAssignmentId, setSavingAssignmentId] = useState(null);
 	/* ===================== FETCH ===================== */
+
+	const fetchPlants = async () => {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/plants`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+
+			if (!res.ok) {
+				throw new Error("Failed to fetch plants");
+			}
+
+			const data = await res.json();
+
+			setPlants(Array.isArray(data) ? data : []);
+		} catch (err) {
+			console.error("Failed to load plants", err);
+			setPlants([]);
+		}
+	};
 
 	const fetchItems = async () => {
 		if (!canOpenWarehouse) {
@@ -78,8 +102,14 @@ function WarehousePage() {
 					description: item.description,
 					clientName: item.clientName,
 
+					plantCode: item.plantCode,
+					packedAreaCode: item.packedAreaCode,
+					currentLocationCode: item.currentLocationCode,
+					fgAreaCode: item.fgAreaCode,
+					fgZoneCode: item.fgZoneCode,
+
 					status: item.status,
-					location: item.location || "-",
+					location: item.currentLocationCode || item.location || "-",
 					factoryFloor: item.floor,
 					warehouseCode: item.warehouseCode,
 					gatePassNumber: item.gatePassNumber,
@@ -100,6 +130,7 @@ function WarehousePage() {
 			return;
 		}
 
+		fetchPlants();
 		fetchItems();
 	}, []);
 
@@ -111,7 +142,9 @@ function WarehousePage() {
 			"pdNo",
 			"drawingNo",
 			"clientName",
+			"plantCode",
 			"location",
+			"currentLocationCode",
 			"status",
 			"warehouseCode",
 		];
@@ -308,6 +341,178 @@ function WarehousePage() {
 	const getWarehouseStatus = (row) =>
 		row.status || row.movementStatus || "";
 
+	const getPlantLabel = (plantCode) => {
+		if (!plantCode) return "Not Assigned";
+
+		const plant = plants.find((p) => p.plantCode === plantCode);
+
+		if (!plant) return plantCode;
+
+		return plant.plantName
+			? `${plant.plantCode} | ${plant.plantName}`
+			: plant.plantCode;
+	};
+
+	const getPlantConfig = (plantCode) => {
+		return plants.find((p) => p.plantCode === plantCode) || null;
+	};
+
+	const getLocationOptions = (plantCode) => {
+		const plant = getPlantConfig(plantCode);
+
+		if (!plant) return [];
+
+		const options = [];
+
+		if (plant.packedAreaCode) {
+			options.push(plant.packedAreaCode);
+		}
+
+		if (plant.fgAreaCode) {
+			options.push(plant.fgAreaCode);
+		}
+
+		if (Array.isArray(plant.fgZones)) {
+			plant.fgZones.forEach((zone) => {
+				if (plant.fgAreaCode && zone) {
+					options.push(`${plant.fgAreaCode}-${zone}`);
+				}
+			});
+		}
+
+		if (Array.isArray(plant.warehouseCodes)) {
+			plant.warehouseCodes.forEach((warehouse) => {
+				if (warehouse) {
+					options.push(warehouse);
+				}
+			});
+		}
+
+		return Array.from(new Set(options));
+	};
+
+	const getWarehouseOptions = (plantCode) => {
+		const plant = getPlantConfig(plantCode);
+
+		if (!plant || !Array.isArray(plant.warehouseCodes)) {
+			return [];
+		}
+
+		return plant.warehouseCodes;
+	};
+
+	const getAssignmentDraft = (row) => {
+		const id = getWarehouseRowId(row);
+		return assignmentDrafts[id] || null;
+	};
+
+	const isAssignmentEditing = (row) => {
+		return Boolean(getAssignmentDraft(row));
+	};
+
+	const startAssignmentEdit = (row) => {
+		if (!isAdmin) return;
+
+		const id = getWarehouseRowId(row);
+
+		setAssignmentDrafts((prev) => ({
+			...prev,
+			[id]: {
+				plantCode: row.plantCode || "",
+				currentLocationCode:
+					row.currentLocationCode ||
+					row.location ||
+					"",
+				warehouseCode: row.warehouseCode || "",
+				fgZoneCode: row.fgZoneCode || "",
+			},
+		}));
+	};
+
+	const cancelAssignmentEdit = (row) => {
+		const id = getWarehouseRowId(row);
+
+		setAssignmentDrafts((prev) => {
+			const copy = { ...prev };
+			delete copy[id];
+			return copy;
+		});
+	};
+
+	const updateAssignmentDraft = (row, key, value) => {
+		const id = getWarehouseRowId(row);
+
+		setAssignmentDrafts((prev) => {
+			const existing = prev[id] || {};
+
+			const next = {
+				...existing,
+				[key]: value,
+			};
+
+			if (key === "plantCode") {
+				next.currentLocationCode = "";
+				next.warehouseCode = "";
+				next.fgZoneCode = "";
+			}
+
+			if (key === "warehouseCode" && value) {
+				next.currentLocationCode = value;
+			}
+
+			return {
+				...prev,
+				[id]: next,
+			};
+		});
+	};
+
+	const saveAssignment = async (row) => {
+		const id = getWarehouseRowId(row);
+		const draft = assignmentDrafts[id];
+
+		if (!draft) return;
+
+		if (!draft.plantCode) {
+			alert("Please select Plant");
+			return;
+		}
+
+		try {
+			setSavingAssignmentId(id);
+
+			const res = await fetch(
+				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/plant-location`,
+				{
+					method: "PATCH",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						plantCode: draft.plantCode,
+						currentLocationCode: draft.currentLocationCode || null,
+						fgZoneCode: draft.fgZoneCode || null,
+						warehouseCode: draft.warehouseCode || null,
+					}),
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Location assignment failed");
+			}
+
+			cancelAssignmentEdit(row);
+			await fetchItems();
+		} catch (err) {
+			console.error("Location assignment failed", err);
+			alert(err.message || "Location assignment failed");
+		} finally {
+			setSavingAssignmentId(null);
+		}
+	};
+
 	const filteredRows = useMemo(() => {
 		return rows.filter((r) => {
 			const searchValue = search.trim().toLowerCase();
@@ -321,7 +526,9 @@ function WarehousePage() {
 				!(r.sku || "").toLowerCase().includes(searchValue) &&
 				!(r.drawingNo || "").toLowerCase().includes(searchValue) &&
 				!(r.description || "").toLowerCase().includes(searchValue) &&
-				!(r.warehouseCode || "").toLowerCase().includes(searchValue)
+				!(r.warehouseCode || "").toLowerCase().includes(searchValue) &&
+				!(r.plantCode || "").toLowerCase().includes(searchValue) &&
+				!(r.currentLocationCode || "").toLowerCase().includes(searchValue)
 			) {
 				return false;
 			}
@@ -626,17 +833,95 @@ function WarehousePage() {
 			),
 		},
 		{
+			field: "plantCode",
+			headerName: "Plant",
+			width: 150,
+
+			renderHeader: () => <span>Plant</span>,
+
+			renderCell: (params) => {
+				const row = params.row;
+				const draft = getAssignmentDraft(row);
+
+				if (isAdmin && draft) {
+					return (
+						<TextField
+							select
+							size="small"
+							value={draft.plantCode || ""}
+							onChange={(e) =>
+								updateAssignmentDraft(row, "plantCode", e.target.value)
+							}
+							sx={{
+								width: 135,
+								...compactActionFieldSx,
+							}}
+						>
+							{plants.map((plant) => (
+								<MenuItem
+									key={plant.plantCode}
+									value={plant.plantCode}
+								>
+									{plant.plantCode}
+								</MenuItem>
+							))}
+						</TextField>
+					);
+				}
+
+				return (
+					<span style={simpleMutedText} title={getPlantLabel(row.plantCode)}>
+						{row.plantCode || "—"}
+					</span>
+				);
+			},
+		},
+		{
 			field: "location",
 			headerName: "Location",
-			width: 160,
+			width: 170,
 
 			renderHeader: () => <span>Location</span>,
 
-			renderCell: (params) => (
-				<span style={simpleMutedText} title={params.value}>
-					{params.value || "-"}
-				</span>
-			),
+			renderCell: (params) => {
+				const row = params.row;
+				const draft = getAssignmentDraft(row);
+				const plantCode = draft?.plantCode || row.plantCode;
+				const locationOptions = getLocationOptions(plantCode);
+
+				if (isAdmin && draft) {
+					return (
+						<TextField
+							select
+							size="small"
+							value={draft.currentLocationCode || ""}
+							onChange={(e) =>
+								updateAssignmentDraft(row, "currentLocationCode", e.target.value)
+							}
+							sx={{
+								width: 155,
+								...compactActionFieldSx,
+							}}
+							disabled={!draft.plantCode}
+						>
+							{locationOptions.map((location) => (
+								<MenuItem
+									key={location}
+									value={location}
+								>
+									{location}
+								</MenuItem>
+							))}
+						</TextField>
+					);
+				}
+
+				return (
+					<span style={simpleMutedText} title={row.currentLocationCode || row.location}>
+						{row.currentLocationCode || row.location || "-"}
+					</span>
+				);
+			},
 		},
 		{
 			field: "status",
@@ -794,7 +1079,6 @@ function WarehousePage() {
 				</span>
 			),
 		},
-
 		{
 			field: "warehouseCode",
 			headerName: "Warehouse",
@@ -802,13 +1086,50 @@ function WarehousePage() {
 
 			renderHeader: () => <span>Warehouse</span>,
 
-			renderCell: (params) => (
-				<span style={simpleMutedText} title={params.row.warehouseCode}>
-					{params.row.warehouseCode || "—"}
-				</span>
-			),
-		},
+			renderCell: (params) => {
+				const row = params.row;
+				const draft = getAssignmentDraft(row);
+				const plantCode = draft?.plantCode || row.plantCode;
+				const warehouseOptions = getWarehouseOptions(plantCode);
 
+				if (isAdmin && draft) {
+					return (
+						<TextField
+							select
+							size="small"
+							value={draft.warehouseCode || ""}
+							onChange={(e) =>
+								updateAssignmentDraft(row, "warehouseCode", e.target.value)
+							}
+							sx={{
+								width: 165,
+								...compactActionFieldSx,
+							}}
+							disabled={!draft.plantCode}
+						>
+							<MenuItem value="">
+								None
+							</MenuItem>
+
+							{warehouseOptions.map((warehouse) => (
+								<MenuItem
+									key={warehouse}
+									value={warehouse}
+								>
+									{warehouse}
+								</MenuItem>
+							))}
+						</TextField>
+					);
+				}
+
+				return (
+					<span style={simpleMutedText} title={row.warehouseCode}>
+						{row.warehouseCode || "—"}
+					</span>
+				);
+			},
+		},
 		{
 			field: "actions",
 			headerName: "Action",
@@ -828,6 +1149,32 @@ function WarehousePage() {
 			renderCell: (params) => {
 				const row = params.row;
 
+				const assignmentEditing = isAssignmentEditing(row);
+				const rowId = getWarehouseRowId(row);
+
+				if (isAdmin && assignmentEditing) {
+					return (
+						<Box sx={actionCell}>
+							<Button
+								size="small"
+								disabled={savingAssignmentId === rowId}
+								onClick={() => saveAssignment(row)}
+								sx={actionSuccess}
+							>
+								{savingAssignmentId === rowId ? "Saving..." : "Save"}
+							</Button>
+
+							<Button
+								size="small"
+								disabled={savingAssignmentId === rowId}
+								onClick={() => cancelAssignmentEdit(row)}
+								sx={actionDanger}
+							>
+								Cancel
+							</Button>
+						</Box>
+					);
+				}
 				// WAREHOUSE REQUESTED
 				if (row.status === "WAREHOUSE_REQUESTED") {
 					// PACKING VIEW
@@ -962,6 +1309,17 @@ function WarehousePage() {
 
 					return (
 						<Chip label="Awaiting Admin Approval" size="small" sx={pendingChip} />
+					);
+				}
+				if (isAdmin) {
+					return (
+						<Button
+							size="small"
+							onClick={() => startAssignmentEdit(row)}
+							sx={actionInfo}
+						>
+							Edit Location
+						</Button>
 					);
 				}
 				return null;
@@ -1197,12 +1555,54 @@ function WarehousePage() {
 							size="small"
 							value={importMode}
 							onChange={(e) => setImportMode(e.target.value)}
-							sx={{
-								width: 190,
-								...compactFieldSx,
+							sx={importModeFieldSx}
+							SelectProps={{
+								displayEmpty: true,
+								renderValue: (selected) => {
+									if (!selected) {
+										return (
+											<Box sx={importModePlaceholderSx}>
+												<span>⬇️</span>
+												<span>Select Import Mode</span>
+											</Box>
+										);
+									}
+
+									return (
+										<Box sx={importModeValueSx}>
+											<span>📦</span>
+											<span>Create Inventory</span>
+										</Box>
+									);
+								},
+								MenuProps: {
+									PaperProps: {
+										sx: importModeMenuPaperSx,
+									},
+								},
 							}}
 						>
-							<MenuItem value="CREATE">Create Inventory</MenuItem>
+							<MenuItem value="" disabled sx={importModeDisabledOptionSx}>
+								Select Import Mode
+							</MenuItem>
+
+							<MenuItem value="CREATE" sx={importModeOptionSx}>
+								<Box sx={importModeOptionInnerSx}>
+									<Box sx={importModeOptionIconSx}>
+										📦
+									</Box>
+
+									<Box>
+										<Box sx={importModeOptionTitleSx}>
+											Create Inventory
+										</Box>
+
+										<Box sx={importModeOptionSubSx}>
+											Upload new warehouse inventory records
+										</Box>
+									</Box>
+								</Box>
+							</MenuItem>
 						</TextField>
 
 						<Button
@@ -1446,6 +1846,7 @@ function WarehousePage() {
 								<div>DWG No.</div>
 								<div>Description</div>
 								<div>Client</div>
+								<div>Plant</div>
 								<div>Location</div>
 								<div>Movement Status</div>
 								<div>Factory Floor</div>
@@ -1504,16 +1905,19 @@ function WarehousePage() {
 
 										<div>
 											{columns[7].renderCell({
+												value: row.plantCode,
+												row,
+											})}
+										</div>
+
+										<div>
+											{columns[8].renderCell({
 												value: row.location,
 												row,
 											})}
 										</div>
 
 										<div style={movementStatusCellWrap}>
-											{columns[8].renderCell({ row })}
-										</div>
-
-										<div>
 											{columns[9].renderCell({ row })}
 										</div>
 
@@ -1525,6 +1929,9 @@ function WarehousePage() {
 											{columns[11].renderCell({ row })}
 										</div>
 
+										<div>
+											{columns[12].renderCell({ row })}
+										</div>
 									</div>
 								))}
 							</div>
@@ -2013,7 +2420,7 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 const warehouseGrid =
-	"52px 220px 120px 85px 85px 150px 145px 90px 300px 110px 115px 440px";
+	"52px 220px 120px 85px 85px 150px 145px 140px 170px 300px 110px 180px 520px";
 
 const content = {
 	padding: "18px 24px",
@@ -2341,6 +2748,143 @@ const compactFieldSx = {
 		color: "#fff",
 		fontSize: 12,
 	},
+};
+
+const importModeFieldSx = {
+	width: 230,
+
+	"& .MuiOutlinedInput-root": {
+		height: 38,
+		borderRadius: "14px",
+		background:
+			"linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025))",
+		color: "#fff",
+		fontSize: 12,
+		border: "1px solid rgba(59,130,246,.16)",
+		boxShadow:
+			"inset 0 1px 0 rgba(255,255,255,.05), 0 8px 22px rgba(2,6,23,.20)",
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.08)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(96,165,250,.45)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#3b82f6",
+			boxShadow: "0 0 0 3px rgba(59,130,246,.14)",
+		},
+	},
+
+	"& .MuiSelect-select": {
+		display: "flex",
+		alignItems: "center",
+		color: "#fff",
+		fontWeight: 800,
+		fontSize: 12,
+		paddingTop: "8px",
+		paddingBottom: "8px",
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#60a5fa",
+	},
+};
+
+const importModePlaceholderSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	color: "#94a3b8",
+	fontWeight: 800,
+	fontSize: 12,
+};
+
+const importModeValueSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	color: "#e0f2fe",
+	fontWeight: 900,
+	fontSize: 12,
+};
+
+const importModeMenuPaperSx = {
+	mt: 1,
+	borderRadius: "18px",
+	background:
+		"linear-gradient(180deg,#0f172a,#111827)",
+	color: "#fff",
+	border: "1px solid rgba(255,255,255,.08)",
+	boxShadow: "0 24px 70px rgba(0,0,0,.55)",
+	overflow: "hidden",
+
+	"& .MuiMenuItem-root": {
+		color: "#fff",
+	},
+};
+
+const importModeDisabledOptionSx = {
+	fontSize: 12,
+	fontWeight: 800,
+	color: "#64748b !important",
+	opacity: "1 !important",
+};
+
+const importModeOptionSx = {
+	px: 1.4,
+	py: 1.2,
+	borderRadius: "14px",
+	mx: 1,
+	my: 0.6,
+
+	"&:hover": {
+		background: "rgba(59,130,246,.14)",
+	},
+
+	"&.Mui-selected": {
+		background: "rgba(59,130,246,.18) !important",
+	},
+
+	"&.Mui-selected:hover": {
+		background: "rgba(59,130,246,.24) !important",
+	},
+};
+
+const importModeOptionInnerSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.3,
+	width: "100%",
+};
+
+const importModeOptionIconSx = {
+	width: 34,
+	height: 34,
+	borderRadius: "12px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	background:
+		"linear-gradient(135deg, rgba(37,99,235,.28), rgba(59,130,246,.16))",
+	border: "1px solid rgba(96,165,250,.18)",
+	boxShadow: "0 8px 20px rgba(37,99,235,.18)",
+};
+
+const importModeOptionTitleSx = {
+	color: "#fff",
+	fontSize: 13,
+	fontWeight: 900,
+	lineHeight: 1.2,
+};
+
+const importModeOptionSubSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 700,
+	mt: 0.3,
 };
 
 const actionCell = {
