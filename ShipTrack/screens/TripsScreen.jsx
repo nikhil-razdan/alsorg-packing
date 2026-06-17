@@ -94,9 +94,9 @@ export default function TripsScreen({
       Alert.alert(
         "Trips failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load trips"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to load trips"
       );
     } finally {
       setLoading(false);
@@ -119,9 +119,9 @@ export default function TripsScreen({
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh trips"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to refresh trips"
       );
     } finally {
       setRefreshing(false);
@@ -329,9 +329,9 @@ function TripCard({
       Alert.alert(
         "Start failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to start trip"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to start trip"
       );
     }
   };
@@ -352,9 +352,9 @@ function TripCard({
       Alert.alert(
         "Tracking failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to start live tracking"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to start live tracking"
       );
     }
   };
@@ -403,8 +403,8 @@ function TripCard({
           value={
             trip.tripStart
               ? new Date(
-                  trip.tripStart
-                ).toLocaleString()
+                trip.tripStart
+              ).toLocaleString()
               : "—"
           }
         />
@@ -414,8 +414,8 @@ function TripCard({
           value={
             trip.tripEnd
               ? new Date(
-                  trip.tripEnd
-                ).toLocaleString()
+                trip.tripEnd
+              ).toLocaleString()
               : "—"
           }
         />
@@ -492,20 +492,21 @@ function TripCard({
           </Text>
         </TouchableOpacity>
 
-        {isActive && hasLiveLocation ? (
+        {isActive ? (
           <TouchableOpacity
             style={styles.locationBtn}
             onPress={() =>
-              safeOpenCoordinatesInMaps(
-                trip.currentLatitude,
-                trip.currentLongitude,
-                trip.challanNumber ||
-                  "Live Trip Location"
+              navigation.navigate(
+                "LiveTripMap",
+                {
+                  trip,
+                  tripId: trip.id,
+                }
               )
             }
           >
             <Text style={styles.locationText}>
-              Live Location
+              Live Map
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -522,7 +523,7 @@ function TripCard({
         ) : null}
 
         {isDelivered &&
-        hasDeliveryLocation ? (
+          hasDeliveryLocation ? (
           <TouchableOpacity
             style={styles.locationBtn}
             onPress={() =>
@@ -530,7 +531,7 @@ function TripCard({
                 trip.deliveryLatitude,
                 trip.deliveryLongitude,
                 trip.challanNumber ||
-                  "Delivery Location"
+                "Delivery Location"
               )
             }
           >

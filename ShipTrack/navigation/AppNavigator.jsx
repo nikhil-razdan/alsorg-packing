@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 
+import LiveTripMapScreen from "../screens/LiveTripMapScreen";
+
 import {
   useAuth,
 } from "../auth/AuthContext";
@@ -108,7 +110,17 @@ export default function AppNavigator() {
                 headerTintColor: "#fff",
               }}
             />
-
+            <Stack.Screen
+              name="LiveTripMap"
+              component={LiveTripMapScreen}
+              options={{
+                title: "Live Location",
+                headerStyle: {
+                  backgroundColor: "#020617",
+                },
+                headerTintColor: "#fff"
+              }}
+            />
             <Stack.Screen
               name="StartTrip"
               component={StartTripScreen}

@@ -1012,6 +1012,18 @@ const readyStatusChip = {
 		"1px solid rgba(59,130,246,.18)",
 };
 
+const queuedStatusChip = {
+	fontWeight: 700,
+
+	color: "#fcd34d",
+
+	background:
+		"rgba(245,158,11,.13)",
+
+	border:
+		"1px solid rgba(245,158,11,.22)",
+};
+
 const dispatchedStatusChip = {
 	fontWeight: 700,
 
@@ -2775,6 +2787,11 @@ function DispatchedItemsPage() {
 				let label = row.status || "—";
 				let sx = pendingStatusChip;
 
+				if (row.status === "QUEUED") {
+					label = "QUEUED";
+					sx = queuedStatusChip;
+				}
+
 				if (row.status === "READY") {
 					if (inFg) {
 						label = "PACKED - FG";
@@ -3720,6 +3737,7 @@ function DispatchedItemsPage() {
 						<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
 						<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
 						<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
+						<MenuItem value="QUEUED">⏳ Queued</MenuItem>
 						<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
 						<MenuItem value="OUT_FOR_DELIVERY">🚚 Out For Delivery</MenuItem>
 						<MenuItem value="DELIVERED">✅ Delivered</MenuItem>
