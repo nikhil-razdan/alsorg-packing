@@ -1,6 +1,5 @@
 import React, {
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -13,10 +12,7 @@ import {
   Alert,
 } from "react-native";
 
-import MapView, {
-  Marker,
-  PROVIDER_GOOGLE,
-} from "react-native-maps";
+import MapLibreGL from "@maplibre/maplibre-react-native";
 
 import {
   fetchTrips,
@@ -26,43 +22,10 @@ import {
   safeOpenCoordinatesInMaps,
 } from "../api/locationApi";
 
-function normalizeStatus(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase();
-}
+MapLibreGL.setAccessToken(null);
 
-function hasCoords(trip) {
-  return (
-    Number.isFinite(Number(trip?.currentLatitude)) &&
-    Number.isFinite(Number(trip?.currentLongitude))
-  );
-}
-
-function getRegion(trip) {
-  const latitude =
-    Number(trip.currentLatitude);
-
-  const longitude =
-    Number(trip.currentLongitude);
-
-  return {
-    latitude,
-    longitude,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  };
-}
-
-function formatLastUpdated(value) {
-  if (!value) return "Not updated yet";
-
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
+const normalizeStatus = (value) =>
+  String(value || "").trim().toUpperCase();
 
 export default function LiveTripMapScreen({
   route,
@@ -71,243 +34,212 @@ export default function LiveTripMapScreen({
   const initialTrip =
     route?.params?.trip || null;
 
-  const tripId =
-    initialTrip?.id ||
-    route?.params?.tripId;
-
   const [trip, setTrip] =
     useState(initialTrip);
 
   const [loading, setLoading] =
     useState(false);
 
-  const mapRef =
+  const intervalRef =
     useRef(null);
 
-  const region =
-    useMemo(() => {
-      if (!hasCoords(trip)) return null;
+  const lat =
+    Number(trip?.currentLatitude);
 
-      return getRegion(trip);
-    }, [trip]);
+  const lng =
+    Number(trip?.currentLongitude);
 
-  const loadTrip = async (
-    silent = false
-  ) => {
-    if (!tripId) return;
+  const hasLocation =
+    Number.isFinite(lat) &&
+    Number.isFinite(lng);
+
+  const isActive =
+    normalizeStatus(trip?.status) ===
+    "OUT_FOR_DELIVERY";
+
+  const loadFreshTrip = async () => {
+    if (!initialTrip?.id) return;
 
     try {
-      if (!silent) {
-        setLoading(true);
-      }
+      setLoading(true);
 
       const trips =
         await fetchTrips();
 
-      const found =
+      const fresh =
         Array.isArray(trips)
           ? trips.find(
               (x) =>
-                String(x.id) === String(tripId)
+                String(x.id) ===
+                String(initialTrip.id)
             )
           : null;
 
-      if (found) {
-        setTrip(found);
-
-        if (hasCoords(found) && mapRef.current) {
-          mapRef.current.animateToRegion(
-            getRegion(found),
-            700
-          );
-        }
+      if (fresh) {
+        setTrip(fresh);
       }
     } catch (e) {
-      if (!silent) {
-        Alert.alert(
-          "Location failed",
-          e?.response?.data?.message ||
-            e?.response?.data ||
-            e?.message ||
-            "Unable to load live location"
-        );
-      }
+      console.log(
+        "Live map refresh failed",
+        e?.message
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadTrip(false);
+    loadFreshTrip();
 
-    const timer =
-      setInterval(() => {
-        loadTrip(true);
-      }, 5000);
+    intervalRef.current =
+      setInterval(
+        loadFreshTrip,
+        5000
+      );
 
     return () => {
-      clearInterval(timer);
+      if (intervalRef.current) {
+        clearInterval(
+          intervalRef.current
+        );
+      }
     };
-  }, [tripId]);
+  }, []);
 
-  const driverName =
-    trip?.driver?.name ||
-    trip?.driverName ||
-    "—";
+  if (!initialTrip) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>
+          Trip missing
+        </Text>
+      </View>
+    );
+  }
 
-  const vehicleNo =
-    trip?.vehicle?.vehicleNumber ||
-    trip?.vehicleNumber ||
-    "—";
-
-  const status =
-    normalizeStatus(trip?.status);
-
-  const canOpenExternal =
-    hasCoords(trip);
-
-  return (
-    <View style={styles.page}>
-      <View style={styles.header}>
+  if (!hasLocation) {
+    return (
+      <View style={styles.center}>
         <Text style={styles.title}>
           Live Location
         </Text>
 
         <Text style={styles.sub}>
-          {trip?.challanNumber || "—"} •{" "}
-          {driverName} • {vehicleNo}
+          Waiting for driver location...
         </Text>
 
-        <View style={styles.statusRow}>
-          <Text style={styles.statusText}>
-            {status || "—"}
-          </Text>
-
-          <Text style={styles.lastUpdated}>
-            Last update:{" "}
-            {formatLastUpdated(
-              trip?.currentLocationAt
-            )}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.mapCard}>
-        {loading && !region ? (
-          <View style={styles.center}>
-            <ActivityIndicator />
-
-            <Text style={styles.waitText}>
-              Loading live location...
-            </Text>
-          </View>
-        ) : region ? (
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={region}
-            showsUserLocation={false}
-            showsMyLocationButton={false}
-          >
-            <Marker
-              coordinate={{
-                latitude:
-                  region.latitude,
-                longitude:
-                  region.longitude,
-              }}
-              title={
-                driverName ||
-                "Driver Location"
-              }
-              description={
-                trip?.challanNumber ||
-                "Live trip location"
-              }
-            />
-          </MapView>
-        ) : (
-          <View style={styles.center}>
-            <Text style={styles.noLocationTitle}>
-              No live location yet
-            </Text>
-
-            <Text style={styles.noLocationText}>
-              Location will appear here once the driver starts tracking.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.bottomPanel}>
-        <View style={styles.coordinateBox}>
-          <Text style={styles.coordLabel}>
-            Latitude
-          </Text>
-
-          <Text style={styles.coordValue}>
-            {trip?.currentLatitude || "—"}
-          </Text>
-        </View>
-
-        <View style={styles.coordinateBox}>
-          <Text style={styles.coordLabel}>
-            Longitude
-          </Text>
-
-          <Text style={styles.coordValue}>
-            {trip?.currentLongitude || "—"}
-          </Text>
-        </View>
-
-        <View style={styles.coordinateBox}>
-          <Text style={styles.coordLabel}>
-            Accuracy
-          </Text>
-
-          <Text style={styles.coordValue}>
-            {trip?.currentLocationAccuracy
-              ? `${Math.round(
-                  Number(
-                    trip.currentLocationAccuracy
-                  )
-                )} m`
-              : "—"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.secondaryBtn}
+          style={styles.retryBtn}
+          onPress={loadFreshTrip}
+        >
+          <Text style={styles.retryText}>
+            Refresh
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const lastUpdated =
+    trip?.currentLocationAt
+      ? new Date(
+          trip.currentLocationAt
+        ).toLocaleTimeString()
+      : "—";
+
+  return (
+    <View style={styles.page}>
+      <MapLibreGL.MapView
+        style={styles.map}
+        styleURL="https://demotiles.maplibre.org/style.json"
+        logoEnabled={false}
+        attributionEnabled={false}
+      >
+        <MapLibreGL.Camera
+          zoomLevel={15}
+          centerCoordinate={[
+            lng,
+            lat,
+          ]}
+          animationMode="flyTo"
+          animationDuration={900}
+        />
+
+        <MapLibreGL.PointAnnotation
+          id="driver-location"
+          coordinate={[
+            lng,
+            lat,
+          ]}
+        >
+          <View style={styles.markerOuter}>
+            <View style={styles.markerInner}>
+              <Text style={styles.markerText}>
+                🚚
+              </Text>
+            </View>
+          </View>
+        </MapLibreGL.PointAnnotation>
+      </MapLibreGL.MapView>
+
+      <View style={styles.topBar}>
+        <TouchableOpacity
           onPress={() =>
             navigation.goBack()
           }
         >
-          <Text style={styles.secondaryText}>
-            Back
+          <Text style={styles.back}>
+            ←
           </Text>
         </TouchableOpacity>
 
+        <View style={{ flex: 1 }}>
+          <Text style={styles.mapTitle}>
+            Live Trip Location
+          </Text>
+
+          <Text style={styles.mapSub}>
+            {trip?.challanNumber || "—"}
+          </Text>
+        </View>
+
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : null}
+      </View>
+
+      <View style={styles.bottomCard}>
+        <View style={styles.liveRow}>
+          <View style={styles.liveIcon}>
+            <Text style={styles.liveIconText}>
+              ((•))
+            </Text>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.liveTitle}>
+              {isActive
+                ? "Live location active"
+                : "Trip not active"}
+            </Text>
+
+            <Text style={styles.liveSub}>
+              Last updated: {lastUpdated}
+            </Text>
+          </View>
+        </View>
+
         <TouchableOpacity
-          style={[
-            styles.primaryBtn,
-            !canOpenExternal
-              ? styles.disabledBtn
-              : null,
-          ]}
-          disabled={!canOpenExternal}
+          style={styles.openMapsBtn}
           onPress={() =>
             safeOpenCoordinatesInMaps(
-              trip.currentLatitude,
-              trip.currentLongitude,
-              trip.challanNumber ||
-                "Live Trip Location"
+              lat,
+              lng,
+              trip?.challanNumber ||
+                "Driver Location"
             )
           }
         >
-          <Text style={styles.primaryText}>
+          <Text style={styles.openMapsText}>
             Open in Google Maps
           </Text>
         </TouchableOpacity>
@@ -320,149 +252,168 @@ const styles = {
   page: {
     flex: 1,
     backgroundColor: "#020617",
-    padding: 16,
-  },
-
-  header: {
-    marginBottom: 12,
-  },
-
-  title: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "900",
-  },
-
-  sub: {
-    color: "#94a3b8",
-    marginTop: 5,
-    fontWeight: "700",
-  },
-
-  statusRow: {
-    marginTop: 10,
-    gap: 5,
-  },
-
-  statusText: {
-    color: "#93c5fd",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  lastUpdated: {
-    color: "#cbd5e1",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-
-  mapCard: {
-    flex: 1,
-    borderRadius: 22,
-    overflow: "hidden",
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
   },
 
   map: {
-    width: "100%",
-    height: "100%",
+    flex: 1,
   },
 
   center: {
     flex: 1,
+    backgroundColor: "#020617",
     alignItems: "center",
     justifyContent: "center",
-    padding: 22,
+    padding: 24,
   },
 
-  waitText: {
-    color: "#94a3b8",
-    marginTop: 12,
-    fontWeight: "700",
-  },
-
-  noLocationTitle: {
+  title: {
     color: "#fff",
+    fontSize: 24,
     fontWeight: "900",
-    fontSize: 18,
     marginBottom: 8,
   },
 
-  noLocationText: {
+  sub: {
     color: "#94a3b8",
     fontWeight: "700",
     textAlign: "center",
-    lineHeight: 20,
   },
 
-  bottomPanel: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
-
-  coordinateBox: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-  },
-
-  coordLabel: {
-    color: "#64748b",
-    fontSize: 10,
+  error: {
+    color: "#f87171",
     fontWeight: "900",
   },
 
-  coordValue: {
-    color: "#e5e7eb",
-    fontWeight: "800",
-    marginTop: 4,
-    fontSize: 11,
-  },
-
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
-
-  secondaryBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(96,165,250,.25)",
-    backgroundColor: "rgba(59,130,246,.10)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  secondaryText: {
-    color: "#93c5fd",
-    fontWeight: "900",
-  },
-
-  primaryBtn: {
-    flex: 1,
-    height: 48,
+  retryBtn: {
+    height: 44,
+    paddingHorizontal: 22,
     borderRadius: 14,
     backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 18,
   },
 
-  disabledBtn: {
-    opacity: 0.5,
-  },
-
-  primaryText: {
+  retryText: {
     color: "#fff",
     fontWeight: "900",
-    fontSize: 12,
+  },
+
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    minHeight: 88,
+    paddingTop: 34,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: "rgba(2,6,23,.92)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  back: {
+    color: "#fff",
+    fontSize: 34,
+    fontWeight: "700",
+  },
+
+  mapTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  mapSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  bottomCard: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#020617",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+  },
+
+  liveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 16,
+  },
+
+  liveIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  liveIconText: {
+    color: "#020617",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  liveTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  liveSub: {
+    color: "#94a3b8",
+    marginTop: 4,
+    fontWeight: "700",
+  },
+
+  openMapsBtn: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  openMapsText: {
+    color: "#052e16",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  markerOuter: {
+    width: 54,
+    height: 54,
+    borderRadius: 999,
+    backgroundColor: "rgba(34,197,94,.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  markerInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#fff",
+  },
+
+  markerText: {
+    fontSize: 18,
   },
 };

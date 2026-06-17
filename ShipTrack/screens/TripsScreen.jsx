@@ -492,6 +492,7 @@ function TripCard({
           </Text>
         </TouchableOpacity>
 
+        {/* ACTIVE TRIP LIVE MAP - for ADMIN / DISPATCH / LOGISTICS / DRIVER */}
         {isActive ? (
           <TouchableOpacity
             style={styles.locationBtn}
@@ -506,11 +507,14 @@ function TripCard({
             }
           >
             <Text style={styles.locationText}>
-              Live Map
+              {hasLiveLocation
+                ? "Live Map"
+                : "Waiting GPS"}
             </Text>
           </TouchableOpacity>
         ) : null}
 
+        {/* DRIVER ONLY - restart/resume background live tracking */}
         {isActive && isDriver ? (
           <TouchableOpacity
             style={styles.locationBtn}
@@ -522,8 +526,8 @@ function TripCard({
           </TouchableOpacity>
         ) : null}
 
-        {isDelivered &&
-          hasDeliveryLocation ? (
+        {/* DELIVERED TRIP FINAL GPS LOCATION */}
+        {isDelivered && hasDeliveryLocation ? (
           <TouchableOpacity
             style={styles.locationBtn}
             onPress={() =>

@@ -25,7 +25,6 @@
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -70,10 +69,6 @@
             "photo"
           ]
         }
-      ],
-      [
-        "react-native-maps",
-        {}
       ]
     ],
     "extra": {

@@ -110,17 +110,7 @@ export default function AppNavigator() {
                 headerTintColor: "#fff",
               }}
             />
-            <Stack.Screen
-              name="LiveTripMap"
-              component={LiveTripMapScreen}
-              options={{
-                title: "Live Location",
-                headerStyle: {
-                  backgroundColor: "#020617",
-                },
-                headerTintColor: "#fff"
-              }}
-            />
+
             <Stack.Screen
               name="StartTrip"
               component={StartTripScreen}
@@ -136,7 +126,13 @@ export default function AppNavigator() {
                 title: "",
               }}
             />
-
+            <Stack.Screen
+              name="LiveTripMap"
+              component={LiveTripMapScreen}
+              options={{
+                headerShown: false
+              }}
+            />
             <Stack.Screen
               name="TripItems"
               component={TripItemScreen}
