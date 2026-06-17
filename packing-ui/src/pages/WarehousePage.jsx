@@ -17,6 +17,7 @@ function WarehousePage() {
 
 	const isDispatch = role === "DISPATCH";
 	const isPacking = role === "PACKING";
+	const DEFAULT_WAREHOUSE_OPTIONS = ["BLS-WH-1", "RTP-WH-2"];
 	const [importMode, setImportMode] = useState("");
 	const [previewRows, setPreviewRows] = useState([]);
 	const [previewOpen, setPreviewOpen] = useState(false);
@@ -360,45 +361,65 @@ function WarehousePage() {
 	const getLocationOptions = (plantCode) => {
 		const plant = getPlantConfig(plantCode);
 
-		if (!plant) return [];
+		const options = [
+			"FLOOR",
+			"PKD-1",
+			"PKD-2",
+			"PKD-3",
+			"PKD-4",
+			"FG-1",
+			"FG-1-A",
+			"FG-1-B",
+			"FG-1-C",
+			"FG-2",
+			"FG-3",
+			"FG-4",
+			...DEFAULT_WAREHOUSE_OPTIONS,
+		];
 
-		const options = [];
+		if (plant) {
+			if (plant.packedAreaCode) {
+				options.push(plant.packedAreaCode);
+			}
 
-		if (plant.packedAreaCode) {
-			options.push(plant.packedAreaCode);
+			if (plant.fgAreaCode) {
+				options.push(plant.fgAreaCode);
+			}
+
+			if (Array.isArray(plant.fgZones)) {
+				plant.fgZones.forEach((zone) => {
+					if (plant.fgAreaCode && zone) {
+						options.push(`${plant.fgAreaCode}-${zone}`);
+					}
+				});
+			}
+
+			if (Array.isArray(plant.warehouseCodes)) {
+				plant.warehouseCodes.forEach((warehouse) => {
+					if (warehouse) {
+						options.push(warehouse);
+					}
+				});
+			}
 		}
 
-		if (plant.fgAreaCode) {
-			options.push(plant.fgAreaCode);
-		}
-
-		if (Array.isArray(plant.fgZones)) {
-			plant.fgZones.forEach((zone) => {
-				if (plant.fgAreaCode && zone) {
-					options.push(`${plant.fgAreaCode}-${zone}`);
-				}
-			});
-		}
-
-		if (Array.isArray(plant.warehouseCodes)) {
-			plant.warehouseCodes.forEach((warehouse) => {
-				if (warehouse) {
-					options.push(warehouse);
-				}
-			});
-		}
-
-		return Array.from(new Set(options));
+		return Array.from(new Set(options)).filter(Boolean);
 	};
 
 	const getWarehouseOptions = (plantCode) => {
 		const plant = getPlantConfig(plantCode);
 
-		if (!plant || !Array.isArray(plant.warehouseCodes)) {
-			return [];
-		}
+		const plantWarehouses =
+			plant && Array.isArray(plant.warehouseCodes)
+				? plant.warehouseCodes
+				: [];
 
-		return plant.warehouseCodes;
+		return Array.from(
+			new Set([
+				...plantWarehouses,
+				...DEFAULT_WAREHOUSE_OPTIONS,
+			])
+		).filter(Boolean);
 	};
 
 	const getAssignmentDraft = (row) => {
@@ -410,23 +431,36 @@ function WarehousePage() {
 		return Boolean(getAssignmentDraft(row));
 	};
 
-	const startAssignmentEdit = (row) => {
-		if (!isAdmin) return;
-
+	const updateAssignmentDraft = (row, key, value) => {
 		const id = getWarehouseRowId(row);
 
-		setAssignmentDrafts((prev) => ({
-			...prev,
-			[id]: {
-				plantCode: row.plantCode || "",
-				currentLocationCode:
-					row.currentLocationCode ||
-					row.location ||
-					"",
-				warehouseCode: row.warehouseCode || "",
-				fgZoneCode: row.fgZoneCode || "",
-			},
-		}));
+		setAssignmentDrafts((prev) => {
+			const existing = prev[id] || {};
+
+			const next = {
+				...existing,
+				[key]: value,
+			};
+
+			if (key === "plantCode") {
+				next.currentLocationCode = "";
+				next.warehouseCode = "";
+				next.fgZoneCode = "";
+			}
+
+			if (key === "warehouseCode") {
+				next.warehouseCode = value;
+
+				if (value) {
+					next.currentLocationCode = value;
+				}
+			}
+
+			return {
+				...prev,
+				[id]: next,
+			};
+		});
 	};
 
 	const cancelAssignmentEdit = (row) => {
@@ -456,8 +490,12 @@ function WarehousePage() {
 				next.fgZoneCode = "";
 			}
 
-			if (key === "warehouseCode" && value) {
-				next.currentLocationCode = value;
+			if (key === "warehouseCode") {
+				next.warehouseCode = value;
+
+				if (value) {
+					next.currentLocationCode = value;
+				}
 			}
 
 			return {
@@ -879,7 +917,7 @@ function WarehousePage() {
 		{
 			field: "location",
 			headerName: "Location",
-			width: 170,
+			width: 190,
 
 			renderHeader: () => <span>Location</span>,
 
@@ -899,11 +937,22 @@ function WarehousePage() {
 								updateAssignmentDraft(row, "currentLocationCode", e.target.value)
 							}
 							sx={{
-								width: 155,
+								width: 175,
 								...compactActionFieldSx,
 							}}
-							disabled={!draft.plantCode}
+							SelectProps={{
+								displayEmpty: true,
+								MenuProps: {
+									PaperProps: {
+										sx: warehouseSelectMenuSx,
+									},
+								},
+							}}
 						>
+							<MenuItem value="">
+								Select Location
+							</MenuItem>
+
 							{locationOptions.map((location) => (
 								<MenuItem
 									key={location}
@@ -1082,7 +1131,7 @@ function WarehousePage() {
 		{
 			field: "warehouseCode",
 			headerName: "Warehouse",
-			width: 180,
+			width: 190,
 
 			renderHeader: () => <span>Warehouse</span>,
 
@@ -1102,13 +1151,20 @@ function WarehousePage() {
 								updateAssignmentDraft(row, "warehouseCode", e.target.value)
 							}
 							sx={{
-								width: 165,
+								width: 175,
 								...compactActionFieldSx,
 							}}
-							disabled={!draft.plantCode}
+							SelectProps={{
+								displayEmpty: true,
+								MenuProps: {
+									PaperProps: {
+										sx: warehouseSelectMenuSx,
+									},
+								},
+							}}
 						>
 							<MenuItem value="">
-								None
+								Select Warehouse
 							</MenuItem>
 
 							{warehouseOptions.map((warehouse) => (
@@ -1250,6 +1306,18 @@ function WarehousePage() {
 								sx={actionWarning}
 							>
 								Return to Dispatch
+							</Button>
+						);
+					}
+
+					if (isAdmin) {
+						return (
+							<Button
+								size="small"
+								onClick={() => startAssignmentEdit(row)}
+								sx={actionInfo}
+							>
+								Edit Location
 							</Button>
 						);
 					}
@@ -2420,7 +2488,7 @@ function WarehousePage() {
 
 /* ===================== STYLES ===================== */
 const warehouseGrid =
-	"52px 220px 120px 85px 85px 150px 145px 140px 170px 300px 110px 180px 520px";
+	"52px 220px 120px 85px 85px 150px 145px 140px 190px 300px 110px 190px 520px";
 
 const content = {
 	padding: "18px 24px",
@@ -2747,6 +2815,30 @@ const compactFieldSx = {
 	"& input": {
 		color: "#fff",
 		fontSize: 12,
+	},
+};
+
+const warehouseSelectMenuSx = {
+	mt: 1,
+	borderRadius: "14px",
+	background: "#f8fafc",
+	color: "#0f172a",
+	border: "1px solid rgba(15,23,42,.12)",
+	boxShadow: "0 20px 50px rgba(0,0,0,.35)",
+
+	"& .MuiMenuItem-root": {
+		fontSize: 13,
+		fontWeight: 700,
+		color: "#0f172a",
+		minHeight: 36,
+	},
+
+	"& .MuiMenuItem-root:hover": {
+		background: "rgba(59,130,246,.12)",
+	},
+
+	"& .Mui-selected": {
+		background: "rgba(59,130,246,.18) !important",
 	},
 };
 
