@@ -473,38 +473,6 @@ function WarehousePage() {
 		});
 	};
 
-	const updateAssignmentDraft = (row, key, value) => {
-		const id = getWarehouseRowId(row);
-
-		setAssignmentDrafts((prev) => {
-			const existing = prev[id] || {};
-
-			const next = {
-				...existing,
-				[key]: value,
-			};
-
-			if (key === "plantCode") {
-				next.currentLocationCode = "";
-				next.warehouseCode = "";
-				next.fgZoneCode = "";
-			}
-
-			if (key === "warehouseCode") {
-				next.warehouseCode = value;
-
-				if (value) {
-					next.currentLocationCode = value;
-				}
-			}
-
-			return {
-				...prev,
-				[id]: next,
-			};
-		});
-	};
-
 	const saveAssignment = async (row) => {
 		const id = getWarehouseRowId(row);
 		const draft = assignmentDrafts[id];
