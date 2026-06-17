@@ -10,83 +10,90 @@ import UsersPage from "./pages/UsersPage";
 import WarehousePage from "./pages/WarehousePage";
 import LogisticsPortalPage from "./pages/LogisticsPortalPage";
 import RequireRole from "./auth/RequireRole";
+import RequireWarehouseAccess from "./auth/RequireWarehouseAccess";
 
 function App() {
-  useViewportHeight();
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* PUBLIC */}
-        <Route path="/login" element={<LoginPage />} />
+	useViewportHeight();
 
-        {/* PROTECTED */}
-        <Route
-          element={
-            <RequireAuth>
-              <Layout />
-            </RequireAuth>
-          }
-        >
-          <Route path="/" element={<DashboardPage />} />
-		  <Route
-		    path="/users"
-		    element={
-		      <RequireRole allowed={["ADMIN"]}>
-		        <UsersPage />
-		      </RequireRole>
-		    }
-		  />
-          <Route path="/zoho-items" element={<ZohoItemsPage />} />
-		  <Route
-		    path="/warehouse"
-		    element={
-		      <RequireRole
-		        allowed={[
-		          "ADMIN",
-		          "PACKING",
-		          "DISPATCH",
-		          "WAREHOUSE",
-		        ]}
-		      >
-		        <WarehousePage />
-		      </RequireRole>
-		    }
-		  />
-		  <Route
-		    path="/dispatched-items"
-		    element={
-		      <RequireRole
-		        allowed={[
-		          "ADMIN",
-		          "PACKING",
-		          "DISPATCH",
-		          "WAREHOUSE",
-		        ]}
-		      >
-		        <DispatchedItemsPage />
-		      </RequireRole>
-		    }
-		  />
-		  <Route
-		    path="/logistics"
-		    element={
-		      <RequireRole
-		        allowed={[
-		          "ADMIN",
-		          "LOGISTICS",
-		        ]}
-		      >
-		        <LogisticsPortalPage />
-		      </RequireRole>
-		    }
-		  />
-        </Route>
+	return (
+		<BrowserRouter>
+			<Routes>
+				{/* PUBLIC */}
+				<Route path="/login" element={<LoginPage />} />
 
-        {/* FALLBACK */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
-  );
+				{/* PROTECTED */}
+				<Route
+					element={
+						<RequireAuth>
+							<Layout />
+						</RequireAuth>
+					}
+				>
+					<Route path="/" element={<DashboardPage />} />
+
+					<Route
+						path="/users"
+						element={
+							<RequireRole allowed={["ADMIN"]}>
+								<UsersPage />
+							</RequireRole>
+						}
+					/>
+
+					<Route
+						path="/zoho-items"
+						element={
+							<RequireRole allowed={["ADMIN", "PACKING"]}>
+								<ZohoItemsPage />
+							</RequireRole>
+						}
+					/>
+
+					<Route
+						path="/warehouse"
+						element={
+							<RequireWarehouseAccess>
+								<WarehousePage />
+							</RequireWarehouseAccess>
+						}
+					/>
+
+					<Route
+						path="/dispatched-items"
+						element={
+							<RequireRole
+								allowed={[
+									"ADMIN",
+									"PACKING",
+									"DISPATCH",
+									"WAREHOUSE",
+								]}
+							>
+								<DispatchedItemsPage />
+							</RequireRole>
+						}
+					/>
+
+					<Route
+						path="/logistics"
+						element={
+							<RequireRole
+								allowed={[
+									"ADMIN",
+									"LOGISTICS",
+								]}
+							>
+								<LogisticsPortalPage />
+							</RequireRole>
+						}
+					/>
+				</Route>
+
+				{/* FALLBACK */}
+				<Route path="*" element={<Navigate to="/" />} />
+			</Routes>
+		</BrowserRouter>
+	);
 }
 
 export default App;

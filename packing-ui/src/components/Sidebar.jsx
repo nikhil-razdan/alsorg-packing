@@ -1,361 +1,360 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
+import { canOpenWarehousePage, normalizeRole } from "../utils/permissions";
 
 function Sidebar() {
-  const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
-  const role = localStorage.getItem("role");
+	const location = useLocation();
+	const [collapsed, setCollapsed] = useState(false);
 
-  const links = [
-    {
-      path: "/",
-      label: "Dashboard",
-      roles: [
-        "ADMIN",
-        "DISPATCH",
-        "PACKING",
-        "WAREHOUSE",
-        "LOGISTICS",
-      ],
-      icon: "📊",
-    },
+	const role = normalizeRole(localStorage.getItem("role"));
+	const canOpenWarehouse = canOpenWarehousePage();
 
-    {
-      path: "/zoho-items",
-      label: "Inventory Items",
-      roles: ["ADMIN", "PACKING"],
-      icon: "📦",
-    },
+	const links = [
+		{
+			path: "/",
+			label: "Dashboard",
+			roles: [
+				"ADMIN",
+				"DISPATCH",
+				"PACKING",
+				"WAREHOUSE",
+				"LOGISTICS",
+			],
+			icon: "📊",
+		},
 
-    {
-      path: "/warehouse",
-      label: "Warehouse",
-      roles: [
-        "ADMIN",
-        "DISPATCH",
-        "WAREHOUSE",
-      ],
-      icon: "🏭",
-    },
+		{
+			path: "/zoho-items",
+			label: "Inventory Items",
+			roles: ["ADMIN", "PACKING"],
+			icon: "📦",
+		},
 
-    {
-      path: "/dispatched-items",
-      label: "Dispatched Items",
-      roles: [
-        "ADMIN",
-        "DISPATCH",
-        "WAREHOUSE",
-      ],
-      icon: "🚚",
-    },
+		{
+			path: "/warehouse",
+			label: "Warehouse",
+			roles: [],
+			customAccess: canOpenWarehouse,
+			icon: "🏭",
+		},
 
-    {
-      path: "/logistics",
-      label: "Logistics",
-      roles: [
-        "ADMIN",
-        "LOGISTICS",
-      ],
-      icon: "🚛",
-    },
+		{
+			path: "/dispatched-items",
+			label: "Dispatched Items",
+			roles: [
+				"ADMIN",
+				"DISPATCH",
+				"WAREHOUSE",
+			],
+			icon: "🚚",
+		},
 
-    {
-      path: "/users",
-      label: "User Management",
-      roles: ["ADMIN"],
-      icon: "👤",
-    },
-  ];
+		{
+			path: "/logistics",
+			label: "Logistics",
+			roles: [
+				"ADMIN",
+				"LOGISTICS",
+			],
+			icon: "🚛",
+		},
 
-  const visibleLinks = links.filter(link =>
-      link.roles.includes(role)
-    );
-	
+		{
+			path: "/users",
+			label: "User Management",
+			roles: ["ADMIN"],
+			icon: "👤",
+		},
+	];
+
+	const visibleLinks = links.filter((link) => {
+		if (typeof link.customAccess === "boolean") {
+			return link.customAccess;
+		}
+
+		return link.roles.includes(role);
+	});
 
 	const linkStyle = (active) => ({
-	  display: "flex",
+		display: "flex",
 
-	  alignItems: "center",
+		alignItems: "center",
 
-	  gap: collapsed ? 0 : 14,
+		gap: collapsed ? 0 : 14,
 
-	  padding: "11px 14px",
+		padding: "11px 14px",
 
-	  marginBottom: 6,
+		marginBottom: 6,
 
-	  borderRadius: 14,
+		borderRadius: 14,
 
-	  textDecoration: "none",
+		textDecoration: "none",
 
-	  fontWeight: 700,
+		fontWeight: 700,
 
-	  fontSize: 14,
+		fontSize: 14,
 
-	  color: active
-	    ? "#fff"
-	    : "rgba(255,255,255,.72)",
+		color: active
+			? "#fff"
+			: "rgba(255,255,255,.72)",
 
-	  background: active
-	    ? "linear-gradient(135deg,#1d4ed8,#2563eb)"
-	    : "transparent",
+		background: active
+			? "linear-gradient(135deg,#1d4ed8,#2563eb)"
+			: "transparent",
 
-	  border: active
-	    ? "1px solid rgba(59,130,246,.35)"
-	    : "1px solid transparent",
+		border: active
+			? "1px solid rgba(59,130,246,.35)"
+			: "1px solid transparent",
 
-	  boxShadow: active
-	    ? "0 6px 18px rgba(37,99,235,.18)"
-	    : "none",
+		boxShadow: active
+			? "0 6px 18px rgba(37,99,235,.18)"
+			: "none",
 
-	  transition: "all .22s ease",
+		transition: "all .22s ease",
 
-	  justifyContent:
-	    collapsed
-	      ? "center"
-	      : "flex-start",
+		justifyContent:
+			collapsed
+				? "center"
+				: "flex-start",
 	});
 
 	return (
-	  <div
-	    style={{
-	      ...sidebar,
-	      width: collapsed ? 64 : 210,
-	    }}
-	  >
-	    {/* Glass highlight */}
-	    <div style={topHighlight} />
+		<div
+			style={{
+				...sidebar,
+				width: collapsed ? 64 : 210,
+			}}
+		>
+			<div style={topHighlight} />
 
-	    {/* Logo */}
-	    <div style={logoSection}>
-	      <div style={logoIcon}>
-	        A
-	      </div>
+			<div style={logoSection}>
+				<div style={logoIcon}>
+					A
+				</div>
 
-	      {!collapsed && (
-	        <div>
-	          <div style={logoTitle}>
-	            ALSORG
-	          </div>
+				{!collapsed && (
+					<div>
+						<div style={logoTitle}>
+							ALSORG
+						</div>
 
-	          <div style={logoSub}>
-	            Inventory Suite
-	          </div>
-	        </div>
-	      )}
-	    </div>
+						<div style={logoSub}>
+							Inventory Suite
+						</div>
+					</div>
+				)}
+			</div>
 
-	    {/* Menu + Correct Toggle */}
-	    <div
-	      style={{
-	        ...toggleRow,
-	        justifyContent: collapsed
-	          ? "center"
-	          : "space-between",
-	      }}
-	    >
-	      {!collapsed && (
-	        <div style={menuTitle}>
-	          Menu
-	        </div>
-	      )}
+			<div
+				style={{
+					...toggleRow,
+					justifyContent: collapsed
+						? "center"
+						: "space-between",
+				}}
+			>
+				{!collapsed && (
+					<div style={menuTitle}>
+						Menu
+					</div>
+				)}
 
-	      <button
-	        onClick={() =>
-	          setCollapsed((v) => !v)
-	        }
-	        style={toggleButton}
-	        title={
-	          collapsed
-	            ? "Expand sidebar"
-	            : "Collapse sidebar"
-	        }
-	      >
-	        {collapsed ? "›" : "‹"}
-	      </button>
-	    </div>
+				<button
+					onClick={() =>
+						setCollapsed((v) => !v)
+					}
+					style={toggleButton}
+					title={
+						collapsed
+							? "Expand sidebar"
+							: "Collapse sidebar"
+					}
+				>
+					{collapsed ? "›" : "‹"}
+				</button>
+			</div>
 
-	    {/* Links */}
-	    {visibleLinks.map((link) => {
-	      const active =
-	        location.pathname === link.path;
+			{visibleLinks.map((link) => {
+				const active =
+					location.pathname === link.path;
 
-	      return (
-	        <Link
-	          key={link.path}
-	          to={link.path}
-	          style={linkStyle(active)}
-	        >
-	          <span style={icon}>
-	            {link.icon}
-	          </span>
+				return (
+					<Link
+						key={link.path}
+						to={link.path}
+						style={linkStyle(active)}
+					>
+						<span style={icon}>
+							{link.icon}
+						</span>
 
-	          {!collapsed && link.label}
-	        </Link>
-	      );
-	    })}
+						{!collapsed && link.label}
+					</Link>
+				);
+			})}
 
-	    <div style={{ flexGrow: 1 }} />
-	    <div style={divider} />
-	  </div>
+			<div style={{ flexGrow: 1 }} />
+			<div style={divider} />
+		</div>
 	);
 }
 
 /* ===================== STYLES ===================== */
 
 const sidebar = {
-  width: 220,
+	width: 220,
 
-  height: "100vh",
+	height: "100vh",
 
-  padding: "22px 14px",
+	padding: "22px 14px",
 
-  boxSizing: "border-box",
+	boxSizing: "border-box",
 
-  display: "flex",
+	display: "flex",
 
-  flexDirection: "column",
+	flexDirection: "column",
 
-  position: "relative",
+	position: "relative",
 
-  background:
-    "linear-gradient(180deg,#071120 0%,#0a162b 100%)",
+	background:
+		"linear-gradient(180deg,#071120 0%,#0a162b 100%)",
 
-  borderRight:
-    "1px solid rgba(255,255,255,.06)",
+	borderRight:
+		"1px solid rgba(255,255,255,.06)",
 
-  boxShadow:
-    "8px 0 30px rgba(2,6,23,.45)",
+	boxShadow:
+		"8px 0 30px rgba(2,6,23,.45)",
 
-  overflow: "hidden",
+	overflow: "hidden",
 
-  transition: "width .25s ease",
+	transition: "width .25s ease",
 };
 
 const topHighlight = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 90,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,0.16), transparent)",
-  pointerEvents: "none",
+	position: "absolute",
+	top: 0,
+	left: 0,
+	right: 0,
+	height: 90,
+	background:
+		"linear-gradient(180deg, rgba(255,255,255,0.16), transparent)",
+	pointerEvents: "none",
 };
 
 const toggleButton = {
-  width: 28,
-  height: 28,
+	width: 28,
+	height: 28,
 
-  borderRadius: 10,
+	borderRadius: 10,
 
-  border:
-    "1px solid rgba(255,255,255,.08)",
+	border:
+		"1px solid rgba(255,255,255,.08)",
 
-  background:
-    "rgba(255,255,255,.04)",
+	background:
+		"rgba(255,255,255,.04)",
 
-  color: "#94a3b8",
+	color: "#94a3b8",
 
-  cursor: "pointer",
+	cursor: "pointer",
 
-  fontWeight: 900,
+	fontWeight: 900,
 
-  fontSize: 18,
+	fontSize: 18,
 
-  lineHeight: 1,
+	lineHeight: 1,
 
-  display: "flex",
+	display: "flex",
 
-  alignItems: "center",
+	alignItems: "center",
 
-  justifyContent: "center",
+	justifyContent: "center",
 
-  transition: "all .2s ease",
+	transition: "all .2s ease",
 };
 
 const menuTitle = {
-  margin: 0,
-  paddingLeft: 6,
-  fontWeight: 700,
-  fontSize: 11,
-  color: "rgba(255,255,255,0.55)",
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
+	margin: 0,
+	paddingLeft: 6,
+	fontWeight: 700,
+	fontSize: 11,
+	color: "rgba(255,255,255,0.55)",
+	letterSpacing: "0.12em",
+	textTransform: "uppercase",
 };
 
 const toggleRow = {
-  display: "flex",
-  alignItems: "center",
-  marginBottom: 18,
-  minHeight: 28,
+	display: "flex",
+	alignItems: "center",
+	marginBottom: 18,
+	minHeight: 28,
 };
 
 const icon = {
-  fontSize: 16,
-  opacity: 0.9,
+	fontSize: 16,
+	opacity: 0.9,
 };
 
 const divider = {
-  height: 1,
-  background:
-    "linear-gradient(90deg, rgba(255,255,255,0.14), transparent)",
-  marginTop: 24,
+	height: 1,
+	background:
+		"linear-gradient(90deg, rgba(255,255,255,0.14), transparent)",
+	marginTop: 24,
 };
 
 const logoSection = {
-  display: "flex",
+	display: "flex",
 
-  alignItems: "center",
+	alignItems: "center",
 
-  gap: 14,
+	gap: 14,
 
-  marginBottom: 18,
+	marginBottom: 18,
 
-  paddingLeft: 4,
+	paddingLeft: 4,
 };
 
 const logoIcon = {
-  width: 36,
+	width: 36,
 
-  height: 36,
+	height: 36,
 
-  borderRadius: 14,
+	borderRadius: 14,
 
-  display: "flex",
+	display: "flex",
 
-  alignItems: "center",
+	alignItems: "center",
 
-  justifyContent: "center",
+	justifyContent: "center",
 
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
+	background:
+		"linear-gradient(135deg,#2563eb,#3b82f6)",
 
-  color: "#fff",
+	color: "#fff",
 
-  fontWeight: 900,
+	fontWeight: 900,
 
-  fontSize: 16,
+	fontSize: 16,
 
-  boxShadow:
-    "0 10px 24px rgba(37,99,235,.35)",
+	boxShadow:
+		"0 10px 24px rgba(37,99,235,.35)",
 };
 
 const logoTitle = {
-  color: "#fff",
+	color: "#fff",
 
-  fontWeight: 900,
+	fontWeight: 900,
 
-  fontSize: 15,
+	fontSize: 15,
 
-  letterSpacing: 1,
+	letterSpacing: 1,
 };
 
 const logoSub = {
-  color: "rgba(255,255,255,.45)",
+	color: "rgba(255,255,255,.45)",
 
-  fontSize: 11,
+	fontSize: 11,
 
-  marginTop: 2,
+	marginTop: 2,
 };
 
 export default Sidebar;

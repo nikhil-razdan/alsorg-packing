@@ -34,16 +34,17 @@ public class UserController {
     }
 
     @PostMapping
-    public User createUser(@RequestBody Map<String, Object> body) {
+public User createUser(@RequestBody Map<String, Object> body) {
 
-        return service.createUser(
-                String.valueOf(body.get("username")),
-                String.valueOf(body.get("password")),
-                String.valueOf(body.get("role")),
-                readPlantCodes(body),
-                readDriverId(body)
-        );
-    }
+    return service.createUser(
+            String.valueOf(body.get("username")),
+            String.valueOf(body.get("password")),
+            String.valueOf(body.get("role")),
+            readPlantCodes(body),
+            readDriverId(body),
+            readBoolean(body, "warehouseAccess")
+    );
+}
 
     @GetMapping
     public List<User> getUsers() {
@@ -51,19 +52,20 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public User updateUser(
-            @PathVariable Long id,
-            @RequestBody Map<String, Object> body
-    ) {
+public User updateUser(
+        @PathVariable Long id,
+        @RequestBody Map<String, Object> body
+) {
 
-        return service.updateUser(
-                id,
-                String.valueOf(body.get("username")),
-                String.valueOf(body.get("role")),
-                readPlantCodes(body),
-                readDriverId(body)
-        );
-    }
+    return service.updateUser(
+            id,
+            String.valueOf(body.get("username")),
+            String.valueOf(body.get("role")),
+            readPlantCodes(body),
+            readDriverId(body),
+            readBoolean(body, "warehouseAccess")
+    );
+}
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
@@ -148,4 +150,22 @@ public class UserController {
             throw new RuntimeException("Invalid driverId: " + text);
         }
     }
+
+    private boolean readBoolean(Map<String, Object> body, String key) {
+    Object value = body.get(key);
+
+    if (value == null) {
+        return false;
+    }
+
+    if (value instanceof Boolean b) {
+        return b;
+    }
+
+    String text = String.valueOf(value).trim();
+
+    return "true".equalsIgnoreCase(text)
+            || "1".equals(text)
+            || "yes".equalsIgnoreCase(text);
+}
 }

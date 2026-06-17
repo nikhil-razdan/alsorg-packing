@@ -1,9 +1,9 @@
 package com.alsorg.packing.controller;
 
-
 import java.util.List;
 import java.util.Map;
-
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,190 +27,191 @@ import com.alsorg.packing.service.CurrentUserService;
 @RequestMapping("/api/warehouse")
 public class WarehouseController {
 
-    private final WarehouseService service;
-    private final DispatchedItemService dservice;
-    private final CurrentUserService currentUserService;
+        private final WarehouseService service;
+        private final DispatchedItemService dservice;
+        private final CurrentUserService currentUserService;
 
-    public WarehouseController(WarehouseService service, 
-    		DispatchedItemService dservice,
-    		CurrentUserService currentUserService
-    		) {
-        this.service = service;
-        this.dservice = dservice;
-        this.currentUserService = currentUserService;
-    }
+        public WarehouseController(WarehouseService service,
+                        DispatchedItemService dservice,
+                        CurrentUserService currentUserService) {
+                this.service = service;
+                this.dservice = dservice;
+                this.currentUserService = currentUserService;
+        }
 
-    @GetMapping("/floor")
-    public List<DispatchedItem> floor(
-            @RequestHeader("Authorization") String auth
-    ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+        @GetMapping("/floor")
+        public List<DispatchedItem> floor(
+                        @RequestHeader("Authorization") String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        return service.getFloorItems(
-                currentUserService.allowedPlants(user),
-                currentUserService.isAdmin(user)
-        );
-    }
+                assertWarehouseAccess(user);
 
-    @GetMapping("/items")
-    public List<DispatchedItem> warehouse(
-            @RequestHeader("Authorization") String auth
-    ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+                return service.getFloorItems(
+                                currentUserService.allowedPlants(user),
+                                currentUserService.isAdmin(user));
+        }
 
-        return service.getWarehouseItems(
-                currentUserService.allowedPlants(user),
-                currentUserService.isAdmin(user)
-        );
-    }
+        @GetMapping("/items")
+        public List<DispatchedItem> warehouse(
+                        @RequestHeader("Authorization") String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
 
-    
-    @PostMapping("/{zohoItemId}/store")
-    public ResponseEntity<Map<String, String>> moveToWarehouse(
-            @PathVariable String zohoItemId,
-            @RequestParam String warehouseCode,
-            @RequestParam String fromLocation,  
-            @RequestHeader("Authorization") String auth
-    ) {
-        String token = auth.replace("Bearer ", "");
+                assertWarehouseAccess(user);
 
-        String gatePass = dservice.moveToWarehouse(
-                zohoItemId,
-                warehouseCode,
-                fromLocation,                   
-                JwtUtil.getUsername(token)
-        );
+                return service.getWarehouseItems(
+                                currentUserService.allowedPlants(user),
+                                currentUserService.isAdmin(user));
+        }
 
-        return ResponseEntity.ok(Map.of("gatePass", gatePass));
-    }
-    
-    @PostMapping("/bulk-move")
-    public ResponseEntity<Map<String, String>> bulkMoveToWarehouse(
-            @RequestBody Map<String, Object> body,
-            @RequestHeader("Authorization") String auth
-    ) {
-        String token = auth.replace("Bearer ", "");
+        @PostMapping("/{zohoItemId}/store")
+        public ResponseEntity<Map<String, String>> moveToWarehouse(
+                        @PathVariable String zohoItemId,
+                        @RequestParam String warehouseCode,
+                        @RequestParam String fromLocation,
+                        @RequestHeader("Authorization") String auth) {
+                String token = auth.replace("Bearer ", "");
 
-        List<String> itemIds = (List<String>) body.get("itemIds");
-        String warehouseCode = (String) body.get("warehouseCode");
-        String fromLocation = (String) body.get("fromLocation");
+                String gatePass = dservice.moveToWarehouse(
+                                zohoItemId,
+                                warehouseCode,
+                                fromLocation,
+                                JwtUtil.getUsername(token));
 
-        String gatePass = dservice.bulkMoveToWarehouse(
-                itemIds,
-                warehouseCode,
-                fromLocation,
-                JwtUtil.getUsername(token)
-        );
+                return ResponseEntity.ok(Map.of("gatePass", gatePass));
+        }
 
-        return ResponseEntity.ok(Map.of("gatePass", gatePass));
-    }
-    
-    @PostMapping("/{zohoItemId}/approve")
-    public void approveWarehouse(
-            @PathVariable String zohoItemId,
-            @RequestParam String gatePass,
-            @RequestHeader("Authorization") String auth
-    ) {
-        String token = auth.replace("Bearer ", "");
+        @PostMapping("/bulk-move")
+        public ResponseEntity<Map<String, String>> bulkMoveToWarehouse(
+                        @RequestBody Map<String, Object> body,
+                        @RequestHeader("Authorization") String auth) {
+                String token = auth.replace("Bearer ", "");
 
-        dservice.approveWarehouseMove(
-                zohoItemId,
-                gatePass,
-                JwtUtil.getUsername(token)
-        );
-    }
-    
-    @PostMapping("/import")
-    public ResponseEntity<?> importExcel(
-            @RequestParam MultipartFile file,
-            @RequestParam String mode,
-            @RequestParam(required = false) String plantCode,
-            @RequestHeader("Authorization") String auth,
-            @RequestHeader(value = "X-Username", required = false) String username
-    ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+                List<String> itemIds = (List<String>) body.get("itemIds");
+                String warehouseCode = (String) body.get("warehouseCode");
+                String fromLocation = (String) body.get("fromLocation");
 
-        String resolvedPlant =
-                currentUserService.resolvePlantForWrite(user, plantCode);
+                String gatePass = dservice.bulkMoveToWarehouse(
+                                itemIds,
+                                warehouseCode,
+                                fromLocation,
+                                JwtUtil.getUsername(token));
 
-        service.processImport(
-                file,
-                mode,
-                username != null && !username.isBlank()
-                        ? username
-                        : user.getUsername(),
-                resolvedPlant
-        );
+                return ResponseEntity.ok(Map.of("gatePass", gatePass));
+        }
 
-        return ResponseEntity.ok("Import successful");
-    }
-    
-    @PostMapping("/{zohoItemId}/reject")
-    public void rejectWarehouse(
-            @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
-    ) {
-        String token = auth.replace("Bearer ", "");
+        @PostMapping("/{zohoItemId}/approve")
+        public void approveWarehouse(
+                        @PathVariable String zohoItemId,
+                        @RequestParam String gatePass,
+                        @RequestHeader("Authorization") String auth) {
+                String token = auth.replace("Bearer ", "");
 
-        dservice.rejectWarehouseMove(
-                zohoItemId,
-                JwtUtil.getUsername(token)
-        );
-    }
-    
-    @PostMapping("/import/preview")
-    public List<ImportPreviewRow> preview(
-            @RequestParam MultipartFile file,
-            @RequestParam String mode
-    ) {
-        return service.previewImport(file, mode);
-    }
-    
-    @PostMapping("/import/confirm")
-    public ResponseEntity<?> confirm(
-            @RequestParam MultipartFile file,
-            @RequestParam String mode,
-            @RequestParam(required = false) String plantCode,
-            @RequestHeader("Authorization") String auth,
-            @RequestHeader(value = "X-Username", required = false) String username
-    ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+                dservice.approveWarehouseMove(
+                                zohoItemId,
+                                gatePass,
+                                JwtUtil.getUsername(token));
+        }
 
-        String resolvedPlant =
-                currentUserService.resolvePlantForWrite(user, plantCode);
+        @PostMapping("/import")
+        public ResponseEntity<?> importExcel(
+                        @RequestParam MultipartFile file,
+                        @RequestParam String mode,
+                        @RequestParam(required = false) String plantCode,
+                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "X-Username", required = false) String username) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertWarehouseAccess(user);
 
-        service.processImport(
-                file,
-                mode,
-                username != null && !username.isBlank()
-                        ? username
-                        : user.getUsername(),
-                resolvedPlant
-        );
+                String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
 
-        return ResponseEntity.ok("Import successful");
-    }
-    
-    @GetMapping("/import/template")
-    public ResponseEntity<byte[]> downloadTemplate() {
+                service.processImport(
+                                file,
+                                mode,
+                                username != null && !username.isBlank()
+                                                ? username
+                                                : user.getUsername(),
+                                resolvedPlant);
 
-    	String header = String.join(",",
-    		    "name",
-    		    "sku",
-    		    "pdNo",
-    		    "drawingNo",
-    		    "description",
-    		    "clientName",
-    		    "location",
-    		    "warehouseCode",
-    		    "gatePass"
-    		);
+                return ResponseEntity.ok("Import successful");
+        }
 
-        byte[] csv = (header + "\n").getBytes();
+        @PostMapping("/{zohoItemId}/reject")
+        public void rejectWarehouse(
+                        @PathVariable String zohoItemId,
+                        @RequestHeader("Authorization") String auth) {
+                String token = auth.replace("Bearer ", "");
 
-        return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=warehouse_import_template.csv")
-                .header("Content-Type", "text/csv")
-                .body(csv);
-    }
+                dservice.rejectWarehouseMove(
+                                zohoItemId,
+                                JwtUtil.getUsername(token));
+        }
+
+        @PostMapping("/import/preview")
+        public List<ImportPreviewRow> preview(
+                        @RequestParam MultipartFile file,
+                        @RequestParam String mode,
+                        @RequestHeader("Authorization") String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                assertWarehouseAccess(user);
+
+                return service.previewImport(file, mode);
+        }
+
+        @PostMapping("/import/confirm")
+        public ResponseEntity<?> confirm(
+                        @RequestParam MultipartFile file,
+                        @RequestParam String mode,
+                        @RequestParam(required = false) String plantCode,
+                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "X-Username", required = false) String username) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertWarehouseAccess(user);
+
+                String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
+
+                service.processImport(
+                                file,
+                                mode,
+                                username != null && !username.isBlank()
+                                                ? username
+                                                : user.getUsername(),
+                                resolvedPlant);
+
+                return ResponseEntity.ok("Import successful");
+        }
+
+        @GetMapping("/import/template")
+        public ResponseEntity<byte[]> downloadTemplate(
+                        @RequestHeader("Authorization") String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                assertWarehouseAccess(user);
+
+                String header = String.join(",",
+                                "name",
+                                "sku",
+                                "pdNo",
+                                "drawingNo",
+                                "description",
+                                "clientName",
+                                "location",
+                                "warehouseCode",
+                                "gatePass");
+
+                byte[] csv = (header + "\n").getBytes();
+
+                return ResponseEntity.ok()
+                                .header("Content-Disposition", "attachment; filename=warehouse_import_template.csv")
+                                .header("Content-Type", "text/csv")
+                                .body(csv);
+        }
+
+        private void assertWarehouseAccess(User user) {
+                if (!currentUserService.canAccessWarehouse(user)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "Warehouse access not allowed");
+                }
+        }
 }

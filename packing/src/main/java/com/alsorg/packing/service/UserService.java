@@ -27,14 +27,17 @@ public class UserService {
             String password,
             String role,
             Set<String> plantCodes,
-            java.util.UUID driverId
-    ) {
+            java.util.UUID driverId,
+            boolean warehouseAccess) {
 
         User user = new User();
 
         user.setUsername(username);
         user.setPassword(encoder.encode(password));
         user.setRole(role);
+
+        user.setWarehouseAccess(
+                warehouseAccess || "WAREHOUSE".equalsIgnoreCase(role));
 
         Set<String> cleanPlants = cleanPlantCodes(plantCodes);
 
@@ -68,8 +71,8 @@ public class UserService {
             String username,
             String role,
             Set<String> plantCodes,
-            java.util.UUID driverId
-    ) {
+            java.util.UUID driverId,
+            boolean warehouseAccess) {
 
         Optional<User> optional = repo.findById(id);
 
@@ -81,6 +84,8 @@ public class UserService {
 
         user.setUsername(username);
         user.setRole(role);
+        user.setWarehouseAccess(
+                warehouseAccess || "WAREHOUSE".equalsIgnoreCase(role));
 
         Set<String> cleanPlants = cleanPlantCodes(plantCodes);
 

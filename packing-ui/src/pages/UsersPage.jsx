@@ -9,8 +9,10 @@ import {
 	Dialog,
 	DialogTitle,
 	DialogContent,
-	DialogActions
+	DialogActions,
+	Switch,
 } from "@mui/material";
+
 import Drawer from "@mui/material/Drawer";
 
 import SearchIcon from "@mui/icons-material/Search";
@@ -62,7 +64,8 @@ function UsersPage() {
 	const [driverId, setDriverId] = useState("");
 
 	const [editDriverId, setEditDriverId] = useState("");
-
+	const [warehouseAccess, setWarehouseAccess] = useState(false);
+	const [editWarehouseAccess, setEditWarehouseAccess] = useState(false);
 	const splitPlantCodes = (value) => {
 		if (!value) return [];
 
@@ -186,6 +189,10 @@ function UsersPage() {
 					role === "DRIVER"
 						? driverId
 						: null,
+				warehouseAccess:
+					role === "WAREHOUSE"
+						? true
+						: warehouseAccess,
 			});
 
 			setUsername("");
@@ -193,6 +200,7 @@ function UsersPage() {
 			setRole("PACKING");
 			setPlantCodes([]);
 			setDriverId("");
+			setWarehouseAccess(false);
 
 			const res = await API.get("/users");
 
@@ -226,6 +234,7 @@ function UsersPage() {
 		setEditId(u.id);
 		setEditUsername(u.username);
 		setEditRole(u.role);
+		setEditWarehouseAccess(Boolean(u.warehouseAccess));
 
 		if (u.role === "DRIVER") {
 			setEditPlantCodes([]);
@@ -240,6 +249,7 @@ function UsersPage() {
 		setEditId(null);
 		setEditPlantCodes([]);
 		setEditDriverId("");
+		setEditWarehouseAccess(false);
 	};
 
 	const saveEdit = async () => {
@@ -269,6 +279,10 @@ function UsersPage() {
 					editRole === "DRIVER"
 						? editDriverId
 						: null,
+				warehouseAccess:
+					editRole === "WAREHOUSE"
+						? true
+						: editWarehouseAccess,
 			});
 
 			const res = await API.get("/users");
@@ -283,6 +297,7 @@ function UsersPage() {
 			setEditId(null);
 			setEditDriverId("");
 			setEditPlantCodes([]);
+			setEditWarehouseAccess(false);
 
 			setSnackMsg("User updated successfully");
 			setSnackType("success");
@@ -304,6 +319,14 @@ function UsersPage() {
 	const deleteUser = (id) => {
 		setDeleteUserId(id);
 		setDeleteOpen(true);
+	};
+
+	const hasWarehouseAccess = (user) => {
+		return (
+			user?.role === "ADMIN" ||
+			user?.role === "WAREHOUSE" ||
+			Boolean(user?.warehouseAccess)
+		);
 	};
 
 	const confirmDelete = async () => {
@@ -464,6 +487,7 @@ function UsersPage() {
 							setRole("PACKING");
 							setPlantCodes([]);
 							setDriverId("");
+							setWarehouseAccess(false);
 							setCreateOpen(true);
 						}}
 					>
@@ -503,6 +527,8 @@ function UsersPage() {
 							<div>Driver Profile</div>
 
 							<div>Plant Access</div>
+
+							<div>Warehouse Access</div>
 
 							<div>Actions</div>
 						</div>
@@ -741,6 +767,61 @@ function UsersPage() {
 													))
 												)}
 											</Box>
+										)}
+									</div>
+									<div
+										style={{
+											display: "flex",
+											alignItems: "center",
+											minWidth: 0,
+										}}
+									>
+										{editId === u.id ? (
+											<Box
+												sx={{
+													display: "flex",
+													alignItems: "center",
+													gap: 1,
+												}}
+											>
+												<Switch
+													checked={
+														editRole === "ADMIN" ||
+														editRole === "WAREHOUSE" ||
+														editWarehouseAccess
+													}
+													disabled={editRole === "ADMIN" || editRole === "WAREHOUSE"}
+													onChange={(e) => setEditWarehouseAccess(e.target.checked)}
+													sx={{
+														"& .MuiSwitch-switchBase.Mui-checked": {
+															color: "#fbbf24",
+														},
+														"& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+															backgroundColor: "#f59e0b",
+														},
+													}}
+												/>
+
+												<Chip
+													size="small"
+													label={
+														editRole === "ADMIN" || editRole === "WAREHOUSE" || editWarehouseAccess
+															? "Enabled"
+															: "No Access"
+													}
+													sx={
+														editRole === "ADMIN" || editRole === "WAREHOUSE" || editWarehouseAccess
+															? warehouseAccessChip
+															: noWarehouseAccessChip
+													}
+												/>
+											</Box>
+										) : (
+											<Chip
+												size="small"
+												label={hasWarehouseAccess(u) ? "Enabled" : "No Access"}
+												sx={hasWarehouseAccess(u) ? warehouseAccessChip : noWarehouseAccessChip}
+											/>
 										)}
 									</div>
 
@@ -1248,8 +1329,50 @@ function UsersPage() {
 									))}
 								</TextField>
 							)}
-						</Box>
 
+						</Box>
+						{role !== "DRIVER" && (
+							<Box sx={permissionCardSx}>
+								<Box>
+									<Box
+										sx={{
+											color: "#fff",
+											fontWeight: 900,
+											fontSize: 14,
+										}}
+									>
+										Warehouse Page Access
+									</Box>
+
+									<Box
+										sx={{
+											color: "#94a3b8",
+											fontSize: 12,
+											fontWeight: 600,
+											mt: 0.4,
+											lineHeight: 1.4,
+										}}
+									>
+										Allow this user to open Warehouse page and view warehouse data
+										based on selected plant access.
+									</Box>
+								</Box>
+
+								<Switch
+									checked={role === "ADMIN" || role === "WAREHOUSE" || warehouseAccess}
+									disabled={role === "ADMIN" || role === "WAREHOUSE"}
+									onChange={(e) => setWarehouseAccess(e.target.checked)}
+									sx={{
+										"& .MuiSwitch-switchBase.Mui-checked": {
+											color: "#fbbf24",
+										},
+										"& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+											backgroundColor: "#f59e0b",
+										},
+									}}
+								/>
+							</Box>
+						)}
 						<Box sx={{ flex: 1 }} />
 
 						<Box
@@ -1726,7 +1849,7 @@ const tableHeader = {
 	display: "grid",
 
 	gridTemplateColumns:
-		"1.2fr .8fr 1.2fr 1.4fr 1.4fr",
+		"1.1fr .75fr 1.1fr 1.3fr .9fr 1.4fr",
 
 	padding: "14px 16px",
 
@@ -1747,7 +1870,7 @@ const tableRow = {
 	display: "grid",
 
 	gridTemplateColumns:
-		"1.2fr .8fr 1.2fr 1.4fr 1.4fr",
+		"1.1fr .75fr 1.1fr 1.3fr .9fr 1.4fr",
 
 	alignItems: "center",
 
@@ -1765,6 +1888,34 @@ const userInfo = {
 	alignItems: "center",
 
 	gap: 14,
+};
+
+const permissionCardSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+
+	p: 1.6,
+	borderRadius: "16px",
+
+	background: "rgba(255,255,255,.04)",
+
+	border: "1px solid rgba(255,255,255,.08)",
+};
+
+const warehouseAccessChip = {
+	fontWeight: 800,
+	color: "#fbbf24",
+	background: "rgba(251,191,36,.12)",
+	border: "1px solid rgba(251,191,36,.18)",
+};
+
+const noWarehouseAccessChip = {
+	fontWeight: 800,
+	color: "#94a3b8",
+	background: "rgba(148,163,184,.10)",
+	border: "1px solid rgba(148,163,184,.14)",
 };
 
 const inlineInput = {

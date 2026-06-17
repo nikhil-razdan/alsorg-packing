@@ -1,6 +1,7 @@
 import { useState } from "react";
 import API from "../services/api";
 import { useNavigate } from "react-router-dom";
+import { normalizeRole } from "../utils/permissions";
 
 function LoginPage() {
   const [username, setUsername] = useState("");
@@ -15,14 +16,61 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await API.post("/auth/login", { username, password });
+      const res = await API.post("/auth/login", {
+        username,
+        password,
+      });
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("role", res.data.role);
+      const loginData = res.data || {};
+
+      const token = loginData.token;
+
+      if (!token) {
+        throw new Error("Token missing from login response");
+      }
+
+      localStorage.setItem("token", token);
       localStorage.setItem("auth", "true");
 
+      let meData = null;
+
+      try {
+        const meRes = await API.get("/auth/me");
+        meData = meRes.data || {};
+      } catch (meErr) {
+        console.warn("Could not load /auth/me after login. Falling back to login response.", meErr);
+      }
+
+      const finalRole = normalizeRole(
+        meData?.role ||
+        meData?.user?.role ||
+        loginData?.role ||
+        loginData?.user?.role
+      );
+
+      const finalUsername =
+        meData?.username ||
+        meData?.user?.username ||
+        loginData?.username ||
+        loginData?.user?.username ||
+        username.trim();
+
+      const finalWarehouseAccess =
+        meData?.warehouseAccess === true ||
+        meData?.user?.warehouseAccess === true ||
+        loginData?.warehouseAccess === true ||
+        loginData?.user?.warehouseAccess === true ||
+        finalRole === "ADMIN" ||
+        finalRole === "WAREHOUSE";
+
+      localStorage.setItem("role", finalRole);
+      localStorage.setItem("username", finalUsername);
+      localStorage.setItem("warehouseAccess", String(finalWarehouseAccess));
+
       navigate("/", { replace: true });
-    } catch {
+    } catch (err) {
+      console.error("Login failed", err);
+      localStorage.clear();
       setError("Invalid username or password");
     } finally {
       setLoading(false);

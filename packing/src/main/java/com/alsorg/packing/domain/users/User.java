@@ -5,12 +5,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-
 @Entity
 @Table(name = "users")
 public class User {
@@ -32,20 +26,28 @@ public class User {
     private String plantCode;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "user_plant_access",
-            joinColumns = @JoinColumn(name = "user_id")
-    )
+    @CollectionTable(name = "user_plant_access", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "plant_code")
     private Set<String> plantCodes = new LinkedHashSet<>();
-    
+
     private String packedAreaCode;
-    
+
     private String fgAreaCode;
-    
+
     private String allowedWarehouseCodes;
-    
+
     private UUID driverId;
+
+    @Column(name = "warehouse_access", nullable = false)
+    private boolean warehouseAccess = false;
+
+    public boolean isWarehouseAccess() {
+        return warehouseAccess;
+    }
+
+    public void setWarehouseAccess(boolean warehouseAccess) {
+        this.warehouseAccess = warehouseAccess;
+    }
 
     public UUID getDriverId() {
         return driverId;
@@ -54,7 +56,7 @@ public class User {
     public void setDriverId(java.util.UUID driverId) {
         this.driverId = driverId;
     }
-    
+
     public Long getId() {
         return id;
     }
@@ -121,27 +123,27 @@ public class User {
         return fallback;
     }
 
-	public String getPackedAreaCode() {
-		return packedAreaCode;
-	}
+    public String getPackedAreaCode() {
+        return packedAreaCode;
+    }
 
-	public void setPackedAreaCode(String packedAreaCode) {
-		this.packedAreaCode = packedAreaCode;
-	}
+    public void setPackedAreaCode(String packedAreaCode) {
+        this.packedAreaCode = packedAreaCode;
+    }
 
-	public String getFgAreaCode() {
-		return fgAreaCode;
-	}
+    public String getFgAreaCode() {
+        return fgAreaCode;
+    }
 
-	public void setFgAreaCode(String fgAreaCode) {
-		this.fgAreaCode = fgAreaCode;
-	}
+    public void setFgAreaCode(String fgAreaCode) {
+        this.fgAreaCode = fgAreaCode;
+    }
 
-	public String getAllowedWarehouseCodes() {
-		return allowedWarehouseCodes;
-	}
+    public String getAllowedWarehouseCodes() {
+        return allowedWarehouseCodes;
+    }
 
-	public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
-		this.allowedWarehouseCodes = allowedWarehouseCodes;
-	}
+    public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
+        this.allowedWarehouseCodes = allowedWarehouseCodes;
+    }
 }

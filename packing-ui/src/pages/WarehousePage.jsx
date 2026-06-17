@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Button, TextField, Box, Chip, MenuItem } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
+import { canOpenWarehousePage, normalizeRole } from "../utils/permissions";
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
@@ -10,7 +11,10 @@ function WarehousePage() {
 	const [gatePassPopup, setGatePassPopup] = useState(null);
 	const [approveGatePass, setApproveGatePass] = useState({});
 	const token = localStorage.getItem("token");
-	const role = localStorage.getItem("role");
+	const role = normalizeRole(localStorage.getItem("role"));
+
+	const canOpenWarehouse = canOpenWarehousePage();
+
 	const isDispatch = role === "DISPATCH";
 	const isPacking = role === "PACKING";
 	const [importMode, setImportMode] = useState("");
@@ -30,7 +34,13 @@ function WarehousePage() {
 	/* ===================== FETCH ===================== */
 
 	const fetchItems = async () => {
+		if (!canOpenWarehouse) {
+			setRows([]);
+			return;
+		}
+
 		setLoading(true);
+
 		try {
 			const [res1, res2] = await Promise.all([
 				fetch(`${API_BASE_URL}/api/warehouse/floor`, {
@@ -39,12 +49,24 @@ function WarehousePage() {
 				fetch(`${API_BASE_URL}/api/warehouse/items`, {
 					headers: { Authorization: `Bearer ${token}` },
 				}),
-			]); //Hello
+			]);
+
+			if (!res1.ok || !res2.ok) {
+				if (res1.status === 403 || res2.status === 403) {
+					alert("Warehouse access not allowed for this user");
+				}
+
+				throw new Error("Warehouse fetch failed");
+			}
 
 			const floorData = await res1.json();
 			const warehouseData = await res2.json();
 
-			const combined = [...floorData, ...warehouseData];
+			const combined = [
+				...(Array.isArray(floorData) ? floorData : []),
+				...(Array.isArray(warehouseData) ? warehouseData : []),
+			];
+
 			setRows(
 				combined.map((item) => ({
 					id: item.zohoItemId || item.sku,
@@ -64,7 +86,8 @@ function WarehousePage() {
 				}))
 			);
 
-		} catch {
+		} catch (err) {
+			console.error("Warehouse fetch failed", err);
 			setRows([]);
 		} finally {
 			setLoading(false);
@@ -72,6 +95,11 @@ function WarehousePage() {
 	};
 
 	useEffect(() => {
+		if (!canOpenWarehouse) {
+			setRows([]);
+			return;
+		}
+
 		fetchItems();
 	}, []);
 
@@ -954,6 +982,78 @@ function WarehousePage() {
 	const selectedItems = rows.filter(r =>
 		selectionModel?.includes(r.zohoItemId)
 	);
+
+	if (!canOpenWarehouse) {
+		return (
+			<div style={page}>
+				<div style={content}>
+					<Box
+						sx={{
+							minHeight: "70vh",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+						}}
+					>
+						<Box
+							sx={{
+								width: "100%",
+								maxWidth: 520,
+								p: 4,
+								borderRadius: "24px",
+								background: "linear-gradient(180deg,#0f172a,#111827)",
+								border: "1px solid rgba(255,255,255,.08)",
+								boxShadow: "0 30px 80px rgba(0,0,0,.45)",
+								textAlign: "center",
+							}}
+						>
+							<Box
+								sx={{
+									fontSize: 44,
+									mb: 1.5,
+								}}
+							>
+								🔒
+							</Box>
+
+							<Box
+								sx={{
+									color: "#fff",
+									fontSize: 28,
+									fontWeight: 900,
+									mb: 1,
+								}}
+							>
+								Warehouse Access Required
+							</Box>
+
+							<Box
+								sx={{
+									color: "#94a3b8",
+									fontSize: 14,
+									fontWeight: 600,
+									lineHeight: 1.6,
+									mb: 3,
+								}}
+							>
+								Your user does not currently have permission to open the Warehouse page.
+								Ask an Admin to enable Warehouse Page Access from User Management.
+							</Box>
+
+							<Button
+								onClick={() => {
+									window.location.href = "/";
+								}}
+								sx={actionPrimary}
+							>
+								Back to Dashboard
+							</Button>
+						</Box>
+					</Box>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div style={page}>

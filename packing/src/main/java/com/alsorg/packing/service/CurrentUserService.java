@@ -17,8 +17,7 @@ public class CurrentUserService {
 
     public CurrentUserService(
             UserRepository userRepository,
-            PlantLocationService plantLocationService
-    ) {
+            PlantLocationService plantLocationService) {
         this.userRepository = userRepository;
         this.plantLocationService = plantLocationService;
     }
@@ -50,25 +49,23 @@ public class CurrentUserService {
     public boolean isDispatch(User user) {
         return user != null && "DISPATCH".equalsIgnoreCase(user.getRole());
     }
-    
+
     public boolean isLogistics(User user) {
         if (user == null || user.getRole() == null) {
             return false;
         }
 
         return "LOGISTICS".equalsIgnoreCase(
-                String.valueOf(user.getRole()).trim()
-        );
+                String.valueOf(user.getRole()).trim());
     }
-    
+
     public boolean isDriver(User user) {
         if (user == null || user.getRole() == null) {
             return false;
         }
 
         return "DRIVER".equalsIgnoreCase(
-                String.valueOf(user.getRole()).trim()
-        );
+                String.valueOf(user.getRole()).trim());
     }
 
     public boolean canViewTrips(User user) {
@@ -101,7 +98,8 @@ public class CurrentUserService {
     }
 
     public boolean hasExplicitPlantAccess(User user) {
-        if (user == null) return false;
+        if (user == null)
+            return false;
         return !parsePlantCodes(user.getPlantCode()).isEmpty();
     }
 
@@ -149,5 +147,20 @@ public class CurrentUserService {
         }
 
         return plants;
+    }
+
+    public boolean isWarehouse(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+
+        return "WAREHOUSE".equalsIgnoreCase(
+                String.valueOf(user.getRole()).trim());
+    }
+
+    public boolean canAccessWarehouse(User user) {
+        return isAdmin(user)
+                || isWarehouse(user)
+                || Boolean.TRUE.equals(user.isWarehouseAccess());
     }
 }

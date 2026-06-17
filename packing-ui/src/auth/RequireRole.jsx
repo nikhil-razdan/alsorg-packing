@@ -1,17 +1,21 @@
 import { Navigate } from "react-router-dom";
+import { normalizeRole } from "../utils/permissions";
 
 function RequireRole({
-  children,
-  allowed,
+	children,
+	allowed,
 }) {
-  const role =
-    localStorage.getItem("role");
+	const role = normalizeRole(localStorage.getItem("role"));
 
-  if (!allowed.includes(role)) {
-    return <Navigate to="/" replace />;
-  }
+	const normalizedAllowed = allowed.map((item) =>
+		normalizeRole(item)
+	);
 
-  return children;
+	if (!normalizedAllowed.includes(role)) {
+		return <Navigate to="/" replace />;
+	}
+
+	return children;
 }
 
 export default RequireRole;
