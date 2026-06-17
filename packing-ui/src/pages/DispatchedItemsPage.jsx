@@ -1717,6 +1717,13 @@ function DispatchedItemsPage() {
 			};
 		}
 
+		if (row.status === "LOADED") {
+			return {
+				label: "Queued",
+				sx: queuedStatusChip,
+			};
+		}
+
 		if (row.status === "DISPATCHED") {
 			return {
 				label: "Dispatched",
@@ -2822,6 +2829,11 @@ function DispatchedItemsPage() {
 					sx = readyStatusChip;
 				}
 
+				if (row.status === "LOADED") {
+					label = "QUEUED";
+					sx = queuedStatusChip;
+				}
+
 				if (row.status === "DISPATCHED") {
 					label = "DISPATCHED";
 					sx = dispatchedStatusChip;
@@ -3222,6 +3234,10 @@ function DispatchedItemsPage() {
 
 		if (canChangeReadyStatus(row)) {
 			return "CHANGE_STATUS";
+		}
+
+		if (row.status === "LOADED") {
+			return "NONE";
 		}
 
 		if (row.status === "READY_TO_STORE") {
@@ -3737,7 +3753,7 @@ function DispatchedItemsPage() {
 						<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
 						<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
 						<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
-						<MenuItem value="QUEUED">⏳ Queued</MenuItem>
+						<MenuItem value="LOADED">⏳ Queued</MenuItem>
 						<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
 						<MenuItem value="OUT_FOR_DELIVERY">🚚 Out For Delivery</MenuItem>
 						<MenuItem value="DELIVERED">✅ Delivered</MenuItem>
