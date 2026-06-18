@@ -137,9 +137,7 @@ export default function BOMFlowLayout() {
 				<Box sx={topbarSx}>
 					<Box sx={topbarLeftSx}>
 						<Typography sx={systemTitleSx}>BOMFlow</Typography>
-                        <div style={subtitle}>
-								Alsorg Operations Suite
-							</div>
+                        
 
 						<Box sx={topbarDividerSx} />
 
