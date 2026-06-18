@@ -58,13 +58,6 @@ function Sidebar() {
 			],
 			icon: "🚛",
 		},
-
-		{
-			path: "/packflow/users",
-			label: "User Management",
-			roles: ["ADMIN"],
-			icon: "👤",
-		},
 	];
 
 	const visibleLinks = links.filter((link) => {

@@ -39,6 +39,18 @@ function App() {
 					}
 				/>
 
+				{/* GLOBAL USER MANAGEMENT - OUTSIDE PACKFLOW */}
+				<Route
+					path="/users"
+					element={
+						<RequireAuth>
+							<RequireRole allowed={["ADMIN"]}>
+								<UsersPage />
+							</RequireRole>
+						</RequireAuth>
+					}
+				/>
+
 				{/* PACKFLOW MODULE */}
 				<Route
 					path="/packflow"
@@ -58,15 +70,6 @@ function App() {
 					<Route
 						path="dashboard"
 						element={<DashboardPage />}
-					/>
-
-					<Route
-						path="users"
-						element={
-							<RequireRole allowed={["ADMIN"]}>
-								<UsersPage />
-							</RequireRole>
-						}
 					/>
 
 					<Route
@@ -117,6 +120,12 @@ function App() {
 						}
 					/>
 
+					{/* OLD PACKFLOW USER URL SHOULD NO LONGER OPEN INSIDE PACKFLOW */}
+					<Route
+						path="users"
+						element={<Navigate to="/users" replace />}
+					/>
+
 					<Route
 						path="*"
 						element={<Navigate to="dashboard" replace />}
@@ -142,11 +151,6 @@ function App() {
 				<Route
 					path="/dashboard"
 					element={<Navigate to="/packflow/dashboard" replace />}
-				/>
-
-				<Route
-					path="/users"
-					element={<Navigate to="/packflow/users" replace />}
 				/>
 
 				<Route

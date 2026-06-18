@@ -180,12 +180,6 @@ function Header() {
 				icon: <LocalShippingIcon />,
 				roles: ["ADMIN", "LOGISTICS"],
 			},
-			{
-				label: "User Management",
-				path: "/packflow/users",
-				icon: <PersonIcon />,
-				roles: ["ADMIN"],
-			},
 		],
 		[]
 	);
@@ -352,6 +346,22 @@ function Header() {
 
 							<span>
 								BOMFlow
+							</span>
+						</button>
+					)}
+					{role === "ADMIN" && (
+						<button
+							style={moduleCard}
+							onClick={() =>
+								openModule("/users")
+							}
+						>
+							<span style={moduleIcon}>
+								<PersonIcon />
+							</span>
+
+							<span>
+								User Management
 							</span>
 						</button>
 					)}
@@ -580,7 +590,7 @@ function Header() {
 						<button
 							style={settingsAction}
 							onClick={() =>
-								navigate("/packflow/users")
+								navigate("/users")
 							}
 						>
 							Manage Users
