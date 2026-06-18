@@ -103,7 +103,7 @@ export default function AppNavigator() {
               name="DispatchItems"
               component={DispatchItemsScreen}
               options={{
-                title: "Dispatch Items",
+                title: "",
                 headerStyle: {
                   backgroundColor: "#020617",
                 },

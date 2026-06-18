@@ -9,10 +9,13 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 
-import MapLibreGL from "@maplibre/maplibre-react-native";
+import {
+  Map,
+  Camera,
+  ViewAnnotation,
+} from "@maplibre/maplibre-react-native";
 
 import {
   fetchTrips,
@@ -22,10 +25,81 @@ import {
   safeOpenCoordinatesInMaps,
 } from "../api/locationApi";
 
-MapLibreGL.setAccessToken(null);
+const MAP_STYLE_URL =
+  "https://tiles.openfreemap.org/styles/liberty";
 
 const normalizeStatus = (value) =>
-  String(value || "").trim().toUpperCase();
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+function cleanNumber(value) {
+  const n = Number(value);
+
+  return Number.isFinite(n)
+    ? n
+    : null;
+}
+
+function formatTime(value) {
+  if (!value) return "—";
+
+  try {
+    return new Date(value).toLocaleTimeString();
+  } catch {
+    return "—";
+  }
+}
+
+function isStaleLocation(value) {
+  if (!value) return false;
+
+  const updatedAt =
+    new Date(value).getTime();
+
+  if (!Number.isFinite(updatedAt)) {
+    return false;
+  }
+
+  const diffMs =
+    Date.now() - updatedAt;
+
+  return diffMs > 2 * 60 * 1000;
+}
+
+async function reverseGeocodeAddress(
+  latitude,
+  longitude
+) {
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
+
+    const res =
+      await fetch(url, {
+        headers: {
+          "User-Agent":
+            "ShipTrack/1.0 alsorg logistics live location",
+          "Accept-Language": "en",
+        },
+      });
+
+    if (!res.ok) {
+      return "";
+    }
+
+    const data =
+      await res.json();
+
+    return (
+      data?.display_name ||
+      data?.name ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
 
 export default function LiveTripMapScreen({
   route,
@@ -34,31 +108,47 @@ export default function LiveTripMapScreen({
   const initialTrip =
     route?.params?.trip || null;
 
+  const tripId =
+    route?.params?.tripId ||
+    initialTrip?.id;
+
   const [trip, setTrip] =
     useState(initialTrip);
 
   const [loading, setLoading] =
     useState(false);
 
+  const [address, setAddress] =
+    useState("");
+
+  const [mapError, setMapError] =
+    useState("");
+
   const intervalRef =
     useRef(null);
 
   const lat =
-    Number(trip?.currentLatitude);
+    cleanNumber(trip?.currentLatitude);
 
   const lng =
-    Number(trip?.currentLongitude);
+    cleanNumber(trip?.currentLongitude);
 
   const hasLocation =
-    Number.isFinite(lat) &&
-    Number.isFinite(lng);
+    lat !== null && lng !== null;
 
   const isActive =
     normalizeStatus(trip?.status) ===
     "OUT_FOR_DELIVERY";
 
+  const stale =
+    isStaleLocation(
+      trip?.currentLocationAt
+    );
+
   const loadFreshTrip = async () => {
-    if (!initialTrip?.id) return;
+    if (!tripId) {
+      return;
+    }
 
     try {
       setLoading(true);
@@ -71,7 +161,7 @@ export default function LiveTripMapScreen({
           ? trips.find(
               (x) =>
                 String(x.id) ===
-                String(initialTrip.id)
+                String(tripId)
             )
           : null;
 
@@ -81,7 +171,8 @@ export default function LiveTripMapScreen({
     } catch (e) {
       console.log(
         "Live map refresh failed",
-        e?.message
+        e?.response?.data ||
+          e?.message
       );
     } finally {
       setLoading(false);
@@ -104,9 +195,36 @@ export default function LiveTripMapScreen({
         );
       }
     };
-  }, []);
+  }, [tripId]);
 
-  if (!initialTrip) {
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAddress = async () => {
+      if (!hasLocation) {
+        setAddress("");
+        return;
+      }
+
+      const result =
+        await reverseGeocodeAddress(
+          lat,
+          lng
+        );
+
+      if (!cancelled) {
+        setAddress(result);
+      }
+    };
+
+    loadAddress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lat, lng, hasLocation]);
+
+  if (!tripId) {
     return (
       <View style={styles.center}>
         <Text style={styles.error}>
@@ -124,7 +242,7 @@ export default function LiveTripMapScreen({
         </Text>
 
         <Text style={styles.sub}>
-          Waiting for driver location...
+          Waiting for driver GPS location...
         </Text>
 
         <TouchableOpacity
@@ -140,23 +258,50 @@ export default function LiveTripMapScreen({
   }
 
   const lastUpdated =
-    trip?.currentLocationAt
-      ? new Date(
-          trip.currentLocationAt
-        ).toLocaleTimeString()
+    formatTime(
+      trip?.currentLocationAt
+    );
+
+  const accuracy =
+    trip?.currentLocationAccuracy
+      ? `${Math.round(
+          Number(
+            trip.currentLocationAccuracy
+          )
+        )} m`
+      : "—";
+
+  const speed =
+    trip?.currentSpeed != null
+      ? `${Math.round(
+          Number(trip.currentSpeed) * 3.6
+        )} km/h`
+      : "—";
+
+  const heading =
+    trip?.currentHeading != null
+      ? `${Math.round(
+          Number(trip.currentHeading)
+        )}°`
       : "—";
 
   return (
     <View style={styles.page}>
-      <MapLibreGL.MapView
+      <Map
         style={styles.map}
-        styleURL="https://demotiles.maplibre.org/style.json"
-        logoEnabled={false}
-        attributionEnabled={false}
+        mapStyle={MAP_STYLE_URL}
+        onDidFinishLoadingMap={() =>
+          setMapError("")
+        }
+        onDidFailLoadingMap={() =>
+          setMapError(
+            "Map tiles failed to load. Check internet connection."
+          )
+        }
       >
-        <MapLibreGL.Camera
-          zoomLevel={15}
-          centerCoordinate={[
+        <Camera
+          zoom={16.5}
+          center={[
             lng,
             lat,
           ]}
@@ -164,9 +309,9 @@ export default function LiveTripMapScreen({
           animationDuration={900}
         />
 
-        <MapLibreGL.PointAnnotation
+        <ViewAnnotation
           id="driver-location"
-          coordinate={[
+          lngLat={[
             lng,
             lat,
           ]}
@@ -178,8 +323,8 @@ export default function LiveTripMapScreen({
               </Text>
             </View>
           </View>
-        </MapLibreGL.PointAnnotation>
-      </MapLibreGL.MapView>
+        </ViewAnnotation>
+      </Map>
 
       <View style={styles.topBar}>
         <TouchableOpacity
@@ -204,7 +349,36 @@ export default function LiveTripMapScreen({
 
         {loading ? (
           <ActivityIndicator color="#fff" />
-        ) : null}
+        ) : (
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={loadFreshTrip}
+          >
+            <Text style={styles.refreshText}>
+              ↻
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {mapError ? (
+        <View style={styles.mapErrorBox}>
+          <Text style={styles.mapErrorText}>
+            {mapError}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.addressPill}>
+        <Text
+          style={styles.addressText}
+          numberOfLines={2}
+        >
+          {address ||
+            `Lat ${lat.toFixed(
+              5
+            )}, Long ${lng.toFixed(5)}`}
+        </Text>
       </View>
 
       <View style={styles.bottomCard}>
@@ -218,12 +392,22 @@ export default function LiveTripMapScreen({
           <View style={{ flex: 1 }}>
             <Text style={styles.liveTitle}>
               {isActive
-                ? "Live location active"
+                ? stale
+                  ? "Live location stale"
+                  : "Live location active"
                 : "Trip not active"}
             </Text>
 
             <Text style={styles.liveSub}>
               Last updated: {lastUpdated}
+            </Text>
+
+            <Text style={styles.liveSub}>
+              Accuracy: {accuracy}
+            </Text>
+
+            <Text style={styles.liveSub}>
+              Speed: {speed} • Heading: {heading}
             </Text>
           </View>
         </View>
@@ -332,6 +516,57 @@ const styles = {
     marginTop: 2,
   },
 
+  refreshBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  refreshText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  mapErrorBox: {
+    position: "absolute",
+    top: 96,
+    left: 16,
+    right: 16,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(239,68,68,.92)",
+  },
+
+  mapErrorText: {
+    color: "#fff",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  addressPill: {
+    position: "absolute",
+    top: 100,
+    left: 16,
+    right: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(2,6,23,.88)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+  },
+
+  addressText: {
+    color: "#e5e7eb",
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
   bottomCard: {
     position: "absolute",
     left: 0,
@@ -394,8 +629,8 @@ const styles = {
   },
 
   markerOuter: {
-    width: 54,
-    height: 54,
+    width: 58,
+    height: 58,
     borderRadius: 999,
     backgroundColor: "rgba(34,197,94,.25)",
     alignItems: "center",
@@ -403,8 +638,8 @@ const styles = {
   },
 
   markerInner: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     backgroundColor: "#22c55e",
     alignItems: "center",

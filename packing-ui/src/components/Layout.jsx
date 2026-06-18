@@ -3,54 +3,54 @@ import Sidebar from "./Sidebar";
 import { Outlet } from "react-router-dom";
 
 function Layout() {
-  return (
-    <div style={shell}>
-      <Sidebar />
+	return (
+		<div style={shell}>
+			<Sidebar />
 
-      <div style={main}>
-        <Header />
+			<div style={main}>
+				<Header />
 
-        <div style={contentShell}>
-          <div style={contentInner}>
-            <Outlet />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+				<div style={contentShell}>
+					<div style={contentInner}>
+						<Outlet />
+					</div>
+				</div>
+			</div>
+		</div>
+	);
 }
 
 const shell = {
-  display: "flex",
+	display: "flex",
 
-  width: "100%",
+	width: "100%",
 
-  minHeight: "100vh",
+	minHeight: "100vh",
 
-  background:
-    "linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)",
+	background:
+		"linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)",
 
-  overflow: "hidden",
+	overflow: "hidden",
 };
 
 const main = {
-  flex: 1,
+	flex: 1,
 
-  minWidth: 0,
+	minWidth: 0,
 
-  display: "flex",
+	display: "flex",
 
-  flexDirection: "column",
+	flexDirection: "column",
 };
 
 const contentShell = {
-  flex: 1,
+	flex: 1,
 
-  overflow: "auto",
+	overflow: "auto",
 
-  padding: 24,
+	padding: 24,
 
-  background: `
+	background: `
     radial-gradient(
       circle at top left,
       rgba(59,130,246,0.10),
@@ -66,9 +66,9 @@ const contentShell = {
 };
 
 const contentInner = {
-  width: "100%",
+	width: "100%",
 
-  minHeight: "100%",
+	minHeight: "100%",
 };
 
 export default Layout;

@@ -1,16 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
 import Layout from "./components/Layout";
+
 import DashboardPage from "./pages/Dashboard";
 import ZohoItemsPage from "./pages/ZohoItemsPage";
 import LoginPage from "./pages/LoginPage";
-import RequireAuth from "./auth/RequireAuth";
 import DispatchedItemsPage from "./pages/DispatchedItemsPage";
-import useViewportHeight from "./useViewportHeight";
 import UsersPage from "./pages/UsersPage";
 import WarehousePage from "./pages/WarehousePage";
 import LogisticsPortalPage from "./pages/LogisticsPortalPage";
+
+import RequireAuth from "./auth/RequireAuth";
 import RequireRole from "./auth/RequireRole";
 import RequireWarehouseAccess from "./auth/RequireWarehouseAccess";
+import RequireModule from "./auth/RequireModule";
+
+import ModuleHub from "./shell/ModuleHub";
+import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
+
+import useViewportHeight from "./useViewportHeight";
 
 function App() {
 	useViewportHeight();
@@ -21,18 +29,39 @@ function App() {
 				{/* PUBLIC */}
 				<Route path="/login" element={<LoginPage />} />
 
-				{/* PROTECTED */}
+				{/* GLOBAL MODULE HUB */}
 				<Route
+					path="/modules"
 					element={
 						<RequireAuth>
-							<Layout />
+							<ModuleHub />
+						</RequireAuth>
+					}
+				/>
+
+				{/* PACKFLOW MODULE */}
+				<Route
+					path="/packflow"
+					element={
+						<RequireAuth>
+							<RequireModule moduleKey="PACKFLOW">
+								<Layout />
+							</RequireModule>
 						</RequireAuth>
 					}
 				>
-					<Route path="/" element={<DashboardPage />} />
+					<Route
+						index
+						element={<Navigate to="dashboard" replace />}
+					/>
 
 					<Route
-						path="/users"
+						path="dashboard"
+						element={<DashboardPage />}
+					/>
+
+					<Route
+						path="users"
 						element={
 							<RequireRole allowed={["ADMIN"]}>
 								<UsersPage />
@@ -41,7 +70,7 @@ function App() {
 					/>
 
 					<Route
-						path="/zoho-items"
+						path="zoho-items"
 						element={
 							<RequireRole allowed={["ADMIN", "PACKING"]}>
 								<ZohoItemsPage />
@@ -50,7 +79,7 @@ function App() {
 					/>
 
 					<Route
-						path="/warehouse"
+						path="warehouse"
 						element={
 							<RequireWarehouseAccess>
 								<WarehousePage />
@@ -59,7 +88,7 @@ function App() {
 					/>
 
 					<Route
-						path="/dispatched-items"
+						path="dispatched-items"
 						element={
 							<RequireRole
 								allowed={[
@@ -75,7 +104,7 @@ function App() {
 					/>
 
 					<Route
-						path="/logistics"
+						path="logistics"
 						element={
 							<RequireRole
 								allowed={[
@@ -87,10 +116,61 @@ function App() {
 							</RequireRole>
 						}
 					/>
+
+					<Route
+						path="*"
+						element={<Navigate to="dashboard" replace />}
+					/>
 				</Route>
 
+				{/* BOMFLOW MODULE */}
+				<Route
+					path="/bomflow/*"
+					element={
+						<RequireAuth>
+							<RequireModule moduleKey="BOMFLOW">
+								<BOMFlowRoutes />
+							</RequireModule>
+						</RequireAuth>
+					}
+				/>
+
+				{/* ROOT REDIRECT */}
+				<Route path="/" element={<Navigate to="/modules" replace />} />
+
+				{/* OLD PACKFLOW URL REDIRECTS */}
+				<Route
+					path="/dashboard"
+					element={<Navigate to="/packflow/dashboard" replace />}
+				/>
+
+				<Route
+					path="/users"
+					element={<Navigate to="/packflow/users" replace />}
+				/>
+
+				<Route
+					path="/zoho-items"
+					element={<Navigate to="/packflow/zoho-items" replace />}
+				/>
+
+				<Route
+					path="/warehouse"
+					element={<Navigate to="/packflow/warehouse" replace />}
+				/>
+
+				<Route
+					path="/dispatched-items"
+					element={<Navigate to="/packflow/dispatched-items" replace />}
+				/>
+
+				<Route
+					path="/logistics"
+					element={<Navigate to="/packflow/logistics" replace />}
+				/>
+
 				{/* FALLBACK */}
-				<Route path="*" element={<Navigate to="/" />} />
+				<Route path="*" element={<Navigate to="/modules" replace />} />
 			</Routes>
 		</BrowserRouter>
 	);

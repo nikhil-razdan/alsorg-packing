@@ -11,7 +11,7 @@ function Sidebar() {
 
 	const links = [
 		{
-			path: "/",
+			path: "/packflow/dashboard",
 			label: "Dashboard",
 			roles: [
 				"ADMIN",
@@ -24,14 +24,14 @@ function Sidebar() {
 		},
 
 		{
-			path: "/zoho-items",
+			path: "/packflow/zoho-items",
 			label: "Inventory Items",
 			roles: ["ADMIN", "PACKING"],
 			icon: "📦",
 		},
 
 		{
-			path: "/warehouse",
+			path: "/packflow/warehouse",
 			label: "Warehouse",
 			roles: [],
 			customAccess: canOpenWarehouse,
@@ -39,7 +39,7 @@ function Sidebar() {
 		},
 
 		{
-			path: "/dispatched-items",
+			path: "/packflow/dispatched-items",
 			label: "Dispatched Items",
 			roles: [
 				"ADMIN",
@@ -50,7 +50,7 @@ function Sidebar() {
 		},
 
 		{
-			path: "/logistics",
+			path: "/packflow/logistics",
 			label: "Logistics",
 			roles: [
 				"ADMIN",
@@ -60,7 +60,7 @@ function Sidebar() {
 		},
 
 		{
-			path: "/users",
+			path: "/packflow/users",
 			label: "User Management",
 			roles: ["ADMIN"],
 			icon: "👤",
@@ -139,7 +139,7 @@ function Sidebar() {
 						</div>
 
 						<div style={logoSub}>
-							Inventory Suite
+							PackFlow
 						</div>
 					</div>
 				)}
@@ -174,9 +174,23 @@ function Sidebar() {
 				</button>
 			</div>
 
+			<Link
+				to="/modules"
+				style={linkStyle(location.pathname === "/modules")}
+			>
+				<span style={icon}>
+					🧭
+				</span>
+
+				{!collapsed && "All Modules"}
+			</Link>
+
+			<div style={smallDivider} />
+
 			{visibleLinks.map((link) => {
 				const active =
-					location.pathname === link.path;
+					location.pathname === link.path ||
+					location.pathname.startsWith(`${link.path}/`);
 
 				return (
 					<Link
@@ -299,6 +313,13 @@ const divider = {
 	background:
 		"linear-gradient(90deg, rgba(255,255,255,0.14), transparent)",
 	marginTop: 24,
+};
+
+const smallDivider = {
+	height: 1,
+	background:
+		"linear-gradient(90deg, rgba(255,255,255,0.10), transparent)",
+	margin: "10px 0 12px",
 };
 
 const logoSection = {

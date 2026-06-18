@@ -63,11 +63,35 @@ function LoginPage() {
         finalRole === "ADMIN" ||
         finalRole === "WAREHOUSE";
 
+      const finalModules =
+        Array.isArray(meData?.modules)
+          ? meData.modules
+          : Array.isArray(meData?.user?.modules)
+            ? meData.user.modules
+            : Array.isArray(loginData?.modules)
+              ? loginData.modules
+              : Array.isArray(loginData?.user?.modules)
+                ? loginData.user.modules
+                : finalRole === "ADMIN"
+                  ? ["PACKFLOW", "BOMFLOW"]
+                  : ["PACKFLOW"];
+
+      const currentUser = {
+        username: finalUsername,
+        role: finalRole,
+        warehouseAccess: finalWarehouseAccess,
+        modules: finalModules,
+      };
+
       localStorage.setItem("role", finalRole);
       localStorage.setItem("username", finalUsername);
       localStorage.setItem("warehouseAccess", String(finalWarehouseAccess));
 
-      navigate("/", { replace: true });
+      localStorage.setItem("modules", JSON.stringify(finalModules));
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      navigate("/modules", { replace: true });
+
     } catch (err) {
       console.error("Login failed", err);
       localStorage.clear();
@@ -89,18 +113,18 @@ function LoginPage() {
         </div>
 
         <div style={contentBlock}>
-          <span style={badge}>Inventory Management Platform</span>
+          <span style={badge}>FlowSuite</span>
 
           <h1 style={title}>
-            Inventory Management
+            Operations Management
             <br />
             <span style={titleAccent}>Made Intelligent</span>
           </h1>
 
           <p style={description}>
-            A centralized system designed to simplify stock tracking, optimize
-            decision-making, and give teams complete visibility across their
-            inventory lifecycle.
+            A centralized platform for PackFlow and BOMFlow, helping teams manage
+            inventory, packing, dispatch, product BOM, costing and approval workflows
+            from one secure login.
           </p>
 
           <div style={divider} />
@@ -122,7 +146,7 @@ function LoginPage() {
             <div style={statusDot} />
 
             <span style={topBarText}>
-              ENTERPRISE ACCESS PORTAL
+              GLOBAL ACCESS PORTAL
             </span>
           </div>
           <h3 style={cardTitle}>Welcome back</h3>
@@ -181,7 +205,7 @@ function LoginPage() {
                 cursor: loading ? "not-allowed" : "pointer",
               }}
             >
-              {loading ? "Signing in..." : "Proceed to my Account →"}
+              {loading ? "Signing in..." : "Continue to Modules →"}
             </button>
           </form>
         </div>

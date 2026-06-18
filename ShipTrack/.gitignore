@@ -48,3 +48,10 @@ android-local-backup/
 android-local-backup-1/
 android-local-backup-old/
 ios-local-backup/
+android-local-backup/
+.gradle/
+**/.gradle/
+**/*.lock
+android/build/
+android/app/build/
+.expo/

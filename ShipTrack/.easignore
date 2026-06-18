@@ -1,8 +1,31 @@
-/android/
-/ios/
+# Local Android backups / generated folders
 android-local-backup/
-android-local-backup-1/
-android-local-backup-old/
-ios-local-backup/
-android/local.properties
-local.properties
+android-local-backup/**
+
+# Gradle caches and locks
+.gradle/
+**/.gradle/
+**/checksums.lock
+**/*.lock
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+
+# Node / Expo local cache
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env
+.env.*

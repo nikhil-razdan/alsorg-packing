@@ -241,8 +241,6 @@ export async function startLiveLocationForTrip(
 }
 
 export async function stopLiveLocation() {
-  await stopForegroundTracker();
-
   try {
     const started =
       await Location.hasStartedLocationUpdatesAsync(
@@ -256,12 +254,50 @@ export async function stopLiveLocation() {
     }
   } catch (e) {
     console.log(
-      "Stop background tracker failed",
+      "Stop live location failed",
       e?.message || e
     );
   }
 
-  await SecureStore.deleteItemAsync(
-    ACTIVE_TRIP_KEY
-  );
+  try {
+    await SecureStore.deleteItemAsync(
+      ACTIVE_TRIP_KEY
+    );
+  } catch (e) {
+    console.log(
+      "Clear active trip key failed",
+      e?.message || e
+    );
+  }
+}
+
+export async function resetLiveLocationTask() {
+  try {
+    const started =
+      await Location.hasStartedLocationUpdatesAsync(
+        LIVE_LOCATION_TASK
+      );
+
+    if (started) {
+      await Location.stopLocationUpdatesAsync(
+        LIVE_LOCATION_TASK
+      );
+    }
+  } catch (e) {
+    console.log(
+      "Reset live location task failed",
+      e?.message || e
+    );
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(
+      ACTIVE_TRIP_KEY
+    );
+  } catch (e) {
+    console.log(
+      "Reset active trip key failed",
+      e?.message || e
+    );
+  }
 }
