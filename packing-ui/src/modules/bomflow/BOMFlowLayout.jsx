@@ -136,14 +136,21 @@ export default function BOMFlowLayout() {
             <Box sx={mainSx}>
                 <Box sx={topbarSx}>
                     <Box sx={topbarLeftSx}>
-                        <Typography sx={systemTitleSx}>BOMFlow</Typography>
-                        <div style={subtitle}>
-                            Alsorg Operations Suite
-                        </div>
+                        <Box sx={systemTitleBlockSx}>
+                            <Typography sx={systemTitleSx}>
+                                BOMFlow
+                            </Typography>
+
+                            <Typography sx={systemSubtitleSx}>
+                                Alsorg Operations Suite
+                            </Typography>
+                        </Box>
 
                         <Box sx={topbarDividerSx} />
 
-                        <Typography sx={breadcrumbSx}>{activeLabel}</Typography>
+                        <Typography sx={breadcrumbSx}>
+                            {activeLabel}
+                        </Typography>
                     </Box>
 
                     <Box sx={topbarCenterSx}>
@@ -339,17 +346,33 @@ const topbarSx = {
 };
 
 const topbarLeftSx = {
-    display: "flex",
-    alignItems: "center",
-    gap: 2,
-    minWidth: 300,
+	display: "flex",
+	alignItems: "center",
+	gap: 2,
+	minWidth: 300,
+};
+
+const systemTitleBlockSx = {
+	display: "flex",
+	flexDirection: "column",
+	justifyContent: "center",
+	lineHeight: 1,
+};
+
+const systemSubtitleSx = {
+	color: "rgba(255,255,255,.52)",
+	fontSize: 11,
+	fontWeight: 700,
+	mt: 0.4,
+	letterSpacing: 0.3,
 };
 
 const systemTitleSx = {
-    color: "#dbeafe",
-    fontWeight: 950,
-    fontSize: 18,
-    letterSpacing: "-0.03em",
+	color: "#dbeafe",
+	fontWeight: 950,
+	fontSize: 22,
+	lineHeight: 1,
+	letterSpacing: "-0.03em",
 };
 
 const topbarDividerSx = {
