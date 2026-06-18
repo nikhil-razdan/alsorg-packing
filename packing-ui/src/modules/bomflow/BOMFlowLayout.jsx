@@ -84,8 +84,8 @@ export default function BOMFlowLayout() {
 					<Box sx={brandMarkSx}>B</Box>
 
 					<Box>
-						<Typography sx={brandTitleSx}>BOMFlow</Typography>
-						<Typography sx={brandSubSx}>Industrial Costing</Typography>
+						<Typography sx={brandTitleSx}>Alsorg</Typography>
+						<Typography sx={brandSubSx}>BOMFlow</Typography>
 					</Box>
 				</Box>
 
@@ -136,7 +136,10 @@ export default function BOMFlowLayout() {
 			<Box sx={mainSx}>
 				<Box sx={topbarSx}>
 					<Box sx={topbarLeftSx}>
-						<Typography sx={systemTitleSx}>BOMFlow System</Typography>
+						<Typography sx={systemTitleSx}>BOMFlow</Typography>
+                        <div style={subtitle}>
+								Alsorg Operations Suite
+							</div>
 
 						<Box sx={topbarDividerSx} />
 
