@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
 	Box,
@@ -14,7 +15,12 @@ import {
 } from "@mui/material";
 
 import Drawer from "@mui/material/Drawer";
-
+import { hasModuleAccess } from "../utils/moduleAccess";
+import { normalizeRole } from "../utils/permissions";
+import AppsIcon from "@mui/icons-material/Apps";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import LogoutIcon from "@mui/icons-material/Logout";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import LockResetIcon from "@mui/icons-material/LockReset";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -27,6 +33,28 @@ import Alert from "@mui/material/Alert";
 import API from "../services/api";
 
 function UsersPage() {
+
+	const navigate = useNavigate();
+
+	const currentRole = normalizeRole(localStorage.getItem("role"));
+	const canOpenBOMFlow = hasModuleAccess("BOMFLOW");
+
+	const goToModules = () => {
+		navigate("/modules");
+	};
+
+	const goToPackFlow = () => {
+		navigate("/packflow/dashboard");
+	};
+
+	const goToBOMFlow = () => {
+		navigate("/bomflow/dashboard");
+	};
+
+	const logout = () => {
+		localStorage.clear();
+		navigate("/login", { replace: true });
+	};
 
 	const [users, setUsers] = useState([]);
 	const [loading, setLoading] = useState(false);
@@ -468,31 +496,103 @@ function UsersPage() {
 
 		<div style={page}>
 			<div style={content}>
-				<div style={headerRow}>
-					<div>
-						<div style={logo}>
-							👥 User Management
+				<div style={globalHeader}>
+					<div style={globalHeaderLeft}>
+						<div style={brandBlock}>
+							<div style={brandIcon}>
+								A
+							</div>
+
+							<div>
+								<div style={suiteTitle}>
+									FlowSuite
+								</div>
+
+								<div style={suiteSub}>
+									Global User & Access Control
+								</div>
+							</div>
 						</div>
 
-						<div style={subtitle}>
-							Manage roles, permissions and
-							enterprise access control
+						<div style={pageTitleBlock}>
+							<div style={logo}>
+								👥 User Management
+							</div>
+
+							<div style={subtitle}>
+								Manage users, roles, plant access, warehouse access and platform permissions.
+							</div>
 						</div>
 					</div>
-					<button
-						style={moduleButton}
-						onClick={() => {
-							setUsername("");
-							setPassword("");
-							setRole("PACKING");
-							setPlantCodes([]);
-							setDriverId("");
-							setWarehouseAccess(false);
-							setCreateOpen(true);
-						}}
-					>
-						+ Create User
+
+					<div style={globalHeaderActions}>
+						<button
+							style={navButton}
+							onClick={goToModules}
+						>
+							<AppsIcon fontSize="small" />
+							All Modules
+						</button>
+
+						<button
+							style={navButton}
+							onClick={goToPackFlow}
+						>
+							<InventoryIcon fontSize="small" />
+							PackFlow
+						</button>
+
+						{canOpenBOMFlow && (
+							<button
+								style={navButton}
+								onClick={goToBOMFlow}
+							>
+								<AccountTreeOutlinedIcon fontSize="small" />
+								BOMFlow
+							</button>
+						)}
+
+						<button
+							style={logoutNavButton}
+							onClick={logout}
+						>
+							<LogoutIcon fontSize="small" />
+							Logout
+						</button>
+
+						<button
+							style={moduleButton}
+							onClick={() => {
+								setUsername("");
+								setPassword("");
+								setRole("PACKING");
+								setPlantCodes([]);
+								setDriverId("");
+								setWarehouseAccess(false);
+								setCreateOpen(true);
+							}}
+						>
+							+ Create User
+						</button>
+					</div>
+				</div>
+				<div style={breadcrumbRow}>
+					<button style={breadcrumbButton} onClick={goToModules}>
+						<ArrowBackIcon fontSize="small" />
+						Back to Module Hub
 					</button>
+
+					<div style={breadcrumbText}>
+						FlowSuite / Administration / User Management
+					</div>
+
+					{currentRole === "ADMIN" && (
+						<Chip
+							size="small"
+							label="ADMIN ACCESS"
+							sx={adminAccessChip}
+						/>
+					)}
 				</div>
 
 				<Box sx={searchPanel}>
@@ -1539,49 +1639,172 @@ function UsersPage() {
 
 /* ===== ENHANCED GLASS STYLE ===== */
 
+const globalHeader = {
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 24,
+	padding: 24,
+	borderRadius: 26,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	boxShadow: "0 30px 80px rgba(2,6,23,.42)",
+	position: "relative",
+	overflow: "hidden",
+};
+
+const globalHeaderLeft = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 24,
+	minWidth: 0,
+};
+
+const brandBlock = {
+	display: "flex",
+	alignItems: "center",
+	gap: 14,
+};
+
+const brandIcon = {
+	width: 48,
+	height: 48,
+	borderRadius: 16,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	color: "#fff",
+	fontWeight: 900,
+	fontSize: 20,
+	boxShadow: "0 12px 28px rgba(37,99,235,.35)",
+};
+
+const suiteTitle = {
+	color: "#fff",
+	fontSize: 18,
+	fontWeight: 900,
+	letterSpacing: 0.6,
+};
+
+const suiteSub = {
+	color: "rgba(255,255,255,.52)",
+	fontSize: 12,
+	marginTop: 3,
+	fontWeight: 600,
+};
+
+const pageTitleBlock = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 4,
+};
+
+const globalHeaderActions = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 10,
+	flexWrap: "wrap",
+};
+
+const navButton = {
+	height: 42,
+	padding: "0 14px",
+	borderRadius: 14,
+	border: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(255,255,255,.04)",
+	color: "#fff",
+	fontWeight: 800,
+	cursor: "pointer",
+	display: "inline-flex",
+	alignItems: "center",
+	gap: 8,
+};
+
+const logoutNavButton = {
+	...navButton,
+	color: "#fca5a5",
+	background: "rgba(239,68,68,.10)",
+	border: "1px solid rgba(239,68,68,.18)",
+};
+
+const breadcrumbRow = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 14,
+	flexWrap: "wrap",
+	padding: "0 4px",
+};
+
+const breadcrumbButton = {
+	height: 38,
+	padding: "0 14px",
+	borderRadius: 12,
+	border: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(255,255,255,.04)",
+	color: "#cbd5e1",
+	fontWeight: 800,
+	cursor: "pointer",
+	display: "inline-flex",
+	alignItems: "center",
+	gap: 8,
+};
+
+const breadcrumbText = {
+	color: "#94a3b8",
+	fontSize: 13,
+	fontWeight: 700,
+};
+
+const adminAccessChip = {
+	fontWeight: 900,
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.12)",
+	border: "1px solid rgba(59,130,246,.22)",
+};
+
 const page = {
 	minHeight: "100vh",
-
-	background:
-		"linear-gradient(135deg,#020617,#0f172a)",
+	position: "relative",
+	overflow: "hidden",
+	background: `
+		radial-gradient(circle at top left, rgba(59,130,246,0.14), transparent 22%),
+		radial-gradient(circle at bottom right, rgba(14,165,233,0.10), transparent 24%),
+		linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)
+	`,
 };
 
 const content = {
-	padding: 24,
-
+	padding: 28,
 	display: "flex",
-
 	flexDirection: "column",
-
-	gap: 24,
+	gap: 22,
+	maxWidth: 1500,
+	margin: "0 auto",
 };
 
 const wrap = {
 	background:
-		"linear-gradient(180deg,#0f172a,#111827)",
-
-	borderRadius: 24,
-
+		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(17,24,39,.92))",
+	borderRadius: 26,
 	padding: 28,
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 24px 70px rgba(2,6,23,.35)",
 };
 
 const moduleButton = {
 	height: 44,
-
 	padding: "0 18px",
-
-	borderRadius: 12,
-
-	border: "none",
-
-	background:
-		"linear-gradient(135deg,#2563eb,#3b82f6)",
-
+	borderRadius: 14,
+	border: "1px solid rgba(59,130,246,.35)",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
-
-	fontWeight: 700,
-
+	fontWeight: 900,
 	cursor: "pointer",
+	boxShadow: "0 14px 34px rgba(37,99,235,.35)",
 };
 
 const logisticsChip = {
@@ -1648,14 +1871,6 @@ const searchInput = {
 		color: "rgba(255,255,255,.42)",
 		opacity: 1,
 	},
-};
-
-const headerRow = {
-	display: "flex",
-
-	justifyContent: "space-between",
-
-	alignItems: "center",
 };
 
 const logo = {
