@@ -148,49 +148,81 @@ export default function BOMFlowLayout() {
 
                         <Box sx={topbarDividerSx} />
 
-                        <Typography sx={breadcrumbSx}>
-                            {activeLabel}
-                        </Typography>
+                        <Chip
+                            label={activeLabel}
+                            size="small"
+                            sx={breadcrumbChipSx}
+                        />
                     </Box>
 
-                    <Box sx={topbarCenterSx}>
-                        {["Metal", "Wood", "Hardware", "Stone", "Glass"].map((item) => (
-                            <Chip
-                                key={item}
-                                label={item}
-                                size="small"
-                                sx={item === "Metal" ? activeTopChipSx : topChipSx}
-                            />
-                        ))}
+                    <Box className="bomflow-topbar-center" sx={topbarCenterShellSx}>
+                        <Box sx={topbarCenterSx}>
+                            {["Metal", "Wood", "Hardware", "Stone", "Glass"].map((item) => {
+                                const active = item === "Metal";
+
+                                return (
+                                    <Chip
+                                        key={item}
+                                        label={item}
+                                        size="small"
+                                        sx={active ? activeTopChipSx : topChipSx}
+                                    />
+                                );
+                            })}
+                        </Box>
                     </Box>
 
                     <Box sx={topbarRightSx}>
-                        <Tooltip title="Notifications">
-                            <IconButton sx={topIconBtnSx}>
-                                <NotificationsNoneOutlinedIcon />
-                            </IconButton>
-                        </Tooltip>
+                        <Box sx={iconGroupSx}>
+                            <Tooltip title="Notifications">
+                                <IconButton sx={topIconBtnSx}>
+                                    <NotificationsNoneOutlinedIcon />
+                                </IconButton>
+                            </Tooltip>
 
-                        <Tooltip title="Settings">
-                            <IconButton sx={topIconBtnSx}>
-                                <SettingsOutlinedIcon />
-                            </IconButton>
-                        </Tooltip>
+                            <Tooltip title="Settings">
+                                <IconButton sx={topIconBtnSx}>
+                                    <SettingsOutlinedIcon />
+                                </IconButton>
+                            </Tooltip>
 
-                        <Tooltip title="Help">
-                            <IconButton sx={topIconBtnSx}>
-                                <HelpOutlineOutlinedIcon />
-                            </IconButton>
-                        </Tooltip>
+                            <Tooltip title="Help">
+                                <IconButton sx={topIconBtnSx}>
+                                    <HelpOutlineOutlinedIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
 
-                        <Button sx={saveBtnSx}>Save Draft</Button>
+                        <Box sx={topbarActionDividerSx} />
 
-                        <Button sx={approveBtnSx}>Approve BOM</Button>
+                        <Box sx={actionGroupSx}>
+                            <Button sx={saveBtnSx}>
+                                Save Draft
+                            </Button>
 
-                        <Box sx={avatarSx}>{username.charAt(0).toUpperCase()}</Box>
+                            <Button sx={approveBtnSx}>
+                                Approve BOM
+                            </Button>
+                        </Box>
+
+                        <Box sx={userPillSx}>
+                            <Box sx={avatarSx}>
+                                {username.charAt(0).toUpperCase()}
+                            </Box>
+
+                            <Box sx={userTextSx}>
+                                <Typography sx={userNameSx}>
+                                    {username}
+                                </Typography>
+
+                                <Typography sx={userRoleSx}>
+                                    Active User
+                                </Typography>
+                            </Box>
+                        </Box>
 
                         <Tooltip title="Logout">
-                            <IconButton onClick={logout} sx={topIconBtnSx}>
+                            <IconButton onClick={logout} sx={logoutIconBtnSx}>
                                 <LogoutIcon />
                             </IconButton>
                         </Tooltip>
@@ -206,275 +238,450 @@ export default function BOMFlowLayout() {
 }
 
 const shellSx = {
-    minHeight: "100vh",
-    display: "flex",
-    background: "#0b0f17",
-    color: "#e5e7eb",
-    fontFamily: "Inter, system-ui, sans-serif",
+	minHeight: "100vh",
+	display: "flex",
+	background: "#0b0f17",
+	color: "#e5e7eb",
+	fontFamily: "Inter, system-ui, sans-serif",
 };
 
+/* ===================== SIDEBAR ===================== */
+
 const sidebarSx = {
-    width: 280,
-    minWidth: 280,
-    minHeight: "100vh",
-    background: "#1a1e27",
-    borderRight: "1px solid rgba(148,163,184,.20)",
-    display: "flex",
-    flexDirection: "column",
-    p: 2,
-    boxSizing: "border-box",
+	width: 280,
+	minWidth: 280,
+	minHeight: "100vh",
+	background:
+		"linear-gradient(180deg, #1a1e27 0%, #151922 100%)",
+	borderRight: "1px solid rgba(148,163,184,.18)",
+	display: "flex",
+	flexDirection: "column",
+	p: 2,
+	boxSizing: "border-box",
+	boxShadow: "10px 0 34px rgba(0,0,0,.24)",
 };
 
 const brandSx = {
-    display: "flex",
-    alignItems: "center",
-    gap: 1.4,
-    mb: 4,
-    px: 0.8,
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	mb: 4,
+	px: 0.8,
 };
 
 const brandMarkSx = {
-    width: 42,
-    height: 42,
-    borderRadius: "4px",
-    display: "grid",
-    placeItems: "center",
-    background: "#8fb5ff",
-    color: "#111827",
-    fontWeight: 950,
-    fontSize: 18,
+	width: 44,
+	height: 44,
+	borderRadius: "10px",
+	display: "grid",
+	placeItems: "center",
+	background: "linear-gradient(135deg, #a8c3ff, #7ea8ff)",
+	color: "#111827",
+	fontWeight: 950,
+	fontSize: 18,
+	boxShadow: "0 14px 30px rgba(79,141,247,.32)",
 };
 
 const brandTitleSx = {
-    color: "#dbeafe",
-    fontSize: 30,
-    lineHeight: 1,
-    fontWeight: 950,
-    letterSpacing: "-0.04em",
+	color: "#eef4ff",
+	fontSize: 30,
+	lineHeight: 1,
+	fontWeight: 950,
+	letterSpacing: "-0.045em",
 };
 
 const brandSubSx = {
-    color: "rgba(255,255,255,.72)",
-    mt: 0.5,
-    fontSize: 13,
-    fontWeight: 700,
+	color: "rgba(255,255,255,.58)",
+	mt: 0.45,
+	fontSize: 13,
+	fontWeight: 750,
+	letterSpacing: 0.2,
 };
 
 const navSx = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 1,
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.8,
 };
 
 const navItemStyle = {
-    width: "100%",
-    height: 46,
-    border: "none",
-    borderRadius: 8,
-    background: "transparent",
-    color: "rgba(255,255,255,.72)",
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    padding: "0 14px",
-    fontWeight: 800,
-    cursor: "pointer",
-    textAlign: "left",
+	width: "100%",
+	height: 48,
+	border: "1px solid transparent",
+	borderRadius: 12,
+	background: "transparent",
+	color: "rgba(255,255,255,.68)",
+	display: "flex",
+	alignItems: "center",
+	gap: 14,
+	padding: "0 14px",
+	fontWeight: 850,
+	cursor: "pointer",
+	textAlign: "left",
+	transition: "all .2s ease",
 };
 
 const navItemActiveStyle = {
-    background: "#4f8df7",
-    color: "#111827",
+	background: "linear-gradient(135deg, #4f8df7, #6ea5ff)",
+	color: "#0f172a",
+	border: "1px solid rgba(168,195,255,.38)",
+	boxShadow: "0 16px 34px rgba(79,141,247,.28)",
 };
 
 const navIconStyle = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 22,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: 22,
 };
 
 const sidebarFooterSx = {
-    borderTop: "1px solid rgba(255,255,255,.12)",
-    pt: 2,
-    display: "flex",
-    flexDirection: "column",
-    gap: 1,
+	borderTop: "1px solid rgba(255,255,255,.10)",
+	pt: 2,
+	display: "flex",
+	flexDirection: "column",
+	gap: 1,
 };
 
 const newCostingBtnSx = {
-    height: 48,
-    borderRadius: "6px",
-    textTransform: "none",
-    fontWeight: 850,
-    background: "#a8c3ff",
-    color: "#0f172a",
-    "&:hover": {
-        background: "#bdd1ff",
-    },
+	height: 48,
+	borderRadius: "12px",
+	textTransform: "none",
+	fontWeight: 900,
+	background: "linear-gradient(135deg, #a8c3ff, #8fb5ff)",
+	color: "#0f172a",
+	boxShadow: "0 14px 30px rgba(79,141,247,.30)",
+	"&:hover": {
+		background: "linear-gradient(135deg, #bdd1ff, #9bbcff)",
+	},
 };
 
 const allModulesBtnSx = {
-    height: 42,
-    borderRadius: "6px",
-    textTransform: "none",
-    fontWeight: 850,
-    color: "#dbeafe",
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.04)",
-    "&:hover": {
-        background: "rgba(255,255,255,.08)",
-    },
+	height: 42,
+	borderRadius: "12px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#dbeafe",
+	border: "1px solid rgba(255,255,255,.10)",
+	background: "rgba(255,255,255,.04)",
+	"&:hover": {
+		background: "rgba(79,141,247,.12)",
+		borderColor: "rgba(168,195,255,.22)",
+	},
 };
+
+/* ===================== MAIN ===================== */
 
 const mainSx = {
-    flex: 1,
-    minWidth: 0,
-    display: "flex",
-    flexDirection: "column",
+	flex: 1,
+	minWidth: 0,
+	display: "flex",
+	flexDirection: "column",
 };
 
+/* ===================== TOPBAR ===================== */
+
 const topbarSx = {
-    height: 64,
-    background: "#11151d",
-    borderBottom: "1px solid rgba(148,163,184,.22)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    px: 3,
-    gap: 2,
+	height: 74,
+	background:
+		"linear-gradient(180deg, #121722 0%, #0f141d 100%)",
+	borderBottom: "1px solid rgba(148,163,184,.18)",
+	display: "grid",
+	gridTemplateColumns: "minmax(300px, 1fr) auto minmax(390px, 1fr)",
+	alignItems: "center",
+	gap: 2,
+	px: 2.5,
+	position: "sticky",
+	top: 0,
+	zIndex: 20,
+	boxShadow: "0 10px 34px rgba(0,0,0,.28)",
+
+	"@media (max-width: 1180px)": {
+		gridTemplateColumns: "minmax(250px, 1fr) minmax(390px, 1fr)",
+	},
+
+	"@media (max-width: 900px)": {
+		height: "auto",
+		gridTemplateColumns: "1fr",
+		alignItems: "stretch",
+		py: 1.5,
+		gap: 1.4,
+	},
 };
 
 const topbarLeftSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 2,
-	minWidth: 300,
+	minWidth: 0,
 };
 
 const systemTitleBlockSx = {
 	display: "flex",
 	flexDirection: "column",
 	justifyContent: "center",
-	lineHeight: 1,
-};
-
-const systemSubtitleSx = {
-	color: "rgba(255,255,255,.52)",
-	fontSize: 11,
-	fontWeight: 700,
-	mt: 0.4,
-	letterSpacing: 0.3,
+	minWidth: 120,
 };
 
 const systemTitleSx = {
-	color: "#dbeafe",
+	color: "#eaf1ff",
 	fontWeight: 950,
 	fontSize: 22,
 	lineHeight: 1,
-	letterSpacing: "-0.03em",
+	letterSpacing: "-0.04em",
+	textShadow: "0 8px 22px rgba(79,141,247,.22)",
+};
+
+const systemSubtitleSx = {
+	color: "rgba(255,255,255,.48)",
+	fontSize: 11,
+	fontWeight: 750,
+	mt: 0.55,
+	letterSpacing: 0.35,
+	whiteSpace: "nowrap",
 };
 
 const topbarDividerSx = {
-    width: 1,
-    height: 34,
-    background: "rgba(255,255,255,.16)",
+	width: 1,
+	height: 38,
+	background:
+		"linear-gradient(180deg, transparent, rgba(255,255,255,.18), transparent)",
+	flexShrink: 0,
 };
 
-const breadcrumbSx = {
-    color: "rgba(255,255,255,.78)",
-    fontSize: 12,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: ".08em",
+const breadcrumbChipSx = {
+	height: 30,
+	borderRadius: "999px",
+	px: 0.8,
+	background: "rgba(79,141,247,.11)",
+	color: "#bcd2ff",
+	border: "1px solid rgba(168,195,255,.20)",
+	fontSize: 11,
+	fontWeight: 950,
+	letterSpacing: ".08em",
+	textTransform: "uppercase",
+	"& .MuiChip-label": {
+		px: 1.2,
+	},
+};
+
+const topbarCenterShellSx = {
+	display: "flex",
+	justifyContent: "center",
+	minWidth: 0,
+
+	"@media (max-width: 1180px)": {
+		display: "none",
+	},
 };
 
 const topbarCenterSx = {
-    display: "flex",
-    alignItems: "center",
-    gap: 1,
+	height: 42,
+	display: "flex",
+	alignItems: "center",
+	gap: 0.6,
+	px: 0.8,
+	borderRadius: "999px",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
 };
 
 const topChipSx = {
-    background: "transparent",
-    color: "rgba(255,255,255,.70)",
-    fontWeight: 850,
-    borderRadius: 0,
+	height: 30,
+	borderRadius: "999px",
+	background: "transparent",
+	color: "rgba(255,255,255,.62)",
+	fontSize: 12,
+	fontWeight: 850,
+	px: 0.4,
+	transition: "all .2s ease",
+	"& .MuiChip-label": {
+		px: 1.2,
+	},
+	"&:hover": {
+		background: "rgba(255,255,255,.06)",
+		color: "#fff",
+	},
 };
 
 const activeTopChipSx = {
-    ...topChipSx,
-    color: "#dbeafe",
-    borderBottom: "2px solid #9bbcff",
+	...topChipSx,
+	color: "#0f172a",
+	background: "#a8c3ff",
+	boxShadow: "0 10px 24px rgba(79,141,247,.28)",
+	"&:hover": {
+		background: "#bdd1ff",
+		color: "#0f172a",
+	},
 };
 
 const topbarRightSx = {
-    display: "flex",
-    alignItems: "center",
-    gap: 1,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1,
+	minWidth: 0,
+
+	"@media (max-width: 900px)": {
+		justifyContent: "flex-start",
+		flexWrap: "wrap",
+	},
+};
+
+const iconGroupSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.4,
+	px: 0.5,
 };
 
 const topIconBtnSx = {
-    color: "rgba(255,255,255,.72)",
-    width: 36,
-    height: 36,
-    "&:hover": {
-        background: "rgba(255,255,255,.07)",
-        color: "#fff",
-    },
+	width: 38,
+	height: 38,
+	borderRadius: "12px",
+	color: "rgba(255,255,255,.66)",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.055)",
+	transition: "all .2s ease",
+	"&:hover": {
+		background: "rgba(79,141,247,.14)",
+		borderColor: "rgba(168,195,255,.25)",
+		color: "#eaf1ff",
+		transform: "translateY(-1px)",
+	},
+};
+
+const topbarActionDividerSx = {
+	width: 1,
+	height: 38,
+	mx: 0.5,
+	background:
+		"linear-gradient(180deg, transparent, rgba(255,255,255,.16), transparent)",
+
+	"@media (max-width: 900px)": {
+		display: "none",
+	},
+};
+
+const actionGroupSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
 };
 
 const saveBtnSx = {
-    width: 90,
-    height: 48,
-    borderRadius: "5px",
-    textTransform: "none",
-    lineHeight: 1.1,
-    fontWeight: 850,
-    color: "#dbeafe",
-    border: "1px solid #7896d8",
-    background: "#10141d",
-    "&:hover": {
-        background: "#172033",
-    },
-};
-
-const subtitle = {
-    fontSize: 12,
-    marginTop: 4,
-    color: "rgba(255,255,255,.55)",
-    letterSpacing: 0.4,
+	height: 42,
+	minWidth: 104,
+	borderRadius: "12px",
+	textTransform: "none",
+	fontWeight: 900,
+	fontSize: 13,
+	color: "#dbeafe",
+	border: "1px solid rgba(168,195,255,.32)",
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.95), rgba(17,24,39,.88))",
+	boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
+	"&:hover": {
+		background: "rgba(79,141,247,.14)",
+		borderColor: "rgba(168,195,255,.48)",
+	},
 };
 
 const approveBtnSx = {
-    width: 108,
-    height: 48,
-    borderRadius: "5px",
-    textTransform: "none",
-    lineHeight: 1.1,
-    fontWeight: 850,
-    color: "#172033",
-    background: "#a8c3ff",
-    "&:hover": {
-        background: "#bdd1ff",
-    },
+	height: 42,
+	minWidth: 126,
+	borderRadius: "12px",
+	textTransform: "none",
+	fontWeight: 950,
+	fontSize: 13,
+	color: "#0f172a",
+	background: "linear-gradient(135deg, #a8c3ff, #8fb5ff)",
+	boxShadow: "0 12px 28px rgba(79,141,247,.30)",
+	"&:hover": {
+		background: "linear-gradient(135deg, #bdd1ff, #9bbcff)",
+		boxShadow: "0 14px 34px rgba(79,141,247,.38)",
+	},
+};
+
+const userPillSx = {
+	height: 42,
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	pl: 0.55,
+	pr: 1.2,
+	borderRadius: "999px",
+	background: "rgba(255,255,255,.045)",
+	border: "1px solid rgba(255,255,255,.075)",
+	minWidth: 0,
 };
 
 const avatarSx = {
-    width: 34,
-    height: 34,
-    borderRadius: "8px",
-    display: "grid",
-    placeItems: "center",
-    background: "#7c2bd6",
-    color: "#fff",
-    fontWeight: 950,
+	width: 32,
+	height: 32,
+	borderRadius: "10px",
+	display: "grid",
+	placeItems: "center",
+	background: "linear-gradient(135deg, #7c2bd6, #9333ea)",
+	color: "#fff",
+	fontWeight: 950,
+	fontSize: 13,
+	boxShadow: "0 10px 22px rgba(124,43,214,.28)",
+	flexShrink: 0,
 };
 
+const userTextSx = {
+	display: {
+		xs: "none",
+		lg: "flex",
+	},
+	flexDirection: "column",
+	minWidth: 0,
+};
+
+const userNameSx = {
+	color: "#fff",
+	fontSize: 12,
+	fontWeight: 900,
+	lineHeight: 1.1,
+	maxWidth: 90,
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
+};
+
+const userRoleSx = {
+	color: "rgba(255,255,255,.45)",
+	fontSize: 10,
+	fontWeight: 750,
+	lineHeight: 1.1,
+	mt: 0.35,
+};
+
+const logoutIconBtnSx = {
+	width: 38,
+	height: 38,
+	borderRadius: "12px",
+	color: "#fca5a5",
+	background: "rgba(239,68,68,.075)",
+	border: "1px solid rgba(239,68,68,.14)",
+	transition: "all .2s ease",
+	"&:hover": {
+		background: "rgba(239,68,68,.15)",
+		borderColor: "rgba(239,68,68,.28)",
+		color: "#fecaca",
+		transform: "translateY(-1px)",
+	},
+};
+
+/* ===================== CONTENT ===================== */
+
 const contentSx = {
-    flex: 1,
-    minHeight: 0,
-    overflow: "auto",
-    p: 3,
-    background: "#0b0f17",
+	flex: 1,
+	minHeight: 0,
+	overflow: "auto",
+	p: 3,
+	background:
+		"radial-gradient(circle at top left, rgba(79,141,247,.07), transparent 26%), #0b0f17",
 };
