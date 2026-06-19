@@ -28,7 +28,7 @@ export default function BOMFlowBOMBuilder() {
 						<Chip label="PRJ-2024-089" size="small" sx={styles.BOM_projectChipSx} />
 						<Chip label="DRAFT" size="small" sx={styles.BOM_draftProjectChipSx} />
 					</Box>
-					<Typography sx={styles.BOM_pageTitle}>Executive Office Desk - Mod A</Typography>
+					<Typography sx={styles.BOM_pageTitleSx}>Executive Office Desk - Mod A</Typography>
 					<Typography sx={styles.BOM_pageSubSx}>Costing Sheet Revision 2 • Created by Admin</Typography>
 				</Box>
 
