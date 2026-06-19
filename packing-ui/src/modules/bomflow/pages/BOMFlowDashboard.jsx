@@ -30,7 +30,7 @@ export default function BOMFlowDashboard() {
 					<Typography sx={styles.BOM_pageTitleSx}>Product Costing Control Center</Typography>
 					<Typography sx={styles.BOM_pageSubSx}>
 						Create product profiles, build BOM, maintain rates, calculate costing, control workflow and export final reports.
-					</Typography>
+					</Typography>   
 				</Box>
 
 				<Box sx={styles.BOM_activeCostingsCardSx}>

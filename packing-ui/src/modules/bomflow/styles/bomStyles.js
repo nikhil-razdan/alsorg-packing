@@ -460,7 +460,7 @@ export const BOM_sectionHeaderSx = { height: 56, display: "flex", alignItems: "c
 export const BOM_sectionLeftSx = { display: "flex", alignItems: "center", gap: 1 };
 export const BOM_sectionRightSx = { display: "flex", alignItems: "center", gap: 2 };
 export const BOM_sectionIconBtnSx = { color: "#64748b" };
-export const BOM_sectionTitleSx = { color: "#fff", fontSize: 16, fontWeight: 700 };
+
 export const BOM_countChipSx = { background: "rgba(255,255,255,.04)", color: "#94a3b8", height: 20, borderRadius: "4px" };
 export const BOM_sectionTotalLabelSx = { color: "#64748b", fontSize: 10, textTransform: "uppercase", textAlign: "right" };
 export const BOM_sectionTotalValueSx = { color: "#fff", fontWeight: 700, fontFamily: "monospace", fontSize: 15 };
