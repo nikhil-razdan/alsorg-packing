@@ -414,7 +414,6 @@ export const BOM_noteTextSx = { color: "#94a3b8", fontSize: 13, lineHeight: 1.5 
 
 export const BOM_sidePanelSx = { mb: 3, p: 2.5, background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px" };
 export const BOM_sideTitleRowSx = { display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 };
-export const BOM_sideTitleSx = { color: "#fff", fontSize: 16, fontWeight: 700 };
 
 export const BOM_uploadBoxSx = {
 	height: 180,
