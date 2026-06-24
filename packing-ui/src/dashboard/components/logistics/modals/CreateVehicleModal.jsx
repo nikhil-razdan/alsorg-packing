@@ -1,271 +1,587 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  TextField,
+  MenuItem,
+} from "@mui/material";
 
 import {
   createVehicle,
+  updateVehicle,
 } from "../../../api/logisticsApi";
 
 import {
   getBackendMessage,
 } from "../logisticsAlertUtils";
 
+const emptyVehicleForm = {
+  vehicleNumber: "",
+  vehicleType: "",
+  driverName: "",
+  ownerName: "",
+  registeringAuthority: "",
+  vehicleClass: "",
+  fuelType: "",
+  fuelCapacity: "",
+  emissionNorm: "",
+  vehicleAge: "",
+  status: "Active",
+  registrationDate: "",
+  fitnessValidUpto: "",
+  insuranceValidUpto: "",
+  taxValidUpto: "",
+  permitValidUpto: "",
+  puccValidUpto: "",
+  nationalPermitValidUpto: "",
+};
+
+const basicFields = [
+  {
+    key: "vehicleNumber",
+    label: "Vehicle No.",
+    required: true,
+    placeholder: "HR55AY3512",
+  },
+  {
+    key: "vehicleType",
+    label: "Vehicle Type",
+    required: true,
+    placeholder: "Canter / Pickup / Eeco",
+  },
+  {
+    key: "driverName",
+    label: "Driver Name",
+    placeholder: "Assigned driver name",
+  },
+  {
+    key: "ownerName",
+    label: "Owner Name",
+    placeholder: "Vehicle owner/company name",
+  },
+  {
+    key: "registeringAuthority",
+    label: "Registering Authority",
+    placeholder: "RTA Gurgaon / SDM Gurugram",
+  },
+  {
+    key: "vehicleClass",
+    label: "Vehicle Class",
+    placeholder: "Goods Carrier (LGV) / Motor Car (LMV)",
+  },
+];
+
+const technicalFields = [
+  {
+    key: "fuelType",
+    label: "Fuel Type",
+    placeholder: "CNG / Diesel / Petrol / Electric",
+  },
+  {
+    key: "fuelCapacity",
+    label: "Fuel Capacity",
+    placeholder: "Optional fuel capacity",
+  },
+  {
+    key: "emissionNorm",
+    label: "Emission Norm",
+    placeholder: "Bharat Stage VI",
+  },
+  {
+    key: "vehicleAge",
+    label: "Vehicle Age",
+    placeholder: "4 years 2 months",
+  },
+];
+
+const validityFields = [
+  {
+    key: "registrationDate",
+    label: "Registration Date",
+  },
+  {
+    key: "fitnessValidUpto",
+    label: "Fitness Valid Upto",
+  },
+  {
+    key: "insuranceValidUpto",
+    label: "Insurance Valid Upto",
+  },
+  {
+    key: "taxValidUpto",
+    label: "Tax Valid Upto",
+  },
+  {
+    key: "permitValidUpto",
+    label: "Permit Valid Upto",
+  },
+  {
+    key: "puccValidUpto",
+    label: "PUCC Valid Upto",
+  },
+  {
+    key: "nationalPermitValidUpto",
+    label: "National Permit Valid Upto",
+  },
+];
+
+const statusOptions = [
+  "Active",
+  "Fitness expired",
+  "Insurance expired",
+  "Under Maintenance",
+  "Inactive",
+];
+
 function CreateVehicleModal({
   open,
   onClose,
   onCreated,
   showAlert = () => {},
+  initialData = null,
 }) {
+  const isEdit = Boolean(initialData?.id);
+
+  const [form, setForm] =
+    useState(emptyVehicleForm);
+
   const [saving, setSaving] =
     useState(false);
 
-  const [form, setForm] =
-    useState({
-      vehicleNumber: "",
-      vehicleType: "",
-      fuelCapacity: "",
-      status: "ACTIVE",
+  useEffect(() => {
+    if (!open) return;
+
+    setForm({
+      ...emptyVehicleForm,
+      ...(initialData || {}),
+      registrationDate: toInputDate(initialData?.registrationDate),
+      fitnessValidUpto: toInputDate(initialData?.fitnessValidUpto),
+      insuranceValidUpto: toInputDate(initialData?.insuranceValidUpto),
+      taxValidUpto: toInputDate(initialData?.taxValidUpto),
+      permitValidUpto: toInputDate(initialData?.permitValidUpto),
+      puccValidUpto: toInputDate(initialData?.puccValidUpto),
+      nationalPermitValidUpto: toInputDate(initialData?.nationalPermitValidUpto),
     });
+  }, [open, initialData]);
 
-  if (!open) return null;
+  const title = useMemo(() => {
+    return isEdit
+      ? "Edit Vehicle Details"
+      : "Add Vehicle Details";
+  }, [isEdit]);
 
-  const update = (
-    key,
-    value
-  ) => {
+  const subtitle = useMemo(() => {
+    return isEdit
+      ? "Update fleet, document validity and operational information"
+      : "Add complete fleet, document validity and operational information";
+  }, [isEdit]);
+
+  const updateField = (key, value) => {
     setForm((prev) => ({
       ...prev,
       [key]: value,
     }));
   };
 
-  const submit = async () => {
-    if (saving) return;
+  const buildPayload = () => {
+    return {
+      ...form,
+      vehicleNumber: form.vehicleNumber?.trim(),
+      vehicleType: form.vehicleType?.trim(),
+      driverName: form.driverName?.trim(),
+      ownerName: form.ownerName?.trim(),
+      registeringAuthority: form.registeringAuthority?.trim(),
+      vehicleClass: form.vehicleClass?.trim(),
+      fuelType: form.fuelType?.trim(),
+      fuelCapacity: form.fuelCapacity?.trim(),
+      emissionNorm: form.emissionNorm?.trim(),
+      vehicleAge: form.vehicleAge?.trim(),
+      status: form.status || "Active",
+      registrationDate: cleanDate(form.registrationDate),
+      fitnessValidUpto: cleanDate(form.fitnessValidUpto),
+      insuranceValidUpto: cleanDate(form.insuranceValidUpto),
+      taxValidUpto: cleanDate(form.taxValidUpto),
+      permitValidUpto: cleanDate(form.permitValidUpto),
+      puccValidUpto: cleanDate(form.puccValidUpto),
+      nationalPermitValidUpto: cleanDate(form.nationalPermitValidUpto),
+    };
+  };
+
+  const saveVehicle = async () => {
+    if (!form.vehicleNumber?.trim()) {
+      showAlert("Vehicle No. is required", "error");
+      return;
+    }
+
+    if (!form.vehicleType?.trim()) {
+      showAlert("Vehicle Type is required", "error");
+      return;
+    }
 
     try {
       setSaving(true);
 
-      if (!form.vehicleNumber) {
-        throw new Error(
-          "Vehicle number is required"
-        );
-      }
+      const payload = buildPayload();
 
-      if (!form.vehicleType) {
-        throw new Error(
-          "Vehicle type is required"
-        );
+      if (isEdit) {
+        await updateVehicle(initialData.id, payload);
+      } else {
+        await createVehicle(payload);
       }
-
-      await createVehicle(form);
 
       showAlert(
-        "Vehicle created successfully",
+        isEdit
+          ? "Vehicle updated successfully"
+          : "Vehicle added successfully",
         "success"
       );
 
       await onCreated?.();
 
-      onClose();
-
-      setForm({
-        vehicleNumber: "",
-        vehicleType: "",
-        fuelCapacity: "",
-        status: "ACTIVE",
-      });
-
+      onClose?.();
     } catch (e) {
       console.error(e);
 
       showAlert(
         getBackendMessage(
           e,
-          "Vehicle creation failed"
+          isEdit
+            ? "Vehicle update failed"
+            : "Vehicle create failed"
         ),
         "error"
       );
-
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
-        <div style={title}>
-          Add Vehicle
-        </div>
+    <Dialog
+      open={open}
+      onClose={saving ? undefined : onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: dialogPaperSx,
+      }}
+    >
+      <DialogTitle sx={dialogTitleSx}>
+        <Box>
+          <Box sx={dialogMainTitleSx}>
+            {title}
+          </Box>
 
-        <div style={grid}>
-          <input
-            placeholder="Vehicle Number"
-            style={input}
-            value={form.vehicleNumber}
-            onChange={(e) =>
-              update(
-                "vehicleNumber",
-                e.target.value
-              )
-            }
-          />
+          <Box sx={dialogSubTitleSx}>
+            {subtitle}
+          </Box>
+        </Box>
+      </DialogTitle>
 
-          <input
-            placeholder="Vehicle Type"
-            style={input}
-            value={form.vehicleType}
-            onChange={(e) =>
-              update(
-                "vehicleType",
-                e.target.value
-              )
-            }
-          />
+      <DialogContent sx={dialogContentSx}>
+        <Box sx={sectionCardSx}>
+          <Box sx={sectionTitleSx}>
+            Vehicle Identity
+          </Box>
 
-          <input
-            type="number"
-            placeholder="Fuel Capacity"
-            style={input}
-            value={form.fuelCapacity}
-            onChange={(e) =>
-              update(
-                "fuelCapacity",
-                Number(e.target.value)
-              )
-            }
-          />
-        </div>
+          <Box sx={fieldGridSx}>
+            {basicFields.map((field) => (
+              <TextField
+                key={field.key}
+                label={field.label}
+                placeholder={field.placeholder}
+                required={field.required}
+                value={form[field.key] || ""}
+                onChange={(e) =>
+                  updateField(field.key, e.target.value)
+                }
+                sx={inputSx}
+              />
+            ))}
+          </Box>
+        </Box>
 
-        <div style={footer}>
-          <button
-            style={cancelBtn}
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </button>
+        <Box sx={sectionCardSx}>
+          <Box sx={sectionTitleSx}>
+            Technical Details
+          </Box>
 
-          <button
-            style={{
-              ...saveBtn,
-              opacity: saving ? 0.7 : 1,
-              cursor: saving
-                ? "not-allowed"
-                : "pointer",
-            }}
-            onClick={submit}
-            disabled={saving}
-          >
-            {saving
-              ? "Saving..."
-              : "Create Vehicle"}
-          </button>
-        </div>
-      </div>
-    </div>
+          <Box sx={fieldGridSx}>
+            {technicalFields.map((field) => (
+              <TextField
+                key={field.key}
+                label={field.label}
+                placeholder={field.placeholder}
+                value={form[field.key] || ""}
+                onChange={(e) =>
+                  updateField(field.key, e.target.value)
+                }
+                sx={inputSx}
+              />
+            ))}
+
+            <TextField
+              select
+              label="Vehicle Status"
+              value={form.status || "Active"}
+              onChange={(e) =>
+                updateField("status", e.target.value)
+              }
+              sx={inputSx}
+            >
+              {statusOptions.map((status) => (
+                <MenuItem
+                  key={status}
+                  value={status}
+                >
+                  {status}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+        </Box>
+
+        <Box sx={sectionCardSx}>
+          <Box sx={sectionTitleSx}>
+            Document Validity
+          </Box>
+
+          <Box sx={fieldGridSx}>
+            {validityFields.map((field) => (
+              <TextField
+                key={field.key}
+                label={field.label}
+                type="date"
+                value={form[field.key] || ""}
+                onChange={(e) =>
+                  updateField(field.key, e.target.value)
+                }
+                sx={inputSx}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      </DialogContent>
+
+      <DialogActions sx={dialogActionsSx}>
+        <Button
+          disabled={saving}
+          onClick={onClose}
+          sx={cancelButtonSx}
+        >
+          Cancel
+        </Button>
+
+        <Button
+          disabled={saving}
+          onClick={saveVehicle}
+          sx={saveButtonSx}
+        >
+          {saving
+            ? "Saving..."
+            : isEdit
+            ? "Update Vehicle"
+            : "Add Vehicle"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
-const overlay = {
-  position: "fixed",
-  inset: 0,
+function cleanDate(value) {
+  return value || null;
+}
+
+function toInputDate(value) {
+  if (!value) return "";
+
+  const text = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+
+  const match =
+    text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+
+  if (!match) return "";
+
+  const day = match[1].padStart(2, "0");
+  const monthMap = {
+    Jan: "01",
+    Feb: "02",
+    Mar: "03",
+    Apr: "04",
+    May: "05",
+    Jun: "06",
+    Jul: "07",
+    Aug: "08",
+    Sep: "09",
+    Oct: "10",
+    Nov: "11",
+    Dec: "12",
+  };
+
+  const month =
+    monthMap[
+      match[2].slice(0, 3)
+    ];
+
+  let year = match[3];
+
+  if (year.length === 2) {
+    year = Number(year) > 50
+      ? `19${year}`
+      : `20${year}`;
+  }
+
+  if (!month) return "";
+
+  return `${year}-${month}-${day}`;
+}
+
+const dialogPaperSx = {
+  borderRadius: "26px",
   background:
-    "rgba(0,0,0,.6)",
-
-  display: "flex",
-
-  justifyContent: "center",
-
-  alignItems: "center",
-
-  zIndex: 9999,
-};
-
-const modal = {
-  width: 500,
-
-  background:
-    "linear-gradient(180deg,#020617,#0f172a)",
-
-  borderRadius: 24,
-
-  padding: 24,
-
-  border:
-    "1px solid rgba(255,255,255,.08)",
-};
-
-const title = {
+    "linear-gradient(180deg,#0f172a,#111827)",
   color: "#fff",
+  border: "1px solid rgba(255,255,255,.08)",
+  boxShadow:
+    "0 26px 70px rgba(0,0,0,.45)",
+};
 
+const dialogTitleSx = {
+  px: 3,
+  pt: 3,
+  pb: 1,
+};
+
+const dialogMainTitleSx = {
   fontSize: 24,
-
-  fontWeight: 800,
-
-  marginBottom: 20,
+  fontWeight: 900,
 };
 
-const grid = {
+const dialogSubTitleSx = {
+  mt: 0.6,
+  color: "#94a3b8",
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const dialogContentSx = {
+  px: 3,
+  py: 2,
+};
+
+const sectionCardSx = {
+  p: 2,
+  mb: 2,
+  borderRadius: "20px",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.08)",
+};
+
+const sectionTitleSx = {
+  mb: 1.6,
+  color: "#93c5fd",
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".1em",
+};
+
+const fieldGridSx = {
   display: "grid",
-
-  gap: 16,
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
+  gap: 1.4,
 };
 
-const input = {
-  height: 48,
+const inputSx = {
+  "& .MuiInputBase-root": {
+    borderRadius: "14px",
+    background: "rgba(15,23,42,.72)",
+    color: "#fff",
+  },
 
-  borderRadius: 14,
+  "& .MuiInputLabel-root": {
+    color: "#94a3b8",
+    fontWeight: 700,
+  },
 
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  "& .MuiInputLabel-root.Mui-focused": {
+    color: "#60a5fa",
+  },
 
-  background: "#111827",
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(255,255,255,.10)",
+  },
 
+  "&:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(96,165,250,.35)",
+  },
+
+  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
+    borderColor: "#60a5fa",
+  },
+
+  "& input": {
+    color: "#fff",
+  },
+};
+
+const dialogActionsSx = {
+  px: 3,
+  pb: 3,
+  pt: 1,
+};
+
+const cancelButtonSx = {
+  borderRadius: "14px",
+  textTransform: "none",
+  fontWeight: 800,
   color: "#fff",
+  background: "rgba(255,255,255,.05)",
+  border: "1px solid rgba(255,255,255,.08)",
 
-  padding: "0 14px",
+  "&:hover": {
+    background: "rgba(255,255,255,.10)",
+  },
 };
 
-const footer = {
-  display: "flex",
-
-  justifyContent: "flex-end",
-
-  gap: 12,
-
-  marginTop: 24,
-};
-
-const cancelBtn = {
-  height: 44,
-
-  padding: "0 20px",
-
-  borderRadius: 12,
-
-  background: "#1e293b",
-
-  border: "none",
-
+const saveButtonSx = {
+  px: 2.4,
+  borderRadius: "14px",
+  textTransform: "none",
+  fontWeight: 900,
   color: "#fff",
-
-  cursor: "pointer",
-};
-
-const saveBtn = {
-  height: 44,
-
-  padding: "0 20px",
-
-  borderRadius: 12,
-
-  border: "none",
-
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow:
+    "0 12px 28px rgba(37,99,235,.32)",
 
-  color: "#fff",
+  "&:hover": {
+    background:
+      "linear-gradient(135deg,#1d4ed8,#2563eb)",
+  },
 
-  fontWeight: 700,
+  "&.Mui-disabled": {
+    color: "rgba(255,255,255,.5)",
+    background: "rgba(148,163,184,.16)",
+    boxShadow: "none",
+  },
 };
 
 export default CreateVehicleModal;

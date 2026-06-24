@@ -230,6 +230,30 @@ export async function createVehicle(
   return res.json();
 }
 
+export async function updateVehicle(id, payload) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles/${id}`,
+    {
+      method: "PUT",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(text || "Vehicle update failed");
+  }
+
+  return res.json();
+}
+
 export async function createDispatchChallan(payload) {
   const res = await fetch(
     `${API_BASE_URL}/api/logistics/dispatch/chalaan?preview=true`,

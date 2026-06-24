@@ -9,6 +9,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Chip,
+  Box,
 } from "@mui/material";
 
 import {
@@ -32,6 +34,9 @@ function VehicleManagement({
   const [open, setOpen] =
     useState(false);
 
+  const [editingVehicle, setEditingVehicle] =
+    useState(null);
+
   const [deleteOpen, setDeleteOpen] =
     useState(false);
 
@@ -48,7 +53,7 @@ function VehicleManagement({
     try {
       const data = await fetchVehicles();
 
-      setVehicles(data || []);
+      setVehicles(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
 
@@ -63,32 +68,23 @@ function VehicleManagement({
   };
 
   useEffect(() => {
-    let active = true;
+    loadVehicles();
+  }, []);
 
-    fetchVehicles()
-      .then((data) => {
-        if (!active) return;
+  const openCreate = () => {
+    setEditingVehicle(null);
+    setOpen(true);
+  };
 
-        setVehicles(data || []);
-      })
-      .catch((e) => {
-        if (!active) return;
+  const openEdit = (vehicle) => {
+    setEditingVehicle(vehicle);
+    setOpen(true);
+  };
 
-        console.error(e);
-
-        showAlert(
-          getBackendMessage(
-            e,
-            "Failed to load vehicles"
-          ),
-          "error"
-        );
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [showAlert]);
+  const closeForm = () => {
+    setOpen(false);
+    setEditingVehicle(null);
+  };
 
   const openDelete = (id) => {
     setDeleteVehicleId(id);
@@ -152,15 +148,13 @@ function VehicleManagement({
           </div>
 
           <div style={subtitle}>
-            Vehicles, fuel and maintenance
+            Complete editable vehicle records, document validity and fleet status
           </div>
         </div>
 
         <button
           style={button}
-          onClick={() =>
-            setOpen(true)
-          }
+          onClick={openCreate}
         >
           + Add Vehicle
         </button>
@@ -169,30 +163,109 @@ function VehicleManagement({
       <div style={table}>
         <div style={tableHead}>
           <div>Vehicle</div>
-          <div>Type</div>
+          <div>Driver</div>
+          <div>Owner</div>
+          <div>Type / Class</div>
+          <div>Fuel / Norm</div>
           <div>Status</div>
-          <div>Fuel</div>
+          <div>Document Validity</div>
           <div>Actions</div>
         </div>
+
+        {paginatedVehicles.length === 0 && (
+          <div style={emptyState}>
+            No vehicles found.
+          </div>
+        )}
 
         {paginatedVehicles.map((v) => (
           <div
             key={v.id}
             style={tableRow}
           >
-            <div>{v.vehicleNumber}</div>
+            <div style={mainCell}>
+              <span style={vehicleNoText}>
+                {v.vehicleNumber || "-"}
+              </span>
 
-            <div>{v.vehicleType}</div>
+              <span style={subText}>
+                Reg: {formatDate(v.registrationDate)}
+              </span>
 
-            <div>{v.status}</div>
+              <span style={subText}>
+                {v.registeringAuthority || "-"}
+              </span>
+            </div>
 
-            <div>
-              {v.fuelCapacity ??
-                v.fuel ??
-                "-"}
+            <div style={normalCell}>
+              {v.driverName || "-"}
+            </div>
+
+            <div style={normalCell}>
+              {v.ownerName || "-"}
+            </div>
+
+            <div style={mainCell}>
+              <span style={normalText}>
+                {v.vehicleType || "-"}
+              </span>
+
+              <span style={subText}>
+                {v.vehicleClass || "-"}
+              </span>
+            </div>
+
+            <div style={mainCell}>
+              <span style={normalText}>
+                {v.fuelType ||
+                  v.fuel ||
+                  "-"}
+              </span>
+
+              <span style={subText}>
+                {v.emissionNorm || "-"}
+              </span>
             </div>
 
             <div>
+              <Chip
+                label={v.status || "Active"}
+                size="small"
+                sx={getStatusChipSx(v.status)}
+              />
+
+              {v.vehicleAge && (
+                <div style={subText}>
+                  Age: {v.vehicleAge}
+                </div>
+              )}
+            </div>
+
+            <div style={validityCell}>
+              <ValidityLine
+                label="Fitness"
+                value={v.fitnessValidUpto}
+              />
+
+              <ValidityLine
+                label="Insurance"
+                value={v.insuranceValidUpto}
+              />
+
+              <ValidityLine
+                label="PUCC"
+                value={v.puccValidUpto}
+              />
+            </div>
+
+            <div style={actionsCell}>
+              <button
+                style={editBtn}
+                onClick={() => openEdit(v)}
+              >
+                Edit
+              </button>
+
               <button
                 style={deleteBtn}
                 onClick={() =>
@@ -216,11 +289,10 @@ function VehicleManagement({
 
       <CreateVehicleModal
         open={open}
-        onClose={() =>
-          setOpen(false)
-        }
+        onClose={closeForm}
         onCreated={loadVehicles}
         showAlert={showAlert}
+        initialData={editingVehicle}
       />
 
       <Dialog
@@ -265,6 +337,55 @@ function VehicleManagement({
   );
 }
 
+function ValidityLine({
+  label,
+  value,
+}) {
+  return (
+    <Box sx={validityLineSx}>
+      <span>{label}</span>
+
+      <b>{formatDate(value)}</b>
+    </Box>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+
+  const text = String(value);
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const [year, month, day] =
+      text.slice(0, 10).split("-");
+
+    return `${day}-${month}-${year}`;
+  }
+
+  return text;
+}
+
+function getStatusChipSx(status) {
+  const value =
+    String(status || "Active")
+      .toLowerCase();
+
+  if (
+    value.includes("expired") ||
+    value.includes("inactive")
+  ) {
+    return statusDangerChipSx;
+  }
+
+  if (
+    value.includes("maintenance")
+  ) {
+    return statusWarningChipSx;
+  }
+
+  return statusActiveChipSx;
+}
+
 const wrap = {
   background:
     "linear-gradient(180deg,#0f172a,#111827)",
@@ -304,28 +425,109 @@ const button = {
 
 const table = {
   borderRadius: 18,
-  overflow: "hidden",
+  overflowX: "auto",
+  border:
+    "1px solid rgba(255,255,255,.06)",
 };
 
 const tableHead = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr 1fr 1fr .8fr",
+    "1.25fr 1fr 1.1fr 1.1fr 1fr .8fr 1.3fr 1fr",
+  minWidth: 1320,
   padding: 16,
   background: "#111827",
   color: "#94a3b8",
-  fontWeight: 700,
+  fontWeight: 800,
+  fontSize: 13,
 };
 
 const tableRow = {
   display: "grid",
   gridTemplateColumns:
-    "1.2fr 1fr 1fr 1fr .8fr",
+    "1.25fr 1fr 1.1fr 1.1fr 1fr .8fr 1.3fr 1fr",
+  minWidth: 1320,
   padding: 16,
   color: "#fff",
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
   alignItems: "center",
+};
+
+const emptyState = {
+  minWidth: 1320,
+  padding: 24,
+  color: "#94a3b8",
+  textAlign: "center",
+  borderTop:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const mainCell = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  minWidth: 0,
+};
+
+const normalCell = {
+  color: "#e5e7eb",
+  fontWeight: 700,
+  fontSize: 13,
+};
+
+const vehicleNoText = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 14,
+  letterSpacing: ".03em",
+};
+
+const normalText = {
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const subText = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 650,
+};
+
+const validityCell = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+};
+
+const validityLineSx = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 1,
+  color: "#94a3b8",
+  fontSize: 11,
+
+  "& b": {
+    color: "#e5e7eb",
+    fontWeight: 900,
+  },
+};
+
+const actionsCell = {
+  display: "flex",
+  gap: 8,
+};
+
+const editBtn = {
+  border: "none",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  borderRadius: 10,
+  padding: "7px 12px",
+  cursor: "pointer",
+  fontWeight: 800,
 };
 
 const deleteBtn = {
@@ -336,7 +538,31 @@ const deleteBtn = {
   borderRadius: 10,
   padding: "7px 12px",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
+};
+
+const statusActiveChipSx = {
+  color: "#bbf7d0",
+  background: "rgba(34,197,94,.15)",
+  border:
+    "1px solid rgba(34,197,94,.25)",
+  fontWeight: 900,
+};
+
+const statusWarningChipSx = {
+  color: "#fde68a",
+  background: "rgba(245,158,11,.15)",
+  border:
+    "1px solid rgba(245,158,11,.25)",
+  fontWeight: 900,
+};
+
+const statusDangerChipSx = {
+  color: "#fecaca",
+  background: "rgba(239,68,68,.15)",
+  border:
+    "1px solid rgba(239,68,68,.25)",
+  fontWeight: 900,
 };
 
 const actionSecondary = {

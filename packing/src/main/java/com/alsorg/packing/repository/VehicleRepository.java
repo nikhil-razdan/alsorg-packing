@@ -12,4 +12,10 @@ extends JpaRepository<Vehicle, UUID> {
 boolean existsByVehicleNumberIgnoreCase(
     String vehicleNumber
 );
+
+boolean existsByVehicleNumberIgnoreCaseAndIdNot(
+        String vehicleNumber,
+        UUID id
+);
+
 }

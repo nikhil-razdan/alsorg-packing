@@ -41,6 +41,18 @@ public class VehicleController {
     }
 
     /*
+     * UPDATE
+     */
+
+    @PutMapping("/{id}")
+    public Vehicle update(
+            @PathVariable UUID id,
+            @RequestBody Vehicle vehicle
+    ) {
+        return service.update(id, vehicle);
+    }
+
+    /*
      * DELETE
      */
 
