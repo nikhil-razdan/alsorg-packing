@@ -20,16 +20,14 @@ public class GatePassController {
 
     public GatePassController(
             DispatchedItemRepository repo,
-            GatePassPdfService pdfService
-    ) {
+            GatePassPdfService pdfService) {
         this.repo = repo;
         this.pdfService = pdfService;
     }
 
     @GetMapping("/{zohoItemId}/pdf")
     public ResponseEntity<byte[]> downloadGatePass(
-            @PathVariable String zohoItemId
-    ) throws Exception {
+            @PathVariable String zohoItemId) throws Exception {
 
         DispatchedItem item = repo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
@@ -47,11 +45,13 @@ public class GatePassController {
 
         byte[] pdf = pdfService.generateGatePass(item);
         return ResponseEntity.ok()
-        		.header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=GATEPASS.pdf")
-        		.contentType(MediaType.APPLICATION_PDF)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=" + item.getGatePassNumber() + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
-    
+
     @GetMapping("/bulk/{gatePass}/pdf")
     public ResponseEntity<byte[]> bulkGatePassPdf(@PathVariable String gatePass) throws Exception {
 
@@ -64,7 +64,9 @@ public class GatePassController {
         byte[] pdf = pdfService.generateBulkGatePass(items);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=GATEPASS.pdf")
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=" + gatePass + ".pdf")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
