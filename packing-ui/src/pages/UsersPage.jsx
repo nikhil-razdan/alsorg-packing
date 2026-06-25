@@ -2378,13 +2378,6 @@ const userInfo = {
 	gap: 14,
 };
 
-const moduleAccessChip = {
-	background: "rgba(14,165,233,.15)",
-	color: "#7dd3fc",
-	border: "1px solid rgba(14,165,233,.28)",
-	fontWeight: 800,
-};
-
 const permissionCardSx = {
 	display: "flex",
 	alignItems: "center",
