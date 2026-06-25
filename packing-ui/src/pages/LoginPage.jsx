@@ -73,8 +73,12 @@ function LoginPage() {
               : Array.isArray(loginData?.user?.modules)
                 ? loginData.user.modules
                 : finalRole === "ADMIN"
-                  ? ["PACKFLOW", "BOMFLOW"]
-                  : ["PACKFLOW"];
+                  ? ["PACKFLOW", "BOMFLOW", "VENFLOW"]
+                  : finalRole?.startsWith("BOMFLOW_")
+                    ? ["BOMFLOW"]
+                    : finalRole?.startsWith("VENFLOW_")
+                      ? ["VENFLOW"]
+                      : ["PACKFLOW"];
 
       const currentUser = {
         username: finalUsername,

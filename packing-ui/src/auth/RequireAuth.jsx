@@ -42,12 +42,22 @@ function RequireAuth({ children }) {
 					finalRole === "ADMIN" ||
 					finalRole === "WAREHOUSE";
 
+				const storedModules = JSON.parse(localStorage.getItem("modules") || "[]");
+
 				const finalModules =
-					Array.isArray(data?.modules)
+					Array.isArray(data?.modules) && data.modules.length > 0
 						? data.modules
-						: Array.isArray(data?.user?.modules)
+						: Array.isArray(data?.user?.modules) && data.user.modules.length > 0
 							? data.user.modules
-							: JSON.parse(localStorage.getItem("modules") || "[]");
+							: storedModules.length > 0
+								? storedModules
+								: finalRole === "ADMIN"
+									? ["PACKFLOW", "BOMFLOW", "VENFLOW"]
+									: finalRole?.startsWith("BOMFLOW_")
+										? ["BOMFLOW"]
+										: finalRole?.startsWith("VENFLOW_")
+											? ["VENFLOW"]
+											: ["PACKFLOW"];
 
 				const finalUser = {
 					username: finalUsername,

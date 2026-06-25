@@ -32,7 +32,13 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "user_plant_access",
-            joinColumns = @JoinColumn(name = "user_id")
+            joinColumns = @JoinColumn(name = "user_id"),
+            uniqueConstraints = {
+                    @UniqueConstraint(
+                            name = "uk_user_plant_access",
+                            columnNames = {"user_id", "plant_code"}
+                    )
+            }
     )
     @Column(name = "plant_code")
     private Set<String> plantCodes = new LinkedHashSet<>();
@@ -40,7 +46,13 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "user_module_access",
-            joinColumns = @JoinColumn(name = "user_id")
+            joinColumns = @JoinColumn(name = "user_id"),
+            uniqueConstraints = {
+                    @UniqueConstraint(
+                            name = "uk_user_module_access",
+                            columnNames = {"user_id", "module_key"}
+                    )
+            }
     )
     @Column(name = "module_key")
     private Set<String> modules = new LinkedHashSet<>();

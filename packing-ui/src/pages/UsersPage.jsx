@@ -563,15 +563,19 @@ function UsersPage() {
 			return <AdminPanelSettingsIcon fontSize="small" />;
 		}
 
-		if (role === "DISPATCH") {
-			return <LocalShippingIcon fontSize="small" />;
+		if (role?.startsWith("BOMFLOW_")) {
+			return <AccountTreeOutlinedIcon fontSize="small" />;
 		}
 
-		if (role === "LOGISTICS") {
-			return <LocalShippingIcon fontSize="small" />;
+		if (role?.startsWith("VENFLOW_")) {
+			return <LayersOutlinedIcon fontSize="small" />;
 		}
 
-		if (role === "DRIVER") {
+		if (
+			role === "DISPATCH" ||
+			role === "LOGISTICS" ||
+			role === "DRIVER"
+		) {
 			return <LocalShippingIcon fontSize="small" />;
 		}
 
@@ -592,6 +596,10 @@ function UsersPage() {
 		if (role === "DRIVER") return driverChip;
 
 		if (role === "WAREHOUSE") return warehouseChip;
+
+		if (role?.startsWith("BOMFLOW_")) return bomFlowChip;
+
+		if (role?.startsWith("VENFLOW_")) return venFlowChip;
 
 		return packingChip;
 	};
@@ -683,6 +691,7 @@ function UsersPage() {
 								setPlantCodes([]);
 								setDriverId("");
 								setWarehouseAccess(false);
+								setModules(["PACKFLOW"]);
 								setCreateOpen(true);
 							}}
 						>
@@ -815,19 +824,19 @@ function UsersPage() {
 												onChange={(e) => {
 													const nextRole = e.target.value;
 
-													setRole(nextRole);
-													setModules(defaultModulesForRole(nextRole));
+													setEditRole(nextRole);
+													setEditModules(defaultModulesForRole(nextRole));
 
 													if (nextRole === "DRIVER") {
-														setPlantCodes([]);
+														setEditPlantCodes([]);
 													} else {
-														setDriverId("");
+														setEditDriverId("");
 													}
 
 													if (nextRole === "ADMIN" || nextRole === "WAREHOUSE") {
-														setWarehouseAccess(true);
+														setEditWarehouseAccess(true);
 													} else {
-														setWarehouseAccess(false);
+														setEditWarehouseAccess(false);
 													}
 												}}
 												sx={inlineInput}
@@ -854,59 +863,6 @@ function UsersPage() {
 										)}
 									</div>
 
-									<TextField
-										select
-										label="Module Access"
-										value={modules}
-										onChange={(e) => {
-											const value = e.target.value;
-											setModules(
-												typeof value === "string"
-													? value.split(",")
-													: value
-											);
-										}}
-										fullWidth
-										sx={formFieldSx}
-										SelectProps={{
-											multiple: true,
-											renderValue: (selected) =>
-												selected.length
-													? selected.map(moduleLabel).join(", ")
-													: "Select Modules",
-										}}
-										slotProps={{
-											select: {
-												MenuProps: {
-													PaperProps: {
-														sx: {
-															mt: 1,
-															borderRadius: "18px",
-															background: "linear-gradient(180deg,#0f172a,#111827)",
-															color: "#fff",
-															border: "1px solid rgba(255,255,255,.06)",
-															"& .MuiMenuItem-root": {
-																color: "#fff",
-															},
-															"& .Mui-selected": {
-																background: "rgba(59,130,246,.18) !important",
-																color: "#fff",
-															},
-														},
-													},
-												},
-											},
-										}}
-									>
-										{moduleOptions.map((module) => (
-											<MenuItem
-												key={module.key}
-												value={module.key}
-											>
-												{module.label}
-											</MenuItem>
-										))}
-									</TextField>
 
 									<div
 										style={{
@@ -1513,11 +1469,18 @@ function UsersPage() {
 									const nextRole = e.target.value;
 
 									setRole(nextRole);
+									setModules(defaultModulesForRole(nextRole));
 
 									if (nextRole === "DRIVER") {
 										setPlantCodes([]);
 									} else {
 										setDriverId("");
+									}
+
+									if (nextRole === "ADMIN" || nextRole === "WAREHOUSE") {
+										setWarehouseAccess(true);
+									} else {
+										setWarehouseAccess(false);
 									}
 								}}
 								fullWidth
@@ -1560,6 +1523,61 @@ function UsersPage() {
 										value={r}
 									>
 										{r}
+									</MenuItem>
+								))}
+							</TextField>
+
+							<TextField
+								select
+								label="Module Access"
+								value={modules}
+								onChange={(e) => {
+									const value = e.target.value;
+
+									setModules(
+										typeof value === "string"
+											? value.split(",")
+											: value
+									);
+								}}
+								fullWidth
+								sx={formFieldSx}
+								SelectProps={{
+									multiple: true,
+									renderValue: (selected) =>
+										selected.length
+											? selected.map(moduleLabel).join(", ")
+											: "Select Modules",
+								}}
+								slotProps={{
+									select: {
+										MenuProps: {
+											PaperProps: {
+												sx: {
+													mt: 1,
+													borderRadius: "18px",
+													background: "linear-gradient(180deg,#0f172a,#111827)",
+													color: "#fff",
+													border: "1px solid rgba(255,255,255,.06)",
+													"& .MuiMenuItem-root": {
+														color: "#fff",
+													},
+													"& .Mui-selected": {
+														background: "rgba(59,130,246,.18) !important",
+														color: "#fff",
+													},
+												},
+											},
+										},
+									},
+								}}
+							>
+								{moduleOptions.map((module) => (
+									<MenuItem
+										key={module.key}
+										value={module.key}
+									>
+										{module.label}
 									</MenuItem>
 								))}
 							</TextField>
@@ -2127,9 +2145,9 @@ const subtitle = {
 };
 
 const tableWrapper = {
-	overflow: "hidden",
-
-	borderRadius: 18,
+	width: "100%",
+	overflowX: "auto",
+	borderRadius: 24,
 };
 
 const avatar = {
@@ -2142,6 +2160,27 @@ const avatar = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
+};
+
+const bomFlowChip = {
+	background: "rgba(99,102,241,.16)",
+	color: "#c4b5fd",
+	border: "1px solid rgba(129,140,248,.35)",
+	fontWeight: 900,
+};
+
+const venFlowChip = {
+	background: "rgba(146,64,14,.18)",
+	color: "#fdba74",
+	border: "1px solid rgba(251,146,60,.35)",
+	fontWeight: 900,
+};
+
+const moduleAccessChip = {
+	background: "rgba(14,165,233,.15)",
+	color: "#7dd3fc",
+	border: "1px solid rgba(14,165,233,.28)",
+	fontWeight: 900,
 };
 
 const adminChip = {
@@ -2182,12 +2221,16 @@ const packingChip = {
 
 const actionContainer = {
 	display: "flex",
-
 	alignItems: "center",
-
-	gap: 8,
-
+	justifyContent: "flex-start",
+	gap: 1,
 	flexWrap: "nowrap",
+	minWidth: 240,
+
+	"& .MuiButton-root": {
+		whiteSpace: "nowrap",
+		minWidth: "auto",
+	},
 };
 
 const actionPrimary = {
@@ -2299,17 +2342,16 @@ const formFieldSx = {
 };
 
 const tableHeader = {
+	minWidth: 1500,
 	display: "grid",
-
-	gridTemplateColumns: "1.25fr .9fr 1.25fr 1.25fr 1.25fr 1.15fr 1.7fr",
-
-	padding: "14px 16px",
-
-	background: "#111827",
-
-	color: "#94a3b8",
-
-	fontWeight: 700,
+	gridTemplateColumns: "1.15fr .95fr 1.25fr 1.15fr 1.35fr 1.15fr 250px",
+	alignItems: "center",
+	gap: 18,
+	padding: "18px 24px",
+	color: "#93c5fd",
+	fontSize: 13,
+	fontWeight: 900,
+	borderBottom: "1px solid rgba(255,255,255,.08)",
 };
 
 const tableBody = {
@@ -2319,18 +2361,13 @@ const tableBody = {
 };
 
 const tableRow = {
+	minWidth: 1500,
 	display: "grid",
-
-	gridTemplateColumns: "1.25fr .9fr 1.25fr 1.25fr 1.25fr 1.15fr 1.7fr",
-
+	gridTemplateColumns: "1.15fr .95fr 1.25fr 1.15fr 1.35fr 1.15fr 250px",
 	alignItems: "center",
-
-	padding: "14px 16px",
-
-	color: "#fff",
-
-	borderTop:
-		"1px solid rgba(255,255,255,0.06)",
+	gap: 18,
+	padding: "20px 24px",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
 };
 
 const userInfo = {

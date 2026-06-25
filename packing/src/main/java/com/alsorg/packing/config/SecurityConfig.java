@@ -23,9 +23,7 @@ public class SecurityConfig {
 
         http
                 .cors(cors ->
-                        cors.configurationSource(
-                                corsConfigurationSource
-                        )
+                        cors.configurationSource(corsConfigurationSource)
                 )
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session ->
@@ -40,9 +38,21 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/register"
+                        ).permitAll()
+
+                        .requestMatchers(
                                 "/api/stickers/history/*/download"
                         ).permitAll()
 
+                        /*
+                         * We keep this permitAll because AuthInterceptor is
+                         * currently handling JWT validation for /api/**.
+                         *
+                         * Do not remove AuthInterceptor unless you replace it
+                         * with a proper JWT filter.
+                         */
                         .anyRequest().permitAll()
                 );
 
