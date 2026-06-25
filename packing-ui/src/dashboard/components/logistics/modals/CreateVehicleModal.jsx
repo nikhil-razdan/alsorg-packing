@@ -146,7 +146,7 @@ function CreateVehicleModal({
   open,
   onClose,
   onCreated,
-  showAlert = () => {},
+  showAlert = () => { },
   initialData = null,
 }) {
   const isEdit = Boolean(initialData?.id);
@@ -163,13 +163,13 @@ function CreateVehicleModal({
     setForm({
       ...emptyVehicleForm,
       ...(initialData || {}),
-      registrationDate: toInputDate(initialData?.registrationDate),
-      fitnessValidUpto: toInputDate(initialData?.fitnessValidUpto),
-      insuranceValidUpto: toInputDate(initialData?.insuranceValidUpto),
-      taxValidUpto: toInputDate(initialData?.taxValidUpto),
-      permitValidUpto: toInputDate(initialData?.permitValidUpto),
-      puccValidUpto: toInputDate(initialData?.puccValidUpto),
-      nationalPermitValidUpto: toInputDate(initialData?.nationalPermitValidUpto),
+      registrationDate: toDisplayDate(initialData?.registrationDate),
+      fitnessValidUpto: toDisplayDate(initialData?.fitnessValidUpto),
+      insuranceValidUpto: toDisplayDate(initialData?.insuranceValidUpto),
+      taxValidUpto: toDisplayDate(initialData?.taxValidUpto),
+      permitValidUpto: toDisplayDate(initialData?.permitValidUpto),
+      puccValidUpto: toDisplayDate(initialData?.puccValidUpto),
+      nationalPermitValidUpto: toDisplayDate(initialData?.nationalPermitValidUpto),
     });
   }, [open, initialData]);
 
@@ -206,13 +206,13 @@ function CreateVehicleModal({
       emissionNorm: form.emissionNorm?.trim(),
       vehicleAge: form.vehicleAge?.trim(),
       status: form.status || "Active",
-      registrationDate: cleanDate(form.registrationDate),
-      fitnessValidUpto: cleanDate(form.fitnessValidUpto),
-      insuranceValidUpto: cleanDate(form.insuranceValidUpto),
-      taxValidUpto: cleanDate(form.taxValidUpto),
-      permitValidUpto: cleanDate(form.permitValidUpto),
-      puccValidUpto: cleanDate(form.puccValidUpto),
-      nationalPermitValidUpto: cleanDate(form.nationalPermitValidUpto),
+      registrationDate: toBackendDate(form.registrationDate),
+      fitnessValidUpto: toBackendDate(form.fitnessValidUpto),
+      insuranceValidUpto: toBackendDate(form.insuranceValidUpto),
+      taxValidUpto: toBackendDate(form.taxValidUpto),
+      permitValidUpto: toBackendDate(form.permitValidUpto),
+      puccValidUpto: toBackendDate(form.puccValidUpto),
+      nationalPermitValidUpto: toBackendDate(form.nationalPermitValidUpto),
     };
   };
 
@@ -360,15 +360,23 @@ function CreateVehicleModal({
               <TextField
                 key={field.key}
                 label={field.label}
-                type="date"
+                placeholder="dd/mm/yy"
                 value={form[field.key] || ""}
                 onChange={(e) =>
-                  updateField(field.key, e.target.value)
+                  updateField(
+                    field.key,
+                    formatDateTyping(e.target.value)
+                  )
                 }
                 sx={inputSx}
                 InputLabelProps={{
                   shrink: true,
                 }}
+                inputProps={{
+                  inputMode: "numeric",
+                  maxLength: 8,
+                }}
+                helperText="Format: dd/mm/yy"
               />
             ))}
           </Box>
@@ -392,52 +400,100 @@ function CreateVehicleModal({
           {saving
             ? "Saving..."
             : isEdit
-            ? "Update Vehicle"
-            : "Add Vehicle"}
+              ? "Update Vehicle"
+              : "Add Vehicle"}
         </Button>
       </DialogActions>
     </Dialog>
   );
 }
 
-function cleanDate(value) {
-  return value || null;
+function formatDateTyping(value) {
+  const digits = String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, 6);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
-function toInputDate(value) {
+function toDisplayDate(value) {
   if (!value) return "";
 
   const text = String(value).trim();
 
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return text.slice(0, 10);
+    const [year, month, day] = text.slice(0, 10).split("-");
+
+    return `${day}/${month}/${year.slice(-2)}`;
   }
 
-  const match =
-    text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
 
-  if (!match) return "";
+  if (slashMatch) {
+    const day = slashMatch[1].padStart(2, "0");
+    const month = slashMatch[2].padStart(2, "0");
+    const year = slashMatch[3].slice(-2);
+
+    return `${day}/${month}/${year}`;
+  }
+
+  const dashMonthMatch = text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+
+  if (dashMonthMatch) {
+    const day = dashMonthMatch[1].padStart(2, "0");
+
+    const monthMap = {
+      Jan: "01",
+      Feb: "02",
+      Mar: "03",
+      Apr: "04",
+      May: "05",
+      Jun: "06",
+      Jul: "07",
+      Aug: "08",
+      Sep: "09",
+      Oct: "10",
+      Nov: "11",
+      Dec: "12",
+    };
+
+    const month = monthMap[dashMonthMatch[2].slice(0, 3)];
+
+    if (!month) return "";
+
+    const year = dashMonthMatch[3].slice(-2);
+
+    return `${day}/${month}/${year}`;
+  }
+
+  return "";
+}
+
+function toBackendDate(value) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+
+  if (!match) {
+    return null;
+  }
 
   const day = match[1].padStart(2, "0");
-  const monthMap = {
-    Jan: "01",
-    Feb: "02",
-    Mar: "03",
-    Apr: "04",
-    May: "05",
-    Jun: "06",
-    Jul: "07",
-    Aug: "08",
-    Sep: "09",
-    Oct: "10",
-    Nov: "11",
-    Dec: "12",
-  };
-
-  const month =
-    monthMap[
-      match[2].slice(0, 3)
-    ];
+  const month = match[2].padStart(2, "0");
 
   let year = match[3];
 
@@ -446,8 +502,6 @@ function toInputDate(value) {
       ? `19${year}`
       : `20${year}`;
   }
-
-  if (!month) return "";
 
   return `${year}-${month}-${day}`;
 }
