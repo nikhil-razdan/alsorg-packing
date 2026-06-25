@@ -6,7 +6,6 @@ import {
 	Card,
 	CardContent,
 	Chip,
-	Grid,
 	Typography,
 } from "@mui/material";
 
@@ -133,47 +132,45 @@ export default function ModuleHub() {
 						</Typography>
 					</Card>
 				) : (
-					<Grid container spacing={3}>
+					<Box sx={moduleGridSx}>
 						{cards.map((card) => (
-							<Grid item xs={12} md={4} key={card.key}>
-								<Card sx={moduleCardSx}>
-									<CardContent sx={{ p: 3.5, position: "relative", zIndex: 1 }}>
-										<Box sx={cardTopSx}>
-											<Box sx={iconBoxSx}>
-												{card.icon}
-											</Box>
-
-											<Chip label={card.accent} size="small" sx={cardChipSx} />
+							<Card key={card.key} sx={moduleCardSx}>
+								<CardContent sx={cardContentSx}>
+									<Box sx={cardTopSx}>
+										<Box sx={iconBoxSx}>
+											{card.icon}
 										</Box>
 
-										<Typography variant="h4" sx={cardTitleSx}>
-											{card.title}
-										</Typography>
+										<Chip label={card.accent} size="small" sx={cardChipSx} />
+									</Box>
 
-										<Typography sx={cardSubtitleSx}>
-											{card.subtitle}
-										</Typography>
+									<Typography variant="h4" sx={cardTitleSx}>
+										{card.title}
+									</Typography>
 
-										<Box sx={tagWrapSx}>
-											{card.tags.map((tag) => (
-												<Chip key={tag} label={tag} size="small" sx={tagSx} />
-											))}
-										</Box>
+									<Typography sx={cardSubtitleSx}>
+										{card.subtitle}
+									</Typography>
 
-										<Button
-											fullWidth
-											variant="contained"
-											endIcon={<ArrowForwardIcon />}
-											onClick={() => navigate(card.path)}
-											sx={openBtnSx}
-										>
-											Open {card.title}
-										</Button>
-									</CardContent>
-								</Card>
-							</Grid>
+									<Box sx={tagWrapSx}>
+										{card.tags.map((tag) => (
+											<Chip key={tag} label={tag} size="small" sx={tagSx} />
+										))}
+									</Box>
+
+									<Button
+										fullWidth
+										variant="contained"
+										endIcon={<ArrowForwardIcon />}
+										onClick={() => navigate(card.path)}
+										sx={openBtnSx}
+									>
+										Open {card.title}
+									</Button>
+								</CardContent>
+							</Card>
 						))}
-					</Grid>
+					</Box>
 				)}
 			</Box>
 		</Box>
@@ -183,7 +180,8 @@ export default function ModuleHub() {
 const pageSx = {
 	minHeight: "100vh",
 	position: "relative",
-	overflow: "hidden",
+	overflowX: "hidden",
+	overflowY: "auto",
 	fontFamily: "Inter, system-ui, sans-serif",
 	background: `
 		radial-gradient(circle at top left, rgba(59,130,246,0.14), transparent 22%),
@@ -218,7 +216,7 @@ const ambientGlowTwo = {
 };
 
 const backgroundText = {
-	position: "absolute",
+	position: "fixed",
 	fontSize: { xs: 88, md: 190 },
 	fontWeight: 950,
 	background:
@@ -240,7 +238,7 @@ const topBarSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	maxWidth: 1280,
+	maxWidth: 1120,
 	mx: "auto",
 	mb: 5,
 };
@@ -295,13 +293,13 @@ const logoutBtnSx = {
 const containerSx = {
 	position: "relative",
 	zIndex: 1,
-	maxWidth: 1280,
+	maxWidth: 1120,
 	mx: "auto",
 };
 
 const heroSx = {
 	mb: 4,
-	maxWidth: 840,
+	maxWidth: 780,
 };
 
 const badgeSx = {
@@ -322,13 +320,24 @@ const titleSx = {
 	letterSpacing: "-0.055em",
 	lineHeight: 1,
 	mb: 2,
+	fontSize: { xs: 40, md: 58 },
 };
 
 const subtitleSx = {
 	color: "rgba(255,255,255,.66)",
-	fontSize: { xs: 15, md: 18 },
+	fontSize: { xs: 15, md: 17 },
 	lineHeight: 1.8,
 	maxWidth: 760,
+};
+
+const moduleGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2, minmax(0, 1fr))",
+	},
+	gap: 3,
+	alignItems: "stretch",
 };
 
 const emptyCardSx = {
@@ -341,6 +350,7 @@ const emptyCardSx = {
 
 const moduleCardSx = {
 	height: "100%",
+	minHeight: 286,
 	position: "relative",
 	overflow: "hidden",
 	borderRadius: 5,
@@ -364,6 +374,15 @@ const moduleCardSx = {
 		boxShadow: "0 34px 90px rgba(2,6,23,.62)",
 		borderColor: "rgba(59,130,246,.28)",
 	},
+};
+
+const cardContentSx = {
+	p: 3.5,
+	position: "relative",
+	zIndex: 1,
+	height: "100%",
+	display: "flex",
+	flexDirection: "column",
 };
 
 const cardTopSx = {
@@ -403,7 +422,7 @@ const cardTitleSx = {
 const cardSubtitleSx = {
 	color: "rgba(255,255,255,.58)",
 	lineHeight: 1.75,
-	minHeight: 86,
+	minHeight: 72,
 	mb: 2.2,
 };
 
@@ -412,6 +431,7 @@ const tagWrapSx = {
 	flexWrap: "wrap",
 	gap: 1,
 	mb: 3,
+	mt: "auto",
 };
 
 const tagSx = {

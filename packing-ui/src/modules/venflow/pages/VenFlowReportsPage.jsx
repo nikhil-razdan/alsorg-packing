@@ -1,54 +1,101 @@
 import React from "react";
 import { Box, Card, CardContent, Typography } from "@mui/material";
 
+import {
+	cardSx,
+	pageSubSx,
+	pageTitleSx,
+} from "../venflowTheme";
+
 export default function VenFlowReportsPage() {
+	const reports = [
+		"Pending Store Check Report",
+		"Pending Requisition Report",
+		"Pending Ordered Quantity Report",
+		"Pending Receiving Report",
+		"Balance Quantity Report",
+		"Delayed Expected Date Report",
+		"PD-wise Veneer Summary",
+		"Client-wise Veneer Summary",
+		"Excel Export",
+	];
+
 	return (
 		<Box>
-			<Typography sx={titleSx}>
+			<Typography sx={pageTitleSx}>
 				VenFlow Reports
 			</Typography>
 
-			<Typography sx={subSx}>
-				Reports will include pending store check, pending requisition, pending receiving, delayed expected date, balance pending, PD-wise and client-wise tracking.
+			<Typography sx={pageSubSx}>
+				Reports will cover pending store checks, requisition gaps, delayed
+				receiving, balance quantities, PD-wise movement and client-wise tracking.
 			</Typography>
 
-			<Card sx={cardSx}>
-				<CardContent>
-					<Typography sx={{ fontWeight: 900 }}>
-						Coming next:
+			<Card sx={{ ...cardSx, mt: 2.5 }}>
+				<CardContent sx={{ p: 3 }}>
+					<Typography sx={sectionTitleSx}>
+						Coming Next
 					</Typography>
 
-					<Typography sx={{ mt: 1, color: "#64748b", lineHeight: 1.8 }}>
-						1. Pending Requisition Report<br />
-						2. Pending Receiving Report<br />
-						3. Balance Qty Report<br />
-						4. Delayed Expected Date Report<br />
-						5. Client-wise Veneer Summary<br />
-						6. Excel Export
-					</Typography>
+					<Box sx={reportsGridSx}>
+						{reports.map((item, index) => (
+							<Box key={item} sx={reportItemSx}>
+								<Box sx={indexSx}>
+									{index + 1}
+								</Box>
+
+								<Typography sx={reportTextSx}>
+									{item}
+								</Typography>
+							</Box>
+						))}
+					</Box>
 				</CardContent>
 			</Card>
 		</Box>
 	);
 }
 
-const titleSx = {
-	fontSize: 28,
+const sectionTitleSx = {
+	color: "#fff",
 	fontWeight: 950,
-	color: "#111827",
-	letterSpacing: "-0.04em",
+	fontSize: 20,
+	mb: 2,
 };
 
-const subSx = {
-	mt: 0.5,
-	mb: 2.5,
-	color: "#64748b",
-	fontWeight: 650,
-	lineHeight: 1.7,
+const reportsGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2, minmax(0,1fr))",
+	},
+	gap: 1.4,
 };
 
-const cardSx = {
-	borderRadius: 4,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 18px 45px rgba(15,23,42,.06)",
+const reportItemSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	p: 1.6,
+	borderRadius: "16px",
+	background: "rgba(255,255,255,.045)",
+	border: "1px solid rgba(255,255,255,.07)",
+};
+
+const indexSx = {
+	width: 30,
+	height: 30,
+	borderRadius: "50%",
+	display: "grid",
+	placeItems: "center",
+	background: "rgba(59,130,246,.16)",
+	color: "#93c5fd",
+	fontWeight: 950,
+	fontSize: 12,
+};
+
+const reportTextSx = {
+	color: "rgba(255,255,255,.78)",
+	fontWeight: 800,
+	fontSize: 14,
 };

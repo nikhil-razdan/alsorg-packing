@@ -11,6 +11,16 @@ import {
 import { useNavigate } from "react-router-dom";
 import { venflowApi } from "../api/venflowApi";
 
+import {
+	cardSx,
+	errorAlertSx,
+	fieldSx,
+	pageSubSx,
+	pageTitleSx,
+	primaryBtnSx,
+	secondaryBtnSx,
+} from "../venflowTheme";
+
 export default function VenFlowCreatePage() {
 	const navigate = useNavigate();
 
@@ -55,19 +65,20 @@ export default function VenFlowCreatePage() {
 	};
 
 	return (
-		<Box sx={{ maxWidth: 760 }}>
-			<Typography sx={titleSx}>
+		<Box sx={{ maxWidth: 860 }}>
+			<Typography sx={pageTitleSx}>
 				New Veneer Requirement
 			</Typography>
 
-			<Typography sx={subSx}>
-				Start the veneer tracking flow. Product, store, requisition, ordered quantity and receiving will open step-by-step after this.
+			<Typography sx={pageSubSx}>
+				Start the veneer tracking flow. Store status, requisition, ordered quantity,
+				expected date and receiving will open step-by-step after this.
 			</Typography>
 
-			<Card sx={cardSx}>
+			<Card sx={{ ...cardSx, mt: 2.5 }}>
 				<CardContent sx={{ p: 3 }}>
 					{error && (
-						<Alert severity="error" sx={{ mb: 2 }}>
+						<Alert severity="error" sx={errorAlertSx}>
 							{error}
 						</Alert>
 					)}
@@ -80,6 +91,7 @@ export default function VenFlowCreatePage() {
 							onChange={(e) => update("orderDate", e.target.value)}
 							InputLabelProps={{ shrink: true }}
 							required
+							sx={fieldSx}
 						/>
 
 						<TextField
@@ -87,6 +99,7 @@ export default function VenFlowCreatePage() {
 							value={form.pdNo}
 							onChange={(e) => update("pdNo", e.target.value)}
 							required
+							sx={fieldSx}
 						/>
 
 						<TextField
@@ -94,10 +107,23 @@ export default function VenFlowCreatePage() {
 							value={form.clientName}
 							onChange={(e) => update("clientName", e.target.value)}
 							required
+							sx={fieldSx}
 						/>
 					</Box>
 
-					<Box sx={{ display: "flex", gap: 1.5, mt: 3 }}>
+					<Box sx={noteSx}>
+						<Typography sx={noteTitleSx}>
+							Controlled flow enabled
+						</Typography>
+
+						<Typography sx={noteTextSx}>
+							After creating the header, users can update the next stages only
+							as per role and sequence: Product Details → Store Status →
+							Requisition → Ordered Qty → Expected Date → Receiving.
+						</Typography>
+					</Box>
+
+					<Box sx={{ display: "flex", gap: 1.5, mt: 3, flexWrap: "wrap" }}>
 						<Button
 							variant="contained"
 							onClick={submit}
@@ -109,7 +135,7 @@ export default function VenFlowCreatePage() {
 
 						<Button
 							onClick={() => navigate("/venflow/entries")}
-							sx={cancelBtnSx}
+							sx={secondaryBtnSx}
 						>
 							Cancel
 						</Button>
@@ -120,27 +146,6 @@ export default function VenFlowCreatePage() {
 	);
 }
 
-const titleSx = {
-	fontSize: 28,
-	fontWeight: 950,
-	color: "#111827",
-	letterSpacing: "-0.04em",
-};
-
-const subSx = {
-	mt: 0.6,
-	mb: 2.5,
-	color: "#64748b",
-	fontWeight: 650,
-	lineHeight: 1.7,
-};
-
-const cardSx = {
-	borderRadius: 4,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 18px 45px rgba(15,23,42,.06)",
-};
-
 const formGridSx = {
 	display: "grid",
 	gridTemplateColumns: {
@@ -150,16 +155,24 @@ const formGridSx = {
 	gap: 2,
 };
 
-const primaryBtnSx = {
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	background: "linear-gradient(135deg,#92400e,#b45309)",
+const noteSx = {
+	mt: 2.5,
+	p: 2,
+	borderRadius: "18px",
+	background: "rgba(59,130,246,.10)",
+	border: "1px solid rgba(59,130,246,.20)",
 };
 
-const cancelBtnSx = {
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	color: "#64748b",
+const noteTitleSx = {
+	color: "#bfdbfe",
+	fontWeight: 950,
+	fontSize: 14,
+};
+
+const noteTextSx = {
+	mt: 0.8,
+	color: "rgba(255,255,255,.58)",
+	fontWeight: 650,
+	fontSize: 13,
+	lineHeight: 1.7,
 };

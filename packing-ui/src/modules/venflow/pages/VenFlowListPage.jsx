@@ -21,6 +21,21 @@ import { venflowApi } from "../api/venflowApi";
 import VenFlowStatusChip from "../components/VenFlowStatusChip";
 import VenFlowStageChip from "../components/VenFlowStageChip";
 
+import {
+	darkMenuProps,
+	fieldSx,
+	loadingBoxSx,
+	outlineBtnSx,
+	pageHeaderSx,
+	pageSubSx,
+	pageTitleSx,
+	primaryBtnSx,
+	tableCardSx,
+	tableCellSx,
+	tableHeadCellSx,
+	tableRowSx,
+} from "../venflowTheme";
+
 export default function VenFlowListPage() {
 	const navigate = useNavigate();
 
@@ -36,12 +51,12 @@ export default function VenFlowListPage() {
 		storeStatus: "",
 	});
 
-	const load = async () => {
+	const load = async (targetPage = page) => {
 		try {
 			setLoading(true);
 
 			const res = await venflowApi.getEntries({
-				page,
+				page: targetPage,
 				size,
 				search: filters.search || undefined,
 				stage: filters.stage || undefined,
@@ -58,12 +73,12 @@ export default function VenFlowListPage() {
 	};
 
 	useEffect(() => {
-		load();
+		load(page);
 	}, [page, size]);
 
 	const applyFilters = () => {
 		setPage(0);
-		setTimeout(load, 0);
+		load(0);
 	};
 
 	const updateFilter = (key, value) => {
@@ -75,14 +90,15 @@ export default function VenFlowListPage() {
 
 	return (
 		<Box>
-			<Box sx={headerSx}>
+			<Box sx={pageHeaderSx}>
 				<Box>
-					<Typography sx={titleSx}>
+					<Typography sx={pageTitleSx}>
 						Veneer Entries
 					</Typography>
 
-					<Typography sx={subSx}>
-						Track every veneer requirement from order date to receiving and balance closure.
+					<Typography sx={pageSubSx}>
+						Track every veneer requirement from order date to store,
+						requisition, receiving and balance closure.
 					</Typography>
 				</Box>
 
@@ -102,6 +118,7 @@ export default function VenFlowListPage() {
 						size="small"
 						value={filters.search}
 						onChange={(e) => updateFilter("search", e.target.value)}
+						sx={fieldSx}
 					/>
 
 					<TextField
@@ -110,6 +127,8 @@ export default function VenFlowListPage() {
 						select
 						value={filters.stage}
 						onChange={(e) => updateFilter("stage", e.target.value)}
+						sx={fieldSx}
+						SelectProps={{ MenuProps: darkMenuProps }}
 					>
 						<MenuItem value="">All</MenuItem>
 						<MenuItem value="HEADER_CREATED">Header Created</MenuItem>
@@ -128,6 +147,8 @@ export default function VenFlowListPage() {
 						select
 						value={filters.storeStatus}
 						onChange={(e) => updateFilter("storeStatus", e.target.value)}
+						sx={fieldSx}
+						SelectProps={{ MenuProps: darkMenuProps }}
 					>
 						<MenuItem value="">All</MenuItem>
 						<MenuItem value="AVAILABLE_IN_STORE">Available in Store</MenuItem>
@@ -140,7 +161,7 @@ export default function VenFlowListPage() {
 					<Button
 						variant="outlined"
 						onClick={applyFilters}
-						sx={filterBtnSx}
+						sx={outlineBtnSx}
 					>
 						Apply
 					</Button>
@@ -149,59 +170,61 @@ export default function VenFlowListPage() {
 
 			<Card sx={tableCardSx}>
 				{loading ? (
-					<Box sx={{ p: 5, textAlign: "center" }}>
+					<Box sx={loadingBoxSx}>
 						<CircularProgress />
 					</Box>
 				) : (
 					<>
-						<TableContainer>
-							<Table size="small">
+						<TableContainer sx={{ overflowX: "auto" }}>
+							<Table size="small" sx={{ minWidth: 1320 }}>
 								<TableHead>
 									<TableRow>
-										<TableCell>Order Date</TableCell>
-										<TableCell>PD No.</TableCell>
-										<TableCell>Client</TableCell>
-										<TableCell>Product</TableCell>
-										<TableCell>Veneer</TableCell>
-										<TableCell>Size</TableCell>
-										<TableCell>Store</TableCell>
-										<TableCell>Ordered</TableCell>
-										<TableCell>Received</TableCell>
-										<TableCell>Balance</TableCell>
-										<TableCell>Expected</TableCell>
-										<TableCell>Stage</TableCell>
-										<TableCell align="right">Action</TableCell>
+										<TableCell sx={tableHeadCellSx}>Order Date</TableCell>
+										<TableCell sx={tableHeadCellSx}>PD No.</TableCell>
+										<TableCell sx={tableHeadCellSx}>Client</TableCell>
+										<TableCell sx={tableHeadCellSx}>Product</TableCell>
+										<TableCell sx={tableHeadCellSx}>Veneer</TableCell>
+										<TableCell sx={tableHeadCellSx}>Size</TableCell>
+										<TableCell sx={tableHeadCellSx}>Store</TableCell>
+										<TableCell sx={tableHeadCellSx}>Ordered</TableCell>
+										<TableCell sx={tableHeadCellSx}>Received</TableCell>
+										<TableCell sx={tableHeadCellSx}>Balance</TableCell>
+										<TableCell sx={tableHeadCellSx}>Expected</TableCell>
+										<TableCell sx={tableHeadCellSx}>Stage</TableCell>
+										<TableCell sx={tableHeadCellSx} align="right">Action</TableCell>
 									</TableRow>
 								</TableHead>
 
 								<TableBody>
 									{rows.map((row) => (
-										<TableRow key={row.id} hover>
-											<TableCell>{row.orderDate || "-"}</TableCell>
-											<TableCell sx={{ fontWeight: 900 }}>{row.pdNo}</TableCell>
-											<TableCell>{row.clientName}</TableCell>
-											<TableCell>{row.productDescription || "-"}</TableCell>
-											<TableCell>{row.veneerType || "-"}</TableCell>
-											<TableCell>{row.size || "-"}</TableCell>
-											<TableCell>
+										<TableRow key={row.id} hover sx={tableRowSx}>
+											<TableCell sx={tableCellSx}>{row.orderDate || "-"}</TableCell>
+											<TableCell sx={{ ...tableCellSx, color: "#fff", fontWeight: 950 }}>
+												{row.pdNo}
+											</TableCell>
+											<TableCell sx={tableCellSx}>{row.clientName}</TableCell>
+											<TableCell sx={tableCellSx}>{row.productDescription || "-"}</TableCell>
+											<TableCell sx={tableCellSx}>{row.veneerType || "-"}</TableCell>
+											<TableCell sx={tableCellSx}>{row.size || "-"}</TableCell>
+											<TableCell sx={tableCellSx}>
 												<VenFlowStatusChip status={row.storeStatus} />
 											</TableCell>
-											<TableCell>
+											<TableCell sx={tableCellSx}>
 												{row.orderedQty ?? "-"} {row.unit || ""}
 											</TableCell>
-											<TableCell>{row.receivedQty ?? "-"}</TableCell>
-											<TableCell sx={{ fontWeight: 900 }}>
+											<TableCell sx={tableCellSx}>{row.receivedQty ?? "-"}</TableCell>
+											<TableCell sx={{ ...tableCellSx, color: "#fff", fontWeight: 950 }}>
 												{row.balanceQty ?? "-"}
 											</TableCell>
-											<TableCell>{row.expectedDate || "-"}</TableCell>
-											<TableCell>
+											<TableCell sx={tableCellSx}>{row.expectedDate || "-"}</TableCell>
+											<TableCell sx={tableCellSx}>
 												<VenFlowStageChip stage={row.stage} />
 											</TableCell>
-											<TableCell align="right">
+											<TableCell sx={tableCellSx} align="right">
 												<Button
 													size="small"
 													onClick={() => navigate(`/venflow/entries/${row.id}`)}
-													sx={{ fontWeight: 900 }}
+													sx={openBtnSx}
 												>
 													Open
 												</Button>
@@ -211,7 +234,11 @@ export default function VenFlowListPage() {
 
 									{rows.length === 0 && (
 										<TableRow>
-											<TableCell colSpan={13} align="center" sx={{ py: 5 }}>
+											<TableCell
+												colSpan={13}
+												align="center"
+												sx={{ ...tableCellSx, py: 5 }}
+											>
 												No VenFlow entries found.
 											</TableCell>
 										</TableRow>
@@ -231,6 +258,7 @@ export default function VenFlowListPage() {
 								setPage(0);
 							}}
 							rowsPerPageOptions={[10, 25, 50, 100]}
+							sx={paginationSx}
 						/>
 					</>
 				)}
@@ -239,41 +267,14 @@ export default function VenFlowListPage() {
 	);
 }
 
-const headerSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: { xs: "flex-start", md: "center" },
-	gap: 2,
-	mb: 2.5,
-	flexDirection: { xs: "column", md: "row" },
-};
-
-const titleSx = {
-	fontSize: 28,
-	fontWeight: 950,
-	color: "#111827",
-	letterSpacing: "-0.04em",
-};
-
-const subSx = {
-	mt: 0.5,
-	color: "#64748b",
-	fontWeight: 650,
-};
-
-const primaryBtnSx = {
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	background: "linear-gradient(135deg,#92400e,#b45309)",
-};
-
 const filterCardSx = {
 	p: 2,
 	borderRadius: 4,
 	mb: 2,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 14px 35px rgba(15,23,42,.05)",
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.30)",
+	backdropFilter: "blur(18px)",
 };
 
 const filterGridSx = {
@@ -285,17 +286,26 @@ const filterGridSx = {
 	gap: 1.5,
 };
 
-const filterBtnSx = {
+const openBtnSx = {
 	borderRadius: "12px",
 	textTransform: "none",
 	fontWeight: 900,
-	borderColor: "#92400e",
-	color: "#92400e",
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.10)",
+	border: "1px solid rgba(59,130,246,.22)",
+	"&:hover": {
+		background: "rgba(59,130,246,.18)",
+	},
 };
 
-const tableCardSx = {
-	borderRadius: 4,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 18px 45px rgba(15,23,42,.06)",
-	overflow: "hidden",
+const paginationSx = {
+	color: "#cbd5e1",
+	borderTop: "1px solid rgba(255,255,255,.07)",
+	"& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+		color: "#94a3b8",
+		fontWeight: 700,
+	},
+	"& .MuiSvgIcon-root": {
+		color: "#cbd5e1",
+	},
 };

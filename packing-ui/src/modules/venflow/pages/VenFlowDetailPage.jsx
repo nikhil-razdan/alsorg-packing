@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+
 import {
 	Alert,
 	Box,
@@ -11,12 +12,30 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
+
 import { useNavigate, useParams } from "react-router-dom";
 
 import { venflowApi } from "../api/venflowApi";
 import VenFlowStatusChip from "../components/VenFlowStatusChip";
 import VenFlowStageChip from "../components/VenFlowStageChip";
 import { normalizeRole } from "../../../utils/permissions";
+
+import {
+	cardSx,
+	darkMenuProps,
+	dividerSx,
+	errorAlertSx,
+	fieldSx,
+	infoLabelSx,
+	infoValueSx,
+	loadingBoxSx,
+	outlineBtnSx,
+	pageHeaderSx,
+	pageTitleSx,
+	primaryBtnSx,
+	secondaryBtnSx,
+	sectionTitleSx,
+} from "../venflowTheme";
 
 export default function VenFlowDetailPage() {
 	const { id } = useParams();
@@ -25,9 +44,22 @@ export default function VenFlowDetailPage() {
 	const role = normalizeRole(localStorage.getItem("role"));
 
 	const isAdmin = role === "ADMIN";
-	const isProduction = isAdmin || role === "VENFLOW_PRODUCTION";
-	const isStore = isAdmin || role === "VENFLOW_STORE";
-	const isPurchase = isAdmin || role === "VENFLOW_PURCHASE";
+	const isManager = role === "VENFLOW_MANAGER";
+
+	const isProduction =
+		isAdmin ||
+		isManager ||
+		role === "VENFLOW_PRODUCTION";
+
+	const isStore =
+		isAdmin ||
+		isManager ||
+		role === "VENFLOW_STORE";
+
+	const isPurchase =
+		isAdmin ||
+		isManager ||
+		role === "VENFLOW_PURCHASE";
 
 	const [entry, setEntry] = useState(null);
 	const [loading, setLoading] = useState(true);
@@ -109,6 +141,14 @@ export default function VenFlowDetailPage() {
 			setRemarksForm({
 				remarks: row.remarks || "",
 			});
+		} catch (err) {
+			setEntry(null);
+
+			setError(
+				err?.response?.data?.message ||
+				err?.response?.data?.error ||
+				"Unable to load VenFlow entry."
+			);
 		} finally {
 			setLoading(false);
 		}
@@ -116,12 +156,14 @@ export default function VenFlowDetailPage() {
 
 	useEffect(() => {
 		load();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [id]);
 
 	const run = async (fn) => {
 		try {
 			setSaving(true);
 			setError("");
+
 			await fn();
 			await load();
 		} catch (err) {
@@ -137,25 +179,36 @@ export default function VenFlowDetailPage() {
 
 	if (loading) {
 		return (
-			<Box sx={{ p: 5, textAlign: "center" }}>
+			<Box sx={loadingBoxSx}>
 				<CircularProgress />
 			</Box>
 		);
 	}
 
 	if (!entry) {
-		return <Alert severity="error">Entry not found.</Alert>;
+		return (
+			<Alert severity="error" sx={errorAlertSx}>
+				{error || "Entry not found."}
+			</Alert>
+		);
 	}
 
 	return (
 		<Box>
-			<Box sx={headerSx}>
+			<Box sx={pageHeaderSx}>
 				<Box>
-					<Typography sx={titleSx}>
+					<Typography sx={pageTitleSx}>
 						{entry.pdNo} — {entry.clientName}
 					</Typography>
 
-					<Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+					<Box
+						sx={{
+							display: "flex",
+							gap: 1,
+							mt: 1,
+							flexWrap: "wrap",
+						}}
+					>
 						<VenFlowStageChip stage={entry.stage} />
 						<VenFlowStatusChip status={entry.storeStatus} />
 					</Box>
@@ -163,23 +216,26 @@ export default function VenFlowDetailPage() {
 
 				<Button
 					onClick={() => navigate("/venflow/entries")}
-					sx={backBtnSx}
+					sx={secondaryBtnSx}
 				>
 					Back to Entries
 				</Button>
 			</Box>
 
 			{error && (
-				<Alert severity="error" sx={{ mb: 2 }}>
+				<Alert severity="error" sx={errorAlertSx}>
 					{error}
 				</Alert>
 			)}
 
 			<Box sx={gridSx}>
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>1. Header</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							1. Header
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<Info label="Order Date" value={entry.orderDate} />
 						<Info label="PD No." value={entry.pdNo} />
@@ -188,9 +244,12 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>2. Product Details</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							2. Product Details
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<Box sx={formGridSx}>
 							<TextField
@@ -203,6 +262,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isProduction}
+								sx={fieldSx}
 							/>
 
 							<TextField
@@ -215,6 +275,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isProduction}
+								sx={fieldSx}
 							/>
 
 							<TextField
@@ -227,6 +288,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isProduction}
+								sx={fieldSx}
 							/>
 						</Box>
 
@@ -234,9 +296,11 @@ export default function VenFlowDetailPage() {
 							variant="contained"
 							disabled={!isProduction || saving}
 							onClick={() =>
-								run(() => venflowApi.updateProductDetails(id, productForm))
+								run(() =>
+									venflowApi.updateProductDetails(id, productForm)
+								)
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Product Details
 						</Button>
@@ -244,23 +308,44 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>3. Store Status</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							3. Store Status
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<TextField
 							fullWidth
 							select
 							label="Veneer Status in Store"
 							value={storeForm.storeStatus}
-							onChange={(e) => setStoreForm({ storeStatus: e.target.value })}
+							onChange={(e) =>
+								setStoreForm({
+									storeStatus: e.target.value,
+								})
+							}
 							disabled={!isStore}
+							sx={fieldSx}
+							SelectProps={{
+								MenuProps: darkMenuProps,
+							}}
 						>
-							<MenuItem value="AVAILABLE_IN_STORE">Available in Store</MenuItem>
-							<MenuItem value="NOT_AVAILABLE">Not Available</MenuItem>
-							<MenuItem value="PARTIALLY_AVAILABLE">Partially Available</MenuItem>
-							<MenuItem value="PENDING">Pending</MenuItem>
-							<MenuItem value="HOLD">Hold</MenuItem>
+							<MenuItem value="AVAILABLE_IN_STORE">
+								Available in Store
+							</MenuItem>
+							<MenuItem value="NOT_AVAILABLE">
+								Not Available
+							</MenuItem>
+							<MenuItem value="PARTIALLY_AVAILABLE">
+								Partially Available
+							</MenuItem>
+							<MenuItem value="PENDING">
+								Pending
+							</MenuItem>
+							<MenuItem value="HOLD">
+								Hold
+							</MenuItem>
 						</TextField>
 
 						<Button
@@ -269,7 +354,7 @@ export default function VenFlowDetailPage() {
 							onClick={() =>
 								run(() => venflowApi.updateStoreStatus(id, storeForm))
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Store Status
 						</Button>
@@ -277,9 +362,12 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>4. Requisition</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							4. Requisition
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<Box sx={formGridSx}>
 							<TextField
@@ -292,6 +380,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isPurchase}
+								sx={fieldSx}
 							/>
 
 							<TextField
@@ -306,6 +395,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isPurchase}
+								sx={fieldSx}
 							/>
 						</Box>
 
@@ -313,9 +403,11 @@ export default function VenFlowDetailPage() {
 							variant="contained"
 							disabled={!isPurchase || saving}
 							onClick={() =>
-								run(() => venflowApi.updateRequisition(id, requisitionForm))
+								run(() =>
+									venflowApi.updateRequisition(id, requisitionForm)
+								)
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Requisition
 						</Button>
@@ -323,9 +415,12 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>5. Ordered Quantity</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							5. Ordered Quantity
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<Box sx={formGridSx}>
 							<TextField
@@ -339,6 +434,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isPurchase}
+								sx={fieldSx}
 							/>
 
 							<TextField
@@ -352,6 +448,10 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isPurchase}
+								sx={fieldSx}
+								SelectProps={{
+									MenuProps: darkMenuProps,
+								}}
 							>
 								<MenuItem value="SHEET">Sheet</MenuItem>
 								<MenuItem value="PCS">Pcs</MenuItem>
@@ -366,9 +466,11 @@ export default function VenFlowDetailPage() {
 							variant="contained"
 							disabled={!isPurchase || saving}
 							onClick={() =>
-								run(() => venflowApi.updateOrderedQty(id, orderedForm))
+								run(() =>
+									venflowApi.updateOrderedQty(id, orderedForm)
+								)
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Ordered Qty
 						</Button>
@@ -376,9 +478,12 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>6. Expected Date</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							6. Expected Date
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<TextField
 							fullWidth
@@ -386,17 +491,24 @@ export default function VenFlowDetailPage() {
 							type="date"
 							InputLabelProps={{ shrink: true }}
 							value={expectedForm.expectedDate}
-							onChange={(e) => setExpectedForm({ expectedDate: e.target.value })}
+							onChange={(e) =>
+								setExpectedForm({
+									expectedDate: e.target.value,
+								})
+							}
 							disabled={!isProduction}
+							sx={fieldSx}
 						/>
 
 						<Button
 							variant="contained"
 							disabled={!isProduction || saving}
 							onClick={() =>
-								run(() => venflowApi.updateExpectedDate(id, expectedForm))
+								run(() =>
+									venflowApi.updateExpectedDate(id, expectedForm)
+								)
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Expected Date
 						</Button>
@@ -404,9 +516,12 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>7. Receiving</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							7. Receiving
+						</Typography>
+
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
 
 						<Box sx={formGridSx}>
 							<TextField
@@ -420,6 +535,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isStore}
+								sx={fieldSx}
 							/>
 
 							<TextField
@@ -434,6 +550,7 @@ export default function VenFlowDetailPage() {
 									}))
 								}
 								disabled={!isStore}
+								sx={fieldSx}
 							/>
 						</Box>
 
@@ -441,9 +558,11 @@ export default function VenFlowDetailPage() {
 							variant="contained"
 							disabled={!isStore || saving}
 							onClick={() =>
-								run(() => venflowApi.updateReceivedQty(id, receivedForm))
+								run(() =>
+									venflowApi.updateReceivedQty(id, receivedForm)
+								)
 							}
-							sx={saveBtnSx}
+							sx={{ ...primaryBtnSx, mt: 2 }}
 						>
 							Save Receiving
 						</Button>
@@ -451,13 +570,25 @@ export default function VenFlowDetailPage() {
 				</Card>
 
 				<Card sx={cardSx}>
-					<CardContent>
-						<Typography sx={sectionTitleSx}>8. Balance & Remarks</Typography>
-						<Divider sx={{ my: 1.5 }} />
+					<CardContent sx={{ p: 2.6 }}>
+						<Typography sx={sectionTitleSx}>
+							8. Balance & Remarks
+						</Typography>
 
-						<Info label="Ordered Qty" value={`${entry.orderedQty ?? "-"} ${entry.unit || ""}`} />
-						<Info label="Received Qty" value={entry.receivedQty ?? "-"} />
-						<Info label="Balance Qty" value={entry.balanceQty ?? "-"} />
+						<Divider sx={{ ...dividerSx, my: 1.5 }} />
+
+						<Info
+							label="Ordered Qty"
+							value={`${entry.orderedQty ?? "-"} ${entry.unit || ""}`}
+						/>
+						<Info
+							label="Received Qty"
+							value={entry.receivedQty ?? "-"}
+						/>
+						<Info
+							label="Balance Qty"
+							value={entry.balanceQty ?? "-"}
+						/>
 
 						<TextField
 							fullWidth
@@ -465,8 +596,15 @@ export default function VenFlowDetailPage() {
 							minRows={3}
 							label="Remarks"
 							value={remarksForm.remarks}
-							onChange={(e) => setRemarksForm({ remarks: e.target.value })}
-							sx={{ mt: 2 }}
+							onChange={(e) =>
+								setRemarksForm({
+									remarks: e.target.value,
+								})
+							}
+							sx={{
+								...fieldSx,
+								mt: 2,
+							}}
 						/>
 
 						<Button
@@ -475,7 +613,7 @@ export default function VenFlowDetailPage() {
 							onClick={() =>
 								run(() => venflowApi.updateRemarks(id, remarksForm))
 							}
-							sx={remarksBtnSx}
+							sx={{ ...outlineBtnSx, mt: 2 }}
 						>
 							Save Remarks
 						</Button>
@@ -488,39 +626,17 @@ export default function VenFlowDetailPage() {
 
 function Info({ label, value }) {
 	return (
-		<Box sx={{ mb: 1.1 }}>
-			<Typography sx={{ fontSize: 12, color: "#64748b", fontWeight: 850 }}>
+		<Box sx={{ mb: 1.2 }}>
+			<Typography sx={infoLabelSx}>
 				{label}
 			</Typography>
-			<Typography sx={{ fontSize: 15, color: "#111827", fontWeight: 850 }}>
+
+			<Typography sx={infoValueSx}>
 				{value || "-"}
 			</Typography>
 		</Box>
 	);
 }
-
-const headerSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: { xs: "flex-start", md: "center" },
-	gap: 2,
-	mb: 2.5,
-	flexDirection: { xs: "column", md: "row" },
-};
-
-const titleSx = {
-	fontSize: 28,
-	fontWeight: 950,
-	color: "#111827",
-	letterSpacing: "-0.04em",
-};
-
-const backBtnSx = {
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	color: "#92400e",
-};
 
 const gridSx = {
 	display: "grid",
@@ -531,18 +647,6 @@ const gridSx = {
 	gap: 2,
 };
 
-const cardSx = {
-	borderRadius: 4,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 18px 45px rgba(15,23,42,.06)",
-};
-
-const sectionTitleSx = {
-	fontSize: 17,
-	fontWeight: 950,
-	color: "#111827",
-};
-
 const formGridSx = {
 	display: "grid",
 	gridTemplateColumns: {
@@ -550,21 +654,4 @@ const formGridSx = {
 		md: "1fr 1fr",
 	},
 	gap: 1.5,
-};
-
-const saveBtnSx = {
-	mt: 2,
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	background: "linear-gradient(135deg,#92400e,#b45309)",
-};
-
-const remarksBtnSx = {
-	mt: 2,
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	borderColor: "#92400e",
-	color: "#92400e",
 };

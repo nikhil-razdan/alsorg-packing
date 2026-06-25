@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from "react";
 import {
 	Box,
+	Button,
 	Card,
 	CardContent,
-	Grid,
-	Typography,
 	CircularProgress,
-	Button,
+	Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { venflowApi } from "../api/venflowApi";
+
+import {
+	loadingBoxSx,
+	pageHeaderSx,
+	pageSubSx,
+	pageTitleSx,
+	primaryBtnSx,
+} from "../venflowTheme";
 
 export default function VenFlowDashboard() {
 	const navigate = useNavigate();
@@ -32,33 +39,74 @@ export default function VenFlowDashboard() {
 
 	if (loading) {
 		return (
-			<Box sx={{ p: 5, textAlign: "center" }}>
+			<Box sx={loadingBoxSx}>
 				<CircularProgress />
 			</Box>
 		);
 	}
 
 	const cards = [
-		["Total Entries", data.totalEntries],
-		["Pending Store Check", data.pendingStoreCheck],
-		["Pending Requisition", data.pendingRequisition],
-		["Pending Order Qty", data.pendingOrderQty],
-		["Pending Receiving", data.pendingReceiving],
-		["Balance Pending", data.balancePending],
-		["Delayed Items", data.delayedItems],
-		["Completed", data.completedEntries],
+		{
+			label: "Total Entries",
+			value: data.totalEntries,
+			subtle: "All veneer requirements",
+			accent: "#60a5fa",
+		},
+		{
+			label: "Pending Store Check",
+			value: data.pendingStoreCheck,
+			subtle: "Store status not updated",
+			accent: "#f59e0b",
+		},
+		{
+			label: "Pending Requisition",
+			value: data.pendingRequisition,
+			subtle: "Slip pending after store check",
+			accent: "#fb7185",
+		},
+		{
+			label: "Pending Order Qty",
+			value: data.pendingOrderQty,
+			subtle: "Purchase quantity pending",
+			accent: "#a78bfa",
+		},
+		{
+			label: "Pending Receiving",
+			value: data.pendingReceiving,
+			subtle: "Ordered but not completed",
+			accent: "#22c55e",
+		},
+		{
+			label: "Balance Pending",
+			value: data.balancePending,
+			subtle: "Received quantity short",
+			accent: "#06b6d4",
+		},
+		{
+			label: "Delayed Items",
+			value: data.delayedItems,
+			subtle: "Expected date crossed",
+			accent: "#ef4444",
+		},
+		{
+			label: "Completed",
+			value: data.completedEntries,
+			subtle: "Fully received / closed",
+			accent: "#34d399",
+		},
 	];
 
 	return (
 		<Box>
-			<Box sx={headerSx}>
+			<Box sx={pageHeaderSx}>
 				<Box>
 					<Typography sx={pageTitleSx}>
 						Veneer Dashboard
 					</Typography>
 
 					<Typography sx={pageSubSx}>
-						Live tracking of veneer requirement, store status, requisition, ordered quantity, receiving and pending balance.
+						Live tracking of veneer requirement, store status, requisition,
+						ordered quantity, receiving and balance closure.
 					</Typography>
 				</Box>
 
@@ -71,74 +119,81 @@ export default function VenFlowDashboard() {
 				</Button>
 			</Box>
 
-			<Grid container spacing={2.2}>
-				{cards.map(([label, value]) => (
-					<Grid item xs={12} sm={6} md={3} key={label}>
-						<Card sx={kpiCardSx}>
-							<CardContent>
-								<Typography sx={kpiLabelSx}>
-									{label}
-								</Typography>
+			<Box sx={kpiGridSx}>
+				{cards.map((card) => (
+					<Card key={card.label} sx={kpiCardSx(card.accent)}>
+						<CardContent sx={{ p: 2.4 }}>
+							<Box sx={cardAccentSx(card.accent)} />
 
-								<Typography sx={kpiValueSx}>
-									{value ?? 0}
-								</Typography>
-							</CardContent>
-						</Card>
-					</Grid>
+							<Typography sx={kpiLabelSx}>
+								{card.label}
+							</Typography>
+
+							<Typography sx={kpiValueSx}>
+								{card.value ?? 0}
+							</Typography>
+
+							<Typography sx={kpiSubtleSx}>
+								{card.subtle}
+							</Typography>
+						</CardContent>
+					</Card>
 				))}
-			</Grid>
+			</Box>
 		</Box>
 	);
 }
 
-const headerSx = {
-	display: "flex",
-	alignItems: { xs: "flex-start", md: "center" },
-	justifyContent: "space-between",
-	gap: 2,
-	mb: 3,
-	flexDirection: { xs: "column", md: "row" },
+const kpiGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+	gap: 1.8,
 };
 
-const pageTitleSx = {
-	fontSize: 30,
-	fontWeight: 950,
-	color: "#111827",
-	letterSpacing: "-0.05em",
-};
+const kpiCardSx = (accent) => ({
+	position: "relative",
+	overflow: "hidden",
+	borderRadius: "22px",
+	background: "rgba(15,23,42,.78)",
+	border: `1px solid ${accent}44`,
+	boxShadow: "0 18px 35px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	color: "#fff",
+	transition: "all .25s ease",
+	"&:hover": {
+		transform: "translateY(-4px)",
+		boxShadow: `0 20px 42px ${accent}22`,
+	},
+});
 
-const pageSubSx = {
-	mt: 0.8,
-	color: "#64748b",
-	fontWeight: 650,
-	maxWidth: 900,
-	lineHeight: 1.7,
-};
-
-const primaryBtnSx = {
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 900,
-	background: "linear-gradient(135deg,#92400e,#b45309)",
-	boxShadow: "0 14px 30px rgba(146,64,14,.22)",
-};
-
-const kpiCardSx = {
-	borderRadius: 4,
-	border: "1px solid #e5e7eb",
-	boxShadow: "0 18px 45px rgba(15,23,42,.06)",
-};
+const cardAccentSx = (accent) => ({
+	position: "absolute",
+	top: 0,
+	left: 0,
+	right: 0,
+	height: 4,
+	background: accent,
+});
 
 const kpiLabelSx = {
-	color: "#64748b",
-	fontSize: 13,
+	color: "rgba(255,255,255,.62)",
+	fontSize: 12,
 	fontWeight: 850,
+	textTransform: "uppercase",
+	letterSpacing: ".07em",
 };
 
 const kpiValueSx = {
-	mt: 1,
+	mt: 1.2,
 	fontSize: 34,
 	fontWeight: 950,
-	color: "#111827",
+	color: "#fff",
+	lineHeight: 1,
+};
+
+const kpiSubtleSx = {
+	mt: 1,
+	color: "rgba(255,255,255,.52)",
+	fontSize: 12,
+	fontWeight: 650,
 };
