@@ -18,6 +18,8 @@ import {
   deleteVehicle,
 } from "../../api/logisticsApi";
 
+import VehicleExpenseModal from "./modals/VehicleExpenseModal";
+
 import CreateVehicleModal from "./modals/CreateVehicleModal";
 import LogisticsPagination from "./LogisticsPagination";
 
@@ -30,6 +32,12 @@ function VehicleManagement({
 }) {
   const [vehicles, setVehicles] =
     useState([]);
+
+  const [expenseOpen, setExpenseOpen] =
+    useState(false);
+
+  const [expenseVehicle, setExpenseVehicle] =
+    useState(null);
 
   const [open, setOpen] =
     useState(false);
@@ -94,6 +102,16 @@ function VehicleManagement({
   const closeDelete = () => {
     setDeleteOpen(false);
     setDeleteVehicleId(null);
+  };
+
+  const openExpense = (vehicle) => {
+    setExpenseVehicle(vehicle);
+    setExpenseOpen(true);
+  };
+
+  const closeExpense = () => {
+    setExpenseOpen(false);
+    setExpenseVehicle(null);
   };
 
   const confirmDelete = async () => {
@@ -236,7 +254,7 @@ function VehicleManagement({
 
               {v.vehicleAge && (
                 <div style={subText}>
-                  Age: {v.vehicleAge}
+                  Age: {getVehicleAge(v)}
                 </div>
               )}
             </div>
@@ -259,6 +277,13 @@ function VehicleManagement({
             </div>
 
             <div style={actionsCell}>
+
+              <button
+                style={expenseBtn}
+                onClick={() => openExpense(v)}
+              >
+                Expense
+              </button>
               <button
                 style={editBtn}
                 onClick={() => openEdit(v)}
@@ -293,6 +318,13 @@ function VehicleManagement({
         onCreated={loadVehicles}
         showAlert={showAlert}
         initialData={editingVehicle}
+      />
+
+      <VehicleExpenseModal
+        open={expenseOpen}
+        onClose={closeExpense}
+        vehicle={expenseVehicle}
+        showAlert={showAlert}
       />
 
       <Dialog
@@ -384,6 +416,50 @@ function getStatusChipSx(status) {
   }
 
   return statusActiveChipSx;
+}
+
+function getVehicleAge(vehicle) {
+  if (vehicle?.registrationDate) {
+    return calculateVehicleAge(
+      vehicle.registrationDate
+    );
+  }
+
+  return vehicle?.vehicleAge || "-";
+}
+
+function calculateVehicleAge(registrationDate) {
+  const date = new Date(registrationDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const now = new Date();
+
+  let years =
+    now.getFullYear() -
+    date.getFullYear();
+
+  let months =
+    now.getMonth() -
+    date.getMonth();
+
+  if (now.getDate() < date.getDate()) {
+    months -= 1;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years < 0) {
+    years = 0;
+    months = 0;
+  }
+
+  return `${years} years ${months} months`;
 }
 
 const wrap = {
@@ -600,6 +676,18 @@ const actionSecondary = {
     background:
       "rgba(255,255,255,.08)",
   },
+};
+
+const expenseBtn = {
+  border: "none",
+  background:
+    "linear-gradient(135deg,#0891b2,#06b6d4)",
+  color: "#fff",
+  borderRadius: 10,
+  padding: "8px 14px",
+  cursor: "pointer",
+  fontWeight: 900,
+  fontSize: 12,
 };
 
 const actionDanger = {

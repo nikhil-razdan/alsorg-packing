@@ -9,6 +9,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Table;
+import java.time.Period;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "vehicles")
@@ -174,6 +176,25 @@ public class Vehicle {
     }
 
     public String getVehicleAge() {
+
+        if (registrationDate != null) {
+            LocalDate today = LocalDate.now(
+                    ZoneId.of("Asia/Kolkata"));
+
+            if (registrationDate.isAfter(today)) {
+                return "0 years 0 months";
+            }
+
+            Period period = Period.between(
+                    registrationDate,
+                    today);
+
+            return period.getYears()
+                    + " years "
+                    + period.getMonths()
+                    + " months";
+        }
+
         return vehicleAge;
     }
 

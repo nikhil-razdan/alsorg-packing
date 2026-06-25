@@ -413,3 +413,51 @@ export async function downloadTripChallan(id) {
     filename,
   };
 }
+
+export async function fetchVehicleExpenses(vehicleId) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles/${vehicleId}/expenses`,
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(
+      text || "Failed to fetch vehicle expenses"
+    );
+  }
+
+  return res.json();
+}
+
+export async function createVehicleExpense(
+  vehicleId,
+  payload
+) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logistics/vehicles/${vehicleId}/expenses`,
+    {
+      method: "POST",
+
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+
+    throw new Error(
+      text || "Failed to save vehicle expense"
+    );
+  }
+
+  return res.json();
+}
