@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
-
+import VenFlowRoutes from "./modules/venflow/VenFlowRoutes";
 import DashboardPage from "./pages/Dashboard";
 import ZohoItemsPage from "./pages/ZohoItemsPage";
 import LoginPage from "./pages/LoginPage";
@@ -139,6 +139,18 @@ function App() {
 						<RequireAuth>
 							<RequireModule moduleKey="BOMFLOW">
 								<BOMFlowRoutes />
+							</RequireModule>
+						</RequireAuth>
+					}
+				/>
+
+				{/* VENFLOW MODULE */}
+				<Route
+					path="/venflow/*"
+					element={
+						<RequireAuth>
+							<RequireModule moduleKey="VENFLOW">
+								<VenFlowRoutes />
 							</RequireModule>
 						</RequireAuth>
 					}

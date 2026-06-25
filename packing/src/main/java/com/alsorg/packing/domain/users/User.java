@@ -1,6 +1,8 @@
 package com.alsorg.packing.domain.users;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -13,11 +15,13 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String username;
 
+    @JsonIgnore
     private String password;
 
+    @Column(nullable = false)
     private String role;
 
     private boolean enabled = true;
@@ -26,9 +30,20 @@ public class User {
     private String plantCode;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_plant_access", joinColumns = @JoinColumn(name = "user_id"))
+    @CollectionTable(
+            name = "user_plant_access",
+            joinColumns = @JoinColumn(name = "user_id")
+    )
     @Column(name = "plant_code")
     private Set<String> plantCodes = new LinkedHashSet<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "user_module_access",
+            joinColumns = @JoinColumn(name = "user_id")
+    )
+    @Column(name = "module_key")
+    private Set<String> modules = new LinkedHashSet<>();
 
     private String packedAreaCode;
 
@@ -41,22 +56,6 @@ public class User {
     @Column(name = "warehouse_access", nullable = false)
     private boolean warehouseAccess = false;
 
-    public boolean isWarehouseAccess() {
-        return warehouseAccess;
-    }
-
-    public void setWarehouseAccess(boolean warehouseAccess) {
-        this.warehouseAccess = warehouseAccess;
-    }
-
-    public UUID getDriverId() {
-        return driverId;
-    }
-
-    public void setDriverId(java.util.UUID driverId) {
-        this.driverId = driverId;
-    }
-
     public Long getId() {
         return id;
     }
@@ -66,7 +65,7 @@ public class User {
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        this.username = username == null ? null : username.trim();
     }
 
     public String getPassword() {
@@ -82,7 +81,7 @@ public class User {
     }
 
     public void setRole(String role) {
-        this.role = role;
+        this.role = role == null ? null : role.trim().toUpperCase();
     }
 
     public boolean isEnabled() {
@@ -98,7 +97,7 @@ public class User {
     }
 
     public void setPlantCode(String plantCode) {
-        this.plantCode = plantCode;
+        this.plantCode = plantCode == null ? null : plantCode.trim();
     }
 
     public Set<String> getPlantCodes() {
@@ -106,7 +105,9 @@ public class User {
     }
 
     public void setPlantCodes(Set<String> plantCodes) {
-        this.plantCodes = plantCodes;
+        this.plantCodes = plantCodes == null
+                ? new LinkedHashSet<>()
+                : new LinkedHashSet<>(plantCodes);
     }
 
     public Set<String> getEffectivePlantCodes() {
@@ -117,10 +118,58 @@ public class User {
         Set<String> fallback = new LinkedHashSet<>();
 
         if (plantCode != null && !plantCode.isBlank()) {
-            fallback.add(plantCode);
+            fallback.add(plantCode.trim());
         }
 
         return fallback;
+    }
+
+    public Set<String> getModules() {
+        return modules;
+    }
+
+    public void setModules(Set<String> modules) {
+        this.modules = modules == null
+                ? new LinkedHashSet<>()
+                : new LinkedHashSet<>(modules);
+    }
+
+    public Set<String> getEffectiveModules() {
+        Set<String> effective = new LinkedHashSet<>();
+
+        if (modules != null && !modules.isEmpty()) {
+            effective.addAll(modules);
+            return effective;
+        }
+
+        String r = role == null ? "" : role.trim().toUpperCase();
+
+        if ("ADMIN".equals(r)) {
+            effective.add("PACKFLOW");
+            effective.add("BOMFLOW");
+            effective.add("VENFLOW");
+            return effective;
+        }
+
+        if (
+                "PACKING".equals(r)
+                        || "WAREHOUSE".equals(r)
+                        || "DISPATCH".equals(r)
+                        || "LOGISTICS".equals(r)
+                        || "DRIVER".equals(r)
+        ) {
+            effective.add("PACKFLOW");
+        }
+
+        if (r.startsWith("BOMFLOW_")) {
+            effective.add("BOMFLOW");
+        }
+
+        if (r.startsWith("VENFLOW_")) {
+            effective.add("VENFLOW");
+        }
+
+        return effective;
     }
 
     public String getPackedAreaCode() {
@@ -145,5 +194,21 @@ public class User {
 
     public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
         this.allowedWarehouseCodes = allowedWarehouseCodes;
+    }
+
+    public UUID getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(UUID driverId) {
+        this.driverId = driverId;
+    }
+
+    public boolean isWarehouseAccess() {
+        return warehouseAccess;
+    }
+
+    public void setWarehouseAccess(boolean warehouseAccess) {
+        this.warehouseAccess = warehouseAccess;
     }
 }

@@ -14,6 +14,7 @@ import {
 	Switch,
 } from "@mui/material";
 
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import Drawer from "@mui/material/Drawer";
 import { hasModuleAccess } from "../utils/moduleAccess";
 import { normalizeRole } from "../utils/permissions";
@@ -38,6 +39,7 @@ function UsersPage() {
 
 	const currentRole = normalizeRole(localStorage.getItem("role"));
 	const canOpenBOMFlow = hasModuleAccess("BOMFLOW");
+	const canOpenVenFlow = hasModuleAccess("VENFLOW");
 
 	const goToModules = () => {
 		navigate("/modules");
@@ -49,6 +51,10 @@ function UsersPage() {
 
 	const goToBOMFlow = () => {
 		navigate("/bomflow/dashboard");
+	};
+
+	const goToVenFlow = () => {
+		navigate("/venflow/dashboard");
 	};
 
 	const logout = () => {
@@ -94,6 +100,8 @@ function UsersPage() {
 	const [editDriverId, setEditDriverId] = useState("");
 	const [warehouseAccess, setWarehouseAccess] = useState(false);
 	const [editWarehouseAccess, setEditWarehouseAccess] = useState(false);
+	const [modules, setModules] = useState(["PACKFLOW"]);
+	const [editModules, setEditModules] = useState([]);
 	const splitPlantCodes = (value) => {
 		if (!value) return [];
 
@@ -117,12 +125,100 @@ function UsersPage() {
 
 	const roles = [
 		"ADMIN",
+
 		"PACKING",
 		"WAREHOUSE",
 		"DISPATCH",
 		"LOGISTICS",
 		"DRIVER",
+
+		"BOMFLOW_EDITOR",
+		"BOMFLOW_REVIEWER",
+		"BOMFLOW_APPROVER",
+		"BOMFLOW_MANAGER",
+
+		"VENFLOW_PRODUCTION",
+		"VENFLOW_STORE",
+		"VENFLOW_PURCHASE",
+		"VENFLOW_MANAGER",
 	];
+
+	const moduleOptions = [
+		{
+			key: "PACKFLOW",
+			label: "PackFlow",
+		},
+		{
+			key: "BOMFLOW",
+			label: "BOMFlow",
+		},
+		{
+			key: "VENFLOW",
+			label: "VenFlow",
+		},
+	];
+
+	const defaultModulesForRole = (nextRole) => {
+		if (nextRole === "ADMIN") {
+			return ["PACKFLOW", "BOMFLOW", "VENFLOW"];
+		}
+
+		if (
+			nextRole === "PACKING" ||
+			nextRole === "WAREHOUSE" ||
+			nextRole === "DISPATCH" ||
+			nextRole === "LOGISTICS" ||
+			nextRole === "DRIVER"
+		) {
+			return ["PACKFLOW"];
+		}
+
+		if (nextRole.startsWith("BOMFLOW_")) {
+			return ["BOMFLOW"];
+		}
+
+		if (nextRole.startsWith("VENFLOW_")) {
+			return ["VENFLOW"];
+		}
+
+		return [];
+	};
+
+	const normalizeArray = (value) => {
+		if (Array.isArray(value)) {
+			return value.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
+		}
+
+		if (!value) {
+			return [];
+		}
+
+		return String(value)
+			.split(",")
+			.map((x) => x.trim())
+			.filter(Boolean);
+	};
+
+	const normalizeUserPlantCodes = (user) => {
+		if (Array.isArray(user?.plantCodes) && user.plantCodes.length > 0) {
+			return normalizeArray(user.plantCodes);
+		}
+
+		return normalizeArray(user?.plantCode);
+	};
+
+	const normalizeUserModules = (user) => {
+		if (Array.isArray(user?.modules) && user.modules.length > 0) {
+			return normalizeArray(user.modules);
+		}
+
+		return defaultModulesForRole(user?.role || "");
+	};
+
+	const moduleLabel = (key) => {
+		const option = moduleOptions.find((item) => item.key === key);
+		return option ? option.label : key;
+	};
 
 	const driverName = (id) => {
 		if (!id) return "Not Linked";
@@ -209,18 +305,19 @@ function UsersPage() {
 				username: username.trim(),
 				password,
 				role,
-				plantCode:
+				plantCodes:
 					role === "DRIVER"
-						? ""
-						: joinPlantCodes(plantCodes),
+						? []
+						: plantCodes,
 				driverId:
 					role === "DRIVER"
 						? driverId
 						: null,
 				warehouseAccess:
-					role === "WAREHOUSE"
+					role === "WAREHOUSE" || role === "ADMIN"
 						? true
 						: warehouseAccess,
+				modules,
 			});
 
 			setUsername("");
@@ -229,6 +326,9 @@ function UsersPage() {
 			setPlantCodes([]);
 			setDriverId("");
 			setWarehouseAccess(false);
+			setModules(["PACKFLOW"]);
+			setCreateOpen(true);
+
 
 			const res = await API.get("/users");
 
@@ -263,12 +363,13 @@ function UsersPage() {
 		setEditUsername(u.username);
 		setEditRole(u.role);
 		setEditWarehouseAccess(Boolean(u.warehouseAccess));
+		setEditModules(normalizeUserModules(u));
 
 		if (u.role === "DRIVER") {
 			setEditPlantCodes([]);
 			setEditDriverId(u.driverId || "");
 		} else {
-			setEditPlantCodes(splitPlantCodes(u.plantCode));
+			setEditPlantCodes(normalizeUserPlantCodes(u));
 			setEditDriverId("");
 		}
 	};
@@ -278,6 +379,7 @@ function UsersPage() {
 		setEditPlantCodes([]);
 		setEditDriverId("");
 		setEditWarehouseAccess(false);
+		setEditModules([]);
 	};
 
 	const saveEdit = async () => {
@@ -299,18 +401,19 @@ function UsersPage() {
 			await API.put(`/users/${editId}`, {
 				username: editUsername.trim(),
 				role: editRole,
-				plantCode:
+				plantCodes:
 					editRole === "DRIVER"
-						? ""
-						: joinPlantCodes(editPlantCodes),
+						? []
+						: editPlantCodes,
 				driverId:
 					editRole === "DRIVER"
 						? editDriverId
 						: null,
 				warehouseAccess:
-					editRole === "WAREHOUSE"
+					editRole === "WAREHOUSE" || editRole === "ADMIN"
 						? true
 						: editWarehouseAccess,
+				modules: editModules,
 			});
 
 			const res = await API.get("/users");
@@ -326,6 +429,7 @@ function UsersPage() {
 			setEditDriverId("");
 			setEditPlantCodes([]);
 			setEditWarehouseAccess(false);
+			setEditModules([]);
 
 			setSnackMsg("User updated successfully");
 			setSnackType("success");
@@ -552,6 +656,16 @@ function UsersPage() {
 							</button>
 						)}
 
+						{canOpenVenFlow && (
+							<button
+								style={navButton}
+								onClick={goToVenFlow}
+							>
+								<LayersOutlinedIcon fontSize="small" />
+								VenFlow
+							</button>
+						)}
+
 						<button
 							style={logoutNavButton}
 							onClick={logout}
@@ -621,15 +735,11 @@ function UsersPage() {
 					<div style={tableWrapper}>
 						<div style={tableHeader}>
 							<div>Username</div>
-
 							<div>Role</div>
-
+							<div>Module Access</div>
 							<div>Driver Profile</div>
-
 							<div>Plant Access</div>
-
 							<div>Warehouse Access</div>
-
 							<div>Actions</div>
 						</div>
 
@@ -705,12 +815,19 @@ function UsersPage() {
 												onChange={(e) => {
 													const nextRole = e.target.value;
 
-													setEditRole(nextRole);
+													setRole(nextRole);
+													setModules(defaultModulesForRole(nextRole));
 
 													if (nextRole === "DRIVER") {
-														setEditPlantCodes([]);
+														setPlantCodes([]);
 													} else {
-														setEditDriverId("");
+														setDriverId("");
+													}
+
+													if (nextRole === "ADMIN" || nextRole === "WAREHOUSE") {
+														setWarehouseAccess(true);
+													} else {
+														setWarehouseAccess(false);
 													}
 												}}
 												sx={inlineInput}
@@ -735,8 +852,129 @@ function UsersPage() {
 											/>
 
 										)}
-
 									</div>
+
+									<TextField
+										select
+										label="Module Access"
+										value={modules}
+										onChange={(e) => {
+											const value = e.target.value;
+											setModules(
+												typeof value === "string"
+													? value.split(",")
+													: value
+											);
+										}}
+										fullWidth
+										sx={formFieldSx}
+										SelectProps={{
+											multiple: true,
+											renderValue: (selected) =>
+												selected.length
+													? selected.map(moduleLabel).join(", ")
+													: "Select Modules",
+										}}
+										slotProps={{
+											select: {
+												MenuProps: {
+													PaperProps: {
+														sx: {
+															mt: 1,
+															borderRadius: "18px",
+															background: "linear-gradient(180deg,#0f172a,#111827)",
+															color: "#fff",
+															border: "1px solid rgba(255,255,255,.06)",
+															"& .MuiMenuItem-root": {
+																color: "#fff",
+															},
+															"& .Mui-selected": {
+																background: "rgba(59,130,246,.18) !important",
+																color: "#fff",
+															},
+														},
+													},
+												},
+											},
+										}}
+									>
+										{moduleOptions.map((module) => (
+											<MenuItem
+												key={module.key}
+												value={module.key}
+											>
+												{module.label}
+											</MenuItem>
+										))}
+									</TextField>
+
+									<div
+										style={{
+											display: "flex",
+											alignItems: "center",
+											minWidth: 0,
+										}}
+									>
+										{editId === u.id ? (
+											<TextField
+												select
+												size="small"
+												value={editModules}
+												onChange={(e) => {
+													const value = e.target.value;
+
+													setEditModules(
+														typeof value === "string"
+															? value.split(",")
+															: value
+													);
+												}}
+												sx={inlineInput}
+												SelectProps={{
+													multiple: true,
+													renderValue: (selected) =>
+														selected.length
+															? selected.map(moduleLabel).join(", ")
+															: "Select Modules",
+												}}
+											>
+												{moduleOptions.map((module) => (
+													<MenuItem
+														key={module.key}
+														value={module.key}
+													>
+														{module.label}
+													</MenuItem>
+												))}
+											</TextField>
+										) : (
+											<Box
+												sx={{
+													display: "flex",
+													gap: 0.7,
+													flexWrap: "wrap",
+												}}
+											>
+												{normalizeUserModules(u).length === 0 ? (
+													<Chip
+														size="small"
+														label="No Modules"
+														sx={noWarehouseAccessChip}
+													/>
+												) : (
+													normalizeUserModules(u).map((module) => (
+														<Chip
+															key={module}
+															size="small"
+															label={moduleLabel(module)}
+															sx={moduleAccessChip}
+														/>
+													))
+												)}
+											</Box>
+										)}
+									</div>
+
 									{/* DRIVER PROFILE COLUMN */}
 
 									<div
@@ -850,14 +1088,14 @@ function UsersPage() {
 													flexWrap: "wrap",
 												}}
 											>
-												{splitPlantCodes(u.plantCode).length === 0 ? (
+												{normalizeUserPlantCodes(u).length === 0 ? (
 													<Chip
 														size="small"
 														label="All / Legacy"
 														sx={legacyPlantChip}
 													/>
 												) : (
-													splitPlantCodes(u.plantCode).map((code) => (
+													normalizeUserPlantCodes(u).map((code) => (
 														<Chip
 															key={code}
 															size="small"
@@ -2063,8 +2301,7 @@ const formFieldSx = {
 const tableHeader = {
 	display: "grid",
 
-	gridTemplateColumns:
-		"1.1fr .75fr 1.1fr 1.3fr .9fr 1.4fr",
+	gridTemplateColumns: "1.25fr .9fr 1.25fr 1.25fr 1.25fr 1.15fr 1.7fr",
 
 	padding: "14px 16px",
 
@@ -2084,8 +2321,7 @@ const tableBody = {
 const tableRow = {
 	display: "grid",
 
-	gridTemplateColumns:
-		"1.1fr .75fr 1.1fr 1.3fr .9fr 1.4fr",
+	gridTemplateColumns: "1.25fr .9fr 1.25fr 1.25fr 1.25fr 1.15fr 1.7fr",
 
 	alignItems: "center",
 
@@ -2103,6 +2339,13 @@ const userInfo = {
 	alignItems: "center",
 
 	gap: 14,
+};
+
+const moduleAccessChip = {
+	background: "rgba(14,165,233,.15)",
+	color: "#7dd3fc",
+	border: "1px solid rgba(14,165,233,.28)",
+	fontWeight: 800,
 };
 
 const permissionCardSx = {

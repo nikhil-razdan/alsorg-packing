@@ -1,11 +1,12 @@
 package com.alsorg.packing.controller;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,42 +35,48 @@ public class UserController {
     }
 
     @PostMapping
-public User createUser(@RequestBody Map<String, Object> body) {
+    public UserResponse createUser(@RequestBody Map<String, Object> body) {
+        User user = service.createUser(
+                readText(body, "username"),
+                readText(body, "password"),
+                readText(body, "role"),
+                readPlantCodes(body),
+                readDriverId(body),
+                readBoolean(body, "warehouseAccess"),
+                readModules(body)
+        );
 
-    return service.createUser(
-            String.valueOf(body.get("username")),
-            String.valueOf(body.get("password")),
-            String.valueOf(body.get("role")),
-            readPlantCodes(body),
-            readDriverId(body),
-            readBoolean(body, "warehouseAccess")
-    );
-}
+        return toResponse(user);
+    }
 
     @GetMapping
-    public List<User> getUsers() {
-        return service.getAllUsers();
+    public List<UserResponse> getUsers() {
+        return service.getAllUsers()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @PutMapping("/{id}")
-public User updateUser(
-        @PathVariable Long id,
-        @RequestBody Map<String, Object> body
-) {
+    public UserResponse updateUser(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body
+    ) {
+        User user = service.updateUser(
+                id,
+                readText(body, "username"),
+                readText(body, "role"),
+                readPlantCodes(body),
+                readDriverId(body),
+                readBoolean(body, "warehouseAccess"),
+                readModules(body)
+        );
 
-    return service.updateUser(
-            id,
-            String.valueOf(body.get("username")),
-            String.valueOf(body.get("role")),
-            readPlantCodes(body),
-            readDriverId(body),
-            readBoolean(body, "warehouseAccess")
-    );
-}
+        return toResponse(user);
+    }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
-
         service.deleteUser(id);
 
         return ResponseEntity.ok(
@@ -82,7 +89,6 @@ public User updateUser(
             @PathVariable Long id,
             @RequestBody Map<String, String> body
     ) {
-
         Optional<User> optionalUser = userRepository.findById(id);
 
         if (optionalUser.isEmpty()) {
@@ -107,6 +113,36 @@ public User updateUser(
         );
     }
 
+    private UserResponse toResponse(User user) {
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole(),
+                user.isEnabled(),
+                user.getPlantCode(),
+                user.getEffectivePlantCodes(),
+                user.getEffectiveModules(),
+                user.getDriverId(),
+                user.isWarehouseAccess()
+        );
+    }
+
+    private String readText(Map<String, Object> body, String key) {
+        Object value = body.get(key);
+
+        if (value == null) {
+            return null;
+        }
+
+        String text = String.valueOf(value).trim();
+
+        if (text.isBlank() || "null".equalsIgnoreCase(text)) {
+            return null;
+        }
+
+        return text;
+    }
+
     private Set<String> readPlantCodes(Map<String, Object> body) {
         Set<String> plants = new LinkedHashSet<>();
 
@@ -114,21 +150,63 @@ public User updateUser(
 
         if (plantCodesObj instanceof List<?> list) {
             for (Object item : list) {
-                if (item != null && !String.valueOf(item).isBlank()) {
-                    plants.add(String.valueOf(item).trim());
-                }
+                addCsvValues(plants, item);
             }
+        } else {
+            addCsvValues(plants, plantCodesObj);
         }
 
         Object plantCodeObj = body.get("plantCode");
 
-        if (plants.isEmpty()
-                && plantCodeObj != null
-                && !String.valueOf(plantCodeObj).isBlank()) {
-            plants.add(String.valueOf(plantCodeObj).trim());
+        if (plants.isEmpty()) {
+            addCsvValues(plants, plantCodeObj);
         }
 
         return plants;
+    }
+
+    private Set<String> readModules(Map<String, Object> body) {
+        Set<String> modules = new LinkedHashSet<>();
+
+        Object modulesObj = body.get("modules");
+
+        if (modulesObj instanceof List<?> list) {
+            for (Object item : list) {
+                addCsvValues(modules, item);
+            }
+        } else {
+            addCsvValues(modules, modulesObj);
+        }
+
+        Object moduleObj = body.get("module");
+
+        if (modules.isEmpty()) {
+            addCsvValues(modules, moduleObj);
+        }
+
+        return modules;
+    }
+
+    private void addCsvValues(Set<String> target, Object value) {
+        if (value == null) {
+            return;
+        }
+
+        String text = String.valueOf(value).trim();
+
+        if (text.isBlank() || "null".equalsIgnoreCase(text)) {
+            return;
+        }
+
+        String[] parts = text.split(",");
+
+        for (String part : parts) {
+            String clean = part == null ? "" : part.trim();
+
+            if (!clean.isBlank()) {
+                target.add(clean);
+            }
+        }
     }
 
     private UUID readDriverId(Map<String, Object> body) {
@@ -152,20 +230,33 @@ public User updateUser(
     }
 
     private boolean readBoolean(Map<String, Object> body, String key) {
-    Object value = body.get(key);
+        Object value = body.get(key);
 
-    if (value == null) {
-        return false;
+        if (value == null) {
+            return false;
+        }
+
+        if (value instanceof Boolean b) {
+            return b;
+        }
+
+        String text = String.valueOf(value).trim();
+
+        return "true".equalsIgnoreCase(text)
+                || "1".equals(text)
+                || "yes".equalsIgnoreCase(text);
     }
 
-    if (value instanceof Boolean b) {
-        return b;
+    public record UserResponse(
+            Long id,
+            String username,
+            String role,
+            boolean enabled,
+            String plantCode,
+            Set<String> plantCodes,
+            Set<String> modules,
+            UUID driverId,
+            boolean warehouseAccess
+    ) {
     }
-
-    String text = String.valueOf(value).trim();
-
-    return "true".equalsIgnoreCase(text)
-            || "1".equals(text)
-            || "yes".equalsIgnoreCase(text);
-}
 }

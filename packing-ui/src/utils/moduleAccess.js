@@ -1,6 +1,7 @@
 export const MODULE_KEYS = {
 	PACKFLOW: "PACKFLOW",
 	BOMFLOW: "BOMFLOW",
+	VENFLOW: "VENFLOW",
 };
 
 export function getCurrentUser() {

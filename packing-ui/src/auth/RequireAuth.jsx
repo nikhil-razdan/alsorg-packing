@@ -42,9 +42,25 @@ function RequireAuth({ children }) {
 					finalRole === "ADMIN" ||
 					finalRole === "WAREHOUSE";
 
+				const finalModules =
+					Array.isArray(data?.modules)
+						? data.modules
+						: Array.isArray(data?.user?.modules)
+							? data.user.modules
+							: JSON.parse(localStorage.getItem("modules") || "[]");
+
+				const finalUser = {
+					username: finalUsername,
+					role: finalRole,
+					warehouseAccess: finalWarehouseAccess,
+					modules: finalModules,
+				};
+
 				localStorage.setItem("role", finalRole);
 				localStorage.setItem("username", finalUsername);
 				localStorage.setItem("warehouseAccess", String(finalWarehouseAccess));
+				localStorage.setItem("modules", JSON.stringify(finalModules));
+				localStorage.setItem("currentUser", JSON.stringify(finalUser));
 
 				setOk(true);
 			})

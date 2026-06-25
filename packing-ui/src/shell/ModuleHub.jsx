@@ -10,6 +10,7 @@ import {
 	Typography,
 } from "@mui/material";
 
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
@@ -47,6 +48,17 @@ export default function ModuleHub() {
 			tags: ["Product Master", "BOM Builder", "Rate Master", "Costing"],
 			visible: hasModuleAccess("BOMFLOW"),
 			accent: "Costing Control",
+		},
+		{
+			key: "VENFLOW",
+			title: "VenFlow",
+			subtitle:
+				"Veneer requirement, store availability, requisition, ordered quantity, received quantity and balance tracking.",
+			icon: <LayersOutlinedIcon fontSize="large" />,
+			path: "/venflow/dashboard",
+			tags: ["Veneer", "Production", "Store", "Requisition"],
+			visible: hasModuleAccess("VENFLOW"),
+			accent: "Veneer Control",
 		},
 		{
 			key: "USERS",
@@ -117,7 +129,7 @@ export default function ModuleHub() {
 						</Typography>
 
 						<Typography sx={{ mt: 1, color: "rgba(255,255,255,.58)" }}>
-							Please contact Admin to assign PackFlow or BOMFlow access.
+							Please contact Admin to assign PackFlow, BOMFlow or VenFlow access.
 						</Typography>
 					</Card>
 				) : (

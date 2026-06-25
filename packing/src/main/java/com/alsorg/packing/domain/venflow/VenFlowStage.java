@@ -1,0 +1,13 @@
+package com.alsorg.packing.domain.venflow;
+
+public enum VenFlowStage {
+    HEADER_CREATED,
+    PRODUCT_DETAILS_FILLED,
+    STORE_STATUS_UPDATED,
+    REQUISITION_UPDATED,
+    ORDER_QTY_UPDATED,
+    RECEIVED_QTY_UPDATED,
+    EXPECTED_DATE_UPDATED,
+    COMPLETED,
+    HOLD
+}

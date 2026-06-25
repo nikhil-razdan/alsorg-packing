@@ -1,18 +1,45 @@
 package com.alsorg.packing.service;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 @Service
 public class UserService {
+
+    private static final Set<String> ALLOWED_ROLES = Set.of(
+            "ADMIN",
+            "PACKING",
+            "WAREHOUSE",
+            "DISPATCH",
+            "LOGISTICS",
+            "DRIVER",
+
+            "BOMFLOW_EDITOR",
+            "BOMFLOW_REVIEWER",
+            "BOMFLOW_APPROVER",
+            "BOMFLOW_MANAGER",
+
+            "VENFLOW_PRODUCTION",
+            "VENFLOW_STORE",
+            "VENFLOW_PURCHASE",
+            "VENFLOW_MANAGER"
+    );
+
+    private static final Set<String> ALLOWED_MODULES = Set.of(
+            "PACKFLOW",
+            "BOMFLOW",
+            "VENFLOW"
+    );
 
     private final UserRepository repo;
     private final PasswordEncoder encoder;
@@ -27,53 +54,42 @@ public class UserService {
             String password,
             String role,
             Set<String> plantCodes,
-            java.util.UUID driverId,
-            boolean warehouseAccess) {
+            UUID driverId,
+            boolean warehouseAccess,
+            Set<String> modules
+    ) {
+        String cleanUsername = cleanRequired(username, "Username is required.");
+        String cleanPassword = cleanRequired(password, "Password is required.");
+        String cleanRole = normalizeRole(role);
+
+        if (repo.existsByUsername(cleanUsername)) {
+            throw new RuntimeException("Username already exists: " + cleanUsername);
+        }
 
         User user = new User();
 
-        user.setUsername(username);
-        user.setPassword(encoder.encode(password));
-        user.setRole(role);
+        user.setUsername(cleanUsername);
+        user.setPassword(encoder.encode(cleanPassword));
+        user.setRole(cleanRole);
 
-        user.setWarehouseAccess(
-                warehouseAccess || "WAREHOUSE".equalsIgnoreCase(role));
-
-        Set<String> cleanPlants = cleanPlantCodes(plantCodes);
-
-        user.setPlantCodes(cleanPlants);
-
-        if (!cleanPlants.isEmpty()) {
-            user.setPlantCode(cleanPlants.iterator().next());
-        }
-
-        if ("DRIVER".equalsIgnoreCase(role)) {
-            if (driverId == null) {
-                throw new RuntimeException("Driver profile required for DRIVER user");
-            }
-
-            user.setDriverId(driverId);
-        } else {
-            user.setDriverId(null);
-        }
+        applyAccessFields(user, cleanRole, plantCodes, driverId, warehouseAccess, modules);
 
         return repo.save(user);
     }
 
     public List<User> getAllUsers() {
-        return repo.findAll();
+        return repo.findAll(Sort.by(Sort.Direction.ASC, "username"));
     }
-
-    /* ================= UPDATE USER ================= */
 
     public User updateUser(
             Long id,
             String username,
             String role,
             Set<String> plantCodes,
-            java.util.UUID driverId,
-            boolean warehouseAccess) {
-
+            UUID driverId,
+            boolean warehouseAccess,
+            Set<String> modules
+    ) {
         Optional<User> optional = repo.findById(id);
 
         if (optional.isEmpty()) {
@@ -82,10 +98,58 @@ public class UserService {
 
         User user = optional.get();
 
-        user.setUsername(username);
-        user.setRole(role);
+        String cleanUsername = cleanRequired(username, "Username is required.");
+        String cleanRole = normalizeRole(role);
+
+        if (repo.existsByUsernameAndIdNot(cleanUsername, id)) {
+            throw new RuntimeException("Username already exists: " + cleanUsername);
+        }
+
+        user.setUsername(cleanUsername);
+        user.setRole(cleanRole);
+
+        applyAccessFields(user, cleanRole, plantCodes, driverId, warehouseAccess, modules);
+
+        return repo.save(user);
+    }
+
+    public void deleteUser(Long id) {
+        if (!repo.existsById(id)) {
+            throw new RuntimeException("User not found");
+        }
+
+        repo.deleteById(id);
+    }
+
+    private void applyAccessFields(
+            User user,
+            String role,
+            Set<String> plantCodes,
+            UUID driverId,
+            boolean warehouseAccess,
+            Set<String> modules
+    ) {
+        Set<String> cleanModules = cleanModules(modules, role);
+        user.setModules(cleanModules);
+
         user.setWarehouseAccess(
-                warehouseAccess || "WAREHOUSE".equalsIgnoreCase(role));
+                warehouseAccess
+                        || "ADMIN".equalsIgnoreCase(role)
+                        || "WAREHOUSE".equalsIgnoreCase(role)
+        );
+
+        if ("DRIVER".equalsIgnoreCase(role)) {
+            if (driverId == null) {
+                throw new RuntimeException("Driver profile required for DRIVER user");
+            }
+
+            user.setDriverId(driverId);
+            user.setPlantCodes(new LinkedHashSet<>());
+            user.setPlantCode(null);
+            return;
+        }
+
+        user.setDriverId(null);
 
         Set<String> cleanPlants = cleanPlantCodes(plantCodes);
 
@@ -96,24 +160,6 @@ public class UserService {
         } else {
             user.setPlantCode(null);
         }
-
-        if ("DRIVER".equalsIgnoreCase(role)) {
-            if (driverId == null) {
-                throw new RuntimeException("Driver profile required for DRIVER user");
-            }
-
-            user.setDriverId(driverId);
-        } else {
-            user.setDriverId(null);
-        }
-
-        return repo.save(user);
-    }
-
-    /* ================= DELETE USER ================= */
-
-    public void deleteUser(Long id) {
-        repo.deleteById(id);
     }
 
     private Set<String> cleanPlantCodes(Set<String> plantCodes) {
@@ -130,5 +176,65 @@ public class UserService {
         }
 
         return clean;
+    }
+
+    private Set<String> cleanModules(Set<String> modules, String role) {
+        Set<String> clean = new LinkedHashSet<>();
+
+        if (modules != null) {
+            for (String module : modules) {
+                if (module == null || module.isBlank()) {
+                    continue;
+                }
+
+                String normalized = module.trim().toUpperCase();
+
+                if (!ALLOWED_MODULES.contains(normalized)) {
+                    throw new RuntimeException("Invalid module access: " + normalized);
+                }
+
+                clean.add(normalized);
+            }
+        }
+
+        if (clean.isEmpty()) {
+            if ("ADMIN".equals(role)) {
+                clean.add("PACKFLOW");
+                clean.add("BOMFLOW");
+                clean.add("VENFLOW");
+            } else if (
+                    "PACKING".equals(role)
+                            || "WAREHOUSE".equals(role)
+                            || "DISPATCH".equals(role)
+                            || "LOGISTICS".equals(role)
+                            || "DRIVER".equals(role)
+            ) {
+                clean.add("PACKFLOW");
+            } else if (role.startsWith("BOMFLOW_")) {
+                clean.add("BOMFLOW");
+            } else if (role.startsWith("VENFLOW_")) {
+                clean.add("VENFLOW");
+            }
+        }
+
+        return clean;
+    }
+
+    private String normalizeRole(String role) {
+        String cleanRole = cleanRequired(role, "Role is required.").toUpperCase();
+
+        if (!ALLOWED_ROLES.contains(cleanRole)) {
+            throw new RuntimeException("Invalid role: " + cleanRole);
+        }
+
+        return cleanRole;
+    }
+
+    private String cleanRequired(String value, String message) {
+        if (value == null || value.trim().isBlank() || "null".equalsIgnoreCase(value.trim())) {
+            throw new RuntimeException(message);
+        }
+
+        return value.trim();
     }
 }
