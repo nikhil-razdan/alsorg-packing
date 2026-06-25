@@ -26,7 +26,7 @@ import {
 } from "./logisticsAlertUtils";
 
 function VehicleManagement({
-  showAlert = () => {},
+  showAlert = () => { },
 }) {
   const [vehicles, setVehicles] =
     useState([]);
@@ -433,29 +433,31 @@ const table = {
 const tableHead = {
   display: "grid",
   gridTemplateColumns:
-    "1.25fr 1fr 1.1fr 1.1fr 1fr .8fr 1.3fr 1fr",
-  minWidth: 1320,
-  padding: 16,
+    "1.18fr 1.05fr 1.1fr 1.1fr 1fr .85fr 1.85fr 1.15fr",
+  minWidth: 1520,
+  padding: "16px 18px",
   background: "#111827",
   color: "#94a3b8",
-  fontWeight: 800,
+  fontWeight: 900,
   fontSize: 13,
+  columnGap: 18,
 };
 
 const tableRow = {
   display: "grid",
   gridTemplateColumns:
-    "1.25fr 1fr 1.1fr 1.1fr 1fr .8fr 1.3fr 1fr",
-  minWidth: 1320,
-  padding: 16,
+    "1.18fr 1.05fr 1.1fr 1.1fr 1fr .85fr 1.85fr 1.15fr",
+  minWidth: 1520,
+  padding: "18px 18px",
   color: "#fff",
   borderTop:
     "1px solid rgba(255,255,255,0.06)",
   alignItems: "center",
+  columnGap: 18,
 };
 
 const emptyState = {
-  minWidth: 1320,
+  minWidth: 1520,
   padding: 24,
   color: "#94a3b8",
   textAlign: "center",
@@ -498,25 +500,42 @@ const subText = {
 const validityCell = {
   display: "flex",
   flexDirection: "column",
-  gap: 5,
+  gap: 8,
+  minWidth: 230,
+  paddingRight: 18,
 };
 
 const validityLineSx = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 1,
-  color: "#94a3b8",
-  fontSize: 11,
+  display: "grid",
+  gridTemplateColumns: "88px 120px",
+  alignItems: "center",
+  gap: 1.4,
+  color: "#bfdbfe",
+  fontSize: 12.5,
+  fontWeight: 850,
+  lineHeight: 1.25,
+
+  "& span": {
+    color: "#93c5fd",
+    fontWeight: 900,
+    fontSize: 12.5,
+  },
 
   "& b": {
-    color: "#e5e7eb",
-    fontWeight: 900,
+    color: "#f8fafc",
+    fontWeight: 950,
+    fontSize: 12.5,
+    whiteSpace: "nowrap",
   },
 };
 
 const actionsCell = {
   display: "flex",
-  gap: 8,
+  gap: 10,
+  alignItems: "center",
+  justifyContent: "flex-start",
+  paddingLeft: 18,
+  borderLeft: "1px solid rgba(255,255,255,.06)",
 };
 
 const editBtn = {
@@ -525,9 +544,10 @@ const editBtn = {
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   borderRadius: 10,
-  padding: "7px 12px",
+  padding: "8px 14px",
   cursor: "pointer",
-  fontWeight: 800,
+  fontWeight: 900,
+  fontSize: 12,
 };
 
 const deleteBtn = {
@@ -536,9 +556,10 @@ const deleteBtn = {
     "linear-gradient(135deg,#dc2626,#ef4444)",
   color: "#fff",
   borderRadius: 10,
-  padding: "7px 12px",
+  padding: "8px 14px",
   cursor: "pointer",
-  fontWeight: 800,
+  fontWeight: 900,
+  fontSize: 12,
 };
 
 const statusActiveChipSx = {
