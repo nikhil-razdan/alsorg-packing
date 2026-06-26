@@ -59,18 +59,30 @@ function RequireAuth({ children }) {
 											? ["VENFLOW"]
 											: ["PACKFLOW"];
 
+				const finalPlantCodes =
+					Array.isArray(data?.plantCodes) && data.plantCodes.length > 0
+						? data.plantCodes
+						: Array.isArray(data?.user?.plantCodes) && data.user.plantCodes.length > 0
+							? data.user.plantCodes
+							: data?.plantCode
+								? [data.plantCode]
+								: [];
+
 				const finalUser = {
 					username: finalUsername,
 					role: finalRole,
 					warehouseAccess: finalWarehouseAccess,
 					modules: finalModules,
+					plantCodes: finalPlantCodes,
 				};
+
+				localStorage.setItem("plantCodes", JSON.stringify(finalPlantCodes));
+				localStorage.setItem("currentUser", JSON.stringify(finalUser));
 
 				localStorage.setItem("role", finalRole);
 				localStorage.setItem("username", finalUsername);
 				localStorage.setItem("warehouseAccess", String(finalWarehouseAccess));
 				localStorage.setItem("modules", JSON.stringify(finalModules));
-				localStorage.setItem("currentUser", JSON.stringify(finalUser));
 
 				setOk(true);
 			})

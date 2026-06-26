@@ -1,23 +1,63 @@
-import React from "react";
-import { Box, Card, CardContent, Typography } from "@mui/material";
+import React, { useEffect, useState } from "react";
+import {
+	Box,
+	Card,
+	CardContent,
+	CircularProgress,
+	Typography,
+} from "@mui/material";
+
+import { venflowApi } from "../api/venflowApi";
 
 import {
 	cardSx,
+	loadingBoxSx,
 	pageSubSx,
 	pageTitleSx,
 } from "../venflowTheme";
 
 export default function VenFlowReportsPage() {
-	const reports = [
-		"Pending Store Check Report",
-		"Pending Requisition Report",
-		"Pending Ordered Quantity Report",
-		"Pending Receiving Report",
-		"Balance Quantity Report",
-		"Delayed Expected Date Report",
-		"PD-wise Veneer Summary",
-		"Client-wise Veneer Summary",
-		"Excel Export",
+	const [summary, setSummary] = useState(null);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		let active = true;
+
+		venflowApi.getReportSummary()
+			.then((res) => {
+				if (!active) return;
+				setSummary(res.data || {});
+			})
+			.finally(() => {
+				if (active) setLoading(false);
+			});
+
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	if (loading) {
+		return (
+			<Box sx={loadingBoxSx}>
+				<CircularProgress />
+			</Box>
+		);
+	}
+
+	const cards = [
+		["Total Orders", summary?.totalOrders, "All veneer orders"],
+		["Pending Store Check", summary?.pendingStoreCheck, "Production raised but Store pending"],
+		["Sent to Purchase", summary?.sentToPurchase, "Store forwarded to Purchase"],
+		["Pending PO Raise", summary?.pendingPoRaise, "Purchase has not raised PO"],
+		["Pending PO Approval", summary?.pendingPoApproval, "PO raised but not approved"],
+		["Pending Material Receiving", summary?.pendingMaterialReceiving, "PO approved, receiving pending"],
+		["Material Received Not Informed", summary?.materialReceivedNotInformed, "Store received but Production not informed"],
+		["Production Not Started", summary?.productionNotStarted, "Production informed but not started"],
+		["Production Started", summary?.productionStarted, "Work started but not done"],
+		["Job Done", summary?.jobDone, "Closed production jobs"],
+		["Delayed Items", summary?.delayedItems, "Expected date crossed"],
+		["Total Pending Work Loading", summary?.totalPendingWorkLoading, "Everything except Job Done"],
 	];
 
 	return (
@@ -27,26 +67,50 @@ export default function VenFlowReportsPage() {
 			</Typography>
 
 			<Typography sx={pageSubSx}>
-				Reports will cover pending store checks, requisition gaps, delayed
-				receiving, balance quantities, PD-wise movement and client-wise tracking.
+				Plant-wise and access-wise reporting for veneer requirement,
+				Store review, Purchase PO, material receiving and Production closure.
 			</Typography>
+
+			<Box sx={gridSx}>
+				{cards.map(([label, value, subtle]) => (
+					<Card key={label} sx={reportCardSx}>
+						<CardContent sx={{ p: 2.4 }}>
+							<Typography sx={labelSx}>
+								{label}
+							</Typography>
+
+							<Typography sx={valueSx}>
+								{value ?? 0}
+							</Typography>
+
+							<Typography sx={subtleSx}>
+								{subtle}
+							</Typography>
+						</CardContent>
+					</Card>
+				))}
+			</Box>
 
 			<Card sx={{ ...cardSx, mt: 2.5 }}>
 				<CardContent sx={{ p: 3 }}>
 					<Typography sx={sectionTitleSx}>
-						Coming Next
+						Next detailed exports
 					</Typography>
 
 					<Box sx={reportsGridSx}>
-						{reports.map((item, index) => (
+						{[
+							"Total Orders List",
+							"Date-wise Order Log",
+							"Daily Production Done",
+							"Total Pending Work Loading",
+							"Purchase Pending Report",
+							"Store Pending Report",
+							"Production Pending Report",
+							"Plant-wise Excel Export",
+						].map((item, index) => (
 							<Box key={item} sx={reportItemSx}>
-								<Box sx={indexSx}>
-									{index + 1}
-								</Box>
-
-								<Typography sx={reportTextSx}>
-									{item}
-								</Typography>
+								<Box sx={indexSx}>{index + 1}</Box>
+								<Typography sx={reportTextSx}>{item}</Typography>
 							</Box>
 						))}
 					</Box>
@@ -55,6 +119,47 @@ export default function VenFlowReportsPage() {
 		</Box>
 	);
 }
+
+const gridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+	gap: 1.8,
+	mt: 2.5,
+};
+
+const reportCardSx = {
+	position: "relative",
+	overflow: "hidden",
+	borderRadius: "22px",
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(59,130,246,.28)",
+	boxShadow: "0 18px 35px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	color: "#fff",
+};
+
+const labelSx = {
+	color: "rgba(255,255,255,.62)",
+	fontSize: 12,
+	fontWeight: 850,
+	textTransform: "uppercase",
+	letterSpacing: ".07em",
+};
+
+const valueSx = {
+	mt: 1.2,
+	fontSize: 34,
+	fontWeight: 950,
+	color: "#fff",
+	lineHeight: 1,
+};
+
+const subtleSx = {
+	mt: 1,
+	color: "rgba(255,255,255,.52)",
+	fontSize: 12,
+	fontWeight: 650,
+};
 
 const sectionTitleSx = {
 	color: "#fff",

@@ -6,5 +6,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.UUID;
 
-public interface VenFlowEntryRepository extends JpaRepository<VenFlowEntry, UUID>, JpaSpecificationExecutor<VenFlowEntry> {
+public interface VenFlowEntryRepository
+        extends JpaRepository<VenFlowEntry, UUID>,
+                JpaSpecificationExecutor<VenFlowEntry> {
 }

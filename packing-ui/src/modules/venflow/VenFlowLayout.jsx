@@ -12,6 +12,7 @@ import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOu
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import AppsIcon from "@mui/icons-material/Apps";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import ShoppingCartCheckoutOutlinedIcon from "@mui/icons-material/ShoppingCartCheckoutOutlined";
 
 export default function VenFlowLayout() {
 	const navigate = useNavigate();
@@ -27,6 +28,11 @@ export default function VenFlowLayout() {
 			label: "Entries",
 			path: "/venflow/entries",
 			icon: <FormatListBulletedOutlinedIcon fontSize="small" />,
+		},
+		{
+			label: "Purchase Desk",
+			path: "/venflow/purchase",
+			icon: <ShoppingCartCheckoutOutlinedIcon fontSize="small" />,
 		},
 		{
 			label: "New Requirement",

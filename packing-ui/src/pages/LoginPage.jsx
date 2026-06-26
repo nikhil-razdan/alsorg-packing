@@ -80,12 +80,28 @@ function LoginPage() {
                       ? ["VENFLOW"]
                       : ["PACKFLOW"];
 
+      const finalPlantCodes =
+        Array.isArray(meData?.plantCodes) && meData.plantCodes.length > 0
+          ? meData.plantCodes
+          : Array.isArray(meData?.user?.plantCodes) && meData.user.plantCodes.length > 0
+            ? meData.user.plantCodes
+            : Array.isArray(loginData?.plantCodes) && loginData.plantCodes.length > 0
+              ? loginData.plantCodes
+              : Array.isArray(loginData?.user?.plantCodes) && loginData.user.plantCodes.length > 0
+                ? loginData.user.plantCodes
+                : loginData?.plantCode
+                  ? [loginData.plantCode]
+                  : [];
+
       const currentUser = {
         username: finalUsername,
         role: finalRole,
         warehouseAccess: finalWarehouseAccess,
         modules: finalModules,
+        plantCodes: finalPlantCodes,
       };
+
+      localStorage.setItem("plantCodes", JSON.stringify(finalPlantCodes));
 
       localStorage.setItem("role", finalRole);
       localStorage.setItem("username", finalUsername);
