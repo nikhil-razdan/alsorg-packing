@@ -1,7 +1,6 @@
 package com.alsorg.packing.service;
 
 import com.alsorg.packing.domain.venflow.*;
-
 import java.util.Collection;
 import java.util.Set;
 
@@ -14,8 +13,7 @@ public class VenFlowSpecifications {
 
     public static Specification<VenFlowEntry> visiblePlants(
             Set<String> plants,
-            boolean allPlants
-    ) {
+            boolean allPlants) {
         return (root, query, cb) -> {
             if (allPlants) {
                 return cb.conjunction();
@@ -37,8 +35,7 @@ public class VenFlowSpecifications {
 
             return cb.equal(
                     cb.upper(root.get("plantCode")),
-                    plantCode.trim().toUpperCase()
-            );
+                    plantCode.trim().toUpperCase());
         };
     }
 
@@ -56,8 +53,7 @@ public class VenFlowSpecifications {
                     cb.like(cb.lower(root.get("productDescription")), like),
                     cb.like(cb.lower(root.get("veneerType")), like),
                     cb.like(cb.lower(root.get("poNo")), like),
-                    cb.like(cb.lower(root.get("vendorName")), like)
-            );
+                    cb.like(cb.lower(root.get("vendorName")), like));
         };
     }
 
@@ -67,20 +63,15 @@ public class VenFlowSpecifications {
                 return cb.conjunction();
             }
 
-            try {
-                VenFlowStage value =
-                        VenFlowStage.valueOf(stage.trim().toUpperCase());
-
-                return cb.equal(root.get("stage"), value);
-            } catch (Exception e) {
-                return cb.disjunction();
-            }
+            return cb.equal(
+                    root.get("stage"),
+                    com.alsorg.packing.domain.venflow.VenFlowStage.valueOf(
+                            stage.trim().toUpperCase()));
         };
     }
 
     public static Specification<VenFlowEntry> stagesIn(
-            Collection<VenFlowStage> stages
-    ) {
+            Collection<VenFlowStage> stages) {
         return (root, query, cb) -> {
             if (stages == null || stages.isEmpty()) {
                 return cb.conjunction();
@@ -96,14 +87,10 @@ public class VenFlowSpecifications {
                 return cb.conjunction();
             }
 
-            try {
-                VenFlowStoreStatus value =
-                        VenFlowStoreStatus.valueOf(storeStatus.trim().toUpperCase());
-
-                return cb.equal(root.get("storeStatus"), value);
-            } catch (Exception e) {
-                return cb.disjunction();
-            }
+            return cb.equal(
+                    root.get("storeStatus"),
+                    com.alsorg.packing.domain.venflow.VenFlowStoreStatus.valueOf(
+                            storeStatus.trim().toUpperCase()));
         };
     }
 
@@ -113,35 +100,23 @@ public class VenFlowSpecifications {
                 return cb.conjunction();
             }
 
-            try {
-                VenFlowPoStatus value =
-                        VenFlowPoStatus.valueOf(poStatus.trim().toUpperCase());
-
-                return cb.equal(root.get("poStatus"), value);
-            } catch (Exception e) {
-                return cb.disjunction();
-            }
+            return cb.equal(
+                    root.get("poStatus"),
+                    com.alsorg.packing.domain.venflow.VenFlowPoStatus.valueOf(
+                            poStatus.trim().toUpperCase()));
         };
     }
 
-    public static Specification<VenFlowEntry> productionStatus(
-            String productionStatus
-    ) {
+    public static Specification<VenFlowEntry> productionStatus(String productionStatus) {
         return (root, query, cb) -> {
             if (productionStatus == null || productionStatus.isBlank()) {
                 return cb.conjunction();
             }
 
-            try {
-                VenFlowProductionStatus value =
-                        VenFlowProductionStatus.valueOf(
-                                productionStatus.trim().toUpperCase()
-                        );
-
-                return cb.equal(root.get("productionStatus"), value);
-            } catch (Exception e) {
-                return cb.disjunction();
-            }
+            return cb.equal(
+                    root.get("productionStatus"),
+                    com.alsorg.packing.domain.venflow.VenFlowProductionStatus.valueOf(
+                            productionStatus.trim().toUpperCase()));
         };
     }
 }

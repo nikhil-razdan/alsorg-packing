@@ -1,18 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Alert,
     Box,
     Button,
     Card,
     CardContent,
+    MenuItem,
     TextField,
     Typography,
 } from "@mui/material";
+
 import { useNavigate } from "react-router-dom";
+
+import API from "../../../services/api";
 import { venflowApi } from "../api/venflowApi";
 
 import {
     cardSx,
+    darkMenuProps,
     errorAlertSx,
     fieldSx,
     pageSubSx,
@@ -20,10 +25,6 @@ import {
     primaryBtnSx,
     secondaryBtnSx,
 } from "../venflowTheme";
-
-import { MenuItem } from "@mui/material";
-import API from "../../../services/api";
-import { darkMenuProps } from "../venflowTheme";
 
 const readCurrentUser = () => {
     try {
@@ -42,9 +43,17 @@ const readLocalPlantCodes = () => {
 };
 
 export default function VenFlowCreatePage() {
-
-
     const navigate = useNavigate();
+
+    const currentUser = readCurrentUser();
+
+    const role = String(
+        currentUser.role ||
+        localStorage.getItem("role") ||
+        ""
+    ).toUpperCase();
+
+    const [plantOptions, setPlantOptions] = useState([]);
 
     const [form, setForm] = useState({
         plantCode: "",
@@ -55,25 +64,14 @@ export default function VenFlowCreatePage() {
         bomAttachmentUrl: "",
     });
 
-    const currentUser = readCurrentUser();
-    const role = String(currentUser.role || localStorage.getItem("role") || "").toUpperCase();
-
-    const [plantOptions, setPlantOptions] = useState([]);
-
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
-
-    const update = (key, value) => {
-        setForm((prev) => ({
-            ...prev,
-            [key]: value,
-        }));
-    };
 
     useEffect(() => {
         const loadPlants = async () => {
             const assignedPlants =
-                Array.isArray(currentUser.plantCodes) && currentUser.plantCodes.length > 0
+                Array.isArray(currentUser.plantCodes) &&
+                    currentUser.plantCodes.length > 0
                     ? currentUser.plantCodes
                     : readLocalPlantCodes();
 
@@ -82,20 +80,25 @@ export default function VenFlowCreatePage() {
 
                 setForm((prev) => ({
                     ...prev,
-                    plantCode: prev.plantCode || assignedPlants[0],
+                    plantCode:
+                        prev.plantCode ||
+                        assignedPlants[0],
                 }));
 
                 return;
             }
 
             /*
-             * Admin/Manager may have empty plantCodes meaning all plants.
-             * In that case fetch all plants.
+             * Admin / Manager may have empty plantCodes meaning all plants.
+             * In that case, load all plant options.
              */
             if (role === "ADMIN" || role === "VENFLOW_MANAGER") {
                 try {
                     const res = await API.get("/plants");
-                    const rows = Array.isArray(res.data) ? res.data : [];
+
+                    const rows = Array.isArray(res.data)
+                        ? res.data
+                        : [];
 
                     const plantCodes = rows
                         .map((p) => p.plantCode)
@@ -105,7 +108,10 @@ export default function VenFlowCreatePage() {
 
                     setForm((prev) => ({
                         ...prev,
-                        plantCode: prev.plantCode || plantCodes[0] || "",
+                        plantCode:
+                            prev.plantCode ||
+                            plantCodes[0] ||
+                            "",
                     }));
                 } catch (err) {
                     console.error("Failed to load plants", err);
@@ -118,17 +124,48 @@ export default function VenFlowCreatePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const update = (key, value) => {
+        setForm((prev) => ({
+            ...prev,
+            [key]: value,
+        }));
+    };
+
     const submit = async () => {
         try {
-            setSaving(true);
             setError("");
 
             if (!form.plantCode) {
                 setError("Plant is required.");
-                setSaving(false);
                 return;
             }
-            const res = await venflowApi.createEntry(form);
+
+            if (!form.orderDate) {
+                setError("Order Date is required.");
+                return;
+            }
+
+            if (!form.pdNo.trim()) {
+                setError("PD No. is required.");
+                return;
+            }
+
+            if (!form.clientName.trim()) {
+                setError("Client Name is required.");
+                return;
+            }
+
+            setSaving(true);
+
+            const res = await venflowApi.createEntry({
+                plantCode: form.plantCode,
+                orderDate: form.orderDate,
+                pdNo: form.pdNo.trim(),
+                clientName: form.clientName.trim(),
+                bomReference: form.bomReference.trim(),
+                bomAttachmentUrl: form.bomAttachmentUrl.trim(),
+            });
+
             const id = res.data?.id;
 
             if (id) {
@@ -140,6 +177,7 @@ export default function VenFlowCreatePage() {
             setError(
                 err?.response?.data?.message ||
                 err?.response?.data?.error ||
+                err?.response?.data ||
                 "Failed to create VenFlow entry."
             );
         } finally {
@@ -148,14 +186,15 @@ export default function VenFlowCreatePage() {
     };
 
     return (
-        <Box sx={{ maxWidth: 860 }}>
+        <Box sx={{ maxWidth: 920 }}>
             <Typography sx={pageTitleSx}>
                 New Veneer Requirement
             </Typography>
 
             <Typography sx={pageSubSx}>
-                Start the veneer tracking flow. Store status, requisition, ordered quantity,
-                expected date and receiving will open step-by-step after this.
+                Start the veneer tracking flow. The entry will move department-wise:
+                Production Raised → Store Reviewed → Sent to Purchase → PO Raised →
+                PO Approved → Material Received → Production Informed → Production Started → Job Done.
             </Typography>
 
             <Card sx={{ ...cardSx, mt: 2.5 }}>
@@ -171,13 +210,20 @@ export default function VenFlowCreatePage() {
                             select
                             label="Plant"
                             value={form.plantCode}
-                            onChange={(e) => update("plantCode", e.target.value)}
+                            onChange={(e) =>
+                                update("plantCode", e.target.value)
+                            }
                             required
                             sx={fieldSx}
-                            SelectProps={{ MenuProps: darkMenuProps }}
+                            SelectProps={{
+                                MenuProps: darkMenuProps,
+                            }}
                         >
                             {plantOptions.map((plant) => (
-                                <MenuItem key={plant} value={plant}>
+                                <MenuItem
+                                    key={plant}
+                                    value={plant}
+                                >
                                     {plant}
                                 </MenuItem>
                             ))}
@@ -187,7 +233,9 @@ export default function VenFlowCreatePage() {
                             label="Order Date"
                             type="date"
                             value={form.orderDate}
-                            onChange={(e) => update("orderDate", e.target.value)}
+                            onChange={(e) =>
+                                update("orderDate", e.target.value)
+                            }
                             InputLabelProps={{ shrink: true }}
                             required
                             sx={fieldSx}
@@ -196,7 +244,9 @@ export default function VenFlowCreatePage() {
                         <TextField
                             label="PD No."
                             value={form.pdNo}
-                            onChange={(e) => update("pdNo", e.target.value)}
+                            onChange={(e) =>
+                                update("pdNo", e.target.value)
+                            }
                             required
                             sx={fieldSx}
                         />
@@ -204,7 +254,9 @@ export default function VenFlowCreatePage() {
                         <TextField
                             label="Client Name"
                             value={form.clientName}
-                            onChange={(e) => update("clientName", e.target.value)}
+                            onChange={(e) =>
+                                update("clientName", e.target.value)
+                            }
                             required
                             sx={fieldSx}
                         />
@@ -212,31 +264,42 @@ export default function VenFlowCreatePage() {
                         <TextField
                             label="BOM Reference / BOM No."
                             value={form.bomReference}
-                            onChange={(e) => update("bomReference", e.target.value)}
+                            onChange={(e) =>
+                                update("bomReference", e.target.value)
+                            }
                             sx={fieldSx}
                         />
 
                         <TextField
                             label="BOM Attachment URL"
                             value={form.bomAttachmentUrl}
-                            onChange={(e) => update("bomAttachmentUrl", e.target.value)}
+                            onChange={(e) =>
+                                update("bomAttachmentUrl", e.target.value)
+                            }
                             sx={fieldSx}
                         />
                     </Box>
 
                     <Box sx={noteSx}>
                         <Typography sx={noteTitleSx}>
-                            Controlled flow enabled
+                            Controlled plant-wise VenFlow process
                         </Typography>
 
                         <Typography sx={noteTextSx}>
-                            After creating the requirement, the flow will move department-wise:
-                            Production Raised → Store Reviewed → Sent to Purchase → PO Raised →
-                            PO Approved → Material Received → Production Informed → Production Started → Job Done.
+                            This requirement will be visible only to users having access to
+                            the selected plant. Store, Purchase and Production actions will
+                            open step-by-step based on role and workflow stage.
                         </Typography>
                     </Box>
 
-                    <Box sx={{ display: "flex", gap: 1.5, mt: 3, flexWrap: "wrap" }}>
+                    <Box
+                        sx={{
+                            display: "flex",
+                            gap: 1.5,
+                            mt: 3,
+                            flexWrap: "wrap",
+                        }}
+                    >
                         <Button
                             variant="contained"
                             onClick={submit}
