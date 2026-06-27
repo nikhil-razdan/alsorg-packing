@@ -19,7 +19,7 @@ import VenFlowStoreDeskPage from "./pages/VenFlowStoreDeskPage";
 
 import {
     defaultVenFlowPathForRole,
-} from "./utils/venflowAccess";
+} from "./../../utils/venflowAccess";
 
 function VenFlowHomeRedirect() {
     return (
