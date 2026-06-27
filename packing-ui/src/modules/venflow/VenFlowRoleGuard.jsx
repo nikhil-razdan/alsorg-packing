@@ -5,7 +5,7 @@ import {
 	canAccessVenFlowScreen,
 	defaultVenFlowPathForRole,
 	getVenFlowRole,
-} from "./utils/venflowAccess";
+} from "./../../utils/venflowAccess";
 
 export default function VenFlowRoleGuard({
 	screen,
