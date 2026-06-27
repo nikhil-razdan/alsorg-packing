@@ -26,7 +26,7 @@ import {
 	canAccessVenFlowScreen,
 	getVenFlowRole,
 	venFlowRoleLabel,
-} from "./utils/venflowAccess";
+} from "./../../utils/venflowAccess";
 
 export default function VenFlowLayout() {
 	const navigate = useNavigate();

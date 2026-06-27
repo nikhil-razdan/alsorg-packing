@@ -22,7 +22,7 @@ import {
     defaultVenFlowPathForRole,
     getVenFlowRole,
     isVenFlowAdminOrManager,
-} from "../utils/venflowAccess";
+} from "../../../utils/venflowAccess";
 
 export default function VenFlowDashboard() {
     const navigate = useNavigate();

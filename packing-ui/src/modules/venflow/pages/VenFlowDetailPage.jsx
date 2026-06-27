@@ -9,7 +9,7 @@ import {
     isVenFlowStore,
     isVenFlowPurchase,
     canApproveVenFlowPo,
-} from "../utils/venflowAccess";
+} from "./../../../utils/venflowAccess";
 
 import {
     Alert,
