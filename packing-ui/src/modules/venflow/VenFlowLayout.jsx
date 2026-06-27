@@ -1,8 +1,14 @@
 import React from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+	Outlet,
+	useLocation,
+	useNavigate,
+} from "react-router-dom";
+
 import {
 	Box,
 	Button,
+	Chip,
 	Typography,
 } from "@mui/material";
 
@@ -13,42 +19,73 @@ import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import AppsIcon from "@mui/icons-material/Apps";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import ShoppingCartCheckoutOutlinedIcon from "@mui/icons-material/ShoppingCartCheckoutOutlined";
+import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
+
+import {
+	canAccessVenFlowScreen,
+	getVenFlowRole,
+	venFlowRoleLabel,
+} from "./utils/venflowAccess";
 
 export default function VenFlowLayout() {
 	const navigate = useNavigate();
 	const location = useLocation();
 
+	const role = getVenFlowRole();
+
 	const navItems = [
 		{
 			label: "Dashboard",
 			path: "/venflow/dashboard",
+			screen: "dashboard",
 			icon: <DashboardOutlinedIcon fontSize="small" />,
 		},
 		{
-			label: "Entries",
-			path: "/venflow/entries",
-			icon: <FormatListBulletedOutlinedIcon fontSize="small" />,
+			label: "Production Desk",
+			path: "/venflow/production",
+			screen: "production",
+			icon: <PrecisionManufacturingOutlinedIcon fontSize="small" />,
+		},
+		{
+			label: "Store Desk",
+			path: "/venflow/store",
+			screen: "store",
+			icon: <WarehouseOutlinedIcon fontSize="small" />,
 		},
 		{
 			label: "Purchase Desk",
 			path: "/venflow/purchase",
+			screen: "purchase",
 			icon: <ShoppingCartCheckoutOutlinedIcon fontSize="small" />,
+		},
+		{
+			label: "Full Tracker",
+			path: "/venflow/entries",
+			screen: "entries",
+			icon: <FormatListBulletedOutlinedIcon fontSize="small" />,
 		},
 		{
 			label: "New Requirement",
 			path: "/venflow/create",
+			screen: "create",
 			icon: <AddCircleOutlineOutlinedIcon fontSize="small" />,
 		},
 		{
 			label: "Reports",
 			path: "/venflow/reports",
+			screen: "reports",
 			icon: <AssessmentOutlinedIcon fontSize="small" />,
 		},
-	];
+	].filter((item) =>
+		canAccessVenFlowScreen(item.screen, role)
+	);
 
 	return (
 		<Box sx={pageSx}>
-			<Box sx={backgroundText}>VenFlow</Box>
+			<Box sx={backgroundText}>
+				VenFlow
+			</Box>
 
 			<Box sx={contentSx}>
 				<Box sx={heroRowSx}>
@@ -58,12 +95,21 @@ export default function VenFlowLayout() {
 						</Box>
 
 						<Box>
-							<Typography sx={titleSx}>
-								VenFlow
-							</Typography>
+							<Box sx={titleRowSx}>
+								<Typography sx={titleSx}>
+									VenFlow
+								</Typography>
+
+								<Chip
+									label={venFlowRoleLabel(role)}
+									size="small"
+									sx={roleChipSx}
+								/>
+							</Box>
 
 							<Typography sx={subtitleSx}>
-								Veneer Production, Store, Requisition & Receiving Control
+								Department-wise veneer tracker for Production,
+								Store, Purchase, PO approval and Job Done closure.
 							</Typography>
 						</Box>
 					</Box>
@@ -172,12 +218,26 @@ const logoBoxSx = {
 	border: "1px solid rgba(255,255,255,.10)",
 };
 
+const titleRowSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+	flexWrap: "wrap",
+};
+
 const titleSx = {
 	fontSize: { xs: 28, md: 34 },
 	fontWeight: 950,
 	color: "#fff",
 	letterSpacing: "-0.04em",
 	lineHeight: 1,
+};
+
+const roleChipSx = {
+	background: "rgba(59,130,246,.16)",
+	color: "#bfdbfe",
+	border: "1px solid rgba(59,130,246,.28)",
+	fontWeight: 900,
 };
 
 const subtitleSx = {

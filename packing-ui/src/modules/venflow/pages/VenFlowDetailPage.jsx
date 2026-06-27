@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from "react";
 
+import VenFlowTracker from "../components/VenFlowTracker";
+
+import {
+    getVenFlowRole,
+    isVenFlowAdminOrManager,
+    isVenFlowProduction,
+    isVenFlowStore,
+    isVenFlowPurchase,
+    canApproveVenFlowPo,
+} from "../utils/venflowAccess";
+
 import {
     Alert,
     Box,
@@ -18,7 +29,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { venflowApi } from "../api/venflowApi";
 import VenFlowStatusChip from "../components/VenFlowStatusChip";
 import VenFlowStageChip from "../components/VenFlowStageChip";
-import { normalizeRole } from "../../../utils/permissions";
+
 
 import {
     cardSx,
@@ -41,25 +52,13 @@ export default function VenFlowDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const role = normalizeRole(localStorage.getItem("role"));
+    const role = getVenFlowRole();
 
-    const isAdmin = role === "ADMIN";
-    const isManager = role === "VENFLOW_MANAGER";
-
-    const isProduction =
-        isAdmin ||
-        isManager ||
-        role === "VENFLOW_PRODUCTION";
-
-    const isStore =
-        isAdmin ||
-        isManager ||
-        role === "VENFLOW_STORE";
-
-    const isPurchase =
-        isAdmin ||
-        isManager ||
-        role === "VENFLOW_PURCHASE";
+    const isAdminManager = isVenFlowAdminOrManager(role);
+    const isProduction = isVenFlowProduction(role);
+    const isStore = isVenFlowStore(role);
+    const isPurchase = isVenFlowPurchase(role);
+    const canApprovePo = canApproveVenFlowPo(role);
 
     const [entry, setEntry] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -239,6 +238,24 @@ export default function VenFlowDetailPage() {
                     Back to Entries
                 </Button>
             </Box>
+            <VenFlowTracker stage={entry.stage} />
+            <Box sx={rolePanelSx}>
+                <Typography sx={rolePanelTitleSx}>
+                    Your Action Area
+                </Typography>
+
+                <Typography sx={rolePanelTextSx}>
+                    {isAdminManager
+                        ? "You can monitor the full tracker and approve PO/sign-off."
+                        : role === "VENFLOW_PRODUCTION"
+                            ? "You can raise requirements, update product details, set expected date, start production and mark job done."
+                            : role === "VENFLOW_STORE"
+                                ? "You can review store availability, send to purchase, receive material and inform production."
+                                : role === "VENFLOW_PURCHASE"
+                                    ? "You can update requisition, ordered quantity and raise PO."
+                                    : "You have view-only VenFlow access."}
+                </Typography>
+            </Box>
 
             {error && (
                 <Alert severity="error" sx={errorAlertSx}>
@@ -266,361 +283,372 @@ export default function VenFlowDetailPage() {
                     </CardContent>
                 </Card>
 
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            2. Product Details
-                        </Typography>
+                {isProduction && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                2. Product Details
+                            </Typography>
 
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
 
-                        <Box sx={formGridSx}>
-                            <TextField
-                                label="Product Description"
-                                value={productForm.productDescription}
-                                onChange={(e) =>
-                                    setProductForm((p) => ({
-                                        ...p,
-                                        productDescription: e.target.value,
-                                    }))
+                            <Box sx={formGridSx}>
+                                <TextField
+                                    label="Product Description"
+                                    value={productForm.productDescription}
+                                    onChange={(e) =>
+                                        setProductForm((p) => ({
+                                            ...p,
+                                            productDescription: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isProduction}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="Veneer Type"
+                                    value={productForm.veneerType}
+                                    onChange={(e) =>
+                                        setProductForm((p) => ({
+                                            ...p,
+                                            veneerType: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isProduction}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="Size"
+                                    value={productForm.size}
+                                    onChange={(e) =>
+                                        setProductForm((p) => ({
+                                            ...p,
+                                            size: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isProduction}
+                                    sx={fieldSx}
+                                />
+                            </Box>
+
+                            <Button
+                                variant="contained"
+                                disabled={!isProduction || saving}
+                                onClick={() =>
+                                    run(() =>
+                                        venflowApi.updateProductDetails(id, productForm)
+                                    )
                                 }
-                                disabled={!isProduction}
-                                sx={fieldSx}
-                            />
+                                sx={{ ...primaryBtnSx, mt: 2 }}
+                            >
+                                Save Product Details
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {isStore && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                3. Store Status
+                            </Typography>
+
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
 
                             <TextField
-                                label="Veneer Type"
-                                value={productForm.veneerType}
-                                onChange={(e) =>
-                                    setProductForm((p) => ({
-                                        ...p,
-                                        veneerType: e.target.value,
-                                    }))
-                                }
-                                disabled={!isProduction}
-                                sx={fieldSx}
-                            />
-
-                            <TextField
-                                label="Size"
-                                value={productForm.size}
-                                onChange={(e) =>
-                                    setProductForm((p) => ({
-                                        ...p,
-                                        size: e.target.value,
-                                    }))
-                                }
-                                disabled={!isProduction}
-                                sx={fieldSx}
-                            />
-                        </Box>
-
-                        <Button
-                            variant="contained"
-                            disabled={!isProduction || saving}
-                            onClick={() =>
-                                run(() =>
-                                    venflowApi.updateProductDetails(id, productForm)
-                                )
-                            }
-                            sx={{ ...primaryBtnSx, mt: 2 }}
-                        >
-                            Save Product Details
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            3. Store Status
-                        </Typography>
-
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
-
-                        <TextField
-                            fullWidth
-                            select
-                            label="Veneer Status in Store"
-                            value={storeForm.storeStatus}
-                            onChange={(e) =>
-                                setStoreForm({
-                                    storeStatus: e.target.value,
-                                })
-                            }
-                            disabled={!isStore}
-                            sx={fieldSx}
-                            SelectProps={{
-                                MenuProps: darkMenuProps,
-                            }}
-                        >
-                            <MenuItem value="AVAILABLE_IN_STORE">
-                                Available in Store
-                            </MenuItem>
-                            <MenuItem value="NOT_AVAILABLE">
-                                Not Available
-                            </MenuItem>
-                            <MenuItem value="PARTIALLY_AVAILABLE">
-                                Partially Available
-                            </MenuItem>
-                            <MenuItem value="PENDING">
-                                Pending
-                            </MenuItem>
-                            <MenuItem value="HOLD">
-                                Hold
-                            </MenuItem>
-                        </TextField>
-
-                        <Button
-                            variant="contained"
-                            disabled={!isStore || saving}
-                            onClick={() =>
-                                run(() => venflowApi.updateStoreStatus(id, storeForm))
-                            }
-                            sx={{ ...primaryBtnSx, mt: 2 }}
-                        >
-                            Save Store Status
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            disabled={!isStore || saving}
-                            onClick={() =>
-                                run(() => venflowApi.sendToPurchase(id))
-                            }
-                            sx={{ ...outlineBtnSx, mt: 2, ml: { xs: 0, sm: 1 } }}
-                        >
-                            Send to Purchase
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            4. Requisition
-                        </Typography>
-
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
-
-                        <Box sx={formGridSx}>
-                            <TextField
-                                label="Requisition Slip No."
-                                value={requisitionForm.requisitionSlipNo}
-                                onChange={(e) =>
-                                    setRequisitionForm((p) => ({
-                                        ...p,
-                                        requisitionSlipNo: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
-
-                            <TextField
-                                label="Requisition Date"
-                                type="date"
-                                InputLabelProps={{ shrink: true }}
-                                value={requisitionForm.requisitionDate}
-                                onChange={(e) =>
-                                    setRequisitionForm((p) => ({
-                                        ...p,
-                                        requisitionDate: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
-                        </Box>
-
-                        <Button
-                            variant="contained"
-                            disabled={!isPurchase || saving}
-                            onClick={() =>
-                                run(() =>
-                                    venflowApi.updateRequisition(id, requisitionForm)
-                                )
-                            }
-                            sx={{ ...primaryBtnSx, mt: 2 }}
-                        >
-                            Save Requisition
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            5. Ordered Quantity
-                        </Typography>
-
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
-
-                        <Box sx={formGridSx}>
-                            <TextField
-                                label="Ordered Qty"
-                                type="number"
-                                value={orderedForm.orderedQty}
-                                onChange={(e) =>
-                                    setOrderedForm((p) => ({
-                                        ...p,
-                                        orderedQty: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
-
-                            <TextField
-                                label="Unit"
+                                fullWidth
                                 select
-                                value={orderedForm.unit}
+                                label="Veneer Status in Store"
+                                value={storeForm.storeStatus}
                                 onChange={(e) =>
-                                    setOrderedForm((p) => ({
-                                        ...p,
-                                        unit: e.target.value,
-                                    }))
+                                    setStoreForm({
+                                        storeStatus: e.target.value,
+                                    })
                                 }
-                                disabled={!isPurchase}
+                                disabled={!isStore}
                                 sx={fieldSx}
                                 SelectProps={{
                                     MenuProps: darkMenuProps,
                                 }}
                             >
-                                <MenuItem value="SHEET">Sheet</MenuItem>
-                                <MenuItem value="PCS">Pcs</MenuItem>
-                                <MenuItem value="NO">No</MenuItem>
-                                <MenuItem value="SQFT">Sqft</MenuItem>
-                                <MenuItem value="SQM">Sqm</MenuItem>
-                                <MenuItem value="METER">Meter</MenuItem>
+                                <MenuItem value="AVAILABLE_IN_STORE">
+                                    Available in Store
+                                </MenuItem>
+                                <MenuItem value="NOT_AVAILABLE">
+                                    Not Available
+                                </MenuItem>
+                                <MenuItem value="PARTIALLY_AVAILABLE">
+                                    Partially Available
+                                </MenuItem>
+                                <MenuItem value="PENDING">
+                                    Pending
+                                </MenuItem>
+                                <MenuItem value="HOLD">
+                                    Hold
+                                </MenuItem>
                             </TextField>
-                        </Box>
 
-                        <Button
-                            variant="contained"
-                            disabled={!isPurchase || saving}
-                            onClick={() =>
-                                run(() =>
-                                    venflowApi.updateOrderedQty(id, orderedForm)
-                                )
-                            }
-                            sx={{ ...primaryBtnSx, mt: 2 }}
-                        >
-                            Save Ordered Qty
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            6. Purchase / PO
-                        </Typography>
-
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
-
-                        <Box sx={formGridSx}>
-                            <TextField
-                                label="Vendor Name"
-                                value={poForm.vendorName}
-                                onChange={(e) =>
-                                    setPoForm((p) => ({
-                                        ...p,
-                                        vendorName: e.target.value,
-                                    }))
+                            <Button
+                                variant="contained"
+                                disabled={!isStore || saving}
+                                onClick={() =>
+                                    run(() => venflowApi.updateStoreStatus(id, storeForm))
                                 }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
-
-                            <TextField
-                                label="PO No."
-                                value={poForm.poNo}
-                                onChange={(e) =>
-                                    setPoForm((p) => ({
-                                        ...p,
-                                        poNo: e.target.value,
-                                    }))
+                                sx={{ ...primaryBtnSx, mt: 2 }}
+                            >
+                                Save Store Status
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                disabled={!isStore || saving}
+                                onClick={() =>
+                                    run(() => venflowApi.sendToPurchase(id))
                                 }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
+                                sx={{ ...outlineBtnSx, mt: 2, ml: { xs: 0, sm: 1 } }}
+                            >
+                                Send to Purchase
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
 
-                            <TextField
-                                label="PO Date"
-                                type="date"
-                                InputLabelProps={{ shrink: true }}
-                                value={poForm.poDate}
-                                onChange={(e) =>
-                                    setPoForm((p) => ({
-                                        ...p,
-                                        poDate: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
+                {isPurchase && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                4. Requisition
+                            </Typography>
 
-                            <TextField
-                                label="PO Amount"
-                                type="number"
-                                value={poForm.poAmount}
-                                onChange={(e) =>
-                                    setPoForm((p) => ({
-                                        ...p,
-                                        poAmount: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
 
-                            <TextField
-                                label="PO Document URL"
-                                value={poForm.poDocumentUrl}
-                                onChange={(e) =>
-                                    setPoForm((p) => ({
-                                        ...p,
-                                        poDocumentUrl: e.target.value,
-                                    }))
-                                }
-                                disabled={!isPurchase}
-                                sx={fieldSx}
-                            />
-                        </Box>
+                            <Box sx={formGridSx}>
+                                <TextField
+                                    label="Requisition Slip No."
+                                    value={requisitionForm.requisitionSlipNo}
+                                    onChange={(e) =>
+                                        setRequisitionForm((p) => ({
+                                            ...p,
+                                            requisitionSlipNo: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
 
-                        <Box sx={{ mt: 2 }}>
-                            <Info label="PO Status" value={entry.poStatus || "NOT_RAISED"} />
-                            <Info label="PO Raised By" value={entry.poRaisedBy} />
-                            <Info label="PO Raised At" value={entry.poRaisedAt} />
-                            <Info label="PO Approved By" value={entry.poApprovedBy} />
-                            <Info label="PO Approved At" value={entry.poApprovedAt} />
-                        </Box>
+                                <TextField
+                                    label="Requisition Date"
+                                    type="date"
+                                    InputLabelProps={{ shrink: true }}
+                                    value={requisitionForm.requisitionDate}
+                                    onChange={(e) =>
+                                        setRequisitionForm((p) => ({
+                                            ...p,
+                                            requisitionDate: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+                            </Box>
 
-                        <Box sx={{ display: "flex", gap: 1.5, mt: 2, flexWrap: "wrap" }}>
                             <Button
                                 variant="contained"
                                 disabled={!isPurchase || saving}
                                 onClick={() =>
-                                    run(() => venflowApi.raisePo(id, poForm))
+                                    run(() =>
+                                        venflowApi.updateRequisition(id, requisitionForm)
+                                    )
                                 }
-                                sx={primaryBtnSx}
+                                sx={{ ...primaryBtnSx, mt: 2 }}
                             >
-                                Raise PO
+                                Save Requisition
                             </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {isPurchase && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                5. Ordered Quantity
+                            </Typography>
+
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
+
+                            <Box sx={formGridSx}>
+                                <TextField
+                                    label="Ordered Qty"
+                                    type="number"
+                                    value={orderedForm.orderedQty}
+                                    onChange={(e) =>
+                                        setOrderedForm((p) => ({
+                                            ...p,
+                                            orderedQty: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="Unit"
+                                    select
+                                    value={orderedForm.unit}
+                                    onChange={(e) =>
+                                        setOrderedForm((p) => ({
+                                            ...p,
+                                            unit: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                    SelectProps={{
+                                        MenuProps: darkMenuProps,
+                                    }}
+                                >
+                                    <MenuItem value="SHEET">Sheet</MenuItem>
+                                    <MenuItem value="PCS">Pcs</MenuItem>
+                                    <MenuItem value="NO">No</MenuItem>
+                                    <MenuItem value="SQFT">Sqft</MenuItem>
+                                    <MenuItem value="SQM">Sqm</MenuItem>
+                                    <MenuItem value="METER">Meter</MenuItem>
+                                </TextField>
+                            </Box>
 
                             <Button
-                                variant="outlined"
-                                disabled={!(isAdmin || isManager) || saving}
+                                variant="contained"
+                                disabled={!isPurchase || saving}
                                 onClick={() =>
-                                    run(() => venflowApi.approvePo(id))
+                                    run(() =>
+                                        venflowApi.updateOrderedQty(id, orderedForm)
+                                    )
                                 }
-                                sx={outlineBtnSx}
+                                sx={{ ...primaryBtnSx, mt: 2 }}
                             >
-                                Approve / Sign PO
+                                Save Ordered Qty
                             </Button>
-                        </Box>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {(isPurchase || isAdminManager) && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                6. Purchase / PO
+                            </Typography>
+
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
+
+                            <Box sx={formGridSx}>
+                                <TextField
+                                    label="Vendor Name"
+                                    value={poForm.vendorName}
+                                    onChange={(e) =>
+                                        setPoForm((p) => ({
+                                            ...p,
+                                            vendorName: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="PO No."
+                                    value={poForm.poNo}
+                                    onChange={(e) =>
+                                        setPoForm((p) => ({
+                                            ...p,
+                                            poNo: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="PO Date"
+                                    type="date"
+                                    InputLabelProps={{ shrink: true }}
+                                    value={poForm.poDate}
+                                    onChange={(e) =>
+                                        setPoForm((p) => ({
+                                            ...p,
+                                            poDate: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="PO Amount"
+                                    type="number"
+                                    value={poForm.poAmount}
+                                    onChange={(e) =>
+                                        setPoForm((p) => ({
+                                            ...p,
+                                            poAmount: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="PO Document URL"
+                                    value={poForm.poDocumentUrl}
+                                    onChange={(e) =>
+                                        setPoForm((p) => ({
+                                            ...p,
+                                            poDocumentUrl: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isPurchase}
+                                    sx={fieldSx}
+                                />
+                            </Box>
+
+                            <Box sx={{ mt: 2 }}>
+                                <Info label="PO Status" value={entry.poStatus || "NOT_RAISED"} />
+                                <Info label="PO Raised By" value={entry.poRaisedBy} />
+                                <Info label="PO Raised At" value={entry.poRaisedAt} />
+                                <Info label="PO Approved By" value={entry.poApprovedBy} />
+                                <Info label="PO Approved At" value={entry.poApprovedAt} />
+                            </Box>
+
+                            <Box sx={{ display: "flex", gap: 1.5, mt: 2, flexWrap: "wrap" }}>
+                                <Button
+                                    variant="contained"
+                                    disabled={!isPurchase || saving}
+                                    onClick={() =>
+                                        run(() => venflowApi.raisePo(id, poForm))
+                                    }
+                                    sx={primaryBtnSx}
+                                >
+                                    Raise PO
+                                </Button>
+
+                                <Button
+                                    variant="outlined"
+                                    disabled={!canApprovePo || saving}
+                                    onClick={() =>
+                                        run(() => venflowApi.approvePo(id))
+                                    }
+                                    sx={outlineBtnSx}
+                                >
+                                    Approve / Sign PO
+                                </Button>
+                            </Box>
+                        </CardContent>
+                    </Card>
+
+                )}
 
                 <Card sx={cardSx}>
                     <CardContent sx={{ p: 2.6 }}>
@@ -660,73 +688,75 @@ export default function VenFlowDetailPage() {
                     </CardContent>
                 </Card>
 
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            7. Receiving
-                        </Typography>
+                {isStore && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                7. Receiving
+                            </Typography>
 
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
 
-                        <Box sx={formGridSx}>
-                            <TextField
-                                label="Received Qty"
-                                type="number"
-                                value={receivedForm.receivedQty}
-                                onChange={(e) =>
-                                    setReceivedForm((p) => ({
-                                        ...p,
-                                        receivedQty: e.target.value,
-                                    }))
+                            <Box sx={formGridSx}>
+                                <TextField
+                                    label="Received Qty"
+                                    type="number"
+                                    value={receivedForm.receivedQty}
+                                    onChange={(e) =>
+                                        setReceivedForm((p) => ({
+                                            ...p,
+                                            receivedQty: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isStore}
+                                    sx={fieldSx}
+                                />
+
+                                <TextField
+                                    label="Actual In-house Date"
+                                    type="date"
+                                    InputLabelProps={{ shrink: true }}
+                                    value={receivedForm.actualInHouseDate}
+                                    onChange={(e) =>
+                                        setReceivedForm((p) => ({
+                                            ...p,
+                                            actualInHouseDate: e.target.value,
+                                        }))
+                                    }
+                                    disabled={!isStore}
+                                    sx={fieldSx}
+                                />
+                            </Box>
+
+                            <Button
+                                variant="contained"
+                                disabled={!isStore || saving}
+                                onClick={() =>
+                                    run(() =>
+                                        venflowApi.materialReceived(id, {
+                                            ...receivedForm,
+                                            remarks: remarksForm.remarks,
+                                        })
+                                    )
                                 }
-                                disabled={!isStore}
-                                sx={fieldSx}
-                            />
+                                sx={{ ...primaryBtnSx, mt: 2 }}
+                            >
+                                Save Receiving
+                            </Button>
 
-                            <TextField
-                                label="Actual In-house Date"
-                                type="date"
-                                InputLabelProps={{ shrink: true }}
-                                value={receivedForm.actualInHouseDate}
-                                onChange={(e) =>
-                                    setReceivedForm((p) => ({
-                                        ...p,
-                                        actualInHouseDate: e.target.value,
-                                    }))
+                            <Button
+                                variant="outlined"
+                                disabled={!isStore || saving}
+                                onClick={() =>
+                                    run(() => venflowApi.informProduction(id))
                                 }
-                                disabled={!isStore}
-                                sx={fieldSx}
-                            />
-                        </Box>
-
-                        <Button
-                            variant="contained"
-                            disabled={!isStore || saving}
-                            onClick={() =>
-                                run(() =>
-                                    venflowApi.materialReceived(id, {
-                                        ...receivedForm,
-                                        remarks: remarksForm.remarks,
-                                    })
-                                )
-                            }
-                            sx={{ ...primaryBtnSx, mt: 2 }}
-                        >
-                            Save Receiving
-                        </Button>
-
-                        <Button
-                            variant="outlined"
-                            disabled={!isStore || saving}
-                            onClick={() =>
-                                run(() => venflowApi.informProduction(id))
-                            }
-                            sx={{ ...outlineBtnSx, mt: 2, ml: { xs: 0, sm: 1 } }}
-                        >
-                            Inform Production
-                        </Button>
-                    </CardContent>
-                </Card>
+                                sx={{ ...outlineBtnSx, mt: 2, ml: { xs: 0, sm: 1 } }}
+                            >
+                                Inform Production
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <Card sx={cardSx}>
                     <CardContent sx={{ p: 2.6 }}>
@@ -779,56 +809,58 @@ export default function VenFlowDetailPage() {
                     </CardContent>
                 </Card>
 
-                <Card sx={cardSx}>
-                    <CardContent sx={{ p: 2.6 }}>
-                        <Typography sx={sectionTitleSx}>
-                            10. Production Action
-                        </Typography>
+                {isProduction && (
+                    <Card sx={cardSx}>
+                        <CardContent sx={{ p: 2.6 }}>
+                            <Typography sx={sectionTitleSx}>
+                                10. Production Action
+                            </Typography>
 
-                        <Divider sx={{ ...dividerSx, my: 1.5 }} />
+                            <Divider sx={{ ...dividerSx, my: 1.5 }} />
 
-                        <Info
-                            label="Production Status"
-                            value={entry.productionStatus || "NOT_STARTED"}
-                        />
-                        <Info label="Production Started By" value={entry.productionStartedBy} />
-                        <Info label="Production Started At" value={entry.productionStartedAt} />
-                        <Info label="Job Done By" value={entry.jobDoneBy} />
-                        <Info label="Job Done At" value={entry.jobDoneAt} />
+                            <Info
+                                label="Production Status"
+                                value={entry.productionStatus || "NOT_STARTED"}
+                            />
+                            <Info label="Production Started By" value={entry.productionStartedBy} />
+                            <Info label="Production Started At" value={entry.productionStartedAt} />
+                            <Info label="Job Done By" value={entry.jobDoneBy} />
+                            <Info label="Job Done At" value={entry.jobDoneAt} />
 
-                        <Box sx={{ display: "flex", gap: 1.5, mt: 2, flexWrap: "wrap" }}>
-                            <Button
-                                variant="contained"
-                                disabled={!isProduction || saving}
-                                onClick={() =>
-                                    run(() =>
-                                        venflowApi.startProduction(id, {
-                                            remarks: remarksForm.remarks,
-                                        })
-                                    )
-                                }
-                                sx={primaryBtnSx}
-                            >
-                                Start Production
-                            </Button>
+                            <Box sx={{ display: "flex", gap: 1.5, mt: 2, flexWrap: "wrap" }}>
+                                <Button
+                                    variant="contained"
+                                    disabled={!isProduction || saving}
+                                    onClick={() =>
+                                        run(() =>
+                                            venflowApi.startProduction(id, {
+                                                remarks: remarksForm.remarks,
+                                            })
+                                        )
+                                    }
+                                    sx={primaryBtnSx}
+                                >
+                                    Start Production
+                                </Button>
 
-                            <Button
-                                variant="outlined"
-                                disabled={!isProduction || saving}
-                                onClick={() =>
-                                    run(() =>
-                                        venflowApi.jobDone(id, {
-                                            remarks: remarksForm.remarks,
-                                        })
-                                    )
-                                }
-                                sx={outlineBtnSx}
-                            >
-                                Mark Job Done
-                            </Button>
-                        </Box>
-                    </CardContent>
-                </Card>
+                                <Button
+                                    variant="outlined"
+                                    disabled={!isProduction || saving}
+                                    onClick={() =>
+                                        run(() =>
+                                            venflowApi.jobDone(id, {
+                                                remarks: remarksForm.remarks,
+                                            })
+                                        )
+                                    }
+                                    sx={outlineBtnSx}
+                                >
+                                    Mark Job Done
+                                </Button>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                )}
             </Box>
         </Box>
     );
@@ -847,6 +879,28 @@ function Info({ label, value }) {
         </Box>
     );
 }
+
+const rolePanelSx = {
+    mb: 2,
+    p: 2,
+    borderRadius: "20px",
+    background: "rgba(59,130,246,.10)",
+    border: "1px solid rgba(59,130,246,.22)",
+};
+
+const rolePanelTitleSx = {
+    color: "#bfdbfe",
+    fontWeight: 950,
+    fontSize: 14,
+};
+
+const rolePanelTextSx = {
+    mt: 0.6,
+    color: "rgba(255,255,255,.62)",
+    fontWeight: 650,
+    fontSize: 13,
+    lineHeight: 1.7,
+};
 
 const gridSx = {
     display: "grid",

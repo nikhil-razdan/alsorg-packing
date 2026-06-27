@@ -18,10 +18,19 @@ import {
     primaryBtnSx,
 } from "../venflowTheme";
 
+import {
+    defaultVenFlowPathForRole,
+    getVenFlowRole,
+    isVenFlowAdminOrManager,
+} from "../utils/venflowAccess";
+
 export default function VenFlowDashboard() {
     const navigate = useNavigate();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    const role = getVenFlowRole();
+    const isAdminManager = isVenFlowAdminOrManager(role);
 
     const load = async () => {
         try {
@@ -127,14 +136,23 @@ export default function VenFlowDashboard() {
                         ordered quantity, receiving and balance closure.
                     </Typography>
                 </Box>
-
                 <Button
                     variant="contained"
-                    onClick={() => navigate("/venflow/create")}
+                    onClick={() => navigate(defaultVenFlowPathForRole(role))}
                     sx={primaryBtnSx}
                 >
-                    New Veneer Requirement
+                    Open My Work
                 </Button>
+
+                {(role === "VENFLOW_PRODUCTION" || isAdminManager) && (
+                    <Button
+                        variant="contained"
+                        onClick={() => navigate("/venflow/create")}
+                        sx={primaryBtnSx}
+                    >
+                        New Veneer Requirement
+                    </Button>
+                )}
             </Box>
 
             <Box sx={kpiGridSx}>
