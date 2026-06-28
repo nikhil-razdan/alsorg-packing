@@ -13,6 +13,7 @@ import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
 import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
+import API from "../services/api";
 
 function InventoryModal({
   open,
@@ -662,11 +663,12 @@ function ZohoItemsPage() {
     setGeneratedHistoryUserFilter("ALL");
     setGeneratedHistoryRows([]);
     setGeneratedHistoryUsers([]);
-    setHistoryPdfPreview(null);
 
     if (historyPdfPreview?.url) {
       URL.revokeObjectURL(historyPdfPreview.url);
     }
+
+    setHistoryPdfPreview(null);
 
     await fetchGeneratedHistoryUsers();
     await fetchGeneratedHistory("ALL");
@@ -674,19 +676,11 @@ function ZohoItemsPage() {
 
   const fetchGeneratedHistoryUsers = async () => {
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/stickers/generated-history/users`,
-        {
-          method: "GET",
-        }
+      const res = await API.get(
+        "/stickers/generated-history/users"
       );
 
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res);
-        throw new Error(message);
-      }
-
-      const data = await res.json();
+      const data = res.data;
 
       setGeneratedHistoryUsers(
         Array.isArray(data)
@@ -695,11 +689,15 @@ function ZohoItemsPage() {
       );
     } catch (e) {
       console.error("Generated history users failed:", e);
+
       setGeneratedHistoryUsers([]);
 
       showUiAlert(
         "error",
-        e?.message || "Failed to load generated history users"
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to load generated history users"
       );
     }
   };
@@ -710,24 +708,20 @@ function ZohoItemsPage() {
     try {
       setGeneratedHistoryLoading(true);
 
-      const query =
-        userFilter && userFilter !== "ALL"
-          ? `?generatedBy=${encodeURIComponent(userFilter)}`
-          : "";
+      const params = {};
 
-      const res = await authFetch(
-        `${API_BASE_URL}/api/stickers/generated-history${query}`,
+      if (userFilter && userFilter !== "ALL") {
+        params.generatedBy = userFilter;
+      }
+
+      const res = await API.get(
+        "/stickers/generated-history",
         {
-          method: "GET",
+          params,
         }
       );
 
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res);
-        throw new Error(message);
-      }
-
-      const data = await res.json();
+      const data = res.data;
 
       setGeneratedHistoryRows(
         Array.isArray(data)
@@ -741,7 +735,10 @@ function ZohoItemsPage() {
 
       showUiAlert(
         "error",
-        e?.message || "Failed to load generated history"
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to load generated history"
       );
     } finally {
       setGeneratedHistoryLoading(false);
@@ -755,25 +752,17 @@ function ZohoItemsPage() {
     }
 
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/stickers/history/${historyId}/download-pdf`,
+      const res = await API.get(
+        `/stickers/history/${historyId}/download-pdf`,
         {
-          method: "GET",
+          responseType: "blob",
+          headers: {
+            Accept: "application/pdf",
+          },
         }
       );
 
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res);
-        throw new Error(message);
-      }
-
-      const contentType = res.headers.get("content-type");
-
-      if (!contentType?.includes("pdf")) {
-        throw new Error("Invalid PDF response from server");
-      }
-
-      const blob = await res.blob();
+      const blob = res.data;
       const url = URL.createObjectURL(blob);
 
       if (historyPdfPreview?.url) {
@@ -791,7 +780,10 @@ function ZohoItemsPage() {
 
       showUiAlert(
         "error",
-        e?.message || "Failed to open sticker PDF"
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to open sticker PDF"
       );
     }
   };
