@@ -2,32 +2,39 @@ import axios from "axios";
 import { API_BASE_URL } from "../config";
 
 const API = axios.create({
-	baseURL: `${API_BASE_URL}/api`,
-	withCredentials: true,
+  baseURL: `${API_BASE_URL}/api`,
+  withCredentials: true,
 });
+
+const getValidToken = () => {
+  const token = localStorage.getItem("token");
+
+  if (
+    !token ||
+    token === "null" ||
+    token === "undefined" ||
+    token.trim() === ""
+  ) {
+    return "";
+  }
+
+  return token;
+};
 
 API.interceptors.request.use((config) => {
-	/*
-	 * New auth uses HttpOnly cookie.
-	 * Do not attach stale localStorage token.
-	 */
-	if (config.headers) {
-		delete config.headers.Authorization;
-		delete config.headers["X-Username"];
-	}
+  config.withCredentials = true;
 
-	return config;
+  const token = getValidToken();
+
+  config.headers = config.headers || {};
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    delete config.headers.Authorization;
+  }
+
+  return config;
 });
-
-API.interceptors.response.use(
-	(response) => response,
-	(error) => {
-		if (error?.response?.status === 401) {
-			window.dispatchEvent(new Event("app:unauthorized"));
-		}
-
-		return Promise.reject(error);
-	}
-);
 
 export default API;

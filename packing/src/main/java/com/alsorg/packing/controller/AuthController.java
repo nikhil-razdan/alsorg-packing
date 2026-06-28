@@ -72,7 +72,10 @@ public class AuthController {
         }
 
         boolean passwordMatch =
-                passwordEncoder.matches(password, user.getPassword());
+                passwordEncoder.matches(
+                        password,
+                        user.getPassword()
+                );
 
         if (!passwordMatch) {
             return ResponseEntity.status(401)
@@ -102,16 +105,23 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<?> me() {
         Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
 
         if (
                 authentication == null
                         || !authentication.isAuthenticated()
                         || authentication.getName() == null
                         || authentication.getName().isBlank()
+                        || "anonymousUser".equals(authentication.getName())
         ) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("message", "Unauthorized"));
+            return ResponseEntity.ok(
+                    Map.of(
+                            "authenticated",
+                            false
+                    )
+            );
         }
 
         Optional<User> optionalUser =
@@ -120,11 +130,16 @@ public class AuthController {
                 );
 
         if (optionalUser.isEmpty()) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("message", "User not found"));
+            return ResponseEntity.ok(
+                    Map.of(
+                            "authenticated",
+                            false
+                    )
+            );
         }
 
-        User user = optionalUser.get();
+        User user =
+                optionalUser.get();
 
         if (!user.isEnabled()) {
             return ResponseEntity.status(403)
@@ -159,8 +174,10 @@ public class AuthController {
         Map<String, Object> response =
                 new LinkedHashMap<>();
 
-        String role = normalizeRole(user.getRole());
+        String role =
+                normalizeRole(user.getRole());
 
+        response.put("authenticated", true);
         response.put("id", user.getId());
         response.put("username", user.getUsername());
         response.put("role", role);
@@ -197,7 +214,8 @@ public class AuthController {
     private boolean hasWarehouseAccess(
             User user
     ) {
-        String role = normalizeRole(user.getRole());
+        String role =
+                normalizeRole(user.getRole());
 
         return user.isWarehouseAccess()
                 || "ADMIN".equals(role)
@@ -260,7 +278,10 @@ public class AuthController {
             return "";
         }
 
-        return role.trim().toUpperCase();
+        return role
+                .replace("ROLE_", "")
+                .trim()
+                .toUpperCase();
     }
 
     private String clean(
@@ -270,11 +291,13 @@ public class AuthController {
             return null;
         }
 
-        String text = value.trim();
+        String text =
+                value.trim();
 
         if (
                 text.isBlank()
                         || "null".equalsIgnoreCase(text)
+                        || "undefined".equalsIgnoreCase(text)
         ) {
             return null;
         }

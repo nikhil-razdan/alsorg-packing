@@ -38,6 +38,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return true;
         }
 
+        /*
+         * Do not filter login/logout.
+         *
+         * Do NOT skip /api/auth/me.
+         * If cookie exists, /me should authenticate.
+         * If cookie does not exist, SecurityConfig permits it and controller
+         * returns authenticated:false.
+         */
         return path.equals("/api/auth/login")
                 || path.equals("/api/auth/logout");
     }
@@ -78,15 +86,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         new ArrayList<>();
 
                 if (cleanRole != null && !cleanRole.isBlank()) {
-                    /*
-                     * IMPORTANT:
-                     * SecurityConfig uses hasAuthority("ADMIN")
-                     * but some controllers may use hasRole("ADMIN").
-                     *
-                     * So we provide BOTH:
-                     * ADMIN
-                     * ROLE_ADMIN
-                     */
                     authorities.add(
                             new SimpleGrantedAuthority(cleanRole)
                     );
@@ -118,6 +117,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } catch (ExpiredJwtException ex) {
             SecurityContextHolder.clearContext();
 
+            if (isMeRequest(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             writeUnauthorized(
                     response,
                     "Session expired. Please login again."
@@ -126,6 +130,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } catch (JwtException | IllegalArgumentException ex) {
             SecurityContextHolder.clearContext();
 
+            if (isMeRequest(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             writeUnauthorized(
                     response,
                     "Invalid session. Please login again."
@@ -133,9 +142,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
+    private boolean isMeRequest(
+            HttpServletRequest request
+    ) {
+        return "/api/auth/me".equals(
+                request.getServletPath()
+        );
+    }
+
     private String resolveToken(
             HttpServletRequest request
     ) {
+        /*
+         * Cookie first.
+         * Header fallback only for old frontend pages still using Bearer token.
+         */
         String cookieToken =
                 tokenFromCookie(request);
 
@@ -220,6 +241,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
 
         response.getWriter()
                 .write("{\"message\":\"" + message + "\"}");

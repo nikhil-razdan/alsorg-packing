@@ -41,10 +41,29 @@ public class SecurityConfig {
                         cors.configurationSource(corsConfigurationSource)
                 )
                 .csrf(csrf -> csrf.disable())
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .formLogin(formLogin -> formLogin.disable())
+                .logout(logout -> logout.disable())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, ex) -> {
+                            response.setStatus(401);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter()
+                                    .write("{\"message\":\"Unauthorized\"}");
+                        })
+                        .accessDeniedHandler((request, response, ex) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter()
+                                    .write("{\"message\":\"Forbidden\"}");
+                        })
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -52,18 +71,26 @@ public class SecurityConfig {
                                 "/**"
                         ).permitAll()
 
+                        /*
+                         * Login/logout/me must be public.
+                         * /api/auth/me itself decides whether user is authenticated.
+                         */
                         .requestMatchers(
                                 "/api/auth/login",
-                                "/api/auth/logout"
+                                "/api/auth/logout",
+                                "/api/auth/me"
                         ).permitAll()
 
+                        /*
+                         * Generated history must NOT be public.
+                         * It should work through HttpOnly cookie auth.
+                         */
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/stickers/generated-history",
+                                "/api/stickers/generated-history/users",
                                 "/api/stickers/history/*/download",
                                 "/api/stickers/history/*/download-pdf"
-                        ).permitAll()
-
-                        .requestMatchers(
-                                "/api/auth/me"
                         ).authenticated()
 
                         .requestMatchers(
@@ -86,13 +113,6 @@ public class SecurityConfig {
                 (DelegatingPasswordEncoder)
                         PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
-        /*
-         * Existing database passwords may be BCrypt hashes without "{bcrypt}" prefix.
-         *
-         * This supports both:
-         * Old DB value:  $2a$10$....
-         * New DB value:  {bcrypt}$2a$10$....
-         */
         encoder.setDefaultPasswordEncoderForMatches(
                 new BCryptPasswordEncoder()
         );

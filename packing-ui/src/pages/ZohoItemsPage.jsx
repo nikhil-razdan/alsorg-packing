@@ -166,21 +166,19 @@ function ZohoItemsPage() {
     url,
     options = {}
   ) => {
-    const cleanHeaders = {
-      ...(options.headers || {}),
-    };
+    const headers = new Headers(options.headers || {});
 
-    delete cleanHeaders.Authorization;
-    delete cleanHeaders["X-Username"];
+    headers.delete("Authorization");
+    headers.delete("X-Username");
 
     const finalOptions = {
       ...options,
       credentials: "include",
+      cache: "no-store",
+      headers,
     };
 
-    if (Object.keys(cleanHeaders).length > 0) {
-      finalOptions.headers = cleanHeaders;
-    } else {
+    if ([...headers.keys()].length === 0) {
       delete finalOptions.headers;
     }
 
@@ -661,12 +659,17 @@ function ZohoItemsPage() {
   const openGeneratedHistory = async () => {
     setGeneratedHistoryOpen(true);
     setGeneratedHistorySearch("");
+    setGeneratedHistoryUserFilter("ALL");
+    setGeneratedHistoryRows([]);
+    setGeneratedHistoryUsers([]);
     setHistoryPdfPreview(null);
 
-    await Promise.all([
-      fetchGeneratedHistoryUsers(),
-      fetchGeneratedHistory("ALL"),
-    ]);
+    if (historyPdfPreview?.url) {
+      URL.revokeObjectURL(historyPdfPreview.url);
+    }
+
+    await fetchGeneratedHistoryUsers();
+    await fetchGeneratedHistory("ALL");
   };
 
   const fetchGeneratedHistoryUsers = async () => {
@@ -679,19 +682,31 @@ function ZohoItemsPage() {
       );
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const message = await readApiErrorMessage(res);
+        throw new Error(message);
       }
 
       const data = await res.json();
 
-      setGeneratedHistoryUsers(Array.isArray(data) ? data : []);
+      setGeneratedHistoryUsers(
+        Array.isArray(data)
+          ? data.filter(Boolean)
+          : []
+      );
     } catch (e) {
-      console.error(e);
+      console.error("Generated history users failed:", e);
       setGeneratedHistoryUsers([]);
+
+      showUiAlert(
+        "error",
+        e?.message || "Failed to load generated history users"
+      );
     }
   };
 
-  const fetchGeneratedHistory = async (userFilter = generatedHistoryUserFilter) => {
+  const fetchGeneratedHistory = async (
+    userFilter = generatedHistoryUserFilter
+  ) => {
     try {
       setGeneratedHistoryLoading(true);
 
@@ -708,25 +723,36 @@ function ZohoItemsPage() {
       );
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const message = await readApiErrorMessage(res);
+        throw new Error(message);
       }
 
       const data = await res.json();
 
-      setGeneratedHistoryRows(Array.isArray(data) ? data : []);
+      setGeneratedHistoryRows(
+        Array.isArray(data)
+          ? data
+          : []
+      );
     } catch (e) {
-      console.error(e);
+      console.error("Generated history failed:", e);
 
-      if (typeof showUiAlert === "function") {
-        showUiAlert("error", "Failed to load generated history");
-      }
+      setGeneratedHistoryRows([]);
+
+      showUiAlert(
+        "error",
+        e?.message || "Failed to load generated history"
+      );
     } finally {
       setGeneratedHistoryLoading(false);
     }
   };
 
   const openHistoryPdf = async (historyId) => {
-    if (!historyId) return;
+    if (!historyId) {
+      showUiAlert("error", "History id missing");
+      return;
+    }
 
     try {
       const res = await authFetch(
@@ -737,7 +763,14 @@ function ZohoItemsPage() {
       );
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const message = await readApiErrorMessage(res);
+        throw new Error(message);
+      }
+
+      const contentType = res.headers.get("content-type");
+
+      if (!contentType?.includes("pdf")) {
+        throw new Error("Invalid PDF response from server");
       }
 
       const blob = await res.blob();
@@ -754,11 +787,12 @@ function ZohoItemsPage() {
 
       setHistoryPdfModalOpen(true);
     } catch (e) {
-      console.error(e);
+      console.error("Generated history PDF failed:", e);
 
-      if (typeof showUiAlert === "function") {
-        showUiAlert("error", "Failed to open sticker PDF");
-      }
+      showUiAlert(
+        "error",
+        e?.message || "Failed to open sticker PDF"
+      );
     }
   };
 
