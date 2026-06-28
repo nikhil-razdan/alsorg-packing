@@ -227,6 +227,15 @@ function ZohoItemsPage() {
   const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
   const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
   const [generatedHistorySearch, setGeneratedHistorySearch] = useState("");
+  const [generatedHistoryFilters, setGeneratedHistoryFilters] = useState({
+    client: "",
+    pdNo: "",
+    sku: "",
+    itemName: "",
+    drawingNo: "",
+    stickerNumber: "",
+    packetNumber: "",
+  });
   const [historyPdfPreview, setHistoryPdfPreview] = useState(null);
   const [stickerReviewOpen, setStickerReviewOpen] = useState(false);
   const [stickerReviewLoading, setStickerReviewLoading] = useState(false);
@@ -659,7 +668,7 @@ function ZohoItemsPage() {
 
   const openGeneratedHistory = async () => {
     setGeneratedHistoryOpen(true);
-    setGeneratedHistorySearch("");
+    resetGeneratedHistoryFilters();
     setGeneratedHistoryUserFilter("ALL");
     setGeneratedHistoryRows([]);
     setGeneratedHistoryUsers([]);
@@ -883,26 +892,239 @@ function ZohoItemsPage() {
     );
   }, [filteredRows, safePageNo, pageSize]);
 
-  const filteredGeneratedHistoryRows = useMemo(() => {
-    const q = generatedHistorySearch.trim().toLowerCase();
+  const normalizeHistorySearch = (value) => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase();
+  };
 
-    if (!q) return generatedHistoryRows;
+  const historyFieldValue = (row, field) => {
+    if (!row) return "";
 
-    return generatedHistoryRows.filter((r) => {
-      return (
-        (r.itemName || "").toLowerCase().includes(q) ||
-        (r.sku || "").toLowerCase().includes(q) ||
-        (r.pdNo || "").toLowerCase().includes(q) ||
-        (r.drawingNo || "").toLowerCase().includes(q) ||
-        (r.clientName || "").toLowerCase().includes(q) ||
-        (r.clientAddress || "").toLowerCase().includes(q) ||
-        (r.description || "").toLowerCase().includes(q) ||
-        (r.remarks || "").toLowerCase().includes(q) ||
-        (r.stickerNumber || "").toLowerCase().includes(q) ||
-        (r.generatedBy || "").toLowerCase().includes(q)
+    if (field === "client") {
+      return [
+        row.clientName,
+        row.clientAddress,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    if (field === "pdNo") {
+      return row.pdNo || "";
+    }
+
+    if (field === "sku") {
+      return row.sku || "";
+    }
+
+    if (field === "itemName") {
+      return row.itemName || "";
+    }
+
+    if (field === "drawingNo") {
+      return row.drawingNo || "";
+    }
+
+    if (field === "stickerNumber") {
+      return row.stickerNumber || "";
+    }
+
+    if (field === "packetNumber") {
+      return row.packetNumber || "";
+    }
+
+    return row?.[field] || "";
+  };
+
+  const historyAnyAttributeText = (row) => {
+    if (!row) return "";
+
+    return Object.values(row)
+      .filter((value) => value !== null && value !== undefined)
+      .map((value) => String(value))
+      .join(" ")
+      .toLowerCase();
+  };
+
+  const splitSmartSearchTerms = (value) => {
+    const text = String(value || "").trim();
+
+    if (!text) return [];
+
+    const matches =
+      text.match(/"([^"]+)"|\S+/g) || [];
+
+    return matches.map((term) =>
+      term.replace(/^"|"$/g, "").trim()
+    ).filter(Boolean);
+  };
+
+  const smartFieldAliases = {
+    client: ["client"],
+    party: ["client"],
+    customer: ["client"],
+
+    pd: ["pdNo"],
+    pdno: ["pdNo"],
+    "pd-no": ["pdNo"],
+
+    sku: ["sku"],
+    code: ["sku"],
+
+    name: ["itemName"],
+    item: ["itemName"],
+    itemname: ["itemName"],
+
+    dwg: ["drawingNo"],
+    drawing: ["drawingNo"],
+    drawingno: ["drawingNo"],
+    "dwg-no": ["drawingNo"],
+
+    sticker: ["stickerNumber"],
+    stickerno: ["stickerNumber"],
+
+    packet: ["packetNumber", "sku"],
+    pkt: ["packetNumber", "sku"],
+
+    by: ["generatedBy"],
+    user: ["generatedBy"],
+    generatedby: ["generatedBy"],
+
+    desc: ["description"],
+    description: ["description"],
+
+    remarks: ["remarks"],
+    remark: ["remarks"],
+
+    floor: ["floor"],
+    weight: ["weight"],
+    dimension: ["dimensions"],
+    dimensions: ["dimensions"],
+    reason: ["reason"],
+  };
+
+  const rowMatchesSmartHistorySearch = (row, searchText) => {
+    const terms = splitSmartSearchTerms(searchText);
+
+    if (terms.length === 0) return true;
+
+    return terms.every((rawTerm) => {
+      const term = normalizeHistorySearch(rawTerm);
+
+      if (!term) return true;
+
+      const colonIndex = term.indexOf(":");
+
+      if (colonIndex > 0) {
+        const rawKey = term.slice(0, colonIndex).trim();
+        const rawValue = term.slice(colonIndex + 1).trim();
+
+        if (!rawValue) return true;
+
+        const fields = smartFieldAliases[rawKey];
+
+        if (!fields || fields.length === 0) {
+          return historyAnyAttributeText(row).includes(term);
+        }
+
+        return fields.some((field) =>
+          normalizeHistorySearch(
+            historyFieldValue(row, field)
+          ).includes(rawValue)
+        );
+      }
+
+      return historyAnyAttributeText(row).includes(term);
+    });
+  };
+
+  const rowMatchesGeneratedHistoryFilters = (row) => {
+    const filters = [
+      {
+        value: generatedHistoryFilters.client,
+        fields: ["client"],
+      },
+      {
+        value: generatedHistoryFilters.pdNo,
+        fields: ["pdNo"],
+      },
+      {
+        value: generatedHistoryFilters.sku,
+        fields: ["sku"],
+      },
+      {
+        value: generatedHistoryFilters.itemName,
+        fields: ["itemName"],
+      },
+      {
+        value: generatedHistoryFilters.drawingNo,
+        fields: ["drawingNo"],
+      },
+      {
+        value: generatedHistoryFilters.stickerNumber,
+        fields: ["stickerNumber"],
+      },
+      {
+        value: generatedHistoryFilters.packetNumber,
+        fields: ["packetNumber", "sku"],
+      },
+    ];
+
+    return filters.every((filter) => {
+      const value = normalizeHistorySearch(filter.value);
+
+      if (!value) return true;
+
+      return filter.fields.some((field) =>
+        normalizeHistorySearch(
+          historyFieldValue(row, field)
+        ).includes(value)
       );
     });
-  }, [generatedHistoryRows, generatedHistorySearch]);
+  };
+
+  const updateGeneratedHistoryFilter = (key, value) => {
+    setGeneratedHistoryFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const resetGeneratedHistoryFilters = () => {
+    setGeneratedHistorySearch("");
+
+    setGeneratedHistoryFilters({
+      client: "",
+      pdNo: "",
+      sku: "",
+      itemName: "",
+      drawingNo: "",
+      stickerNumber: "",
+      packetNumber: "",
+    });
+  };
+
+  const filteredGeneratedHistoryRows = useMemo(() => {
+    const list =
+      Array.isArray(generatedHistoryRows)
+        ? generatedHistoryRows
+        : [];
+
+    return list.filter((row) => {
+      return (
+        rowMatchesSmartHistorySearch(
+          row,
+          generatedHistorySearch
+        ) &&
+        rowMatchesGeneratedHistoryFilters(row)
+      );
+    });
+  }, [
+    generatedHistoryRows,
+    generatedHistorySearch,
+    generatedHistoryFilters,
+  ]);
 
   const isLastPacket = (row) => {
     const key = row.masterItemId || row.itemName;
@@ -2915,39 +3137,135 @@ function ZohoItemsPage() {
           }
         >
           <Box sx={historyTopBarSx}>
-            <TextField
-              variant="standard"
-              placeholder="Search item, SKU, client, description, sticker no..."
-              value={generatedHistorySearch}
-              onChange={(e) => setGeneratedHistorySearch(e.target.value)}
-              InputProps={{ disableUnderline: true }}
-              sx={historySearchInputSx}
-            />
-
-            <TextField
-              select
-              size="small"
-              label="Generated By"
-              value={generatedHistoryUserFilter}
-              onChange={async (e) => {
-                const value = e.target.value;
-                setGeneratedHistoryUserFilter(value);
-                await fetchGeneratedHistory(value);
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  md: "1.8fr repeat(3, 1fr)",
+                  lg: "2fr repeat(6, 1fr)",
+                },
+                gap: 1.1,
+                width: "100%",
+                alignItems: "center",
               }}
-              sx={historyUserSelectSx}
-              slotProps={selectMenuSlotProps}
             >
-              <MenuItem value="ALL">All Users</MenuItem>
+              <TextField
+                variant="standard"
+                placeholder='Smart search: client:abc pd:PD-12 sku:PKT name:wardrobe dwg:04/15 or any text'
+                value={generatedHistorySearch}
+                onChange={(e) => setGeneratedHistorySearch(e.target.value)}
+                InputProps={{ disableUnderline: true }}
+                sx={historySearchInputSx}
+              />
 
-              {generatedHistoryUsers.map((user) => (
-                <MenuItem key={user} value={user}>
-                  {user}
-                </MenuItem>
-              ))}
-            </TextField>
+              <TextField
+                size="small"
+                label="Client"
+                value={generatedHistoryFilters.client}
+                onChange={(e) =>
+                  updateGeneratedHistoryFilter("client", e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+              />
 
-            <Box sx={historyCountBadgeSx}>
-              {filteredGeneratedHistoryRows.length} Generated
+              <TextField
+                size="small"
+                label="PD No"
+                value={generatedHistoryFilters.pdNo}
+                onChange={(e) =>
+                  updateGeneratedHistoryFilter("pdNo", e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+              />
+
+              <TextField
+                size="small"
+                label="SKU"
+                value={generatedHistoryFilters.sku}
+                onChange={(e) =>
+                  updateGeneratedHistoryFilter("sku", e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+              />
+
+              <TextField
+                size="small"
+                label="Item Name"
+                value={generatedHistoryFilters.itemName}
+                onChange={(e) =>
+                  updateGeneratedHistoryFilter("itemName", e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+              />
+
+              <TextField
+                size="small"
+                label="DWG No"
+                value={generatedHistoryFilters.drawingNo}
+                onChange={(e) =>
+                  updateGeneratedHistoryFilter("drawingNo", e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+              />
+
+              <TextField
+                size="small"
+                label="Sticker / Packet"
+                value={
+                  generatedHistoryFilters.stickerNumber ||
+                  generatedHistoryFilters.packetNumber
+                }
+                onChange={(e) => {
+                  updateGeneratedHistoryFilter("stickerNumber", e.target.value);
+                  updateGeneratedHistoryFilter("packetNumber", e.target.value);
+                }}
+                sx={historyMiniFilterFieldSx}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.2,
+                width: "100%",
+                flexWrap: "wrap",
+                mt: 1.2,
+              }}
+            >
+              <TextField
+                select
+                size="small"
+                label="Generated By"
+                value={generatedHistoryUserFilter}
+                onChange={async (e) => {
+                  const value = e.target.value;
+                  setGeneratedHistoryUserFilter(value);
+                  await fetchGeneratedHistory(value);
+                }}
+                sx={historyUserSelectSx}
+                slotProps={selectMenuSlotProps}
+              >
+                <MenuItem value="ALL">All Users</MenuItem>
+
+                {generatedHistoryUsers.map((user) => (
+                  <MenuItem key={user} value={user}>
+                    {user}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Button
+                onClick={resetGeneratedHistoryFilters}
+                sx={modalSecondaryButtonSx}
+              >
+                Clear Search
+              </Button>
+
+              <Box sx={historyCountBadgeSx}>
+                {filteredGeneratedHistoryRows.length} Generated
+              </Box>
             </Box>
           </Box>
 
@@ -3874,6 +4192,46 @@ const paginationButtonSx = {
   "&:disabled": {
     opacity: 0.45,
     color: "#94a3b8",
+  },
+};
+
+const historyMiniFilterFieldSx = {
+  minWidth: 120,
+
+  "& .MuiOutlinedInput-root": {
+    height: 40,
+    borderRadius: "12px",
+    color: "#fff",
+    background: "rgba(255,255,255,.045)",
+    border: "1px solid rgba(255,255,255,.07)",
+  },
+
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(255,255,255,.08)",
+  },
+
+  "&:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(96,165,250,.45)",
+  },
+
+  "& .Mui-focused .MuiOutlinedInput-notchedOutline": {
+    borderColor: "#60a5fa",
+  },
+
+  "& .MuiInputLabel-root": {
+    color: "rgba(255,255,255,.55)",
+    fontWeight: 800,
+    fontSize: 12,
+  },
+
+  "& .MuiInputLabel-root.Mui-focused": {
+    color: "#93c5fd",
+  },
+
+  "& input": {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 700,
   },
 };
 
