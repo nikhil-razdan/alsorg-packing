@@ -1,15 +1,19 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { hasModuleAccess } from "../utils/moduleAccess";
+import { useAuth } from "./AuthContext";
 
 export default function RequireModule({ moduleKey, children }) {
-	const token = localStorage.getItem("token");
+	const { modules, authLoading, isLoggedIn } = useAuth();
 
-	if (!token) {
+	if (authLoading) {
+		return null;
+	}
+
+	if (!isLoggedIn) {
 		return <Navigate to="/login" replace />;
 	}
 
-	if (!hasModuleAccess(moduleKey)) {
+	if (!modules.includes(moduleKey)) {
 		return <Navigate to="/modules" replace />;
 	}
 

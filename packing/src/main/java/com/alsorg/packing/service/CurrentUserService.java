@@ -1,13 +1,14 @@
 package com.alsorg.packing.service;
 
-import java.util.LinkedHashSet;
 import java.util.Set;
 
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
-import com.alsorg.packing.security.JwtUtil;
 
 @Service
 public class CurrentUserService {
@@ -17,55 +18,83 @@ public class CurrentUserService {
 
     public CurrentUserService(
             UserRepository userRepository,
-            PlantLocationService plantLocationService) {
+            PlantLocationService plantLocationService
+    ) {
         this.userRepository = userRepository;
         this.plantLocationService = plantLocationService;
     }
 
-    public User getCurrentUserFromAuth(String auth) {
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            throw new RuntimeException("Missing Authorization header");
+    public User requireCurrentUser() {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (
+                authentication == null
+                        || !authentication.isAuthenticated()
+                        || authentication.getName() == null
+                        || authentication.getName().isBlank()
+        ) {
+            throw new AccessDeniedException("Authentication required");
         }
 
-        String token = auth.replace("Bearer ", "").trim();
-        String username = JwtUtil.getUsername(token);
+        User user =
+                userRepository.findByUsernameIgnoreCase(
+                                authentication.getName()
+                        )
+                        .orElseThrow(() ->
+                                new AccessDeniedException("User not found")
+                        );
 
-        if (username == null || username.isBlank()) {
-            throw new RuntimeException("Username missing in token");
+        if (!user.isEnabled()) {
+            throw new AccessDeniedException("User is disabled");
         }
 
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found: " + username));
+        return user;
     }
 
     public boolean isAdmin(User user) {
-        return user != null && "ADMIN".equalsIgnoreCase(user.getRole());
+        return hasRole(user, "ADMIN");
     }
 
     public boolean isPacking(User user) {
-        return user != null && "PACKING".equalsIgnoreCase(user.getRole());
+        return hasRole(user, "PACKING");
     }
 
     public boolean isDispatch(User user) {
-        return user != null && "DISPATCH".equalsIgnoreCase(user.getRole());
+        return hasRole(user, "DISPATCH");
     }
 
     public boolean isLogistics(User user) {
-        if (user == null || user.getRole() == null) {
-            return false;
-        }
-
-        return "LOGISTICS".equalsIgnoreCase(
-                String.valueOf(user.getRole()).trim());
+        return hasRole(user, "LOGISTICS");
     }
 
     public boolean isDriver(User user) {
-        if (user == null || user.getRole() == null) {
-            return false;
-        }
+        return hasRole(user, "DRIVER");
+    }
 
-        return "DRIVER".equalsIgnoreCase(
-                String.valueOf(user.getRole()).trim());
+    public boolean isWarehouse(User user) {
+        return hasRole(user, "WAREHOUSE");
+    }
+
+    public boolean hasRole(
+            User user,
+            String role
+    ) {
+        return user != null
+                && user.getRole() != null
+                && user.getRole()
+                        .trim()
+                        .equalsIgnoreCase(role);
+    }
+
+    public boolean hasModule(
+            User user,
+            String module
+    ) {
+        return user != null
+                && user.getEffectiveModules() != null
+                && user.getEffectiveModules()
+                        .contains(module);
     }
 
     public boolean canViewTrips(User user) {
@@ -77,48 +106,65 @@ public class CurrentUserService {
 
     public Set<String> allowedPlants(User user) {
         if (user == null) {
-            throw new RuntimeException("User missing");
+            throw new AccessDeniedException("User missing");
         }
 
         if (isAdmin(user)) {
             return plantLocationService.getAllPlantCodes();
         }
 
-        Set<String> plants = parsePlantCodes(user.getPlantCode());
+        Set<String> plants =
+                user.getEffectivePlantCodes();
 
         /*
-         * LEGACY SAFETY:
-         * Old users may not have plantCode assigned yet.
-         * Let them continue working until admin assigns plant.
+         * SECURITY FIX:
+         * Empty plant access must NOT mean all plants.
          */
-        if (plants.isEmpty()) {
-            return plantLocationService.getAllPlantCodes();
+        if (plants == null || plants.isEmpty()) {
+            throw new AccessDeniedException(
+                    "No plant access assigned"
+            );
         }
+
         return plants;
     }
 
     public boolean hasExplicitPlantAccess(User user) {
-        if (user == null)
-            return false;
-        return !parsePlantCodes(user.getPlantCode()).isEmpty();
+        return user != null
+                && user.getEffectivePlantCodes() != null
+                && !user.getEffectivePlantCodes().isEmpty();
     }
 
-    public boolean canAccessPlant(User user, String plantCode) {
+    public boolean canAccessPlant(
+            User user,
+            String plantCode
+    ) {
         if (plantCode == null || plantCode.isBlank()) {
             return false;
         }
 
-        return allowedPlants(user).contains(plantCode.trim());
+        return allowedPlants(user)
+                .contains(plantCode.trim());
     }
 
-    public String resolvePlantForWrite(User user, String requestedPlantCode) {
-        Set<String> allowed = allowedPlants(user);
+    public String resolvePlantForWrite(
+            User user,
+            String requestedPlantCode
+    ) {
+        Set<String> allowed =
+                allowedPlants(user);
 
-        if (requestedPlantCode != null && !requestedPlantCode.isBlank()) {
-            String clean = requestedPlantCode.trim();
+        if (
+                requestedPlantCode != null
+                        && !requestedPlantCode.isBlank()
+        ) {
+            String clean =
+                    requestedPlantCode.trim();
 
             if (!allowed.contains(clean)) {
-                throw new RuntimeException("User does not have access to plant: " + clean);
+                throw new AccessDeniedException(
+                        "User does not have access to plant: " + clean
+                );
             }
 
             return clean;
@@ -128,34 +174,9 @@ public class CurrentUserService {
             return allowed.iterator().next();
         }
 
-        throw new RuntimeException("Plant selection required");
-    }
-
-    private Set<String> parsePlantCodes(String raw) {
-        Set<String> plants = new LinkedHashSet<>();
-
-        if (raw == null || raw.isBlank()) {
-            return plants;
-        }
-
-        for (String part : raw.split(",")) {
-            String clean = part.trim();
-
-            if (!clean.isBlank()) {
-                plants.add(clean);
-            }
-        }
-
-        return plants;
-    }
-
-    public boolean isWarehouse(User user) {
-        if (user == null || user.getRole() == null) {
-            return false;
-        }
-
-        return "WAREHOUSE".equalsIgnoreCase(
-                String.valueOf(user.getRole()).trim());
+        throw new AccessDeniedException(
+                "Plant selection required"
+        );
     }
 
     public boolean canAccessWarehouse(User user) {
@@ -166,6 +187,7 @@ public class CurrentUserService {
     }
 
     public boolean canViewAllWarehouseData(User user) {
-        return isAdmin(user) || isDispatch(user);
+        return isAdmin(user)
+                || isDispatch(user);
     }
 }

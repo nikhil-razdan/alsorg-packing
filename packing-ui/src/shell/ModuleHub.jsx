@@ -16,14 +16,22 @@ import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettin
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import LogoutIcon from "@mui/icons-material/Logout";
 
-import { hasModuleAccess } from "../utils/moduleAccess";
-import { normalizeRole } from "../utils/permissions";
+import { useAuth } from "../auth/AuthContext";
 
 export default function ModuleHub() {
 	const navigate = useNavigate();
 
-	const username = localStorage.getItem("username") || "User";
-	const role = normalizeRole(localStorage.getItem("role"));
+	const {
+		user,
+		role,
+		modules,
+		logout,
+	} = useAuth();
+
+	const username = user?.username || "User";
+
+	const hasModuleAccess = (moduleKey) =>
+		modules.includes(moduleKey);
 
 	const cards = [
 		{
@@ -72,8 +80,8 @@ export default function ModuleHub() {
 		},
 	].filter((card) => card.visible);
 
-	const logout = () => {
-		localStorage.clear();
+	const handleLogout = async () => {
+		await logout();
 		navigate("/login", { replace: true });
 	};
 
@@ -100,7 +108,7 @@ export default function ModuleHub() {
 
 				<Button
 					startIcon={<LogoutIcon />}
-					onClick={logout}
+					onClick={handleLogout}
 					sx={logoutBtnSx}
 				>
 					Logout

@@ -14,6 +14,7 @@ import RequireAuth from "./auth/RequireAuth";
 import RequireRole from "./auth/RequireRole";
 import RequireWarehouseAccess from "./auth/RequireWarehouseAccess";
 import RequireModule from "./auth/RequireModule";
+import { AuthProvider } from "./auth/AuthContext";
 
 import ModuleHub from "./shell/ModuleHub";
 import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
@@ -24,171 +25,130 @@ function App() {
 	useViewportHeight();
 
 	return (
-		<BrowserRouter>
-			<Routes>
-				{/* PUBLIC */}
-				<Route path="/login" element={<LoginPage />} />
-
-				{/* GLOBAL MODULE HUB */}
-				<Route
-					path="/modules"
-					element={
-						<RequireAuth>
-							<ModuleHub />
-						</RequireAuth>
-					}
-				/>
-
-				{/* GLOBAL USER MANAGEMENT - OUTSIDE PACKFLOW */}
-				<Route
-					path="/users"
-					element={
-						<RequireAuth>
-							<RequireRole allowed={["ADMIN"]}>
-								<UsersPage />
-							</RequireRole>
-						</RequireAuth>
-					}
-				/>
-
-				{/* PACKFLOW MODULE */}
-				<Route
-					path="/packflow"
-					element={
-						<RequireAuth>
-							<RequireModule moduleKey="PACKFLOW">
-								<Layout />
-							</RequireModule>
-						</RequireAuth>
-					}
-				>
-					<Route
-						index
-						element={<Navigate to="dashboard" replace />}
-					/>
+		<AuthProvider>
+			<BrowserRouter>
+				<Routes>
+					<Route path="/login" element={<LoginPage />} />
 
 					<Route
-						path="dashboard"
-						element={<DashboardPage />}
-					/>
-
-					<Route
-						path="zoho-items"
+						path="/modules"
 						element={
-							<RequireRole allowed={["ADMIN", "PACKING"]}>
-								<ZohoItemsPage />
-							</RequireRole>
+							<RequireAuth>
+								<ModuleHub />
+							</RequireAuth>
 						}
 					/>
 
 					<Route
-						path="warehouse"
+						path="/users"
 						element={
-							<RequireWarehouseAccess>
-								<WarehousePage />
-							</RequireWarehouseAccess>
+							<RequireAuth>
+								<RequireRole allowed={["ADMIN"]}>
+									<UsersPage />
+								</RequireRole>
+							</RequireAuth>
 						}
 					/>
 
 					<Route
-						path="dispatched-items"
+						path="/packflow"
 						element={
-							<RequireRole
-								allowed={[
-									"ADMIN",
-									"PACKING",
-									"DISPATCH",
-									"WAREHOUSE",
-								]}
-							>
-								<DispatchedItemsPage />
-							</RequireRole>
+							<RequireAuth>
+								<RequireModule moduleKey="PACKFLOW">
+									<Layout />
+								</RequireModule>
+							</RequireAuth>
+						}
+					>
+						<Route index element={<Navigate to="dashboard" replace />} />
+						<Route path="dashboard" element={<DashboardPage />} />
+
+						<Route
+							path="zoho-items"
+							element={
+								<RequireRole allowed={["ADMIN", "PACKING"]}>
+									<ZohoItemsPage />
+								</RequireRole>
+							}
+						/>
+
+						<Route
+							path="warehouse"
+							element={
+								<RequireWarehouseAccess>
+									<WarehousePage />
+								</RequireWarehouseAccess>
+							}
+						/>
+
+						<Route
+							path="dispatched-items"
+							element={
+								<RequireRole
+									allowed={[
+										"ADMIN",
+										"PACKING",
+										"DISPATCH",
+										"WAREHOUSE",
+									]}
+								>
+									<DispatchedItemsPage />
+								</RequireRole>
+							}
+						/>
+
+						<Route
+							path="logistics"
+							element={
+								<RequireRole
+									allowed={[
+										"ADMIN",
+										"LOGISTICS",
+									]}
+								>
+									<LogisticsPortalPage />
+								</RequireRole>
+							}
+						/>
+
+						<Route path="users" element={<Navigate to="/users" replace />} />
+						<Route path="*" element={<Navigate to="dashboard" replace />} />
+					</Route>
+
+					<Route
+						path="/bomflow/*"
+						element={
+							<RequireAuth>
+								<RequireModule moduleKey="BOMFLOW">
+									<BOMFlowRoutes />
+								</RequireModule>
+							</RequireAuth>
 						}
 					/>
 
 					<Route
-						path="logistics"
+						path="/venflow/*"
 						element={
-							<RequireRole
-								allowed={[
-									"ADMIN",
-									"LOGISTICS",
-								]}
-							>
-								<LogisticsPortalPage />
-							</RequireRole>
+							<RequireAuth>
+								<RequireModule moduleKey="VENFLOW">
+									<VenFlowRoutes />
+								</RequireModule>
+							</RequireAuth>
 						}
 					/>
 
-					{/* OLD PACKFLOW USER URL SHOULD NO LONGER OPEN INSIDE PACKFLOW */}
-					<Route
-						path="users"
-						element={<Navigate to="/users" replace />}
-					/>
+					<Route path="/" element={<Navigate to="/modules" replace />} />
 
-					<Route
-						path="*"
-						element={<Navigate to="dashboard" replace />}
-					/>
-				</Route>
+					<Route path="/dashboard" element={<Navigate to="/packflow/dashboard" replace />} />
+					<Route path="/zoho-items" element={<Navigate to="/packflow/zoho-items" replace />} />
+					<Route path="/warehouse" element={<Navigate to="/packflow/warehouse" replace />} />
+					<Route path="/dispatched-items" element={<Navigate to="/packflow/dispatched-items" replace />} />
+					<Route path="/logistics" element={<Navigate to="/packflow/logistics" replace />} />
 
-				{/* BOMFLOW MODULE */}
-				<Route
-					path="/bomflow/*"
-					element={
-						<RequireAuth>
-							<RequireModule moduleKey="BOMFLOW">
-								<BOMFlowRoutes />
-							</RequireModule>
-						</RequireAuth>
-					}
-				/>
-
-				{/* VENFLOW MODULE */}
-				<Route
-					path="/venflow/*"
-					element={
-						<RequireAuth>
-							<RequireModule moduleKey="VENFLOW">
-								<VenFlowRoutes />
-							</RequireModule>
-						</RequireAuth>
-					}
-				/>
-
-				{/* ROOT REDIRECT */}
-				<Route path="/" element={<Navigate to="/modules" replace />} />
-
-				{/* OLD PACKFLOW URL REDIRECTS */}
-				<Route
-					path="/dashboard"
-					element={<Navigate to="/packflow/dashboard" replace />}
-				/>
-
-				<Route
-					path="/zoho-items"
-					element={<Navigate to="/packflow/zoho-items" replace />}
-				/>
-
-				<Route
-					path="/warehouse"
-					element={<Navigate to="/packflow/warehouse" replace />}
-				/>
-
-				<Route
-					path="/dispatched-items"
-					element={<Navigate to="/packflow/dispatched-items" replace />}
-				/>
-
-				<Route
-					path="/logistics"
-					element={<Navigate to="/packflow/logistics" replace />}
-				/>
-
-				{/* FALLBACK */}
-				<Route path="*" element={<Navigate to="/modules" replace />} />
-			</Routes>
-		</BrowserRouter>
+					<Route path="*" element={<Navigate to="/modules" replace />} />
+				</Routes>
+			</BrowserRouter>
+		</AuthProvider>
 	);
 }
 

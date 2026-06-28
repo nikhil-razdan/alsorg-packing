@@ -1,9 +1,30 @@
 import { Navigate } from "react-router-dom";
-import { canOpenWarehousePage } from "../utils/permissions";
+import { useAuth } from "./AuthContext";
 
 function RequireWarehouseAccess({ children }) {
-	if (!canOpenWarehousePage()) {
-		return <Navigate to="/" replace />;
+	const {
+		role,
+		warehouseAccess,
+		authLoading,
+		isLoggedIn,
+	} = useAuth();
+
+	if (authLoading) {
+		return null;
+	}
+
+	if (!isLoggedIn) {
+		return <Navigate to="/login" replace />;
+	}
+
+	const allowed =
+		role === "ADMIN" ||
+		role === "DISPATCH" ||
+		role === "WAREHOUSE" ||
+		warehouseAccess;
+
+	if (!allowed) {
+		return <Navigate to="/modules" replace />;
 	}
 
 	return children;

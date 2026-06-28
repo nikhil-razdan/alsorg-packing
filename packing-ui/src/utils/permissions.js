@@ -1,21 +1,14 @@
 export const normalizeRole = (role) => {
-    return String(role || "").trim().toUpperCase();
+	return String(role || "").trim().toUpperCase();
 };
 
-export const readBooleanStorage = (key) => {
-    return String(localStorage.getItem(key) || "")
-        .trim()
-        .toLowerCase() === "true";
-};
+export const canOpenWarehousePageFromUser = (user) => {
+	const role = normalizeRole(user?.role);
 
-export const canOpenWarehousePage = () => {
-    const role = normalizeRole(localStorage.getItem("role"));
-    const warehouseAccess = readBooleanStorage("warehouseAccess");
-
-    return (
-        role === "ADMIN" ||
-        role === "DISPATCH" ||
-        role === "WAREHOUSE" ||
-        warehouseAccess
-    );
+	return (
+		role === "ADMIN" ||
+		role === "DISPATCH" ||
+		role === "WAREHOUSE" ||
+		user?.warehouseAccess === true
+	);
 };

@@ -16,7 +16,7 @@ import {
 
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import Drawer from "@mui/material/Drawer";
-import { hasModuleAccess } from "../utils/moduleAccess";
+import { useAuth } from "../auth/AuthContext";
 import { normalizeRole } from "../utils/permissions";
 import AppsIcon from "@mui/icons-material/Apps";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -37,9 +37,15 @@ function UsersPage() {
 
 	const navigate = useNavigate();
 
-	const currentRole = normalizeRole(localStorage.getItem("role"));
-	const canOpenBOMFlow = hasModuleAccess("BOMFLOW");
-	const canOpenVenFlow = hasModuleAccess("VENFLOW");
+	const {
+		user,
+		role: currentRole,
+		modules: currentModules,
+		logout: authLogout,
+	} = useAuth();
+
+	const canOpenBOMFlow = currentModules.includes("BOMFLOW");
+	const canOpenVenFlow = currentModules.includes("VENFLOW");
 
 	const goToModules = () => {
 		navigate("/modules");
@@ -57,8 +63,8 @@ function UsersPage() {
 		navigate("/venflow/dashboard");
 	};
 
-	const logout = () => {
-		localStorage.clear();
+	const logout = async () => {
+		await authLogout();
 		navigate("/login", { replace: true });
 	};
 
@@ -470,7 +476,7 @@ function UsersPage() {
 			const res = await API.get("/users");
 			setUsers(res.data.map(u => ({ ...u, id: u.id })));
 
-			setSnackMsg("User deleted successfully");
+			setSnackMsg("User disabled successfully");
 			setSnackType("success");
 			setSnackOpen(true);
 
@@ -1047,7 +1053,7 @@ function UsersPage() {
 												{normalizeUserPlantCodes(u).length === 0 ? (
 													<Chip
 														size="small"
-														label="All / Legacy"
+														label={u.role === "ADMIN" ? "All Plants" : "No Plant Assigned"}
 														sx={legacyPlantChip}
 													/>
 												) : (
@@ -1847,11 +1853,11 @@ function UsersPage() {
 					}}>
 
 					<DialogTitle>
-						Delete User
+						Disable User
 					</DialogTitle>
 
 					<DialogContent>
-						Are you sure you want to delete this user?
+						Are you sure you want to disable this user?
 					</DialogContent>
 
 					<DialogActions>
@@ -1865,7 +1871,7 @@ function UsersPage() {
 							sx={actionDanger}
 							onClick={confirmDelete}
 						>
-							Delete
+							Disable
 						</Button>
 
 					</DialogActions>

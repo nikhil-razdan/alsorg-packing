@@ -13,8 +13,8 @@ public class CorsConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
-        CorsConfiguration config = new CorsConfiguration();
+        CorsConfiguration config =
+                new CorsConfiguration();
 
         config.setAllowCredentials(true);
 
@@ -25,13 +25,10 @@ public class CorsConfig {
         ));
 
         config.setAllowedHeaders(List.of(
-                "Authorization",
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With",
-                "X-Username",
-                "x-username"
+                "X-Requested-With"
         ));
 
         config.setAllowedMethods(List.of(
@@ -44,7 +41,6 @@ public class CorsConfig {
         ));
 
         config.setExposedHeaders(List.of(
-                "Authorization",
                 "Content-Disposition"
         ));
 

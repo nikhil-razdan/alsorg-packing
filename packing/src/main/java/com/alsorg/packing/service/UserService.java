@@ -2,13 +2,13 @@ package com.alsorg.packing.service;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
@@ -44,11 +44,15 @@ public class UserService {
     private final UserRepository repo;
     private final PasswordEncoder encoder;
 
-    public UserService(UserRepository repo, PasswordEncoder encoder) {
+    public UserService(
+            UserRepository repo,
+            PasswordEncoder encoder
+    ) {
         this.repo = repo;
         this.encoder = encoder;
     }
 
+    @Transactional
     public User createUser(
             String username,
             String password,
@@ -58,29 +62,60 @@ public class UserService {
             boolean warehouseAccess,
             Set<String> modules
     ) {
-        String cleanUsername = cleanRequired(username, "Username is required.");
-        String cleanPassword = cleanRequired(password, "Password is required.");
-        String cleanRole = normalizeRole(role);
+        String cleanUsername =
+                cleanRequired(
+                        username,
+                        "Username is required."
+                );
 
-        if (repo.existsByUsername(cleanUsername)) {
-            throw new RuntimeException("Username already exists: " + cleanUsername);
+        String cleanPassword =
+                cleanRequired(
+                        password,
+                        "Password is required."
+                );
+
+        validatePassword(cleanPassword);
+
+        String cleanRole =
+                normalizeRole(role);
+
+        if (repo.existsByUsernameIgnoreCase(cleanUsername)) {
+            throw new RuntimeException(
+                    "Username already exists: " + cleanUsername
+            );
         }
 
         User user = new User();
 
         user.setUsername(cleanUsername);
-        user.setPassword(encoder.encode(cleanPassword));
+        user.setPassword(
+                encoder.encode(cleanPassword)
+        );
         user.setRole(cleanRole);
+        user.setEnabled(true);
 
-        applyAccessFields(user, cleanRole, plantCodes, driverId, warehouseAccess, modules);
+        applyAccessFields(
+                user,
+                cleanRole,
+                plantCodes,
+                driverId,
+                warehouseAccess,
+                modules
+        );
 
         return repo.save(user);
     }
 
     public List<User> getAllUsers() {
-        return repo.findAll(Sort.by(Sort.Direction.ASC, "username"));
+        return repo.findAll(
+                Sort.by(
+                        Sort.Direction.ASC,
+                        "username"
+                )
+        );
     }
 
+    @Transactional
     public User updateUser(
             Long id,
             String username,
@@ -90,35 +125,103 @@ public class UserService {
             boolean warehouseAccess,
             Set<String> modules
     ) {
-        Optional<User> optional = repo.findById(id);
+        User user =
+                repo.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException("User not found")
+                        );
 
-        if (optional.isEmpty()) {
-            throw new RuntimeException("User not found");
-        }
+        String cleanUsername =
+                cleanRequired(
+                        username,
+                        "Username is required."
+                );
 
-        User user = optional.get();
+        String cleanRole =
+                normalizeRole(role);
 
-        String cleanUsername = cleanRequired(username, "Username is required.");
-        String cleanRole = normalizeRole(role);
-
-        if (repo.existsByUsernameAndIdNot(cleanUsername, id)) {
-            throw new RuntimeException("Username already exists: " + cleanUsername);
+        if (
+                repo.existsByUsernameIgnoreCaseAndIdNot(
+                        cleanUsername,
+                        id
+                )
+        ) {
+            throw new RuntimeException(
+                    "Username already exists: " + cleanUsername
+            );
         }
 
         user.setUsername(cleanUsername);
         user.setRole(cleanRole);
 
-        applyAccessFields(user, cleanRole, plantCodes, driverId, warehouseAccess, modules);
+        applyAccessFields(
+                user,
+                cleanRole,
+                plantCodes,
+                driverId,
+                warehouseAccess,
+                modules
+        );
 
         return repo.save(user);
     }
 
-    public void deleteUser(Long id) {
-        if (!repo.existsById(id)) {
-            throw new RuntimeException("User not found");
+    @Transactional
+    public void disableUser(Long id) {
+        User user =
+                repo.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException("User not found")
+                        );
+
+        if ("ADMIN".equalsIgnoreCase(user.getRole())) {
+            long adminCount =
+                    repo.findAll()
+                            .stream()
+                            .filter(User::isEnabled)
+                            .filter(u ->
+                                    "ADMIN".equalsIgnoreCase(
+                                            u.getRole()
+                                    )
+                            )
+                            .count();
+
+            if (adminCount <= 1) {
+                throw new RuntimeException(
+                        "Cannot disable the last active ADMIN user"
+                );
+            }
         }
 
-        repo.deleteById(id);
+        user.setEnabled(false);
+
+        repo.save(user);
+    }
+
+    @Transactional
+    public void resetPassword(
+            Long id,
+            String newPassword
+    ) {
+        String cleanPassword =
+                cleanRequired(
+                        newPassword,
+                        "Password cannot be empty"
+                );
+
+        validatePassword(cleanPassword);
+
+        User user =
+                repo.findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException("User not found")
+                        );
+
+        user.setPassword(
+                encoder.encode(cleanPassword)
+        );
+
+        repo.save(user);
     }
 
     private void applyAccessFields(
@@ -129,18 +232,25 @@ public class UserService {
             boolean warehouseAccess,
             Set<String> modules
     ) {
-        Set<String> cleanModules = cleanModules(modules, role);
+        Set<String> cleanModules =
+                cleanModules(
+                        modules,
+                        role
+                );
+
         user.setModules(cleanModules);
 
         user.setWarehouseAccess(
                 warehouseAccess
-                        || "ADMIN".equalsIgnoreCase(role)
-                        || "WAREHOUSE".equalsIgnoreCase(role)
+                        || "ADMIN".equals(role)
+                        || "WAREHOUSE".equals(role)
         );
 
-        if ("DRIVER".equalsIgnoreCase(role)) {
+        if ("DRIVER".equals(role)) {
             if (driverId == null) {
-                throw new RuntimeException("Driver profile required for DRIVER user");
+                throw new RuntimeException(
+                        "Driver profile required for DRIVER user"
+                );
             }
 
             user.setDriverId(driverId);
@@ -151,19 +261,40 @@ public class UserService {
 
         user.setDriverId(null);
 
-        Set<String> cleanPlants = cleanPlantCodes(plantCodes);
+        Set<String> cleanPlants =
+                cleanPlantCodes(plantCodes);
+
+        /*
+         * ADMIN can have no selected plant because ADMIN can access all.
+         * Non-driver, non-admin operational users should have explicit plant access.
+         */
+        if (
+                !"ADMIN".equals(role)
+                        && cleanPlants.isEmpty()
+                        && !role.startsWith("BOMFLOW_")
+                        && !role.startsWith("VENFLOW_")
+        ) {
+            throw new RuntimeException(
+                    "Plant access is required for this user"
+            );
+        }
 
         user.setPlantCodes(cleanPlants);
 
         if (!cleanPlants.isEmpty()) {
-            user.setPlantCode(cleanPlants.iterator().next());
+            user.setPlantCode(
+                    cleanPlants.iterator().next()
+            );
         } else {
             user.setPlantCode(null);
         }
     }
 
-    private Set<String> cleanPlantCodes(Set<String> plantCodes) {
-        Set<String> clean = new LinkedHashSet<>();
+    private Set<String> cleanPlantCodes(
+            Set<String> plantCodes
+    ) {
+        Set<String> clean =
+                new LinkedHashSet<>();
 
         if (plantCodes == null) {
             return clean;
@@ -171,15 +302,21 @@ public class UserService {
 
         for (String code : plantCodes) {
             if (code != null && !code.isBlank()) {
-                clean.add(code.trim());
+                clean.add(
+                        code.trim().toUpperCase()
+                );
             }
         }
 
         return clean;
     }
 
-    private Set<String> cleanModules(Set<String> modules, String role) {
-        Set<String> clean = new LinkedHashSet<>();
+    private Set<String> cleanModules(
+            Set<String> modules,
+            String role
+    ) {
+        Set<String> clean =
+                new LinkedHashSet<>();
 
         if (modules != null) {
             for (String module : modules) {
@@ -187,10 +324,13 @@ public class UserService {
                     continue;
                 }
 
-                String normalized = module.trim().toUpperCase();
+                String normalized =
+                        module.trim().toUpperCase();
 
                 if (!ALLOWED_MODULES.contains(normalized)) {
-                    throw new RuntimeException("Invalid module access: " + normalized);
+                    throw new RuntimeException(
+                            "Invalid module access: " + normalized
+                    );
                 }
 
                 clean.add(normalized);
@@ -198,40 +338,121 @@ public class UserService {
         }
 
         if (clean.isEmpty()) {
-            if ("ADMIN".equals(role)) {
-                clean.add("PACKFLOW");
-                clean.add("BOMFLOW");
-                clean.add("VENFLOW");
-            } else if (
-                    "PACKING".equals(role)
-                            || "WAREHOUSE".equals(role)
-                            || "DISPATCH".equals(role)
-                            || "LOGISTICS".equals(role)
-                            || "DRIVER".equals(role)
-            ) {
-                clean.add("PACKFLOW");
-            } else if (role.startsWith("BOMFLOW_")) {
-                clean.add("BOMFLOW");
-            } else if (role.startsWith("VENFLOW_")) {
-                clean.add("VENFLOW");
-            }
+            clean.addAll(
+                    defaultModulesForRole(role)
+            );
+        }
+
+        /*
+         * Safety rule:
+         * Role must belong to at least its natural module.
+         */
+        if (
+                role.startsWith("BOMFLOW_")
+                        && !clean.contains("BOMFLOW")
+        ) {
+            throw new RuntimeException(
+                    "BOMFlow role requires BOMFlow module access"
+            );
+        }
+
+        if (
+                role.startsWith("VENFLOW_")
+                        && !clean.contains("VENFLOW")
+        ) {
+            throw new RuntimeException(
+                    "VenFlow role requires VenFlow module access"
+            );
+        }
+
+        if (
+                (
+                        "PACKING".equals(role)
+                                || "WAREHOUSE".equals(role)
+                                || "DISPATCH".equals(role)
+                                || "LOGISTICS".equals(role)
+                                || "DRIVER".equals(role)
+                )
+                        && !clean.contains("PACKFLOW")
+        ) {
+            throw new RuntimeException(
+                    "PackFlow role requires PackFlow module access"
+            );
         }
 
         return clean;
     }
 
-    private String normalizeRole(String role) {
-        String cleanRole = cleanRequired(role, "Role is required.").toUpperCase();
+    private Set<String> defaultModulesForRole(
+            String role
+    ) {
+        Set<String> clean =
+                new LinkedHashSet<>();
+
+        if ("ADMIN".equals(role)) {
+            clean.add("PACKFLOW");
+            clean.add("BOMFLOW");
+            clean.add("VENFLOW");
+        } else if (
+                "PACKING".equals(role)
+                        || "WAREHOUSE".equals(role)
+                        || "DISPATCH".equals(role)
+                        || "LOGISTICS".equals(role)
+                        || "DRIVER".equals(role)
+        ) {
+            clean.add("PACKFLOW");
+        } else if (role.startsWith("BOMFLOW_")) {
+            clean.add("BOMFLOW");
+        } else if (role.startsWith("VENFLOW_")) {
+            clean.add("VENFLOW");
+        }
+
+        return clean;
+    }
+
+    private String normalizeRole(
+            String role
+    ) {
+        String cleanRole =
+                cleanRequired(
+                        role,
+                        "Role is required."
+                ).toUpperCase();
 
         if (!ALLOWED_ROLES.contains(cleanRole)) {
-            throw new RuntimeException("Invalid role: " + cleanRole);
+            throw new RuntimeException(
+                    "Invalid role: " + cleanRole
+            );
         }
 
         return cleanRole;
     }
 
-    private String cleanRequired(String value, String message) {
-        if (value == null || value.trim().isBlank() || "null".equalsIgnoreCase(value.trim())) {
+    private void validatePassword(
+            String password
+    ) {
+        if (password.length() < 8) {
+            throw new RuntimeException(
+                    "Password must be at least 8 characters"
+            );
+        }
+
+        if (password.length() > 128) {
+            throw new RuntimeException(
+                    "Password is too long"
+            );
+        }
+    }
+
+    private String cleanRequired(
+            String value,
+            String message
+    ) {
+        if (
+                value == null
+                        || value.trim().isBlank()
+                        || "null".equalsIgnoreCase(value.trim())
+        ) {
             throw new RuntimeException(message);
         }
 

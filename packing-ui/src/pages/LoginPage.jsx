@@ -1,7 +1,7 @@
 import { useState } from "react";
 import API from "../services/api";
 import { useNavigate } from "react-router-dom";
-import { normalizeRole } from "../utils/permissions";
+import { useAuth } from "../auth/AuthContext";
 
 function LoginPage() {
   const [username, setUsername] = useState("");
@@ -9,117 +9,32 @@ function LoginPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { loadMe } = useAuth();
 
   const submit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+	e.preventDefault();
+	setError(null);
+	setLoading(true);
 
-    try {
-      const res = await API.post("/auth/login", {
-        username,
-        password,
-      });
+	try {
+		await API.post("/auth/login", {
+			username: username.trim(),
+			password,
+		});
 
-      const loginData = res.data || {};
+		await loadMe();
 
-      const token = loginData.token;
-
-      if (!token) {
-        throw new Error("Token missing from login response");
-      }
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("auth", "true");
-
-      let meData = null;
-
-      try {
-        const meRes = await API.get("/auth/me");
-        meData = meRes.data || {};
-      } catch (meErr) {
-        console.warn("Could not load /auth/me after login. Falling back to login response.", meErr);
-      }
-
-      const finalRole = normalizeRole(
-        meData?.role ||
-        meData?.user?.role ||
-        loginData?.role ||
-        loginData?.user?.role
-      );
-
-      const finalUsername =
-        meData?.username ||
-        meData?.user?.username ||
-        loginData?.username ||
-        loginData?.user?.username ||
-        username.trim();
-
-      const finalWarehouseAccess =
-        meData?.warehouseAccess === true ||
-        meData?.user?.warehouseAccess === true ||
-        loginData?.warehouseAccess === true ||
-        loginData?.user?.warehouseAccess === true ||
-        finalRole === "ADMIN" ||
-        finalRole === "WAREHOUSE";
-
-      const finalModules =
-        Array.isArray(meData?.modules)
-          ? meData.modules
-          : Array.isArray(meData?.user?.modules)
-            ? meData.user.modules
-            : Array.isArray(loginData?.modules)
-              ? loginData.modules
-              : Array.isArray(loginData?.user?.modules)
-                ? loginData.user.modules
-                : finalRole === "ADMIN"
-                  ? ["PACKFLOW", "BOMFLOW", "VENFLOW"]
-                  : finalRole?.startsWith("BOMFLOW_")
-                    ? ["BOMFLOW"]
-                    : finalRole?.startsWith("VENFLOW_")
-                      ? ["VENFLOW"]
-                      : ["PACKFLOW"];
-
-      const finalPlantCodes =
-        Array.isArray(meData?.plantCodes) && meData.plantCodes.length > 0
-          ? meData.plantCodes
-          : Array.isArray(meData?.user?.plantCodes) && meData.user.plantCodes.length > 0
-            ? meData.user.plantCodes
-            : Array.isArray(loginData?.plantCodes) && loginData.plantCodes.length > 0
-              ? loginData.plantCodes
-              : Array.isArray(loginData?.user?.plantCodes) && loginData.user.plantCodes.length > 0
-                ? loginData.user.plantCodes
-                : loginData?.plantCode
-                  ? [loginData.plantCode]
-                  : [];
-
-      const currentUser = {
-        username: finalUsername,
-        role: finalRole,
-        warehouseAccess: finalWarehouseAccess,
-        modules: finalModules,
-        plantCodes: finalPlantCodes,
-      };
-
-      localStorage.setItem("plantCodes", JSON.stringify(finalPlantCodes));
-
-      localStorage.setItem("role", finalRole);
-      localStorage.setItem("username", finalUsername);
-      localStorage.setItem("warehouseAccess", String(finalWarehouseAccess));
-
-      localStorage.setItem("modules", JSON.stringify(finalModules));
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      navigate("/modules", { replace: true });
-
-    } catch (err) {
-      console.error("Login failed", err);
-      localStorage.clear();
-      setError("Invalid username or password");
-    } finally {
-      setLoading(false);
-    }
-  };
+		navigate("/modules", { replace: true });
+	} catch (err) {
+		console.error("Login failed", err);
+		setError(
+			err?.response?.data?.message ||
+			"Invalid username or password"
+		);
+	} finally {
+		setLoading(false);
+	}
+};
 
   return (
     <div style={pageStyle}>

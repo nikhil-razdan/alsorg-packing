@@ -3,14 +3,18 @@ import { API_BASE_URL } from "../config";
 
 const API = axios.create({
   baseURL: `${API_BASE_URL}/api`,
+  withCredentials: true,
 });
 
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      window.dispatchEvent(new Event("app:unauthorized"));
+    }
+
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
 export default API;

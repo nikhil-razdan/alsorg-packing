@@ -1,13 +1,13 @@
 spring:
   config:
     activate:
-      on-profile: render
+      on-profile: local
 
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/alsorg_packing}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
@@ -16,7 +16,7 @@ spring:
       ddl-auto: update
     properties:
       hibernate:
-        format_sql: false
+        format_sql: true
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -42,18 +42,18 @@ server:
 logging:
   level:
     root: INFO
-    com.alsorg: INFO
-    org.springframework.security: INFO
+    com.alsorg: DEBUG
+    org.springframework.security: DEBUG
 
 sticker:
   logo:
-    path: ${STICKER_LOGO_PATH:}
+    path: ${STICKER_LOGO_PATH:D:/Nikhil/2025/alsorg-packing/packing/logo/images (1).png}
   storage:
-    path: ${STICKER_STORAGE_PATH:/data/stickers}
+    path: ${STICKER_STORAGE_PATH:D:/Nikhil/2025/alsorg-packing/packing/stickers}
 
 app:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:LOCAL_DEV_SECRET_CHANGE_ME_1234567890_ABCDEF}
     expiry-ms: ${JWT_EXPIRY_MS:28800000}
 
   mail:
