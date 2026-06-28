@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from "react";
 import { Button, TextField, Box, Chip, MenuItem } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
-import { canOpenWarehousePage, normalizeRole } from "../utils/permissions";
+import { canOpenWarehousePage } from "../utils/permissions";
+import { useAuth } from "../auth/AuthContext";
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
@@ -10,10 +11,12 @@ function WarehousePage() {
 	const [search, setSearch] = useState("");
 	const [gatePassPopup, setGatePassPopup] = useState(null);
 	const [approveGatePass, setApproveGatePass] = useState({});
-	const token = localStorage.getItem("token");
-	const role = normalizeRole(localStorage.getItem("role"));
+	const {
+		user,
+		role,
+	} = useAuth();
 
-	const canOpenWarehouse = canOpenWarehousePage();
+	const canOpenWarehouse = canOpenWarehousePage(user);
 
 	const isDispatch = role === "DISPATCH";
 	const isPacking = role === "PACKING";
@@ -42,7 +45,7 @@ function WarehousePage() {
 	const fetchPlants = async () => {
 		try {
 			const res = await fetch(`${API_BASE_URL}/api/plants`, {
-				headers: { Authorization: `Bearer ${token}` },
+				credentials: "include",
 			});
 
 			if (!res.ok) {
@@ -69,10 +72,10 @@ function WarehousePage() {
 		try {
 			const [res1, res2] = await Promise.all([
 				fetch(`${API_BASE_URL}/api/warehouse/floor`, {
-					headers: { Authorization: `Bearer ${token}` },
+					credentials: "include",
 				}),
 				fetch(`${API_BASE_URL}/api/warehouse/items`, {
-					headers: { Authorization: `Bearer ${token}` },
+					credentials: "include",
 				}),
 			]);
 
@@ -133,7 +136,7 @@ function WarehousePage() {
 
 		fetchPlants();
 		fetchItems();
-	}, []);
+	}, [canOpenWarehouse]);
 
 	const exportCSV = () => {
 		const headers = [
@@ -193,9 +196,7 @@ function WarehousePage() {
 
 		const res = await fetch(`${API_BASE_URL}/api/warehouse/import/preview`, {
 			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+			credentials: "include",
 			body: formData,
 		});
 
@@ -218,11 +219,7 @@ function WarehousePage() {
 			`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gp.trim())}`,
 			{
 				method: "POST",
-				headers: {
-					Authorization: `Bearer ${token}`,
-					"X-Username": localStorage.getItem("username")
-				},
-
+				credentials: "include",
 			}
 		);
 
@@ -240,10 +237,7 @@ function WarehousePage() {
 				`${API_BASE_URL}/api/warehouse/${id}/reject`,
 				{
 					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"X-Username": localStorage.getItem("username")
-					},
+					credentials: "include",
 				}
 			);
 
@@ -261,10 +255,7 @@ function WarehousePage() {
 				`${API_BASE_URL}/api/dispatched/${id}/request-return`,
 				{
 					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"X-Username": localStorage.getItem("username"),
-					},
+					credentials: "include",
 				}
 			);
 
@@ -300,10 +291,7 @@ function WarehousePage() {
 						`${API_BASE_URL}/api/dispatched/${id}/request-return`,
 						{
 							method: "POST",
-							headers: {
-								Authorization: `Bearer ${token}`,
-								"X-Username": localStorage.getItem("username"),
-							},
+							credentials: "include",
 						}
 					)
 				)
@@ -432,35 +420,35 @@ function WarehousePage() {
 	};
 
 	const startAssignmentEdit = (row) => {
-	if (!isAdmin) {
-		return;
-	}
+		if (!isAdmin) {
+			return;
+		}
 
-	const id = getWarehouseRowId(row);
+		const id = getWarehouseRowId(row);
 
-	if (!id) {
-		alert("Row ID missing. Cannot edit location.");
-		return;
-	}
+		if (!id) {
+			alert("Row ID missing. Cannot edit location.");
+			return;
+		}
 
-	setAssignmentDrafts((prev) => ({
-		...prev,
-		[id]: {
-			plantCode: row.plantCode || "",
-			currentLocationCode:
-				row.currentLocationCode && row.currentLocationCode !== "-"
-					? row.currentLocationCode
-					: row.location && row.location !== "-"
-						? row.location
+		setAssignmentDrafts((prev) => ({
+			...prev,
+			[id]: {
+				plantCode: row.plantCode || "",
+				currentLocationCode:
+					row.currentLocationCode && row.currentLocationCode !== "-"
+						? row.currentLocationCode
+						: row.location && row.location !== "-"
+							? row.location
+							: "",
+				warehouseCode:
+					row.warehouseCode && row.warehouseCode !== "-"
+						? row.warehouseCode
 						: "",
-			warehouseCode:
-				row.warehouseCode && row.warehouseCode !== "-"
-					? row.warehouseCode
-					: "",
-			fgZoneCode: row.fgZoneCode || "",
-		},
-	}));
-};
+				fgZoneCode: row.fgZoneCode || "",
+			},
+		}));
+	};
 
 	const updateAssignmentDraft = (row, key, value) => {
 		const id = getWarehouseRowId(row);
@@ -522,8 +510,8 @@ function WarehousePage() {
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/plant-location`,
 				{
 					method: "PATCH",
+					credentials: "include",
 					headers: {
-						Authorization: `Bearer ${token}`,
 						"Content-Type": "application/json",
 					},
 					body: JSON.stringify({
@@ -688,10 +676,7 @@ function WarehousePage() {
 						`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gatePass)}`,
 						{
 							method: "POST",
-							headers: {
-								Authorization: `Bearer ${token}`,
-								"X-Username": localStorage.getItem("username"),
-							},
+							credentials: "include",
 						}
 					);
 
@@ -999,9 +984,7 @@ function WarehousePage() {
 									`${API_BASE_URL}/api/gatepass/${row.zohoItemId}/pdf`,
 									{
 										method: "GET",
-										headers: {
-											Authorization: `Bearer ${token}`,
-										},
+										credentials: "include",
 									}
 								);
 
@@ -1340,9 +1323,7 @@ function WarehousePage() {
 											`${API_BASE_URL}/api/dispatched/${row.zohoItemId}/approve-return`,
 											{
 												method: "POST",
-												headers: {
-													Authorization: `Bearer ${token}`,
-												},
+												credentials: "include",
 											}
 										);
 										fetchItems();
@@ -1359,9 +1340,7 @@ function WarehousePage() {
 											`${API_BASE_URL}/api/dispatched/${row.zohoItemId}/reject-return`,
 											{
 												method: "POST",
-												headers: {
-													Authorization: `Bearer ${token}`,
-												},
+												credentials: "include",
 											}
 										);
 										fetchItems();
@@ -1708,7 +1687,7 @@ function WarehousePage() {
 								const res = await fetch(
 									`${API_BASE_URL}/api/warehouse/import/template`,
 									{
-										headers: { Authorization: `Bearer ${token}` },
+										credentials: "include",
 									}
 								);
 
@@ -2428,10 +2407,7 @@ function WarehousePage() {
 
 									const res = await fetch(`${API_BASE_URL}/api/warehouse/import/confirm`, {
 										method: "POST",
-										headers: {
-											Authorization: `Bearer ${token}`,
-											"X-Username": localStorage.getItem("username"),
-										},
+										credentials: "include",
 										body: formData,
 									});
 

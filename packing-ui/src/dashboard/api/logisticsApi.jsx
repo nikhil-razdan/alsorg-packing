@@ -1,463 +1,357 @@
 import { API_BASE_URL } from "../../config";
 
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
+/**
+ * Logistics API
+ * Uses HttpOnly cookie auth.
+ */
+
+const requestJson = async (
+	path,
+	{
+		method = "GET",
+		body,
+		headers = {},
+		errorMessage = "Request failed",
+	} = {}
+) => {
+	const finalHeaders = {
+		...headers,
+	};
+
+	const hasBody =
+		body !== undefined &&
+		body !== null;
+
+	if (hasBody && !finalHeaders["Content-Type"]) {
+		finalHeaders["Content-Type"] = "application/json";
+	}
+
+	const res = await fetch(`${API_BASE_URL}${path}`, {
+		method,
+		credentials: "include",
+		headers: finalHeaders,
+		body: hasBody ? JSON.stringify(body) : undefined,
+	});
+
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || errorMessage);
+	}
+
+	if (res.status === 204) {
+		return null;
+	}
+
+	return res.json();
+};
+
+const requestBlob = async (
+	path,
+	{
+		method = "GET",
+		body,
+		headers = {},
+		errorMessage = "Download failed",
+	} = {}
+) => {
+	const finalHeaders = {
+		...headers,
+	};
+
+	const hasBody =
+		body !== undefined &&
+		body !== null;
+
+	if (hasBody && !finalHeaders["Content-Type"]) {
+		finalHeaders["Content-Type"] = "application/json";
+	}
+
+	const res = await fetch(`${API_BASE_URL}${path}`, {
+		method,
+		credentials: "include",
+		headers: finalHeaders,
+		body: hasBody ? JSON.stringify(body) : undefined,
+	});
+
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || errorMessage);
+	}
+
+	return res;
+};
 
 export async function fetchDrivers() {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/drivers`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(
-      "Failed to fetch drivers"
-    );
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/drivers",
+		{
+			errorMessage: "Failed to fetch drivers",
+		}
+	);
 }
 
 export async function createDriver(
-  payload
+	payload
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/drivers`,
-    {
-      method: "POST",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text);
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/drivers",
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to create driver",
+		}
+	);
 }
 
 export async function deleteDriver(
-  id
+	id
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/drivers/${id}`,
-    {
-      method: "DELETE",
-
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text);
-  }
+	return requestJson(
+		`/api/logistics/drivers/${encodeURIComponent(id)}`,
+		{
+			method: "DELETE",
+			errorMessage: "Failed to delete driver",
+		}
+	);
 }
 
 export async function fetchShifts() {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/shifts`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error("Failed shifts");
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/shifts",
+		{
+			errorMessage: "Failed shifts",
+		}
+	);
 }
 
 export async function createShift(
-  payload
+	payload
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/shifts`,
-    {
-      method: "POST",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text =
-      await res.text();
-
-    throw new Error(text);
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/shifts",
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to create shift",
+		}
+	);
 }
 
 export async function deleteShift(
-  id
+	id
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/shifts/${id}`,
-    {
-      method: "DELETE",
-
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text =
-      await res.text();
-
-    throw new Error(text);
-  }
+	return requestJson(
+		`/api/logistics/shifts/${encodeURIComponent(id)}`,
+		{
+			method: "DELETE",
+			errorMessage: "Failed to delete shift",
+		}
+	);
 }
 
 export async function updateShift(
-  id,
-  payload
+	id,
+	payload
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/shifts/${id}`,
-    {
-      method: "PUT",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text);
-  }
-
-  return res.json();
+	return requestJson(
+		`/api/logistics/shifts/${encodeURIComponent(id)}`,
+		{
+			method: "PUT",
+			body: payload,
+			errorMessage: "Failed to update shift",
+		}
+	);
 }
 
 export async function updateShiftStatus(
-  id,
-  status
+	id,
+	status
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/shifts/${id}/status`,
-    {
-      method: "PATCH",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify({
-        status,
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text);
-  }
-
-  return res.json();
+	return requestJson(
+		`/api/logistics/shifts/${encodeURIComponent(id)}/status`,
+		{
+			method: "PATCH",
+			body: {
+				status,
+			},
+			errorMessage: "Failed to update shift status",
+		}
+	);
 }
 
-
 export async function fetchVehicles() {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error("Failed vehicles");
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/vehicles",
+		{
+			errorMessage: "Failed vehicles",
+		}
+	);
 }
 
 export async function createVehicle(
-  payload
+	payload
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles`,
-    {
-      method: "POST",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-  if (!res.ok) {
-    const text =
-      await res.text();
-
-    throw new Error(text);
-  }
-  return res.json();
+	return requestJson(
+		"/api/logistics/vehicles",
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to create vehicle",
+		}
+	);
 }
 
-export async function updateVehicle(id, payload) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles/${id}`,
-    {
-      method: "PUT",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text || "Vehicle update failed");
-  }
-
-  return res.json();
+export async function updateVehicle(
+	id,
+	payload
+) {
+	return requestJson(
+		`/api/logistics/vehicles/${encodeURIComponent(id)}`,
+		{
+			method: "PUT",
+			body: payload,
+			errorMessage: "Vehicle update failed",
+		}
+	);
 }
 
-export async function createDispatchChallan(payload) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/dispatch/chalaan?preview=true`,
-    {
-      method: "POST",
+export async function deleteVehicle(
+	id
+) {
+	return requestJson(
+		`/api/logistics/vehicles/${encodeURIComponent(id)}`,
+		{
+			method: "DELETE",
+			errorMessage: "Failed to delete vehicle",
+		}
+	);
+}
 
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-      },
+export async function createDispatchChallan(
+	payload
+) {
+	const res = await requestBlob(
+		"/api/logistics/dispatch/chalaan?preview=true",
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to create dispatch trip",
+		}
+	);
 
-      body: JSON.stringify(payload),
-    }
-  );
+	const blob = await res.blob();
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to create dispatch trip");
-  }
-
-  const blob = await res.blob();
-
-  return {
-    blob,
-    tripId: res.headers.get("X-Trip-Id"),
-    challanNo: res.headers.get("X-Challan-No"),
-  };
+	return {
+		blob,
+		tripId: res.headers.get("X-Trip-Id"),
+		challanNo: res.headers.get("X-Challan-No"),
+	};
 }
 
 export async function fetchLogisticsTrips() {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/trips`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to fetch trips");
-  }
-
-  return res.json();
+	return requestJson(
+		"/api/logistics/trips",
+		{
+			errorMessage: "Failed to fetch trips",
+		}
+	);
 }
 
-export async function endLogisticsTrip(id, payload) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/trips/${id}/end`,
-    {
-      method: "POST",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to end trip");
-  }
-
-  return res.json();
+export async function endLogisticsTrip(
+	id,
+	payload
+) {
+	return requestJson(
+		`/api/logistics/trips/${encodeURIComponent(id)}/end`,
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to end trip",
+		}
+	);
 }
 
-export async function deleteVehicle(id) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles/${id}`,
-    {
-      method: "DELETE",
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(text);
-  }
+export async function fetchLogisticsTripItems(
+	id
+) {
+	return requestJson(
+		`/api/logistics/trips/${encodeURIComponent(id)}/items`,
+		{
+			errorMessage: "Failed to fetch trip items",
+		}
+	);
 }
 
-export async function fetchLogisticsTripItems(id) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/trips/${id}/items`,
-    {
-      headers: authHeaders(),
-    }
-  );
+export async function downloadTripChallan(
+	id
+) {
+	if (!id) {
+		throw new Error("Trip id missing");
+	}
 
-  if (!res.ok) {
-    const text = await res.text();
+	const res = await requestBlob(
+		`/api/logistics/trips/${encodeURIComponent(id)}/challan`,
+		{
+			method: "GET",
+			errorMessage: "Failed to download challan",
+		}
+	);
 
-    throw new Error(
-      text || "Failed to fetch trip items"
-    );
-  }
+	const blob = await res.blob();
 
-  return res.json();
+	const disposition =
+		res.headers.get("Content-Disposition") || "";
+
+	let filename = "challan.pdf";
+
+	const match =
+		disposition.match(/filename="?([^"]+)"?/);
+
+	if (match && match[1]) {
+		filename = match[1];
+	}
+
+	const url =
+		window.URL.createObjectURL(blob);
+
+	const a =
+		document.createElement("a");
+
+	a.href = url;
+	a.download = filename;
+
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+
+	window.URL.revokeObjectURL(url);
+
+	return {
+		filename,
+	};
 }
 
-export async function downloadTripChallan(id) {
-  if (!id) {
-    throw new Error("Trip id missing");
-  }
-
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/trips/${id}/challan`,
-    {
-      method: "GET",
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(
-      text || "Failed to download challan"
-    );
-  }
-
-  const blob = await res.blob();
-
-  const disposition =
-    res.headers.get("Content-Disposition") || "";
-
-  let filename = "challan.pdf";
-
-  const match =
-    disposition.match(/filename="?([^"]+)"?/);
-
-  if (match && match[1]) {
-    filename = match[1];
-  }
-
-  const url =
-    window.URL.createObjectURL(blob);
-
-  const a =
-    document.createElement("a");
-
-  a.href = url;
-  a.download = filename;
-
-  document.body.appendChild(a);
-
-  a.click();
-
-  a.remove();
-
-  window.URL.revokeObjectURL(url);
-
-  return {
-    filename,
-  };
-}
-
-export async function fetchVehicleExpenses(vehicleId) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles/${vehicleId}/expenses`,
-    {
-      headers: authHeaders(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(
-      text || "Failed to fetch vehicle expenses"
-    );
-  }
-
-  return res.json();
+export async function fetchVehicleExpenses(
+	vehicleId
+) {
+	return requestJson(
+		`/api/logistics/vehicles/${encodeURIComponent(vehicleId)}/expenses`,
+		{
+			errorMessage: "Failed to fetch vehicle expenses",
+		}
+	);
 }
 
 export async function createVehicleExpense(
-  vehicleId,
-  payload
+	vehicleId,
+	payload
 ) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/logistics/vehicles/${vehicleId}/expenses`,
-    {
-      method: "POST",
-
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-      },
-
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-
-    throw new Error(
-      text || "Failed to save vehicle expense"
-    );
-  }
-
-  return res.json();
+	return requestJson(
+		`/api/logistics/vehicles/${encodeURIComponent(vehicleId)}/expenses`,
+		{
+			method: "POST",
+			body: payload,
+			errorMessage: "Failed to save vehicle expense",
+		}
+	);
 }

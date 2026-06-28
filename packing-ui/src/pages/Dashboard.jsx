@@ -16,6 +16,7 @@ import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShif
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 import InventorySidebar from
   "../dashboard/components/inventory/InventorySidebar";
+import { useAuth } from "../auth/AuthContext";
 
 function StatCard({
   title,
@@ -334,12 +335,14 @@ function DashboardPage() {
     error: "",
   });
 
-  const role = String(localStorage.getItem("role") || "").toUpperCase();
+  const { role } = useAuth();
 
-  const isAdmin =
-    role === "ADMIN" ||
-    role === "ROLE_ADMIN";
+  const cleanRole = String(role || "")
+    .replace("ROLE_", "")
+    .trim()
+    .toUpperCase();
 
+  const isAdmin = cleanRole === "ADMIN";
 
   const inventoryTotal =
     Number(stats.warehouseItems || 0) +

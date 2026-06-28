@@ -1,29 +1,77 @@
 import { API_BASE_URL } from "../config";
+
 /**
  * Packing Report API
+ * Uses HttpOnly cookie auth.
  */
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
 
-export async function fetchPackingReport(from, to) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/reports/packing?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-    { headers: authHeaders() }
-  );
+export async function fetchPackingReport(
+	from,
+	to
+) {
+	const res = await fetch(
+		`${API_BASE_URL}/api/reports/packing?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+		{
+			credentials: "include",
+		}
+	);
 
-  if (!res.ok) {
-    throw new Error("Failed to fetch packing report");
-  }
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || "Failed to fetch packing report");
+	}
 
-  return res.json();
+	return res.json();
 }
 
-export function exportPackingReport(type, from, to) {
-  const url =
-    type === "csv"
-      ? `${API_BASE_URL}/api/reports/export/packing/csv?from=${from}&to=${to}`
-      : `${API_BASE_URL}/api/reports/export/packing/excel?from=${from}&to=${to}`;
+export async function exportPackingReport(
+	type,
+	from,
+	to
+) {
+	const url =
+		type === "csv"
+			? `${API_BASE_URL}/api/reports/export/packing/csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+			: `${API_BASE_URL}/api/reports/export/packing/excel?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 
-  window.open(url, "_blank");
+	const res = await fetch(url, {
+		credentials: "include",
+	});
+
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || "Export failed");
+	}
+
+	const blob = await res.blob();
+
+	const disposition =
+		res.headers.get("Content-Disposition") || "";
+
+	let filename =
+		type === "csv"
+			? "packing_report.csv"
+			: "packing_report.xlsx";
+
+	const match =
+		disposition.match(/filename="?([^"]+)"?/);
+
+	if (match && match[1]) {
+		filename = match[1];
+	}
+
+	const blobUrl =
+		window.URL.createObjectURL(blob);
+
+	const a =
+		document.createElement("a");
+
+	a.href = blobUrl;
+	a.download = filename;
+
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+
+	window.URL.revokeObjectURL(blobUrl);
 }

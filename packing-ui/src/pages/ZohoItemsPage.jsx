@@ -12,6 +12,7 @@ import { API_BASE_URL } from "../config";
 import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
 import { Switch } from "@mui/material";
+import { useAuth } from "../auth/AuthContext";
 
 function InventoryModal({
   open,
@@ -150,11 +151,41 @@ function ZohoItemsPage() {
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
 
-  const role = String(localStorage.getItem("role") || "")
+  const { role } = useAuth();
+
+  const cleanRole = String(role || "")
     .replace("ROLE_", "")
+    .trim()
     .toUpperCase();
 
-  const isAdmin = role === "ADMIN";
+  const isAdmin = cleanRole === "ADMIN";
+
+  const getAuthHeaders = () => ({});
+
+  const authFetch = (
+    url,
+    options = {}
+  ) => {
+    const cleanHeaders = {
+      ...(options.headers || {}),
+    };
+
+    delete cleanHeaders.Authorization;
+    delete cleanHeaders["X-Username"];
+
+    const finalOptions = {
+      ...options,
+      credentials: "include",
+    };
+
+    if (Object.keys(cleanHeaders).length > 0) {
+      finalOptions.headers = cleanHeaders;
+    } else {
+      delete finalOptions.headers;
+    }
+
+    return fetch(url, finalOptions);
+  };
 
   const [customPacketNo, setCustomPacketNo] = useState("");
   const [customCreateOpen, setCustomCreateOpen] = useState(false);
@@ -220,10 +251,8 @@ function ZohoItemsPage() {
 
   const fetchMyPlants = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+      const res = await authFetch(`${API_BASE_URL}/api/plants/my`, {
+        method: "GET",
       });
 
       if (!res.ok) {
@@ -243,7 +272,6 @@ function ZohoItemsPage() {
       }
 
       return list;
-
     } catch (e) {
       console.error(e);
       setMyPlants([]);
@@ -552,11 +580,10 @@ function ZohoItemsPage() {
 
   const fetchItems = async () => {
     setLoading(true);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/packets/items`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+      const res = await authFetch(`${API_BASE_URL}/api/packets/items`, {
+        method: "GET",
       });
 
       if (!res.ok) {
@@ -579,10 +606,6 @@ function ZohoItemsPage() {
       setLoading(false);
     }
   };
-
-  const getAuthHeaders = () => ({
-    Authorization: `Bearer ${localStorage.getItem("token")}`,
-  });
 
   const normalizeUtcDateTime = (value) => {
     if (!value) return null;
@@ -648,10 +671,10 @@ function ZohoItemsPage() {
 
   const fetchGeneratedHistoryUsers = async () => {
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE_URL}/api/stickers/generated-history/users`,
         {
-          headers: getAuthHeaders(),
+          method: "GET",
         }
       );
 
@@ -677,10 +700,10 @@ function ZohoItemsPage() {
           ? `?generatedBy=${encodeURIComponent(userFilter)}`
           : "";
 
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE_URL}/api/stickers/generated-history${query}`,
         {
-          headers: getAuthHeaders(),
+          method: "GET",
         }
       );
 
@@ -706,10 +729,10 @@ function ZohoItemsPage() {
     if (!historyId) return;
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE_URL}/api/stickers/history/${historyId}/download-pdf`,
         {
-          headers: getAuthHeaders(),
+          method: "GET",
         }
       );
 
@@ -994,13 +1017,10 @@ function ZohoItemsPage() {
     setStickerReviewLoading(true);
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/preview-sticker?factoryFloor=${encodeURIComponent(row.floor || "")}&showCompanyHeader=${form.showCompanyHeader}`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
         }
       );
 
@@ -1138,13 +1158,10 @@ function ZohoItemsPage() {
     try {
       setDeleteLoading(true);
 
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE_URL}/api/packets/items/${encodeURIComponent(deleteId)}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
         }
       );
 
@@ -1890,7 +1907,7 @@ function ZohoItemsPage() {
               try {
                 setGenerating(true);
 
-                const genRes = await fetch(
+                const genRes = await authFetch(
                   `${API_BASE_URL}/api/packets/items/${encodeURIComponent(
                     itemId
                   )}/generate-sticker?factoryFloor=${encodeURIComponent(
@@ -1898,9 +1915,6 @@ function ZohoItemsPage() {
                   )}&showCompanyHeader=${form.showCompanyHeader}`,
                   {
                     method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${localStorage.getItem("token")}`,
-                    },
                   }
                 );
 
@@ -2123,11 +2137,10 @@ function ZohoItemsPage() {
                     return;
                   }
 
-                  const res = await fetch(`${API_BASE_URL}/api/packets/create`, {
+                  const res = await authFetch(`${API_BASE_URL}/api/packets/create`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
-                      Authorization: `Bearer ${localStorage.getItem("token")}`,
                     },
                     body: JSON.stringify({
                       ...form,
@@ -2274,11 +2287,10 @@ function ZohoItemsPage() {
                       return;
                     }
 
-                    const res = await fetch(`${API_BASE_URL}/api/packets/create-custom`, {
+                    const res = await authFetch(`${API_BASE_URL}/api/packets/create-custom`, {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
-                        Authorization: `Bearer ${localStorage.getItem("token")}`,
                       },
                       body: JSON.stringify({
                         ...form,
@@ -2429,13 +2441,12 @@ function ZohoItemsPage() {
                 }}
                 onClick={async () => {
                   try {
-                    const res = await fetch(
+                    const res = await authFetch(
                       `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
                       {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
-                          Authorization: `Bearer ${localStorage.getItem("token")}`,
                         },
                         body: JSON.stringify({
                           numberOfPackets: addCount,
@@ -2609,13 +2620,12 @@ function ZohoItemsPage() {
                 }}
                 onClick={async () => {
                   try {
-                    const res = await fetch(
+                    const res = await authFetch(
                       `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
                       {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
-                          Authorization: `Bearer ${localStorage.getItem("token")}`,
                         },
                         body: JSON.stringify({
                           customPacketNumber: Number(customPacketNo),
@@ -2762,13 +2772,12 @@ function ZohoItemsPage() {
                         ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
                         : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
 
-                    const res = await fetch(
+                    const res = await authFetch(
                       editUrl,
                       {
                         method: "PUT",
                         headers: {
                           "Content-Type": "application/json",
-                          Authorization: `Bearer ${localStorage.getItem("token")}`,
                         },
                         body: JSON.stringify(editForm),
                       }
@@ -3168,8 +3177,6 @@ function ZohoItemsPage() {
   );
 }
 
-
-/* ===================== STYLES ===================== */
 
 /* ===================== STYLES ===================== */
 

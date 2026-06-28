@@ -1,5 +1,8 @@
 export const normalizeRole = (role) => {
-	return String(role || "").trim().toUpperCase();
+	return String(role || "")
+		.replace("ROLE_", "")
+		.trim()
+		.toUpperCase();
 };
 
 export const canOpenWarehousePageFromUser = (user) => {
@@ -11,4 +14,8 @@ export const canOpenWarehousePageFromUser = (user) => {
 		role === "WAREHOUSE" ||
 		user?.warehouseAccess === true
 	);
+};
+
+export const canOpenWarehousePage = (user) => {
+	return canOpenWarehousePageFromUser(user);
 };

@@ -10,6 +10,7 @@ import {
 	fetchVehicles,
 	createDispatchChallan,
 } from "../dashboard/api/logisticsApi";
+import { useAuth } from "../auth/AuthContext";
 
 const page = {
 	minHeight: "100vh",
@@ -1414,9 +1415,17 @@ function DispatchedItemsPage() {
 	const [statusFilter, setStatusFilter] = useState("ALL");
 	const [groupBy, setGroupBy] = useState("NONE");
 	const [fromLocation, setFromLocation] = useState("");
-	const role = localStorage.getItem("role");
-	const isAdmin = role === "ADMIN";
-	const isDispatch = role === "DISPATCH";
+	const {
+		role,
+	} = useAuth();
+
+	const cleanRole = String(role || "")
+		.replace("ROLE_", "")
+		.trim()
+		.toUpperCase();
+
+	const isAdmin = cleanRole === "ADMIN";
+	const isDispatch = cleanRole === "DISPATCH";
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [, setHistoryItem] = useState(null);
 	const [historyRows, setHistoryRows] = useState([]);
@@ -1603,16 +1612,31 @@ function DispatchedItemsPage() {
 		}, 150);
 	}, [qrDispatchOpen, scanMode, scanCart.length]);
 
-	const getAuthHeaders = () => {
-		const token = localStorage.getItem("token");
+	const getAuthHeaders = () => ({});
 
-		if (!token) {
-			console.error("❌ No token found");
-			return {};
-		}
-		return {
-			Authorization: `Bearer ${token}`,
+	const authFetch = (
+		url,
+		options = {}
+	) => {
+		const cleanHeaders = {
+			...(options.headers || {}),
 		};
+
+		delete cleanHeaders.Authorization;
+		delete cleanHeaders["X-Username"];
+
+		const finalOptions = {
+			...options,
+			credentials: "include",
+		};
+
+		if (Object.keys(cleanHeaders).length > 0) {
+			finalOptions.headers = cleanHeaders;
+		} else {
+			delete finalOptions.headers;
+		}
+
+		return fetch(url, finalOptions);
 	};
 
 	const getCurrentLocation = (row) => {
@@ -1755,47 +1779,45 @@ function DispatchedItemsPage() {
 	};
 
 	const fetchData = async () => {
-		try {
-			setLoading(true);
-			console.log("TOKEN:", localStorage.getItem("token"));
-			console.log("ROLE:", localStorage.getItem("role"));
-			const res = await fetch(`${API_BASE_URL}/api/dispatched`, {
-				method: "GET",
-				headers: getAuthHeaders(),
-			});
+	try {
+		setLoading(true);
 
-			if (!res.ok) throw new Error("Failed to fetch dispatched items");
+		const res = await authFetch(`${API_BASE_URL}/api/dispatched`, {
+			method: "GET",
+		});
 
-			const data = await res.json();
-			console.log("📦 API DATA:", data);
-			console.log("📦 FIRST ITEM:", data?.[0]);
-
-			if (!Array.isArray(data)) {
-				console.error("Invalid API response:", data);
-				setRows([]);
-				return;
-			}
-			console.log("STOCK VALUES:", data.map(d => d.stock));
-
-			const cleaned = data
-				.filter(d => d?.zohoItemId)
-				.map(d => ({
-					...d,
-					stock: d.stock ?? 0,
-					status: (d.status || "").trim()
-				}));
-
-			setRows(cleaned);
-
-			return cleaned;
-		} catch (err) {
-			console.error(err);
-			setRows([]);
-			return;
-		} finally {
-			setLoading(false);
+		if (!res.ok) {
+			const text = await res.text();
+			throw new Error(text || "Failed to fetch dispatched items");
 		}
-	};
+
+		const data = await res.json();
+
+		if (!Array.isArray(data)) {
+			console.error("Invalid API response:", data);
+			setRows([]);
+			return [];
+		}
+
+		const cleaned = data
+			.filter((d) => d?.zohoItemId)
+			.map((d) => ({
+				...d,
+				stock: d.stock ?? 0,
+				status: (d.status || "").trim(),
+			}));
+
+		setRows(cleaned);
+
+		return cleaned;
+	} catch (err) {
+		console.error(err);
+		setRows([]);
+		return [];
+	} finally {
+		setLoading(false);
+	}
+};
 
 	const PLANT_LOCATION_MAP = {
 		"AL-P1": {
@@ -1980,10 +2002,8 @@ function DispatchedItemsPage() {
 
 	const fetchPlantConfigs = async () => {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/plants/my`, {
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
+			const res = await authFetch(`${API_BASE_URL}/api/plants/my`, {
+				method: "GET",
 			});
 
 			if (!res.ok) {
@@ -2015,7 +2035,7 @@ function DispatchedItemsPage() {
 	};
 
 	const resolveScan = async (rawScan) => {
-		const res = await fetch(`${API_BASE_URL}/api/scanner/resolve`, {
+		const res = await authFetch(`${API_BASE_URL}/api/scanner/resolve`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
@@ -2060,7 +2080,7 @@ function DispatchedItemsPage() {
 			? `?fgZoneCode=${encodeURIComponent(finalZone)}`
 			: "";
 
-		const res = await fetch(
+		const res = await authFetch(
 			`${API_BASE_URL}/api/dispatched/${encodeURIComponent(item.zohoItemId)}/move-to-fg${query}`,
 			{
 				method: "POST",
@@ -2305,7 +2325,7 @@ function DispatchedItemsPage() {
 		try {
 			setMoveFgLoading(true);
 
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
 					moveFgModal.zohoItemId
 				)}/move-to-fg?fgZoneCode=${encodeURIComponent(fgZone || "")}`,
@@ -2335,7 +2355,7 @@ function DispatchedItemsPage() {
 
 	const requestRestore = async (zohoItemId) => {
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(zohoItemId)}/request-restore`,
 				{
 					method: "POST",
@@ -2361,7 +2381,7 @@ function DispatchedItemsPage() {
 			let res = null;
 
 			if (status === "READY_TO_STORE" || status === "READY_TO_DISPATCH") {
-				res = await fetch(
+				res = await authFetch(
 					`${API_BASE_URL}/api/dispatched/${encodeURIComponent(zohoItemId)}/dispatch?status=${status}`,
 					{
 						method: "POST",
@@ -2401,7 +2421,7 @@ function DispatchedItemsPage() {
 
 	const approveRestore = async (zohoItemId) => {
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(zohoItemId)}/approve-restore`,
 				{
 					method: "POST",
@@ -2416,7 +2436,7 @@ function DispatchedItemsPage() {
 
 	const rejectRestore = async (zohoItemId) => {
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(zohoItemId)}/reject-restore`,
 				{
 					method: "POST",
@@ -2438,7 +2458,7 @@ function DispatchedItemsPage() {
 
 	const approveReturn = async (id) => {
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${id}/approve-return`,
 				{
 					method: "POST",
@@ -2456,7 +2476,7 @@ function DispatchedItemsPage() {
 
 	const rejectReturn = async (id) => {
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/dispatched/${id}/reject-return`,
 				{
 					method: "POST",
@@ -2482,7 +2502,7 @@ function DispatchedItemsPage() {
 			setHistoryRows([]);
 			setHistoryItem(itemId);
 
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/stickers/${encodeURIComponent(itemId)}/history`,
 				{
 					method: "GET",
@@ -2507,7 +2527,7 @@ function DispatchedItemsPage() {
 			setAuditLoading(true);
 			setAuditRows([]);
 
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/audit/${encodeURIComponent(zohoItemId)}`,
 				{
 					method: "GET",
@@ -3162,13 +3182,13 @@ function DispatchedItemsPage() {
 	};
 
 	const getRoleChipStyle = (role) => {
-		if (role === "ADMIN")
+		if (cleanRole === "ADMIN")
 			return { bg: "#111827", color: "#fff" };
 
-		if (role === "DISPATCH")
+		if (cleanRole === "DISPATCH")
 			return { bg: "#065f46", color: "#ecfdf5" };
 
-		if (role === "USER")
+		if (cleanRole === "USER")
 			return { bg: "#1e40af", color: "#eff6ff" };
 
 		return { bg: "#374151", color: "#f9fafb" };
@@ -3355,7 +3375,7 @@ function DispatchedItemsPage() {
 		}
 
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/admin-sticker-details`,
 				{
 					method: "PUT",
@@ -3452,7 +3472,7 @@ function DispatchedItemsPage() {
 			}
 
 			if (dispatchTripContext.mode === "QR_SINGLE") {
-				const res = await fetch(
+				const res = await authFetch(
 					`${API_BASE_URL}/api/scanner/dispatch-single?preview=true`,
 					{
 						method: "POST",
@@ -3492,7 +3512,7 @@ function DispatchedItemsPage() {
 
 				await moveQrCartItemsToFgIfNeeded(dispatchTripContext.qrCart);
 
-				const res = await fetch(
+				const res = await authFetch(
 					`${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
 					{
 						method: "POST",
@@ -4865,7 +4885,7 @@ function DispatchedItemsPage() {
 														sx={modalMiniButtonSx}
 														onClick={async () => {
 															try {
-																const res = await fetch(
+																const res = await authFetch(
 																	`${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 																	{
 																		method: "GET",
@@ -4914,7 +4934,7 @@ function DispatchedItemsPage() {
 														sx={modalMiniButtonSx}
 														onClick={async () => {
 															try {
-																const res = await fetch(
+																const res = await authFetch(
 																	`${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 																	{
 																		method: "GET",
@@ -5223,13 +5243,12 @@ function DispatchedItemsPage() {
 										try {
 											setBulkLoading(true);
 
-											const res = await fetch(
+											const res = await authFetch(
 												`${API_BASE_URL}/api/chalaan/bulk`,
 												{
 													method: "POST",
 													headers: {
 														"Content-Type": "application/json",
-														Authorization: `Bearer ${localStorage.getItem("token")}`,
 													},
 													body: JSON.stringify(
 														rows
@@ -5337,13 +5356,12 @@ function DispatchedItemsPage() {
 										try {
 
 											// 🔥 STEP 1: CALL BULK STORE API
-											const res = await fetch(
+											const res = await authFetch(
 												`${API_BASE_URL}/api/dispatched/bulk/store?warehouseCode=${encodeURIComponent(warehouseCode)}&fromLocation=${encodeURIComponent(fromLocation)}`,
 												{
 													method: "POST",
 													headers: {
 														"Content-Type": "application/json",
-														Authorization: `Bearer ${localStorage.getItem("token")}`,
 													},
 													body: JSON.stringify(selectionModel),
 												}
@@ -5359,12 +5377,10 @@ function DispatchedItemsPage() {
 											const gatePass = data.gatePass;
 
 											// 🔥 STEP 2: FETCH BULK PDF
-											const pdfRes = await fetch(
+											const pdfRes = await authFetch(
 												`${API_BASE_URL}/api/gatepass/bulk/${gatePass}/pdf`,
 												{
-													headers: {
-														Authorization: `Bearer ${localStorage.getItem("token")}`,
-													},
+													method: "GET",
 												}
 											);
 
@@ -5453,14 +5469,10 @@ function DispatchedItemsPage() {
 									onClick={async () => {
 										try {
 											// 🔥 STEP 1: GENERATE
-											const res = await fetch(
+											const res = await authFetch(
 												`${API_BASE_URL}/api/dispatched/${gatePassModal.zohoItemId}/store?warehouseCode=${encodeURIComponent(warehouseCode)}&fromLocation=${encodeURIComponent(fromLocation)}`,
 												{
 													method: "POST",
-													headers: {
-														Authorization: `Bearer ${localStorage.getItem("token")}`,
-														"X-Username": localStorage.getItem("username"),
-													},
 												}
 											);
 
@@ -5473,12 +5485,10 @@ function DispatchedItemsPage() {
 											const data = await res.json();
 
 											// 🔥 STEP 2: FETCH PDF
-											const resPdf = await fetch(
+											const resPdf = await authFetch(
 												`${API_BASE_URL}/api/gatepass/${gatePassModal.zohoItemId}/pdf`,
 												{
-													headers: {
-														Authorization: `Bearer ${localStorage.getItem("token")}`,
-													},
+													method: "GET",
 												}
 											);
 
@@ -5631,7 +5641,7 @@ function DispatchedItemsPage() {
 												? `?fgZoneCode=${encodeURIComponent(finalZone)}`
 												: "";
 
-											const res = await fetch(
+											const res = await authFetch(
 												`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
 													moveFgModal.zohoItemId
 												)}/move-to-fg${query}`,
@@ -5905,7 +5915,7 @@ function DispatchedItemsPage() {
 												: "";
 
 											for (const item of readyItemsNotInFg) {
-												const res = await fetch(
+												const res = await authFetch(
 													`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
 														item.zohoItemId
 													)}/move-to-fg${query}`,
