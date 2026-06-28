@@ -31,7 +31,7 @@ public class PlantLocationController {
 
     @GetMapping("/my")
     public List<PlantLocationService.PlantConfig> getMyPlants(
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 

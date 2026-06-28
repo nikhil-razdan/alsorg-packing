@@ -33,7 +33,7 @@ public class ScannerDispatchController {
     @PostMapping("/resolve")
     public ResponseEntity<ScanResolveResponse> resolve(
             @RequestBody ScanRequest request,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -57,7 +57,7 @@ public class ScannerDispatchController {
     )
     public ResponseEntity<byte[]> dispatchSingle(
             @RequestBody ScanRequest request,
-            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
@@ -101,7 +101,7 @@ public class ScannerDispatchController {
     )
     public ResponseEntity<byte[]> dispatchBulk(
             @RequestBody BulkScanRequest request,
-            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);

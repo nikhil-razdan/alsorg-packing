@@ -177,7 +177,7 @@ public class PacketController {
     @PostMapping("/create")
     public ResponseEntity<?> createItem(
             @RequestBody CreateItemRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -198,7 +198,7 @@ public class PacketController {
     
     @GetMapping("/items")
     public List<PacketItemResponse> getAllItems(
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -245,7 +245,7 @@ public class PacketController {
     public ResponseEntity<?> addMorePackets(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         if (req.getNumberOfPackets() <= 0) {
             throw new RuntimeException("Invalid packet count");
@@ -268,7 +268,7 @@ public class PacketController {
             @PathVariable UUID itemId,
             @RequestParam String factoryFloor,
             @RequestParam(defaultValue = "true") boolean showCompanyHeader,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -301,7 +301,7 @@ public class PacketController {
     @PostMapping("/create-custom")
     public ResponseEntity<?> createCustom(
             @RequestBody CreateItemRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -321,7 +321,7 @@ public class PacketController {
     public ResponseEntity<?> addCustom(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -346,7 +346,7 @@ public class PacketController {
     public ResponseEntity<?> assignPlantLocation(
             @PathVariable UUID itemId,
             @RequestBody PlantAssignmentRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -475,7 +475,7 @@ public class PacketController {
             @PathVariable UUID itemId,
             @RequestParam(required = false) String factoryFloor,
             @RequestParam(defaultValue = "true") boolean showCompanyHeader,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -499,7 +499,7 @@ public class PacketController {
     public ResponseEntity<?> adminUpdateStickerDetails(
             @PathVariable UUID itemId,
             @RequestBody UpdatePacketItemRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 

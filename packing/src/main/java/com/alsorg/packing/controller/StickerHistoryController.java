@@ -30,7 +30,7 @@ public class StickerHistoryController {
 
     @GetMapping("/generated-history")
     public ResponseEntity<List<GeneratedPacketHistoryResponse>> generatedHistory(
-            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(required = false) String generatedBy
     ) {
         String token = extractToken(auth);
@@ -61,7 +61,7 @@ public class StickerHistoryController {
 
     @GetMapping("/generated-history/users")
     public ResponseEntity<List<String>> generatedHistoryUsers(
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 

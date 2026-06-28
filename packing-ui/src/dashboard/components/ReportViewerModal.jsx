@@ -20,12 +20,21 @@ function ReportViewerModal({
 
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 16));
 
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-    }),
-    []
-  );
+  const authHeaders = () => {
+    const token = localStorage.getItem("token");
+
+    if (
+      !token ||
+      token === "null" ||
+      token === "undefined"
+    ) {
+      return {};
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
 
   const loadReport = async () => {
     try {
@@ -35,7 +44,10 @@ function ReportViewerModal({
         `${API_BASE_URL}${fetchUrl}?from=${encodeURIComponent(
           from
         )}&to=${encodeURIComponent(to)}`,
-        { headers: authHeaders }
+        {
+          credentials: "include",
+          headers: authHeaders(),
+        }
       );
 
       if (!res.ok) {
@@ -65,7 +77,10 @@ function ReportViewerModal({
         `${API_BASE_URL}${url}?from=${encodeURIComponent(
           from
         )}&to=${encodeURIComponent(to)}`,
-        { headers: authHeaders }
+        {
+          credentials: "include",
+          headers: authHeaders(),
+        }
       );
 
       if (!res.ok) {
@@ -346,7 +361,7 @@ const table = {
 const th = {
   position: "sticky",
   top: 0,
-  zIndex: 1,  
+  zIndex: 1,
   background:
     "rgba(255,255,255,.05)",
 

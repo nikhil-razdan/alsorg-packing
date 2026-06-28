@@ -35,7 +35,7 @@ public class DispatchedItemsController {
 
     @GetMapping
     public List<DispatchedItem> getDispatchedItems(
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -67,7 +67,7 @@ public class DispatchedItemsController {
     public ResponseEntity<?> moveToFg(
             @PathVariable String zohoItemId,
             @RequestParam(required = false) String fgZoneCode,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -97,7 +97,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/request-restore")
     public ResponseEntity<?> requestRestore(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -115,7 +115,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/approve-restore")
     public ResponseEntity<?> approveRestore(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -136,7 +136,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/reject-restore")
     public ResponseEntity<?> rejectRestore(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -158,7 +158,7 @@ public class DispatchedItemsController {
     public ResponseEntity<?> updateDispatchStatus(
             @PathVariable String zohoItemId,
             @RequestParam String status,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
     	User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -191,7 +191,7 @@ public class DispatchedItemsController {
     public ResponseEntity<?> moveToWarehouse(
             @PathVariable String zohoItemId,
             @RequestParam String warehouseCode,
-            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(required = false) String fromLocation
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
@@ -222,7 +222,7 @@ public class DispatchedItemsController {
             @RequestBody List<String> itemIds,
             @RequestParam String warehouseCode,
             @RequestParam(required = false) String fromLocation,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -247,7 +247,7 @@ public class DispatchedItemsController {
     public ResponseEntity<?> bulkStatusUpdate(
             @RequestBody List<String> ids,
             @RequestParam String status,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -268,7 +268,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/request-return")
     public ResponseEntity<?> requestReturn(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -288,7 +288,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/approve-return")
     public ResponseEntity<?> approveReturn(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -307,7 +307,7 @@ public class DispatchedItemsController {
     @PostMapping("/{zohoItemId:.+}/reject-return")
     public ResponseEntity<?> rejectReturn(
             @PathVariable String zohoItemId,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         String token = extractToken(auth);
 
@@ -327,7 +327,7 @@ public class DispatchedItemsController {
     public ResponseEntity<?> assignPlantLocation(
             @PathVariable String zohoItemId,
             @RequestBody PlantAssignmentRequest req,
-            @RequestHeader("Authorization") String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 

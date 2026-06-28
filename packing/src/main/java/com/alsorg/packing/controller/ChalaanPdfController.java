@@ -46,7 +46,7 @@ public class ChalaanPdfController {
     @GetMapping("/{zohoItemId}/download")
     public ResponseEntity<byte[]> generate(@PathVariable String zohoItemId, 
     		@RequestParam(defaultValue = "false") boolean preview,
-    		@RequestHeader("Authorization") String auth
+    		@RequestHeader(value = "Authorization", required = false) String auth
     		) {
 
     	try {
@@ -152,7 +152,7 @@ public class ChalaanPdfController {
     @PostMapping("/bulk")
     public ResponseEntity<byte[]> generateBulk(@RequestBody List<String> ids,
     		@RequestParam(defaultValue = "false") boolean preview,
-    		@RequestHeader("Authorization") String auth) {
+    		@RequestHeader(value = "Authorization", required = false) String auth) {
 
         List<DispatchedItem> items = repo.findAllById(ids);
         String token = extractToken(auth);

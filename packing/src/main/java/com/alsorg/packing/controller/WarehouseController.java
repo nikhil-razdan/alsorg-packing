@@ -41,7 +41,7 @@ public class WarehouseController {
 
         @GetMapping("/floor")
         public List<DispatchedItem> floor(
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 assertWarehouseAccess(user);
@@ -53,7 +53,7 @@ public class WarehouseController {
 
         @GetMapping("/items")
         public List<DispatchedItem> warehouse(
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 assertWarehouseAccess(user);
@@ -68,7 +68,7 @@ public class WarehouseController {
                         @PathVariable String zohoItemId,
                         @RequestParam String warehouseCode,
                         @RequestParam String fromLocation,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 String token = auth.replace("Bearer ", "");
 
                 String gatePass = dservice.moveToWarehouse(
@@ -83,7 +83,7 @@ public class WarehouseController {
         @PostMapping("/bulk-move")
         public ResponseEntity<Map<String, String>> bulkMoveToWarehouse(
                         @RequestBody Map<String, Object> body,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 String token = auth.replace("Bearer ", "");
 
                 List<String> itemIds = (List<String>) body.get("itemIds");
@@ -103,7 +103,7 @@ public class WarehouseController {
         public void approveWarehouse(
                         @PathVariable String zohoItemId,
                         @RequestParam String gatePass,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 String token = auth.replace("Bearer ", "");
 
                 dservice.approveWarehouseMove(
@@ -117,7 +117,7 @@ public class WarehouseController {
                         @RequestParam MultipartFile file,
                         @RequestParam String mode,
                         @RequestParam(required = false) String plantCode,
-                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestHeader(value = "X-Username", required = false) String username) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
                 assertWarehouseAccess(user);
@@ -138,7 +138,7 @@ public class WarehouseController {
         @PostMapping("/{zohoItemId}/reject")
         public void rejectWarehouse(
                         @PathVariable String zohoItemId,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 String token = auth.replace("Bearer ", "");
 
                 dservice.rejectWarehouseMove(
@@ -150,7 +150,7 @@ public class WarehouseController {
         public List<ImportPreviewRow> preview(
                         @RequestParam MultipartFile file,
                         @RequestParam String mode,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 assertWarehouseAccess(user);
@@ -163,7 +163,7 @@ public class WarehouseController {
                         @RequestParam MultipartFile file,
                         @RequestParam String mode,
                         @RequestParam(required = false) String plantCode,
-                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestHeader(value = "X-Username", required = false) String username) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
                 assertWarehouseAccess(user);
@@ -183,7 +183,7 @@ public class WarehouseController {
 
         @GetMapping("/import/template")
         public ResponseEntity<byte[]> downloadTemplate(
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 assertWarehouseAccess(user);

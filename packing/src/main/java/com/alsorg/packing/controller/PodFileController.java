@@ -45,7 +45,7 @@ public class PodFileController {
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public Map<String, Object> uploadPodFile(
-            @RequestHeader("Authorization") String auth,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
 

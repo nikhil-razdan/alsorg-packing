@@ -44,7 +44,7 @@ public class LogisticsDispatchController {
         @PostMapping(value = "/dispatch/chalaan", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> createDispatchTripAndChallan(
                         @RequestBody DispatchTripRequest request,
-                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestParam(defaultValue = "true") boolean preview) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -86,7 +86,7 @@ public class LogisticsDispatchController {
          */
         @GetMapping("/trips")
         public List<LogisticsTrip> getTrips(
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!currentUserService.canViewTrips(user)) {
@@ -106,7 +106,7 @@ public class LogisticsDispatchController {
         @GetMapping("/trips/{tripId}/items")
         public List<LogisticsTripItemResponse> getTripItems(
                         @PathVariable UUID tripId,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!currentUserService.canViewTrips(user)) {
@@ -127,7 +127,7 @@ public class LogisticsDispatchController {
         @PostMapping("/trips/{tripId}/start")
         public LogisticsTrip startTrip(
                         @PathVariable UUID tripId,
-                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestBody(required = false) Map<String, Object> body) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -154,7 +154,7 @@ public class LogisticsDispatchController {
         @PostMapping("/trips/{tripId}/location")
         public LogisticsTrip updateTripLocation(
                         @PathVariable UUID tripId,
-                        @RequestHeader("Authorization") String auth,
+                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestBody Map<String, Object> body) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -184,7 +184,7 @@ public class LogisticsDispatchController {
         public LogisticsTrip endTrip(
                         @PathVariable UUID tripId,
                         @RequestBody EndTripRequest request,
-                        @RequestHeader("Authorization") String auth) {
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 return tripService.endTrip(
