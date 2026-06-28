@@ -1,44 +1,45 @@
 package com.alsorg.packing.security;
 
-import java.io.IOException;
-import java.util.List;
-
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String ACCESS_COOKIE = "ALSORG_ACCESS";
 
-    private final JwtUtil jwtUtil;
-
-    public JwtAuthenticationFilter(
-            JwtUtil jwtUtil
-    ) {
-        this.jwtUtil = jwtUtil;
-    }
-
     @Override
     protected boolean shouldNotFilter(
             HttpServletRequest request
     ) {
-        String path = request.getRequestURI();
+        String path =
+                request.getServletPath();
 
-        return "OPTIONS".equalsIgnoreCase(request.getMethod())
-                || path.equals("/api/auth/login")
-                || path.equals("/api/auth/logout")
-                || path.equals("/api/auth/register");
+        if (HttpMethod.OPTIONS.matches(request.getMethod())) {
+            return true;
+        }
+
+        return path.equals("/api/auth/login")
+                || path.equals("/api/auth/logout");
     }
 
     @Override
@@ -48,72 +49,179 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
+        String token =
+                resolveToken(request);
+
+        if (token == null || token.isBlank()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
-            String token = readToken(request);
+            String username =
+                    JwtUtil.getUsername(token);
 
-            if (token != null && !token.isBlank()) {
-                String username = jwtUtil.getUsername(token);
-                String role = jwtUtil.getRole(token);
+            String role =
+                    JwtUtil.getRole(token);
 
-                if (username != null && !username.isBlank()) {
-                    String cleanRole = role == null || role.isBlank()
-                            ? "USER"
-                            : role.trim().toUpperCase();
+            if (
+                    username != null
+                            && !username.isBlank()
+                            && SecurityContextHolder
+                                    .getContext()
+                                    .getAuthentication() == null
+            ) {
+                String cleanRole =
+                        cleanRole(role);
 
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    username,
-                                    null,
-                                    List.of(
-                                            new SimpleGrantedAuthority(cleanRole)
-                                    )
-                            );
+                List<GrantedAuthority> authorities =
+                        new ArrayList<>();
 
-                    SecurityContextHolder.getContext()
-                            .setAuthentication(authentication);
+                if (cleanRole != null && !cleanRole.isBlank()) {
+                    /*
+                     * IMPORTANT:
+                     * SecurityConfig uses hasAuthority("ADMIN")
+                     * but some controllers may use hasRole("ADMIN").
+                     *
+                     * So we provide BOTH:
+                     * ADMIN
+                     * ROLE_ADMIN
+                     */
+                    authorities.add(
+                            new SimpleGrantedAuthority(cleanRole)
+                    );
+
+                    authorities.add(
+                            new SimpleGrantedAuthority("ROLE_" + cleanRole)
+                    );
                 }
+
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                username,
+                                null,
+                                authorities
+                        );
+
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource()
+                                .buildDetails(request)
+                );
+
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(authentication);
             }
 
             filterChain.doFilter(request, response);
 
-        } catch (ExpiredJwtException e) {
+        } catch (ExpiredJwtException ex) {
             SecurityContextHolder.clearContext();
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"message\":\"Session expired\"}");
 
-        } catch (Exception e) {
+            writeUnauthorized(
+                    response,
+                    "Session expired. Please login again."
+            );
+
+        } catch (JwtException | IllegalArgumentException ex) {
             SecurityContextHolder.clearContext();
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"message\":\"Invalid authentication\"}");
+
+            writeUnauthorized(
+                    response,
+                    "Invalid session. Please login again."
+            );
         }
     }
 
-    private String readToken(
+    private String resolveToken(
             HttpServletRequest request
     ) {
-        /*
-         * First preference: HttpOnly cookie.
-         */
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                if (ACCESS_COOKIE.equals(cookie.getName())) {
-                    return cookie.getValue();
+        String cookieToken =
+                tokenFromCookie(request);
+
+        if (cookieToken != null && !cookieToken.isBlank()) {
+            return cookieToken;
+        }
+
+        String header =
+                request.getHeader("Authorization");
+
+        if (header == null || header.isBlank()) {
+            return null;
+        }
+
+        if (!header.startsWith("Bearer ")) {
+            return null;
+        }
+
+        String token =
+                header.substring(7).trim();
+
+        if (
+                token.isBlank()
+                        || token.equalsIgnoreCase("null")
+                        || token.equalsIgnoreCase("undefined")
+        ) {
+            return null;
+        }
+
+        return token;
+    }
+
+    private String tokenFromCookie(
+            HttpServletRequest request
+    ) {
+        Cookie[] cookies =
+                request.getCookies();
+
+        if (cookies == null) {
+            return null;
+        }
+
+        for (Cookie cookie : cookies) {
+            if (ACCESS_COOKIE.equals(cookie.getName())) {
+                String value =
+                        cookie.getValue();
+
+                if (
+                        value != null
+                                && !value.isBlank()
+                                && !value.equalsIgnoreCase("null")
+                                && !value.equalsIgnoreCase("undefined")
+                ) {
+                    return value.trim();
                 }
             }
         }
 
-        /*
-         * Temporary fallback during migration.
-         * Remove this after frontend no longer sends Authorization header.
-         */
-        String auth = request.getHeader("Authorization");
+        return null;
+    }
 
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return auth.substring(7).trim();
+    private String cleanRole(
+            String role
+    ) {
+        if (role == null) {
+            return null;
         }
 
-        return null;
+        return role
+                .replace("ROLE_", "")
+                .trim()
+                .toUpperCase();
+    }
+
+    private void writeUnauthorized(
+            HttpServletResponse response,
+            String message
+    ) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+
+        response.getWriter()
+                .write("{\"message\":\"" + message + "\"}");
     }
 }
