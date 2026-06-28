@@ -13,6 +13,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import CloseIcon from "@mui/icons-material/Close";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 
 import {
 	Badge,
@@ -25,75 +26,25 @@ import {
 	Tooltip,
 } from "@mui/material";
 
-import { hasModuleAccess } from "../utils/moduleAccess";
-
-const parseJwt = (token) => {
-	try {
-		if (!token) return null;
-
-		const base64Url = token.split(".")[1];
-
-		if (!base64Url) return null;
-
-		const base64 = base64Url
-			.replace(/-/g, "+")
-			.replace(/_/g, "/");
-
-		const jsonPayload = decodeURIComponent(
-			atob(base64)
-				.split("")
-				.map((c) => {
-					return `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`;
-				})
-				.join("")
-		);
-
-		return JSON.parse(jsonPayload);
-	} catch {
-		return null;
-	}
-};
-
-const cleanRole = (value) => {
-	return String(value || "GUEST")
-		.replace("ROLE_", "")
-		.trim()
-		.toUpperCase();
-};
-
-const getStoredUsername = () => {
-	const token = localStorage.getItem("token");
-	const payload = parseJwt(token);
-
-	const possibleUsername =
-		localStorage.getItem("username") ||
-		localStorage.getItem("name") ||
-		localStorage.getItem("fullName") ||
-		localStorage.getItem("email") ||
-		localStorage.getItem("userName") ||
-		payload?.username ||
-		payload?.name ||
-		payload?.fullName ||
-		payload?.email ||
-		payload?.sub;
-
-	if (!possibleUsername) {
-		return "User";
-	}
-
-	return String(possibleUsername).trim() || "User";
-};
+import { useAuth } from "../auth/AuthContext";
 
 function Header() {
 	const navigate = useNavigate();
 
-	const role = cleanRole(
-		localStorage.getItem("role")
-	);
+	const {
+		user,
+		role,
+		modules,
+		logout,
+	} = useAuth();
 
-	const username = getStoredUsername();
+	const username = user?.username || "User";
 
-	const canOpenBOMFlow = hasModuleAccess("BOMFLOW");
+	const canOpenBOMFlow =
+		modules.includes("BOMFLOW");
+
+	const canOpenVenFlow =
+		modules.includes("VENFLOW");
 
 	const [appsAnchor, setAppsAnchor] =
 		useState(null);
@@ -162,6 +113,7 @@ function Header() {
 				roles: [
 					"ADMIN",
 					"WAREHOUSE",
+					"DISPATCH",
 				],
 			},
 			{
@@ -172,6 +124,7 @@ function Header() {
 					"ADMIN",
 					"DISPATCH",
 					"WAREHOUSE",
+					"PACKING",
 				],
 			},
 			{
@@ -193,8 +146,8 @@ function Header() {
 		notifications.filter((n) => !n.read)
 			.length;
 
-	const handleLogout = () => {
-		localStorage.clear();
+	const handleLogout = async () => {
+		await logout();
 		navigate("/login", { replace: true });
 	};
 
@@ -346,6 +299,22 @@ function Header() {
 
 							<span>
 								BOMFlow
+							</span>
+						</button>
+					)}
+					{canOpenVenFlow && (
+						<button
+							style={moduleCard}
+							onClick={() =>
+								openModule("/venflow/dashboard")
+							}
+						>
+							<span style={moduleIcon}>
+								<LayersOutlinedIcon />
+							</span>
+
+							<span>
+								VenFlow
 							</span>
 						</button>
 					)}
@@ -504,14 +473,14 @@ function Header() {
 					<HealthAndSafetyIcon
 						fontSize="small"
 					/>
-					Auth Token Active
+					Auth Session Active
 				</Box>
 
 				<Box sx={healthRow}>
 					<HealthAndSafetyIcon
 						fontSize="small"
 					/>
-					Local Storage Ready
+					Secure Cookie Mode
 				</Box>
 			</Popover>
 

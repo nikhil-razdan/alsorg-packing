@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
+import com.alsorg.packing.security.JwtUtil;
 
 @Service
 public class CurrentUserService {
@@ -24,23 +25,20 @@ public class CurrentUserService {
         this.plantLocationService = plantLocationService;
     }
 
+    /*
+     * NEW PREFERRED METHOD:
+     * Uses Spring SecurityContext populated by JwtAuthenticationFilter.
+     */
     public User requireCurrentUser() {
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+        String username =
+                usernameFromSecurityContext();
 
-        if (
-                authentication == null
-                        || !authentication.isAuthenticated()
-                        || authentication.getName() == null
-                        || authentication.getName().isBlank()
-        ) {
+        if (username == null || username.isBlank()) {
             throw new AccessDeniedException("Authentication required");
         }
 
         User user =
-                userRepository.findByUsernameIgnoreCase(
-                                authentication.getName()
-                        )
+                userRepository.findByUsernameIgnoreCase(username)
                         .orElseThrow(() ->
                                 new AccessDeniedException("User not found")
                         );
@@ -50,6 +48,66 @@ public class CurrentUserService {
         }
 
         return user;
+    }
+
+    /*
+     * BACKWARD COMPATIBILITY:
+     * Existing controllers still call getCurrentUserFromAuth(auth).
+     *
+     * If Authorization header is present, parse it.
+     * If Authorization header is missing because frontend now uses HttpOnly cookie,
+     * fallback to SecurityContext.
+     */
+    public User getCurrentUserFromAuth(
+        String auth
+) {
+    String username = null;
+
+    if (auth != null && auth.startsWith("Bearer ")) {
+        username = JwtUtil.getUsername(auth);
+    }
+
+    if (username == null || username.isBlank()) {
+        username = usernameFromSecurityContext();
+    }
+
+    if (username == null || username.isBlank()) {
+        throw new AccessDeniedException("Authentication required");
+    }
+
+    final String finalUsername = username;
+
+    User user =
+            userRepository.findByUsernameIgnoreCase(finalUsername)
+                    .orElseThrow(() ->
+                            new AccessDeniedException(
+                                    "User not found: " + finalUsername
+                            )
+                    );
+
+    if (!user.isEnabled()) {
+        throw new AccessDeniedException("User is disabled");
+    }
+
+    return user;
+}
+
+    private String usernameFromSecurityContext() {
+        Authentication authentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        if (
+                authentication == null
+                        || !authentication.isAuthenticated()
+                        || authentication.getName() == null
+                        || authentication.getName().isBlank()
+        ) {
+            return null;
+        }
+
+        return authentication.getName();
     }
 
     public boolean isAdmin(User user) {
@@ -116,10 +174,6 @@ public class CurrentUserService {
         Set<String> plants =
                 user.getEffectivePlantCodes();
 
-        /*
-         * SECURITY FIX:
-         * Empty plant access must NOT mean all plants.
-         */
         if (plants == null || plants.isEmpty()) {
             throw new AccessDeniedException(
                     "No plant access assigned"

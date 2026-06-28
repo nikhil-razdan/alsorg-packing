@@ -1,13 +1,29 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
-import { canOpenWarehousePage, normalizeRole } from "../utils/permissions";
+
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
+import AltRouteOutlinedIcon from "@mui/icons-material/AltRouteOutlined";
+import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
+
+import { useAuth } from "../auth/AuthContext";
 
 function Sidebar() {
 	const location = useLocation();
 	const [collapsed, setCollapsed] = useState(false);
 
-	const role = normalizeRole(localStorage.getItem("role"));
-	const canOpenWarehouse = canOpenWarehousePage();
+	const {
+		role,
+		warehouseAccess,
+	} = useAuth();
+
+	const canOpenWarehouse =
+		role === "ADMIN" ||
+		role === "DISPATCH" ||
+		role === "WAREHOUSE" ||
+		warehouseAccess === true;
 
 	const links = [
 		{
@@ -20,14 +36,14 @@ function Sidebar() {
 				"WAREHOUSE",
 				"LOGISTICS",
 			],
-			icon: "📊",
+			icon: <DashboardOutlinedIcon fontSize="small" />,
 		},
 
 		{
 			path: "/packflow/zoho-items",
 			label: "Inventory Items",
 			roles: ["ADMIN", "PACKING"],
-			icon: "📦",
+			icon: <Inventory2OutlinedIcon fontSize="small" />,
 		},
 
 		{
@@ -35,7 +51,7 @@ function Sidebar() {
 			label: "Warehouse",
 			roles: [],
 			customAccess: canOpenWarehouse,
-			icon: "🏭",
+			icon: <WarehouseOutlinedIcon fontSize="small" />,
 		},
 
 		{
@@ -45,8 +61,9 @@ function Sidebar() {
 				"ADMIN",
 				"DISPATCH",
 				"WAREHOUSE",
+				"PACKING",
 			],
-			icon: "🚚",
+			icon: <LocalShippingOutlinedIcon fontSize="small" />,
 		},
 
 		{
@@ -56,7 +73,7 @@ function Sidebar() {
 				"ADMIN",
 				"LOGISTICS",
 			],
-			icon: "🚛",
+			icon: <AltRouteOutlinedIcon fontSize="small" />,
 		},
 	];
 
@@ -70,45 +87,30 @@ function Sidebar() {
 
 	const linkStyle = (active) => ({
 		display: "flex",
-
 		alignItems: "center",
-
 		gap: collapsed ? 0 : 14,
-
 		padding: "11px 14px",
-
 		marginBottom: 6,
-
 		borderRadius: 14,
-
 		textDecoration: "none",
-
 		fontWeight: 700,
-
 		fontSize: 14,
-
 		color: active
 			? "#fff"
 			: "rgba(255,255,255,.72)",
-
 		background: active
 			? "linear-gradient(135deg,#1d4ed8,#2563eb)"
 			: "transparent",
-
 		border: active
 			? "1px solid rgba(59,130,246,.35)"
 			: "1px solid transparent",
-
 		boxShadow: active
 			? "0 6px 18px rgba(37,99,235,.18)"
 			: "none",
-
 		transition: "all .22s ease",
-
-		justifyContent:
-			collapsed
-				? "center"
-				: "flex-start",
+		justifyContent: collapsed
+			? "center"
+			: "flex-start",
 	});
 
 	return (
@@ -172,7 +174,7 @@ function Sidebar() {
 				style={linkStyle(location.pathname === "/modules")}
 			>
 				<span style={icon}>
-					🧭
+					<AppsOutlinedIcon fontSize="small" />
 				</span>
 
 				{!collapsed && "All Modules"}
@@ -201,6 +203,7 @@ function Sidebar() {
 			})}
 
 			<div style={{ flexGrow: 1 }} />
+
 			<div style={divider} />
 		</div>
 	);
@@ -210,30 +213,19 @@ function Sidebar() {
 
 const sidebar = {
 	width: 220,
-
 	height: "100vh",
-
 	padding: "22px 14px",
-
 	boxSizing: "border-box",
-
 	display: "flex",
-
 	flexDirection: "column",
-
 	position: "relative",
-
 	background:
 		"linear-gradient(180deg,#071120 0%,#0a162b 100%)",
-
 	borderRight:
 		"1px solid rgba(255,255,255,.06)",
-
 	boxShadow:
 		"8px 0 30px rgba(2,6,23,.45)",
-
 	overflow: "hidden",
-
 	transition: "width .25s ease",
 };
 
@@ -251,31 +243,19 @@ const topHighlight = {
 const toggleButton = {
 	width: 28,
 	height: 28,
-
 	borderRadius: 10,
-
 	border:
 		"1px solid rgba(255,255,255,.08)",
-
 	background:
 		"rgba(255,255,255,.04)",
-
 	color: "#94a3b8",
-
 	cursor: "pointer",
-
 	fontWeight: 900,
-
 	fontSize: 18,
-
 	lineHeight: 1,
-
 	display: "flex",
-
 	alignItems: "center",
-
 	justifyContent: "center",
-
 	transition: "all .2s ease",
 };
 
@@ -297,8 +277,13 @@ const toggleRow = {
 };
 
 const icon = {
-	fontSize: 16,
-	opacity: 0.9,
+	width: 20,
+	minWidth: 20,
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	opacity: 0.95,
+	color: "inherit",
 };
 
 const divider = {
@@ -317,57 +302,38 @@ const smallDivider = {
 
 const logoSection = {
 	display: "flex",
-
 	alignItems: "center",
-
 	gap: 14,
-
 	marginBottom: 18,
-
 	paddingLeft: 4,
 };
 
 const logoIcon = {
 	width: 36,
-
 	height: 36,
-
 	borderRadius: 14,
-
 	display: "flex",
-
 	alignItems: "center",
-
 	justifyContent: "center",
-
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
-
 	color: "#fff",
-
 	fontWeight: 900,
-
 	fontSize: 16,
-
 	boxShadow:
 		"0 10px 24px rgba(37,99,235,.35)",
 };
 
 const logoTitle = {
 	color: "#fff",
-
 	fontWeight: 900,
-
 	fontSize: 15,
-
 	letterSpacing: 1,
 };
 
 const logoSub = {
 	color: "rgba(255,255,255,.45)",
-
 	fontSize: 11,
-
 	marginTop: 2,
 };
 
