@@ -40,12 +40,20 @@ function UsersPage() {
 	const {
 		user,
 		role: currentRole,
-		modules: currentModules,
+		modules: currentModules = [],
 		logout: authLogout,
 	} = useAuth();
 
-	const canOpenBOMFlow = currentModules.includes("BOMFLOW");
-	const canOpenVenFlow = currentModules.includes("VENFLOW");
+	const safeCurrentModules =
+		Array.isArray(currentModules)
+			? currentModules
+			: [];
+
+	const canOpenBOMFlow =
+		safeCurrentModules.includes("BOMFLOW");
+
+	const canOpenVenFlow =
+		safeCurrentModules.includes("VENFLOW");
 
 	const goToModules = () => {
 		navigate("/modules");
@@ -127,6 +135,75 @@ function UsersPage() {
 		if (!plant) return code;
 
 		return `${plant.plantCode} | ${plant.packedAreaCode} → ${plant.fgAreaCode}`;
+	};
+
+	const normalizeUserRole = (value) => {
+		return String(value || "")
+			.replace("ROLE_", "")
+			.trim()
+			.toUpperCase();
+	};
+
+	const readBoolean = (value) => {
+		if (value === true) return true;
+		if (value === 1) return true;
+
+		const text = String(value || "")
+			.trim()
+			.toLowerCase();
+
+		return (
+			text === "true" ||
+			text === "yes" ||
+			text === "1" ||
+			text === "enabled"
+		);
+	};
+
+	const getWarehouseAccessValue = (u) => {
+		return readBoolean(
+			u?.warehouseAccess ??
+			u?.warehousePageAccess ??
+			u?.hasWarehouseAccess ??
+			u?.canOpenWarehousePage ??
+			u?.warehouse
+		);
+	};
+
+	const getSafeModulesForSave = (selectedRole, selectedModules, selectedWarehouseAccess) => {
+		const cleanRole = normalizeUserRole(selectedRole);
+
+		const nextModules = Array.from(
+			new Set(
+				Array.isArray(selectedModules)
+					? selectedModules.filter(Boolean)
+					: []
+			)
+		);
+
+		const isPackFlowRole =
+			cleanRole === "ADMIN" ||
+			cleanRole === "PACKING" ||
+			cleanRole === "WAREHOUSE" ||
+			cleanRole === "DISPATCH" ||
+			cleanRole === "LOGISTICS" ||
+			cleanRole === "DRIVER";
+
+		if (
+			isPackFlowRole ||
+			selectedWarehouseAccess ||
+			cleanRole === "WAREHOUSE"
+		) {
+			if (!nextModules.includes("PACKFLOW")) {
+				nextModules.unshift("PACKFLOW");
+			}
+		}
+
+		if (cleanRole === "ADMIN") {
+			return ["PACKFLOW", "BOMFLOW", "VENFLOW"];
+		}
+
+		return nextModules;
 	};
 
 	const roles = [
@@ -307,6 +384,18 @@ function UsersPage() {
 				return;
 			}
 
+			const finalWarehouseAccess =
+				role === "WAREHOUSE" ||
+				role === "ADMIN" ||
+				warehouseAccess;
+
+			const finalModules =
+				getSafeModulesForSave(
+					role,
+					modules,
+					finalWarehouseAccess
+				);
+
 			await API.post("/users", {
 				username: username.trim(),
 				password,
@@ -319,11 +408,8 @@ function UsersPage() {
 					role === "DRIVER"
 						? driverId
 						: null,
-				warehouseAccess:
-					role === "WAREHOUSE" || role === "ADMIN"
-						? true
-						: warehouseAccess,
-				modules,
+				warehouseAccess: finalWarehouseAccess,
+				modules: finalModules,
 			});
 
 			setUsername("");
@@ -333,8 +419,6 @@ function UsersPage() {
 			setDriverId("");
 			setWarehouseAccess(false);
 			setModules(["PACKFLOW"]);
-			setCreateOpen(true);
-
 
 			const res = await API.get("/users");
 
@@ -367,8 +451,8 @@ function UsersPage() {
 	const startEdit = (u) => {
 		setEditId(u.id);
 		setEditUsername(u.username);
-		setEditRole(u.role);
-		setEditWarehouseAccess(Boolean(u.warehouseAccess));
+		setEditRole(normalizeUserRole(u.role));
+		setEditWarehouseAccess(getWarehouseAccessValue(u));
 		setEditModules(normalizeUserModules(u));
 
 		if (u.role === "DRIVER") {
@@ -404,6 +488,18 @@ function UsersPage() {
 				return;
 			}
 
+			const finalWarehouseAccess =
+				editRole === "WAREHOUSE" ||
+				editRole === "ADMIN" ||
+				editWarehouseAccess;
+
+			const finalModules =
+				getSafeModulesForSave(
+					editRole,
+					editModules,
+					finalWarehouseAccess
+				);
+
 			await API.put(`/users/${editId}`, {
 				username: editUsername.trim(),
 				role: editRole,
@@ -415,11 +511,8 @@ function UsersPage() {
 					editRole === "DRIVER"
 						? editDriverId
 						: null,
-				warehouseAccess:
-					editRole === "WAREHOUSE" || editRole === "ADMIN"
-						? true
-						: editWarehouseAccess,
-				modules: editModules,
+				warehouseAccess: finalWarehouseAccess,
+				modules: finalModules,
 			});
 
 			const res = await API.get("/users");
@@ -459,11 +552,13 @@ function UsersPage() {
 		setDeleteOpen(true);
 	};
 
-	const hasWarehouseAccess = (user) => {
+	const hasWarehouseAccess = (u) => {
+		const cleanRole = normalizeUserRole(u?.role);
+
 		return (
-			user?.role === "ADMIN" ||
-			user?.role === "WAREHOUSE" ||
-			Boolean(user?.warehouseAccess)
+			cleanRole === "ADMIN" ||
+			cleanRole === "WAREHOUSE" ||
+			getWarehouseAccessValue(u)
 		);
 	};
 
@@ -1090,8 +1185,14 @@ function UsersPage() {
 														editRole === "WAREHOUSE" ||
 														editWarehouseAccess
 													}
-													disabled={editRole === "ADMIN" || editRole === "WAREHOUSE"}
-													onChange={(e) => setEditWarehouseAccess(e.target.checked)}
+													onChange={(e) => {
+														if (editRole === "ADMIN" || editRole === "WAREHOUSE") {
+															setEditWarehouseAccess(true);
+															return;
+														}
+
+														setEditWarehouseAccess(e.target.checked);
+													}}
 													sx={{
 														"& .MuiSwitch-switchBase.Mui-checked": {
 															color: "#fbbf24",
