@@ -28,11 +28,15 @@ import {
 	venFlowRoleLabel,
 } from "./../../utils/venflowAccess";
 
+import { useAuth } from "../../auth/AuthContext";
+
 export default function VenFlowLayout() {
 	const navigate = useNavigate();
 	const location = useLocation();
 
-	const role = getVenFlowRole();
+	const { role } = useAuth();
+
+	const venFlowRole = getVenFlowRole(role);
 
 	const navItems = [
 		{
@@ -78,7 +82,7 @@ export default function VenFlowLayout() {
 			icon: <AssessmentOutlinedIcon fontSize="small" />,
 		},
 	].filter((item) =>
-		canAccessVenFlowScreen(item.screen, role)
+		canAccessVenFlowScreen(item.screen, venFlowRole)
 	);
 
 	return (
@@ -101,7 +105,7 @@ export default function VenFlowLayout() {
 								</Typography>
 
 								<Chip
-									label={venFlowRoleLabel(role)}
+									label={venFlowRoleLabel(venFlowRole)}
 									size="small"
 									sx={roleChipSx}
 								/>

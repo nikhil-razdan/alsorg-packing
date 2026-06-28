@@ -1,4 +1,4 @@
-import { normalizeRole } from "../utils/permissions";
+import { normalizeRole } from "./permissions";
 
 export const VENFLOW_ROLES = {
 	ADMIN: "ADMIN",
@@ -8,16 +8,20 @@ export const VENFLOW_ROLES = {
 	PURCHASE: "VENFLOW_PURCHASE",
 };
 
+export const getVenFlowRole = (role) => {
+	return normalizeRole(role);
+};
+
 export const isVenFlowAdmin = (role) => {
-	return normalizeRole(role) === VENFLOW_ROLES.ADMIN;
+	return getVenFlowRole(role) === VENFLOW_ROLES.ADMIN;
 };
 
 export const isVenFlowManager = (role) => {
-	return normalizeRole(role) === VENFLOW_ROLES.MANAGER;
+	return getVenFlowRole(role) === VENFLOW_ROLES.MANAGER;
 };
 
 export const isVenFlowAdminOrManager = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	return (
 		cleanRole === VENFLOW_ROLES.ADMIN ||
@@ -26,7 +30,7 @@ export const isVenFlowAdminOrManager = (role) => {
 };
 
 export const isVenFlowProduction = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	return (
 		isVenFlowAdminOrManager(cleanRole) ||
@@ -35,7 +39,7 @@ export const isVenFlowProduction = (role) => {
 };
 
 export const isVenFlowStore = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	return (
 		isVenFlowAdminOrManager(cleanRole) ||
@@ -44,7 +48,7 @@ export const isVenFlowStore = (role) => {
 };
 
 export const isVenFlowPurchase = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	return (
 		isVenFlowAdminOrManager(cleanRole) ||
@@ -80,7 +84,7 @@ export const canAccessVenFlowScreen = (
 	screen,
 	role
 ) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	if (isVenFlowAdminOrManager(cleanRole)) {
 		return true;
@@ -122,7 +126,7 @@ export const canAccessVenFlowScreen = (
 };
 
 export const defaultVenFlowPathForRole = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	if (isVenFlowAdminOrManager(cleanRole)) {
 		return "/venflow/dashboard";
@@ -144,7 +148,7 @@ export const defaultVenFlowPathForRole = (role) => {
 };
 
 export const venFlowRoleLabel = (role) => {
-	const cleanRole = normalizeRole(role);
+	const cleanRole = getVenFlowRole(role);
 
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
 		return "Admin Control";

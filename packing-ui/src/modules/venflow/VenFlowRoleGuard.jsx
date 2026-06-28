@@ -7,23 +7,29 @@ import {
 	getVenFlowRole,
 } from "./../../utils/venflowAccess";
 
+import { useAuth } from "../../auth/AuthContext";
+
 export default function VenFlowRoleGuard({
 	screen,
 	children,
 }) {
 	const location = useLocation();
-	const role = getVenFlowRole();
+
+	const { role } = useAuth();
+
+	const venFlowRole = getVenFlowRole(role);
 
 	const allowed = canAccessVenFlowScreen(
 		screen,
-		role
+		venFlowRole
 	);
 
 	if (allowed) {
 		return children;
 	}
 
-	const fallback = defaultVenFlowPathForRole(role);
+	const fallback =
+		defaultVenFlowPathForRole(venFlowRole);
 
 	if (fallback === location.pathname) {
 		return <Navigate to="/modules" replace />;
