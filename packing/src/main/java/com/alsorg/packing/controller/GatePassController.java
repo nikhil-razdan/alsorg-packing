@@ -32,18 +32,20 @@ public class GatePassController {
         DispatchedItem item = repo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        if (item.getGatePassNumber() == null) {
+        if (item.getGatePassNumber() == null ||
+                item.getGatePassNumber().trim().isBlank()) {
             throw new IllegalStateException("Gate pass not generated yet");
         }
-        System.out.println("📄 GatePass PDF DEBUG:");
-        System.out.println("ID: " + zohoItemId);
-        System.out.println("GatePass: " + item.getGatePassNumber());
-        System.out.println("Item: " + item.getName());
-        System.out.println("Warehouse: " + item.getWarehouseCode());
-        System.out.println("From: " + item.getFromLocation());
-        System.out.println("CreatedBy: " + item.getCreatedBy());
 
-        byte[] pdf = pdfService.generateGatePass(item);
+        List<DispatchedItem> gatePassItems = repo.findByGatePassNumber(
+                item.getGatePassNumber());
+
+        if (gatePassItems == null || gatePassItems.isEmpty()) {
+            gatePassItems = List.of(item);
+        }
+
+        byte[] pdf = pdfService.generateBulkGatePass(gatePassItems);
+
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,

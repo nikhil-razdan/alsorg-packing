@@ -861,6 +861,11 @@ public class DispatchedItemService {
                 null);
     }
 
+    public String createGatePassNumber(
+            String warehouseCode) {
+        return generateGatePassNumber(warehouseCode);
+    }
+
     private String generateGatePassNumber(
             String warehouseCode) {
         String cleanWarehouse = warehouseCode == null || warehouseCode.trim().isBlank()

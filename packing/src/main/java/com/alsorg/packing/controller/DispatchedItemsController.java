@@ -35,7 +35,7 @@ public class DispatchedItemsController {
 
     @GetMapping
     public List<DispatchedItem> getDispatchedItems(
-            @RequestHeader(value = "authheaders", required = false) String auth
+            @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 

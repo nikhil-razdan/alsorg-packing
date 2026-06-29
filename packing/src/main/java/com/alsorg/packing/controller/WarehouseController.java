@@ -214,4 +214,29 @@ public class WarehouseController {
                                         "Warehouse access not allowed");
                 }
         }
+
+        @PostMapping("/gatepass/generate-missing")
+        public ResponseEntity<Map<String, Object>> generateMissingGatePass(
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                assertWarehouseAccess(user);
+
+                if (!currentUserService.isAdmin(user) &&
+                                !currentUserService.isDispatch(user)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "Only ADMIN or DISPATCH can generate missing gate passes");
+                }
+
+                int generated = service.generateMissingGatePassForStoredItems(
+                                currentUserService.allowedPlants(user),
+                                currentUserService.canViewAllWarehouseData(user),
+                                user.getUsername());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "generated", generated,
+                                                "message", generated + " missing gate pass number(s) generated"));
+        }
 }

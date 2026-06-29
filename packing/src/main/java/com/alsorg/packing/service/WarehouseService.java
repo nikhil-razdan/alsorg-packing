@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import com.opencsv.CSVReader;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,8 +28,7 @@ public class WarehouseService {
     public WarehouseService(
             DispatchedItemRepository repo,
             DispatchedItemService dispatchedItemService,
-            PlantLocationService plantLocationService
-    ) {
+            PlantLocationService plantLocationService) {
         this.repo = repo;
         this.dispatchedItemService = dispatchedItemService;
         this.plantLocationService = plantLocationService;
@@ -35,27 +36,23 @@ public class WarehouseService {
 
     public List<DispatchedItem> getFloorItems(
             java.util.Set<String> allowedPlants,
-            boolean viewallWarehouseData
-    ) {
+            boolean viewallWarehouseData) {
         if (viewallWarehouseData) {
             return repo.findByStatus(ItemDispatchStatus.ON_FLOOR);
         }
 
         return repo.findByStatusAndPlantCodeIn(
                 ItemDispatchStatus.ON_FLOOR,
-                allowedPlants
-        );
+                allowedPlants);
     }
 
     public List<DispatchedItem> getWarehouseItems(
             java.util.Set<String> allowedPlants,
-            boolean viewallWarehouseData
-    ) {
+            boolean viewallWarehouseData) {
         List<ItemDispatchStatus> statuses = List.of(
                 ItemDispatchStatus.WAREHOUSE_REQUESTED,
                 ItemDispatchStatus.IN_WAREHOUSE,
-                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED
-        );
+                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
 
         if (viewallWarehouseData) {
             return repo.findByStatusIn(statuses);
@@ -63,23 +60,20 @@ public class WarehouseService {
 
         return repo.findByStatusInAndPlantCodeIn(
                 statuses,
-                allowedPlants
-        );
+                allowedPlants);
     }
 
     public void requestWarehouseMove(
             String id,
             String warehouseCode,
             String gatePass,
-            String username
-    ) {
+            String username) {
 
         DispatchedItem item = repo.findById(id).orElseThrow();
 
         if (item.getStatus() != ItemDispatchStatus.ON_FLOOR) {
             throw new RuntimeException(
-                    "Only ON_FLOOR items can request warehouse move"
-            );
+                    "Only ON_FLOOR items can request warehouse move");
         }
 
         if (gatePass == null || gatePass.isBlank()) {
@@ -97,17 +91,15 @@ public class WarehouseService {
     public void processImport(
             MultipartFile file,
             String mode,
-            String username
-    ) {
+            String username) {
         throw new RuntimeException("Plant code required for warehouse import");
     }
-    
+
     public void processImport(
             MultipartFile file,
             String mode,
             String username,
-            String plantCode
-    ) {
+            String plantCode) {
 
         if (plantCode == null || plantCode.isBlank()) {
             throw new RuntimeException("Plant code required");
@@ -115,8 +107,15 @@ public class WarehouseService {
 
         List<ImportRow> rows = parseCsv(file);
 
-        PlantLocationService.PlantConfig plant =
-                plantLocationService.getPlantConfig(plantCode);
+        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+
+        /*
+         * One generated gate pass per warehouse in this import.
+         * Example:
+         * BLS-WH-1 items get one GP.
+         * RTP-WH-2 items get another GP.
+         */
+        Map<String, String> generatedGatePassByWarehouse = new HashMap<>();
 
         for (ImportRow row : rows) {
 
@@ -133,8 +132,7 @@ public class WarehouseService {
                 newItem.setDescription(clean(row.getDescription()));
                 newItem.setClientName(clean(row.getClientName()));
 
-                String warehouseLocation =
-                        cleanLocation(row.getWarehouseCode());
+                String warehouseLocation = cleanLocation(row.getWarehouseCode());
 
                 if (warehouseLocation == null || warehouseLocation.isBlank()) {
                     throw new RuntimeException("Warehouse required");
@@ -149,20 +147,27 @@ public class WarehouseService {
                 newItem.setCurrentLocationCode(warehouseLocation);
                 newItem.setWarehouseCode(warehouseLocation);
 
-                newItem.setGatePassNumber(
-                        row.getGatePass() == null || row.getGatePass().isBlank()
-                                ? null
-                                : row.getGatePass().trim()
-                );
+                String gatePass;
+
+                if (row.getGatePass() != null && !row.getGatePass().isBlank()) {
+                    gatePass = row.getGatePass().trim();
+                } else {
+                    gatePass = generatedGatePassByWarehouse.computeIfAbsent(
+                            warehouseLocation,
+                            dispatchedItemService::createGatePassNumber);
+                }
+
+                newItem.setGatePassNumber(gatePass);
 
                 newItem.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
 
                 newItem.setStock(1);
+
                 newItem.setCreatedBy(
                         username != null && !username.isBlank()
                                 ? username
-                                : "SYSTEM"
-                );
+                                : "SYSTEM");
+
                 newItem.setCreatedAt(LocalDateTime.now());
                 newItem.setStoredAt(LocalDateTime.now());
 
@@ -210,11 +215,10 @@ public class WarehouseService {
 
         return list;
     }
-    
+
     public List<ImportPreviewRow> previewImport(
             MultipartFile file,
-            String mode
-    ) {
+            String mode) {
 
         List<ImportRow> rows = parseCsv(file);
 
@@ -224,14 +228,12 @@ public class WarehouseService {
 
             ImportPreviewRow preview = new ImportPreviewRow();
 
-           
             preview.setZohoItemId(row.getName());
 
             preview.setLocation(row.getLocation());
-            
+
             preview.setWarehouseCode(
-                    cleanLocation(row.getWarehouseCode())
-            );
+                    cleanLocation(row.getWarehouseCode()));
 
             preview.setGatePass(row.getGatePass());
 
@@ -239,17 +241,13 @@ public class WarehouseService {
 
                 // ✅ BASIC VALIDATION
 
-                if (
-                        row.getName() == null
-                                || row.getName().isBlank()
-                ) {
+                if (row.getName() == null
+                        || row.getName().isBlank()) {
                     throw new RuntimeException("Name required");
                 }
 
-                if (
-                        row.getWarehouseCode() == null
-                                || row.getWarehouseCode().isBlank()
-                ) {
+                if (row.getWarehouseCode() == null
+                        || row.getWarehouseCode().isBlank()) {
                     throw new RuntimeException("Warehouse required");
                 }
 
@@ -269,9 +267,80 @@ public class WarehouseService {
         return result;
     }
 
+    public int generateMissingGatePassForStoredItems(
+            java.util.Set<String> allowedPlants,
+            boolean viewAllWarehouseData,
+            String username) {
+        List<DispatchedItem> warehouseItems = getWarehouseItems(
+                allowedPlants,
+                viewAllWarehouseData);
+
+        Map<String, String> generatedGatePassByWarehouse = new HashMap<>();
+
+        List<DispatchedItem> changedItems = new ArrayList<>();
+
+        for (DispatchedItem item : warehouseItems) {
+
+            if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
+                continue;
+            }
+
+            if (item.getGatePassNumber() != null &&
+                    !item.getGatePassNumber().trim().isBlank()) {
+                continue;
+            }
+
+            String warehouseCode = firstNonBlank(
+                    item.getWarehouseCode(),
+                    item.getCurrentLocationCode(),
+                    item.getLocation(),
+                    "WH");
+
+            String gatePass = generatedGatePassByWarehouse.computeIfAbsent(
+                    warehouseCode,
+                    dispatchedItemService::createGatePassNumber);
+
+            item.setGatePassNumber(gatePass);
+
+            if (item.getCreatedBy() == null || item.getCreatedBy().isBlank()) {
+                item.setCreatedBy(
+                        username != null && !username.isBlank()
+                                ? username
+                                : "SYSTEM");
+            }
+
+            if (item.getStoredAt() == null) {
+                item.setStoredAt(LocalDateTime.now());
+            }
+
+            changedItems.add(item);
+        }
+
+        if (!changedItems.isEmpty()) {
+            repo.saveAll(changedItems);
+        }
+
+        return changedItems.size();
+    }
+
     // =========================================================
     // HELPERS
     // =========================================================
+
+    private String firstNonBlank(
+            String... values) {
+        if (values == null) {
+            return "WH";
+        }
+
+        for (String value : values) {
+            if (value != null && !value.trim().isBlank()) {
+                return value.trim();
+            }
+        }
+
+        return "WH";
+    }
 
     private String clean(String value) {
 
@@ -281,11 +350,9 @@ public class WarehouseService {
 
         value = value.trim();
 
-        if (
-                value.startsWith("\"")
-                        && value.endsWith("\"")
-                        && value.length() >= 2
-        ) {
+        if (value.startsWith("\"")
+                && value.endsWith("\"")
+                && value.length() >= 2) {
             value = value.substring(1, value.length() - 1);
         }
 
@@ -310,10 +377,11 @@ public class WarehouseService {
 
         return location;
     }
-    
+
     private String normalizeDwg(String value) {
 
-        if (value == null || value.isBlank()) return value;
+        if (value == null || value.isBlank())
+            return value;
 
         value = value.trim();
 
@@ -331,8 +399,7 @@ public class WarehouseService {
             // Convert "01-Jan" → "01/01"
             if (value.matches("\\d{2}-[A-Za-z]{3}")) {
 
-                java.time.format.DateTimeFormatter f =
-                        java.time.format.DateTimeFormatter.ofPattern("dd-MMM");
+                java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("dd-MMM");
 
                 java.time.LocalDate date = java.time.LocalDate.parse(value, f);
 
@@ -346,8 +413,7 @@ public class WarehouseService {
 
                 long serial = Long.parseLong(value);
 
-                java.time.LocalDate date =
-                        java.time.LocalDate.of(1899, 12, 30).plusDays(serial);
+                java.time.LocalDate date = java.time.LocalDate.of(1899, 12, 30).plusDays(serial);
 
                 return String.format("%02d/%02d",
                         date.getDayOfMonth(),

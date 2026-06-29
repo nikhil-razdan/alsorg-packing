@@ -40,6 +40,8 @@ function WarehousePage() {
 	const [plants, setPlants] = useState([]);
 	const [assignmentDrafts, setAssignmentDrafts] = useState({});
 	const [savingAssignmentId, setSavingAssignmentId] = useState(null);
+	const [generatingMissingGatePass, setGeneratingMissingGatePass] =
+		useState(false);
 	/* ===================== FETCH ===================== */
 
 	const fetchPlants = async () => {
@@ -151,6 +153,7 @@ function WarehousePage() {
 			"currentLocationCode",
 			"status",
 			"warehouseCode",
+			"gatePassNumber",
 		];
 
 		const csv = [
@@ -538,6 +541,45 @@ function WarehousePage() {
 		}
 	};
 
+	const generateMissingGatePasses = async () => {
+		const confirmGenerate = window.confirm(
+			"Generate gate pass numbers for all stored warehouse items that do not have a gate pass?"
+		);
+
+		if (!confirmGenerate) return;
+
+		try {
+			setGeneratingMissingGatePass(true);
+
+			const res = await fetch(
+				`${API_BASE_URL}/api/warehouse/gatepass/generate-missing`,
+				{
+					method: "POST",
+					credentials: "include",
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Failed to generate missing gate passes");
+			}
+
+			const data = await res.json();
+
+			alert(
+				data?.message ||
+				`${data?.generated || 0} missing gate pass number(s) generated`
+			);
+
+			await fetchItems();
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Missing gate pass generation failed");
+		} finally {
+			setGeneratingMissingGatePass(false);
+		}
+	};
+
 	const filteredRows = useMemo(() => {
 		return rows.filter((r) => {
 			const searchValue = search.trim().toLowerCase();
@@ -700,7 +742,6 @@ function WarehousePage() {
 		}
 	};
 
-	/* ===================== COLUMNS ===================== */
 	/* ===================== COLUMNS ===================== */
 
 	const columns = [
@@ -969,12 +1010,15 @@ function WarehousePage() {
 				const row = params.row;
 				const location = row.location || "-";
 
-				// 🔐 who can view
-				const canView =
-					(isPacking || role === "ADMIN") &&
-					(row.gatePassNumber || row.status !== "ON_FLOOR");
+				const hasGatePass =
+					row.gatePassNumber &&
+					String(row.gatePassNumber).trim();
 
-				// 🔥 COMMON VIEW BUTTON
+				const canView =
+					(isPacking || isAdmin || isDispatch) &&
+					hasGatePass &&
+					row.status !== "ON_FLOOR";
+
 				const ViewButton = () => (
 					<Button
 						size="small"
@@ -1064,10 +1108,14 @@ function WarehousePage() {
 					return (
 						<Box sx={movementStatusCell}>
 							<Chip
-								label="Stored in Warehouse"
+								label={
+									hasGatePass
+										? "Stored in Warehouse"
+										: "Stored - GP Missing"
+								}
 								size="small"
 								sx={{
-									...statusStored,
+									...(hasGatePass ? statusStored : missingGatePassChip),
 									...movementStatusChipSx,
 								}}
 							/>
@@ -1076,6 +1124,7 @@ function WarehousePage() {
 						</Box>
 					);
 				}
+
 				if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 					return (
 						<Box sx={movementStatusCell}>
@@ -1595,6 +1644,34 @@ function WarehousePage() {
 						>
 							Export CSV
 						</Button>
+
+						{(isAdmin || isDispatch) && (
+							<Button
+								variant="contained"
+								disabled={generatingMissingGatePass}
+								onClick={generateMissingGatePasses}
+								sx={{
+									...toolbarButton,
+									background: generatingMissingGatePass
+										? "rgba(255,255,255,.08)"
+										: "linear-gradient(135deg,#7c3aed,#a855f7)",
+
+									color: generatingMissingGatePass
+										? "rgba(255,255,255,.45)"
+										: "#fff",
+
+									"&:hover": {
+										background: generatingMissingGatePass
+											? "rgba(255,255,255,.08)"
+											: "linear-gradient(135deg,#6d28d9,#9333ea)",
+									},
+								}}
+							>
+								{generatingMissingGatePass
+									? "Generating..."
+									: "Generate Missing Gate Pass"}
+							</Button>
+						)}
 
 						<TextField
 							select
@@ -2672,6 +2749,13 @@ const simpleCellText = {
 	overflow: "hidden",
 	textOverflow: "ellipsis",
 	display: "block",
+};
+
+const missingGatePassChip = {
+	background: "rgba(245,158,11,.14)",
+	color: "#fbbf24",
+	border: "1px solid rgba(245,158,11,.24)",
+	fontWeight: 800,
 };
 
 const simpleMutedText = {
