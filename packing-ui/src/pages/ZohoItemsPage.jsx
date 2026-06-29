@@ -236,6 +236,21 @@ function ZohoItemsPage() {
     stickerNumber: "",
     packetNumber: "",
   });
+  const [generatedHistoryReportMode, setGeneratedHistoryReportMode] =
+    useState("DETAILED");
+
+  const [generatedHistoryDateFrom, setGeneratedHistoryDateFrom] =
+    useState("");
+
+
+  const [generatedHistoryDateTo, setGeneratedHistoryDateTo] =
+    useState("");
+
+  const [generatedHistoryTimeFrom, setGeneratedHistoryTimeFrom] =
+    useState("");
+
+  const [generatedHistoryTimeTo, setGeneratedHistoryTimeTo] =
+    useState("");
   const [historyPdfPreview, setHistoryPdfPreview] = useState(null);
   const [stickerReviewOpen, setStickerReviewOpen] = useState(false);
   const [stickerReviewLoading, setStickerReviewLoading] = useState(false);
@@ -1103,6 +1118,185 @@ function ZohoItemsPage() {
       stickerNumber: "",
       packetNumber: "",
     });
+
+    setGeneratedHistoryDateFrom("");
+    setGeneratedHistoryDateTo("");
+    setGeneratedHistoryTimeFrom("");
+    setGeneratedHistoryTimeTo("");
+    setGeneratedHistoryReportMode("DETAILED");
+  };
+
+  const generatedHistoryReportModes = [
+    {
+      value: "DETAILED",
+      label: "Detailed History",
+    },
+    {
+      value: "CLIENT",
+      label: "By Client",
+    },
+    {
+      value: "SKU",
+      label: "By SKU",
+    },
+    {
+      value: "DWG",
+      label: "By DWG No",
+    },
+    {
+      value: "PD",
+      label: "By PD No",
+    },
+    {
+      value: "DESCRIPTION",
+      label: "By Description",
+    },
+    {
+      value: "DATE",
+      label: "By Date",
+    },
+    {
+      value: "HOUR",
+      label: "By Hour",
+    },
+    {
+      value: "GENERATED_BY",
+      label: "By Generated User",
+    },
+    {
+      value: "REASON",
+      label: "Initial / Reprint",
+    },
+    {
+      value: "CLIENT_SKU",
+      label: "Client + SKU",
+    },
+    {
+      value: "CLIENT_DWG",
+      label: "Client + DWG",
+    },
+    {
+      value: "CLIENT_PD",
+      label: "Client + PD",
+    },
+    {
+      value: "SKU_DWG",
+      label: "SKU + DWG",
+    },
+    {
+      value: "DATE_CLIENT",
+      label: "Date + Client",
+    },
+    {
+      value: "DATE_SKU",
+      label: "Date + SKU",
+    },
+  ];
+
+  const getHistoryDateParts = (value) => {
+    if (!value) return null;
+
+    try {
+      const normalized =
+        normalizeUtcDateTime(value);
+
+      const date =
+        new Date(normalized);
+
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+
+      const parts =
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(date);
+
+      const map = {};
+
+      parts.forEach((part) => {
+        map[part.type] = part.value;
+      });
+
+      const hour =
+        map.hour === "24" ? "00" : map.hour;
+
+      return {
+        date: `${map.year}-${map.month}-${map.day}`,
+        time: `${hour}:${map.minute}`,
+        hour,
+        minutes: Number(hour) * 60 + Number(map.minute),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const timeToMinutes = (value) => {
+    if (!value) return null;
+
+    const [hour, minute] =
+      String(value)
+        .split(":")
+        .map(Number);
+
+    if (
+      !Number.isFinite(hour) ||
+      !Number.isFinite(minute)
+    ) {
+      return null;
+    }
+
+    return hour * 60 + minute;
+  };
+
+  const rowMatchesGeneratedHistoryDateTime = (row) => {
+    const parts =
+      getHistoryDateParts(row?.generatedAt);
+
+    if (!parts) return true;
+
+    if (
+      generatedHistoryDateFrom &&
+      parts.date < generatedHistoryDateFrom
+    ) {
+      return false;
+    }
+
+    if (
+      generatedHistoryDateTo &&
+      parts.date > generatedHistoryDateTo
+    ) {
+      return false;
+    }
+
+    const fromMinutes =
+      timeToMinutes(generatedHistoryTimeFrom);
+
+    const toMinutes =
+      timeToMinutes(generatedHistoryTimeTo);
+
+    if (
+      fromMinutes !== null &&
+      parts.minutes < fromMinutes
+    ) {
+      return false;
+    }
+
+    if (
+      toMinutes !== null &&
+      parts.minutes > toMinutes
+    ) {
+      return false;
+    }
+
+    return true;
   };
 
   const filteredGeneratedHistoryRows = useMemo(() => {
@@ -1117,14 +1311,310 @@ function ZohoItemsPage() {
           row,
           generatedHistorySearch
         ) &&
-        rowMatchesGeneratedHistoryFilters(row)
+        rowMatchesGeneratedHistoryFilters(row) &&
+        rowMatchesGeneratedHistoryDateTime(row)
       );
     });
   }, [
     generatedHistoryRows,
     generatedHistorySearch,
     generatedHistoryFilters,
+    generatedHistoryDateFrom,
+    generatedHistoryDateTo,
+    generatedHistoryTimeFrom,
+    generatedHistoryTimeTo,
   ]);
+
+  const safeReportValue = (value) => {
+    const text =
+      String(value ?? "")
+        .trim();
+
+    return text || "Unassigned";
+  };
+
+  const getHistoryReportKey = (row, mode) => {
+    const parts =
+      getHistoryDateParts(row?.generatedAt);
+
+    const date =
+      parts?.date || "Unknown Date";
+
+    const hour =
+      parts?.hour ? `${parts.hour}:00 - ${parts.hour}:59` : "Unknown Hour";
+
+    const client =
+      safeReportValue(row?.clientName);
+
+    const sku =
+      safeReportValue(row?.sku);
+
+    const dwg =
+      safeReportValue(row?.drawingNo);
+
+    const pd =
+      safeReportValue(row?.pdNo);
+
+    const description =
+      safeReportValue(row?.description);
+
+    const generatedBy =
+      safeReportValue(row?.generatedBy);
+
+    const reason =
+      row?.reason === "REPRINT"
+        ? "Reprint"
+        : "Initial";
+
+    if (mode === "CLIENT") return client;
+    if (mode === "SKU") return sku;
+    if (mode === "DWG") return dwg;
+    if (mode === "PD") return pd;
+    if (mode === "DESCRIPTION") return description;
+    if (mode === "DATE") return date;
+    if (mode === "HOUR") return hour;
+    if (mode === "GENERATED_BY") return generatedBy;
+    if (mode === "REASON") return reason;
+
+    if (mode === "CLIENT_SKU") {
+      return `${client} | ${sku}`;
+    }
+
+    if (mode === "CLIENT_DWG") {
+      return `${client} | ${dwg}`;
+    }
+
+    if (mode === "CLIENT_PD") {
+      return `${client} | ${pd}`;
+    }
+
+    if (mode === "SKU_DWG") {
+      return `${sku} | ${dwg}`;
+    }
+
+    if (mode === "DATE_CLIENT") {
+      return `${date} | ${client}`;
+    }
+
+    if (mode === "DATE_SKU") {
+      return `${date} | ${sku}`;
+    }
+
+    return "Detailed";
+  };
+
+  const getHistoryReportLabel = (mode) => {
+    return generatedHistoryReportModes.find(
+      (item) => item.value === mode
+    )?.label || "Report";
+  };
+
+  const generatedHistoryReportRows = useMemo(() => {
+    if (generatedHistoryReportMode === "DETAILED") {
+      return [];
+    }
+
+    const map =
+      new Map();
+
+    filteredGeneratedHistoryRows.forEach((row) => {
+      const key =
+        getHistoryReportKey(
+          row,
+          generatedHistoryReportMode
+        );
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          reportType: getHistoryReportLabel(generatedHistoryReportMode),
+          totalPackets: 0,
+          initialCount: 0,
+          reprintCount: 0,
+          clients: new Set(),
+          skus: new Set(),
+          pdNos: new Set(),
+          dwgNos: new Set(),
+          itemNames: new Set(),
+          descriptions: new Set(),
+          generatedByUsers: new Set(),
+          firstGeneratedAt: row.generatedAt,
+          lastGeneratedAt: row.generatedAt,
+        });
+      }
+
+      const item =
+        map.get(key);
+
+      item.totalPackets += 1;
+
+      if (row.reason === "REPRINT") {
+        item.reprintCount += 1;
+      } else {
+        item.initialCount += 1;
+      }
+
+      if (row.clientName) item.clients.add(row.clientName);
+      if (row.sku) item.skus.add(row.sku);
+      if (row.pdNo) item.pdNos.add(row.pdNo);
+      if (row.drawingNo) item.dwgNos.add(row.drawingNo);
+      if (row.itemName) item.itemNames.add(row.itemName);
+      if (row.description) item.descriptions.add(row.description);
+      if (row.generatedBy) item.generatedByUsers.add(row.generatedBy);
+
+      const currentDate =
+        new Date(normalizeUtcDateTime(row.generatedAt));
+
+      const firstDate =
+        new Date(normalizeUtcDateTime(item.firstGeneratedAt));
+
+      const lastDate =
+        new Date(normalizeUtcDateTime(item.lastGeneratedAt));
+
+      if (
+        !Number.isNaN(currentDate.getTime()) &&
+        (
+          Number.isNaN(firstDate.getTime()) ||
+          currentDate < firstDate
+        )
+      ) {
+        item.firstGeneratedAt = row.generatedAt;
+      }
+
+      if (
+        !Number.isNaN(currentDate.getTime()) &&
+        (
+          Number.isNaN(lastDate.getTime()) ||
+          currentDate > lastDate
+        )
+      ) {
+        item.lastGeneratedAt = row.generatedAt;
+      }
+    });
+
+    return Array.from(map.values())
+      .map((item) => ({
+        ...item,
+        clientsText: Array.from(item.clients).join(", ") || "—",
+        skusText: Array.from(item.skus).join(", ") || "—",
+        pdNosText: Array.from(item.pdNos).join(", ") || "—",
+        dwgNosText: Array.from(item.dwgNos).join(", ") || "—",
+        itemNamesText: Array.from(item.itemNames).join(", ") || "—",
+        descriptionsText: Array.from(item.descriptions).join(", ") || "—",
+        generatedByText: Array.from(item.generatedByUsers).join(", ") || "—",
+      }))
+      .sort((a, b) => b.totalPackets - a.totalPackets);
+  }, [
+    filteredGeneratedHistoryRows,
+    generatedHistoryReportMode,
+  ]);
+
+  const csvEscape = (value) => {
+    const text =
+      String(value ?? "");
+
+    if (
+      text.includes(",") ||
+      text.includes('"') ||
+      text.includes("\n")
+    ) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    return text;
+  };
+
+  const downloadCsv = (filename, rows) => {
+    if (!rows || rows.length === 0) {
+      showUiAlert("error", "No report data to export");
+      return;
+    }
+
+    const headers =
+      Object.keys(rows[0]);
+
+    const csv =
+      [
+        headers.join(","),
+        ...rows.map((row) =>
+          headers.map((key) => csvEscape(row[key])).join(",")
+        ),
+      ].join("\n");
+
+    const blob =
+      new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const a =
+      document.createElement("a");
+
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  };
+
+  const exportGeneratedHistoryReport = () => {
+    if (generatedHistoryReportMode === "DETAILED") {
+      const rows =
+        filteredGeneratedHistoryRows.map((row) => ({
+          generatedAt: formatHistoryDateTime(row.generatedAt),
+          generatedBy: row.generatedBy || "",
+          itemName: row.itemName || "",
+          description: row.description || "",
+          sku: row.sku || "",
+          pdNo: row.pdNo || "",
+          drawingNo: row.drawingNo || "",
+          clientName: row.clientName || "",
+          packetNumber: row.packetNumber || "",
+          stickerNumber: row.stickerNumber || "",
+          reason: row.reason || "",
+          printIteration: row.printIteration || "",
+          remarks: row.remarks || "",
+          weight: row.weight || "",
+          dimensions: row.dimensions || "",
+        }));
+
+      downloadCsv(
+        "generated-history-detailed-report.csv",
+        rows
+      );
+
+      return;
+    }
+
+    const rows =
+      generatedHistoryReportRows.map((row) => ({
+        reportType: row.reportType,
+        group: row.key,
+        totalPackets: row.totalPackets,
+        initialCount: row.initialCount,
+        reprintCount: row.reprintCount,
+        clients: row.clientsText,
+        skus: row.skusText,
+        pdNos: row.pdNosText,
+        dwgNos: row.dwgNosText,
+        itemNames: row.itemNamesText,
+        descriptions: row.descriptionsText,
+        generatedBy: row.generatedByText,
+        firstGeneratedAt: formatHistoryDateTime(row.firstGeneratedAt),
+        lastGeneratedAt: formatHistoryDateTime(row.lastGeneratedAt),
+      }));
+
+    downloadCsv(
+      `generated-history-${generatedHistoryReportMode.toLowerCase()}-report.csv`,
+      rows
+    );
+  };
+
 
   const isLastPacket = (row) => {
     const key = row.masterItemId || row.itemName;
@@ -3223,6 +3713,110 @@ function ZohoItemsPage() {
                 sx={historyMiniFilterFieldSx}
               />
             </Box>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  md: "1fr 1fr 1fr",
+                  lg: "1.4fr repeat(4, 1fr) auto auto",
+                },
+                gap: 1.1,
+                width: "100%",
+                alignItems: "center",
+                mt: 1.2,
+              }}
+            >
+              <TextField
+                select
+                size="small"
+                label="Packing Report Type"
+                value={generatedHistoryReportMode}
+                onChange={(e) =>
+                  setGeneratedHistoryReportMode(e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+                slotProps={selectMenuSlotProps}
+              >
+                {generatedHistoryReportModes.map((mode) => (
+                  <MenuItem
+                    key={mode.value}
+                    value={mode.value}
+                  >
+                    {mode.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                size="small"
+                label="Date From"
+                type="date"
+                value={generatedHistoryDateFrom}
+                onChange={(e) =>
+                  setGeneratedHistoryDateFrom(e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+
+              <TextField
+                size="small"
+                label="Date To"
+                type="date"
+                value={generatedHistoryDateTo}
+                onChange={(e) =>
+                  setGeneratedHistoryDateTo(e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+
+              <TextField
+                size="small"
+                label="Time From"
+                type="time"
+                value={generatedHistoryTimeFrom}
+                onChange={(e) =>
+                  setGeneratedHistoryTimeFrom(e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+
+              <TextField
+                size="small"
+                label="Time To"
+                type="time"
+                value={generatedHistoryTimeTo}
+                onChange={(e) =>
+                  setGeneratedHistoryTimeTo(e.target.value)
+                }
+                sx={historyMiniFilterFieldSx}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+
+              <Button
+                onClick={exportGeneratedHistoryReport}
+                sx={modalSecondaryButtonSx}
+              >
+                Export CSV
+              </Button>
+
+              <Box sx={historyCountBadgeSx}>
+                {generatedHistoryReportMode === "DETAILED"
+                  ? `${filteredGeneratedHistoryRows.length} Records`
+                  : `${generatedHistoryReportRows.length} Groups`}
+              </Box>
+            </Box>
 
             <Box
               sx={{
@@ -3283,7 +3877,104 @@ function ZohoItemsPage() {
                 <div>Reason</div>
                 <div>Action</div>
               </div>
+              {generatedHistoryReportMode !== "DETAILED" && (
+                <Box sx={historyReportWrapSx}>
+                  <Box sx={historyReportTitleSx}>
+                    {getHistoryReportLabel(generatedHistoryReportMode)} Packing Report
+                  </Box>
 
+                  <div style={historyReportHeader}>
+                    <div>Group</div>
+                    <div>Total</div>
+                    <div>Initial</div>
+                    <div>Reprint</div>
+                    <div>Client</div>
+                    <div>SKU</div>
+                    <div>PD / DWG</div>
+                    <div>First Generated</div>
+                    <div>Last Generated</div>
+                  </div>
+
+                  <Box sx={historyReportBodySx}>
+                    {generatedHistoryReportRows.length === 0 && (
+                      <Box sx={historyEmptySx}>
+                        No packing report data found.
+                      </Box>
+                    )}
+
+                    {generatedHistoryReportRows.map((row) => (
+                      <div
+                        key={row.key}
+                        style={historyReportRow}
+                      >
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historyMainText}
+                            title={row.key}
+                          >
+                            {row.key}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <Chip
+                            label={row.totalPackets}
+                            size="small"
+                            sx={historyInitialChipSx}
+                          />
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          {row.initialCount}
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          {row.reprintCount}
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historySubText}
+                            title={row.clientsText}
+                          >
+                            {row.clientsText}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historyMonoText}
+                            title={row.skusText}
+                          >
+                            {row.skusText}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historySubText}
+                            title={`${row.pdNosText} / ${row.dwgNosText}`}
+                          >
+                            {row.pdNosText} / {row.dwgNosText}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <span style={historyDateText}>
+                            {formatHistoryDateTime(row.firstGeneratedAt)}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <span style={historyDateText}>
+                            {formatHistoryDateTime(row.lastGeneratedAt)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </Box>
+                </Box>
+              )}
               <Box sx={historyTableBodySx}>
                 {generatedHistoryLoading && (
                   <Box sx={historyEmptySx}>
@@ -4912,6 +5603,58 @@ const formFieldSx = () => ({
     color: "#f87171",
   },
 });
+
+const historyReportWrapSx = {
+  mb: 2,
+  borderRadius: "18px",
+  overflow: "hidden",
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.95), rgba(15,23,42,.88))",
+  border: "1px solid rgba(96,165,250,.16)",
+  boxShadow: "0 18px 42px rgba(0,0,0,.28)",
+};
+
+const historyReportTitleSx = {
+  px: 2,
+  py: 1.4,
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#93c5fd",
+  borderBottom: "1px solid rgba(255,255,255,.08)",
+};
+
+const historyReportHeader = {
+  display: "grid",
+  gridTemplateColumns:
+    "220px 80px 80px 80px 180px 170px 190px 155px 155px",
+  gap: 0,
+  padding: "12px 14px",
+  background: "rgba(255,255,255,.05)",
+  color: "rgba(255,255,255,.72)",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".04em",
+  minWidth: 1310,
+};
+
+const historyReportBodySx = {
+  maxHeight: 320,
+  overflow: "auto",
+};
+
+const historyReportRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "220px 80px 80px 80px 180px 170px 190px 155px 155px",
+  gap: 0,
+  padding: "11px 14px",
+  borderBottom: "1px solid rgba(255,255,255,.055)",
+  color: "rgba(255,255,255,.82)",
+  fontSize: 12,
+  minWidth: 1310,
+  alignItems: "center",
+};
 
 const historyHeaderButtonSx = {
   height: 38,
