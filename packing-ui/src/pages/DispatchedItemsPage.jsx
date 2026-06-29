@@ -1779,45 +1779,45 @@ function DispatchedItemsPage() {
 	};
 
 	const fetchData = async () => {
-	try {
-		setLoading(true);
+		try {
+			setLoading(true);
 
-		const res = await authFetch(`${API_BASE_URL}/api/dispatched`, {
-			method: "GET",
-		});
+			const res = await authFetch(`${API_BASE_URL}/api/dispatched`, {
+				method: "GET",
+			});
 
-		if (!res.ok) {
-			const text = await res.text();
-			throw new Error(text || "Failed to fetch dispatched items");
-		}
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Failed to fetch dispatched items");
+			}
 
-		const data = await res.json();
+			const data = await res.json();
 
-		if (!Array.isArray(data)) {
-			console.error("Invalid API response:", data);
+			if (!Array.isArray(data)) {
+				console.error("Invalid API response:", data);
+				setRows([]);
+				return [];
+			}
+
+			const cleaned = data
+				.filter((d) => d?.zohoItemId)
+				.map((d) => ({
+					...d,
+					stock: d.stock ?? 0,
+					status: (d.status || "").trim(),
+				}));
+
+			setRows(cleaned);
+
+			return cleaned;
+		} catch (err) {
+			console.error(err);
 			setRows([]);
 			return [];
+		} finally {
+			setLoading(false);
 		}
-
-		const cleaned = data
-			.filter((d) => d?.zohoItemId)
-			.map((d) => ({
-				...d,
-				stock: d.stock ?? 0,
-				status: (d.status || "").trim(),
-			}));
-
-		setRows(cleaned);
-
-		return cleaned;
-	} catch (err) {
-		console.error(err);
-		setRows([]);
-		return [];
-	} finally {
-		setLoading(false);
-	}
-};
+	};
 
 	const PLANT_LOCATION_MAP = {
 		"AL-P1": {
@@ -2495,27 +2495,88 @@ function DispatchedItemsPage() {
 
 	/* ===================== DOWNLOAD ===================== */
 
-	const openStickerHistory = async (itemId) => {
+	const openStickerHistory = async (row) => {
 		try {
+			if (!row?.zohoItemId) {
+				alert("Dispatched Item ID missing");
+				return;
+			}
+
 			setHistoryOpen(true);
 			setHistoryLoading(true);
 			setHistoryRows([]);
-			setHistoryItem(itemId);
+			setHistoryItem(row.zohoItemId);
 
+			/*
+			 * Step 1:
+			 * Backend will create missing PacketItem / StickerHistory / PDF
+			 * for old legacy dispatched items.
+			 */
+			const ensureRes = await authFetch(
+				`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(row.zohoItemId)}/ensure-history`,
+				{
+					method: "POST",
+					headers: getAuthHeaders(),
+				}
+			);
+
+			if (!ensureRes.ok) {
+				const text = await ensureRes.text();
+				throw new Error(text || "Sticker history rebuild failed");
+			}
+
+			const ensureData = await ensureRes.json();
+
+			const packetItemId =
+				ensureData?.packetItemId ||
+				row.packetItemId ||
+				row.itemId ||
+				row.id;
+
+			if (!packetItemId) {
+				throw new Error("Packet Item ID missing after history rebuild");
+			}
+
+			/*
+			 * Step 2:
+			 * Now load normal sticker history.
+			 */
 			const res = await authFetch(
-				`${API_BASE_URL}/api/stickers/${encodeURIComponent(itemId)}/history`,
+				`${API_BASE_URL}/api/stickers/${encodeURIComponent(packetItemId)}/history`,
 				{
 					method: "GET",
-					headers: getAuthHeaders()
-				});
+					headers: getAuthHeaders(),
+				}
+			);
 
-			if (!res.ok) throw new Error("History fetch failed");
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "History fetch failed");
+			}
 
 			const data = await res.json();
-			setHistoryRows(data);
+
+			setHistoryRows(Array.isArray(data) ? data : []);
+
+			/*
+			 * Keep row corrected in UI memory too.
+			 */
+			setRows((prev) =>
+				prev.map((item) =>
+					item.zohoItemId === row.zohoItemId
+						? {
+							...item,
+							packetItemId,
+							stickerNumber:
+								ensureData?.stickerNumber ||
+								item.stickerNumber,
+						}
+						: item
+				)
+			);
 		} catch (err) {
 			console.error(err);
-			alert("Failed to load sticker history");
+			alert(err.message || "Failed to load sticker history");
 		} finally {
 			setHistoryLoading(false);
 		}
@@ -2642,12 +2703,7 @@ function DispatchedItemsPage() {
 								size="small"
 								sx={stickerHistoryButton}
 								onClick={() => {
-									if (!row.packetItemId) {
-										alert("Packet Item ID missing");
-										return;
-									}
-
-									openStickerHistory(row.packetItemId);
+									openStickerHistory(row);
 								}}
 							>
 								<DownloadOutlinedIcon fontSize="small" />

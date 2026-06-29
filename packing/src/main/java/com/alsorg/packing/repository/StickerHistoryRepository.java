@@ -121,4 +121,8 @@ public interface StickerHistoryRepository
      * Optional but useful if your delete logic deletes sticker history.
      */
     void deleteByPacketItem_Id(UUID packetItemId);
+
+    List<StickerHistory> findByPacketItem_IdOrderByGeneratedAtDesc(
+        UUID packetItemId
+);
 }
