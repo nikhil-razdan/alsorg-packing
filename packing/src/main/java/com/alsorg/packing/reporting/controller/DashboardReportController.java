@@ -6,19 +6,25 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
 import com.alsorg.packing.reporting.dto.DashboardStatsDTO;
 import com.alsorg.packing.reporting.service.DashboardReportService;
-import com.alsorg.packing.security.JwtUtil;
+import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard")
 public class DashboardReportController {
 
     private final DashboardReportService service;
+    private final CurrentUserService currentUserService;
 
-    public DashboardReportController(DashboardReportService service) {
+    public DashboardReportController(
+            DashboardReportService service,
+            CurrentUserService currentUserService
+    ) {
         this.service = service;
+        this.currentUserService = currentUserService;
     }
 
     @GetMapping
@@ -31,11 +37,10 @@ public class DashboardReportController {
             @RequestParam String type,
             @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        String token = extractToken(auth);
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-        String role = JwtUtil.getRole(token);
-
-        if (!"ADMIN".equalsIgnoreCase(role)) {
+        if (!currentUserService.isAdmin(user)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Only ADMIN can view user-wise throughput"
@@ -50,16 +55,5 @@ public class DashboardReportController {
                     e.getMessage()
             );
         }
-    }
-
-    private String extractToken(String auth) {
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "Missing or invalid Authorization header"
-            );
-        }
-
-        return auth.replace("Bearer ", "").trim();
     }
 }
