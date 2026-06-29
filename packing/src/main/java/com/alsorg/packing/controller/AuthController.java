@@ -41,6 +41,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(
             @RequestBody LoginRequest request,
+            @RequestHeader(value = "X-Client-Type", required = false) String clientType,
             HttpServletRequest httpRequest
     ) {
         String username = clean(request.username());
@@ -94,12 +95,28 @@ public class AuthController {
                         httpRequest
                 );
 
+        Map<String, Object> response =
+                buildAuthResponse(user);
+
+        /*
+         * Web PackFlow:
+         * Token is stored only in HttpOnly cookie.
+         *
+         * Mobile ShipTrack:
+         * React Native cannot depend on browser HttpOnly cookies,
+         * so mobile gets token in JSON and stores it in Expo SecureStore.
+         */
+        if (isMobileClient(clientType)) {
+            response.put("token", token);
+            response.put("accessToken", token);
+        }
+
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.SET_COOKIE,
                         cookie.toString()
                 )
-                .body(buildAuthResponse(user));
+                .body(response);
     }
 
     @GetMapping("/me")
@@ -220,6 +237,13 @@ public class AuthController {
         return user.isWarehouseAccess()
                 || "ADMIN".equals(role)
                 || "WAREHOUSE".equals(role);
+    }
+
+    private boolean isMobileClient(
+            String clientType
+    ) {
+        return clientType != null
+                && "mobile".equalsIgnoreCase(clientType.trim());
     }
 
     private ResponseCookie buildAccessCookie(

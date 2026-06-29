@@ -5,7 +5,17 @@ import React, {
   useState,
 } from "react";
 
-import * as SecureStore from "expo-secure-store";
+import {
+  clearStoredAuth,
+  getStoredRole,
+  getStoredToken,
+  getStoredUsername,
+  saveStoredAuth,
+} from "../api/client";
+
+import {
+  logoutUser,
+} from "../api/authApi";
 
 const AuthContext = createContext(null);
 
@@ -31,13 +41,13 @@ export function AuthProvider({
   const loadStoredAuth = async () => {
     try {
       const storedToken =
-        await SecureStore.getItemAsync("token");
+        await getStoredToken();
 
       const storedRole =
-        await SecureStore.getItemAsync("role");
+        await getStoredRole();
 
       const storedUsername =
-        await SecureStore.getItemAsync("username");
+        await getStoredUsername();
 
       setToken(storedToken || null);
       setRole(storedRole || "");
@@ -52,20 +62,11 @@ export function AuthProvider({
     role,
     username,
   }) => {
-    await SecureStore.setItemAsync(
-      "token",
-      token || ""
-    );
-
-    await SecureStore.setItemAsync(
-      "role",
-      role || ""
-    );
-
-    await SecureStore.setItemAsync(
-      "username",
-      username || ""
-    );
+    await saveStoredAuth({
+      token,
+      role,
+      username,
+    });
 
     setToken(token || null);
     setRole(role || "");
@@ -73,9 +74,13 @@ export function AuthProvider({
   };
 
   const logout = async () => {
-    await SecureStore.deleteItemAsync("token");
-    await SecureStore.deleteItemAsync("role");
-    await SecureStore.deleteItemAsync("username");
+    try {
+      await logoutUser();
+    } catch (e) {
+      // Ignore backend logout failure on mobile.
+    }
+
+    await clearStoredAuth();
 
     setToken(null);
     setRole("");

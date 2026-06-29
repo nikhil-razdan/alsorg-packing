@@ -4,8 +4,10 @@ import {
 } from "react-native";
 
 import * as FileSystem from "expo-file-system/legacy";
-import * as MediaLibrary from "expo-media-library";
-import * as SecureStore from "expo-secure-store";
+import * as MediaLibrary from "expo-media-library"; import {
+  buildBearerToken,
+  getStoredToken,
+} from "./client";
 
 function getImageExtension(url) {
   const cleanUrl =
@@ -54,12 +56,15 @@ async function downloadPodToCache(url) {
     `shiptrack-pod-${Date.now()}.${ext}`;
 
   const token =
-    await SecureStore.getItemAsync("token");
+    await getStoredToken();
 
-  const headers = token
+  const bearer =
+    buildBearerToken(token);
+
+  const headers = bearer
     ? {
-        Authorization: `Bearer ${token}`,
-      }
+      Authorization: bearer,
+    }
     : {};
 
   const result =
@@ -168,7 +173,7 @@ export async function safeOpenPodImage(url) {
     Alert.alert(
       "Open POD failed",
       e?.message ||
-        "POD image could not be opened, but please check your phone gallery."
+      "POD image could not be opened, but please check your phone gallery."
     );
   }
 }
@@ -185,7 +190,7 @@ export async function safeDownloadPodImage(url) {
     Alert.alert(
       "Download failed",
       e?.message ||
-        "Unable to download POD image."
+      "Unable to download POD image."
     );
   }
 }

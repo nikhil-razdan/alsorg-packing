@@ -79,8 +79,13 @@ export default function LoginScreen() {
         username;
 
       if (!token) {
+        console.log(
+          "Mobile login response without token:",
+          data
+        );
+
         throw new Error(
-          "Login token missing"
+          "Backend login succeeded, but mobile token was not returned. Check X-Client-Type mobile handling in AuthController."
         );
       }
 
