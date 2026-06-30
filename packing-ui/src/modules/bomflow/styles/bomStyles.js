@@ -256,7 +256,7 @@ export const BOM_glassPanelSx = {
 export const BOM_panelSx = {
 	...BOM_glassPanelSx,
 	p: 3,
-	borderRadius: 24,
+	borderRadius: 16,
 	width: "100%",
 	boxSizing: "border-box",
 	overflow: "hidden",
@@ -265,7 +265,7 @@ export const BOM_panelSx = {
 export const BOM_sidePanelSx = {
 	...BOM_glassPanelSx,
 	p: 2.5,
-	borderRadius: 24,
+	borderRadius: 16,
 	width: "100%",
 	boxSizing: "border-box",
 	overflow: "hidden",
@@ -274,7 +274,7 @@ export const BOM_sidePanelSx = {
 export const BOM_moduleCardSx = {
 	...BOM_glassPanelSx,
 	p: 3,
-	borderRadius: 24,
+	borderRadius: 16,
 	height: "100%",
 	display: "flex",
 	flexDirection: "column",
@@ -296,7 +296,7 @@ export const BOM_activeCostingsCardSx = {
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.92), rgba(17,24,39,.88))",
 	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "18px",
+	borderRadius: "14px",
 	p: 2,
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
 };
@@ -320,7 +320,7 @@ export const BOM_cardTopSx = {
 export const BOM_iconSx = {
 	width: 54,
 	height: 54,
-	borderRadius: "18px",
+	borderRadius: "14px",
 	display: "grid",
 	placeItems: "center",
 	color: "#93c5fd",
@@ -408,7 +408,7 @@ export const BOM_productSideColumnSx = {
 
 export const BOM_productMainPanelSx = {
 	...BOM_panelSx,
-	borderRadius: 24,
+	borderRadius: 16,
 	p: { xs: 2.2, md: 2.8 },
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.68))",
@@ -426,7 +426,7 @@ export const BOM_productMainPanelSx = {
 
 export const BOM_productSidePanelSx = {
 	...BOM_sidePanelSx,
-	borderRadius: 24,
+	borderRadius: 16,
 	p: { xs: 2.2, md: 2.5 },
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.68))",
@@ -556,7 +556,7 @@ export const BOM_noteSx = {
 	mt: 2,
 	p: 2,
 	background: "rgba(2,6,23,.45)",
-	borderRadius: "18px",
+	borderRadius: "14px",
 	display: "flex",
 	gap: 1,
 	alignItems: "flex-start",
@@ -591,7 +591,7 @@ export const BOM_uploadBoxSx = {
 	border: "1.5px dashed rgba(255,255,255,.12)",
 	background:
 		"linear-gradient(180deg, rgba(2,6,23,.52), rgba(2,6,23,.38))",
-	borderRadius: "20px",
+	borderRadius: "14px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
@@ -650,7 +650,7 @@ export const BOM_drawingBoxSx = {
 	border: "1px solid rgba(255,255,255,.08)",
 	background:
 		"linear-gradient(180deg, rgba(2,6,23,.52), rgba(2,6,23,.38))",
-	borderRadius: "20px",
+	borderRadius: "14px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
@@ -795,7 +795,7 @@ export const BOM_costCardSx = {
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
 	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "20px",
+	borderRadius: "14px",
 	p: 2,
 	minWidth: 175,
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
@@ -818,7 +818,7 @@ export const BOM_costValueSx = {
 
 export const BOM_sectionCardSx = {
 	...BOM_glassPanelSx,
-	borderRadius: 24,
+	borderRadius: 16,
 	overflow: "hidden",
 	mb: 2,
 	borderLeft: "4px solid #2563eb",
@@ -1009,7 +1009,7 @@ export const BOM_validRateSx = {
 export const BOM_collapsedSectionSx = {
 	...BOM_glassPanelSx,
 	height: 62,
-	borderRadius: 24,
+	borderRadius: 16,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
@@ -1032,7 +1032,7 @@ export const BOM_panelPlaceholderSx = {
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
 	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "24px",
+	borderRadius: "16px",
 	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
 };
 
@@ -1122,7 +1122,7 @@ export const BOM_brandSubSx = BOM_moduleLogoSubSx;
 export const BOM_heroSx = {
 	mb: 4,
 	p: { xs: 3, md: 4 },
-	borderRadius: "24px",
+	borderRadius: "16px",
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
 	border: "1px solid rgba(255,255,255,.08)",
@@ -1161,7 +1161,7 @@ export const BOM_heroChipSx = {
 
 export const BOM_portalModuleCardSx = (enabled) => ({
 	height: "100%",
-	borderRadius: "24px",
+	borderRadius: "16px",
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
 	border: "1px solid rgba(255,255,255,.08)",
