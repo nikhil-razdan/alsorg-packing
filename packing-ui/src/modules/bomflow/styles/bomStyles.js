@@ -1,10 +1,9 @@
 /* =====================================================
-   BOMFLOW MODULE - SINGLE SOURCE OF TRUTH
-   IMPORTANT:
+   BOMFLOW STYLE SYSTEM
 ===================================================== */
 
 /* =====================================================
-   MODULE PAGE LAYOUT
+   GLOBAL / MODULE PAGE SHELL
 ===================================================== */
 
 export const BOM_modulePageSx = {
@@ -12,13 +11,13 @@ export const BOM_modulePageSx = {
 	position: "relative",
 	overflowX: "hidden",
 	overflowY: "auto",
+	color: "#fff",
 	background: `
 		radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%),
 		radial-gradient(circle at bottom right, rgba(14,165,233,0.12), transparent 24%),
 		linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)
 	`,
 	backgroundAttachment: "fixed",
-	color: "#fff",
 };
 
 export const BOM_moduleContentSx = {
@@ -27,8 +26,34 @@ export const BOM_moduleContentSx = {
 	padding: 24,
 	display: "flex",
 	flexDirection: "column",
-	gap: 20,
+	gap: 22,
 };
+
+export const BOM_viewShellSx = {
+	width: "100%",
+};
+
+export const BOM_backgroundWatermarkSx = {
+	position: "absolute",
+	fontSize: 140,
+	fontWeight: 900,
+	background:
+		"linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.025))",
+	WebkitBackgroundClip: "text",
+	WebkitTextFillColor: "transparent",
+	top: "50%",
+	left: "50%",
+	transform: "translate(-50%, -50%)",
+	pointerEvents: "none",
+	letterSpacing: 8,
+	filter: "blur(1px)",
+	opacity: 0.45,
+	userSelect: "none",
+};
+
+/* =====================================================
+   MODULE HEADER
+===================================================== */
 
 export const BOM_moduleHeaderRowSx = {
 	display: "flex",
@@ -36,7 +61,6 @@ export const BOM_moduleHeaderRowSx = {
 	alignItems: "center",
 	gap: 2,
 	flexWrap: "wrap",
-	mb: 1,
 };
 
 export const BOM_moduleLogoRowSx = {
@@ -66,12 +90,11 @@ export const BOM_moduleLogoSx = {
 	letterSpacing: "-0.04em",
 };
 
-export const BOM_moduleSubtitleSx = {
+export const BOM_moduleLogoSubSx = {
 	color: "rgba(255,255,255,0.65)",
 	fontSize: 14,
-	fontWeight: 650,
+	fontWeight: 600,
 	mt: 0.8,
-	lineHeight: 1.45,
 };
 
 export const BOM_moduleHeaderActionsSx = {
@@ -89,6 +112,10 @@ export const BOM_activePageChipSx = {
 	border: "1px solid rgba(59,130,246,.28)",
 	fontWeight: 900,
 	letterSpacing: ".04em",
+
+	"& .MuiChip-label": {
+		px: 1.4,
+	},
 };
 
 export const BOM_primaryActionBtnSx = {
@@ -122,12 +149,14 @@ export const BOM_secondaryActionBtnSx = {
 	},
 };
 
+/* =====================================================
+   MODULE TABS
+===================================================== */
+
 export const BOM_tabsRowSx = {
 	display: "flex",
 	gap: 12,
 	flexWrap: "wrap",
-	mt: 1,
-	mb: 1,
 };
 
 export const BOM_tabButtonStyle = {
@@ -148,10 +177,6 @@ export const BOM_tabButtonActiveStyle = {
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	border: "1px solid rgba(59,130,246,0.4)",
 	boxShadow: "0 10px 25px rgba(37,99,235,0.35)",
-};
-
-export const BOM_viewShellSx = {
-	width: "100%",
 };
 
 /* =====================================================
@@ -193,14 +218,19 @@ export const BOM_labelChipSx = {
 	border: "1px solid rgba(59,130,246,.24)",
 	fontWeight: 850,
 	letterSpacing: ".06em",
+
+	"& .MuiChip-label": {
+		px: 1.25,
+	},
 };
 
 export const BOM_pageTitleSx = {
 	color: "#fff",
-	fontSize: 30,
-	fontWeight: 900,
-	lineHeight: 1.1,
-	letterSpacing: "-0.03em",
+	fontSize: 32,
+	fontWeight: 950,
+	lineHeight: 1.08,
+	letterSpacing: "-0.04em",
+	margin: 0,
 };
 
 export const BOM_pageSubSx = {
@@ -212,46 +242,42 @@ export const BOM_pageSubSx = {
 };
 
 /* =====================================================
-   COMMON GLASS SURFACES
+   SHARED SURFACES
 ===================================================== */
 
-export const BOM_panelSx = {
-	p: 2.7,
-	borderRadius: 24,
+export const BOM_glassPanelSx = {
 	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+		"linear-gradient(180deg, rgba(15,23,42,.78), rgba(15,23,42,.66))",
+	border: "1px solid rgba(255,255,255,.06)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
 	backdropFilter: "blur(18px)",
-	overflow: "hidden",
+};
+
+export const BOM_panelSx = {
+	...BOM_glassPanelSx,
+	p: 3,
+	borderRadius: 24,
 	width: "100%",
 	boxSizing: "border-box",
+	overflow: "hidden",
 };
 
 export const BOM_sidePanelSx = {
+	...BOM_glassPanelSx,
 	p: 2.5,
 	borderRadius: 24,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
 	width: "100%",
 	boxSizing: "border-box",
+	overflow: "hidden",
 };
 
 export const BOM_moduleCardSx = {
+	...BOM_glassPanelSx,
 	p: 3,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
 	borderRadius: 24,
 	height: "100%",
 	display: "flex",
 	flexDirection: "column",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
 	transition: "all .25s ease",
 
 	"&:hover": {
@@ -262,7 +288,7 @@ export const BOM_moduleCardSx = {
 };
 
 /* =====================================================
-   DASHBOARD CARDS
+   DASHBOARD
 ===================================================== */
 
 export const BOM_activeCostingsCardSx = {
@@ -275,18 +301,13 @@ export const BOM_activeCostingsCardSx = {
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
 };
 
-export const BOM_costLabelSx = {
-	color: "#94a3b8",
-	fontSize: 11,
-	fontWeight: 800,
-	letterSpacing: ".05em",
-};
-
 export const BOM_activeCostingsValueSx = {
 	color: "#22c55e",
-	fontSize: 28,
-	fontWeight: 900,
+	fontSize: 30,
+	fontWeight: 950,
 	fontFamily: "monospace",
+	lineHeight: 1,
+	mt: 0.8,
 };
 
 export const BOM_cardTopSx = {
@@ -297,21 +318,28 @@ export const BOM_cardTopSx = {
 };
 
 export const BOM_iconSx = {
-	width: 52,
-	height: 52,
+	width: 54,
+	height: 54,
 	borderRadius: "18px",
 	display: "grid",
 	placeItems: "center",
 	color: "#93c5fd",
 	background: "rgba(59,130,246,.13)",
 	border: "1px solid rgba(59,130,246,.20)",
+	boxShadow: "0 12px 28px rgba(37,99,235,.16)",
 };
 
 export const BOM_miniChipSx = {
+	height: 26,
 	color: "#93c5fd",
 	background: "rgba(59,130,246,.12)",
 	border: "1px solid rgba(59,130,246,.20)",
-	fontWeight: 800,
+	fontWeight: 850,
+	borderRadius: 999,
+
+	"& .MuiChip-label": {
+		px: 1.1,
+	},
 };
 
 export const BOM_cardTitleSx = {
@@ -324,7 +352,7 @@ export const BOM_cardTitleSx = {
 export const BOM_cardSubSx = {
 	color: "rgba(255,255,255,.62)",
 	fontSize: 14,
-	lineHeight: 1.6,
+	lineHeight: 1.65,
 	mb: 3,
 	flex: 1,
 };
@@ -334,7 +362,7 @@ export const BOM_openBtnSx = {
 	borderRadius: "14px",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
-	fontWeight: 800,
+	fontWeight: 850,
 	textTransform: "none",
 	boxShadow: "0 10px 25px rgba(37,99,235,.28)",
 
@@ -344,7 +372,7 @@ export const BOM_openBtnSx = {
 };
 
 /* =====================================================
-   PRODUCT MASTER PAGE
+   PRODUCT MASTER LAYOUT
 ===================================================== */
 
 export const BOM_productPageSx = {
@@ -354,7 +382,7 @@ export const BOM_productPageSx = {
 
 export const BOM_productMasterGridSx = {
 	display: "grid",
-	gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, .75fr)",
+	gridTemplateColumns: "minmax(0, 1.62fr) minmax(360px, .78fr)",
 	gap: 20,
 	alignItems: "start",
 	width: "100%",
@@ -378,6 +406,32 @@ export const BOM_productSideColumnSx = {
 	gap: 18,
 };
 
+export const BOM_productMainPanelSx = {
+	...BOM_panelSx,
+	borderRadius: 24,
+	p: { xs: 2.2, md: 2.8 },
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.68))",
+
+	"&::before": {
+		content: '""',
+		display: "block",
+		height: 1,
+		width: "100%",
+		background:
+			"linear-gradient(90deg, transparent, rgba(96,165,250,.22), transparent)",
+		mb: 0,
+	},
+};
+
+export const BOM_productSidePanelSx = {
+	...BOM_sidePanelSx,
+	borderRadius: 24,
+	p: { xs: 2.2, md: 2.5 },
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.68))",
+};
+
 export const BOM_twoColumnFieldGridSx = {
 	display: "grid",
 	gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -396,6 +450,12 @@ export const BOM_threeColumnFieldGridSx = {
 	"@media (max-width: 900px)": {
 		gridTemplateColumns: "1fr",
 	},
+};
+
+export const BOM_fieldStackSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 2,
 };
 
 export const BOM_statusWrapSx = {
@@ -527,9 +587,10 @@ export const BOM_sideTitleSx = {
 };
 
 export const BOM_uploadBoxSx = {
-	minHeight: 190,
+	minHeight: 200,
 	border: "1.5px dashed rgba(255,255,255,.12)",
-	background: "rgba(2,6,23,.42)",
+	background:
+		"linear-gradient(180deg, rgba(2,6,23,.52), rgba(2,6,23,.38))",
 	borderRadius: "20px",
 	display: "flex",
 	flexDirection: "column",
@@ -585,9 +646,10 @@ export const BOM_smallDarkChipSx = {
 };
 
 export const BOM_drawingBoxSx = {
-	minHeight: 140,
+	minHeight: 145,
 	border: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(2,6,23,.42)",
+	background:
+		"linear-gradient(180deg, rgba(2,6,23,.52), rgba(2,6,23,.38))",
 	borderRadius: "20px",
 	display: "flex",
 	flexDirection: "column",
@@ -624,7 +686,8 @@ export const BOM_noFileSx = {
 };
 
 export const BOM_versionRowSx = {
-	background: "rgba(2,6,23,.38)",
+	background:
+		"linear-gradient(180deg, rgba(2,6,23,.48), rgba(2,6,23,.34))",
 	border: "1px solid rgba(255,255,255,.06)",
 	p: 1.6,
 	borderRadius: "16px",
@@ -734,43 +797,31 @@ export const BOM_costCardSx = {
 	border: "1px solid rgba(255,255,255,.08)",
 	borderRadius: "20px",
 	p: 2,
-	minWidth: 170,
+	minWidth: 175,
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
+};
+
+export const BOM_costLabelSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 850,
+	letterSpacing: ".05em",
 };
 
 export const BOM_costValueSx = {
 	color: "#22c55e",
 	fontSize: 24,
-	fontWeight: 900,
+	fontWeight: 950,
 	fontFamily: "monospace",
 	mt: 0.6,
 };
 
 export const BOM_sectionCardSx = {
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
+	...BOM_glassPanelSx,
 	borderRadius: 24,
 	overflow: "hidden",
 	mb: 2,
 	borderLeft: "4px solid #2563eb",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
-};
-
-export const BOM_collapsedSectionSx = {
-	minHeight: 62,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
-	borderRadius: 24,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	px: 2,
-	borderLeft: "4px solid #8b5cf6",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
 };
 
 export const BOM_sectionHeaderSx = {
@@ -955,6 +1006,18 @@ export const BOM_validRateSx = {
 	fontFamily: "monospace",
 };
 
+export const BOM_collapsedSectionSx = {
+	...BOM_glassPanelSx,
+	height: 62,
+	borderRadius: 24,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	px: 2,
+	mb: 2,
+	borderLeft: "4px solid #8b5cf6",
+};
+
 /* =====================================================
    PLACEHOLDER
 ===================================================== */
@@ -1004,8 +1067,7 @@ export const BOM_notePlaceholderSx = {
 };
 
 /* =====================================================
-   OPTIONAL OLD HOME / PORTAL SUPPORT
-   Kept so older BOMFlowHome.jsx does not break.
+   OLD HOME / PORTAL SUPPORT
 ===================================================== */
 
 export const BOM_pageSx = BOM_modulePageSx;
@@ -1055,9 +1117,7 @@ export const BOM_topBarSx = BOM_moduleHeaderRowSx;
 export const BOM_brandWrapSx = BOM_moduleLogoRowSx;
 export const BOM_brandMarkSx = BOM_moduleLogoMarkSx;
 export const BOM_brandTitleSx = BOM_moduleLogoSx;
-export const BOM_brandSubSx = BOM_moduleSubtitleSx;
-
-export const BOM_allModulesBtnSx = BOM_secondaryActionBtnSx;
+export const BOM_brandSubSx = BOM_moduleLogoSubSx;
 
 export const BOM_heroSx = {
 	mb: 4,
@@ -1137,7 +1197,7 @@ export const BOM_moduleTitleSx = {
 	fontSize: "18px",
 };
 
-export const BOM_portalModuleSubtitleSx = {
+export const BOM_moduleSubtitleSx = {
 	color: "rgba(255,255,255,.62)",
 	fontSize: "14px",
 	lineHeight: 1.6,

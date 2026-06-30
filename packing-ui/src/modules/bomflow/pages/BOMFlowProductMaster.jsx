@@ -4,9 +4,9 @@ import {
 	Button,
 	Card,
 	Chip,
+	MenuItem,
 	TextField,
 	Typography,
-	MenuItem,
 } from "@mui/material";
 
 import * as styles from "../styles/bomStyles.js";
@@ -47,59 +47,61 @@ export default function BOMFlowProductMaster() {
 
 			<Box sx={styles.BOM_productMasterGridSx}>
 				<Box sx={styles.BOM_productMainColumnSx}>
-					<Card sx={styles.BOM_panelSx}>
+					<Card sx={styles.BOM_productMainPanelSx}>
 						<SectionTitle
 							icon={<InfoOutlinedIcon />}
 							title="Identification & Taxonomy"
 						/>
 
-						<TextField
-							fullWidth
-							label="Product Name *"
-							placeholder="e.g. Executive Office Desk - Series X"
-							sx={styles.BOM_fieldSx}
-						/>
-
-						<Box sx={styles.BOM_twoColumnFieldGridSx}>
+						<Box sx={styles.BOM_fieldStackSx}>
 							<TextField
 								fullWidth
-								label="Product Code *"
-								placeholder="E.G. DESK-EX-001"
+								label="Product Name *"
+								placeholder="e.g. Executive Office Desk - Series X"
 								sx={styles.BOM_fieldSx}
 							/>
 
-							<TextField
-								fullWidth
-								label="Drawing Number"
-								placeholder="e.g. DRW-2023-45B"
-								sx={styles.BOM_fieldSx}
-							/>
+							<Box sx={styles.BOM_twoColumnFieldGridSx}>
+								<TextField
+									fullWidth
+									label="Product Code *"
+									placeholder="e.g. DESK-EX-001"
+									sx={styles.BOM_fieldSx}
+								/>
 
-							<TextField
-								select
-								fullWidth
-								label="Category"
-								defaultValue=""
-								sx={styles.BOM_fieldSx}
-							>
-								<MenuItem value="">Select Category</MenuItem>
-								<MenuItem value="desk">Desk</MenuItem>
-								<MenuItem value="chair">Chair</MenuItem>
-								<MenuItem value="table">Table</MenuItem>
-								<MenuItem value="wardrobe">Wardrobe</MenuItem>
-								<MenuItem value="kitchen">Kitchen</MenuItem>
-							</TextField>
+								<TextField
+									fullWidth
+									label="Drawing Number"
+									placeholder="e.g. DRW-2023-45B"
+									sx={styles.BOM_fieldSx}
+								/>
+							</Box>
 
-							<TextField
-								fullWidth
-								label="Collection / Series"
-								placeholder="e.g. Aether Collection"
-								sx={styles.BOM_fieldSx}
-							/>
+							<Box sx={styles.BOM_twoColumnFieldGridSx}>
+								<TextField
+									select
+									fullWidth
+									label="Category"
+									defaultValue=""
+									sx={styles.BOM_fieldSx}
+								>
+									<MenuItem value="">Select Category</MenuItem>
+									<MenuItem value="desk">Desk</MenuItem>
+									<MenuItem value="chair">Chair</MenuItem>
+									<MenuItem value="table">Table</MenuItem>
+								</TextField>
+
+								<TextField
+									fullWidth
+									label="Collection / Series"
+									placeholder="e.g. Aether Collection"
+									sx={styles.BOM_fieldSx}
+								/>
+							</Box>
 						</Box>
 					</Card>
 
-					<Card sx={styles.BOM_panelSx}>
+					<Card sx={styles.BOM_productMainPanelSx}>
 						<SectionTitle
 							icon={<StraightenOutlinedIcon />}
 							title="Physical Specifications"
@@ -131,12 +133,14 @@ export default function BOMFlowProductMaster() {
 
 						<Box sx={styles.BOM_noteSx}>
 							<Typography sx={styles.BOM_noteTextSx}>
-								Ensure dimensions reflect the final assembled product. These values are used to calculate packaging and shipping volume in downstream modules.
+								Ensure dimensions reflect the final assembled product. These
+								values are used to calculate packaging and shipping volume in
+								downstream modules.
 							</Typography>
 						</Box>
 					</Card>
 
-					<Card sx={styles.BOM_panelSx}>
+					<Card sx={styles.BOM_productMainPanelSx}>
 						<SectionTitle
 							icon={<BusinessCenterOutlinedIcon />}
 							title="Project Allocation"
@@ -162,7 +166,7 @@ export default function BOMFlowProductMaster() {
 				</Box>
 
 				<Box sx={styles.BOM_productSideColumnSx}>
-					<Card sx={styles.BOM_sidePanelSx}>
+					<Card sx={styles.BOM_productSidePanelSx}>
 						<Box sx={styles.BOM_sideTitleRowSx}>
 							<Typography sx={styles.BOM_sideTitleSx}>
 								Product Visual
@@ -186,7 +190,7 @@ export default function BOMFlowProductMaster() {
 						</Box>
 					</Card>
 
-					<Card sx={styles.BOM_sidePanelSx}>
+					<Card sx={styles.BOM_productSidePanelSx}>
 						<Box sx={styles.BOM_sideTitleRowSx}>
 							<Typography sx={styles.BOM_sideTitleSx}>
 								Technical CAD/PDF
@@ -200,13 +204,22 @@ export default function BOMFlowProductMaster() {
 						</Box>
 
 						<Box sx={styles.BOM_drawingBoxSx}>
-							<UploadFileOutlinedIcon sx={{ color: "#64748b", mb: 1 }} />
+							<UploadFileOutlinedIcon
+								sx={{ color: "#64748b", mb: 1.2 }}
+							/>
 
 							<Typography sx={styles.BOM_uploadTitleSx}>
 								Drag & Drop Drawing Files
 							</Typography>
 
-							<Typography sx={styles.BOM_uploadSubSx}>
+							<Typography
+								sx={{
+									color: "#94a3b8",
+									fontSize: 11,
+									fontWeight: 700,
+									mt: 0.35,
+								}}
+							>
 								Supports PDF, DWG, DXF
 							</Typography>
 
@@ -220,7 +233,7 @@ export default function BOMFlowProductMaster() {
 						</Typography>
 					</Card>
 
-					<Card sx={styles.BOM_sidePanelSx}>
+					<Card sx={styles.BOM_productSidePanelSx}>
 						<Box sx={styles.BOM_sideTitleRowSx}>
 							<Typography sx={styles.BOM_sideTitleSx}>
 								Costing Versions
@@ -284,7 +297,14 @@ function VersionRow({ title, date, status, icon }) {
 					{title}
 				</Typography>
 
-				<Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+				<Box
+					sx={{
+						display: "flex",
+						gap: 1,
+						alignItems: "center",
+						flexWrap: "wrap",
+					}}
+				>
 					<Typography sx={styles.BOM_versionDateSx}>
 						{date}
 					</Typography>
@@ -293,7 +313,14 @@ function VersionRow({ title, date, status, icon }) {
 				</Box>
 			</Box>
 
-			<Box sx={{ color: "#38bdf8", display: "flex", cursor: "pointer" }}>
+			<Box
+				sx={{
+					color: "#38bdf8",
+					display: "flex",
+					cursor: "pointer",
+					flexShrink: 0,
+				}}
+			>
 				{icon}
 			</Box>
 		</Box>
