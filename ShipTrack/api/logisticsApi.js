@@ -3,69 +3,71 @@ import {
 } from "./client";
 
 export async function fetchDrivers() {
-  const res = await api.get(
-    "/api/logistics/drivers"
-  );
+  const res =
+    await api.get(
+      "/api/logistics/drivers"
+    );
 
   return res.data;
 }
 
 export async function fetchVehicles() {
-  const res = await api.get(
-    "/api/logistics/vehicles"
-  );
+  const res =
+    await api.get(
+      "/api/logistics/vehicles"
+    );
 
   return res.data;
 }
 
+export async function fetchDispatchedChallans() {
+  const res =
+    await api.get(
+      "/api/dispatched/challans"
+    );
+
+  return Array.isArray(res.data)
+    ? res.data
+    : [];
+}
+
+/*
+ * Legacy aliases.
+ * Keep temporarily so old screen imports do not break.
+ * These now return dispatched challans, not delivery trips.
+ */
 export async function fetchTrips() {
-  const res = await api.get(
-    "/api/logistics/trips"
-  );
-
-  return res.data;
+  return await fetchDispatchedChallans();
 }
 
-export async function fetchTripItems(tripId) {
-  const res = await api.get(
-    `/api/logistics/trips/${tripId}/items`
-  );
+export async function fetchTripItems(challanNumber) {
+  const challans =
+    await fetchDispatchedChallans();
 
-  return res.data;
+  const challan =
+    challans.find(
+      (item) =>
+        item.challanNumber === challanNumber ||
+        item.id === challanNumber
+    );
+
+  return challan?.items || [];
 }
 
-export async function endTrip(
-  tripId,
-  payload
-) {
-  const res = await api.post(
-    `/api/logistics/trips/${tripId}/end`,
-    payload
+export async function endTrip() {
+  throw new Error(
+    "Driver delivery / POD flow has been removed."
   );
-
-  return res.data;
 }
 
-export async function startTrip(
-  tripId,
-  payload = {}
-) {
-  const res = await api.post(
-    `/api/logistics/trips/${tripId}/start`,
-    payload
+export async function startTrip() {
+  throw new Error(
+    "Driver trip start flow has been removed."
   );
-
-  return res.data;
 }
 
-export async function updateTripLocation(
-  tripId,
-  payload
-) {
-  const res = await api.post(
-    `/api/logistics/trips/${tripId}/location`,
-    payload
+export async function updateTripLocation() {
+  throw new Error(
+    "Live location flow has been removed."
   );
-
-  return res.data;
 }

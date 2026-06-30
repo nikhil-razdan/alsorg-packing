@@ -138,9 +138,9 @@ function getFgOptions(item) {
     String(fg).toUpperCase() === "FG-1"
   ) {
     return [
-      "FG1-Zone-A",
-      "FG1-Zone-B",
-      "FG1-Zone-C",
+      "A",
+      "B",
+      "C",
     ];
   }
 

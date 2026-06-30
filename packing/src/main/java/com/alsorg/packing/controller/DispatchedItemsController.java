@@ -2,7 +2,7 @@ package com.alsorg.packing.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import java.util.Map;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
@@ -11,6 +11,10 @@ import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 
 @RestController
 @RequestMapping("/api/dispatched")
@@ -314,5 +318,150 @@ public class DispatchedItemsController {
                         req.getFgZoneCode(),
                         req.getWarehouseCode(),
                         user.getUsername()));
+    }
+
+    @GetMapping("/challans")
+    public ResponseEntity<List<DispatchedChallanResponse>> getDispatchedChallans(
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        List<ItemDispatchStatus> statuses = List.of(ItemDispatchStatus.DISPATCHED);
+
+        List<DispatchedItem> sourceItems;
+
+        if (currentUserService.isAdmin(user)) {
+            sourceItems = repository.findByStatusIn(statuses);
+        } else {
+            sourceItems = repository.findVisibleByStatusesAndPlantsIncludingLegacy(
+                    statuses,
+                    currentUserService.allowedPlants(user));
+        }
+
+        List<DispatchedItem> dispatchedItems = sourceItems
+                .stream()
+                .filter(item -> item.getChalaanNumber() != null
+                        && !item.getChalaanNumber().isBlank())
+                .toList();
+
+        LinkedHashMap<String, List<DispatchedItem>> grouped = new LinkedHashMap<>();
+
+        for (DispatchedItem item : dispatchedItems) {
+            String challanNumber = item.getChalaanNumber().trim();
+
+            grouped
+                    .computeIfAbsent(
+                            challanNumber,
+                            key -> new ArrayList<>())
+                    .add(item);
+        }
+
+        List<DispatchedChallanResponse> response = new ArrayList<>();
+
+        for (Map.Entry<String, List<DispatchedItem>> entry : grouped.entrySet()) {
+            List<DispatchedItem> items = entry.getValue();
+
+            DispatchedItem first = items.get(0);
+
+            LocalDateTime dispatchedAt = items
+                    .stream()
+                    .map(DispatchedItem::getDispatchedAt)
+                    .filter(date -> date != null)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(null);
+
+            List<DispatchedChallanItemResponse> itemResponses = items
+                    .stream()
+                    .map(this::toDispatchedChallanItemResponse)
+                    .toList();
+
+            response.add(
+                    new DispatchedChallanResponse(
+                            entry.getKey(),
+                            first.getDriverId(),
+                            first.getDriverName(),
+                            first.getVehicleId(),
+                            first.getVehicleNumber(),
+                            dispatchedAt,
+                            first.getDispatchedBy(),
+                            items.size(),
+                            itemResponses));
+        }
+
+        response.sort(
+                Comparator
+                        .comparing(
+                                DispatchedChallanResponse::dispatchedAt,
+                                Comparator.nullsLast(Comparator.reverseOrder())));
+
+        return ResponseEntity.ok(response);
+    }
+
+    private DispatchedChallanItemResponse toDispatchedChallanItemResponse(
+            DispatchedItem item) {
+        return new DispatchedChallanItemResponse(
+                item.getZohoItemId(),
+                item.getName(),
+                item.getSku(),
+                item.getPdNo(),
+                item.getDrawingNo(),
+                item.getClientName(),
+                item.getClientAddress(),
+                item.getDescription(),
+                item.getRemarks(),
+                item.getPlantCode(),
+                firstNonBlank(
+                        item.getCurrentLocationCode(),
+                        item.getLocation()),
+                item.getStatus() == null
+                        ? ""
+                        : item.getStatus().name(),
+                item.getQuantity(),
+                item.getDispatchedAt(),
+                item.getDispatchedBy());
+    }
+
+    private String firstNonBlank(
+            String... values) {
+        if (values == null) {
+            return "";
+        }
+
+        for (String value : values) {
+            if (value != null && !value.trim().isBlank()) {
+                return value.trim();
+            }
+        }
+
+        return "";
+    }
+
+    public record DispatchedChallanResponse(
+            String challanNumber,
+            java.util.UUID driverId,
+            String driverName,
+            java.util.UUID vehicleId,
+            String vehicleNumber,
+            LocalDateTime dispatchedAt,
+            String dispatchedBy,
+            int totalItems,
+            List<DispatchedChallanItemResponse> items) {
+    }
+
+    public record DispatchedChallanItemResponse(
+            String zohoItemId,
+            String name,
+            String sku,
+            String pdNo,
+            String drawingNo,
+            String clientName,
+            String clientAddress,
+            String description,
+            String remarks,
+            String plantCode,
+            String currentLocationCode,
+            String status,
+            Integer quantity,
+            LocalDateTime dispatchedAt,
+            String dispatchedBy) {
     }
 }

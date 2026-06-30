@@ -6,7 +6,7 @@ import {
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import ShiftReports from "../dashboard/components/logistics/ShiftReports";
-
+import DispatchChallans from "../dashboard/components/logistics/DispatchChallans";
 import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
@@ -65,6 +65,16 @@ function LogisticsPortalPage() {
 
           <SidebarButton
             active={
+              tab === "challans"
+            }
+            onClick={() =>
+              setTab("challans")
+            }
+            label="Dispatch Challans"
+          />
+
+          <SidebarButton
+            active={
               tab === "drivers"
             }
             onClick={() =>
@@ -106,6 +116,12 @@ function LogisticsPortalPage() {
 
         {tab === "operations" && (
           <ShiftOperations
+            showAlert={showAlert}
+          />
+        )}
+
+        {tab === "challans" && (
+          <DispatchChallans
             showAlert={showAlert}
           />
         )}

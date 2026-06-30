@@ -57,25 +57,14 @@ async function assertPdfFile(uri) {
 }
 
 export async function downloadChallanPdf(
-  tripId,
-  challanNo
+  challanNumber
 ) {
-  if (!tripId) {
-    throw new Error(
-      "Trip id missing. Mobile is not passing trip.id correctly."
-    );
-  }
+  const cleanChallan =
+    String(challanNumber || "").trim();
 
-  const cleanTripId =
-    String(tripId).trim();
-
-  if (
-    cleanTripId === "undefined" ||
-    cleanTripId === "null" ||
-    cleanTripId.length < 20
-  ) {
+  if (!cleanChallan) {
     throw new Error(
-      `Invalid trip id sent from mobile: ${cleanTripId}`
+      "Challan number missing."
     );
   }
 
@@ -92,20 +81,17 @@ export async function downloadChallanPdf(
   }
 
   const filename =
-    cleanFilename(
-      challanNo || `challan-${cleanTripId}`
-    );
+    cleanFilename(cleanChallan);
 
   const url =
-    `${cleanBaseUrl(API_BASE_URL)}/api/logistics/trips/${cleanTripId}/challan`;
+    `${cleanBaseUrl(API_BASE_URL)}/api/chalaan/dispatched/${encodeURIComponent(cleanChallan)}/download`;
 
   const fileUri =
     FileSystem.documentDirectory + filename;
 
-  console.log("CHALLAN DOWNLOAD URL:", url);
   console.log(
-    "CHALLAN AUTH HEADER:",
-    bearer ? "Authorization present" : "Authorization missing"
+    "CHALLAN DOWNLOAD URL:",
+    url
   );
 
   const result =
@@ -121,7 +107,9 @@ export async function downloadChallanPdf(
     );
 
   if (!result?.uri) {
-    throw new Error("Challan download failed");
+    throw new Error(
+      "Challan download failed"
+    );
   }
 
   if (
@@ -146,14 +134,12 @@ export async function downloadChallanPdf(
 }
 
 export async function openChallanPdf(
-  tripId,
-  challanNo
+  challanNumber
 ) {
   const {
     uri,
   } = await downloadChallanPdf(
-    tripId,
-    challanNo
+    challanNumber
   );
 
   if (Platform.OS === "android") {
@@ -178,13 +164,11 @@ export async function openChallanPdf(
 }
 
 export async function safeOpenChallanPdf(
-  tripId,
-  challanNo
+  challanNumber
 ) {
   try {
     await openChallanPdf(
-      tripId,
-      challanNo
+      challanNumber
     );
   } catch (e) {
     Alert.alert(
