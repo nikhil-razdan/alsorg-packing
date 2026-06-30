@@ -62,14 +62,11 @@ public class DispatchedItemsController {
             @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
-        System.out.println(
-                "MOVE_TO_FG USER = " + user.getUsername()
-                        + " | ROLE = " + user.getRole());
-
-        if (!currentUserService.isDispatch(user)) {
+        if (!currentUserService.isDispatch(user)
+                && !currentUserService.isAdmin(user)) {
             return ResponseEntity
                     .status(403)
-                    .body("Only DISPATCH user can move item to FG");
+                    .body("Only DISPATCH / ADMIN user can move item to FG");
         }
 
         dispatchedItemService.movePackedItemToFg(
@@ -78,7 +75,11 @@ public class DispatchedItemsController {
                 user.getUsername(),
                 currentUserService.allowedPlants(user));
 
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(
+                java.util.Map.of(
+                        "message", "Moved to FG successfully",
+                        "zohoItemId", zohoItemId,
+                        "fgZoneCode", fgZoneCode == null ? "" : fgZoneCode));
     }
 
     /* ===================== REQUEST RESTORE ===================== */

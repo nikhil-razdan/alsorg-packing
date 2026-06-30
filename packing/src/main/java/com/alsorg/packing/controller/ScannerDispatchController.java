@@ -4,14 +4,14 @@ import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.controller.dto.scan.BulkScanRequest;
 import com.alsorg.packing.controller.dto.scan.ScanRequest;
 import com.alsorg.packing.controller.dto.scan.ScanResolveResponse;
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.ScannerDispatchService;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/scanner")
@@ -28,16 +28,18 @@ public class ScannerDispatchController {
         this.currentUserService = currentUserService;
     }
 
-    /* ===================== RESOLVE QR ===================== */
-
     @PostMapping("/resolve")
     public ResponseEntity<ScanResolveResponse> resolve(
             @RequestBody ScanRequest request,
             @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-        if (!currentUserService.isDispatch(user) && !currentUserService.isAdmin(user)) {
+        if (
+                !currentUserService.isDispatch(user)
+                        && !currentUserService.isAdmin(user)
+        ) {
             return ResponseEntity.status(403).build();
         }
 
@@ -49,8 +51,6 @@ public class ScannerDispatchController {
         );
     }
 
-    /* ===================== SINGLE QR LOAD / ASSIGN ===================== */
-
     @PostMapping(
             value = "/dispatch-single",
             produces = MediaType.APPLICATION_PDF_VALUE
@@ -60,7 +60,8 @@ public class ScannerDispatchController {
             @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isDispatch(user)) {
             return ResponseEntity.status(403).build();
@@ -76,24 +77,11 @@ public class ScannerDispatchController {
                         request.getTripStart()
                 );
 
-        return ResponseEntity.ok()
-                .header(
-                        "Content-Disposition",
-                        preview
-                                ? "inline; filename=" + result.getChallanNumber() + ".pdf"
-                                : "attachment; filename=" + result.getChallanNumber() + ".pdf"
-                )
-                .header("X-Trip-Id", result.getTripId().toString())
-                .header("X-Challan-No", result.getChallanNumber())
-                .header(
-                        "Access-Control-Expose-Headers",
-                        "X-Trip-Id, X-Challan-No, Content-Disposition"
-                )
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(result.getPdfBytes());
+        return buildPdfResponse(
+                result,
+                preview
+        );
     }
-
-    /* ===================== BULK QR LOAD / ASSIGN ===================== */
 
     @PostMapping(
             value = "/dispatch-bulk",
@@ -104,7 +92,8 @@ public class ScannerDispatchController {
             @RequestHeader(value = "Authorization", required = false) String auth,
             @RequestParam(defaultValue = "true") boolean preview
     ) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isDispatch(user)) {
             return ResponseEntity.status(403).build();
@@ -120,18 +109,38 @@ public class ScannerDispatchController {
                         request.getTripStart()
                 );
 
+        return buildPdfResponse(
+                result,
+                preview
+        );
+    }
+
+    private ResponseEntity<byte[]> buildPdfResponse(
+            DispatchTripPdfResult result,
+            boolean preview
+    ) {
+        String challanNo =
+                result.getChallanNumber() == null || result.getChallanNumber().isBlank()
+                        ? "challan"
+                        : result.getChallanNumber();
+
+        String filename =
+                challanNo.replaceAll("[^a-zA-Z0-9._-]", "_") + ".pdf";
+
         return ResponseEntity.ok()
                 .header(
-                        "Content-Disposition",
+                        HttpHeaders.CONTENT_DISPOSITION,
                         preview
-                                ? "inline; filename=" + result.getChallanNumber() + ".pdf"
-                                : "attachment; filename=" + result.getChallanNumber() + ".pdf"
+                                ? "inline; filename=" + filename
+                                : "attachment; filename=" + filename
                 )
-                .header("X-Trip-Id", result.getTripId().toString())
-                .header("X-Challan-No", result.getChallanNumber())
+                .header(
+                        "X-Challan-No",
+                        challanNo
+                )
                 .header(
                         "Access-Control-Expose-Headers",
-                        "X-Trip-Id, X-Challan-No, Content-Disposition"
+                        "X-Challan-No, Content-Disposition"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(result.getPdfBytes());

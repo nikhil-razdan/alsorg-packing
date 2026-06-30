@@ -117,6 +117,7 @@ public class AuthController {
                         cookie.toString()
                 )
                 .body(response);
+                
     }
 
     @GetMapping("/me")
