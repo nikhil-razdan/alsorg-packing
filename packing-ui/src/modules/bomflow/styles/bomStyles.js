@@ -269,13 +269,100 @@ export const BOM_openBtnSx = {
 };
 
 /* =====================================================
-   PRODUCT MASTER
+   PRODUCT MASTER PAGE 
 ===================================================== */
+
+export const BOM_productPageSx = {
+	width: "100%",
+	maxWidth: "100%",
+};
+
+export const BOM_pageTopSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 16,
+	mb: 3,
+	flexWrap: "wrap",
+};
+
+export const BOM_productMasterGridSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, .75fr)",
+	gap: 20,
+	alignItems: "start",
+	width: "100%",
+
+	"@media (max-width: 1180px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
+export const BOM_productMainColumnSx = {
+	minWidth: 0,
+	display: "flex",
+	flexDirection: "column",
+	gap: 18,
+};
+
+export const BOM_productSideColumnSx = {
+	minWidth: 0,
+	display: "flex",
+	flexDirection: "column",
+	gap: 18,
+};
+
+export const BOM_panelSx = {
+	p: 2.7,
+	borderRadius: 24,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	width: "100%",
+	boxSizing: "border-box",
+};
+
+export const BOM_sidePanelSx = {
+	p: 2.5,
+	borderRadius: 24,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	width: "100%",
+	boxSizing: "border-box",
+};
+
+export const BOM_twoColumnFieldGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+	gap: 16,
+
+	"@media (max-width: 760px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
+export const BOM_threeColumnFieldGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+	gap: 16,
+
+	"@media (max-width: 900px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
 
 export const BOM_statusWrapSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1,
+	mt: 0.4,
 };
 
 export const BOM_statusTextSx = {
@@ -285,35 +372,41 @@ export const BOM_statusTextSx = {
 };
 
 export const BOM_draftChipSx = {
-	height: 30,
+	height: 28,
 	borderRadius: 999,
 	background: "rgba(255,255,255,.06)",
 	color: "#cbd5e1",
 	border: "1px solid rgba(255,255,255,.10)",
 	fontWeight: 800,
+
+	"& .MuiChip-label": {
+		px: 1.25,
+	},
 };
 
 export const BOM_sectionHeadSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1.2,
-	pb: 1.7,
-	mb: 2.5,
+	pb: 1.8,
+	mb: 2.2,
 	borderBottom: "1px solid rgba(255,255,255,.08)",
 };
 
 export const BOM_sectionTitleSx = {
 	color: "#fff",
 	fontWeight: 900,
-	fontSize: 19,
+	fontSize: 20,
+	lineHeight: 1.2,
+	letterSpacing: "-0.02em",
 };
 
 export const BOM_fieldSx = {
-	mb: 2.5,
+	mb: 0,
 
 	"& .MuiInputLabel-root": {
 		color: "rgba(255,255,255,.58)",
-		fontSize: "14px",
+		fontSize: "13px",
 		fontWeight: 700,
 	},
 
@@ -322,10 +415,13 @@ export const BOM_fieldSx = {
 	},
 
 	"& .MuiOutlinedInput-root": {
+		minHeight: 54,
 		color: "#fff",
-		background: "rgba(255,255,255,.035)",
-		borderRadius: "14px",
+		background: "rgba(255,255,255,.04)",
+		borderRadius: "16px",
 		fontSize: "14px",
+		fontWeight: 700,
+		transition: "all .22s ease",
 
 		"& fieldset": {
 			borderColor: "rgba(255,255,255,.08)",
@@ -346,16 +442,21 @@ export const BOM_fieldSx = {
 		fontWeight: 650,
 	},
 
+	"& .MuiInputBase-input::placeholder": {
+		color: "rgba(255,255,255,.34)",
+		opacity: 1,
+	},
+
 	"& .MuiSvgIcon-root": {
 		color: "#94a3b8",
 	},
 };
 
 export const BOM_noteSx = {
-	mt: 1,
+	mt: 2,
 	p: 2,
 	background: "rgba(2,6,23,.45)",
-	borderRadius: "16px",
+	borderRadius: "18px",
 	display: "flex",
 	gap: 1,
 	alignItems: "flex-start",
@@ -366,13 +467,14 @@ export const BOM_noteTextSx = {
 	color: "rgba(255,255,255,.68)",
 	fontSize: 13,
 	lineHeight: 1.55,
-	fontWeight: 600,
+	fontWeight: 650,
 };
 
 export const BOM_sideTitleRowSx = {
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
+	gap: 1.5,
 	mb: 2,
 };
 
@@ -380,23 +482,25 @@ export const BOM_sideTitleSx = {
 	color: "#fff",
 	fontSize: 20,
 	fontWeight: 900,
+	lineHeight: 1.2,
+	letterSpacing: "-0.02em",
 };
 
 export const BOM_uploadBoxSx = {
-	height: 190,
-	border: "2px dashed rgba(255,255,255,.12)",
-	background: "rgba(2,6,23,.38)",
-	borderRadius: "18px",
+	minHeight: 190,
+	border: "1.5px dashed rgba(255,255,255,.12)",
+	background: "rgba(2,6,23,.42)",
+	borderRadius: "20px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "center",
 	textAlign: "center",
-	p: 2,
+	p: 2.5,
 	transition: "all .25s ease",
 
 	"&:hover": {
-		borderColor: "rgba(59,130,246,.45)",
+		borderColor: "rgba(59,130,246,.50)",
 		background: "rgba(59,130,246,.08)",
 	},
 };
@@ -409,78 +513,102 @@ export const BOM_uploadIconSx = {
 	display: "grid",
 	placeItems: "center",
 	color: "#93c5fd",
-	mb: 1,
+	mb: 1.4,
 };
 
 export const BOM_uploadTitleSx = {
 	color: "#fff",
-	fontWeight: 800,
+	fontWeight: 900,
 	fontSize: 13,
+	lineHeight: 1.35,
 };
 
 export const BOM_uploadSubSx = {
 	color: "#94a3b8",
 	fontSize: 11,
+	fontWeight: 700,
 	mt: 0.5,
 };
 
 export const BOM_smallDarkChipSx = {
+	height: 22,
 	background: "rgba(255,255,255,.06)",
 	color: "#94a3b8",
+	border: "1px solid rgba(255,255,255,.08)",
 	borderRadius: "999px",
-	fontWeight: 700,
+	fontWeight: 800,
+	fontSize: 10,
+
+	"& .MuiChip-label": {
+		px: 1,
+	},
 };
 
 export const BOM_drawingBoxSx = {
-	height: 140,
+	minHeight: 140,
 	border: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(2,6,23,.38)",
-	borderRadius: "18px",
+	background: "rgba(2,6,23,.42)",
+	borderRadius: "20px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "center",
+	textAlign: "center",
+	p: 2,
 	mb: 1.5,
 };
 
 export const BOM_browseBtnSx = {
-	mt: 1,
-	height: 30,
+	mt: 1.2,
+	height: 32,
 	borderRadius: "999px",
 	color: "#93c5fd",
-	border: "1px solid rgba(59,130,246,.28)",
+	border: "1px solid rgba(59,130,246,.32)",
+	background: "rgba(59,130,246,.10)",
 	textTransform: "none",
 	fontSize: 12,
-	fontWeight: 800,
+	fontWeight: 900,
+	px: 2,
+
+	"&:hover": {
+		background: "rgba(59,130,246,.18)",
+		borderColor: "rgba(59,130,246,.55)",
+	},
 };
 
 export const BOM_noFileSx = {
 	color: "#94a3b8",
 	fontStyle: "italic",
 	fontSize: 12,
+	fontWeight: 650,
 };
 
 export const BOM_versionRowSx = {
 	background: "rgba(2,6,23,.38)",
 	border: "1px solid rgba(255,255,255,.06)",
-	p: 1.5,
+	p: 1.6,
 	borderRadius: "16px",
 	mb: 1,
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
+	gap: 1.5,
 };
 
 export const BOM_versionTitleSx = {
 	color: "#fff",
-	fontWeight: 750,
+	fontWeight: 850,
 	fontSize: 13,
 	mb: 0.5,
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
 };
 
 export const BOM_versionDateSx = {
 	color: "#94a3b8",
 	fontSize: 11,
+	fontWeight: 700,
 };
 
 export const BOM_approvedSx = {
@@ -488,6 +616,7 @@ export const BOM_approvedSx = {
 	borderRadius: "999px",
 	background: "rgba(34,197,94,.12)",
 	color: "#4ade80",
+	border: "1px solid rgba(34,197,94,.20)",
 	fontSize: 10,
 	fontWeight: 850,
 };
@@ -497,6 +626,7 @@ export const BOM_rejectedSx = {
 	borderRadius: "999px",
 	background: "rgba(239,68,68,.12)",
 	color: "#f87171",
+	border: "1px solid rgba(239,68,68,.20)",
 	fontSize: 10,
 	fontWeight: 850,
 };
@@ -506,6 +636,7 @@ export const BOM_draftMiniSx = {
 	borderRadius: "999px",
 	background: "rgba(255,255,255,.06)",
 	color: "#94a3b8",
+	border: "1px solid rgba(255,255,255,.08)",
 	fontSize: 10,
 	fontWeight: 850,
 };
@@ -514,10 +645,16 @@ export const BOM_newVersionBtnSx = {
 	height: 40,
 	borderRadius: "14px",
 	border: "1px dashed rgba(255,255,255,.14)",
-	color: "#94a3b8",
+	color: "#93c5fd",
+	background: "rgba(255,255,255,.03)",
 	textTransform: "none",
 	fontSize: 13,
-	fontWeight: 800,
+	fontWeight: 850,
+
+	"&:hover": {
+		background: "rgba(59,130,246,.10)",
+		borderColor: "rgba(59,130,246,.35)",
+	},
 };
 
 /* =====================================================
