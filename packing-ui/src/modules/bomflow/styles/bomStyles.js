@@ -177,18 +177,17 @@ export const BOM_labelChipSx = {
 	fontWeight: 850,
 	letterSpacing: ".06em",
 };
-
 export const BOM_pageTitleSx = {
 	color: "#fff",
-	fontSize: 32,
-	fontWeight: 950,
+	fontSize: 30,
+	fontWeight: 900,
 	lineHeight: 1.1,
-	letterSpacing: "-0.045em",
+	letterSpacing: "-0.03em",
 };
 
 export const BOM_pageSubSx = {
-	mt: 0.8,
-	color: "rgba(255,255,255,.65)",
+	mt: 0.7,
+	color: "rgba(255,255,255,.72)",
 	fontSize: 14,
 	fontWeight: 600,
 	lineHeight: 1.6,
@@ -213,25 +212,6 @@ export const BOM_activeCostingsValueSx = {
 	fontSize: 28,
 	fontWeight: 900,
 	fontFamily: "monospace",
-};
-
-export const BOM_moduleCardSx = {
-	p: 3,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "24px",
-	height: "100%",
-	display: "flex",
-	flexDirection: "column",
-	boxShadow: "0 18px 50px rgba(0,0,0,.25)",
-	transition: "all .25s ease",
-
-	"&:hover": {
-		transform: "translateY(-3px)",
-		borderColor: "rgba(59,130,246,.35)",
-		boxShadow: "0 24px 70px rgba(0,0,0,.34)",
-	},
 };
 
 export const BOM_cardTopSx = {
@@ -313,16 +293,6 @@ export const BOM_draftChipSx = {
 	fontWeight: 800,
 };
 
-export const BOM_panelSx = {
-	mb: 3,
-	p: 3,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "24px",
-	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
-};
-
 export const BOM_sectionHeadSx = {
 	display: "flex",
 	alignItems: "center",
@@ -397,16 +367,6 @@ export const BOM_noteTextSx = {
 	fontSize: 13,
 	lineHeight: 1.55,
 	fontWeight: 600,
-};
-
-export const BOM_sidePanelSx = {
-	mb: 3,
-	p: 2.5,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "24px",
-	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
 };
 
 export const BOM_sideTitleRowSx = {
@@ -616,17 +576,6 @@ export const BOM_costValueSx = {
 	mt: 0.6,
 };
 
-export const BOM_sectionCardSx = {
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "22px",
-	overflow: "hidden",
-	mb: 2,
-	borderLeft: "4px solid #2563eb",
-	boxShadow: "0 18px 45px rgba(0,0,0,.24)",
-};
-
 export const BOM_sectionHeaderSx = {
 	height: 62,
 	display: "flex",
@@ -809,20 +758,69 @@ export const BOM_validRateSx = {
 	fontFamily: "monospace",
 };
 
+export const BOM_panelSx = {
+	mb: 3,
+	p: 3,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: 24,
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
+	backdropFilter: "blur(18px)",
+};
+
+export const BOM_sidePanelSx = {
+	mb: 3,
+	p: 2.5,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: 24,
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
+	backdropFilter: "blur(18px)",
+};
+
+export const BOM_moduleCardSx = {
+	p: 3,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: 24,
+	height: "100%",
+	display: "flex",
+	flexDirection: "column",
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
+	backdropFilter: "blur(18px)",
+	transition: "all .25s ease",
+
+	"&:hover": {
+		transform: "translateY(-3px)",
+		borderColor: "rgba(59,130,246,.35)",
+		boxShadow: "0 24px 60px rgba(2,6,23,.42)",
+	},
+};
+
+export const BOM_sectionCardSx = {
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: 24,
+	overflow: "hidden",
+	mb: 2,
+	borderLeft: "4px solid #2563eb",
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
+	backdropFilter: "blur(18px)",
+};
+
 export const BOM_collapsedSectionSx = {
 	height: 62,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	borderRadius: "22px",
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: 24,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
 	px: 2,
 	borderLeft: "4px solid #8b5cf6",
-	boxShadow: "0 18px 45px rgba(0,0,0,.24)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
+	backdropFilter: "blur(18px)",
 };
-
 /* =====================================================
    PLACEHOLDER
 ===================================================== */
@@ -976,9 +974,9 @@ export const BOM_portalModuleCardSx = (enabled) => ({
 
 	"&:hover": enabled
 		? {
-				transform: "translateY(-4px)",
-				borderColor: "rgba(59,130,246,.35)",
-		  }
+			transform: "translateY(-4px)",
+			borderColor: "rgba(59,130,246,.35)",
+		}
 		: {},
 });
 
