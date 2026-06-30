@@ -447,11 +447,11 @@ export default function ScanDispatchScreen({
       Alert.alert(
         "Dispatch created",
         result?.challanNo
-          ? `Trip created. Challan: ${result.challanNo}`
-          : "Trip created successfully.",
+          ? `Dispatch created. Challan: ${result.challanNo}`
+          : "Dispatch Challan generated successfully.",
         [
           {
-            text: "View Trips",
+            text: "View Challans",
             onPress: () =>
               navigation.navigate("Trips"),
           },

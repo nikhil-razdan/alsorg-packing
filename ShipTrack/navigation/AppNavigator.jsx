@@ -13,8 +13,6 @@ import {
   View,
 } from "react-native";
 
-import LiveTripMapScreen from "../screens/LiveTripMapScreen";
-
 import {
   useAuth,
 } from "../auth/AuthContext";
@@ -24,10 +22,8 @@ import LoginScreen from "../screens/LoginScreen";
 import DispatchHomeScreen from "../screens/DispatchHomeScreen";
 import ScanDispatchScreen from "../screens/ScanDispatchScreen";
 import BulkScanScreen from "../screens/BulkScanScreen";
-import StartTripScreen from "../screens/StartTripScreen";
 import TripsScreen from "../screens/TripsScreen";
 import TripItemScreen from "../screens/TripItemScreen";
-import EndTripScreen from "../screens/EndTripScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -104,18 +100,6 @@ export default function AppNavigator() {
               component={DispatchItemsScreen}
               options={{
                 title: "",
-                headerStyle: {
-                  backgroundColor: "#020617",
-                },
-                headerTintColor: "#fff",
-              }}
-            />
-
-            <Stack.Screen
-              name="StartTrip"
-              component={StartTripScreen}
-              options={{
-                title: "Start Trip",
               }}
             />
 
@@ -126,32 +110,12 @@ export default function AppNavigator() {
                 title: "",
               }}
             />
-            <Stack.Screen
-              name="LiveTripMap"
-              component={LiveTripMapScreen}
-              options={{
-                headerShown: false
-              }}
-            />
+
             <Stack.Screen
               name="TripItems"
               component={TripItemScreen}
               options={{
-                title: "Trip Items",
-              }}
-            />
-
-            <Stack.Screen
-              name="EndTrip"
-              component={EndTripScreen}
-              options={{
-                title: "End Trip",
-                presentation: "modal",
-                animation: "slide_from_bottom",
-                headerStyle: {
-                  backgroundColor: "#020617",
-                },
-                headerTintColor: "#fff",
+                title: "Dispatch Items",
               }}
             />
           </>

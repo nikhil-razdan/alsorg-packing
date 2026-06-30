@@ -14,7 +14,6 @@ import com.alsorg.packing.domain.common.PacketStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.packet.Packet;
-import com.alsorg.packing.integration.zoho.dto.ZohoItemDTO;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;

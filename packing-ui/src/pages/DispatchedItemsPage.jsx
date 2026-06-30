@@ -1486,7 +1486,6 @@ function DispatchedItemsPage() {
 	const [dispatchTripForm, setDispatchTripForm] = useState({
 		driverId: "",
 		vehicleId: "",
-		tripStart: "",
 	});
 	const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
 	const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
@@ -2123,7 +2122,7 @@ function DispatchedItemsPage() {
 				return;
 			}
 
-			await dispatchSingleByScan(rawScan);
+			await dispatchSingleByScan(item);
 		} catch (err) {
 			console.error(err);
 			setScanMessage(err.message || "QR scan failed");
@@ -2145,14 +2144,21 @@ function DispatchedItemsPage() {
 				pendingQrFgZone
 			);
 
-			setScanMessage("Item moved to FG. Generating challan...");
-
 			const rawScan = pendingQrFgItem.rawScan;
+
+			const updatedItem = await resolveScan(rawScan);
+
+			if (!updatedItem.dispatchAllowed) {
+				throw new Error(
+					updatedItem.message ||
+					"Item moved to FG but cannot be dispatched"
+				);
+			}
 
 			setPendingQrFgItem(null);
 			setPendingQrFgZone("");
 
-			await dispatchSingleByScan(rawScan);
+			await dispatchSingleByScan(updatedItem);
 		} catch (err) {
 			console.error(err);
 			setScanMessage(err.message || "Move to FG failed");
@@ -2186,14 +2192,19 @@ function DispatchedItemsPage() {
 		}
 	};
 
-	const dispatchSingleByScan = async (rawScan) => {
+	const dispatchSingleByScan = async (item) => {
+		if (!item?.zohoItemId) {
+			alert("Scanned item id missing");
+			return;
+		}
+
 		setScannerText("");
-		setScanMessage("Select driver and vehicle to create trip");
+		setScanMessage("Select driver and vehicle to generate challan");
 
 		openDispatchTripModal({
 			mode: "QR_SINGLE",
-			scanTexts: [rawScan],
-			title: "QR Single Dispatch",
+			itemIds: [item.zohoItemId],
+			title: item.itemName || "QR Single Dispatch",
 		});
 	};
 
@@ -2307,6 +2318,7 @@ function DispatchedItemsPage() {
 
 		openDispatchTripModal({
 			mode: "QR_BULK",
+			itemIds: scanCart.map((x) => x.zohoItemId),
 			scanTexts: scanCart.map((x) => x.rawScan),
 			qrCart: scanCart,
 			title: "QR Bulk Dispatch",
@@ -2905,23 +2917,8 @@ function DispatchedItemsPage() {
 					sx = readyStatusChip;
 				}
 
-				if (row.status === "LOADED") {
-					label = "QUEUED";
-					sx = queuedStatusChip;
-				}
-
 				if (row.status === "DISPATCHED") {
 					label = "DISPATCHED";
-					sx = dispatchedStatusChip;
-				}
-
-				if (row.status === "OUT_FOR_DELIVERY") {
-					label = "DISPATCHED - OUT FOR DELIVERY";
-					sx = readyStatusChip;
-				}
-
-				if (row.status === "DELIVERED") {
-					label = "DELIVERED";
 					sx = dispatchedStatusChip;
 				}
 
@@ -3312,10 +3309,6 @@ function DispatchedItemsPage() {
 			return "CHANGE_STATUS";
 		}
 
-		if (row.status === "LOADED") {
-			return "NONE";
-		}
-
 		if (row.status === "READY_TO_STORE") {
 			return "GATE_PASS";
 		}
@@ -3477,7 +3470,6 @@ function DispatchedItemsPage() {
 		setDispatchTripForm({
 			driverId: "",
 			vehicleId: "",
-			tripStart: getNowDateTimeLocal(),
 		});
 
 		setDispatchTripOpen(true);
@@ -3494,63 +3486,13 @@ function DispatchedItemsPage() {
 			return;
 		}
 
-		if (!dispatchTripForm.tripStart) {
-			alert("Please select dispatch time");
-			return;
-		}
-
 		try {
 			setDispatchTripLoading(true);
 
-			const payloadBase = {
-				driverId: dispatchTripForm.driverId,
-				vehicleId: dispatchTripForm.vehicleId,
-				tripStart: dispatchTripForm.tripStart,
-			};
-
-			let blob;
-			let previewId = "CHALAAN";
-
-			if (
-				dispatchTripContext.mode === "UI_SINGLE" ||
-				dispatchTripContext.mode === "UI_BULK"
-			) {
-				const result = await createDispatchChallan({
-					itemIds: dispatchTripContext.itemIds,
-					...payloadBase,
-				});
-
-				blob = result.blob;
-				previewId =
-					result.challanNo ||
-					dispatchTripContext.itemIds?.[0] ||
-					"CHALAAN";
-			}
-
-			if (dispatchTripContext.mode === "QR_SINGLE") {
-				const res = await authFetch(
-					`${API_BASE_URL}/api/scanner/dispatch-single?preview=true`,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...getAuthHeaders(),
-						},
-						body: JSON.stringify({
-							scanText: dispatchTripContext.scanTexts[0],
-							...payloadBase,
-						}),
-					}
-				);
-
-				if (!res.ok) {
-					const text = await res.text();
-					throw new Error(text || "QR dispatch failed");
-				}
-
-				blob = await res.blob();
-				previewId = "QR_SINGLE";
-			}
+			let finalItemIds =
+				Array.isArray(dispatchTripContext.itemIds)
+					? dispatchTripContext.itemIds.filter(Boolean)
+					: [];
 
 			if (dispatchTripContext.mode === "QR_BULK") {
 				const missingZoneItem = dispatchTripContext.qrCart.find((item) => {
@@ -3567,30 +3509,20 @@ function DispatchedItemsPage() {
 				}
 
 				await moveQrCartItemsToFgIfNeeded(dispatchTripContext.qrCart);
-
-				const res = await authFetch(
-					`${API_BASE_URL}/api/scanner/dispatch-bulk?preview=true`,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...getAuthHeaders(),
-						},
-						body: JSON.stringify({
-							scanTexts: dispatchTripContext.scanTexts,
-							...payloadBase,
-						}),
-					}
-				);
-
-				if (!res.ok) {
-					const text = await res.text();
-					throw new Error(text || "Bulk QR dispatch failed");
-				}
-
-				blob = await res.blob();
-				previewId = "QR_BULK";
 			}
+
+			if (finalItemIds.length === 0) {
+				throw new Error("No items selected for challan");
+			}
+
+			const result = await createDispatchChallan({
+				itemIds: finalItemIds,
+				driverId: dispatchTripForm.driverId,
+				vehicleId: dispatchTripForm.vehicleId,
+				preview: true,
+			});
+
+			const blob = result.blob;
 
 			if (!blob) {
 				throw new Error("No challan PDF generated");
@@ -3600,7 +3532,10 @@ function DispatchedItemsPage() {
 
 			setChalaanPreview({
 				url,
-				id: previewId,
+				id:
+					result.challanNo ||
+					finalItemIds[0] ||
+					"CHALAAN",
 			});
 
 			setDispatchTripOpen(false);
@@ -3621,7 +3556,7 @@ function DispatchedItemsPage() {
 			await fetchData();
 		} catch (e) {
 			console.error(e);
-			alert(e.message || "Dispatch trip failed");
+			alert(e.message || "Challan generation failed");
 		} finally {
 			setDispatchTripLoading(false);
 		}
@@ -3829,10 +3764,7 @@ function DispatchedItemsPage() {
 						<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
 						<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
 						<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
-						<MenuItem value="LOADED">⏳ Queued</MenuItem>
 						<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
-						<MenuItem value="OUT_FOR_DELIVERY">🚚 Out For Delivery</MenuItem>
-						<MenuItem value="DELIVERED">✅ Delivered</MenuItem>
 						<MenuItem value="WAREHOUSE_RETURN_REQUESTED">↩️ Warehouse Return Requested</MenuItem>
 					</TextField>
 
@@ -6245,11 +6177,11 @@ function DispatchedItemsPage() {
 
 									<Box>
 										<Box sx={modalTitleSx}>
-											Create Dispatch Trip
+											Generate Dispatch Challan
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											{dispatchTripContext.title || "Select driver, vehicle and dispatch time"}
+											{dispatchTripContext.title || "Select driver name and vehicle number"}
 										</Box>
 									</Box>
 								</Box>
@@ -6355,26 +6287,6 @@ function DispatchedItemsPage() {
 										))}
 									</Box>
 								</Box>
-
-								<TextField
-									fullWidth
-									label="Dispatch / Trip Start Time"
-									type="datetime-local"
-									value={dispatchTripForm.tripStart}
-									onChange={(e) =>
-										setDispatchTripForm((prev) => ({
-											...prev,
-											tripStart: e.target.value,
-										}))
-									}
-									InputLabelProps={{
-										shrink: true,
-									}}
-									sx={{
-										...formFieldSx,
-										mb: 2,
-									}}
-								/>
 							</Box>
 
 							<Box sx={modalFooterSx}>
@@ -6392,8 +6304,8 @@ function DispatchedItemsPage() {
 									sx={premiumButton}
 								>
 									{dispatchTripLoading
-										? "Creating Trip..."
-										: "Create Trip & Generate Challan"}
+										? "Generating Challan..."
+										: "Generate Challan"}
 								</Button>
 							</Box>
 						</Box>

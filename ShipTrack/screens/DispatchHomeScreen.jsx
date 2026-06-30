@@ -31,24 +31,11 @@ export default function DispatchHomeScreen({
   const isDispatch =
     normalizedRole === "DISPATCH";
 
-  const isDriver =
-    normalizedRole === "DRIVER";
-
-  const isLogistics =
-    normalizedRole === "LOGISTICS";
-
   const isAdmin =
     normalizedRole === "ADMIN";
 
-  const canViewTrips =
-    isDispatch ||
-    isLogistics ||
-    isAdmin ||
-    isDriver;
-
-  const canViewDispatchItems =
-    isDispatch ||
-    isAdmin;
+  const canUseDispatch =
+    isDispatch || isAdmin;
 
   return (
     <View style={styles.page}>
@@ -61,10 +48,10 @@ export default function DispatchHomeScreen({
         {normalizedRole || "ROLE"}
       </Text>
 
-      {isDispatch ? (
+      {canUseDispatch ? (
         <>
           <Action
-            label="Single QR Load"
+            label="Single QR Dispatch"
             icon="📷"
             onPress={() =>
               navigation.navigate(
@@ -74,34 +61,40 @@ export default function DispatchHomeScreen({
           />
 
           <Action
-            label="Bulk QR Load"
+            label="Bulk QR Dispatch"
             icon="📦"
             onPress={() =>
               navigation.navigate("BulkScan")
             }
           />
+
+          <Action
+            label="Dispatch Items"
+            icon="📋"
+            onPress={() =>
+              navigation.navigate("DispatchItems")
+            }
+          />
+
+          <Action
+            label="Dispatched Challans"
+            icon="🚚"
+            onPress={() =>
+              navigation.navigate("Trips")
+            }
+          />
         </>
-      ) : null}
+      ) : (
+        <View style={styles.permissionBox}>
+          <Text style={styles.permissionTitle}>
+            Access Restricted
+          </Text>
 
-      {canViewDispatchItems ? (
-        <Action
-          label="Dispatch Items"
-          icon="📋"
-          onPress={() =>
-            navigation.navigate("DispatchItems")
-          }
-        />
-      ) : null}
-
-      {canViewTrips ? (
-        <Action
-          label="Trips / Delivery"
-          icon="🚚"
-          onPress={() =>
-            navigation.navigate("Trips")
-          }
-        />
-      ) : null}
+          <Text style={styles.permissionText}>
+            ShipTrack mobile is now only for DISPATCH users. Driver delivery, live location and POD flow have been removed.
+          </Text>
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.logout}

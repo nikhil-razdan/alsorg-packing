@@ -560,11 +560,11 @@ export default function BulkScanScreen({
       Alert.alert(
         "Bulk dispatch created",
         result?.challanNo
-          ? `Trip created. Challan: ${result.challanNo}`
-          : "Bulk trip created successfully.",
+          ? `Dispatch created. Challan: ${result.challanNo}`
+          : "Bulk dispatch challan generated successfully.",
         [
           {
-            text: "View Trips",
+            text: "View Challans",
             onPress: () =>
               navigation.navigate("Trips"),
           },
