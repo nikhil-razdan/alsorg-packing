@@ -311,7 +311,7 @@ export default function BOMFlowBOMBuilder() {
 					/>
 				</Box>
 
-				<Box sx={mainGridSx}>
+				<Box sx={{ ...mainGridSx, mt: 0 }}>
 					<Box sx={leftColumnSx}>
 						<Card sx={builderToolbarSx}>
 							<Box>
@@ -786,7 +786,7 @@ const pageSx = {
 	width: "100%",
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
+	gap: 1.6,
 };
 
 const heroSx = {
@@ -795,13 +795,337 @@ const heroSx = {
 	alignItems: "stretch",
 	gap: 2,
 	flexWrap: "wrap",
-	p: 2.2,
-	borderRadius: 16,
+	p: 2.1,
+	borderRadius: 12,
 	background:
 		"radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.72))",
 	border: "1px solid rgba(255,255,255,.08)",
 	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
 	backdropFilter: "blur(18px)",
+};
+
+const totalCostCardSx = {
+	p: 1.7,
+	borderRadius: 12,
+	background: "rgba(2,6,23,.42)",
+	border: "1px solid rgba(255,255,255,.08)",
+};
+
+const totalIconSx = {
+	width: 42,
+	height: 42,
+	borderRadius: "10px",
+	display: "grid",
+	placeItems: "center",
+	background: "rgba(34,197,94,.13)",
+	color: "#4ade80",
+	border: "1px solid rgba(34,197,94,.24)",
+};
+
+const heroActionRowSx = {
+	display: "grid",
+	gridTemplateColumns: "1fr 1fr",
+	gap: 1,
+};
+
+const primaryBtnSx = {
+	height: 40,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#fff",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	boxShadow: "0 12px 28px rgba(37,99,235,.34)",
+
+	"&:hover": {
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+	},
+};
+
+const secondaryBtnSx = {
+	height: 40,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#fff",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.08)",
+
+	"&:hover": {
+		background: "rgba(59,130,246,.14)",
+		borderColor: "rgba(59,130,246,.30)",
+	},
+};
+
+const summaryGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+	gap: 12,
+};
+
+const miniStatSx = (accent) => ({
+	p: 1.65,
+	borderRadius: 12,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 35px rgba(2,6,23,.28)",
+	backdropFilter: "blur(18px)",
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	position: "relative",
+	overflow: "hidden",
+	minHeight: 86,
+
+	"&:before": {
+		content: '""',
+		position: "absolute",
+		top: 0,
+		left: 0,
+		right: 0,
+		height: 3,
+		background: accent,
+	},
+});
+
+const miniIconSx = (accent) => ({
+	width: 42,
+	height: 42,
+	borderRadius: "10px",
+	display: "grid",
+	placeItems: "center",
+	color: accent,
+	background: `${accent}18`,
+	border: `1px solid ${accent}33`,
+	flexShrink: 0,
+});
+
+const mainGridSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0, 1.7fr) minmax(340px, .75fr)",
+	gap: 16,
+	alignItems: "start",
+	marginTop: 0,
+
+	"@media (max-width: 1180px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
+const leftColumnSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+	minWidth: 0,
+};
+
+const rightColumnSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+	minWidth: 0,
+};
+
+const builderToolbarSx = {
+	p: 1.8,
+	borderRadius: 12,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
+	backdropFilter: "blur(18px)",
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 2,
+	flexWrap: "wrap",
+	marginBottom: 0,
+};
+
+const sectionCardSx = (accent, open) => ({
+	borderRadius: 12,
+	background: open
+		? `linear-gradient(180deg, ${accent}11, rgba(15,23,42,.78))`
+		: "rgba(15,23,42,.78)",
+	border: open
+		? `1px solid ${accent}44`
+		: "1px solid rgba(255,255,255,.07)",
+	borderLeft: `4px solid ${accent}`,
+	boxShadow: open
+		? `0 18px 38px ${accent}18`
+		: "0 18px 35px rgba(2,6,23,.28)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	transition: "all .25s ease",
+	marginTop: 0,
+});
+
+const sectionHeaderSx = {
+	minHeight: 60,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+	px: 1.8,
+	py: 1,
+	background: "rgba(2,6,23,.22)",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
+};
+
+const sectionLeftSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.1,
+	minWidth: 0,
+};
+
+const sectionRightSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	flexShrink: 0,
+};
+
+const sectionIconBtnSx = {
+	color: "#94a3b8",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.06)",
+	width: 34,
+	height: 34,
+	borderRadius: "10px",
+
+	"&:hover": {
+		background: "rgba(59,130,246,.14)",
+		color: "#fff",
+	},
+};
+
+const tableShellSx = {
+	background: "rgba(2,6,23,.18)",
+	overflowX: "auto",
+};
+
+const tableHeadSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"44px minmax(230px,2fr) minmax(130px,1.1fr) minmax(160px,1.1fr) 80px 80px 120px 120px 70px",
+	color: "rgba(255,255,255,.54)",
+	fontSize: 11,
+	fontWeight: 900,
+	borderBottom: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(2,6,23,.34)",
+	textTransform: "uppercase",
+	letterSpacing: ".06em",
+	minWidth: 1120,
+
+	"& > div": {
+		padding: "12px 10px",
+	},
+};
+
+const tableRowSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"44px minmax(230px,2fr) minmax(130px,1.1fr) minmax(160px,1.1fr) 80px 80px 120px 120px 70px",
+	alignItems: "center",
+	borderBottom: "1px solid rgba(255,255,255,.06)",
+	minHeight: 48,
+	background: "rgba(255,255,255,.025)",
+	minWidth: 1120,
+
+	"& > p, & > div": {
+		padding: "5px 10px",
+	},
+};
+
+const missingRowSx = {
+	...tableRowSx,
+	background: "rgba(239,68,68,.08)",
+	borderBottom: "1px solid rgba(239,68,68,.16)",
+};
+
+const sidePanelSx = {
+	p: 2,
+	borderRadius: 12,
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+};
+
+const assistantPanelSx = {
+	...sidePanelSx,
+	background:
+		"radial-gradient(circle at top right, rgba(59,130,246,.18), transparent 38%), rgba(15,23,42,.78)",
+};
+
+const warningPanelSx = {
+	...sidePanelSx,
+	background:
+		"linear-gradient(180deg, rgba(239,68,68,.11), rgba(15,23,42,.78))",
+	border: "1px solid rgba(239,68,68,.22)",
+};
+
+const missingRateBoxSx = {
+	p: 1.4,
+	borderRadius: "10px",
+	background: "rgba(2,6,23,.38)",
+	border: "1px solid rgba(239,68,68,.18)",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	mb: 1.4,
+};
+
+const emptySectionSx = {
+	p: 1.8,
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	background: "rgba(2,6,23,.22)",
+	borderTop: "1px solid rgba(255,255,255,.06)",
+	flexWrap: "wrap",
+};
+
+const emptyIconSx = (accent) => ({
+	width: 40,
+	height: 40,
+	borderRadius: "10px",
+	display: "grid",
+	placeItems: "center",
+	color: accent,
+	background: `${accent}15`,
+	border: `1px solid ${accent}30`,
+});
+
+const quickActionStyle = {
+	width: "100%",
+	minHeight: 62,
+	padding: "11px 13px",
+	borderRadius: 10,
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.07)",
+	color: "#fff",
+	display: "flex",
+	alignItems: "center",
+	gap: 12,
+	textAlign: "left",
+	cursor: "pointer",
+	fontFamily: "inherit",
+	transition: "all .22s ease",
+};
+
+const quickActionIconStyle = {
+	width: 36,
+	height: 36,
+	borderRadius: 10,
+	background: "rgba(59,130,246,.13)",
+	border: "1px solid rgba(59,130,246,.20)",
+	color: "#93c5fd",
+	display: "grid",
+	placeItems: "center",
+	flexShrink: 0,
 };
 
 const heroLeftSx = {
@@ -904,21 +1228,6 @@ const metaValueSx = {
 	fontWeight: 950,
 };
 
-const totalCostCardSx = {
-	p: 1.8,
-	borderRadius: 16,
-	background: "rgba(2,6,23,.42)",
-	border: "1px solid rgba(255,255,255,.08)",
-};
-
-const totalTopSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "flex-start",
-	gap: 2,
-	mb: 1.4,
-};
-
 const totalLabelSx = {
 	color: "rgba(255,255,255,.62)",
 	fontSize: 11,
@@ -965,83 +1274,6 @@ const totalHintSx = {
 	fontWeight: 650,
 };
 
-const heroActionRowSx = {
-	display: "grid",
-	gridTemplateColumns: "1fr 1fr",
-	gap: 1,
-};
-
-const primaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 850,
-	color: "#fff",
-	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 12px 28px rgba(37,99,235,.34)",
-
-	"&:hover": {
-		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
-	},
-};
-
-const secondaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
-	textTransform: "none",
-	fontWeight: 850,
-	color: "#fff",
-	background: "rgba(255,255,255,.04)",
-	border: "1px solid rgba(255,255,255,.08)",
-
-	"&:hover": {
-		background: "rgba(59,130,246,.14)",
-		borderColor: "rgba(59,130,246,.30)",
-	},
-};
-
-const summaryGridSx = {
-	display: "grid",
-	gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-	gap: 14,
-};
-
-const miniStatSx = (accent) => ({
-	p: 1.8,
-	borderRadius: 16,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 35px rgba(2,6,23,.28)",
-	backdropFilter: "blur(18px)",
-	display: "flex",
-	alignItems: "center",
-	gap: 1.5,
-	position: "relative",
-	overflow: "hidden",
-
-	"&:before": {
-		content: '""',
-		position: "absolute",
-		top: 0,
-		left: 0,
-		right: 0,
-		height: 4,
-		background: accent,
-	},
-});
-
-const miniIconSx = (accent) => ({
-	width: 44,
-	height: 44,
-	borderRadius: "14px",
-	display: "grid",
-	placeItems: "center",
-	color: accent,
-	background: `${accent}18`,
-	border: `1px solid ${accent}33`,
-	flexShrink: 0,
-});
-
 const miniTitleSx = {
 	color: "rgba(255,255,255,.58)",
 	fontSize: 11,
@@ -1064,45 +1296,6 @@ const miniSubSx = {
 	fontWeight: 650,
 };
 
-const mainGridSx = {
-	display: "grid",
-	gridTemplateColumns: "minmax(0, 1.7fr) minmax(340px, .75fr)",
-	gap: 18,
-	alignItems: "start",
-
-	"@media (max-width: 1180px)": {
-		gridTemplateColumns: "1fr",
-	},
-};
-
-const leftColumnSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: 16,
-	minWidth: 0,
-};
-
-const rightColumnSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: 16,
-	minWidth: 0,
-};
-
-const builderToolbarSx = {
-	p: 2,
-	borderRadius: 16,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
-	backdropFilter: "blur(18px)",
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "center",
-	gap: 2,
-	flexWrap: "wrap",
-};
-
 const toolbarTitleSx = {
 	color: "#fff",
 	fontSize: 18,
@@ -1121,49 +1314,6 @@ const toolbarActionsSx = {
 	alignItems: "center",
 	gap: 1,
 	flexWrap: "wrap",
-};
-
-const sectionCardSx = (accent, open) => ({
-	borderRadius: 16,
-	background: open
-		? `linear-gradient(180deg, ${accent}11, rgba(15,23,42,.78))`
-		: "rgba(15,23,42,.78)",
-	border: open
-		? `1px solid ${accent}44`
-		: "1px solid rgba(255,255,255,.07)",
-	borderLeft: `4px solid ${accent}`,
-	boxShadow: open
-		? `0 18px 38px ${accent}18`
-		: "0 18px 35px rgba(2,6,23,.28)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
-	transition: "all .25s ease",
-});
-
-const sectionHeaderSx = {
-	minHeight: 68,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	gap: 2,
-	px: 2,
-	py: 1.3,
-	background: "rgba(2,6,23,.22)",
-	borderBottom: "1px solid rgba(255,255,255,.07)",
-};
-
-const sectionLeftSx = {
-	display: "flex",
-	alignItems: "center",
-	gap: 1.2,
-	minWidth: 0,
-};
-
-const sectionRightSx = {
-	display: "flex",
-	alignItems: "center",
-	gap: 1.6,
-	flexShrink: 0,
 };
 
 const sectionTitleRowSx = {
@@ -1185,17 +1335,6 @@ const sectionSubSx = {
 	color: "rgba(255,255,255,.50)",
 	fontSize: 11,
 	fontWeight: 650,
-};
-
-const sectionIconBtnSx = {
-	color: "#94a3b8",
-	background: "rgba(255,255,255,.04)",
-	border: "1px solid rgba(255,255,255,.06)",
-
-	"&:hover": {
-		background: "rgba(59,130,246,.14)",
-		color: "#fff",
-	},
 };
 
 const countChipSx = {
@@ -1221,50 +1360,6 @@ const sectionTotalValueSx = {
 	fontWeight: 950,
 	fontFamily: "monospace",
 	fontSize: 15,
-};
-
-const tableShellSx = {
-	background: "rgba(2,6,23,.18)",
-	overflowX: "auto",
-};
-
-const tableHeadSx = {
-	display: "grid",
-	gridTemplateColumns:
-		"44px minmax(230px,2fr) minmax(130px,1.1fr) minmax(160px,1.1fr) 80px 80px 120px 120px 70px",
-	color: "rgba(255,255,255,.54)",
-	fontSize: 11,
-	fontWeight: 900,
-	borderBottom: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(2,6,23,.34)",
-	textTransform: "uppercase",
-	letterSpacing: ".06em",
-	minWidth: 1120,
-
-	"& > div": {
-		padding: "13px 10px",
-	},
-};
-
-const tableRowSx = {
-	display: "grid",
-	gridTemplateColumns:
-		"44px minmax(230px,2fr) minmax(130px,1.1fr) minmax(160px,1.1fr) 80px 80px 120px 120px 70px",
-	alignItems: "center",
-	borderBottom: "1px solid rgba(255,255,255,.06)",
-	minHeight: 50,
-	background: "rgba(255,255,255,.025)",
-	minWidth: 1120,
-
-	"& > p, & > div": {
-		padding: "6px 10px",
-	},
-};
-
-const missingRowSx = {
-	...tableRowSx,
-	background: "rgba(239,68,68,.08)",
-	borderBottom: "1px solid rgba(239,68,68,.16)",
 };
 
 const deleteCellSx = {
@@ -1357,27 +1452,6 @@ const validRateSx = {
 	fontWeight: 800,
 };
 
-const emptySectionSx = {
-	p: 2,
-	display: "flex",
-	alignItems: "center",
-	gap: 1.5,
-	background: "rgba(2,6,23,.22)",
-	borderTop: "1px solid rgba(255,255,255,.06)",
-	flexWrap: "wrap",
-};
-
-const emptyIconSx = (accent) => ({
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
-	display: "grid",
-	placeItems: "center",
-	color: accent,
-	background: `${accent}15`,
-	border: `1px solid ${accent}30`,
-});
-
 const emptyTitleSx = {
 	color: "#fff",
 	fontSize: 14,
@@ -1390,29 +1464,6 @@ const emptySubSx = {
 	fontSize: 12,
 	fontWeight: 650,
 	maxWidth: 520,
-};
-
-const sidePanelSx = {
-	p: 2.2,
-	borderRadius: 16,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
-};
-
-const assistantPanelSx = {
-	...sidePanelSx,
-	background:
-		"radial-gradient(circle at top right, rgba(59,130,246,.18), transparent 38%), rgba(15,23,42,.78)",
-};
-
-const warningPanelSx = {
-	...sidePanelSx,
-	background:
-		"linear-gradient(180deg, rgba(239,68,68,.11), rgba(15,23,42,.78))",
-	border: "1px solid rgba(239,68,68,.22)",
 };
 
 const sideTitleRowSx = {
@@ -1480,18 +1531,6 @@ const assistantSubSx = {
 	color: "rgba(255,255,255,.50)",
 	fontSize: 11,
 	fontWeight: 650,
-};
-
-const missingRateBoxSx = {
-	p: 1.5,
-	borderRadius: "14px",
-	background: "rgba(2,6,23,.38)",
-	border: "1px solid rgba(239,68,68,.18)",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	gap: 1,
-	mb: 1.5,
 };
 
 const missingTitleSx = {
@@ -1588,35 +1627,6 @@ const quickActionListSx = {
 	display: "flex",
 	flexDirection: "column",
 	gap: 1,
-};
-
-const quickActionStyle = {
-	width: "100%",
-	minHeight: 66,
-	padding: "12px 14px",
-	borderRadius: 14,
-	background: "rgba(255,255,255,.04)",
-	border: "1px solid rgba(255,255,255,.07)",
-	color: "#fff",
-	display: "flex",
-	alignItems: "center",
-	gap: 12,
-	textAlign: "left",
-	cursor: "pointer",
-	fontFamily: "inherit",
-	transition: "all .22s ease",
-};
-
-const quickActionIconStyle = {
-	width: 38,
-	height: 38,
-	borderRadius: 12,
-	background: "rgba(59,130,246,.13)",
-	border: "1px solid rgba(59,130,246,.20)",
-	color: "#93c5fd",
-	display: "grid",
-	placeItems: "center",
-	flexShrink: 0,
 };
 
 const quickActionTitleStyle = {
