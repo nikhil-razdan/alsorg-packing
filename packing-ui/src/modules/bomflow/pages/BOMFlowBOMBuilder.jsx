@@ -1245,17 +1245,6 @@ const totalValueSx = {
 	lineHeight: 1,
 };
 
-const totalIconSx = {
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
-	display: "grid",
-	placeItems: "center",
-	background: "rgba(34,197,94,.13)",
-	color: "#4ade80",
-	border: "1px solid rgba(34,197,94,.24)",
-};
-
 const completionProgressSx = {
 	height: 8,
 	borderRadius: 999,
