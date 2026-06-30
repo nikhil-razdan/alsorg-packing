@@ -1,565 +1,562 @@
 import React, {
-  useCallback,
-  useState,
+    useCallback,
+    useState,
 } from "react";
 
 import {
-  View,
-  Text,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-  RefreshControl,
+    View,
+    Text,
+    FlatList,
+    ActivityIndicator,
+    Alert,
+    TouchableOpacity,
+    RefreshControl,
 } from "react-native";
 
 import {
-  safeOpenChallanPdf,
+    safeOpenChallanPdf,
 } from "../api/challanDownloadApi";
 
 import {
-  useFocusEffect,
+    useFocusEffect,
 } from "@react-navigation/native";
 
 import {
-  fetchTripItems,
+    fetchTripItems,
 } from "../api/logisticsApi";
 
 export default function TripItemScreen({
-  route,
+    route,
 }) {
-  const trip =
-    route?.params?.trip || null;
+    const trip =
+        route?.params?.trip || null;
 
-  const [loading, setLoading] =
-    useState(false);
+    const [loading, setLoading] =
+        useState(false);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+    const [refreshing, setRefreshing] =
+        useState(false);
 
-  const [items, setItems] =
-    useState([]);
+    const [items, setItems] =
+        useState([]);
 
-  const loadItems = async () => {
-    if (!trip?.id) {
-      Alert.alert(
-        "Dispatch missing",
-        "Dispatch id not found"
-      );
+    const loadItems = async () => {
+        if (!trip?.challanNumber) {
+            Alert.alert(
+                "Dispatch missing",
+                "Dispatch id not found"
+            );
 
-      return;
-    }
+            return;
+        }
 
-    try {
-      setLoading(true);
+        try {
+            setLoading(true);
 
-      const data =
-        await fetchTripItems(trip.id);
+            const data =
+                await fetchTripItems(trip.challanNumber);
 
-      setItems(
-        Array.isArray(data)
-          ? data
-          : []
-      );
-    } catch (e) {
-      console.error(e);
+            setItems(
+                Array.isArray(data)
+                    ? data
+                    : []
+            );
+        } catch (e) {
+            console.error(e);
 
-      Alert.alert(
-        "Items failed",
-        e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load dispatch items"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+            Alert.alert(
+                "Items failed",
+                e?.response?.data?.message ||
+                e?.response?.data ||
+                e?.message ||
+                "Failed to load dispatch items"
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  const refresh = async () => {
-    if (!trip?.id) return;
+    const refresh = async () => {
+        if (!trip?.id) return;
 
-    try {
-      setRefreshing(true);
+        try {
+            setRefreshing(true);
 
-      const data =
-        await fetchTripItems(trip.id);
+            const data =
+                await fetchTripItems(trip.challanNumber);
 
-      setItems(
-        Array.isArray(data)
-          ? data
-          : []
-      );
-    } catch (e) {
-      Alert.alert(
-        "Refresh failed",
-        e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh items"
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  };
+            setItems(
+                Array.isArray(data)
+                    ? data
+                    : []
+            );
+        } catch (e) {
+            Alert.alert(
+                "Refresh failed",
+                e?.response?.data?.message ||
+                e?.response?.data ||
+                e?.message ||
+                "Failed to refresh items"
+            );
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadItems();
-    }, [trip?.id])
-  );
-
-  const driverName =
-    trip?.driver?.name ||
-    trip?.driverName ||
-    "—";
-
-  const vehicleNo =
-    trip?.vehicle?.vehicleNumber ||
-    trip?.vehicleNumber ||
-    "—";
-
-  if (loading && items.length === 0) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-
-        <Text style={styles.loadingText}>
-          Loading dispatch items...
-        </Text>
-      </View>
+    useFocusEffect(
+        useCallback(() => {
+            loadItems();
+        }, [trip?.id])
     );
-  }
 
-  return (
-    <View style={styles.page}>
-      <View style={styles.tripCard}>
-        <View style={styles.tripHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.challan}>
-              {trip?.challanNumber || "—"}
+    const driverName =
+        trip?.driver?.name ||
+        trip?.driverName ||
+        "—";
+
+    const vehicleNo =
+        trip?.vehicle?.vehicleNumber ||
+        trip?.vehicleNumber ||
+        "—";
+
+    if (loading && items.length === 0) {
+        return (
+            <View style={styles.center}>
+                <ActivityIndicator />
+
+                <Text style={styles.loadingText}>
+                    Loading dispatch items...
+                </Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.page}>
+            <View style={styles.tripCard}>
+                <View style={styles.tripHeader}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.challan}>
+                            {trip?.challanNumber || "—"}
+                        </Text>
+
+                        <Text style={styles.meta}>
+                            {driverName} • {vehicleNo}
+                        </Text>
+                    </View>
+
+                    <View style={styles.doneBadge}>
+                        <Text style={styles.doneText}>
+                            DISPATCHED
+                        </Text>
+                    </View>
+                </View>
+
+                <View style={styles.summaryRow}>
+                    <Info
+                        label="Items"
+                        value={String(
+                            trip?.totalItems ||
+                            items.length ||
+                            0
+                        )}
+                    />
+
+                    <Info
+                        label="Dispatch Time"
+                        value={
+                            trip?.dispatchedAt
+                                ? new Date(trip.dispatchedAt).toLocaleString()
+                                : "—"
+                        }
+                    />
+
+                    <Info
+                        label="Source"
+                        value={trip?.source || "—"}
+                    />
+                </View>
+
+                <TouchableOpacity
+                    style={styles.openChallanBtn}
+                    onPress={() =>
+                        safeOpenChallanPdf(
+                            trip?.challanNumber
+                        )
+                    }
+                >
+                    <Text style={styles.openChallanText}>
+                        Open Challan
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sectionTitle}>
+                Dispatch Items
             </Text>
 
-            <Text style={styles.meta}>
-              {driverName} • {vehicleNo}
-            </Text>
-          </View>
-
-          <View style={styles.doneBadge}>
-            <Text style={styles.doneText}>
-              DISPATCHED
-            </Text>
-          </View>
+            <FlatList
+                data={items}
+                keyExtractor={(item, index) =>
+                    item.id ||
+                    item.zohoItemId ||
+                    String(index)
+                }
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={refresh}
+                        tintColor="#fff"
+                    />
+                }
+                contentContainerStyle={{
+                    paddingBottom: 28,
+                }}
+                ListEmptyComponent={
+                    <View style={styles.emptyBox}>
+                        <Text style={styles.emptyText}>
+                            No items found for this dispatch.
+                        </Text>
+                    </View>
+                }
+                renderItem={({ item, index }) => (
+                    <ItemCard
+                        item={item}
+                        index={index}
+                    />
+                )}
+            />
         </View>
-
-        <View style={styles.summaryRow}>
-          <Info
-            label="Items"
-            value={String(
-              trip?.totalItems ||
-                items.length ||
-                0
-            )}
-          />
-
-          <Info
-            label="Dispatch Time"
-            value={
-              trip?.tripStart
-                ? new Date(
-                    trip.tripStart
-                  ).toLocaleString()
-                : "—"
-            }
-          />
-
-          <Info
-            label="Source"
-            value={trip?.source || "—"}
-          />
-        </View>
-
-        <TouchableOpacity
-          style={styles.openChallanBtn}
-          onPress={() =>
-            safeOpenChallanPdf(
-              trip?.id,
-              trip?.challanNumber
-            )
-          }
-        >
-          <Text style={styles.openChallanText}>
-            Open Challan
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>
-        Dispatch Items
-      </Text>
-
-      <FlatList
-        data={items}
-        keyExtractor={(item, index) =>
-          item.id ||
-          item.zohoItemId ||
-          String(index)
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            tintColor="#fff"
-          />
-        }
-        contentContainerStyle={{
-          paddingBottom: 28,
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>
-              No items found for this dispatch.
-            </Text>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <ItemCard
-            item={item}
-            index={index}
-          />
-        )}
-      />
-    </View>
-  );
+    );
 }
 
 function ItemCard({
-  item,
-  index,
+    item,
+    index,
 }) {
-  return (
-    <View style={styles.itemCard}>
-      <View style={styles.itemTop}>
-        <View style={styles.itemNo}>
-          <Text style={styles.itemNoText}>
-            {index + 1}
-          </Text>
+    return (
+        <View style={styles.itemCard}>
+            <View style={styles.itemTop}>
+                <View style={styles.itemNo}>
+                    <Text style={styles.itemNoText}>
+                        {index + 1}
+                    </Text>
+                </View>
+
+                <View style={{ flex: 1 }}>
+                    <Text
+                        style={styles.itemName}
+                        numberOfLines={2}
+                    >
+                        {item.name || item.itemName || "Unnamed Item"}
+                    </Text>
+
+                    <Text
+                        style={styles.itemSub}
+                        numberOfLines={1}
+                    >
+                        {item.sku || "No SKU"}
+                    </Text>
+                </View>
+            </View>
+
+            <View style={styles.detailGrid}>
+                <Detail
+                    label="PD No"
+                    value={item.pdNo || "—"}
+                />
+
+                <Detail
+                    label="DWG No"
+                    value={item.drawingNo || "—"}
+                />
+
+                <Detail
+                    label="Client"
+                    value={item.clientName || "—"}
+                />
+
+                <Detail
+                    label="Packet Item ID"
+                    value={item.packetItemId || "—"}
+                />
+            </View>
+
+            <View style={styles.longBox}>
+                <Text style={styles.longLabel}>
+                    Description
+                </Text>
+
+                <Text style={styles.longValue}>
+                    {item.description || "—"}
+                </Text>
+            </View>
+
+            {item.remarks ? (
+                <View style={styles.longBox}>
+                    <Text style={styles.longLabel}>
+                        Remarks
+                    </Text>
+
+                    <Text style={styles.longValue}>
+                        {item.remarks}
+                    </Text>
+                </View>
+            ) : null}
         </View>
-
-        <View style={{ flex: 1 }}>
-          <Text
-            style={styles.itemName}
-            numberOfLines={2}
-          >
-            {item.itemName || "Unnamed Item"}
-          </Text>
-
-          <Text
-            style={styles.itemSub}
-            numberOfLines={1}
-          >
-            {item.sku || "No SKU"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.detailGrid}>
-        <Detail
-          label="PD No"
-          value={item.pdNo || "—"}
-        />
-
-        <Detail
-          label="DWG No"
-          value={item.drawingNo || "—"}
-        />
-
-        <Detail
-          label="Client"
-          value={item.clientName || "—"}
-        />
-
-        <Detail
-          label="Packet Item ID"
-          value={item.packetItemId || "—"}
-        />
-      </View>
-
-      <View style={styles.longBox}>
-        <Text style={styles.longLabel}>
-          Description
-        </Text>
-
-        <Text style={styles.longValue}>
-          {item.description || "—"}
-        </Text>
-      </View>
-
-      {item.remarks ? (
-        <View style={styles.longBox}>
-          <Text style={styles.longLabel}>
-            Remarks
-          </Text>
-
-          <Text style={styles.longValue}>
-            {item.remarks}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
+    );
 }
 
 function Info({
-  label,
-  value,
+    label,
+    value,
 }) {
-  return (
-    <View style={styles.info}>
-      <Text style={styles.infoLabel}>
-        {label}
-      </Text>
+    return (
+        <View style={styles.info}>
+            <Text style={styles.infoLabel}>
+                {label}
+            </Text>
 
-      <Text
-        style={styles.infoValue}
-        numberOfLines={2}
-      >
-        {value}
-      </Text>
-    </View>
-  );
+            <Text
+                style={styles.infoValue}
+                numberOfLines={2}
+            >
+                {value}
+            </Text>
+        </View>
+    );
 }
 
 function Detail({
-  label,
-  value,
+    label,
+    value,
 }) {
-  return (
-    <View style={styles.detail}>
-      <Text style={styles.detailLabel}>
-        {label}
-      </Text>
+    return (
+        <View style={styles.detail}>
+            <Text style={styles.detailLabel}>
+                {label}
+            </Text>
 
-      <Text
-        style={styles.detailValue}
-        numberOfLines={2}
-      >
-        {value}
-      </Text>
-    </View>
-  );
+            <Text
+                style={styles.detailValue}
+                numberOfLines={2}
+            >
+                {value}
+            </Text>
+        </View>
+    );
 }
 
 const styles = {
-  page: {
-    flex: 1,
-    backgroundColor: "#020617",
-    padding: 16,
-  },
+    page: {
+        flex: 1,
+        backgroundColor: "#020617",
+        padding: 16,
+    },
 
-  center: {
-    flex: 1,
-    backgroundColor: "#020617",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    center: {
+        flex: 1,
+        backgroundColor: "#020617",
+        alignItems: "center",
+        justifyContent: "center",
+    },
 
-  loadingText: {
-    color: "#94a3b8",
-    marginTop: 12,
-    fontWeight: "700",
-  },
+    loadingText: {
+        color: "#94a3b8",
+        marginTop: 12,
+        fontWeight: "700",
+    },
 
-  tripCard: {
-    backgroundColor: "#0f172a",
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    marginBottom: 16,
-  },
+    tripCard: {
+        backgroundColor: "#0f172a",
+        borderRadius: 20,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,.08)",
+        marginBottom: 16,
+    },
 
-  tripHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 14,
-  },
+    tripHeader: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        marginBottom: 14,
+    },
 
-  challan: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-  },
+    challan: {
+        color: "#fff",
+        fontSize: 18,
+        fontWeight: "900",
+    },
 
-  meta: {
-    color: "#94a3b8",
-    marginTop: 5,
-    fontWeight: "700",
-  },
+    meta: {
+        color: "#94a3b8",
+        marginTop: 5,
+        fontWeight: "700",
+    },
 
-  doneBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(16,185,129,.14)",
-  },
+    doneBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "rgba(16,185,129,.14)",
+    },
 
-  doneText: {
-    color: "#6ee7b7",
-    fontSize: 10,
-    fontWeight: "900",
-  },
+    doneText: {
+        color: "#6ee7b7",
+        fontSize: 10,
+        fontWeight: "900",
+    },
 
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -4,
-  },
+    summaryRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginHorizontal: -4,
+    },
 
-  info: {
-    width: "33.33%",
-    padding: 4,
-  },
+    info: {
+        width: "33.33%",
+        padding: 4,
+    },
 
-  infoLabel: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "900",
-  },
+    infoLabel: {
+        color: "#64748b",
+        fontSize: 11,
+        fontWeight: "900",
+    },
 
-  infoValue: {
-    color: "#e5e7eb",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 3,
-  },
+    infoValue: {
+        color: "#e5e7eb",
+        fontSize: 12,
+        fontWeight: "700",
+        marginTop: 3,
+    },
 
-  openChallanBtn: {
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: "rgba(251,191,36,.12)",
-    borderWidth: 1,
-    borderColor: "rgba(251,191,36,.28)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
+    openChallanBtn: {
+        minHeight: 42,
+        borderRadius: 12,
+        backgroundColor: "rgba(251,191,36,.12)",
+        borderWidth: 1,
+        borderColor: "rgba(251,191,36,.28)",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 12,
+    },
 
-  openChallanText: {
-    color: "#facc15",
-    fontWeight: "900",
-    fontSize: 12,
-  },
+    openChallanText: {
+        color: "#facc15",
+        fontWeight: "900",
+        fontSize: 12,
+    },
 
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 12,
-  },
+    sectionTitle: {
+        color: "#fff",
+        fontSize: 20,
+        fontWeight: "900",
+        marginBottom: 12,
+    },
 
-  emptyBox: {
-    padding: 24,
-    borderRadius: 16,
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    alignItems: "center",
-  },
+    emptyBox: {
+        padding: 24,
+        borderRadius: 16,
+        backgroundColor: "#0f172a",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,.08)",
+        alignItems: "center",
+    },
 
-  emptyText: {
-    color: "#94a3b8",
-    fontWeight: "700",
-    textAlign: "center",
-  },
+    emptyText: {
+        color: "#94a3b8",
+        fontWeight: "700",
+        textAlign: "center",
+    },
 
-  itemCard: {
-    backgroundColor: "#0f172a",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-  },
+    itemCard: {
+        backgroundColor: "#0f172a",
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,.08)",
+    },
 
-  itemTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-  },
+    itemTop: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 14,
+    },
 
-  itemNo: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(59,130,246,.16)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
+    itemNo: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: "rgba(59,130,246,.16)",
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 12,
+    },
 
-  itemNoText: {
-    color: "#93c5fd",
-    fontWeight: "900",
-  },
+    itemNoText: {
+        color: "#93c5fd",
+        fontWeight: "900",
+    },
 
-  itemName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-  },
+    itemName: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "900",
+    },
 
-  itemSub: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
-  },
+    itemSub: {
+        color: "#94a3b8",
+        fontSize: 12,
+        fontWeight: "700",
+        marginTop: 4,
+    },
 
-  detailGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -4,
-  },
+    detailGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginHorizontal: -4,
+    },
 
-  detail: {
-    width: "50%",
-    padding: 4,
-  },
+    detail: {
+        width: "50%",
+        padding: 4,
+    },
 
-  detailLabel: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "900",
-  },
+    detailLabel: {
+        color: "#64748b",
+        fontSize: 11,
+        fontWeight: "900",
+    },
 
-  detailValue: {
-    color: "#e5e7eb",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 3,
-  },
+    detailValue: {
+        color: "#e5e7eb",
+        fontSize: 12,
+        fontWeight: "700",
+        marginTop: 3,
+    },
 
-  longBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,.035)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.06)",
-  },
+    longBox: {
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: "rgba(255,255,255,.035)",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,.06)",
+    },
 
-  longLabel: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "900",
-    marginBottom: 5,
-  },
+    longLabel: {
+        color: "#64748b",
+        fontSize: 11,
+        fontWeight: "900",
+        marginBottom: 5,
+    },
 
-  longValue: {
-    color: "#e5e7eb",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 18,
-  },
+    longValue: {
+        color: "#e5e7eb",
+        fontSize: 12,
+        fontWeight: "700",
+        lineHeight: 18,
+    },
 };

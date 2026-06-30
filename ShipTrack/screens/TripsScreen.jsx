@@ -68,14 +68,20 @@ export default function TripsScreen() {
       Alert.alert(
         "Challans failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load dispatched challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to load dispatched challans"
       );
     } finally {
       setLoading(false);
     }
   };
+
+  const [pageNo, setPageNo] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(10);
 
   const refresh = async () => {
     try {
@@ -93,14 +99,29 @@ export default function TripsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to refresh challans"
       );
     } finally {
       setRefreshing(false);
     }
   };
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(challans.length / pageSize)
+    );
+
+  const currentPage =
+    Math.min(pageNo, totalPages);
+
+  const paginatedChallans =
+    challans.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
 
   useFocusEffect(
     useCallback(() => {
@@ -136,7 +157,7 @@ export default function TripsScreen() {
       </View>
 
       <FlatList
-        data={challans}
+        data={paginatedChallans}
         keyExtractor={(item, index) =>
           item.challanNumber ||
           `challan-${index}`
@@ -151,6 +172,16 @@ export default function TripsScreen() {
         contentContainerStyle={{
           paddingBottom: 28,
         }}
+        ListHeaderComponent={
+          <PaginationBar
+            pageNo={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            setPageNo={setPageNo}
+            setPageSize={setPageSize}
+            totalItems={challans.length}
+          />
+        }
         renderItem={({ item }) => (
           <ChallanCard
             challan={item}
@@ -172,6 +203,90 @@ export default function TripsScreen() {
           </Text>
         }
       />
+    </View>
+  );
+}
+
+function PaginationBar({
+  pageNo,
+  totalPages,
+  pageSize,
+  setPageNo,
+  setPageSize,
+  totalItems,
+}) {
+  return (
+    <View style={styles.paginationBox}>
+      <Text style={styles.paginationText}>
+        Page {pageNo} of {totalPages} • {totalItems} challans
+      </Text>
+
+      <View style={styles.paginationRow}>
+        {[10, 25, 50].map((size) => (
+          <TouchableOpacity
+            key={size}
+            style={[
+              styles.pageSizeBtn,
+              pageSize === size
+                ? styles.pageSizeBtnActive
+                : null,
+            ]}
+            onPress={() => {
+              setPageSize(size);
+              setPageNo(1);
+            }}
+          >
+            <Text
+              style={[
+                styles.pageSizeText,
+                pageSize === size
+                  ? styles.pageSizeTextActive
+                  : null,
+              ]}
+            >
+              {size}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
+        <TouchableOpacity
+          disabled={pageNo <= 1}
+          style={[
+            styles.pageBtn,
+            pageNo <= 1
+              ? styles.pageBtnDisabled
+              : null,
+          ]}
+          onPress={() =>
+            setPageNo((prev) =>
+              Math.max(1, prev - 1)
+            )
+          }
+        >
+          <Text style={styles.pageBtnText}>
+            Prev
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          disabled={pageNo >= totalPages}
+          style={[
+            styles.pageBtn,
+            pageNo >= totalPages
+              ? styles.pageBtnDisabled
+              : null,
+          ]}
+          onPress={() =>
+            setPageNo((prev) =>
+              Math.min(totalPages, prev + 1)
+            )
+          }
+        >
+          <Text style={styles.pageBtnText}>
+            Next
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -518,5 +633,75 @@ const styles = {
     fontWeight: "700",
     fontSize: 11,
     marginTop: 4,
+  },
+
+  paginationBox: {
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+
+  paginationText: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+
+  paginationRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+
+  pageSizeBtn: {
+    minWidth: 42,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageSizeBtnActive: {
+    backgroundColor: "rgba(37,99,235,.22)",
+    borderColor: "rgba(37,99,235,.48)",
+  },
+
+  pageSizeText: {
+    color: "#94a3b8",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  pageSizeTextActive: {
+    color: "#93c5fd",
+  },
+
+  pageBtn: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "rgba(59,130,246,.18)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  pageBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
   },
 };

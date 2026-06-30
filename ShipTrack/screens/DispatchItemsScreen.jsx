@@ -41,14 +41,17 @@ const ALL_STATUSES = [
   "WAREHOUSE_REQUESTED",
   "IN_WAREHOUSE",
   "READY_TO_DISPATCH",
-  "LOADED",
   "DISPATCHED",
-  "OUT_FOR_DELIVERY",
-  "DELIVERED",
   "AVAILABLE",
   "WAREHOUSE_RETURN_REQUESTED",
   "RESTORED",
 ];
+
+const [pageNo, setPageNo] =
+  useState(1);
+
+const [pageSize, setPageSize] =
+  useState(10);
 
 function cleanValue(value) {
   const text =
@@ -132,9 +135,9 @@ export default function DispatchItemsScreen() {
       Alert.alert(
         "Items failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load items"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to load items"
       );
     } finally {
       setLoading(false);
@@ -157,9 +160,9 @@ export default function DispatchItemsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to refresh"
       );
     } finally {
       setRefreshing(false);
@@ -277,6 +280,43 @@ export default function DispatchItemsScreen() {
     locationFilter,
   ]);
 
+  const totalPages = useMemo(
+    () =>
+      Math.max(
+        1,
+        Math.ceil(filteredItems.length / pageSize)
+      ),
+    [filteredItems.length, pageSize]
+  );
+
+  const currentPage =
+    Math.min(pageNo, totalPages);
+
+  const paginatedItems = useMemo(
+    () =>
+      filteredItems.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize
+      ),
+    [filteredItems, currentPage, pageSize]
+  );
+
+  useEffect(() => {
+    setPageNo(1);
+  }, [
+    search,
+    statusFilter,
+    plantFilter,
+    locationFilter,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
+
   const readyItems = useMemo(
     () =>
       filteredItems.filter(
@@ -342,7 +382,7 @@ export default function DispatchItemsScreen() {
       </Text>
 
       <FlatList
-        data={filteredItems}
+        data={paginatedItems}
         keyExtractor={(item, index) =>
           item.zohoItemId ||
           item.id ||
@@ -452,6 +492,15 @@ export default function DispatchItemsScreen() {
                 }
               />
             </View>
+
+            <PaginationBar
+              pageNo={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              setPageNo={setPageNo}
+              setPageSize={setPageSize}
+              totalItems={filteredItems.length}
+            />
           </View>
         }
         renderItem={({ item }) => (
@@ -469,6 +518,90 @@ export default function DispatchItemsScreen() {
           paddingBottom: 36,
         }}
       />
+    </View>
+  );
+}
+
+function PaginationBar({
+  pageNo,
+  totalPages,
+  pageSize,
+  setPageNo,
+  setPageSize,
+  totalItems,
+}) {
+  return (
+    <View style={styles.paginationBox}>
+      <Text style={styles.paginationText}>
+        Page {pageNo} of {totalPages} • {totalItems} items
+      </Text>
+
+      <View style={styles.paginationRow}>
+        {[10, 25, 50].map((size) => (
+          <TouchableOpacity
+            key={size}
+            style={[
+              styles.pageSizeBtn,
+              pageSize === size
+                ? styles.pageSizeBtnActive
+                : null,
+            ]}
+            onPress={() => {
+              setPageSize(size);
+              setPageNo(1);
+            }}
+          >
+            <Text
+              style={[
+                styles.pageSizeText,
+                pageSize === size
+                  ? styles.pageSizeTextActive
+                  : null,
+              ]}
+            >
+              {size}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
+        <TouchableOpacity
+          disabled={pageNo <= 1}
+          style={[
+            styles.pageBtn,
+            pageNo <= 1
+              ? styles.pageBtnDisabled
+              : null,
+          ]}
+          onPress={() =>
+            setPageNo((prev) =>
+              Math.max(1, prev - 1)
+            )
+          }
+        >
+          <Text style={styles.pageBtnText}>
+            Prev
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          disabled={pageNo >= totalPages}
+          style={[
+            styles.pageBtn,
+            pageNo >= totalPages
+              ? styles.pageBtnDisabled
+              : null,
+          ]}
+          onPress={() =>
+            setPageNo((prev) =>
+              Math.min(totalPages, prev + 1)
+            )
+          }
+        >
+          <Text style={styles.pageBtnText}>
+            Next
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -624,9 +757,9 @@ function ItemCard({
               Alert.alert(
                 "Action failed",
                 e?.response?.data?.message ||
-                  e?.response?.data ||
-                  e?.message ||
-                  "Unable to update item"
+                e?.response?.data ||
+                e?.message ||
+                "Unable to update item"
               );
             }
           }}
@@ -938,5 +1071,75 @@ const styles = {
     textAlign: "center",
     marginTop: 40,
     fontWeight: "700",
+  },
+
+  paginationBox: {
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+
+  paginationText: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+
+  paginationRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+
+  pageSizeBtn: {
+    minWidth: 42,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageSizeBtnActive: {
+    backgroundColor: "rgba(37,99,235,.22)",
+    borderColor: "rgba(37,99,235,.48)",
+  },
+
+  pageSizeText: {
+    color: "#94a3b8",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  pageSizeTextActive: {
+    color: "#93c5fd",
+  },
+
+  pageBtn: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "rgba(59,130,246,.18)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  pageBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
   },
 };

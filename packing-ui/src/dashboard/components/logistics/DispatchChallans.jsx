@@ -8,11 +8,20 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Select,
   TextField,
 } from "@mui/material";
 
+import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import DownloadIcon from "@mui/icons-material/Download";
 
 import {
   API_BASE_URL,
@@ -32,6 +41,19 @@ function DispatchChallans({
 
   const [expanded, setExpanded] =
     useState("");
+
+  const [pageNo, setPageNo] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(10);
+
+  const [pdfPreview, setPdfPreview] =
+    useState({
+      open: false,
+      url: "",
+      challanNumber: "",
+    });
 
   const loadData = async () => {
     try {
@@ -85,6 +107,13 @@ function DispatchChallans({
 
   useEffect(() => {
     loadData();
+
+    return () => {
+      if (pdfPreview.url) {
+        URL.revokeObjectURL(pdfPreview.url);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredRows =
@@ -118,6 +147,7 @@ function DispatchChallans({
                 item.clientName,
                 item.description,
                 item.plantCode,
+                item.status,
               ]
                 .filter(Boolean)
                 .join(" ")
@@ -132,12 +162,145 @@ function DispatchChallans({
       });
     }, [rows, search]);
 
+  useEffect(() => {
+    setPageNo(1);
+  }, [search, pageSize]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        filteredRows.length / pageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      pageNo,
+      totalPages
+    );
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
+
+  const paginatedRows =
+    filteredRows.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
+
   const totalItems =
     filteredRows.reduce(
       (sum, row) =>
         sum + Number(row.totalItems || 0),
       0
     );
+
+  const getChallanPdfBlob =
+    async (challanNumber) => {
+      if (!challanNumber) {
+        throw new Error("Challan number missing");
+      }
+
+      const res =
+        await fetch(
+          `${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
+            challanNumber
+          )}/download`,
+          {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              Accept: "application/pdf",
+            },
+          }
+        );
+
+      if (!res.ok) {
+        const text =
+          await res.text();
+
+        throw new Error(
+          text || "Failed to load challan PDF"
+        );
+      }
+
+      return await res.blob();
+    };
+
+  const previewChallanPdf =
+    async (challanNumber) => {
+      try {
+        const blob =
+          await getChallanPdfBlob(challanNumber);
+
+        const url =
+          URL.createObjectURL(blob);
+
+        if (pdfPreview.url) {
+          URL.revokeObjectURL(pdfPreview.url);
+        }
+
+        setPdfPreview({
+          open: true,
+          url,
+          challanNumber,
+        });
+      } catch (e) {
+        console.error(e);
+
+        showAlert?.(
+          e.message || "Unable to preview challan PDF",
+          "error"
+        );
+      }
+    };
+
+  const downloadChallanPdf =
+    async (challanNumber) => {
+      try {
+        const blob =
+          await getChallanPdfBlob(challanNumber);
+
+        const url =
+          URL.createObjectURL(blob);
+
+        const a =
+          document.createElement("a");
+
+        a.href = url;
+        a.download =
+          `${sanitizeFilename(challanNumber)}.pdf`;
+
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+
+        showAlert?.(
+          e.message || "Unable to download challan PDF",
+          "error"
+        );
+      }
+    };
+
+  const closePdfPreview = () => {
+    if (pdfPreview.url) {
+      URL.revokeObjectURL(pdfPreview.url);
+    }
+
+    setPdfPreview({
+      open: false,
+      url: "",
+      challanNumber: "",
+    });
+  };
 
   return (
     <Box sx={wrap}>
@@ -148,7 +311,7 @@ function DispatchChallans({
           </Box>
 
           <Box sx={subtitle}>
-            Challan-wise dispatched items with driver and vehicle details
+            Challan-wise dispatched items with driver, vehicle and PDF access
           </Box>
         </Box>
 
@@ -171,6 +334,11 @@ function DispatchChallans({
         <SummaryCard
           label="Dispatched Items"
           value={totalItems}
+        />
+
+        <SummaryCard
+          label="Current Page"
+          value={`${currentPage}/${totalPages}`}
         />
       </Box>
 
@@ -222,7 +390,7 @@ function DispatchChallans({
         )}
 
       {!loading &&
-        filteredRows.map((challan) => {
+        paginatedRows.map((challan) => {
           const isOpen =
             expanded === challan.challanNumber;
 
@@ -270,6 +438,30 @@ function DispatchChallans({
                     size="small"
                     sx={countChip}
                   />
+
+                  <Button
+                    startIcon={<PictureAsPdfIcon />}
+                    onClick={() =>
+                      previewChallanPdf(
+                        challan.challanNumber
+                      )
+                    }
+                    sx={pdfButton}
+                  >
+                    Preview PDF
+                  </Button>
+
+                  <Button
+                    startIcon={<DownloadIcon />}
+                    onClick={() =>
+                      downloadChallanPdf(
+                        challan.challanNumber
+                      )
+                    }
+                    sx={downloadButton}
+                  >
+                    Download
+                  </Button>
 
                   <Button
                     onClick={() =>
@@ -349,6 +541,156 @@ function DispatchChallans({
             </Box>
           );
         })}
+
+      {!loading &&
+        filteredRows.length > 0 && (
+          <PaginationBar
+            pageNo={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            setPageNo={setPageNo}
+            setPageSize={setPageSize}
+            totalItems={filteredRows.length}
+          />
+        )}
+
+      <Dialog
+        open={pdfPreview.open}
+        onClose={closePdfPreview}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            borderRadius: "18px",
+            background: "#020617",
+            border:
+              "1px solid rgba(255,255,255,.12)",
+            overflow: "hidden",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            color: "#fff",
+            fontWeight: 900,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom:
+              "1px solid rgba(255,255,255,.08)",
+          }}
+        >
+          Challan PDF • {pdfPreview.challanNumber}
+
+          <IconButton
+            onClick={closePdfPreview}
+            sx={{
+              color: "#fff",
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            p: 0,
+            height: "78vh",
+            background: "#111827",
+          }}
+        >
+          {pdfPreview.url && (
+            <iframe
+              title="Challan PDF Preview"
+              src={pdfPreview.url}
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                background: "#fff",
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
+
+function PaginationBar({
+  pageNo,
+  totalPages,
+  pageSize,
+  setPageNo,
+  setPageSize,
+  totalItems,
+}) {
+  const from =
+    totalItems === 0
+      ? 0
+      : (pageNo - 1) * pageSize + 1;
+
+  const to =
+    Math.min(
+      pageNo * pageSize,
+      totalItems
+    );
+
+  return (
+    <Box sx={paginationWrap}>
+      <Box sx={paginationText}>
+        Showing <b>{from}</b> - <b>{to}</b> of{" "}
+        <b>{totalItems}</b>
+      </Box>
+
+      <Box sx={paginationActions}>
+        <Select
+          size="small"
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPageNo(1);
+          }}
+          sx={pageSizeSelect}
+        >
+          {[5, 10, 25, 50, 100].map((size) => (
+            <MenuItem
+              key={size}
+              value={size}
+            >
+              {size} / page
+            </MenuItem>
+          ))}
+        </Select>
+
+        <Button
+          disabled={pageNo <= 1}
+          onClick={() =>
+            setPageNo((prev) =>
+              Math.max(1, prev - 1)
+            )
+          }
+          sx={pageButton}
+        >
+          Prev
+        </Button>
+
+        <Box sx={pageBadge}>
+          {pageNo} / {totalPages}
+        </Box>
+
+        <Button
+          disabled={pageNo >= totalPages}
+          onClick={() =>
+            setPageNo((prev) =>
+              Math.min(totalPages, prev + 1)
+            )
+          }
+          sx={pageButton}
+        >
+          Next
+        </Button>
+      </Box>
     </Box>
   );
 }
@@ -380,6 +722,11 @@ function formatDateTime(value) {
   } catch {
     return value;
   }
+}
+
+function sanitizeFilename(value) {
+  return String(value || "challan")
+    .replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 const wrap = {
@@ -500,6 +847,7 @@ const challanHeader = {
   justifyContent: "space-between",
   gap: 2,
   alignItems: "center",
+  flexWrap: "wrap",
 };
 
 const challanNo = {
@@ -520,7 +868,7 @@ const rightBox = {
   display: "flex",
   alignItems: "center",
   gap: 1,
-  flexShrink: 0,
+  flexWrap: "wrap",
 };
 
 const countChip = {
@@ -530,6 +878,40 @@ const countChip = {
     "rgba(16,185,129,.14)",
   border:
     "1px solid rgba(16,185,129,.22)",
+};
+
+const pdfButton = {
+  height: 34,
+  borderRadius: "10px",
+  textTransform: "none",
+  fontWeight: 800,
+  color: "#facc15",
+  background:
+    "rgba(251,191,36,.12)",
+  border:
+    "1px solid rgba(251,191,36,.25)",
+
+  "&:hover": {
+    background:
+      "rgba(251,191,36,.18)",
+  },
+};
+
+const downloadButton = {
+  height: 34,
+  borderRadius: "10px",
+  textTransform: "none",
+  fontWeight: 800,
+  color: "#93c5fd",
+  background:
+    "rgba(59,130,246,.12)",
+  border:
+    "1px solid rgba(59,130,246,.22)",
+
+  "&:hover": {
+    background:
+      "rgba(59,130,246,.22)",
+  },
 };
 
 const viewButton = {
@@ -615,6 +997,86 @@ const statusChip = {
     "rgba(34,197,94,.13)",
   border:
     "1px solid rgba(34,197,94,.22)",
+};
+
+const paginationWrap = {
+  mt: 2,
+  p: 1.5,
+  borderRadius: "16px",
+  background:
+    "rgba(255,255,255,.035)",
+  border:
+    "1px solid rgba(255,255,255,.07)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 2,
+  flexWrap: "wrap",
+};
+
+const paginationText = {
+  color: "#94a3b8",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const paginationActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 1,
+  flexWrap: "wrap",
+};
+
+const pageSizeSelect = {
+  height: 36,
+  minWidth: 120,
+  color: "#fff",
+  borderRadius: "10px",
+  background:
+    "rgba(255,255,255,.04)",
+
+  ".MuiOutlinedInput-notchedOutline": {
+    borderColor:
+      "rgba(255,255,255,.12)",
+  },
+
+  ".MuiSvgIcon-root": {
+    color: "#fff",
+  },
+};
+
+const pageButton = {
+  height: 36,
+  borderRadius: "10px",
+  textTransform: "none",
+  fontWeight: 800,
+  color: "#fff",
+  background:
+    "rgba(59,130,246,.16)",
+  border:
+    "1px solid rgba(59,130,246,.22)",
+
+  "&:disabled": {
+    color: "rgba(255,255,255,.3)",
+    background:
+      "rgba(255,255,255,.04)",
+  },
+};
+
+const pageBadge = {
+  minWidth: 72,
+  height: 36,
+  px: 1.2,
+  borderRadius: "10px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#fff",
+  fontWeight: 900,
+  background:
+    "rgba(255,255,255,.055)",
+  border:
+    "1px solid rgba(255,255,255,.08)",
 };
 
 export default DispatchChallans;

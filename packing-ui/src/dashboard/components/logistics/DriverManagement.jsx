@@ -18,26 +18,26 @@ import CreateDriverModal from "./modals/CreateDriverModal";
 import LogisticsShiftModal from "./LogisticsShiftModal";
 
 function DriverManagement({
-  showAlert = () => {},
+  showAlert = () => { },
 }) {
   const [drivers, setDrivers] =
     useState([]);
 
-	const [pageNo, setPageNo] =
-	  useState(1);
+  const [pageNo, setPageNo] =
+    useState(1);
 
-	const [pageSize, setPageSize] =
-	  useState(25);
-	  
+  const [pageSize, setPageSize] =
+    useState(25);
+
   const [open, setOpen] =
     useState(false);
 
-	const [shiftOpen, setShiftOpen] =
-	  useState(false);
+  const [shiftOpen, setShiftOpen] =
+    useState(false);
 
-	const [selectedDriver, setSelectedDriver] =
-	  useState(null);
-	  
+  const [selectedDriver, setSelectedDriver] =
+    useState(null);
+
   const loadDrivers =
     async () => {
       try {
@@ -45,57 +45,57 @@ function DriverManagement({
           await fetchDrivers();
 
         setDrivers(data || []);
-		} catch (e) {
-		  console.error(e);
+      } catch (e) {
+        console.error(e);
 
-		  showAlert(
-		    getBackendMessage(
-		      e,
-		      "Failed to load drivers"
-		    ),
-		    "error"
-		  );
-		}
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load drivers"
+          ),
+          "error"
+        );
+      }
     };
 
-	useEffect(() => {
-	  let active = true;
+  useEffect(() => {
+    let active = true;
 
-	  fetchDrivers()
-	    .then((data) => {
-	      if (!active) return;
+    fetchDrivers()
+      .then((data) => {
+        if (!active) return;
 
-	      setDrivers(data || []);
-	    })
-	    .catch((e) => {
-	      if (!active) return;
+        setDrivers(data || []);
+      })
+      .catch((e) => {
+        if (!active) return;
 
-	      console.error(e);
+        console.error(e);
 
-	      showAlert(
-	        getBackendMessage(
-	          e,
-	          "Failed to load drivers"
-	        ),
-	        "error"
-	      );
-	    });
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load drivers"
+          ),
+          "error"
+        );
+      });
 
-	  return () => {
-	    active = false;
-	  };
-	}, [showAlert]);
+    return () => {
+      active = false;
+    };
+  }, [showAlert]);
 
-	const openShiftForDriver = (driver) => {
-	  setSelectedDriver(driver);
-	  setShiftOpen(true);
-	};
+  const openShiftForDriver = (driver) => {
+    setSelectedDriver(driver);
+    setShiftOpen(true);
+  };
 
-	const closeShiftForDriver = () => {
-	  setShiftOpen(false);
-	  setSelectedDriver(null);
-	};
-	
+  const closeShiftForDriver = () => {
+    setShiftOpen(false);
+    setSelectedDriver(null);
+  };
+
   const remove = async (id) => {
     try {
       await deleteDriver(id);
@@ -135,7 +135,17 @@ function DriverManagement({
       (currentPage - 1) * pageSize,
       currentPage * pageSize
     );
-	
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
+
+  useEffect(() => {
+    setPageNo(1);
+  }, [pageSize]);
+
   return (
     <div style={wrap}>
       <div style={header}>
@@ -173,40 +183,40 @@ function DriverManagement({
           <div>Actions</div>
         </div>
 
-		{paginatedDrivers.length === 0 && (
-		  <div style={emptyRow}>
-		    No drivers found
-		  </div>
-		)}
-		
+        {paginatedDrivers.length === 0 && (
+          <div style={emptyRow}>
+            No drivers found
+          </div>
+        )}
+
         {paginatedDrivers.map((d) => (
           <div
             key={d.id}
             style={row}
           >
-		  <div>
-		    <button
-		      style={driverNameBtn}
-		      onClick={() =>
-		        openShiftForDriver(d)
-		      }
-		      title="View shift history and create shift"
-		    >
-		      {d.name}
-		    </button>
-		  </div>
-		  <div>
-		    {d.phoneNumber || d.phone || "-"}
-		  </div>
-		  <div>
-		    {d.licenseNumber || "-"}
-		  </div>
-					   <div>
-					     {d.status ||
-					       (d.active
-					         ? "ACTIVE"
-					         : "INACTIVE")}
-					   </div>
+            <div>
+              <button
+                style={driverNameBtn}
+                onClick={() =>
+                  openShiftForDriver(d)
+                }
+                title="View shift history and create shift"
+              >
+                {d.name}
+              </button>
+            </div>
+            <div>
+              {d.phoneNumber || d.phone || "-"}
+            </div>
+            <div>
+              {d.licenseNumber || "-"}
+            </div>
+            <div>
+              {d.status ||
+                (d.active
+                  ? "ACTIVE"
+                  : "INACTIVE")}
+            </div>
             <div>
               <button
                 style={deleteBtn}
@@ -219,42 +229,42 @@ function DriverManagement({
             </div>
           </div>
         ))}
-		</div>
+      </div>
 
-		<LogisticsPagination
-		  pageNo={currentPage}
-		  setPageNo={setPageNo}
-		  pageSize={pageSize}
-		  setPageSize={setPageSize}
-		  totalItems={drivers.length}
-		/>
+      <LogisticsPagination
+        pageNo={currentPage}
+        setPageNo={setPageNo}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        totalItems={drivers.length}
+      />
 
-		<CreateDriverModal
-		  open={open}
-		  onClose={() =>
-		    setOpen(false)
-		  }
-		  onCreated={loadDrivers}
-		  showAlert={showAlert}
-		/>
-		
-		{shiftOpen && selectedDriver && (
-		  <LogisticsShiftModal
-		    open={shiftOpen}
-		    mode="create"
-		    initialDriverId={
-		      selectedDriver.id
-		    }
-		    driverName={
-		      selectedDriver.name
-		    }
-		    lockDriver={true}
-		    showDriverHistory={true}
-		    onClose={closeShiftForDriver}
-		    onSaved={loadDrivers}
-		    showAlert={showAlert}
-		  />
-		)}
+      <CreateDriverModal
+        open={open}
+        onClose={() =>
+          setOpen(false)
+        }
+        onCreated={loadDrivers}
+        showAlert={showAlert}
+      />
+
+      {shiftOpen && selectedDriver && (
+        <LogisticsShiftModal
+          open={shiftOpen}
+          mode="create"
+          initialDriverId={
+            selectedDriver.id
+          }
+          driverName={
+            selectedDriver.name
+          }
+          lockDriver={true}
+          showDriverHistory={true}
+          onClose={closeShiftForDriver}
+          onSaved={loadDrivers}
+          showAlert={showAlert}
+        />
+      )}
     </div>
   );
 }
