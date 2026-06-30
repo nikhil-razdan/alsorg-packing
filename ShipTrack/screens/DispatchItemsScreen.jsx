@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -47,11 +48,6 @@ const ALL_STATUSES = [
   "RESTORED",
 ];
 
-const [pageNo, setPageNo] =
-  useState(1);
-
-const [pageSize, setPageSize] =
-  useState(10);
 
 function cleanValue(value) {
   const text =
@@ -118,6 +114,13 @@ export default function DispatchItemsScreen() {
 
   const [locationFilter, setLocationFilter] =
     useState("ALL");
+
+
+  const [pageNo, setPageNo] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(10);
 
   const load = async () => {
     try {

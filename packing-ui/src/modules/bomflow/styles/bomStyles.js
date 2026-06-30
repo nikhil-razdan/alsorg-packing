@@ -1,266 +1,881 @@
-// Layout Styles
-export const BOM_shellSx = {
-	height: "100vh",
-	width: "100%",
-	display: "flex",
-	overflow: "hidden",
-	background: "#0b0f17",
-	color: "#e5e7eb",
-	fontFamily: "Inter, system-ui, sans-serif",
+/* =====================================================
+   BOMFLOW MODULE PAGE LAYOUT
+===================================================== */
+
+export const BOM_modulePageSx = {
+	minHeight: "100vh",
+	background:
+		"radial-gradient(circle at top left, rgba(59,130,246,0.10), transparent 24%), linear-gradient(135deg,#020617,#0f172a)",
+	color: "#fff",
 };
 
-export const BOM_mainSx = {
-	flex: 1,
-	minWidth: 0,
-	height: "100vh",
+export const BOM_moduleContentSx = {
+	padding: 24,
 	display: "flex",
 	flexDirection: "column",
-	overflow: "hidden",
+	gap: 24,
 };
 
-export const BOM_contentSx = {
-	flex: 1,
-	minHeight: 0,
-	overflow: "auto",
-	p: 2.8,
-	background: "radial-gradient(circle at top left, rgba(79,141,247,.05), transparent 30%), #0b0f17",
-};
-
-export const BOM_sidebarSx = {
-	width: 268,
-	minWidth: 268,
-	height: "100vh",
-	background: "linear-gradient(180deg, #161a23 0%, #0f131a 100%)",
-	borderRight: "1px solid rgba(255, 255, 255, 0.06)",
+export const BOM_moduleHeaderRowSx = {
 	display: "flex",
-	flexDirection: "column",
-	p: 2,
-	boxSizing: "border-box",
-	boxShadow: "6px 0 24px rgba(0,0,0,.4)",
-	overflow: "hidden",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 2,
+	flexWrap: "wrap",
 };
 
-export const BOM_brandSx = {
+export const BOM_moduleLogoRowSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1.4,
-	mb: 4,
-	px: 0.5,
+	gap: 1.5,
 };
 
-export const BOM_brandMarkSx = {
-	width: 40,
-	height: 40,
-	borderRadius: "10px",
+export const BOM_moduleLogoMarkSx = {
+	width: 46,
+	height: 46,
+	borderRadius: "16px",
 	display: "grid",
 	placeItems: "center",
-	background: "linear-gradient(135deg, #38bdf8, #2563eb)",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
-	fontWeight: 900,
+	fontWeight: 950,
 	fontSize: 18,
-	boxShadow: "0 8px 20px rgba(37,99,235,.3)",
-	flexShrink: 0,
+	boxShadow: "0 12px 28px rgba(37,99,235,.35)",
 };
 
-export const BOM_brandTitleSx = {
+export const BOM_moduleLogoSx = {
 	color: "#fff",
-	fontSize: 22,
+	fontSize: 32,
+	fontWeight: 950,
 	lineHeight: 1,
+	letterSpacing: "-0.04em",
+};
+
+export const BOM_moduleSubtitleSx = {
+	color: "rgba(255,255,255,0.65)",
+	fontSize: 14,
+	fontWeight: 600,
+	mt: 0.8,
+};
+
+export const BOM_moduleHeaderActionsSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+	flexWrap: "wrap",
+};
+
+export const BOM_activePageChipSx = {
+	height: 36,
+	borderRadius: "999px",
+	background: "rgba(59,130,246,.14)",
+	color: "#93c5fd",
+	border: "1px solid rgba(59,130,246,.28)",
 	fontWeight: 900,
-	letterSpacing: "-0.02em",
+	letterSpacing: ".04em",
 };
 
-export const BOM_brandSubSx = {
-	color: "rgba(255,255,255,.4)",
-	mt: 0.4,
-	fontSize: 11,
-	fontWeight: 600,
-	letterSpacing: 0.5,
-};
-
-export const BOM_navSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: 0.5,
-};
-
-export const BOM_navItemStyle = {
-	width: "100%",
+export const BOM_primaryActionBtnSx = {
 	height: 44,
-	border: "none",
-	borderRadius: 8,
-	background: "transparent",
-	color: "rgba(255,255,255,.65)",
+	px: 2.2,
+	borderRadius: "14px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#fff",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	boxShadow: "0 12px 28px rgba(37,99,235,.35)",
+
+	"&:hover": {
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+	},
+};
+
+export const BOM_secondaryActionBtnSx = {
+	height: 44,
+	px: 2.2,
+	borderRadius: "14px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#fff",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.08)",
+
+	"&:hover": {
+		background: "rgba(59,130,246,.14)",
+		borderColor: "rgba(59,130,246,.28)",
+	},
+};
+
+export const BOM_tabsRowSx = {
 	display: "flex",
-	alignItems: "center",
 	gap: 12,
-	padding: "0 14px",
-	fontWeight: 600,
-	fontSize: "14px",
+	flexWrap: "wrap",
+};
+
+export const BOM_tabButtonStyle = {
+	height: 48,
+	borderRadius: 14,
+	border: "1px solid rgba(255,255,255,0.06)",
+	color: "#fff",
 	cursor: "pointer",
-	textAlign: "left",
-	transition: "all .2s ease",
+	paddingLeft: 18,
+	paddingRight: 18,
+	fontWeight: 750,
+	fontSize: 14,
+	transition: "all 0.25s ease",
+	background: "rgba(255,255,255,0.04)",
 };
 
-export const BOM_navItemActiveStyle = {
-	background: "rgba(37, 99, 235, 0.2)",
-	color: "#38bdf8",
-	borderLeft: "4px solid #38bdf8",
-	borderRadius: "0 8px 8px 0",
-	paddingLeft: "10px",
+export const BOM_tabButtonActiveStyle = {
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	border: "1px solid rgba(59,130,246,0.4)",
+	boxShadow: "0 10px 25px rgba(37,99,235,0.35)",
 };
 
-export const BOM_navIconStyle = {
+export const BOM_viewShellSx = {
+	width: "100%",
+};
+
+/* =====================================================
+   COMMON PAGE HEADERS
+===================================================== */
+
+export const BOM_pageHeadSx = {
 	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	width: 20,
-	flexShrink: 0,
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+	mb: 3,
+	flexWrap: "wrap",
 };
 
-export const BOM_sidebarFooterSx = {
-	borderTop: "1px solid rgba(255,255,255,.08)",
-	pt: 2,
+export const BOM_pageTopSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+	mb: 3,
+	flexWrap: "wrap",
+};
+
+export const BOM_pageHeaderSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+	mb: 3,
+	flexWrap: "wrap",
+};
+
+export const BOM_labelChipSx = {
+	height: 30,
+	borderRadius: 999,
+	background: "rgba(59,130,246,.14)",
+	color: "#60a5fa",
+	border: "1px solid rgba(59,130,246,.24)",
+	fontWeight: 850,
+	letterSpacing: ".06em",
+};
+
+export const BOM_pageTitleSx = {
+	color: "#fff",
+	fontSize: 32,
+	fontWeight: 950,
+	lineHeight: 1.1,
+	letterSpacing: "-0.045em",
+};
+
+export const BOM_pageSubSx = {
+	mt: 0.8,
+	color: "rgba(255,255,255,.65)",
+	fontSize: 14,
+	fontWeight: 600,
+	lineHeight: 1.6,
+};
+
+/* =====================================================
+   DASHBOARD CARDS
+===================================================== */
+
+export const BOM_activeCostingsCardSx = {
+	minWidth: 180,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.92), rgba(17,24,39,.88))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "18px",
+	p: 2,
+	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
+};
+
+export const BOM_activeCostingsValueSx = {
+	color: "#22c55e",
+	fontSize: 28,
+	fontWeight: 900,
+	fontFamily: "monospace",
+};
+
+export const BOM_moduleCardSx = {
+	p: 3,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "24px",
+	height: "100%",
 	display: "flex",
 	flexDirection: "column",
-	gap: 1,
+	boxShadow: "0 18px 50px rgba(0,0,0,.25)",
+	transition: "all .25s ease",
+
+	"&:hover": {
+		transform: "translateY(-3px)",
+		borderColor: "rgba(59,130,246,.35)",
+		boxShadow: "0 24px 70px rgba(0,0,0,.34)",
+	},
 };
 
-export const BOM_newCostingBtnSx = {
-	height: 42,
-	borderRadius: "8px",
-	textTransform: "none",
-	fontWeight: 700,
-	background: "#2563eb",
-	color: "#fff",
-	boxShadow: "0 4px 14px rgba(37,99,235,.4)",
-	"&:hover": { background: "#1d4ed8" },
-};
-
-export const BOM_allModulesBtnSx = {
-	height: 40,
-	borderRadius: "8px",
-	textTransform: "none",
-	fontWeight: 600,
-	color: "#94a3b8",
-	border: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(255,255,255,.02)",
-	"&:hover": { background: "rgba(255,255,255,.05)", color: "#fff" },
-};
-
-export const BOM_topbarSx = {
-	height: 64,
-	minHeight: 64,
-	background: "#11151d",
-	borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+export const BOM_cardTopSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	px: 3,
-	zIndex: 20,
-	flexShrink: 0,
+	mb: 2,
 };
 
-export const BOM_topbarLeftSx = { display: "flex", alignItems: "center", gap: 2 };
-export const BOM_systemTitleBlockSx = { display: "flex", flexDirection: "column" };
-export const BOM_systemTitleSx = { color: "#fff", fontWeight: 800, fontSize: 18 };
-export const BOM_systemSubtitleSx = { color: "rgba(255,255,255,.4)", fontSize: 11 };
-export const BOM_topbarDividerSx = { width: 1, height: 24, background: "rgba(255,255,255,.1)" };
-
-export const BOM_breadcrumbChipSx = {
-	height: 24,
-	borderRadius: "4px",
-	background: "rgba(37, 99, 235, 0.15)",
-	color: "#38bdf8",
-	border: "1px solid rgba(37, 99, 235, 0.3)",
-	fontSize: 11,
-	fontWeight: 700,
+export const BOM_iconSx = {
+	width: 52,
+	height: 52,
+	borderRadius: "18px",
+	display: "grid",
+	placeItems: "center",
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.13)",
+	border: "1px solid rgba(59,130,246,.20)",
 };
 
-export const BOM_sectionTabsSx = { display: "flex", gap: 0.5, background: "rgba(0,0,0,.2)", p: 0.5, borderRadius: "6px" };
-export const BOM_sectionChipSx = {
-	height: 28,
-	borderRadius: "4px",
-	background: "transparent",
-	color: "rgba(255,255,255,.6)",
-	fontWeight: 600,
-	fontSize: 12,
-	"&:hover": { background: "rgba(255,255,255,.05)", color: "#fff" },
+export const BOM_miniChipSx = {
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.12)",
+	border: "1px solid rgba(59,130,246,.20)",
+	fontWeight: 800,
 };
-export const BOM_activeSectionChipSx = {
-	height: 28,
-	borderRadius: "4px",
-	background: "#2563eb",
+
+export const BOM_cardTitleSx = {
 	color: "#fff",
-	fontWeight: 700,
-	fontSize: 12,
-	"&:hover": { background: "#1d4ed8" },
+	fontSize: 20,
+	fontWeight: 900,
+	mb: 1,
 };
 
-export const BOM_topbarRightSx = { display: "flex", alignItems: "center", gap: 1.5 };
-export const BOM_iconGroupSx = { display: "flex", gap: 0.5 };
-export const BOM_topIconBtnSx = { color: "rgba(255,255,255,.6)", "&:hover": { color: "#fff", background: "rgba(255,255,255,.05)" } };
-
-export const BOM_saveBtnSx = {
-	height: 36,
-	borderRadius: "6px",
-	textTransform: "none",
-	fontWeight: 600,
-	color: "#94a3b8",
-	border: "1px solid rgba(255,255,255,.1)",
-	px: 2,
-	"&:hover": { background: "rgba(255,255,255,.05)", color: "#fff" },
+export const BOM_cardSubSx = {
+	color: "rgba(255,255,255,.62)",
+	fontSize: 14,
+	lineHeight: 1.6,
+	mb: 3,
+	flex: 1,
 };
 
-export const BOM_approveBtnSx = {
-	height: 36,
-	borderRadius: "6px",
-	textTransform: "none",
-	fontWeight: 600,
-	background: "#22c55e",
+export const BOM_openBtnSx = {
+	height: 42,
+	borderRadius: "14px",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
-	px: 2,
-	"&:hover": { background: "#16a34a" },
+	fontWeight: 800,
+	textTransform: "none",
+	boxShadow: "0 10px 25px rgba(37,99,235,.28)",
+
+	"&:hover": {
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+	},
 };
 
-export const BOM_userPillSx = {
+/* =====================================================
+   PRODUCT MASTER
+===================================================== */
+
+export const BOM_statusWrapSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1,
-	background: "rgba(255,255,255,.03)",
-	p: "4px 12px 4px 6px",
-	borderRadius: "20px",
+};
+
+export const BOM_statusTextSx = {
+	color: "rgba(255,255,255,.72)",
+	fontSize: 13,
+	fontWeight: 800,
+};
+
+export const BOM_draftChipSx = {
+	height: 30,
+	borderRadius: 999,
+	background: "rgba(255,255,255,.06)",
+	color: "#cbd5e1",
+	border: "1px solid rgba(255,255,255,.10)",
+	fontWeight: 800,
+};
+
+export const BOM_panelSx = {
+	mb: 3,
+	p: 3,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "24px",
+	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
+};
+
+export const BOM_sectionHeadSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+	pb: 1.7,
+	mb: 2.5,
+	borderBottom: "1px solid rgba(255,255,255,.08)",
+};
+
+export const BOM_sectionTitleSx = {
+	color: "#fff",
+	fontWeight: 900,
+	fontSize: 19,
+};
+
+export const BOM_fieldSx = {
+	mb: 2.5,
+
+	"& .MuiInputLabel-root": {
+		color: "rgba(255,255,255,.58)",
+		fontSize: "14px",
+		fontWeight: 700,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "#60a5fa",
+	},
+
+	"& .MuiOutlinedInput-root": {
+		color: "#fff",
+		background: "rgba(255,255,255,.035)",
+		borderRadius: "14px",
+		fontSize: "14px",
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.08)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(59,130,246,.35)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#3b82f6",
+			boxShadow: "0 0 0 3px rgba(59,130,246,.12)",
+		},
+	},
+
+	"& .MuiInputBase-input": {
+		color: "#fff",
+		fontWeight: 650,
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
+};
+
+export const BOM_noteSx = {
+	mt: 1,
+	p: 2,
+	background: "rgba(2,6,23,.45)",
+	borderRadius: "16px",
+	display: "flex",
+	gap: 1,
+	alignItems: "flex-start",
 	border: "1px solid rgba(255,255,255,.06)",
 };
 
-export const BOM_avatarSx = {
-	width: 26,
-	height: 26,
-	borderRadius: "50%",
-	background: "#6366f1",
+export const BOM_noteTextSx = {
+	color: "rgba(255,255,255,.68)",
+	fontSize: 13,
+	lineHeight: 1.55,
+	fontWeight: 600,
+};
+
+export const BOM_sidePanelSx = {
+	mb: 3,
+	p: 2.5,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "24px",
+	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
+};
+
+export const BOM_sideTitleRowSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	mb: 2,
+};
+
+export const BOM_sideTitleSx = {
 	color: "#fff",
+	fontSize: 20,
+	fontWeight: 900,
+};
+
+export const BOM_uploadBoxSx = {
+	height: 190,
+	border: "2px dashed rgba(255,255,255,.12)",
+	background: "rgba(2,6,23,.38)",
+	borderRadius: "18px",
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	textAlign: "center",
+	p: 2,
+	transition: "all .25s ease",
+
+	"&:hover": {
+		borderColor: "rgba(59,130,246,.45)",
+		background: "rgba(59,130,246,.08)",
+	},
+};
+
+export const BOM_uploadIconSx = {
+	width: 48,
+	height: 48,
+	borderRadius: "16px",
+	background: "rgba(255,255,255,.06)",
 	display: "grid",
 	placeItems: "center",
+	color: "#93c5fd",
+	mb: 1,
+};
+
+export const BOM_uploadTitleSx = {
+	color: "#fff",
+	fontWeight: 800,
+	fontSize: 13,
+};
+
+export const BOM_uploadSubSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+	mt: 0.5,
+};
+
+export const BOM_smallDarkChipSx = {
+	background: "rgba(255,255,255,.06)",
+	color: "#94a3b8",
+	borderRadius: "999px",
 	fontWeight: 700,
+};
+
+export const BOM_drawingBoxSx = {
+	height: 140,
+	border: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(2,6,23,.38)",
+	borderRadius: "18px",
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	mb: 1.5,
+};
+
+export const BOM_browseBtnSx = {
+	mt: 1,
+	height: 30,
+	borderRadius: "999px",
+	color: "#93c5fd",
+	border: "1px solid rgba(59,130,246,.28)",
+	textTransform: "none",
+	fontSize: 12,
+	fontWeight: 800,
+};
+
+export const BOM_noFileSx = {
+	color: "#94a3b8",
+	fontStyle: "italic",
 	fontSize: 12,
 };
 
-export const BOM_userNameSx = { color: "#fff", fontSize: 13, fontWeight: 600 };
-export const BOM_userRoleSx = { color: "rgba(255,255,255,.4)", fontSize: 10 };
-
-// Home Styles
-export const BOM_pageSx = {
-	minHeight: "100vh",
-	position: "relative",
-	overflow: "hidden",
-	fontFamily: "Inter, system-ui, sans-serif",
-	background: `
-		radial-gradient(circle at top left, rgba(59,130,246,0.08), transparent 25%),
-		radial-gradient(circle at bottom right, rgba(14,165,233,0.05), transparent 25%),
-		linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%)
-	`,
-	p: { xs: 2, md: 4 },
+export const BOM_versionRowSx = {
+	background: "rgba(2,6,23,.38)",
+	border: "1px solid rgba(255,255,255,.06)",
+	p: 1.5,
+	borderRadius: "16px",
+	mb: 1,
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
 };
+
+export const BOM_versionTitleSx = {
+	color: "#fff",
+	fontWeight: 750,
+	fontSize: 13,
+	mb: 0.5,
+};
+
+export const BOM_versionDateSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+};
+
+export const BOM_approvedSx = {
+	height: 20,
+	borderRadius: "999px",
+	background: "rgba(34,197,94,.12)",
+	color: "#4ade80",
+	fontSize: 10,
+	fontWeight: 850,
+};
+
+export const BOM_rejectedSx = {
+	height: 20,
+	borderRadius: "999px",
+	background: "rgba(239,68,68,.12)",
+	color: "#f87171",
+	fontSize: 10,
+	fontWeight: 850,
+};
+
+export const BOM_draftMiniSx = {
+	height: 20,
+	borderRadius: "999px",
+	background: "rgba(255,255,255,.06)",
+	color: "#94a3b8",
+	fontSize: 10,
+	fontWeight: 850,
+};
+
+export const BOM_newVersionBtnSx = {
+	height: 40,
+	borderRadius: "14px",
+	border: "1px dashed rgba(255,255,255,.14)",
+	color: "#94a3b8",
+	textTransform: "none",
+	fontSize: 13,
+	fontWeight: 800,
+};
+
+/* =====================================================
+   BOM BUILDER
+===================================================== */
+
+export const BOM_statusLineSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	mb: 0.8,
+};
+
+export const BOM_projectChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background: "rgba(255,255,255,.06)",
+	color: "#cbd5e1",
+	border: "1px solid rgba(255,255,255,.08)",
+	fontSize: 10,
+	fontWeight: 800,
+};
+
+export const BOM_draftProjectChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background: "rgba(59,130,246,.14)",
+	color: "#93c5fd",
+	border: "1px solid rgba(59,130,246,.24)",
+	fontSize: 10,
+	fontWeight: 800,
+};
+
+export const BOM_costCardSx = {
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "20px",
+	p: 2,
+	minWidth: 170,
+	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
+};
+
+export const BOM_costLabelSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 800,
+	letterSpacing: ".05em",
+};
+
+export const BOM_costValueSx = {
+	color: "#22c55e",
+	fontSize: 24,
+	fontWeight: 900,
+	fontFamily: "monospace",
+	mt: 0.6,
+};
+
+export const BOM_sectionCardSx = {
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "22px",
+	overflow: "hidden",
+	mb: 2,
+	borderLeft: "4px solid #2563eb",
+	boxShadow: "0 18px 45px rgba(0,0,0,.24)",
+};
+
+export const BOM_sectionHeaderSx = {
+	height: 62,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	px: 2,
+	background: "rgba(2,6,23,.22)",
+	borderBottom: "1px solid rgba(255,255,255,.08)",
+};
+
+export const BOM_sectionLeftSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+};
+
+export const BOM_sectionRightSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 2,
+};
+
+export const BOM_sectionIconBtnSx = {
+	color: "#94a3b8",
+
+	"&:hover": {
+		background: "rgba(255,255,255,.06)",
+		color: "#fff",
+	},
+};
+
+export const BOM_countChipSx = {
+	background: "rgba(255,255,255,.06)",
+	color: "#94a3b8",
+	height: 22,
+	borderRadius: "999px",
+	fontWeight: 800,
+};
+
+export const BOM_sectionTotalLabelSx = {
+	color: "#94a3b8",
+	fontSize: 10,
+	textTransform: "uppercase",
+	textAlign: "right",
+	fontWeight: 800,
+};
+
+export const BOM_sectionTotalValueSx = {
+	color: "#fff",
+	fontWeight: 900,
+	fontFamily: "monospace",
+	fontSize: 15,
+};
+
+export const BOM_tableSx = {
+	background: "rgba(2,6,23,.20)",
+	overflowX: "auto",
+};
+
+export const BOM_tableHeadSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"44px minmax(220px,2fr) minmax(130px,1.1fr) minmax(150px,1.1fr) 80px 80px 120px 120px 70px",
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 850,
+	borderBottom: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(2,6,23,.26)",
+	minWidth: 1080,
+
+	"& > div": {
+		padding: "13px 10px",
+	},
+};
+
+export const BOM_tableRowSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"44px minmax(220px,2fr) minmax(130px,1.1fr) minmax(150px,1.1fr) 80px 80px 120px 120px 70px",
+	alignItems: "center",
+	borderBottom: "1px solid rgba(255,255,255,.06)",
+	minHeight: 48,
+	background: "rgba(255,255,255,.025)",
+	minWidth: 1080,
+
+	"& > p, & > div": {
+		padding: "5px 10px",
+	},
+};
+
+export const BOM_missingRowSx = {
+	...BOM_tableRowSx,
+	background: "rgba(239,68,68,.08)",
+	borderBottom: "1px solid rgba(239,68,68,.16)",
+};
+
+export const BOM_deleteCellSx = {
+	color: "#94a3b8",
+	display: "grid",
+	placeItems: "center",
+	cursor: "pointer",
+
+	"&:hover": {
+		color: "#ef4444",
+	},
+};
+
+export const BOM_itemNameCellSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.5,
+	minWidth: 0,
+};
+
+export const BOM_itemNameSx = {
+	color: "#fff",
+	fontWeight: 750,
+	fontSize: 14,
+};
+
+export const BOM_missingItemSx = {
+	color: "#fca5a5",
+	fontWeight: 750,
+	fontSize: 14,
+};
+
+export const BOM_cellTextSx = {
+	color: "#cbd5e1",
+	fontSize: 13,
+};
+
+export const BOM_cellStrongSx = {
+	color: "#fff",
+	fontWeight: 750,
+	fontSize: 13,
+};
+
+export const BOM_numberCellSx = {
+	color: "#fff",
+	fontFamily: "monospace",
+	fontSize: 13,
+};
+
+export const BOM_rateCellSx = {
+	color: "#fff",
+	fontFamily: "monospace",
+	fontSize: 13,
+};
+
+export const BOM_missingRateSx = {
+	background: "rgba(239,68,68,.14)",
+	color: "#f87171",
+	border: "1px solid rgba(239,68,68,.24)",
+	borderRadius: "10px",
+	textAlign: "center",
+	fontWeight: 850,
+	fontSize: 12,
+	py: "4px",
+};
+
+export const BOM_tableFooterSx = {
+	height: 44,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	px: 2,
+	background: "rgba(2,6,23,.26)",
+};
+
+export const BOM_addRowBtnSx = {
+	color: "#60a5fa",
+	textTransform: "none",
+	fontSize: 13,
+	fontWeight: 800,
+};
+
+export const BOM_validRateSx = {
+	color: "#94a3b8",
+	fontSize: 12,
+	fontFamily: "monospace",
+};
+
+export const BOM_collapsedSectionSx = {
+	height: 62,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "22px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	px: 2,
+	borderLeft: "4px solid #8b5cf6",
+	boxShadow: "0 18px 45px rgba(0,0,0,.24)",
+};
+
+/* =====================================================
+   PLACEHOLDER
+===================================================== */
+
+export const BOM_panelPlaceholderSx = {
+	minHeight: 320,
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "flex-start",
+	justifyContent: "center",
+	p: 4,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	borderRadius: "24px",
+	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
+};
+
+export const BOM_chipPlaceholderSx = {
+	mb: 2,
+	height: 28,
+	borderRadius: 999,
+	background: "rgba(255,255,255,.06)",
+	color: "#94a3b8",
+	fontWeight: 800,
+};
+
+export const BOM_titlePlaceholderSx = {
+	color: "#fff",
+	fontWeight: 950,
+	fontSize: 30,
+};
+
+export const BOM_subtitlePlaceholderSx = {
+	mt: 1,
+	color: "rgba(255,255,255,.65)",
+	fontSize: 15,
+	maxWidth: 640,
+	lineHeight: 1.6,
+};
+
+export const BOM_notePlaceholderSx = {
+	mt: 2.5,
+	color: "#60a5fa",
+	fontWeight: 800,
+	fontSize: 13,
+};
+
+/* =====================================================
+   OPTIONAL OLD HOME / PORTAL SUPPORT
+   Kept so BOMFlowHome.jsx does not break if still present.
+===================================================== */
+
+export const BOM_pageSx = BOM_modulePageSx;
 
 export const BOM_ambientGlowOne = {
 	position: "absolute",
@@ -290,7 +905,8 @@ export const BOM_backgroundText = {
 	position: "absolute",
 	fontSize: { xs: 88, md: 190 },
 	fontWeight: 950,
-	background: "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005))",
+	background:
+		"linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005))",
 	WebkitBackgroundClip: "text",
 	WebkitTextFillColor: "transparent",
 	top: "50%",
@@ -302,212 +918,94 @@ export const BOM_backgroundText = {
 	whiteSpace: "nowrap",
 };
 
-export const BOM_topBarSx = {
-	position: "relative",
-	zIndex: 1,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	gap: 2,
-	maxWidth: 1300,
-	mx: "auto",
-	mb: 5,
-};
+export const BOM_topBarSx = BOM_moduleHeaderRowSx;
+export const BOM_brandWrapSx = BOM_moduleLogoRowSx;
+export const BOM_brandMarkSx = BOM_moduleLogoMarkSx;
+export const BOM_brandTitleSx = BOM_moduleLogoSx;
+export const BOM_brandSubSx = BOM_moduleSubtitleSx;
 
 export const BOM_heroSx = {
 	mb: 4,
 	p: { xs: 3, md: 4 },
-	borderRadius: "12px",
-	background: "#1a1e27",
-	border: "1px solid rgba(255,255,255,.06)",
-	boxShadow: "0 20px 50px rgba(0,0,0,.4)",
+	borderRadius: "24px",
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
+	boxShadow: "0 18px 50px rgba(0,0,0,.24)",
 	position: "relative",
 	overflow: "hidden",
 };
 
-export const BOM_heroBadgeSx = {
-	mb: 2,
-	height: 28,
-	background: "rgba(37,99,235,.15)",
-	border: "1px solid rgba(59,130,246,0.3)",
-	color: "#38bdf8",
-	fontWeight: 700,
+export const BOM_heroBadgeSx = BOM_labelChipSx;
+
+export const BOM_heroTitleSx = {
+	color: "#fff",
+	fontWeight: 950,
+	mb: 1,
 };
 
-export const BOM_heroTitleSx = { color: "#fff", fontWeight: 800, mb: 1 };
-export const BOM_heroSubtitleSx = { color: "#94a3b8", fontSize: "16px", lineHeight: 1.6, maxWidth: 800 };
-export const BOM_heroChipWrapSx = { mt: 3, display: "flex", gap: 1, flexWrap: "wrap" };
-export const BOM_heroChipSx = { color: "#cbd5e1", border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.03)" };
+export const BOM_heroSubtitleSx = {
+	color: "rgba(255,255,255,.65)",
+	fontSize: "16px",
+	lineHeight: 1.6,
+	maxWidth: 800,
+};
+
+export const BOM_heroChipWrapSx = {
+	mt: 3,
+	display: "flex",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+export const BOM_heroChipSx = {
+	color: "#cbd5e1",
+	border: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(255,255,255,.04)",
+};
 
 export const BOM_portalModuleCardSx = (enabled) => ({
 	height: "100%",
-	borderRadius: "12px",
-	background: "#1a1e27",
-	border: "1px solid rgba(255,255,255,.06)",
+	borderRadius: "24px",
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(17,24,39,.84))",
+	border: "1px solid rgba(255,255,255,.08)",
 	opacity: enabled ? 1 : 0.65,
-	transition: "all .2s ease",
-	"&:hover": enabled ? { transform: "translateY(-4px)", borderColor: "rgba(37,99,235,.4)" } : {},
+	transition: "all .25s ease",
+
+	"&:hover": enabled
+		? {
+				transform: "translateY(-4px)",
+				borderColor: "rgba(59,130,246,.35)",
+		  }
+		: {},
 });
 
-export const BOM_statusReadySx = { color: "#22c55e", background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.2)", fontWeight: 700 };
-export const BOM_statusPlannedSx = { color: "#64748b", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.06)" };
-export const BOM_moduleTitleSx = { fontWeight: 700, color: "#fff", mb: 1, fontSize: "18px" };
-export const BOM_moduleSubtitleSx = { color: "#94a3b8", fontSize: "14px", lineHeight: 1.6, minHeight: 70, mb: 2 };
-
-// Module Styles
-export const BOM_pageHeadSx = { display: "flex", justifycontent: "space-between", alignitems: "flex-start", gap: 2, mb: 3 };
-export const BOM_labelChipSx = { height: 24, borderRadius: "4px", background: "rgba(37,99,235,.15)", color: "#38bdf8", fontWeight: 700 };
-export const BOM_activeCostingsCardSx = { minWidth: 180, background: "#11151d", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", p: 2 };
-export const BOM_activeCostingsValueSx = { color: "#22c55e", fontSize: 26, fontWeight: 700, fontFamily: "monospace" };
-
-export const BOM_moduleCardSx = {
-	p: 3,
-	background: "#1a1e27",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: "8px",
-	height: "100%",
-	display: "flex",
-	flexDirection: "column",
-	transition: "border-color 0.2s ease",
-	"&:hover": { borderColor: "rgba(37,99,235,.4)" },
+export const BOM_statusReadySx = {
+	color: "#4ade80",
+	background: "rgba(34,197,94,.12)",
+	border: "1px solid rgba(34,197,94,.22)",
+	fontWeight: 800,
 };
 
-export const BOM_cardTitleSx = { color: "#fff", fontSize: 18, fontWeight: 700, mb: 1 };
-export const BOM_cardSubSx = { color: "#94a3b8", fontSize: 14, lineHeight: 1.5, mb: 3, flex: 1 };
-export const BOM_openBtnSx = {
-	height: 38,
-	borderRadius: "6px",
-	background: "#2563eb",
+export const BOM_statusPlannedSx = {
+	color: "#94a3b8",
+	background: "rgba(255,255,255,.06)",
+	border: "1px solid rgba(255,255,255,.08)",
+	fontWeight: 800,
+};
+
+export const BOM_moduleTitleSx = {
+	fontWeight: 850,
 	color: "#fff",
-	fontWeight: 600,
-	textTransform: "none",
-	"&:hover": { background: "#1d4ed8" },
+	mb: 1,
+	fontSize: "18px",
 };
 
-// Product Master Styles
-export const BOM_pageTopSx = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2, mb: 3 };
-export const BOM_statusWrapSx = { display: "flex", alignItems: "center", gap: 1 };
-export const BOM_statusTextSx = { color: "#94a3b8", fontSize: 13, fontWeight: 600 };
-export const BOM_draftChipSx = { height: 26, borderRadius: "4px", background: "rgba(255,255,255,.05)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,.08)" };
-
-export const BOM_panelSx = { mb: 3, p: 3, background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px" };
-export const BOM_sectionHeadSx = { display: "flex", alignItems: "center", gap: 1.2, pb: 1.5, mb: 2.5, borderBottom: "1px solid rgba(255,255,255,.06)" };
-export const BOM_sectionTitleSx = { color: "#fff", fontWeight: 700, fontSize: 18 };
-
-export const BOM_fieldSx = {
-	mb: 2.5,
-	"& .MuiInputLabel-root": { color: "#64748b", fontSize: "14px" },
-	"& .MuiInputLabel-root.Mui-focused": { color: "#38bdf8" },
-	"& .MuiOutlinedInput-root": {
-		color: "#fff",
-		background: "#11151d",
-		fontSize: "14px",
-		"& fieldset": { borderColor: "rgba(255,255,255,.06)" },
-		"&:hover fieldset": { borderColor: "rgba(255,255,255,.12)" },
-		"&.Mui-focused fieldset": { borderColor: "#2563eb" },
-	},
-	"& .MuiSvgIcon-root": { color: "#64748b" },
+export const BOM_moduleSubtitleSx = {
+	color: "rgba(255,255,255,.62)",
+	fontSize: "14px",
+	lineHeight: 1.6,
+	minHeight: 70,
+	mb: 2,
 };
-
-export const BOM_noteSx = { mt: 1, p: 2, background: "#11151d", borderRadius: "6px", display: "flex", gap: 1, alignItems: "flex-start", border: "1px solid rgba(255,255,255,.04)" };
-export const BOM_noteTextSx = { color: "#94a3b8", fontSize: 13, lineHeight: 1.5 };
-
-export const BOM_sidePanelSx = { mb: 3, p: 2.5, background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px" };
-export const BOM_sideTitleRowSx = { display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 };
-
-export const BOM_uploadBoxSx = {
-	height: 180,
-	border: "2px dashed rgba(255,255,255,.08)",
-	background: "#11151d",
-	borderRadius: "6px",
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "center",
-	justifyContent: "center",
-	textAlign: "center",
-	p: 2,
-	"&:hover": { borderColor: "#2563eb" },
-};
-export const BOM_uploadIconSx = { width: 44, height: 44, borderRadius: "8px", background: "rgba(255,255,255,.03)", display: "grid", placeItems: "center", color: "#94a3b8", mb: 1 };
-export const BOM_uploadTitleSx = { color: "#fff", fontWeight: 600, fontSize: 13 };
-export const BOM_uploadSubSx = { color: "#64748b", fontSize: 11, mt: 0.5 };
-
-export const BOM_smallDarkChipSx = { background: "rgba(255,255,255,.05)", color: "#94a3b8", borderRadius: "4px", fontWeight: 600 };
-export const BOM_drawingBoxSx = { height: 130, border: "1px solid rgba(255,255,255,.06)", background: "#11151d", borderRadius: "6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", mb: 1.5 };
-export const BOM_browseBtnSx = { mt: 1, height: 28, borderRadius: "4px", color: "#38bdf8", border: "1px solid rgba(56,189,248,.3)", textTransform: "none", fontSize: 12 };
-export const BOM_noFileSx = { color: "#64748b", fontStyle: "italic", fontSize: 12 };
-
-export const BOM_versionRowSx = { background: "#11151d", border: "1px solid rgba(255,255,255,.04)", p: 1.5, borderRadius: "6px", mb: 1, display: "flex", justifyContent: "space-between", alignItems: "center" };
-export const BOM_versionTitleSx = { color: "#fff", fontWeight: 600, fontSize: 13, mb: 0.5 };
-export const BOM_versionDateSx = { color: "#64748b", fontSize: 11 };
-export const BOM_approvedSx = { height: 18, borderRadius: "4px", background: "rgba(34,197,94,.1)", color: "#22c55e", fontSize: 10, fontWeight: 700 };
-export const BOM_rejectedSx = { height: 18, borderRadius: "4px", background: "rgba(239,68,68,.1)", color: "#ef4444", fontSize: 10, fontWeight: 700 };
-export const BOM_draftMiniSx = { height: 18, borderRadius: "4px", background: "rgba(255,255,255,.04)", color: "#94a3b8", fontSize: 10, fontWeight: 700 };
-export const BOM_newVersionBtnSx = { height: 38, borderRadius: "6px", border: "1px dashed rgba(255,255,255,.1)", color: "#94a3b8", textTransform: "none", fontSize: 13 };
-
-// BOMBuilder Styles
-export const BOM_pageHeaderSx = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3 };
-export const BOM_statusLineSx = { display: "flex", alignItems: "center", gap: 1, mb: 0.5 };
-export const BOM_projectChipSx = { height: 20, borderRadius: "4px", background: "#11151d", color: "#94a3b8", border: "1px solid rgba(255,255,255,.06)", fontSize: 10 };
-export const BOM_draftProjectChipSx = { height: 20, borderRadius: "4px", background: "rgba(37,99,235,.1)", color: "#38bdf8", fontSize: 10 };
-export const BOM_pageTitleSx = { color: "#fff", fontSize: 26, fontWeight: 800 };
-export const BOM_costCardSx = { background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", p: 1.8, minWidth: 160 };
-export const BOM_costLabelSx = { color: "#64748b", fontSize: 11, fontWeight: 700 };
-export const BOM_costValueSx = { color: "#22c55e", fontSize: 22, fontWeight: 700, fontFamily: "monospace", mt: 0.5 };
-
-export const BOM_sectionCardSx = { background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", overflow: "hidden", mb: 2, borderLeft: "4px solid #2563eb" };
-export const BOM_sectionHeaderSx = { height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, background: "#11151d", borderBottom: "1px solid rgba(255,255,255,.06)" };
-export const BOM_sectionLeftSx = { display: "flex", alignItems: "center", gap: 1 };
-export const BOM_sectionRightSx = { display: "flex", alignItems: "center", gap: 2 };
-export const BOM_sectionIconBtnSx = { color: "#64748b" };
-
-export const BOM_countChipSx = { background: "rgba(255,255,255,.04)", color: "#94a3b8", height: 20, borderRadius: "4px" };
-export const BOM_sectionTotalLabelSx = { color: "#64748b", fontSize: 10, textTransform: "uppercase", textAlign: "right" };
-export const BOM_sectionTotalValueSx = { color: "#fff", fontWeight: 700, fontFamily: "monospace", fontSize: 15 };
-
-export const BOM_tableSx = { background: "#11151d" };
-export const BOM_tableHeadSx = {
-	display: "grid",
-	gridTemplateColumns: "44px 2fr 1.2fr 1.2fr 0.6fr 0.6fr 1.2fr 1fr 0.6fr",
-	color: "#64748b",
-	fontSize: 11,
-	fontWeight: 700,
-	borderBottom: "1px solid rgba(255,255,255,.06)",
-	background: "#141822",
-	"& > div": { padding: "12px 8px" },
-};
-export const BOM_tableRowSx = {
-	display: "grid",
-	gridTemplateColumns: "44px 2fr 1.2fr 1.2fr 0.6fr 0.6fr 1.2fr 1fr 0.6fr",
-	alignItems: "center",
-	borderBottom: "1px solid rgba(255,255,255,.04)",
-	minHeight: 44,
-	background: "#1a1e27",
-	"& > p, & > div": { padding: "4px 8px" },
-};
-export const BOM_missingRowSx = {
-	...BOM_tableRowSx,
-	background: "rgba(239, 68, 68, 0.05)",
-	borderBottom: "1px solid rgba(239, 68, 68, 0.15)",
-};
-
-export const BOM_deleteCellSx = { color: "#64748b", display: "grid", placeItems: "center", cursor: "pointer", "&:hover": { color: "#ef4444" } };
-export const BOM_itemNameCellSx = { display: "flex", alignItems: "center", gap: 0.5 };
-export const BOM_itemNameSx = { color: "#fff", fontWeight: 600, fontSize: 14 };
-export const BOM_missingItemSx = { color: "#fca5a5", fontWeight: 600, fontSize: 14 };
-export const BOM_cellTextSx = { color: "#cbd5e1", fontSize: 13 };
-export const BOM_cellStrongSx = { color: "#fff", fontWeight: 600, fontSize: 13 };
-export const BOM_numberCellSx = { color: "#fff", fontFamily: "monospace", fontSize: 13 };
-export const BOM_rateCellSx = { color: "#fff", fontFamily: "monospace", fontSize: 13 };
-export const BOM_missingRateSx = { background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: "4px", textalign: "center", fontWeight: 700, fontSize: 12, py: "2px" };
-export const BOM_tableFooterSx = { height: 40, display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, background: "#141822" };
-export const BOM_addRowBtnSx = { color: "#38bdf8", textTransform: "none", fontSize: 13, fontWeight: 600 };
-export const BOM_validRateSx = { color: "#64748b", fontSize: 12, fontFamily: "monospace" };
-export const BOM_collapsedSectionSx = { height: 56, background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, borderLeft: "4px solid #8b5cf6" };
-
-// BOMPlaceholder Styles
-export const BOM_panelPlaceholderSx = { minHeight: 300, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", p: 4, background: "#1a1e27", border: "1px solid rgba(255,255,255,.06)", borderRadius: "8px" };
-export const BOM_chipPlaceholderSx = { mb: 2, height: 24, background: "rgba(255,255,255,.05)", color: "#94a3b8", fontWeight: 600 };
-export const BOM_titlePlaceholderSx = { color: "#fff", fontWeight: 800, fontSize: 28 };
-export const BOM_subtitlePlaceholderSx = { mt: 1, color: "#94a3b8", fontSize: 15, maxWidth: 600, lineHeight: 1.6 };
-export const BOM_notePlaceholderSx = { mt: 2.5, color: "#38bdf8", fontWeight: 600, fontSize: 13 };

@@ -1,6 +1,8 @@
 import React, {
   useCallback,
+  useMemo,
   useState,
+  useEffect,
 } from "react";
 
 import {
@@ -50,6 +52,12 @@ export default function TripsScreen() {
   const [expanded, setExpanded] =
     useState("");
 
+  const [pageNo, setPageNo] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(10);
+
   const loadChallans = async () => {
     try {
       setLoading(true);
@@ -68,20 +76,14 @@ export default function TripsScreen() {
       Alert.alert(
         "Challans failed",
         e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to load dispatched challans"
+          e?.response?.data ||
+          e?.message ||
+          "Failed to load dispatched challans"
       );
     } finally {
       setLoading(false);
     }
   };
-
-  const [pageNo, setPageNo] =
-    useState(1);
-
-  const [pageSize, setPageSize] =
-    useState(10);
 
   const refresh = async () => {
     try {
@@ -99,35 +101,53 @@ export default function TripsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to refresh challans"
+          e?.response?.data ||
+          e?.message ||
+          "Failed to refresh challans"
       );
     } finally {
       setRefreshing(false);
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      loadChallans();
+    }, [])
+  );
+
   const totalPages =
-    Math.max(
-      1,
-      Math.ceil(challans.length / pageSize)
+    useMemo(
+      () =>
+        Math.max(
+          1,
+          Math.ceil(challans.length / pageSize)
+        ),
+      [challans.length, pageSize]
     );
 
   const currentPage =
     Math.min(pageNo, totalPages);
 
   const paginatedChallans =
-    challans.slice(
-      (currentPage - 1) * pageSize,
-      currentPage * pageSize
+    useMemo(
+      () =>
+        challans.slice(
+          (currentPage - 1) * pageSize,
+          currentPage * pageSize
+        ),
+      [challans, currentPage, pageSize]
     );
 
-  useFocusEffect(
-    useCallback(() => {
-      loadChallans();
-    }, [])
-  );
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [pageNo, totalPages]);
+
+  useEffect(() => {
+    setPageNo(1);
+  }, [pageSize]);
 
   if (
     loading &&
@@ -169,9 +189,6 @@ export default function TripsScreen() {
             tintColor="#fff"
           />
         }
-        contentContainerStyle={{
-          paddingBottom: 28,
-        }}
         ListHeaderComponent={
           <PaginationBar
             pageNo={currentPage}
@@ -182,6 +199,9 @@ export default function TripsScreen() {
             totalItems={challans.length}
           />
         }
+        contentContainerStyle={{
+          paddingBottom: 28,
+        }}
         renderItem={({ item }) => (
           <ChallanCard
             challan={item}
@@ -488,6 +508,76 @@ const styles = {
     lineHeight: 20,
   },
 
+  paginationBox: {
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+
+  paginationText: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+
+  paginationRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+
+  pageSizeBtn: {
+    minWidth: 42,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageSizeBtnActive: {
+    backgroundColor: "rgba(37,99,235,.22)",
+    borderColor: "rgba(37,99,235,.48)",
+  },
+
+  pageSizeText: {
+    color: "#94a3b8",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  pageSizeTextActive: {
+    color: "#93c5fd",
+  },
+
+  pageBtn: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "rgba(59,130,246,.18)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  pageBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
   empty: {
     color: "#94a3b8",
     textAlign: "center",
@@ -633,75 +723,5 @@ const styles = {
     fontWeight: "700",
     fontSize: 11,
     marginTop: 4,
-  },
-
-  paginationBox: {
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 14,
-  },
-
-  paginationText: {
-    color: "#94a3b8",
-    fontWeight: "800",
-    fontSize: 12,
-    marginBottom: 10,
-  },
-
-  paginationRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    alignItems: "center",
-  },
-
-  pageSizeBtn: {
-    minWidth: 42,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  pageSizeBtnActive: {
-    backgroundColor: "rgba(37,99,235,.22)",
-    borderColor: "rgba(37,99,235,.48)",
-  },
-
-  pageSizeText: {
-    color: "#94a3b8",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  pageSizeTextActive: {
-    color: "#93c5fd",
-  },
-
-  pageBtn: {
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: "rgba(59,130,246,.18)",
-    borderWidth: 1,
-    borderColor: "rgba(59,130,246,.28)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  pageBtnDisabled: {
-    opacity: 0.35,
-  },
-
-  pageBtnText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 12,
   },
 };
