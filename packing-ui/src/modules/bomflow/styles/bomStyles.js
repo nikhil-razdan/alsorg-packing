@@ -1,20 +1,33 @@
 /* =====================================================
-   BOMFLOW MODULE PAGE LAYOUT
-   Same architecture style as LogisticsPortalPage
+   BOMFLOW MODULE - SINGLE SOURCE OF TRUTH
+   IMPORTANT:
+===================================================== */
+
+/* =====================================================
+   MODULE PAGE LAYOUT
 ===================================================== */
 
 export const BOM_modulePageSx = {
 	minHeight: "100vh",
-	background:
-		"radial-gradient(circle at top left, rgba(59,130,246,0.10), transparent 24%), linear-gradient(135deg,#020617,#0f172a)",
+	position: "relative",
+	overflowX: "hidden",
+	overflowY: "auto",
+	background: `
+		radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%),
+		radial-gradient(circle at bottom right, rgba(14,165,233,0.12), transparent 24%),
+		linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)
+	`,
+	backgroundAttachment: "fixed",
 	color: "#fff",
 };
 
 export const BOM_moduleContentSx = {
+	position: "relative",
+	zIndex: 1,
 	padding: 24,
 	display: "flex",
 	flexDirection: "column",
-	gap: 24,
+	gap: 20,
 };
 
 export const BOM_moduleHeaderRowSx = {
@@ -23,6 +36,7 @@ export const BOM_moduleHeaderRowSx = {
 	alignItems: "center",
 	gap: 2,
 	flexWrap: "wrap",
+	mb: 1,
 };
 
 export const BOM_moduleLogoRowSx = {
@@ -55,8 +69,9 @@ export const BOM_moduleLogoSx = {
 export const BOM_moduleSubtitleSx = {
 	color: "rgba(255,255,255,0.65)",
 	fontSize: 14,
-	fontWeight: 600,
+	fontWeight: 650,
 	mt: 0.8,
+	lineHeight: 1.45,
 };
 
 export const BOM_moduleHeaderActionsSx = {
@@ -111,6 +126,8 @@ export const BOM_tabsRowSx = {
 	display: "flex",
 	gap: 12,
 	flexWrap: "wrap",
+	mt: 1,
+	mb: 1,
 };
 
 export const BOM_tabButtonStyle = {
@@ -177,6 +194,7 @@ export const BOM_labelChipSx = {
 	fontWeight: 850,
 	letterSpacing: ".06em",
 };
+
 export const BOM_pageTitleSx = {
 	color: "#fff",
 	fontSize: 30,
@@ -194,6 +212,56 @@ export const BOM_pageSubSx = {
 };
 
 /* =====================================================
+   COMMON GLASS SURFACES
+===================================================== */
+
+export const BOM_panelSx = {
+	p: 2.7,
+	borderRadius: 24,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	width: "100%",
+	boxSizing: "border-box",
+};
+
+export const BOM_sidePanelSx = {
+	p: 2.5,
+	borderRadius: 24,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	width: "100%",
+	boxSizing: "border-box",
+};
+
+export const BOM_moduleCardSx = {
+	p: 3,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	borderRadius: 24,
+	height: "100%",
+	display: "flex",
+	flexDirection: "column",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+	transition: "all .25s ease",
+
+	"&:hover": {
+		transform: "translateY(-3px)",
+		borderColor: "rgba(59,130,246,.35)",
+		boxShadow: "0 24px 60px rgba(2,6,23,.42)",
+	},
+};
+
+/* =====================================================
    DASHBOARD CARDS
 ===================================================== */
 
@@ -205,6 +273,13 @@ export const BOM_activeCostingsCardSx = {
 	borderRadius: "18px",
 	p: 2,
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
+};
+
+export const BOM_costLabelSx = {
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 800,
+	letterSpacing: ".05em",
 };
 
 export const BOM_activeCostingsValueSx = {
@@ -269,21 +344,12 @@ export const BOM_openBtnSx = {
 };
 
 /* =====================================================
-   PRODUCT MASTER PAGE 
+   PRODUCT MASTER PAGE
 ===================================================== */
 
 export const BOM_productPageSx = {
 	width: "100%",
 	maxWidth: "100%",
-};
-
-export const BOM_pageTopSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "flex-start",
-	gap: 16,
-	mb: 3,
-	flexWrap: "wrap",
 };
 
 export const BOM_productMasterGridSx = {
@@ -310,32 +376,6 @@ export const BOM_productSideColumnSx = {
 	display: "flex",
 	flexDirection: "column",
 	gap: 18,
-};
-
-export const BOM_panelSx = {
-	p: 2.7,
-	borderRadius: 24,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
-	width: "100%",
-	boxSizing: "border-box",
-};
-
-export const BOM_sidePanelSx = {
-	p: 2.5,
-	borderRadius: 24,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
-	width: "100%",
-	boxSizing: "border-box",
 };
 
 export const BOM_twoColumnFieldGridSx = {
@@ -698,19 +738,39 @@ export const BOM_costCardSx = {
 	boxShadow: "0 18px 45px rgba(0,0,0,.28)",
 };
 
-export const BOM_costLabelSx = {
-	color: "#94a3b8",
-	fontSize: 11,
-	fontWeight: 800,
-	letterSpacing: ".05em",
-};
-
 export const BOM_costValueSx = {
 	color: "#22c55e",
 	fontSize: 24,
 	fontWeight: 900,
 	fontFamily: "monospace",
 	mt: 0.6,
+};
+
+export const BOM_sectionCardSx = {
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	borderRadius: 24,
+	overflow: "hidden",
+	mb: 2,
+	borderLeft: "4px solid #2563eb",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
+};
+
+export const BOM_collapsedSectionSx = {
+	minHeight: 62,
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.70))",
+	border: "1px solid rgba(255,255,255,.07)",
+	borderRadius: 24,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	px: 2,
+	borderLeft: "4px solid #8b5cf6",
+	boxShadow: "0 18px 40px rgba(2,6,23,.32)",
+	backdropFilter: "blur(18px)",
 };
 
 export const BOM_sectionHeaderSx = {
@@ -895,69 +955,6 @@ export const BOM_validRateSx = {
 	fontFamily: "monospace",
 };
 
-export const BOM_panelSx = {
-	mb: 3,
-	p: 3,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: 24,
-	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
-	backdropFilter: "blur(18px)",
-};
-
-export const BOM_sidePanelSx = {
-	mb: 3,
-	p: 2.5,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: 24,
-	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
-	backdropFilter: "blur(18px)",
-};
-
-export const BOM_moduleCardSx = {
-	p: 3,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: 24,
-	height: "100%",
-	display: "flex",
-	flexDirection: "column",
-	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
-	backdropFilter: "blur(18px)",
-	transition: "all .25s ease",
-
-	"&:hover": {
-		transform: "translateY(-3px)",
-		borderColor: "rgba(59,130,246,.35)",
-		boxShadow: "0 24px 60px rgba(2,6,23,.42)",
-	},
-};
-
-export const BOM_sectionCardSx = {
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: 24,
-	overflow: "hidden",
-	mb: 2,
-	borderLeft: "4px solid #2563eb",
-	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
-	backdropFilter: "blur(18px)",
-};
-
-export const BOM_collapsedSectionSx = {
-	height: 62,
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.06)",
-	borderRadius: 24,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	px: 2,
-	borderLeft: "4px solid #8b5cf6",
-	boxShadow: "0 18px 40px rgba(2,6,23,.34)",
-	backdropFilter: "blur(18px)",
-};
 /* =====================================================
    PLACEHOLDER
 ===================================================== */
@@ -1008,7 +1005,7 @@ export const BOM_notePlaceholderSx = {
 
 /* =====================================================
    OPTIONAL OLD HOME / PORTAL SUPPORT
-   Kept so BOMFlowHome.jsx does not break if still present.
+   Kept so older BOMFlowHome.jsx does not break.
 ===================================================== */
 
 export const BOM_pageSx = BOM_modulePageSx;
@@ -1059,6 +1056,8 @@ export const BOM_brandWrapSx = BOM_moduleLogoRowSx;
 export const BOM_brandMarkSx = BOM_moduleLogoMarkSx;
 export const BOM_brandTitleSx = BOM_moduleLogoSx;
 export const BOM_brandSubSx = BOM_moduleSubtitleSx;
+
+export const BOM_allModulesBtnSx = BOM_secondaryActionBtnSx;
 
 export const BOM_heroSx = {
 	mb: 4,
@@ -1111,9 +1110,9 @@ export const BOM_portalModuleCardSx = (enabled) => ({
 
 	"&:hover": enabled
 		? {
-			transform: "translateY(-4px)",
-			borderColor: "rgba(59,130,246,.35)",
-		}
+				transform: "translateY(-4px)",
+				borderColor: "rgba(59,130,246,.35)",
+		  }
 		: {},
 });
 
