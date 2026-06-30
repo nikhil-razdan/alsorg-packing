@@ -632,55 +632,56 @@ const pageSx = {
 	width: "100%",
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
+	gap: "14px",
 };
 
 const heroSx = {
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "stretch",
-	gap: 2,
+	gap: "16px",
 	flexWrap: "wrap",
-	p: 2.2,
-	borderRadius: 16,
+	p: "16px",
+	borderRadius: "10px",
 	background:
 		"radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.72))",
 	border: "1px solid rgba(255,255,255,.08)",
-	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
+	boxShadow: "0 16px 32px rgba(2,6,23,.28)",
 	backdropFilter: "blur(18px)",
 };
 
 const heroLeftSx = {
-	minWidth: 280,
+	minWidth: "280px",
 	flex: 1,
 };
 
 const heroRightSx = {
 	width: {
 		xs: "100%",
-		md: 360,
+		md: "360px",
 	},
 	display: "flex",
 	flexDirection: "column",
-	gap: 1.4,
+	gap: "10px",
 };
 
 const labelChipSx = {
-	height: 30,
+	height: "26px",
 	borderRadius: 999,
 	background: "rgba(59,130,246,.14)",
 	color: "#60a5fa",
 	border: "1px solid rgba(59,130,246,.24)",
 	fontWeight: 900,
+	fontSize: "11px",
 	letterSpacing: ".07em",
-	mb: 1.4,
+	mb: "10px",
 };
 
 const pageTitleSx = {
 	color: "#fff",
 	fontSize: {
-		xs: 26,
-		md: 34,
+		xs: "24px",
+		md: "32px",
 	},
 	fontWeight: 950,
 	lineHeight: 1.05,
@@ -688,29 +689,30 @@ const pageTitleSx = {
 };
 
 const pageSubSx = {
-	mt: 1,
+	mt: "8px",
 	color: "rgba(255,255,255,.68)",
-	fontSize: 14,
+	fontSize: "13px",
 	fontWeight: 650,
-	lineHeight: 1.6,
-	maxWidth: 760,
+	lineHeight: 1.5,
+	maxWidth: "760px",
 };
 
 const heroMetaRowSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1,
+	gap: "8px",
 	flexWrap: "wrap",
-	mt: 2,
+	mt: "14px",
 };
 
 const metaChipSx = {
-	height: 30,
+	height: "26px",
 	borderRadius: 999,
 	background: "rgba(255,255,255,.06)",
 	color: "#cbd5e1",
 	border: "1px solid rgba(255,255,255,.10)",
 	fontWeight: 850,
+	fontSize: "11px",
 };
 
 const draftChipSx = {
@@ -728,8 +730,8 @@ const completeChipSx = {
 };
 
 const completionCardSx = {
-	p: 1.8,
-	borderRadius: 16,
+	p: "14px",
+	borderRadius: "10px",
 	background: "rgba(2,6,23,.42)",
 	border: "1px solid rgba(255,255,255,.08)",
 };
@@ -738,30 +740,30 @@ const completionTopSx = {
 	display: "flex",
 	alignItems: "flex-start",
 	justifyContent: "space-between",
-	gap: 2,
-	mb: 1.4,
+	gap: "14px",
+	mb: "10px",
 };
 
 const completionLabelSx = {
 	color: "rgba(255,255,255,.62)",
-	fontSize: 12,
+	fontSize: "10px",
 	fontWeight: 900,
 	textTransform: "uppercase",
 	letterSpacing: ".07em",
 };
 
 const completionValueSx = {
-	mt: 0.6,
+	mt: "5px",
 	color: "#fff",
-	fontSize: 30,
+	fontSize: "28px",
 	fontWeight: 950,
 	lineHeight: 1,
 };
 
 const completionIconSx = {
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
+	width: "38px",
+	height: "38px",
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	background: "rgba(34,197,94,.13)",
@@ -770,7 +772,7 @@ const completionIconSx = {
 };
 
 const completionProgressSx = {
-	height: 8,
+	height: "7px",
 	borderRadius: 999,
 	background: "rgba(255,255,255,.07)",
 
@@ -781,26 +783,26 @@ const completionProgressSx = {
 };
 
 const completionHintSx = {
-	mt: 1,
+	mt: "8px",
 	color: "rgba(255,255,255,.55)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
 };
 
 const heroActionRowSx = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr",
-	gap: 1,
+	gap: "8px",
 };
 
 const primaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
 	textTransform: "none",
 	fontWeight: 850,
 	color: "#fff",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 12px 28px rgba(37,99,235,.34)",
+	boxShadow: "0 10px 22px rgba(37,99,235,.30)",
 
 	"&:hover": {
 		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
@@ -808,8 +810,8 @@ const primaryBtnSx = {
 };
 
 const secondaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
 	textTransform: "none",
 	fontWeight: 850,
 	color: "#fff",
@@ -825,21 +827,22 @@ const secondaryBtnSx = {
 const summaryGridSx = {
 	display: "grid",
 	gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-	gap: 14,
+	gap: "10px",
 };
 
 const miniStatSx = (accent) => ({
-	p: 1.8,
-	borderRadius: 16,
+	p: "13px",
+	borderRadius: "10px",
 	background: "rgba(15,23,42,.78)",
 	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 35px rgba(2,6,23,.28)",
+	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
 	backdropFilter: "blur(18px)",
 	display: "flex",
 	alignItems: "center",
-	gap: 1.5,
+	gap: "12px",
 	position: "relative",
 	overflow: "hidden",
+	minHeight: "72px",
 
 	"&:before": {
 		content: '""',
@@ -847,15 +850,15 @@ const miniStatSx = (accent) => ({
 		top: 0,
 		left: 0,
 		right: 0,
-		height: 4,
+		height: "3px",
 		background: accent,
 	},
 });
 
 const miniIconSx = (accent) => ({
-	width: 44,
-	height: 44,
-	borderRadius: "14px",
+	width: "38px",
+	height: "38px",
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	color: accent,
@@ -866,30 +869,30 @@ const miniIconSx = (accent) => ({
 
 const miniTitleSx = {
 	color: "rgba(255,255,255,.58)",
-	fontSize: 11,
+	fontSize: "10px",
 	fontWeight: 900,
 	textTransform: "uppercase",
 	letterSpacing: ".07em",
 };
 
 const miniValueSx = {
-	mt: 0.4,
+	mt: "3px",
 	color: "#fff",
-	fontSize: 18,
+	fontSize: "17px",
 	fontWeight: 950,
 };
 
 const miniSubSx = {
-	mt: 0.3,
+	mt: "2px",
 	color: "rgba(255,255,255,.52)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
 };
 
 const mainGridSx = {
 	display: "grid",
 	gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, .75fr)",
-	gap: 18,
+	gap: "14px",
 	alignItems: "start",
 
 	"@media (max-width: 1180px)": {
@@ -900,30 +903,30 @@ const mainGridSx = {
 const leftColumnSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 18,
+	gap: "10px",
 	minWidth: 0,
 };
 
 const rightColumnSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 18,
+	gap: "10px",
 	minWidth: 0,
 };
 
 const panelSx = {
-	p: 2.4,
-	borderRadius: 16,
+	p: "15px",
+	borderRadius: "10px",
 	background: "rgba(15,23,42,.78)",
 	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
+	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
 	backdropFilter: "blur(18px)",
 	overflow: "hidden",
 };
 
 const sidePanelSx = {
 	...panelSx,
-	p: 2.2,
+	p: "15px",
 };
 
 const checklistPanelSx = {
@@ -936,16 +939,16 @@ const checklistPanelSx = {
 const sectionHeadSx = {
 	display: "flex",
 	alignItems: "flex-start",
-	gap: 1.4,
-	pb: 2,
-	mb: 2.2,
+	gap: "12px",
+	pb: "12px",
+	mb: "14px",
 	borderBottom: "1px solid rgba(255,255,255,.08)",
 };
 
 const sectionIconSx = (color) => ({
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
+	width: "38px",
+	height: "38px",
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	color,
@@ -956,30 +959,30 @@ const sectionIconSx = (color) => ({
 
 const sectionTitleSx = {
 	color: "#fff",
-	fontSize: 20,
+	fontSize: "18px",
 	fontWeight: 950,
 	lineHeight: 1.1,
 	letterSpacing: "-0.02em",
 };
 
 const sectionSubSx = {
-	mt: 0.5,
+	mt: "3px",
 	color: "rgba(255,255,255,.55)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
-	lineHeight: 1.45,
+	lineHeight: 1.4,
 };
 
 const fieldStackSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
+	gap: "12px",
 };
 
 const twoColumnGridSx = {
 	display: "grid",
 	gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-	gap: 16,
+	gap: "12px",
 
 	"@media (max-width: 760px)": {
 		gridTemplateColumns: "1fr",
@@ -989,7 +992,7 @@ const twoColumnGridSx = {
 const threeColumnGridSx = {
 	display: "grid",
 	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-	gap: 16,
+	gap: "12px",
 
 	"@media (max-width: 900px)": {
 		gridTemplateColumns: "1fr",
@@ -999,7 +1002,7 @@ const threeColumnGridSx = {
 const fieldSx = {
 	"& .MuiInputLabel-root": {
 		color: "rgba(255,255,255,.58)",
-		fontSize: "13px",
+		fontSize: "12px",
 		fontWeight: 750,
 	},
 
@@ -1008,11 +1011,11 @@ const fieldSx = {
 	},
 
 	"& .MuiOutlinedInput-root": {
-		minHeight: 54,
+		minHeight: "48px",
 		color: "#fff",
 		background: "rgba(255,255,255,.04)",
-		borderRadius: "14px",
-		fontSize: "14px",
+		borderRadius: "9px",
+		fontSize: "13px",
 		fontWeight: 700,
 		transition: "all .22s ease",
 
@@ -1046,44 +1049,44 @@ const fieldSx = {
 };
 
 const dimensionPreviewSx = {
-	mt: 2,
-	p: 1.8,
-	borderRadius: "14px",
+	mt: "12px",
+	p: "13px",
+	borderRadius: "9px",
 	background: "rgba(2,6,23,.42)",
 	border: "1px solid rgba(255,255,255,.07)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 2,
+	gap: "12px",
 	flexWrap: "wrap",
 };
 
 const previewLabelSx = {
 	color: "rgba(255,255,255,.58)",
-	fontSize: 11,
+	fontSize: "10px",
 	fontWeight: 900,
 	textTransform: "uppercase",
 	letterSpacing: ".07em",
 };
 
 const previewValueSx = {
-	mt: 0.4,
+	mt: "3px",
 	color: "#fff",
-	fontSize: 18,
+	fontSize: "16px",
 	fontWeight: 950,
 	fontFamily: "monospace",
 };
 
 const previewBadgeSx = {
-	height: 30,
+	height: "26px",
 	display: "flex",
 	alignItems: "center",
-	px: 1.4,
+	px: "11px",
 	borderRadius: 999,
 	color: "#4ade80",
 	background: "rgba(34,197,94,.12)",
 	border: "1px solid rgba(34,197,94,.22)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 850,
 };
 
@@ -1091,38 +1094,38 @@ const sideTitleRowSx = {
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "flex-start",
-	gap: 1.4,
-	mb: 2,
+	gap: "12px",
+	mb: "12px",
 };
 
 const sideTitleSx = {
 	color: "#fff",
-	fontSize: 19,
+	fontSize: "17px",
 	fontWeight: 950,
 	lineHeight: 1.1,
 	letterSpacing: "-0.02em",
 };
 
 const sideSubSx = {
-	mt: 0.5,
+	mt: "3px",
 	color: "rgba(255,255,255,.52)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
 	lineHeight: 1.4,
 };
 
 const uploadBoxSx = {
-	minHeight: 210,
+	minHeight: "185px",
 	border: "1.5px dashed rgba(255,255,255,.12)",
 	background:
 		"linear-gradient(180deg, rgba(2,6,23,.50), rgba(2,6,23,.36))",
-	borderRadius: "14px",
+	borderRadius: "9px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "center",
 	textAlign: "center",
-	p: 2.5,
+	p: "16px",
 	transition: "all .25s ease",
 
 	"&:hover": {
@@ -1132,42 +1135,42 @@ const uploadBoxSx = {
 };
 
 const uploadIconSx = {
-	width: 50,
-	height: 50,
-	borderRadius: "14px",
+	width: "42px",
+	height: "42px",
+	borderRadius: "9px",
 	background: "rgba(59,130,246,.14)",
 	border: "1px solid rgba(59,130,246,.24)",
 	display: "grid",
 	placeItems: "center",
 	color: "#93c5fd",
-	mb: 1.5,
+	mb: "10px",
 };
 
 const uploadTitleSx = {
 	color: "#fff",
 	fontWeight: 950,
-	fontSize: 14,
+	fontSize: "13px",
 	lineHeight: 1.35,
 };
 
 const uploadSubSx = {
 	color: "rgba(255,255,255,.52)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
-	mt: 0.6,
+	mt: "4px",
 };
 
 const browseBtnSx = {
-	mt: 1.5,
-	height: 34,
+	mt: "12px",
+	height: "32px",
 	borderRadius: "999px",
 	color: "#93c5fd",
 	border: "1px solid rgba(59,130,246,.32)",
 	background: "rgba(59,130,246,.10)",
 	textTransform: "none",
-	fontSize: 12,
+	fontSize: "12px",
 	fontWeight: 900,
-	px: 2,
+	px: "14px",
 
 	"&:hover": {
 		background: "rgba(59,130,246,.18)",
@@ -1176,34 +1179,34 @@ const browseBtnSx = {
 };
 
 const requiredChipSx = {
-	height: 24,
+	height: "22px",
 	borderRadius: 999,
 	color: "#fbbf24",
 	background: "rgba(245,158,11,.13)",
 	border: "1px solid rgba(245,158,11,.24)",
 	fontWeight: 850,
-	fontSize: 10,
+	fontSize: "10px",
 };
 
 const drawingBoxSx = {
-	minHeight: 150,
+	minHeight: "132px",
 	border: "1px solid rgba(255,255,255,.08)",
 	background:
 		"linear-gradient(180deg, rgba(2,6,23,.50), rgba(2,6,23,.36))",
-	borderRadius: "14px",
+	borderRadius: "9px",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "center",
 	textAlign: "center",
-	p: 2,
-	mb: 1.5,
+	p: "14px",
+	mb: "10px",
 };
 
 const noFileSx = {
 	color: "#94a3b8",
 	fontStyle: "italic",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
 };
 
@@ -1211,20 +1214,20 @@ const versionRowSx = {
 	background:
 		"linear-gradient(180deg, rgba(2,6,23,.48), rgba(2,6,23,.34))",
 	border: "1px solid rgba(255,255,255,.06)",
-	p: 1.6,
-	borderRadius: "14px",
-	mb: 1,
+	p: "12px",
+	borderRadius: "9px",
+	mb: "8px",
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
-	gap: 1.5,
+	gap: "12px",
 };
 
 const versionTitleSx = {
 	color: "#fff",
 	fontWeight: 850,
-	fontSize: 13,
-	mb: 0.5,
+	fontSize: "12px",
+	mb: "3px",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
 	whiteSpace: "nowrap",
@@ -1232,34 +1235,34 @@ const versionTitleSx = {
 
 const versionMetaSx = {
 	display: "flex",
-	gap: 1,
+	gap: "8px",
 	alignItems: "center",
 	flexWrap: "wrap",
 };
 
 const versionDateSx = {
 	color: "#94a3b8",
-	fontSize: 11,
+	fontSize: "10.5px",
 	fontWeight: 700,
 };
 
 const approvedChipSx = {
-	height: 20,
+	height: "20px",
 	borderRadius: "999px",
 	background: "rgba(34,197,94,.12)",
 	color: "#4ade80",
 	border: "1px solid rgba(34,197,94,.20)",
-	fontSize: 10,
+	fontSize: "10px",
 	fontWeight: 850,
 };
 
 const draftMiniChipSx = {
-	height: 20,
+	height: "20px",
 	borderRadius: "999px",
 	background: "rgba(255,255,255,.06)",
 	color: "#94a3b8",
 	border: "1px solid rgba(255,255,255,.08)",
-	fontSize: 10,
+	fontSize: "10px",
 	fontWeight: 850,
 };
 
@@ -1271,13 +1274,13 @@ const versionIconSx = {
 };
 
 const newVersionBtnSx = {
-	height: 40,
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
 	border: "1px dashed rgba(255,255,255,.14)",
 	color: "#93c5fd",
 	background: "rgba(255,255,255,.03)",
 	textTransform: "none",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 850,
 
 	"&:hover": {
@@ -1289,8 +1292,8 @@ const newVersionBtnSx = {
 const checkItemSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1,
-	py: 1,
+	gap: "9px",
+	py: "8px",
 	borderBottom: "1px solid rgba(255,255,255,.06)",
 
 	"&:last-of-type": {
@@ -1299,12 +1302,12 @@ const checkItemSx = {
 };
 
 const checkDotSx = (done) => ({
-	width: 24,
-	height: 24,
+	width: "22px",
+	height: "22px",
 	borderRadius: 999,
 	display: "grid",
 	placeItems: "center",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 950,
 	color: done ? "#4ade80" : "#fbbf24",
 	background: done
@@ -1318,6 +1321,6 @@ const checkDotSx = (done) => ({
 
 const checkTextSx = (done) => ({
 	color: done ? "#fff" : "rgba(255,255,255,.62)",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 750,
 });
