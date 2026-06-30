@@ -1427,6 +1427,38 @@ const tableFooterSx = {
 	background: "rgba(2,6,23,.30)",
 };
 
+const totalTopSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+	mb: 1.4,
+};
+
+const totalLabelSx = {
+	color: "rgba(255,255,255,.62)",
+	fontSize: 11,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".07em",
+};
+
+const totalValueSx = {
+	mt: 0.7,
+	color: "#4ade80",
+	fontSize: 30,
+	fontWeight: 950,
+	fontFamily: "monospace",
+	lineHeight: 1,
+};
+
+const totalHintSx = {
+	mt: 1,
+	color: "rgba(255,255,255,.55)",
+	fontSize: 12,
+	fontWeight: 650,
+};
+
 const addRowBtnSx = {
 	color: "#60a5fa",
 	textTransform: "none",
