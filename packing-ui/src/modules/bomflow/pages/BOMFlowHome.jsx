@@ -77,7 +77,9 @@ export default function BOMFlowHome() {
 										<Chip size="small" label={item.status} sx={item.enabled ? styles.BOM_statusReadySx : styles.BOM_statusPlannedSx} />
 									</Box>
 									<Typography sx={styles.BOM_moduleTitleSx}>{item.title}</Typography>
-									<Typography sx={styles.BOM_moduleSubtitleSx}>{item.subtitle}</Typography>
+									<Typography sx={styles.BOM_portalModuleSubtitleSx}>
+										{item.subtitle}
+									</Typography>
 									<Button
 										fullWidth
 										variant={item.enabled ? "contained" : "outlined"}

@@ -1,5 +1,6 @@
 /* =====================================================
    BOMFLOW MODULE PAGE LAYOUT
+   Same architecture style as LogisticsPortalPage
 ===================================================== */
 
 export const BOM_modulePageSx = {
@@ -1002,7 +1003,7 @@ export const BOM_moduleTitleSx = {
 	fontSize: "18px",
 };
 
-export const BOM_moduleSubtitleSx = {
+export const BOM_portalModuleSubtitleSx = {
 	color: "rgba(255,255,255,.62)",
 	fontSize: "14px",
 	lineHeight: 1.6,
