@@ -1407,6 +1407,154 @@ const popupBox = {
 	...darkModalBox,
 };
 
+const normalizeSmartSearch = (value) => {
+	return String(value || "")
+		.toLowerCase()
+		.trim()
+		.replace(/[_]+/g, " ")
+		.replace(/[|]+/g, " ")
+		.replace(/\s+/g, " ");
+};
+
+const normalizeCompactSearch = (value) => {
+	return String(value || "")
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]/g, "");
+};
+
+const getSmartStatusText = (status) => {
+	const cleanStatus = String(status || "")
+		.trim()
+		.toUpperCase();
+
+	const map = {
+		READY: "ready packed pkd packing",
+		READY_TO_STORE: "ready to store warehouse gate pass",
+		WAREHOUSE_REQUESTED: "warehouse requested gate pass pending",
+		IN_WAREHOUSE: "in warehouse stored",
+		READY_TO_DISPATCH: "ready to dispatch challan",
+		LOADED: "loaded queued queue",
+		DISPATCHED: "dispatched challan",
+		OUT_FOR_DELIVERY: "out for delivery dispatched live trip",
+		DELIVERED: "delivered completed",
+		WAREHOUSE_RETURN_REQUESTED: "warehouse return requested return",
+		RESTORED: "restored",
+		AVAILABLE: "available",
+	};
+
+	return `${cleanStatus} ${cleanStatus.replaceAll("_", " ")} ${map[cleanStatus] || ""}`;
+};
+
+const tokenizeSmartSearch = (value) => {
+	const text = String(value || "")
+		.trim()
+		.toLowerCase();
+
+	if (!text) {
+		return [];
+	}
+
+	/*
+	 * Supports normal words and quoted phrases:
+	 * kapil sofa fg1
+	 * "kapil menon" sofa fg1
+	 */
+	const matches =
+		text.match(/"([^"]+)"|'([^']+)'|[^\s,]+/g) || [];
+
+	return matches
+		.map((token) =>
+			token
+				.replace(/^["']|["']$/g, "")
+				.trim()
+		)
+		.map((token) => {
+			/*
+			 * Safety/convenience:
+			 * If someone still types client:kapil,
+			 * we simply convert it to kapil.
+			 */
+			if (token.includes(":")) {
+				return token.split(":").slice(1).join(":").trim();
+			}
+
+			return token;
+		})
+		.filter(Boolean);
+};
+
+const rowSmartHaystack = (row) => {
+	const parts = [
+		row.name,
+		row.itemName,
+		row.sku,
+		row.clientName,
+		row.clientAddress,
+		row.pdNo,
+		row.drawingNo,
+		row.description,
+		row.remarks,
+		row.plantCode,
+		row.packedAreaCode,
+		row.currentLocationCode,
+		row.location,
+		row.fgAreaCode,
+		row.fgZoneCode,
+		row.warehouseCode,
+		row.gatePassNumber,
+		row.challanNumber,
+		row.dispatchChallanNumber,
+		row.driverName,
+		row.vehicleNumber,
+		row.vehicleName,
+		row.status,
+		getSmartStatusText(row.status),
+	];
+
+	const normalText =
+		normalizeSmartSearch(parts.filter(Boolean).join(" "));
+
+	const compactText =
+		normalizeCompactSearch(parts.filter(Boolean).join(" "));
+
+	return {
+		normalText,
+		compactText,
+	};
+};
+
+const smartRowMatches = (row, search) => {
+	const tokens =
+		tokenizeSmartSearch(search);
+
+	if (tokens.length === 0) {
+		return true;
+	}
+
+	const {
+		normalText,
+		compactText,
+	} = rowSmartHaystack(row);
+
+	return tokens.every((token) => {
+		const normalToken =
+			normalizeSmartSearch(token);
+
+		const compactToken =
+			normalizeCompactSearch(token);
+
+		if (!normalToken && !compactToken) {
+			return true;
+		}
+
+		return (
+			normalText.includes(normalToken) ||
+			compactText.includes(compactToken)
+		);
+	});
+};
+
 function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [loading, setLoading] = useState(false);
@@ -1675,21 +1823,19 @@ function DispatchedItemsPage() {
 	};
 
 	const filteredRows = useMemo(() => {
-		if (!Array.isArray(rows)) return [];
+		if (!Array.isArray(rows)) {
+			return [];
+		}
 
-		return rows.filter((r) => {
-			const rowStatus = String(r.status || "")
-				.trim()
-				.toUpperCase();
-
-			if (
-				statusFilter !== "ALL" &&
-				rowStatus !== String(statusFilter || "").trim().toUpperCase()
-			) {
+		return rows.filter((row) => {
+			if (!smartRowMatches(row, search)) {
 				return false;
 			}
 
-			if (!rowMatchesSmartSearch(r, search)) {
+			if (
+				statusFilter !== "ALL" &&
+				String(row.status || "").trim() !== statusFilter
+			) {
 				return false;
 			}
 
@@ -3812,7 +3958,7 @@ function DispatchedItemsPage() {
 
 					<TextField
 						variant="standard"
-						placeholder='Smart Search: item, client, sku, pd, dwg, status, plant, location... e.g. client:kapil sku:WR status:ready'
+						placeholder=" client, item, SKU, PD, DWG, location, status..."
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						InputProps={{ disableUnderline: true }}

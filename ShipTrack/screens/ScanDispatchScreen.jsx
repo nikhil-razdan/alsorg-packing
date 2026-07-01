@@ -125,6 +125,17 @@ function isFgLocation(item) {
 }
 
 function getFgOptions(item) {
+  if (Array.isArray(item?.fgZones)) {
+    return item.fgZones
+      .map((zone) =>
+        typeof zone === "string"
+          ? zone
+          : zone?.zoneCode || zone?.code || zone?.name || ""
+      )
+      .filter(Boolean)
+      .map(String);
+  }
+
   const fg =
     item?.fgAreaCode ||
     item?.fgCode ||
@@ -137,14 +148,9 @@ function getFgOptions(item) {
     String(plant).toUpperCase() === "AL-P1" ||
     String(fg).toUpperCase() === "FG-1"
   ) {
-    return [
-      "A",
-      "B",
-      "C",
-    ];
+    return ["A", "B", "C"];
   }
-
-  return fg ? [fg] : [];
+  return [];
 }
 
 export default function ScanDispatchScreen({

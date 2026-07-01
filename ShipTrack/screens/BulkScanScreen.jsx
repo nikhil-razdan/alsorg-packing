@@ -114,9 +114,26 @@ function isFgLocation(item) {
     );
 }
 
+function getResolvedItem(data) {
+  return (
+    data?.item ||
+    data?.dispatchedItem ||
+    data?.packetItem ||
+    data ||
+    {}
+  );
+}
+
 function getFgOptions(item) {
   if (Array.isArray(item?.fgZones)) {
-    return item.fgZones;
+    return item.fgZones
+      .map((zone) =>
+        typeof zone === "string"
+          ? zone
+          : zone?.zoneCode || zone?.code || zone?.name || ""
+      )
+      .filter(Boolean)
+      .map(String);
   }
 
   const fg =
@@ -131,14 +148,9 @@ function getFgOptions(item) {
     String(plant).toUpperCase() === "AL-P1" ||
     String(fg).toUpperCase() === "FG-1"
   ) {
-    return [
-      "A",
-      "B",
-      "C",
-    ];
+    return ["A", "B", "C"];
   }
-
-  return fg ? [fg] : [];
+  return [];
 }
 
 function needsFgMove(item) {
@@ -209,6 +221,12 @@ export default function BulkScanScreen({
   const [vehicles, setVehicles] =
     useState([]);
 
+  const [bulkMovingFg, setBulkMovingFg] =
+    useState(false);
+
+  const [bulkFgZoneCode, setBulkFgZoneCode] =
+    useState("");
+
   const [form, setForm] =
     useState({
       driverId: "",
@@ -246,7 +264,7 @@ export default function BulkScanScreen({
       Alert.alert(
         "Masters failed",
         e?.message ||
-          "Unable to load drivers/vehicles"
+        "Unable to load drivers/vehicles"
       );
     }
   };
@@ -281,6 +299,50 @@ export default function BulkScanScreen({
     pendingFgCount === 0 &&
     readyCount === rows.length;
 
+  const pendingFgRows =
+    useMemo(
+      () =>
+        rows
+          .map((row, index) => ({
+            row,
+            index,
+          }))
+          .filter(({ row }) =>
+            needsFgMove(row.item)
+          ),
+      [rows]
+    );
+
+  const bulkFgOptions =
+    useMemo(() => {
+      const options = [];
+
+      pendingFgRows.forEach(({ row }) => {
+        getFgOptions(row.item).forEach((zone) => {
+          if (!options.includes(zone)) {
+            options.push(zone);
+          }
+        });
+      });
+
+      return options;
+    }, [pendingFgRows]);
+
+  const pendingFgMissingZoneCount =
+    useMemo(
+      () =>
+        pendingFgRows.filter(({ row }) => {
+          const options =
+            getFgOptions(row.item);
+
+          return (
+            options.length > 0 &&
+            !row.fgZoneCode
+          );
+        }).length,
+      [pendingFgRows]
+    );
+
   const addScan = async (raw) => {
     const cleanScan =
       String(raw || "").trim();
@@ -308,7 +370,9 @@ export default function BulkScanScreen({
       const data =
         await resolveScan(cleanScan);
 
-      const item = data || {};
+      const item =
+        getResolvedItem(data);
+
       const zohoItemId =
         getZohoItemId(item);
 
@@ -334,22 +398,25 @@ export default function BulkScanScreen({
         {
           scanText: cleanScan,
           item,
-          fgZoneCode:
-            getFgOptions(item)[0] || "",
+          fgZoneCode: "",
+          manualFgZone: false,
         },
       ]);
 
       Alert.alert(
         "Item added",
-        `${clean(item.itemName)} added to bulk cart.`
+        `${clean(
+          item.itemName ||
+          item.name
+        )} added to bulk cart.`
       );
     } catch (e) {
       Alert.alert(
         "Scan failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to resolve QR"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to resolve QR"
       );
     } finally {
       setLoading(false);
@@ -399,9 +466,10 @@ export default function BulkScanScreen({
       prev.map((r, i) =>
         i === index
           ? {
-              ...r,
-              fgZoneCode: zone,
-            }
+            ...r,
+            fgZoneCode: zone,
+            manualFgZone: true,
+          }
           : r
       )
     );
@@ -415,33 +483,56 @@ export default function BulkScanScreen({
     try {
       setMovingId(
         getZohoItemId(row.item) ||
-          String(index)
+        String(index)
       );
 
       const data =
         await resolveScan(row.scanText);
 
+      const refreshedItem =
+        getResolvedItem(data);
+
       setRows((prev) =>
-        prev.map((r, i) =>
-          i === index
-            ? {
-                ...r,
-                item: data || {},
-                fgZoneCode:
-                  getFgOptions(data || {})[0] ||
-                  r.fgZoneCode ||
-                  "",
-              }
-            : r
-        )
+        prev.map((r, i) => {
+          if (i !== index) {
+            return r;
+          }
+
+          const options =
+            getFgOptions(refreshedItem);
+
+          let nextZone =
+            r.fgZoneCode || "";
+
+          if (
+            options.length > 0 &&
+            nextZone &&
+            !options.includes(nextZone)
+          ) {
+            nextZone = "";
+          }
+
+          if (options.length === 0) {
+            nextZone = "";
+          }
+
+          return {
+            ...r,
+            item: refreshedItem,
+            fgZoneCode: nextZone,
+            manualFgZone:
+              Boolean(nextZone) &&
+              Boolean(r.manualFgZone),
+          };
+        })
       );
     } catch (e) {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to refresh item"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to refresh item"
       );
     } finally {
       setMovingId("");
@@ -500,15 +591,182 @@ export default function BulkScanScreen({
         statusCode === 403
           ? "Only DISPATCH user can move item to FG."
           : e?.response?.data?.message ||
-            e?.response?.data ||
-            e?.message ||
-            "Unable to move item to FG";
+          e?.response?.data ||
+          e?.message ||
+          "Unable to move item to FG";
 
       Alert.alert(
         "Move failed",
         message
       );
     } finally {
+      setMovingId("");
+    }
+  };
+
+  const applyBulkFgZone = (zone) => {
+    setBulkFgZoneCode(zone);
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (!needsFgMove(row.item)) {
+          return row;
+        }
+
+        const options =
+          getFgOptions(row.item);
+
+        if (
+          options.length > 0 &&
+          !options.includes(zone)
+        ) {
+          return row;
+        }
+
+        return {
+          ...row,
+          fgZoneCode: zone,
+          manualFgZone: false,
+        };
+      })
+    );
+  };
+
+  const submitBulkMoveToFg = () => {
+    if (pendingFgRows.length === 0) {
+      Alert.alert(
+        "No FG movement needed",
+        "There are no scanned items that need FG movement."
+      );
+      return;
+    }
+
+    if (pendingFgMissingZoneCount > 0) {
+      Alert.alert(
+        "FG Zone required",
+        "Select a bulk FG zone or select zone individually for the highlighted items."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Bulk Move To FG",
+      `Move ${pendingFgRows.length} item${pendingFgRows.length > 1 ? "s" : ""
+      } to FG?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Move",
+          onPress: executeBulkMoveToFg,
+        },
+      ]
+    );
+  };
+
+  const executeBulkMoveToFg = async () => {
+    const targetRows =
+      rows
+        .map((row, index) => ({
+          row,
+          index,
+        }))
+        .filter(({ row }) =>
+          needsFgMove(row.item)
+        );
+
+    if (targetRows.length === 0) {
+      Alert.alert(
+        "No FG movement needed",
+        "All scanned items are already ready for dispatch."
+      );
+      return;
+    }
+
+    const missingZone =
+      targetRows.find(({ row }) => {
+        const options =
+          getFgOptions(row.item);
+
+        return (
+          options.length > 0 &&
+          !row.fgZoneCode
+        );
+      });
+
+    if (missingZone) {
+      Alert.alert(
+        "FG Zone required",
+        "One or more items need FG zone selection."
+      );
+      return;
+    }
+
+    try {
+      setBulkMovingFg(true);
+
+      let nextRows = [...rows];
+
+      for (const {
+        row,
+        index,
+      } of targetRows) {
+        const item =
+          row.item || {};
+
+        const zohoItemId =
+          getZohoItemId(item);
+
+        if (!zohoItemId) {
+          throw new Error(
+            `Zoho item id missing for item ${index + 1}`
+          );
+        }
+
+        setMovingId(zohoItemId);
+
+        await moveItemToFg(
+          zohoItemId,
+          row.fgZoneCode || ""
+        );
+
+        if (row.scanText) {
+          const refreshed =
+            await resolveScan(row.scanText);
+
+          const refreshedItem =
+            getResolvedItem(refreshed);
+
+          nextRows[index] = {
+            ...nextRows[index],
+            item: refreshedItem,
+            fgZoneCode: "",
+            manualFgZone: false,
+          };
+
+          setRows([...nextRows]);
+        }
+      }
+
+      setBulkFgZoneCode("");
+      setMovingId("");
+
+      Alert.alert(
+        "Bulk FG completed",
+        "All required items moved to FG successfully."
+      );
+    } catch (e) {
+      Alert.alert(
+        "Bulk move failed",
+        e?.response?.data?.message ||
+        e?.response?.data ||
+        e?.message ||
+        "Unable to move all items to FG"
+      );
+    } finally {
+      setBulkMovingFg(false);
       setMovingId("");
     }
   };
@@ -585,9 +843,9 @@ export default function BulkScanScreen({
       Alert.alert(
         "Bulk dispatch failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to create bulk dispatch"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to create bulk dispatch"
       );
     } finally {
       setDispatching(false);
@@ -736,6 +994,100 @@ export default function BulkScanScreen({
           value={String(pendingFgCount)}
         />
       </View>
+
+      {pendingFgCount > 0 ? (
+        <View style={styles.bulkFgPanel}>
+          <View style={styles.bulkFgTop}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bulkFgTitle}>
+                Bulk Move To FG
+              </Text>
+
+              <Text style={styles.bulkFgSub}>
+                {pendingFgCount} item
+                {pendingFgCount > 1 ? "s" : ""} need FG movement. Select one bulk zone, or override zone item-wise below.
+              </Text>
+            </View>
+
+            <View style={styles.bulkFgCountBadge}>
+              <Text style={styles.bulkFgCountText}>
+                {pendingFgCount}
+              </Text>
+            </View>
+          </View>
+
+          {bulkFgOptions.length > 0 ? (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Bulk FG Zone
+              </Text>
+
+              <View style={styles.zoneRow}>
+                {bulkFgOptions.map((zone) => (
+                  <TouchableOpacity
+                    key={zone}
+                    style={[
+                      styles.zoneChip,
+                      bulkFgZoneCode === zone
+                        ? styles.zoneChipActive
+                        : null,
+                    ]}
+                    onPress={() =>
+                      applyBulkFgZone(zone)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.zoneChipText,
+                        bulkFgZoneCode === zone
+                          ? styles.zoneChipTextActive
+                          : null,
+                      ]}
+                    >
+                      {zone}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {pendingFgMissingZoneCount > 0 ? (
+                <Text style={styles.bulkFgWarning}>
+                  {pendingFgMissingZoneCount} item
+                  {pendingFgMissingZoneCount > 1 ? "s" : ""} still need zone selection.
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.bulkFgInfo}>
+              <Text style={styles.bulkFgInfoText}>
+                No zone selection required for these plants. Items will move to their base FG area.
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.bulkMoveBtn,
+              pendingFgMissingZoneCount > 0
+                ? styles.disabledBtn
+                : null,
+            ]}
+            onPress={submitBulkMoveToFg}
+            disabled={
+              bulkMovingFg ||
+              pendingFgMissingZoneCount > 0
+            }
+          >
+            {bulkMovingFg ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryText}>
+                Move All Required Items To FG
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {rows.map((row, index) => (
         <BulkItemCard
@@ -1578,5 +1930,81 @@ const styles = {
   primaryText: {
     color: "#fff",
     fontWeight: "900",
+  },
+
+  bulkFgPanel: {
+    backgroundColor: "#0f172a",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.24)",
+    marginBottom: 14,
+  },
+
+  bulkFgTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+
+  bulkFgTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 5,
+  },
+
+  bulkFgSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    lineHeight: 19,
+  },
+
+  bulkFgCountBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(245,158,11,.16)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 12,
+  },
+
+  bulkFgCountText: {
+    color: "#facc15",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  bulkFgWarning: {
+    color: "#facc15",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+
+  bulkFgInfo: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(16,185,129,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.20)",
+    marginBottom: 12,
+  },
+
+  bulkFgInfoText: {
+    color: "#6ee7b7",
+    fontWeight: "800",
+    lineHeight: 18,
+  },
+
+  bulkMoveBtn: {
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: "#f59e0b",
+    alignItems: "center",
+    justifyContent: "center",
   },
 };
