@@ -32,10 +32,47 @@ function formatDateTime(value) {
     return "—";
   }
 
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
+  const raw =
+    String(value).trim();
+
+  if (!raw) {
     return "—";
+  }
+
+  try {
+    /*
+     * Backend is returning UTC LocalDateTime without Z:
+     * 2026-07-01T09:14:00
+     *
+     * JS treats it as local time, so we must force it as UTC.
+     */
+    const hasTimezone =
+      /z$/i.test(raw) ||
+      /[+-]\d{2}:\d{2}$/.test(raw);
+
+    const utcSafeValue =
+      raw.includes("T") && !hasTimezone
+        ? `${raw}Z`
+        : raw;
+
+    const date =
+      new Date(utcSafeValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return raw;
+    }
+
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(date);
+  } catch {
+    return raw;
   }
 }
 
@@ -76,9 +113,9 @@ export default function TripsScreen() {
       Alert.alert(
         "Challans failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load dispatched challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to load dispatched challans"
       );
     } finally {
       setLoading(false);
@@ -101,9 +138,9 @@ export default function TripsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to refresh challans"
       );
     } finally {
       setRefreshing(false);

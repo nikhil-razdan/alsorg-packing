@@ -660,7 +660,9 @@ public class DispatchedItemService {
 
         item.setStatus(ItemDispatchStatus.DISPATCHED);
         item.setDispatchedBy(username);
-        item.setDispatchedAt(LocalDateTime.now());
+        item.setDispatchedAt(
+                LocalDateTime.now(
+                        java.time.ZoneId.of("Asia/Kolkata")));
         item.setStock(0);
 
         dispatchedRepo.save(item);

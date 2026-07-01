@@ -48,6 +48,48 @@ const ALL_STATUSES = [
   "RESTORED",
 ];
 
+function formatDateTime(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const raw =
+    String(value).trim();
+
+  if (!raw) {
+    return "—";
+  }
+
+  try {
+    const hasTimezone =
+      /z$/i.test(raw) ||
+      /[+-]\d{2}:\d{2}$/.test(raw);
+
+    const utcSafeValue =
+      raw.includes("T") && !hasTimezone
+        ? `${raw}Z`
+        : raw;
+
+    const date =
+      new Date(utcSafeValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return raw;
+    }
+
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(date);
+  } catch {
+    return raw;
+  }
+}
 
 function cleanValue(value) {
   const text =
@@ -88,6 +130,11 @@ function getSearchBlob(item) {
     item.zohoItemId,
     item.description,
     item.remarks,
+    item.chalaanNumber,
+    item.challanNumber,
+    item.driverName,
+    item.vehicleNumber,
+    item.dispatchedBy,
   ]
     .map(normalizeText)
     .join(" ");
@@ -114,7 +161,6 @@ export default function DispatchItemsScreen() {
 
   const [locationFilter, setLocationFilter] =
     useState("ALL");
-
 
   const [pageNo, setPageNo] =
     useState(1);
@@ -186,6 +232,9 @@ export default function DispatchItemsScreen() {
             normalizeStatus(item.status)
           )
           .filter(Boolean)
+          .filter((status) =>
+            ALL_STATUSES.includes(status)
+          )
       );
 
     const merged =
@@ -194,9 +243,7 @@ export default function DispatchItemsScreen() {
           existing.has(status) ||
           status === "READY" ||
           status === "READY_TO_DISPATCH" ||
-          status === "LOADED" ||
-          status === "OUT_FOR_DELIVERY" ||
-          status === "DELIVERED"
+          status === "DISPATCHED"
       );
 
     const extra =
@@ -339,12 +386,11 @@ export default function DispatchItemsScreen() {
     [filteredItems]
   );
 
-  const loadedItems = useMemo(
+  const dispatchedItems = useMemo(
     () =>
       filteredItems.filter(
         (item) =>
-          normalizeStatus(item.status) ===
-          "LOADED"
+          normalizeStatus(item.status) === "DISPATCHED"
       ),
     [filteredItems]
   );
@@ -408,7 +454,7 @@ export default function DispatchItemsScreen() {
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search client, SKU, PD, DWG, item..."
+                placeholder="Search client, SKU, PD, DWG, item, challan..."
                 placeholderTextColor="#64748b"
                 style={styles.searchInput}
                 autoCapitalize="none"
@@ -477,8 +523,8 @@ export default function DispatchItemsScreen() {
 
             <View style={styles.summaryRow}>
               <Summary
-                label="Loaded"
-                value={loadedItems.length}
+                label="Dispatched"
+                value={dispatchedItems.length}
               />
 
               <Summary
@@ -673,6 +719,14 @@ function ItemCard({
   const canMarkReadyToDispatch =
     status === "READY";
 
+  const challanNumber =
+    item.chalaanNumber ||
+    item.challanNumber ||
+    "";
+
+  const isDispatched =
+    status === "DISPATCHED";
+
   return (
     <View style={styles.card}>
       <View style={styles.cardTop}>
@@ -684,6 +738,12 @@ function ItemCard({
           <Text style={styles.meta}>
             SKU: {cleanValue(item.sku)}
           </Text>
+
+          {challanNumber ? (
+            <Text style={styles.meta}>
+              Challan: {challanNumber}
+            </Text>
+          ) : null}
         </View>
 
         <View
@@ -693,12 +753,19 @@ function ItemCard({
               ? styles.readyDispatchBadge
               : status === "READY"
                 ? styles.readyBadge
-                : status === "LOADED"
-                  ? styles.loadedBadge
+                : status === "DISPATCHED"
+                  ? styles.dispatchedBadge
                   : null,
           ]}
         >
-          <Text style={styles.badgeText}>
+          <Text
+            style={[
+              styles.badgeText,
+              status === "DISPATCHED"
+                ? styles.dispatchedBadgeText
+                : null,
+            ]}
+          >
             {status || "—"}
           </Text>
         </View>
@@ -738,6 +805,32 @@ function ItemCard({
           label="Zoho / Item ID"
           value={item.zohoItemId || "—"}
         />
+
+        {isDispatched ? (
+          <>
+            <Info
+              label="Driver"
+              value={item.driverName || "—"}
+            />
+
+            <Info
+              label="Vehicle"
+              value={item.vehicleNumber || "—"}
+            />
+
+            <Info
+              label="Dispatched At"
+              value={formatDateTime(
+                item.dispatchedAt
+              )}
+            />
+
+            <Info
+              label="Dispatched By"
+              value={item.dispatchedBy || "—"}
+            />
+          </>
+        ) : null}
       </View>
 
       {canMarkReadyToDispatch ? (
@@ -1010,7 +1103,7 @@ const styles = {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    maxWidth: 150,
+    maxWidth: 160,
   },
 
   readyBadge: {
@@ -1021,14 +1114,18 @@ const styles = {
     backgroundColor: "rgba(16,185,129,.14)",
   },
 
-  loadedBadge: {
-    backgroundColor: "rgba(251,191,36,.14)",
+  dispatchedBadge: {
+    backgroundColor: "rgba(34,197,94,.14)",
   },
 
   badgeText: {
     color: "#93c5fd",
     fontSize: 10,
     fontWeight: "900",
+  },
+
+  dispatchedBadgeText: {
+    color: "#86efac",
   },
 
   grid: {
