@@ -5,7 +5,6 @@ import {
 	Button,
 	Card,
 	Chip,
-	Grid,
 	LinearProgress,
 	Typography,
 } from "@mui/material";
@@ -15,7 +14,6 @@ import { useNavigate } from "react-router-dom";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import PriceChangeOutlinedIcon from "@mui/icons-material/PriceChangeOutlined";
-import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -109,63 +107,20 @@ const quickActions = [
 ];
 
 const sectionCostSplit = [
-	{
-		label: "Metal",
-		value: 12450,
-		percent: 28,
-		accent: "#60a5fa",
-	},
-	{
-		label: "Wood",
-		value: 15800,
-		percent: 35,
-		accent: "#a78bfa",
-	},
-	{
-		label: "Hardware",
-		value: 5200,
-		percent: 12,
-		accent: "#34d399",
-	},
-	{
-		label: "Stone",
-		value: 7600,
-		percent: 17,
-		accent: "#f59e0b",
-	},
-	{
-		label: "Glass",
-		value: 4200,
-		percent: 8,
-		accent: "#38bdf8",
-	},
+	{ label: "Metal", value: 12450, percent: 28, accent: "#60a5fa" },
+	{ label: "Wood", value: 15800, percent: 35, accent: "#a78bfa" },
+	{ label: "Hardware", value: 5200, percent: 12, accent: "#34d399" },
+	{ label: "Stone", value: 7600, percent: 17, accent: "#f59e0b" },
+	{ label: "Glass", value: 4200, percent: 8, accent: "#38bdf8" },
 ];
 
 const costTrend = [
-	{
-		month: "Jan",
-		value: 28,
-	},
-	{
-		month: "Feb",
-		value: 42,
-	},
-	{
-		month: "Mar",
-		value: 36,
-	},
-	{
-		month: "Apr",
-		value: 58,
-	},
-	{
-		month: "May",
-		value: 52,
-	},
-	{
-		month: "Jun",
-		value: 74,
-	},
+	{ month: "Jan", value: 28 },
+	{ month: "Feb", value: 42 },
+	{ month: "Mar", value: 36 },
+	{ month: "Apr", value: 58 },
+	{ month: "May", value: 52 },
+	{ month: "Jun", value: 74 },
 ];
 
 const recentCostings = [
@@ -204,36 +159,11 @@ const recentCostings = [
 ];
 
 const workflow = [
-	{
-		label: "Created",
-		value: 48,
-		percent: 100,
-		accent: "#60a5fa",
-	},
-	{
-		label: "BOM Added",
-		value: 34,
-		percent: 71,
-		accent: "#38bdf8",
-	},
-	{
-		label: "Rate Checked",
-		value: 27,
-		percent: 56,
-		accent: "#f59e0b",
-	},
-	{
-		label: "Reviewed",
-		value: 23,
-		percent: 48,
-		accent: "#a78bfa",
-	},
-	{
-		label: "Approved",
-		value: 21,
-		percent: 44,
-		accent: "#22c55e",
-	},
+	{ label: "Created", value: 48, percent: 100, accent: "#60a5fa" },
+	{ label: "BOM Added", value: 34, percent: 71, accent: "#38bdf8" },
+	{ label: "Rate Checked", value: 27, percent: 56, accent: "#f59e0b" },
+	{ label: "Reviewed", value: 23, percent: 48, accent: "#a78bfa" },
+	{ label: "Approved", value: 21, percent: 44, accent: "#22c55e" },
 ];
 
 const missingRateItems = [
@@ -270,8 +200,8 @@ export default function BOMFlowDashboard() {
 
 	return (
 		<Box sx={pageSx}>
-			<Box sx={heroRowSx}>
-				<Box>
+			<Box sx={heroSx}>
+				<Box sx={heroLeftSx}>
 					<Chip label="BOMFLOW DASHBOARD" sx={labelChipSx} />
 
 					<Typography sx={pageTitleSx}>
@@ -329,44 +259,38 @@ export default function BOMFlowDashboard() {
 				</Box>
 			</Box>
 
-			<Grid container spacing={2}>
+			<Box sx={statsGridSx}>
 				{dashboardStats.map((item) => (
-					<Grid item xs={12} sm={6} lg={4} xl={2} key={item.key}>
-						<button
-							type="button"
-							onClick={() => setActiveMetric(item.key)}
-							style={statCardStyle(
-								item.accent,
-								activeMetric === item.key
-							)}
-						>
-							<div style={statAccentStyle(item.accent)} />
+					<button
+						key={item.key}
+						type="button"
+						onClick={() => setActiveMetric(item.key)}
+						style={statCardStyle(item.accent, activeMetric === item.key)}
+					>
+						<div style={statAccentStyle(item.accent)} />
 
-							<Box sx={statIconSx(item.accent)}>
-								{item.icon}
-							</Box>
+						<Box sx={statIconSx(item.accent)}>
+							{item.icon}
+						</Box>
 
-							<Typography sx={statTitleSx}>
-								{item.title}
-							</Typography>
+						<Typography sx={statTitleSx}>
+							{item.title}
+						</Typography>
 
-							<Typography sx={statValueSx}>
-								{item.value}
-							</Typography>
+						<Typography sx={statValueSx}>
+							{item.value}
+						</Typography>
 
-							<Typography sx={statSubSx}>
-								{item.subtle}
-							</Typography>
+						<Typography sx={statSubSx}>
+							{item.subtle}
+						</Typography>
 
-							<Typography sx={statHintSx}>
-								{activeMetric === item.key
-									? "Selected"
-									: "View insight"}
-							</Typography>
-						</button>
-					</Grid>
+						<Typography sx={statHintSx}>
+							{activeMetric === item.key ? "Selected" : "View insight"}
+						</Typography>
+					</button>
 				))}
-			</Grid>
+			</Box>
 
 			{selectedStat && (
 				<Card sx={insightCardSx(selectedStat.accent)}>
@@ -377,8 +301,8 @@ export default function BOMFlowDashboard() {
 
 						<Typography sx={insightSubSx}>
 							This panel can later be connected with live backend APIs.
-							For now, it gives a management-style snapshot of the
-							selected dashboard metric.
+							For now, it gives a management-style snapshot of the selected
+							dashboard metric.
 						</Typography>
 					</Box>
 
@@ -394,226 +318,216 @@ export default function BOMFlowDashboard() {
 				</Card>
 			)}
 
-			<Grid container spacing={2}>
-				<Grid item xs={12} lg={8}>
-					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}>
-							<Box>
-								<Typography sx={panelTitleSx}>
-									Costing Trend
-								</Typography>
+			<Box sx={analyticsGridSx}>
+				<Card sx={panelSx}>
+					<Box sx={panelHeaderSx}>
+						<Box>
+							<Typography sx={panelTitleSx}>
+								Costing Trend
+							</Typography>
 
-								<Typography sx={panelSubSx}>
-									Month-wise movement of product costing activity
-								</Typography>
-							</Box>
-
-							<Box sx={panelIconSx}>
-								<TimelineOutlinedIcon />
-							</Box>
+							<Typography sx={panelSubSx}>
+								Month-wise movement of product costing activity
+							</Typography>
 						</Box>
 
-						<Box sx={barChartSx}>
-							{costTrend.map((item) => (
-								<Box key={item.month} sx={barItemSx}>
-									<Box sx={barTrackSx}>
-										<Box
-											sx={{
-												...barFillSx,
-												height: `${item.value}%`,
-											}}
-										/>
+						<Box sx={panelIconSx}>
+							<TimelineOutlinedIcon />
+						</Box>
+					</Box>
+
+					<Box sx={barChartSx}>
+						{costTrend.map((item) => (
+							<Box key={item.month} sx={barItemSx}>
+								<Box sx={barTrackSx}>
+									<Box
+										sx={{
+											...barFillSx,
+											height: `${item.value}%`,
+										}}
+									/>
+								</Box>
+
+								<Typography sx={barLabelSx}>
+									{item.month}
+								</Typography>
+							</Box>
+						))}
+					</Box>
+				</Card>
+
+				<Card sx={panelSx}>
+					<Box sx={panelHeaderSx}>
+						<Box>
+							<Typography sx={panelTitleSx}>
+								Section Cost Split
+							</Typography>
+
+							<Typography sx={panelSubSx}>
+								Estimated material contribution
+							</Typography>
+						</Box>
+
+						<Box sx={panelIconSx}>
+							<DonutLargeOutlinedIcon />
+						</Box>
+					</Box>
+
+					<Box sx={splitListSx}>
+						{sectionCostSplit.map((item) => (
+							<Box key={item.label} sx={splitItemSx}>
+								<Box sx={splitTopSx}>
+									<Box sx={splitNameSx}>
+										<span style={dotStyle(item.accent)} />
+										{item.label}
 									</Box>
 
-									<Typography sx={barLabelSx}>
-										{item.month}
+									<Typography sx={splitValueSx}>
+										{formatCurrency(item.value)}
 									</Typography>
 								</Box>
-							))}
-						</Box>
-					</Card>
-				</Grid>
 
-				<Grid item xs={12} lg={4}>
-					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}>
-							<Box>
-								<Typography sx={panelTitleSx}>
-									Section Cost Split
-								</Typography>
-
-								<Typography sx={panelSubSx}>
-									Estimated material contribution
-								</Typography>
+								<LinearProgress
+									variant="determinate"
+									value={item.percent}
+									sx={progressSx(item.accent)}
+								/>
 							</Box>
+						))}
+					</Box>
+				</Card>
+			</Box>
 
-							<Box sx={panelIconSx}>
-								<DonutLargeOutlinedIcon />
-							</Box>
+			<Box sx={threePanelGridSx}>
+				<Card sx={panelSx}>
+					<Box sx={panelHeaderSx}>
+						<Box>
+							<Typography sx={panelTitleSx}>
+								Workflow Funnel
+							</Typography>
+
+							<Typography sx={panelSubSx}>
+								Product costing stage movement
+							</Typography>
 						</Box>
 
-						<Box sx={splitListSx}>
-							{sectionCostSplit.map((item) => (
-								<Box key={item.label} sx={splitItemSx}>
-									<Box sx={splitTopSx}>
-										<Box sx={splitNameSx}>
-											<span style={dotStyle(item.accent)} />
-											{item.label}
-										</Box>
+						<Box sx={panelIconSx}>
+							<SpeedOutlinedIcon />
+						</Box>
+					</Box>
 
-										<Typography sx={splitValueSx}>
-											{formatCurrency(item.value)}
-										</Typography>
-									</Box>
+					<Box sx={workflowListSx}>
+						{workflow.map((item) => (
+							<Box key={item.label} sx={workflowItemSx}>
+								<Box sx={workflowTextRowSx}>
+									<Typography sx={workflowLabelSx}>
+										{item.label}
+									</Typography>
 
-									<LinearProgress
-										variant="determinate"
-										value={item.percent}
-										sx={progressSx(item.accent)}
-									/>
+									<Typography sx={workflowValueSx}>
+										{item.value}
+									</Typography>
 								</Box>
-							))}
-						</Box>
-					</Card>
-				</Grid>
-			</Grid>
 
-			<Grid container spacing={2}>
-				<Grid item xs={12} lg={4}>
-					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}>
-							<Box>
-								<Typography sx={panelTitleSx}>
-									Workflow Funnel
-								</Typography>
-
-								<Typography sx={panelSubSx}>
-									Product costing stage movement
-								</Typography>
+								<LinearProgress
+									variant="determinate"
+									value={item.percent}
+									sx={progressSx(item.accent)}
+								/>
 							</Box>
+						))}
+					</Box>
+				</Card>
 
-							<Box sx={panelIconSx}>
-								<SpeedOutlinedIcon />
-							</Box>
+				<Card sx={warningPanelSx}>
+					<Box sx={panelHeaderSx}>
+						<Box>
+							<Typography sx={panelTitleSx}>
+								Attention Required
+							</Typography>
+
+							<Typography sx={panelSubSx}>
+								Missing rates and costing blockers
+							</Typography>
 						</Box>
 
-						<Box sx={workflowListSx}>
-							{workflow.map((item) => (
-								<Box key={item.label} sx={workflowItemSx}>
-									<Box sx={workflowTextRowSx}>
-										<Typography sx={workflowLabelSx}>
-											{item.label}
-										</Typography>
+						<Box sx={warningIconSx}>
+							<WarningAmberOutlinedIcon />
+						</Box>
+					</Box>
 
-										<Typography sx={workflowValueSx}>
-											{item.value}
-										</Typography>
-									</Box>
+					<Box sx={missingListSx}>
+						{missingRateItems.map((item) => (
+							<Box key={item.item} sx={missingItemSx}>
+								<Box>
+									<Typography sx={missingTitleSx}>
+										{item.item}
+									</Typography>
 
-									<LinearProgress
-										variant="determinate"
-										value={item.percent}
-										sx={progressSx(item.accent)}
-									/>
+									<Typography sx={missingSubSx}>
+										{item.product} • {item.section}
+									</Typography>
 								</Box>
-							))}
-						</Box>
-					</Card>
-				</Grid>
 
-				<Grid item xs={12} lg={4}>
-					<Card sx={warningPanelSx}>
-						<Box sx={panelHeaderSx}>
-							<Box>
-								<Typography sx={panelTitleSx}>
-									Attention Required
-								</Typography>
-
-								<Typography sx={panelSubSx}>
-									Missing rates and costing blockers
-								</Typography>
+								<Chip
+									label="Rate Missing"
+									size="small"
+									sx={missingChipSx}
+								/>
 							</Box>
+						))}
+					</Box>
 
-							<Box sx={warningIconSx}>
-								<WarningAmberOutlinedIcon />
-							</Box>
+					<Button
+						fullWidth
+						onClick={() => navigate("/bomflow/rate-master")}
+						sx={warningBtnSx}
+					>
+						Open Rate Master
+					</Button>
+				</Card>
+
+				<Card sx={panelSx}>
+					<Box sx={panelHeaderSx}>
+						<Box>
+							<Typography sx={panelTitleSx}>
+								Quick Actions
+							</Typography>
+
+							<Typography sx={panelSubSx}>
+								Frequent BOMFlow operations
+							</Typography>
 						</Box>
+					</Box>
 
-						<Box sx={missingListSx}>
-							{missingRateItems.map((item) => (
-								<Box key={item.item} sx={missingItemSx}>
-									<Box>
-										<Typography sx={missingTitleSx}>
-											{item.item}
-										</Typography>
+					<Box sx={quickActionListSx}>
+						{quickActions.map((item) => (
+							<button
+								key={item.title}
+								type="button"
+								onClick={() => navigate(item.path)}
+								style={quickActionStyle}
+							>
+								<span style={quickActionIconStyle}>
+									{item.icon}
+								</span>
 
-										<Typography sx={missingSubSx}>
-											{item.product} • {item.section}
-										</Typography>
-									</Box>
-
-									<Chip
-										label="Rate Missing"
-										size="small"
-										sx={missingChipSx}
-									/>
-								</Box>
-							))}
-						</Box>
-
-						<Button
-							fullWidth
-							onClick={() => navigate("/bomflow/rate-master")}
-							sx={warningBtnSx}
-						>
-							Open Rate Master
-						</Button>
-					</Card>
-				</Grid>
-
-				<Grid item xs={12} lg={4}>
-					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}>
-							<Box>
-								<Typography sx={panelTitleSx}>
-									Quick Actions
-								</Typography>
-
-								<Typography sx={panelSubSx}>
-									Frequent BOMFlow operations
-								</Typography>
-							</Box>
-						</Box>
-
-						<Box sx={quickActionListSx}>
-							{quickActions.map((item) => (
-								<button
-									key={item.title}
-									type="button"
-									onClick={() => navigate(item.path)}
-									style={quickActionStyle}
-								>
-									<span style={quickActionIconStyle}>
-										{item.icon}
+								<span style={{ flex: 1 }}>
+									<span style={quickActionTitleStyle}>
+										{item.title}
 									</span>
 
-									<span style={{ flex: 1 }}>
-										<span style={quickActionTitleStyle}>
-											{item.title}
-										</span>
-
-										<span style={quickActionSubStyle}>
-											{item.subtitle}
-										</span>
+									<span style={quickActionSubStyle}>
+										{item.subtitle}
 									</span>
+								</span>
 
-									<ArrowForwardIcon fontSize="small" />
-								</button>
-							))}
-						</Box>
-					</Card>
-				</Grid>
-			</Grid>
+								<ArrowForwardIcon fontSize="small" />
+							</button>
+						))}
+					</Box>
+				</Card>
+			</Box>
 
 			<Card sx={panelSx}>
 				<Box sx={panelHeaderSx}>
@@ -687,34 +601,39 @@ const pageSx = {
 	width: "100%",
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
+	gap: "14px",
 };
 
-const heroRowSx = {
+const heroSx = {
 	display: "flex",
 	alignItems: "flex-start",
 	justifyContent: "space-between",
-	gap: 2,
+	gap: "16px",
 	flexWrap: "wrap",
-	mb: 1,
+};
+
+const heroLeftSx = {
+	minWidth: "280px",
+	flex: 1,
 };
 
 const labelChipSx = {
-	height: 30,
+	height: "26px",
 	borderRadius: 999,
 	background: "rgba(59,130,246,.14)",
 	color: "#60a5fa",
 	border: "1px solid rgba(59,130,246,.24)",
 	fontWeight: 900,
+	fontSize: "11px",
 	letterSpacing: ".07em",
-	mb: 1.4,
+	mb: "10px",
 };
 
 const pageTitleSx = {
 	color: "#fff",
 	fontSize: {
-		xs: 26,
-		md: 34,
+		xs: "24px",
+		md: "32px",
 	},
 	fontWeight: 950,
 	lineHeight: 1.05,
@@ -722,34 +641,35 @@ const pageTitleSx = {
 };
 
 const pageSubSx = {
-	mt: 1,
+	mt: "8px",
 	color: "rgba(255,255,255,.68)",
-	fontSize: 14,
+	fontSize: "13px",
 	fontWeight: 650,
-	lineHeight: 1.6,
-	maxWidth: 760,
+	lineHeight: 1.5,
+	maxWidth: "760px",
 };
 
 const heroActionsSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1.2,
+	justifyContent: "flex-end",
+	gap: "8px",
 	flexWrap: "wrap",
 };
 
 const rangeSwitchSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 0.6,
-	p: 0.5,
+	gap: "4px",
+	p: "4px",
 	borderRadius: 999,
 	background: "rgba(15,23,42,.82)",
 	border: "1px solid rgba(255,255,255,.08)",
 };
 
 const rangeBtnStyle = (active) => ({
-	height: 34,
-	padding: "0 14px",
+	height: 30,
+	padding: "0 12px",
 	borderRadius: 999,
 	border: active
 		? "1px solid rgba(59,130,246,.40)"
@@ -759,22 +679,20 @@ const rangeBtnStyle = (active) => ({
 		: "transparent",
 	color: "#fff",
 	fontWeight: 850,
-	fontSize: 12,
+	fontSize: 11,
 	cursor: "pointer",
-	boxShadow: active
-		? "0 10px 22px rgba(37,99,235,.28)"
-		: "none",
+	boxShadow: active ? "0 8px 18px rgba(37,99,235,.26)" : "none",
 });
 
 const primaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
-	px: 2,
+	height: "38px",
+	borderRadius: "9px",
+	px: "14px",
 	textTransform: "none",
 	fontWeight: 850,
 	color: "#fff",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 12px 28px rgba(37,99,235,.34)",
+	boxShadow: "0 10px 22px rgba(37,99,235,.30)",
 
 	"&:hover": {
 		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
@@ -782,9 +700,9 @@ const primaryBtnSx = {
 };
 
 const secondaryBtnSx = {
-	height: 42,
-	borderRadius: "14px",
-	px: 2,
+	height: "38px",
+	borderRadius: "9px",
+	px: "14px",
 	textTransform: "none",
 	fontWeight: 850,
 	color: "#fff",
@@ -797,12 +715,30 @@ const secondaryBtnSx = {
 	},
 };
 
+const statsGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+	gap: "10px",
+
+	"@media (max-width: 1500px)": {
+		gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+	},
+
+	"@media (max-width: 850px)": {
+		gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+	},
+
+	"@media (max-width: 540px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
 const statCardStyle = (accent, active) => ({
 	position: "relative",
 	width: "100%",
-	minHeight: 154,
-	padding: "18px 18px 16px",
-	borderRadius: 16,
+	minHeight: 118,
+	padding: "13px",
+	borderRadius: 10,
 	background: active
 		? `linear-gradient(180deg, ${accent}20, rgba(15,23,42,.82))`
 		: "rgba(15,23,42,.78)",
@@ -810,8 +746,8 @@ const statCardStyle = (accent, active) => ({
 		? `1px solid ${accent}66`
 		: "1px solid rgba(255,255,255,.07)",
 	boxShadow: active
-		? `0 18px 38px ${accent}26`
-		: "0 18px 35px rgba(2,6,23,.30)",
+		? `0 14px 28px ${accent}20`
+		: "0 14px 28px rgba(2,6,23,.26)",
 	backdropFilter: "blur(18px)",
 	color: "#fff",
 	textAlign: "left",
@@ -826,111 +762,133 @@ const statAccentStyle = (accent) => ({
 	top: 0,
 	left: 0,
 	right: 0,
-	height: 4,
+	height: 3,
 	background: accent,
 });
 
 const statIconSx = (accent) => ({
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
+	width: "36px",
+	height: "36px",
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	background: `${accent}18`,
 	color: accent,
 	border: `1px solid ${accent}33`,
-	mb: 1.5,
+	mb: "9px",
 });
 
 const statTitleSx = {
 	color: "rgba(255,255,255,.60)",
-	fontSize: 11,
+	fontSize: "10px",
 	fontWeight: 900,
 	textTransform: "uppercase",
 	letterSpacing: ".08em",
 };
 
 const statValueSx = {
-	mt: 0.8,
+	mt: "5px",
 	color: "#fff",
-	fontSize: 28,
+	fontSize: "24px",
 	fontWeight: 950,
 	lineHeight: 1,
 };
 
 const statSubSx = {
-	mt: 0.8,
+	mt: "5px",
 	color: "rgba(255,255,255,.54)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
 };
 
 const statHintSx = {
-	mt: 1.3,
+	mt: "8px",
 	color: "rgba(255,255,255,.72)",
-	fontSize: 11,
+	fontSize: "10.5px",
 	fontWeight: 850,
 };
 
 const insightCardSx = (accent) => ({
-	p: 2,
-	borderRadius: 16,
+	p: "15px",
+	borderRadius: "10px",
 	background:
 		"linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.78))",
 	border: `1px solid ${accent}55`,
-	boxShadow: `0 18px 38px ${accent}18`,
+	boxShadow: `0 14px 28px ${accent}16`,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 2,
+	gap: "14px",
 	flexWrap: "wrap",
 });
 
 const insightTitleSx = {
 	color: "#fff",
-	fontSize: 18,
+	fontSize: "17px",
 	fontWeight: 900,
 };
 
 const insightSubSx = {
-	mt: 0.5,
+	mt: "4px",
 	color: "rgba(255,255,255,.58)",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 650,
-	maxWidth: 780,
-	lineHeight: 1.55,
+	maxWidth: "780px",
+	lineHeight: 1.45,
 };
 
 const insightValueBoxSx = {
-	minWidth: 150,
-	p: 1.5,
-	borderRadius: "14px",
+	minWidth: "130px",
+	p: "12px",
+	borderRadius: "9px",
 	background: "rgba(255,255,255,.05)",
 	border: "1px solid rgba(255,255,255,.08)",
 };
 
 const insightValueLabelSx = {
 	color: "rgba(255,255,255,.58)",
-	fontSize: 11,
+	fontSize: "10px",
 	fontWeight: 850,
 	textTransform: "uppercase",
 	letterSpacing: ".07em",
 };
 
 const insightValueSx = {
-	mt: 0.6,
+	mt: "5px",
 	color: "#fff",
-	fontSize: 24,
+	fontSize: "22px",
 	fontWeight: 950,
+};
+
+const analyticsGridSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0, 1.6fr) minmax(320px, .8fr)",
+	gap: "14px",
+	alignItems: "stretch",
+
+	"@media (max-width: 1180px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
+const threePanelGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+	gap: "14px",
+	alignItems: "stretch",
+
+	"@media (max-width: 1180px)": {
+		gridTemplateColumns: "1fr",
+	},
 };
 
 const panelSx = {
 	height: "100%",
-	p: 2.2,
-	borderRadius: 16,
+	p: "15px",
+	borderRadius: "10px",
 	background: "rgba(15,23,42,.78)",
 	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 38px rgba(2,6,23,.30)",
+	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
 	backdropFilter: "blur(18px)",
 	overflow: "hidden",
 };
@@ -946,29 +904,29 @@ const panelHeaderSx = {
 	display: "flex",
 	alignItems: "flex-start",
 	justifyContent: "space-between",
-	gap: 2,
-	mb: 2,
+	gap: "12px",
+	mb: "12px",
 };
 
 const panelTitleSx = {
 	color: "#fff",
-	fontSize: 18,
+	fontSize: "17px",
 	fontWeight: 950,
 	letterSpacing: "-0.02em",
 };
 
 const panelSubSx = {
-	mt: 0.5,
+	mt: "3px",
 	color: "rgba(255,255,255,.55)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 650,
-	lineHeight: 1.5,
+	lineHeight: 1.4,
 };
 
 const panelIconSx = {
-	width: 40,
-	height: 40,
-	borderRadius: "14px",
+	width: "36px",
+	height: "36px",
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	color: "#93c5fd",
@@ -984,12 +942,12 @@ const warningIconSx = {
 };
 
 const barChartSx = {
-	height: 290,
+	height: "240px",
 	display: "grid",
 	gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-	gap: 1.4,
+	gap: "10px",
 	alignItems: "end",
-	pt: 2,
+	pt: "10px",
 };
 
 const barItemSx = {
@@ -998,14 +956,14 @@ const barItemSx = {
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "flex-end",
-	gap: 1,
+	gap: "8px",
 };
 
 const barTrackSx = {
 	width: "100%",
-	maxWidth: 62,
-	height: 220,
-	borderRadius: "16px",
+	maxWidth: "54px",
+	height: "190px",
+	borderRadius: "10px",
 	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.06)",
 	display: "flex",
@@ -1015,62 +973,61 @@ const barTrackSx = {
 
 const barFillSx = {
 	width: "100%",
-	borderRadius: "16px 16px 0 0",
-	background:
-		"linear-gradient(180deg,#60a5fa 0%,#2563eb 100%)",
+	borderRadius: "10px 10px 0 0",
+	background: "linear-gradient(180deg,#60a5fa 0%,#2563eb 100%)",
 	boxShadow: "0 -10px 26px rgba(37,99,235,.28)",
 };
 
 const barLabelSx = {
 	color: "rgba(255,255,255,.62)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 800,
 };
 
 const splitListSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 1.7,
+	gap: "11px",
 };
 
 const splitItemSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 0.8,
+	gap: "6px",
 };
 
 const splitTopSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 1,
+	gap: "8px",
 };
 
 const splitNameSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 8,
+	gap: "7px",
 	color: "#fff",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 850,
 };
 
 const splitValueSx = {
 	color: "rgba(255,255,255,.70)",
-	fontSize: 12,
+	fontSize: "11px",
 	fontWeight: 800,
 };
 
 const dotStyle = (accent) => ({
-	width: 9,
-	height: 9,
+	width: 8,
+	height: 8,
 	borderRadius: 999,
 	background: accent,
 	boxShadow: `0 0 12px ${accent}`,
 });
 
 const progressSx = (accent) => ({
-	height: 8,
+	height: "7px",
 	borderRadius: 999,
 	background: "rgba(255,255,255,.06)",
 
@@ -1083,13 +1040,13 @@ const progressSx = (accent) => ({
 const workflowListSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 1.7,
+	gap: "11px",
 };
 
 const workflowItemSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 0.8,
+	gap: "6px",
 };
 
 const workflowTextRowSx = {
@@ -1100,65 +1057,66 @@ const workflowTextRowSx = {
 
 const workflowLabelSx = {
 	color: "rgba(255,255,255,.72)",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 800,
 };
 
 const workflowValueSx = {
 	color: "#fff",
-	fontSize: 14,
+	fontSize: "13px",
 	fontWeight: 950,
 };
 
 const missingListSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 1,
-	mb: 2,
+	gap: "8px",
+	mb: "12px",
 };
 
 const missingItemSx = {
-	p: 1.4,
-	borderRadius: "14px",
+	p: "12px",
+	borderRadius: "8px",
 	background: "rgba(2,6,23,.38)",
 	border: "1px solid rgba(239,68,68,.18)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 1,
+	gap: "8px",
 };
 
 const missingTitleSx = {
 	color: "#fff",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 850,
 };
 
 const missingSubSx = {
-	mt: 0.3,
+	mt: "2px",
 	color: "rgba(255,255,255,.50)",
-	fontSize: 11,
+	fontSize: "10.5px",
 	fontWeight: 650,
 };
 
 const missingChipSx = {
-	height: 24,
+	height: "22px",
 	borderRadius: 999,
 	background: "rgba(239,68,68,.14)",
 	color: "#fca5a5",
 	border: "1px solid rgba(239,68,68,.24)",
 	fontWeight: 850,
-	fontSize: 10,
+	fontSize: "10px",
 };
 
 const warningBtnSx = {
-	height: 42,
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
 	background: "rgba(239,68,68,.16)",
 	color: "#fca5a5",
 	border: "1px solid rgba(239,68,68,.28)",
 	textTransform: "none",
 	fontWeight: 900,
+	fontSize: "12px",
 
 	"&:hover": {
 		background: "rgba(239,68,68,.24)",
@@ -1168,20 +1126,20 @@ const warningBtnSx = {
 const quickActionListSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 1,
+	gap: "8px",
 };
 
 const quickActionStyle = {
 	width: "100%",
-	minHeight: 66,
-	padding: "12px 14px",
-	borderRadius: 14,
+	minHeight: 54,
+	padding: "10px 12px",
+	borderRadius: 8,
 	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.07)",
 	color: "#fff",
 	display: "flex",
 	alignItems: "center",
-	gap: 12,
+	gap: 10,
 	textAlign: "left",
 	cursor: "pointer",
 	fontFamily: "inherit",
@@ -1189,9 +1147,9 @@ const quickActionStyle = {
 };
 
 const quickActionIconStyle = {
-	width: 38,
-	height: 38,
-	borderRadius: 12,
+	width: 32,
+	height: 32,
+	borderRadius: 8,
 	background: "rgba(59,130,246,.13)",
 	border: "1px solid rgba(59,130,246,.20)",
 	color: "#93c5fd",
@@ -1203,22 +1161,22 @@ const quickActionIconStyle = {
 const quickActionTitleStyle = {
 	display: "block",
 	color: "#fff",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 900,
 };
 
 const quickActionSubStyle = {
 	display: "block",
-	marginTop: 4,
+	marginTop: 3,
 	color: "rgba(255,255,255,.52)",
-	fontSize: 11,
+	fontSize: "10.5px",
 	fontWeight: 650,
-	lineHeight: 1.35,
+	lineHeight: 1.3,
 };
 
 const tableSx = {
 	overflowX: "auto",
-	borderRadius: "14px",
+	borderRadius: "9px",
 	border: "1px solid rgba(255,255,255,.07)",
 };
 
@@ -1229,13 +1187,13 @@ const tableHeadSx = {
 		"minmax(260px, 1.6fr) 140px 120px 150px 150px 160px",
 	background: "rgba(2,6,23,.36)",
 	color: "rgba(255,255,255,.55)",
-	fontSize: 11,
+	fontSize: "10px",
 	fontWeight: 900,
 	textTransform: "uppercase",
 	letterSpacing: ".07em",
 
 	"& > div": {
-		padding: "14px 16px",
+		padding: "12px 14px",
 	},
 };
 
@@ -1249,25 +1207,25 @@ const tableRowSx = {
 	background: "rgba(255,255,255,.025)",
 
 	"& > p, & > div": {
-		padding: "14px 16px",
+		padding: "12px 14px",
 	},
 };
 
 const productNameSx = {
 	color: "#fff",
-	fontSize: 14,
+	fontSize: "13px",
 	fontWeight: 900,
 };
 
 const tableTextSx = {
 	color: "rgba(255,255,255,.68)",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 700,
 };
 
 const costTextSx = {
 	color: "#4ade80",
-	fontSize: 13,
+	fontSize: "12px",
 	fontWeight: 900,
 	fontFamily: "monospace",
 };
@@ -1275,32 +1233,35 @@ const costTextSx = {
 const statusChipSx = (status) => {
 	if (status === "Approved") {
 		return {
-			height: 24,
+			height: "22px",
 			borderRadius: 999,
 			background: "rgba(34,197,94,.14)",
 			color: "#4ade80",
 			border: "1px solid rgba(34,197,94,.24)",
 			fontWeight: 850,
+			fontSize: "10px",
 		};
 	}
 
 	if (status === "Review") {
 		return {
-			height: 24,
+			height: "22px",
 			borderRadius: 999,
 			background: "rgba(168,85,247,.14)",
 			color: "#c084fc",
 			border: "1px solid rgba(168,85,247,.24)",
 			fontWeight: 850,
+			fontSize: "10px",
 		};
 	}
 
 	return {
-		height: 24,
+		height: "22px",
 		borderRadius: 999,
 		background: "rgba(245,158,11,.14)",
 		color: "#fbbf24",
 		border: "1px solid rgba(245,158,11,.24)",
 		fontWeight: 850,
+		fontSize: "10px",
 	};
 };
