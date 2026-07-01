@@ -1503,32 +1503,193 @@ function DispatchedItemsPage() {
 		location: "",
 	});
 
+	const STATUS_SEARCH_LABELS = {
+		READY: "packed pkd ready",
+		READY_TO_STORE: "ready to store warehouse gate pass",
+		WAREHOUSE_REQUESTED: "warehouse requested gate pass pending",
+		IN_WAREHOUSE: "in warehouse stored",
+		READY_TO_DISPATCH: "ready to dispatch challan chalaan",
+		LOADED: "loaded queued",
+		DISPATCHED: "dispatched",
+		OUT_FOR_DELIVERY: "out for delivery",
+		DELIVERED: "delivered completed",
+		AVAILABLE: "available",
+		WAREHOUSE_RETURN_REQUESTED: "warehouse return requested",
+	};
+
+	const SMART_SEARCH_FIELD_ALIASES = {
+		item: ["name", "itemName", "description"],
+		name: ["name", "itemName"],
+		client: ["clientName", "clientAddress"],
+		sku: ["sku"],
+		pd: ["pdNo"],
+		pdno: ["pdNo"],
+		dwg: ["drawingNo"],
+		drawing: ["drawingNo"],
+		description: ["description"],
+		desc: ["description"],
+		status: ["status"],
+		plant: ["plantCode"],
+		location: [
+			"currentLocationCode",
+			"location",
+			"warehouseCode",
+			"fgZoneCode",
+		],
+		loc: [
+			"currentLocationCode",
+			"location",
+			"warehouseCode",
+			"fgZoneCode",
+		],
+		warehouse: ["warehouseCode"],
+		wh: ["warehouseCode"],
+		gatepass: ["gatePassNumber"],
+		gp: ["gatePassNumber"],
+		sticker: ["stickerNumber"],
+		sno: ["stickerNumber"],
+		driver: ["driverName"],
+		vehicle: ["vehicleNumber"],
+		challan: ["challanNumber"],
+		chalaan: ["challanNumber"],
+	};
+
+	const SMART_SEARCH_ALL_FIELDS = Array.from(
+		new Set(
+			Object.values(SMART_SEARCH_FIELD_ALIASES).flat()
+		)
+	);
+
+	const normalizeSmartSearchText = (value) => {
+		return String(value ?? "")
+			.toLowerCase()
+			.replace(/[_/\\.-]+/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+	};
+
+	const getSmartSearchFieldValue = (row, field) => {
+		if (!row) return "";
+
+		if (field === "name" || field === "itemName") {
+			return row.name || row.itemName || "";
+		}
+
+		if (field === "status") {
+			const status = String(row.status || "")
+				.trim()
+				.toUpperCase();
+
+			return `${status} ${STATUS_SEARCH_LABELS[status] || ""}`;
+		}
+
+		if (field === "currentLocationCode") {
+			return row.currentLocationCode || row.location || "";
+		}
+
+		if (field === "location") {
+			return row.location || row.currentLocationCode || "";
+		}
+
+		return row[field] ?? "";
+	};
+
+	const tokenizeSmartSearch = (value) => {
+		const text = String(value || "").trim();
+
+		if (!text) return [];
+
+		const tokens = [];
+		const regex =
+			/([a-zA-Z]+):"([^"]+)"|([a-zA-Z]+):'([^']+)'|"([^"]+)"|'([^']+)'|[^\s,]+/g;
+
+		let match;
+
+		while ((match = regex.exec(text)) !== null) {
+			let field = "";
+			let rawValue = "";
+
+			if (match[1] && match[2]) {
+				field = match[1];
+				rawValue = match[2];
+			} else if (match[3] && match[4]) {
+				field = match[3];
+				rawValue = match[4];
+			} else {
+				rawValue =
+					match[5] ||
+					match[6] ||
+					match[0] ||
+					"";
+
+				const colonIndex = rawValue.indexOf(":");
+
+				if (colonIndex > 0) {
+					field = rawValue.slice(0, colonIndex);
+					rawValue = rawValue.slice(colonIndex + 1);
+				}
+			}
+
+			const normalizedValue =
+				normalizeSmartSearchText(rawValue);
+
+			if (!normalizedValue) continue;
+
+			tokens.push({
+				field: normalizeSmartSearchText(field),
+				value: normalizedValue,
+			});
+		}
+
+		return tokens;
+	};
+
+	const rowMatchesSmartSearch = (row, searchValue) => {
+		const tokens = tokenizeSmartSearch(searchValue);
+
+		if (tokens.length === 0) return true;
+
+		const fullRowSearchText =
+			SMART_SEARCH_ALL_FIELDS
+				.map((field) =>
+					getSmartSearchFieldValue(row, field)
+				)
+				.map(normalizeSmartSearchText)
+				.join(" ");
+
+		return tokens.every((token) => {
+			if (token.field) {
+				const fields =
+					SMART_SEARCH_FIELD_ALIASES[token.field] ||
+					[token.field];
+
+				return fields.some((field) =>
+					normalizeSmartSearchText(
+						getSmartSearchFieldValue(row, field)
+					).includes(token.value)
+				);
+			}
+
+			return fullRowSearchText.includes(token.value);
+		});
+	};
+
 	const filteredRows = useMemo(() => {
 		if (!Array.isArray(rows)) return [];
 
-		const q = search.trim().toLowerCase();
-
 		return rows.filter((r) => {
-			const name = r.name || "";
-			const sku = r.sku || "";
-			const client = r.clientName || "";
-			const pdNo = r.pdNo || "";
-			const drawingNo = r.drawingNo || "";
-			const description = r.description || "";
+			const rowStatus = String(r.status || "")
+				.trim()
+				.toUpperCase();
 
 			if (
-				q &&
-				!name.toLowerCase().includes(q) &&
-				!sku.toLowerCase().includes(q) &&
-				!client.toLowerCase().includes(q) &&
-				!pdNo.toLowerCase().includes(q) &&
-				!drawingNo.toLowerCase().includes(q) &&
-				!description.toLowerCase().includes(q)
+				statusFilter !== "ALL" &&
+				rowStatus !== String(statusFilter || "").trim().toUpperCase()
 			) {
 				return false;
 			}
 
-			if (statusFilter !== "ALL" && r.status !== statusFilter) {
+			if (!rowMatchesSmartSearch(r, search)) {
 				return false;
 			}
 
@@ -3651,7 +3812,7 @@ function DispatchedItemsPage() {
 
 					<TextField
 						variant="standard"
-						placeholder="Search by Item or Client..."
+						placeholder='Smart Search: item, client, sku, pd, dwg, status, plant, location... e.g. client:kapil sku:WR status:ready'
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						InputProps={{ disableUnderline: true }}
@@ -3669,6 +3830,30 @@ function DispatchedItemsPage() {
 							},
 						}}
 					/>
+
+					{search ? (
+						<Button
+							size="small"
+							onClick={() => setSearch("")}
+							sx={{
+								minWidth: 70,
+								height: 34,
+								borderRadius: "10px",
+								textTransform: "none",
+								fontWeight: 800,
+								color: "#cbd5e1",
+								background: "rgba(255,255,255,.05)",
+								border: "1px solid rgba(255,255,255,.08)",
+
+								"&:hover": {
+									background: "rgba(255,255,255,.10)",
+									color: "#fff",
+								},
+							}}
+						>
+							Clear
+						</Button>
+					) : null}
 
 					<TextField
 						select
