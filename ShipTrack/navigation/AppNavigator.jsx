@@ -17,6 +17,7 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+import AdminDashboardScreen from "../screens/AdminDashboardScreen";
 import DispatchItemsScreen from "../screens/DispatchItemsScreen";
 import LoginScreen from "../screens/LoginScreen";
 import DispatchHomeScreen from "../screens/DispatchHomeScreen";
@@ -26,6 +27,31 @@ import TripsScreen from "../screens/TripsScreen";
 import TripItemScreen from "../screens/TripItemScreen";
 
 const Stack = createNativeStackNavigator();
+
+function HomeEntry(props) {
+  const {
+    role,
+  } = useAuth();
+
+  const normalizedRole =
+    String(role || "")
+      .trim()
+      .toUpperCase();
+
+  if (normalizedRole === "ADMIN") {
+    return (
+      <AdminDashboardScreen
+        {...props}
+      />
+    );
+  }
+
+  return (
+    <DispatchHomeScreen
+      {...props}
+    />
+  );
+}
 
 export default function AppNavigator() {
   const {
@@ -73,7 +99,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen
               name="Home"
-              component={DispatchHomeScreen}
+              component={HomeEntry}
               options={{
                 title: "",
               }}
@@ -107,7 +133,7 @@ export default function AppNavigator() {
               name="Trips"
               component={TripsScreen}
               options={{
-                title: "",
+                title: "Trips with Challans",
               }}
             />
 

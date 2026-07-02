@@ -4,6 +4,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
 } from "react-native";
 
 import {
@@ -31,58 +32,131 @@ export default function DispatchHomeScreen({
   const isDispatch =
     normalizedRole === "DISPATCH";
 
-  const isAdmin =
-    normalizedRole === "ADMIN";
-
-  const canUseDispatch =
-    isDispatch || isAdmin;
-
   return (
-    <View style={styles.page}>
-      <Text style={styles.title}>
-        ShipTrack
-      </Text>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={{
+        paddingBottom: 34,
+      }}
+    >
+      <View style={styles.hero}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>
+            SHIPTRACK MOBILE
+          </Text>
 
-      <Text style={styles.sub}>
-        {username || "User"} •{" "}
-        {normalizedRole || "ROLE"}
-      </Text>
+          <Text style={styles.title}>
+            Dispatch Control
+          </Text>
 
-      {canUseDispatch ? (
+          <Text style={styles.sub}>
+            {username || "User"} •{" "}
+            {normalizedRole || "ROLE"}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.logoutSmall}
+          onPress={logout}
+        >
+          <Text style={styles.logoutSmallText}>
+            Logout
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {isDispatch ? (
         <>
-          <Action
-            label="Single QR Dispatch"
-            icon="📷"
-            onPress={() =>
-              navigation.navigate(
-                "ScanDispatch"
-              )
-            }
-          />
+          <View style={styles.statsGrid}>
+            <MiniStat
+              label="Mode"
+              value="QR"
+              active
+            />
 
-          <Action
-            label="Bulk QR Dispatch"
-            icon="📦"
-            onPress={() =>
-              navigation.navigate("BulkScan")
-            }
-          />
+            <MiniStat
+              label="Access"
+              value="Dispatch"
+              active
+            />
 
-          <Action
-            label="Dispatch Items"
-            icon="📋"
-            onPress={() =>
-              navigation.navigate("DispatchItems")
-            }
-          />
+            <MiniStat
+              label="Flow"
+              value="Challan"
+            />
 
-          <Action
-            label="Dispatched Challans"
-            icon="🚚"
-            onPress={() =>
-              navigation.navigate("Trips")
-            }
-          />
+            <MiniStat
+              label="POD"
+              value="Removed"
+            />
+
+            <MiniStat
+              label="Live Loc."
+              value="Off"
+            />
+
+            <MiniStat
+              label="Status"
+              value="Ready"
+              active
+            />
+          </View>
+
+          <Text style={styles.sectionTitle}>
+            Dispatch Actions
+          </Text>
+
+          <View style={styles.actionGrid}>
+            <Action
+              label="Single QR Dispatch"
+              subtitle="Scan one item and create challan"
+              icon="📷"
+              primary
+              onPress={() =>
+                navigation.navigate(
+                  "ScanDispatch"
+                )
+              }
+            />
+
+            <Action
+              label="Bulk QR Dispatch"
+              subtitle="Scan multiple items in one challan"
+              icon="📦"
+              primary
+              onPress={() =>
+                navigation.navigate("BulkScan")
+              }
+            />
+
+            <Action
+              label="Dispatch Items"
+              subtitle="Search, filter and manage items"
+              icon="📋"
+              onPress={() =>
+                navigation.navigate("DispatchItems")
+              }
+            />
+
+            <Action
+              label="Trips with Challans"
+              subtitle="View challans and trip end time"
+              icon="🚚"
+              onPress={() =>
+                navigation.navigate("Trips")
+              }
+            />
+          </View>
+
+          <View style={styles.noteBox}>
+            <Text style={styles.noteTitle}>
+              Current Mobile Flow
+            </Text>
+
+            <Text style={styles.noteText}>
+              Scan item → Move to FG if required → Select driver and vehicle → Generate dispatch challan.
+            </Text>
+          </View>
         </>
       ) : (
         <View style={styles.permissionBox}>
@@ -91,8 +165,19 @@ export default function DispatchHomeScreen({
           </Text>
 
           <Text style={styles.permissionText}>
-            ShipTrack mobile is now only for DISPATCH users. Driver delivery, live location and POD flow have been removed.
+            This mobile dispatch home is only for DISPATCH users. ADMIN users now open the Admin Dashboard automatically from Home.
           </Text>
+
+          <TouchableOpacity
+            style={styles.secondaryFullBtn}
+            onPress={() =>
+              navigation.navigate("Trips")
+            }
+          >
+            <Text style={styles.secondaryFullText}>
+              View Trips / Challans
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -104,19 +189,27 @@ export default function DispatchHomeScreen({
           Logout
         </Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 function Action({
   label,
+  subtitle,
   icon,
+  primary,
   onPress,
 }) {
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[
+        styles.card,
+        primary
+          ? styles.cardPrimary
+          : null,
+      ]}
       onPress={onPress}
+      activeOpacity={0.86}
     >
       <Text style={styles.icon}>
         {icon}
@@ -125,7 +218,45 @@ function Action({
       <Text style={styles.cardText}>
         {label}
       </Text>
+
+      <Text
+        style={styles.cardSub}
+        numberOfLines={2}
+      >
+        {subtitle}
+      </Text>
     </TouchableOpacity>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  active,
+}) {
+  return (
+    <View
+      style={[
+        styles.miniStat,
+        active
+          ? styles.miniStatActive
+          : null,
+      ]}
+    >
+      <Text
+        style={styles.miniStatValue}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+
+      <Text
+        style={styles.miniStatLabel}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -133,44 +264,165 @@ const styles = {
   page: {
     flex: 1,
     backgroundColor: "#020617",
-    padding: 20,
+    padding: 16,
+  },
+
+  hero: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#0f172a",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    padding: 18,
+    marginBottom: 14,
+    marginTop: 4,
+  },
+
+  kicker: {
+    color: "#60a5fa",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginBottom: 5,
   },
 
   title: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
-    marginTop: 16,
   },
 
   sub: {
     color: "#94a3b8",
-    marginTop: 6,
-    marginBottom: 20,
+    marginTop: 5,
     fontWeight: "700",
   },
 
-  card: {
-    minHeight: 90,
-    borderRadius: 20,
-    padding: 18,
+  logoutSmall: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(239,68,68,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 12,
+  },
+
+  logoutSmallText: {
+    color: "#fca5a5",
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+
+  miniStat: {
+    width: "31.6%",
+    minHeight: 56,
+    borderRadius: 15,
     backgroundColor: "#0f172a",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,.08)",
-    marginBottom: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    justifyContent: "center",
+  },
+
+  miniStatActive: {
+    borderColor: "rgba(16,185,129,.32)",
+    backgroundColor: "rgba(16,185,129,.08)",
+  },
+
+  miniStatValue: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  miniStatLabel: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  sectionTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+
+  actionGrid: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+
+  card: {
+    width: "48.4%",
+    minHeight: 124,
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+  },
+
+  cardPrimary: {
+    borderColor: "rgba(37,99,235,.30)",
+    backgroundColor: "rgba(37,99,235,.10)",
   },
 
   icon: {
-    fontSize: 28,
-    marginRight: 14,
+    fontSize: 25,
+    marginBottom: 8,
   },
 
   cardText: {
     color: "#fff",
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: "900",
+  },
+
+  cardSub: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 5,
+    lineHeight: 16,
+  },
+
+  noteBox: {
+    backgroundColor: "rgba(16,185,129,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.20)",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  noteTitle: {
+    color: "#6ee7b7",
+    fontWeight: "900",
+    fontSize: 13,
+    marginBottom: 5,
+  },
+
+  noteText: {
+    color: "#cbd5e1",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   permissionBox: {
@@ -193,6 +445,22 @@ const styles = {
     color: "#cbd5e1",
     fontWeight: "700",
     lineHeight: 19,
+    marginBottom: 14,
+  },
+
+  secondaryFullBtn: {
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: "rgba(59,130,246,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  secondaryFullText: {
+    color: "#93c5fd",
+    fontWeight: "900",
   },
 
   logout: {
@@ -201,7 +469,7 @@ const styles = {
     backgroundColor: "#dc2626",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 20,
+    marginTop: 6,
   },
 
   logoutText: {

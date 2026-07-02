@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   ScrollView,
   TextInput,
+  Modal,
 } from "react-native";
 
 import {
@@ -60,12 +61,42 @@ function normalizeStatus(value) {
     .toUpperCase();
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function formatStatus(value) {
+  const text =
+    String(value || "").trim();
+
+  if (!text || text === "ALL") {
+    return "All";
+  }
+
+  return text.replace(/_/g, " ");
+}
+
 function clean(value) {
   return value === null ||
     value === undefined ||
     value === ""
     ? "—"
     : String(value);
+}
+
+function getBackendMessage(
+  error,
+  fallback = "Something went wrong"
+) {
+  return (
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.response?.data ||
+    error?.message ||
+    fallback
+  );
 }
 
 function getZohoItemId(item) {
@@ -78,6 +109,15 @@ function getZohoItemId(item) {
   );
 }
 
+function getItemName(item) {
+  return (
+    item?.itemName ||
+    item?.name ||
+    item?.item_name ||
+    "Unnamed Item"
+  );
+}
+
 function getCurrentLocation(item) {
   return (
     item?.currentLocationCode ||
@@ -85,6 +125,11 @@ function getCurrentLocation(item) {
     item?.currentLocation ||
     ""
   );
+}
+
+function getPlantCode(item) {
+  return String(item?.plantCode || "")
+    .trim();
 }
 
 function isLegacyLocationMissing(item) {
@@ -96,7 +141,8 @@ function isLegacyLocationMissing(item) {
 }
 
 function isPkdLocation(item) {
-  const loc = getCurrentLocation(item);
+  const loc =
+    getCurrentLocation(item);
 
   return String(loc || "")
     .toUpperCase()
@@ -104,10 +150,15 @@ function isPkdLocation(item) {
 }
 
 function isFgLocation(item) {
-  const loc = getCurrentLocation(item);
-  const fg = item?.fgAreaCode;
+  const loc =
+    getCurrentLocation(item);
 
-  if (!loc || !fg) return false;
+  const fg =
+    item?.fgAreaCode;
+
+  if (!loc || !fg) {
+    return false;
+  }
 
   return String(loc)
     .toUpperCase()
@@ -132,7 +183,10 @@ function getFgOptions(item) {
       .map((zone) =>
         typeof zone === "string"
           ? zone
-          : zone?.zoneCode || zone?.code || zone?.name || ""
+          : zone?.zoneCode ||
+            zone?.code ||
+            zone?.name ||
+            ""
       )
       .filter(Boolean)
       .map(String);
@@ -152,6 +206,7 @@ function getFgOptions(item) {
   ) {
     return ["A", "B", "C"];
   }
+
   return [];
 }
 
@@ -184,6 +239,72 @@ function canDispatchItem(item) {
   return false;
 }
 
+function getRowVirtualStatus(row) {
+  const item =
+    row?.item || {};
+
+  if (needsFgMove(item)) {
+    return "NEED_FG";
+  }
+
+  if (canDispatchItem(item)) {
+    return "READY";
+  }
+
+  return normalizeStatus(item.status) || "BLOCKED";
+}
+
+function getRowReadiness(item) {
+  const status =
+    normalizeStatus(item?.status);
+
+  if (needsFgMove(item)) {
+    return {
+      label: "NEED FG",
+      tone: "warning",
+      message: "Move this item to FG before bulk dispatch.",
+    };
+  }
+
+  if (canDispatchItem(item)) {
+    return {
+      label: "READY",
+      tone: "success",
+      message: "Ready for bulk dispatch.",
+    };
+  }
+
+  return {
+    label: "BLOCKED",
+    tone: "danger",
+    message: `Current status is ${formatStatus(status)}. This item cannot be dispatched now.`,
+  };
+}
+
+function getSearchBlob(row) {
+  const item =
+    row?.item || {};
+
+  return [
+    row?.scanText,
+    item.itemName,
+    item.name,
+    item.sku,
+    item.pdNo,
+    item.drawingNo,
+    item.clientName,
+    item.description,
+    item.remarks,
+    item.plantCode,
+    item.currentLocationCode,
+    item.location,
+    item.status,
+    item.zohoItemId,
+  ]
+    .map(normalizeText)
+    .join(" ");
+}
+
 export default function BulkScanScreen({
   navigation,
 }) {
@@ -204,6 +325,9 @@ export default function BulkScanScreen({
 
   const [scannerActive, setScannerActive] =
     useState(true);
+
+  const [notice, setNotice] =
+    useState(null);
 
   const [loading, setLoading] =
     useState(false);
@@ -229,6 +353,24 @@ export default function BulkScanScreen({
   const [bulkFgZoneCode, setBulkFgZoneCode] =
     useState("");
 
+  const [cartSearch, setCartSearch] =
+    useState("");
+
+  const [filterOpen, setFilterOpen] =
+    useState(false);
+
+  const [itemNameFilter, setItemNameFilter] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("ALL");
+
+  const [plantFilter, setPlantFilter] =
+    useState("ALL");
+
+  const [locationFilter, setLocationFilter] =
+    useState("ALL");
+
   const [form, setForm] =
     useState({
       driverId: "",
@@ -237,15 +379,28 @@ export default function BulkScanScreen({
       remarks: "",
     });
 
-  useEffect(() => {
-    if (isDispatch) {
-      loadMasters();
-    }
-  }, [isDispatch]);
+  const showNotice = (
+    type,
+    title,
+    message
+  ) => {
+    setNotice({
+      type,
+      title,
+      message,
+    });
+  };
+
+  const clearNotice = () => {
+    setNotice(null);
+  };
 
   const loadMasters = async () => {
     try {
-      const [driverData, vehicleData] =
+      const [
+        driverData,
+        vehicleData,
+      ] =
         await Promise.all([
           fetchDrivers(),
           fetchVehicles(),
@@ -263,15 +418,27 @@ export default function BulkScanScreen({
           : []
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Masters failed",
-        e?.message ||
-        "Unable to load drivers/vehicles"
+        getBackendMessage(
+          e,
+          "Unable to load drivers/vehicles"
+        )
       );
     }
   };
 
-  const update = (key, value) => {
+  useEffect(() => {
+    if (isDispatch) {
+      loadMasters();
+    }
+  }, [isDispatch]);
+
+  const update = (
+    key,
+    value
+  ) => {
     setForm((prev) => ({
       ...prev,
       [key]: value,
@@ -293,6 +460,21 @@ export default function BulkScanScreen({
         rows.filter((r) =>
           canDispatchItem(r.item)
         ).length,
+      [rows]
+    );
+
+  const blockedCount =
+    useMemo(
+      () =>
+        rows.filter((r) => {
+          const item =
+            r.item || {};
+
+          return (
+            !needsFgMove(item) &&
+            !canDispatchItem(item)
+          );
+        }).length,
       [rows]
     );
 
@@ -345,11 +527,173 @@ export default function BulkScanScreen({
       [pendingFgRows]
     );
 
+  const statusOptions =
+    useMemo(() => {
+      const values =
+        rows
+          .map(getRowVirtualStatus)
+          .filter(Boolean);
+
+      return [
+        "ALL",
+        ...Array.from(new Set(values)).sort(),
+      ];
+    }, [rows]);
+
+  const plantOptions =
+    useMemo(() => {
+      const values =
+        rows
+          .map((row) =>
+            getPlantCode(row.item)
+          )
+          .filter(Boolean);
+
+      return [
+        "ALL",
+        ...Array.from(new Set(values)).sort(),
+      ];
+    }, [rows]);
+
+  const locationOptions =
+    useMemo(() => {
+      const values =
+        rows
+          .map((row) =>
+            getCurrentLocation(row.item)
+          )
+          .filter(Boolean);
+
+      return [
+        "ALL",
+        ...Array.from(new Set(values)).sort(),
+      ];
+    }, [rows]);
+
+  const filteredRows =
+    useMemo(() => {
+      const query =
+        normalizeText(cartSearch);
+
+      const nameQuery =
+        normalizeText(itemNameFilter);
+
+      return rows
+        .map((row, index) => ({
+          row,
+          index,
+        }))
+        .filter(({ row }) => {
+          const item =
+            row.item || {};
+
+          const itemName =
+            normalizeText(
+              getItemName(item)
+            );
+
+          const clientName =
+            normalizeText(
+              item.clientName
+            );
+
+          const virtualStatus =
+            getRowVirtualStatus(row);
+
+          const plant =
+            getPlantCode(item);
+
+          const location =
+            getCurrentLocation(item);
+
+          const matchesSearch =
+            !query ||
+            getSearchBlob(row).includes(query);
+
+          const matchesName =
+            !nameQuery ||
+            itemName.includes(nameQuery) ||
+            clientName.includes(nameQuery);
+
+          const matchesStatus =
+            statusFilter === "ALL" ||
+            virtualStatus === statusFilter;
+
+          const matchesPlant =
+            plantFilter === "ALL" ||
+            plant === plantFilter;
+
+          const matchesLocation =
+            locationFilter === "ALL" ||
+            location === locationFilter;
+
+          return (
+            matchesSearch &&
+            matchesName &&
+            matchesStatus &&
+            matchesPlant &&
+            matchesLocation
+          );
+        });
+    }, [
+      rows,
+      cartSearch,
+      itemNameFilter,
+      statusFilter,
+      plantFilter,
+      locationFilter,
+    ]);
+
+  const filterCount =
+    [
+      itemNameFilter.trim(),
+      statusFilter !== "ALL",
+      plantFilter !== "ALL",
+      locationFilter !== "ALL",
+    ].filter(Boolean).length;
+
+  const hasAnyFilter =
+    Boolean(cartSearch.trim()) ||
+    filterCount > 0;
+
+  const selectedDriver =
+    useMemo(
+      () =>
+        drivers.find(
+          (driver) =>
+            String(driver.id) ===
+            String(form.driverId)
+        ),
+      [drivers, form.driverId]
+    );
+
+  const selectedVehicle =
+    useMemo(
+      () =>
+        vehicles.find(
+          (vehicle) =>
+            String(vehicle.id) ===
+            String(form.vehicleId)
+        ),
+      [vehicles, form.vehicleId]
+    );
+
+  const clearFilters = () => {
+    setCartSearch("");
+    setItemNameFilter("");
+    setStatusFilter("ALL");
+    setPlantFilter("ALL");
+    setLocationFilter("ALL");
+  };
+
   const addScan = async (raw) => {
     const cleanScan =
       String(raw || "").trim();
 
-    if (!cleanScan) return;
+    if (!cleanScan) {
+      setScannerActive(true);
+      return;
+    }
 
     const duplicate =
       rows.some(
@@ -357,7 +701,8 @@ export default function BulkScanScreen({
       );
 
     if (duplicate) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Duplicate QR",
         "This QR is already added in the bulk cart."
       );
@@ -386,9 +731,10 @@ export default function BulkScanScreen({
         );
 
       if (duplicateItem) {
-        Alert.alert(
+        showNotice(
+          "warning",
           "Duplicate item",
-          "This item is already added."
+          "This item is already added in the bulk cart."
         );
 
         setScannerActive(true);
@@ -405,20 +751,21 @@ export default function BulkScanScreen({
         },
       ]);
 
-      Alert.alert(
+      showNotice(
+        "success",
         "Item added",
         `${clean(
-          item.itemName ||
-          item.name
+          getItemName(item)
         )} added to bulk cart.`
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Scan failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to resolve QR"
+        getBackendMessage(
+          e,
+          "Unable to resolve QR"
+        )
       );
     } finally {
       setLoading(false);
@@ -426,19 +773,28 @@ export default function BulkScanScreen({
     }
   };
 
-  const handleBarcodeScanned = async ({
-    data,
-  }) => {
-    if (!scannerActive || loading) return;
+  const handleBarcodeScanned =
+    async ({
+      data,
+    }) => {
+      if (!scannerActive || loading) {
+        return;
+      }
 
-    setScannerActive(false);
+      setScannerActive(false);
 
-    await addScan(data);
-  };
+      await addScan(data);
+    };
 
   const removeRow = (index) => {
     setRows((prev) =>
       prev.filter((_, i) => i !== index)
+    );
+
+    showNotice(
+      "success",
+      "Removed",
+      "Item removed from bulk cart."
     );
   };
 
@@ -454,7 +810,16 @@ export default function BulkScanScreen({
         {
           text: "Clear",
           style: "destructive",
-          onPress: () => setRows([]),
+          onPress: () => {
+            setRows([]);
+            setBulkFgZoneCode("");
+            clearFilters();
+            showNotice(
+              "success",
+              "Cart cleared",
+              "All scanned items removed."
+            );
+          },
         },
       ]
     );
@@ -468,24 +833,33 @@ export default function BulkScanScreen({
       prev.map((r, i) =>
         i === index
           ? {
-            ...r,
-            fgZoneCode: zone,
-            manualFgZone: true,
-          }
+              ...r,
+              fgZoneCode: zone,
+              manualFgZone: true,
+            }
           : r
       )
     );
   };
 
-  const refreshRow = async (index) => {
-    const row = rows[index];
+  const refreshRow = async (
+    index,
+    options = {}
+  ) => {
+    const row =
+      rows[index];
 
-    if (!row?.scanText) return;
+    const silent =
+      Boolean(options.silent);
+
+    if (!row?.scanText) {
+      return;
+    }
 
     try {
       setMovingId(
         getZohoItemId(row.item) ||
-        String(index)
+          String(index)
       );
 
       const data =
@@ -500,21 +874,21 @@ export default function BulkScanScreen({
             return r;
           }
 
-          const options =
+          const fgOptions =
             getFgOptions(refreshedItem);
 
           let nextZone =
             r.fgZoneCode || "";
 
           if (
-            options.length > 0 &&
+            fgOptions.length > 0 &&
             nextZone &&
-            !options.includes(nextZone)
+            !fgOptions.includes(nextZone)
           ) {
             nextZone = "";
           }
 
-          if (options.length === 0) {
+          if (fgOptions.length === 0) {
             nextZone = "";
           }
 
@@ -528,13 +902,22 @@ export default function BulkScanScreen({
           };
         })
       );
+
+      if (!silent) {
+        showNotice(
+          "success",
+          "Item refreshed",
+          "Latest item status loaded."
+        );
+      }
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Refresh failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to refresh item"
+        getBackendMessage(
+          e,
+          "Unable to refresh item"
+        )
       );
     } finally {
       setMovingId("");
@@ -545,26 +928,30 @@ export default function BulkScanScreen({
     row,
     index
   ) => {
-    const item = row.item;
+    const item =
+      row.item;
+
     const zohoItemId =
       getZohoItemId(item);
 
     if (!zohoItemId) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Missing item",
         "Zoho item id not found."
       );
       return;
     }
 
-    const fgOptions =
+    const options =
       getFgOptions(item);
 
     if (
-      fgOptions.length > 0 &&
+      options.length > 0 &&
       !row.fgZoneCode
     ) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "FG Zone required",
         "Please select FG zone."
       );
@@ -579,11 +966,17 @@ export default function BulkScanScreen({
         row.fgZoneCode
       );
 
-      await refreshRow(index);
+      await refreshRow(
+        index,
+        {
+          silent: true,
+        }
+      );
 
-      Alert.alert(
+      showNotice(
+        "success",
         "Moved to FG",
-        "Item moved to FG successfully."
+        "Item moved to FG and refreshed successfully."
       );
     } catch (e) {
       const statusCode =
@@ -592,12 +985,13 @@ export default function BulkScanScreen({
       const message =
         statusCode === 403
           ? "Only DISPATCH user can move item to FG."
-          : e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to move item to FG";
+          : getBackendMessage(
+              e,
+              "Unable to move item to FG"
+            );
 
-      Alert.alert(
+      showNotice(
+        "error",
         "Move failed",
         message
       );
@@ -636,24 +1030,29 @@ export default function BulkScanScreen({
 
   const submitBulkMoveToFg = () => {
     if (pendingFgRows.length === 0) {
-      Alert.alert(
+      showNotice(
+        "success",
         "No FG movement needed",
-        "There are no scanned items that need FG movement."
+        "All scanned items are already ready for dispatch."
       );
       return;
     }
 
     if (pendingFgMissingZoneCount > 0) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "FG Zone required",
-        "Select a bulk FG zone or select zone individually for the highlighted items."
+        "Select a bulk FG zone or select zone item-wise below."
       );
       return;
     }
 
     Alert.alert(
       "Bulk Move To FG",
-      `Move ${pendingFgRows.length} item${pendingFgRows.length > 1 ? "s" : ""
+      `Move ${pendingFgRows.length} item${
+        pendingFgRows.length > 1
+          ? "s"
+          : ""
       } to FG?`,
       [
         {
@@ -680,7 +1079,8 @@ export default function BulkScanScreen({
         );
 
     if (targetRows.length === 0) {
-      Alert.alert(
+      showNotice(
+        "success",
         "No FG movement needed",
         "All scanned items are already ready for dispatch."
       );
@@ -699,7 +1099,8 @@ export default function BulkScanScreen({
       });
 
     if (missingZone) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "FG Zone required",
         "One or more items need FG zone selection."
       );
@@ -755,17 +1156,19 @@ export default function BulkScanScreen({
       setBulkFgZoneCode("");
       setMovingId("");
 
-      Alert.alert(
+      showNotice(
+        "success",
         "Bulk FG completed",
         "All required items moved to FG successfully."
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Bulk move failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to move all items to FG"
+        getBackendMessage(
+          e,
+          "Unable to move all items to FG"
+        )
       );
     } finally {
       setBulkMovingFg(false);
@@ -775,7 +1178,8 @@ export default function BulkScanScreen({
 
   const submitBulkDispatch = async () => {
     if (!canBulkDispatch) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Not ready",
         pendingFgCount > 0
           ? "Move all required items to FG first."
@@ -785,7 +1189,8 @@ export default function BulkScanScreen({
     }
 
     if (!form.driverId) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Driver required",
         "Please select driver."
       );
@@ -793,7 +1198,8 @@ export default function BulkScanScreen({
     }
 
     if (!form.vehicleId) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Vehicle required",
         "Please select vehicle."
       );
@@ -832,22 +1238,28 @@ export default function BulkScanScreen({
             text: "New Bulk Scan",
             onPress: () => {
               setRows([]);
+              setBulkFgZoneCode("");
+              clearFilters();
+
               setForm((prev) => ({
                 ...prev,
                 remarks: "",
                 tripStart: getNowDateTimeLocal(),
               }));
+
+              setNotice(null);
             },
           },
         ]
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Bulk dispatch failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to create bulk dispatch"
+        getBackendMessage(
+          e,
+          "Unable to create bulk dispatch"
+        )
       );
     } finally {
       setDispatching(false);
@@ -876,7 +1288,7 @@ export default function BulkScanScreen({
           }
         >
           <Text style={styles.primaryText}>
-            Go to Trips / Delivery
+            Go to Trips / Challans
           </Text>
         </TouchableOpacity>
       </View>
@@ -926,8 +1338,22 @@ export default function BulkScanScreen({
       </Text>
 
       <Text style={styles.sub}>
-        Scan multiple items, move FG-required items, then create one bulk dispatch trip.
+        Scan multiple items, move FG-required items, then create one bulk dispatch challan.
       </Text>
+
+      <StatusNotice
+        notice={notice}
+        onClose={clearNotice}
+      />
+
+      <CompactStats
+        scanned={rows.length}
+        ready={readyCount}
+        needFg={pendingFgCount}
+        blocked={blockedCount}
+        drivers={drivers.length}
+        vehicles={vehicles.length}
+      />
 
       <View style={styles.cameraWrap}>
         <CameraView
@@ -964,7 +1390,7 @@ export default function BulkScanScreen({
             onPress={clearAll}
           >
             <Text style={styles.dangerText}>
-              Clear
+              Clear Cart
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -980,22 +1406,78 @@ export default function BulkScanScreen({
         </View>
       ) : null}
 
-      <View style={styles.summaryCard}>
-        <Summary
-          label="Scanned"
-          value={String(rows.length)}
-        />
+      {rows.length > 0 ? (
+        <>
+          <View style={styles.searchBox}>
+            <Text style={styles.searchIcon}>
+              🔍
+            </Text>
 
-        <Summary
-          label="Ready"
-          value={String(readyCount)}
-        />
+            <TextInput
+              value={cartSearch}
+              onChangeText={setCartSearch}
+              placeholder="Search scanned item, client, SKU, PD..."
+              placeholderTextColor="#64748b"
+              style={styles.searchInput}
+              autoCapitalize="none"
+            />
 
-        <Summary
-          label="Need FG"
-          value={String(pendingFgCount)}
-        />
-      </View>
+            {cartSearch ? (
+              <TouchableOpacity
+                onPress={() =>
+                  setCartSearch("")
+                }
+                style={styles.searchClear}
+              >
+                <Text style={styles.searchClearText}>
+                  ×
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[
+                styles.filterOpenBtn,
+                filterCount > 0
+                  ? styles.filterOpenBtnActive
+                  : null,
+              ]}
+              onPress={() =>
+                setFilterOpen(true)
+              }
+            >
+              <Text
+                style={[
+                  styles.filterOpenText,
+                  filterCount > 0
+                    ? styles.filterOpenTextActive
+                    : null,
+                ]}
+              >
+                ⚙
+              </Text>
+
+              {filterCount > 0 ? (
+                <View style={styles.filterCountBadge}>
+                  <Text style={styles.filterCountText}>
+                    {filterCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          </View>
+
+          <ActiveFilterStrip
+            search={cartSearch}
+            itemNameFilter={itemNameFilter}
+            statusFilter={statusFilter}
+            plantFilter={plantFilter}
+            locationFilter={locationFilter}
+            hasAnyFilter={hasAnyFilter}
+            onClear={clearFilters}
+          />
+        </>
+      ) : null}
 
       {pendingFgCount > 0 ? (
         <View style={styles.bulkFgPanel}>
@@ -1006,8 +1488,7 @@ export default function BulkScanScreen({
               </Text>
 
               <Text style={styles.bulkFgSub}>
-                {pendingFgCount} item
-                {pendingFgCount > 1 ? "s" : ""} need FG movement. Select one bulk zone, or override zone item-wise below.
+                {pendingFgCount} item{pendingFgCount > 1 ? "s" : ""} need FG movement. Select one bulk zone, or override zone item-wise below.
               </Text>
             </View>
 
@@ -1054,8 +1535,7 @@ export default function BulkScanScreen({
 
               {pendingFgMissingZoneCount > 0 ? (
                 <Text style={styles.bulkFgWarning}>
-                  {pendingFgMissingZoneCount} item
-                  {pendingFgMissingZoneCount > 1 ? "s" : ""} still need zone selection.
+                  {pendingFgMissingZoneCount} item{pendingFgMissingZoneCount > 1 ? "s" : ""} still need zone selection.
                 </Text>
               ) : null}
             </View>
@@ -1091,7 +1571,16 @@ export default function BulkScanScreen({
         </View>
       ) : null}
 
-      {rows.map((row, index) => (
+      {filteredRows.length === 0 &&
+      rows.length > 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>
+            No scanned items match current filters.
+          </Text>
+        </View>
+      ) : null}
+
+      {filteredRows.map(({ row, index }) => (
         <BulkItemCard
           key={
             getZohoItemId(row.item) ||
@@ -1122,7 +1611,11 @@ export default function BulkScanScreen({
       {rows.length > 0 ? (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>
-            Bulk Dispatch Trip Details
+            Bulk Dispatch Challan Details
+          </Text>
+
+          <Text style={styles.panelSub}>
+            Select driver, vehicle and trip start time to create one dispatch challan for all ready items.
           </Text>
 
           {!canBulkDispatch ? (
@@ -1166,42 +1659,63 @@ export default function BulkScanScreen({
                 </TouchableOpacity>
               ))}
             </View>
+
+            {selectedDriver ? (
+              <Text style={styles.selectionHint}>
+                Selected: {selectedDriver.name}
+              </Text>
+            ) : null}
           </Field>
 
           <Field label="Vehicle">
             <View style={styles.selectBox}>
-              {vehicles.map((v) => (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[
-                    styles.optionChip,
-                    form.vehicleId === v.id
-                      ? styles.optionChipActive
-                      : null,
-                  ]}
-                  onPress={() =>
-                    update(
-                      "vehicleId",
-                      v.id
-                    )
-                  }
-                >
-                  <Text
+              {vehicles.map((v) => {
+                const vehicleLabel =
+                  v.vehicleNumber ||
+                  v.registrationNumber ||
+                  v.name ||
+                  "Vehicle";
+
+                return (
+                  <TouchableOpacity
+                    key={v.id}
                     style={[
-                      styles.optionText,
+                      styles.optionChip,
                       form.vehicleId === v.id
-                        ? styles.optionTextActive
+                        ? styles.optionChipActive
                         : null,
                     ]}
+                    onPress={() =>
+                      update(
+                        "vehicleId",
+                        v.id
+                      )
+                    }
                   >
-                    {v.vehicleNumber ||
-                      v.registrationNumber ||
-                      v.name ||
-                      "Vehicle"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.optionText,
+                        form.vehicleId === v.id
+                          ? styles.optionTextActive
+                          : null,
+                      ]}
+                    >
+                      {vehicleLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+
+            {selectedVehicle ? (
+              <Text style={styles.selectionHint}>
+                Selected:{" "}
+                {selectedVehicle.vehicleNumber ||
+                  selectedVehicle.registrationNumber ||
+                  selectedVehicle.name ||
+                  "Vehicle"}
+              </Text>
+            ) : null}
           </Field>
 
           <TripStartPicker
@@ -1250,7 +1764,401 @@ export default function BulkScanScreen({
           </TouchableOpacity>
         </View>
       ) : null}
+
+      <FilterSheet
+        visible={filterOpen}
+        onClose={() =>
+          setFilterOpen(false)
+        }
+        itemNameFilter={itemNameFilter}
+        setItemNameFilter={setItemNameFilter}
+        statusOptions={statusOptions}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        plantOptions={plantOptions}
+        plantFilter={plantFilter}
+        setPlantFilter={setPlantFilter}
+        locationOptions={locationOptions}
+        locationFilter={locationFilter}
+        setLocationFilter={setLocationFilter}
+        clearFilters={clearFilters}
+      />
     </ScrollView>
+  );
+}
+
+function StatusNotice({
+  notice,
+  onClose,
+}) {
+  if (!notice) {
+    return null;
+  }
+
+  const isSuccess =
+    notice.type === "success";
+
+  const isWarning =
+    notice.type === "warning";
+
+  return (
+    <View
+      style={[
+        styles.noticeBox,
+        isSuccess
+          ? styles.noticeSuccess
+          : isWarning
+            ? styles.noticeWarning
+            : styles.noticeError,
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text
+          style={[
+            styles.noticeTitle,
+            isSuccess
+              ? styles.noticeSuccessText
+              : isWarning
+                ? styles.noticeWarningText
+                : styles.noticeErrorText,
+          ]}
+        >
+          {notice.title}
+        </Text>
+
+        <Text style={styles.noticeMessage}>
+          {notice.message}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.noticeClose}
+        onPress={onClose}
+      >
+        <Text style={styles.noticeCloseText}>
+          ×
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CompactStats({
+  scanned,
+  ready,
+  needFg,
+  blocked,
+  drivers,
+  vehicles,
+}) {
+  return (
+    <View style={styles.statsGrid}>
+      <MiniStat
+        label="Scanned"
+        value={scanned}
+        active={scanned > 0}
+      />
+
+      <MiniStat
+        label="Ready"
+        value={ready}
+        active={ready > 0}
+      />
+
+      <MiniStat
+        label="Need FG"
+        value={needFg}
+        warning={needFg > 0}
+      />
+
+      <MiniStat
+        label="Blocked"
+        value={blocked}
+        danger={blocked > 0}
+      />
+
+      <MiniStat
+        label="Drivers"
+        value={drivers}
+      />
+
+      <MiniStat
+        label="Vehicles"
+        value={vehicles}
+      />
+    </View>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  active,
+  warning,
+  danger,
+}) {
+  return (
+    <View
+      style={[
+        styles.miniStat,
+        active
+          ? styles.miniStatActive
+          : warning
+            ? styles.miniStatWarning
+            : danger
+              ? styles.miniStatDanger
+              : null,
+      ]}
+    >
+      <Text
+        style={styles.miniStatValue}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+
+      <Text style={styles.miniStatLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function ActiveFilterStrip({
+  search,
+  itemNameFilter,
+  statusFilter,
+  plantFilter,
+  locationFilter,
+  hasAnyFilter,
+  onClear,
+}) {
+  if (!hasAnyFilter) {
+    return null;
+  }
+
+  const chips = [];
+
+  if (search.trim()) {
+    chips.push(`Search: ${search.trim()}`);
+  }
+
+  if (itemNameFilter.trim()) {
+    chips.push(`Name: ${itemNameFilter.trim()}`);
+  }
+
+  if (statusFilter !== "ALL") {
+    chips.push(formatStatus(statusFilter));
+  }
+
+  if (plantFilter !== "ALL") {
+    chips.push(`Plant: ${plantFilter}`);
+  }
+
+  if (locationFilter !== "ALL") {
+    chips.push(`Location: ${locationFilter}`);
+  }
+
+  return (
+    <View style={styles.activeStripWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.activeStrip}
+      >
+        {chips.map((chip, index) => (
+          <View
+            key={`${chip}-${index}`}
+            style={styles.activeChip}
+          >
+            <Text
+              style={styles.activeChipText}
+              numberOfLines={1}
+            >
+              {chip}
+            </Text>
+          </View>
+        ))}
+
+        <TouchableOpacity
+          style={styles.activeClearBtn}
+          onPress={onClear}
+        >
+          <Text style={styles.activeClearText}>
+            Clear
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
+
+function FilterSheet({
+  visible,
+  onClose,
+  itemNameFilter,
+  setItemNameFilter,
+  statusOptions,
+  statusFilter,
+  setStatusFilter,
+  plantOptions,
+  plantFilter,
+  setPlantFilter,
+  locationOptions,
+  locationFilter,
+  setLocationFilter,
+  clearFilters,
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <View style={styles.filterSheet}>
+          <View style={styles.filterHeader}>
+            <View>
+              <Text style={styles.filterSheetTitle}>
+                Bulk Cart Filters
+              </Text>
+
+              <Text style={styles.filterSheetSub}>
+                Filter scanned cart items by name, status, plant and location.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={onClose}
+            >
+              <Text style={styles.modalCloseText}>
+                ×
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: 12,
+            }}
+          >
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetLabel}>
+                Item / Client Name
+              </Text>
+
+              <TextInput
+                value={itemNameFilter}
+                onChangeText={setItemNameFilter}
+                placeholder="Type item or client name..."
+                placeholderTextColor="#64748b"
+                style={styles.sheetInput}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <FilterGroup
+              title="Status"
+              options={statusOptions}
+              selected={statusFilter}
+              onSelect={setStatusFilter}
+            />
+
+            <FilterGroup
+              title="Plant"
+              options={plantOptions}
+              selected={plantFilter}
+              onSelect={setPlantFilter}
+            />
+
+            <FilterGroup
+              title="Location"
+              options={locationOptions}
+              selected={locationFilter}
+              onSelect={setLocationFilter}
+            />
+          </ScrollView>
+
+          <View style={styles.sheetActions}>
+            <TouchableOpacity
+              style={styles.sheetClearBtn}
+              onPress={clearFilters}
+            >
+              <Text style={styles.sheetClearText}>
+                Clear All
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sheetApplyBtn}
+              onPress={onClose}
+            >
+              <Text style={styles.sheetApplyText}>
+                Apply Filters
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function FilterGroup({
+  title,
+  options,
+  selected,
+  onSelect,
+}) {
+  return (
+    <View style={styles.filterGroup}>
+      <Text style={styles.sheetLabel}>
+        {title}
+      </Text>
+
+      <View style={styles.filterChipWrap}>
+        {options.map((option) => {
+          const active =
+            selected === option;
+
+          return (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.filterChip,
+                active
+                  ? styles.filterChipActive
+                  : null,
+              ]}
+              onPress={() =>
+                onSelect(option)
+              }
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  active
+                    ? styles.filterChipTextActive
+                    : null,
+                ]}
+                numberOfLines={1}
+              >
+                {formatStatus(option)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -1263,15 +2171,18 @@ function BulkItemCard({
   onMoveToFg,
   onChangeZone,
 }) {
-  const item = row.item || {};
-  const status =
-    normalizeStatus(item.status);
+  const item =
+    row.item || {};
+
+  const readiness =
+    getRowReadiness(item);
+
   const itemNeedsFg =
     needsFgMove(item);
-  const itemReady =
-    canDispatchItem(item);
+
   const fgOptions =
     getFgOptions(item);
+
   const id =
     getZohoItemId(item);
 
@@ -1293,7 +2204,7 @@ function BulkItemCard({
             style={styles.itemName}
             numberOfLines={2}
           >
-            {clean(item.itemName)}
+            {clean(getItemName(item))}
           </Text>
 
           <Text style={styles.itemSub}>
@@ -1304,24 +2215,36 @@ function BulkItemCard({
         <View
           style={[
             styles.statusBadge,
-            itemReady
+            readiness.tone === "success"
               ? styles.readyBadge
-              : styles.warnBadge,
+              : readiness.tone === "warning"
+                ? styles.warnBadge
+                : styles.blockBadge,
           ]}
         >
           <Text
             style={[
               styles.statusText,
-              itemReady
+              readiness.tone === "success"
                 ? styles.readyText
-                : styles.warnText,
+                : readiness.tone === "warning"
+                  ? styles.warnText
+                  : styles.blockText,
             ]}
           >
-            {itemNeedsFg
-              ? "NEED FG"
-              : clean(status)}
+            {readiness.label}
           </Text>
         </View>
+      </View>
+
+      <View style={styles.readinessBox}>
+        <Text style={styles.readinessTitle}>
+          {formatStatus(item.status)}
+        </Text>
+
+        <Text style={styles.readinessText}>
+          {readiness.message}
+        </Text>
       </View>
 
       <View style={styles.grid}>
@@ -1341,10 +2264,20 @@ function BulkItemCard({
         />
 
         <Info
+          label="Plant"
+          value={clean(item.plantCode)}
+        />
+
+        <Info
           label="Location"
           value={clean(
             getCurrentLocation(item)
           )}
+        />
+
+        <Info
+          label="FG Area"
+          value={clean(item.fgAreaCode)}
         />
       </View>
 
@@ -1404,6 +2337,7 @@ function BulkItemCard({
         <TouchableOpacity
           style={styles.smallSecondaryBtn}
           onPress={onRefresh}
+          disabled={isMoving}
         >
           <Text style={styles.smallSecondaryText}>
             Refresh
@@ -1413,6 +2347,7 @@ function BulkItemCard({
         <TouchableOpacity
           style={styles.smallDangerBtn}
           onPress={onRemove}
+          disabled={isMoving}
         >
           <Text style={styles.smallDangerText}>
             Remove
@@ -1458,23 +2393,6 @@ function Info({
   );
 }
 
-function Summary({
-  label,
-  value,
-}) {
-  return (
-    <View style={styles.summaryItem}>
-      <Text style={styles.summaryValue}>
-        {value}
-      </Text>
-
-      <Text style={styles.summaryLabel}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 const styles = {
   page: {
     flex: 1,
@@ -1507,21 +2425,135 @@ const styles = {
 
   title: {
     color: "#fff",
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: "900",
     marginTop: 4,
   },
 
   sub: {
     color: "#94a3b8",
-    marginTop: 6,
-    marginBottom: 16,
+    marginTop: 5,
+    marginBottom: 12,
     fontWeight: "700",
+    lineHeight: 18,
+    fontSize: 12,
+  },
+
+  noticeBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  noticeSuccess: {
+    backgroundColor: "rgba(16,185,129,.10)",
+    borderColor: "rgba(16,185,129,.24)",
+  },
+
+  noticeWarning: {
+    backgroundColor: "rgba(245,158,11,.10)",
+    borderColor: "rgba(245,158,11,.25)",
+  },
+
+  noticeError: {
+    backgroundColor: "rgba(239,68,68,.10)",
+    borderColor: "rgba(239,68,68,.25)",
+  },
+
+  noticeTitle: {
+    fontWeight: "900",
+    fontSize: 13,
+    marginBottom: 3,
+  },
+
+  noticeSuccessText: {
+    color: "#6ee7b7",
+  },
+
+  noticeWarningText: {
+    color: "#facc15",
+  },
+
+  noticeErrorText: {
+    color: "#fca5a5",
+  },
+
+  noticeMessage: {
+    color: "#cbd5e1",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  noticeClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.07)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  noticeCloseText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
     lineHeight: 20,
   },
 
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  miniStat: {
+    width: "31.6%",
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+
+  miniStatActive: {
+    borderColor: "rgba(16,185,129,.32)",
+    backgroundColor: "rgba(16,185,129,.08)",
+  },
+
+  miniStatWarning: {
+    borderColor: "rgba(245,158,11,.30)",
+    backgroundColor: "rgba(245,158,11,.08)",
+  },
+
+  miniStatDanger: {
+    borderColor: "rgba(239,68,68,.30)",
+    backgroundColor: "rgba(239,68,68,.08)",
+  },
+
+  miniStatValue: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  miniStatLabel: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
   cameraWrap: {
-    height: 300,
+    height: 290,
     borderRadius: 22,
     overflow: "hidden",
     backgroundColor: "#0f172a",
@@ -1538,8 +2570,8 @@ const styles = {
     position: "absolute",
     left: 46,
     right: 46,
-    top: 65,
-    bottom: 65,
+    top: 62,
+    bottom: 62,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: "rgba(96,165,250,.95)",
@@ -1589,6 +2621,8 @@ const styles = {
     padding: 16,
     alignItems: "center",
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
   },
 
   loadingText: {
@@ -1597,32 +2631,393 @@ const styles = {
     fontWeight: "700",
   },
 
-  summaryCard: {
-    flexDirection: "row",
-    backgroundColor: "#0f172a",
-    borderRadius: 18,
+  searchBox: {
+    minHeight: 50,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    marginBottom: 14,
-    padding: 12,
-  },
-
-  summaryItem: {
-    flex: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    backgroundColor: "rgba(255,255,255,.05)",
+    flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 12,
+    marginBottom: 8,
   },
 
-  summaryValue: {
+  searchIcon: {
+    fontSize: 17,
+    marginRight: 8,
+  },
+
+  searchInput: {
+    flex: 1,
     color: "#fff",
-    fontSize: 20,
+    fontWeight: "800",
+    fontSize: 12,
+    minHeight: 48,
+  },
+
+  searchClear: {
+    width: 27,
+    height: 27,
+    borderRadius: 999,
+    backgroundColor: "rgba(148,163,184,.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
+
+  searchClearText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 18,
+    lineHeight: 20,
+  },
+
+  filterOpenBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: "rgba(59,130,246,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+    position: "relative",
+  },
+
+  filterOpenBtnActive: {
+    backgroundColor: "rgba(16,185,129,.16)",
+    borderColor: "rgba(16,185,129,.35)",
+  },
+
+  filterOpenText: {
+    color: "#93c5fd",
+    fontWeight: "900",
+    fontSize: 17,
+  },
+
+  filterOpenTextActive: {
+    color: "#6ee7b7",
+  },
+
+  filterCountBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#020617",
+  },
+
+  filterCountText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  activeStripWrap: {
+    marginBottom: 9,
+  },
+
+  activeStrip: {
+    gap: 7,
+    paddingRight: 10,
+  },
+
+  activeChip: {
+    maxWidth: 180,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(16,185,129,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.22)",
+    justifyContent: "center",
+  },
+
+  activeChipText: {
+    color: "#6ee7b7",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  activeClearBtn: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(239,68,68,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.24)",
+    justifyContent: "center",
+  },
+
+  activeClearText: {
+    color: "#fca5a5",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,.55)",
+  },
+
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  filterSheet: {
+    maxHeight: "86%",
+    backgroundColor: "#020617",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    padding: 16,
+  },
+
+  filterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+
+  filterSheetTitle: {
+    color: "#fff",
+    fontSize: 22,
     fontWeight: "900",
   },
 
-  summaryLabel: {
+  filterSheetSub: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 3,
+    maxWidth: 285,
+    lineHeight: 17,
+  },
+
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  modalCloseText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 24,
+    lineHeight: 26,
+  },
+
+  sheetField: {
+    marginBottom: 15,
+  },
+
+  sheetLabel: {
     color: "#94a3b8",
     fontSize: 11,
+    fontWeight: "900",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+
+  sheetInput: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    backgroundColor: "rgba(255,255,255,.05)",
+    color: "#fff",
+    paddingHorizontal: 13,
     fontWeight: "800",
-    marginTop: 3,
+    fontSize: 13,
+  },
+
+  filterGroup: {
+    marginBottom: 15,
+  },
+
+  filterChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  filterChip: {
+    minHeight: 34,
+    maxWidth: "100%",
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    backgroundColor: "rgba(15,23,42,.88)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  filterChipActive: {
+    borderColor: "rgba(37,99,235,.55)",
+    backgroundColor: "rgba(37,99,235,.22)",
+  },
+
+  filterChipText: {
+    color: "#94a3b8",
+    fontSize: 10.5,
+    fontWeight: "900",
+    maxWidth: 220,
+  },
+
+  filterChipTextActive: {
+    color: "#93c5fd",
+  },
+
+  sheetActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,.08)",
+  },
+
+  sheetClearBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "rgba(239,68,68,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sheetClearText: {
+    color: "#fca5a5",
+    fontWeight: "900",
+  },
+
+  sheetApplyBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sheetApplyText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
+
+  emptyBox: {
+    padding: 18,
+    borderRadius: 16,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  emptyText: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  bulkFgPanel: {
+    backgroundColor: "#0f172a",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.24)",
+    marginBottom: 14,
+  },
+
+  bulkFgTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+
+  bulkFgTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 5,
+  },
+
+  bulkFgSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    lineHeight: 19,
+    fontSize: 12,
+  },
+
+  bulkFgCountBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(245,158,11,.16)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 12,
+  },
+
+  bulkFgCountText: {
+    color: "#facc15",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  bulkFgWarning: {
+    color: "#facc15",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+
+  bulkFgInfo: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(16,185,129,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.20)",
+    marginBottom: 12,
+  },
+
+  bulkFgInfoText: {
+    color: "#6ee7b7",
+    fontWeight: "800",
+    lineHeight: 18,
+    fontSize: 12,
+  },
+
+  bulkMoveBtn: {
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: "#f59e0b",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   itemCard: {
@@ -1669,17 +3064,29 @@ const styles = {
   },
 
   statusBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 999,
+    marginLeft: 8,
+    maxWidth: 120,
   },
 
   readyBadge: {
     backgroundColor: "rgba(16,185,129,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.24)",
   },
 
   warnBadge: {
     backgroundColor: "rgba(245,158,11,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.24)",
+  },
+
+  blockBadge: {
+    backgroundColor: "rgba(239,68,68,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.24)",
   },
 
   statusText: {
@@ -1693,6 +3100,33 @@ const styles = {
 
   warnText: {
     color: "#facc15",
+  },
+
+  blockText: {
+    color: "#fca5a5",
+  },
+
+  readinessBox: {
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.07)",
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  readinessTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
+    marginBottom: 4,
+  },
+
+  readinessText: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 17,
   },
 
   grid: {
@@ -1826,7 +3260,15 @@ const styles = {
     color: "#fff",
     fontSize: 18,
     fontWeight: "900",
+    marginBottom: 6,
+  },
+
+  panelSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    lineHeight: 19,
     marginBottom: 12,
+    fontSize: 12,
   },
 
   warningBox: {
@@ -1842,6 +3284,7 @@ const styles = {
     color: "#facc15",
     fontWeight: "800",
     lineHeight: 18,
+    fontSize: 12,
   },
 
   field: {
@@ -1902,6 +3345,13 @@ const styles = {
     color: "#6ee7b7",
   },
 
+  selectionHint: {
+    color: "#6ee7b7",
+    fontWeight: "800",
+    fontSize: 11,
+    marginTop: 8,
+  },
+
   dispatchBtn: {
     height: 52,
     borderRadius: 15,
@@ -1927,81 +3377,5 @@ const styles = {
   primaryText: {
     color: "#fff",
     fontWeight: "900",
-  },
-
-  bulkFgPanel: {
-    backgroundColor: "#0f172a",
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,.24)",
-    marginBottom: 14,
-  },
-
-  bulkFgTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-
-  bulkFgTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 5,
-  },
-
-  bulkFgSub: {
-    color: "#94a3b8",
-    fontWeight: "700",
-    lineHeight: 19,
-  },
-
-  bulkFgCountBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(245,158,11,.16)",
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,.28)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 12,
-  },
-
-  bulkFgCountText: {
-    color: "#facc15",
-    fontWeight: "900",
-    fontSize: 16,
-  },
-
-  bulkFgWarning: {
-    color: "#facc15",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 8,
-  },
-
-  bulkFgInfo: {
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: "rgba(16,185,129,.08)",
-    borderWidth: 1,
-    borderColor: "rgba(16,185,129,.20)",
-    marginBottom: 12,
-  },
-
-  bulkFgInfoText: {
-    color: "#6ee7b7",
-    fontWeight: "800",
-    lineHeight: 18,
-  },
-
-  bulkMoveBtn: {
-    height: 50,
-    borderRadius: 15,
-    backgroundColor: "#f59e0b",
-    alignItems: "center",
-    justifyContent: "center",
   },
 };

@@ -60,12 +60,36 @@ function normalizeStatus(value) {
     .toUpperCase();
 }
 
+function formatStatus(value) {
+  const text =
+    String(value || "").trim();
+
+  if (!text) {
+    return "—";
+  }
+
+  return text.replace(/_/g, " ");
+}
+
 function clean(value) {
   return value === null ||
     value === undefined ||
     value === ""
     ? "—"
     : String(value);
+}
+
+function getBackendMessage(
+  error,
+  fallback = "Something went wrong"
+) {
+  return (
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.response?.data ||
+    error?.message ||
+    fallback
+  );
 }
 
 function getResolvedItem(data) {
@@ -75,6 +99,15 @@ function getResolvedItem(data) {
     data?.packetItem ||
     data ||
     {}
+  );
+}
+
+function getItemName(item) {
+  return (
+    item?.itemName ||
+    item?.name ||
+    item?.item_name ||
+    "Unnamed Item"
   );
 }
 
@@ -106,7 +139,8 @@ function isLegacyLocationMissing(item) {
 }
 
 function isPkdLocation(item) {
-  const loc = getCurrentLocation(item);
+  const loc =
+    getCurrentLocation(item);
 
   return String(loc || "")
     .toUpperCase()
@@ -114,10 +148,15 @@ function isPkdLocation(item) {
 }
 
 function isFgLocation(item) {
-  const loc = getCurrentLocation(item);
-  const fg = item?.fgAreaCode;
+  const loc =
+    getCurrentLocation(item);
 
-  if (!loc || !fg) return false;
+  const fg =
+    item?.fgAreaCode;
+
+  if (!loc || !fg) {
+    return false;
+  }
 
   return String(loc)
     .toUpperCase()
@@ -132,7 +171,10 @@ function getFgOptions(item) {
       .map((zone) =>
         typeof zone === "string"
           ? zone
-          : zone?.zoneCode || zone?.code || zone?.name || ""
+          : zone?.zoneCode ||
+            zone?.code ||
+            zone?.name ||
+            ""
       )
       .filter(Boolean)
       .map(String);
@@ -152,13 +194,13 @@ function getFgOptions(item) {
   ) {
     return ["A", "B", "C"];
   }
+
   return [];
 }
 
 export default function ScanDispatchScreen({
   navigation,
 }) {
-
   const {
     role,
   } = useAuth();
@@ -181,6 +223,9 @@ export default function ScanDispatchScreen({
     useState("");
 
   const [resolved, setResolved] =
+    useState(null);
+
+  const [notice, setNotice] =
     useState(null);
 
   const [loading, setLoading] =
@@ -207,13 +252,28 @@ export default function ScanDispatchScreen({
       fgZoneCode: "",
     });
 
-  useEffect(() => {
-    loadMasters();
-  }, []);
+  const showNotice = (
+    type,
+    title,
+    message
+  ) => {
+    setNotice({
+      type,
+      title,
+      message,
+    });
+  };
+
+  const clearNotice = () => {
+    setNotice(null);
+  };
 
   const loadMasters = async () => {
     try {
-      const [driverData, vehicleData] =
+      const [
+        driverData,
+        vehicleData,
+      ] =
         await Promise.all([
           fetchDrivers(),
           fetchVehicles(),
@@ -231,18 +291,28 @@ export default function ScanDispatchScreen({
           : []
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Masters failed",
-        e?.message ||
-        "Unable to load drivers/vehicles"
+        getBackendMessage(
+          e,
+          "Unable to load drivers/vehicles"
+        )
       );
     }
   };
 
-  const item = useMemo(
-    () => getResolvedItem(resolved),
-    [resolved]
-  );
+  useEffect(() => {
+    if (isDispatch) {
+      loadMasters();
+    }
+  }, [isDispatch]);
+
+  const item =
+    useMemo(
+      () => getResolvedItem(resolved),
+      [resolved]
+    );
 
   const status =
     normalizeStatus(item?.status);
@@ -251,13 +321,13 @@ export default function ScanDispatchScreen({
     getFgOptions(item);
 
   const needsFgMove =
-    resolved &&
+    Boolean(resolved) &&
     status === "READY" &&
     !isLegacyLocationMissing(item) &&
     isPkdLocation(item);
 
   const canDispatch =
-    resolved &&
+    Boolean(resolved) &&
     (
       status === "READY_TO_DISPATCH" ||
       (
@@ -269,72 +339,154 @@ export default function ScanDispatchScreen({
       )
     );
 
-  const update = (key, value) => {
+  const readiness =
+    useMemo(() => {
+      if (!resolved) {
+        return {
+          label: "Waiting",
+          tone: "idle",
+          message: "Scan a dispatch QR to begin.",
+        };
+      }
+
+      if (needsFgMove) {
+        return {
+          label: "Need FG",
+          tone: "warning",
+          message: "Move this item to FG before dispatch.",
+        };
+      }
+
+      if (canDispatch) {
+        return {
+          label: "Ready",
+          tone: "success",
+          message: "This item is ready for dispatch challan.",
+        };
+      }
+
+      return {
+        label: "Blocked",
+        tone: "danger",
+        message: `Current status is ${formatStatus(status)}. This item cannot be dispatched now.`,
+      };
+    }, [
+      resolved,
+      needsFgMove,
+      canDispatch,
+      status,
+    ]);
+
+  const selectedDriver =
+    useMemo(
+      () =>
+        drivers.find(
+          (driver) =>
+            String(driver.id) ===
+            String(form.driverId)
+        ),
+      [drivers, form.driverId]
+    );
+
+  const selectedVehicle =
+    useMemo(
+      () =>
+        vehicles.find(
+          (vehicle) =>
+            String(vehicle.id) ===
+            String(form.vehicleId)
+        ),
+      [vehicles, form.vehicleId]
+    );
+
+  const update = (
+    key,
+    value
+  ) => {
     setForm((prev) => ({
       ...prev,
       [key]: value,
     }));
   };
 
-  const handleBarcodeScanned = async ({
-    data,
-  }) => {
-    if (!scannerActive || loading) return;
-
-    const raw = String(data || "").trim();
-
-    if (!raw) return;
-
-    setScannerActive(false);
-    setScanText(raw);
-
-    await resolveQr(raw);
-  };
-
-  const resolveQr = async (raw) => {
-    try {
-      setLoading(true);
-
-      const data =
-        await resolveScan(raw);
-
-      setResolved(data);
-
-      const foundItem =
-        getResolvedItem(data);
-
-      const options =
-        getFgOptions(foundItem);
-
-      if (options.length === 1) {
-        update("fgZoneCode", options[0]);
+  const handleBarcodeScanned =
+    async ({
+      data,
+    }) => {
+      if (!scannerActive || loading) {
+        return;
       }
 
-      Alert.alert(
-        "QR scanned",
-        "Item resolved successfully."
-      );
-    } catch (e) {
-      setResolved(null);
+      const raw =
+        String(data || "").trim();
 
-      Alert.alert(
-        "Scan failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to resolve QR"
-      );
+      if (!raw) {
+        return;
+      }
 
-      setScannerActive(true);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setScannerActive(false);
+      setScanText(raw);
+
+      await resolveQr(raw);
+    };
+
+  const resolveQr =
+    async (
+      raw,
+      options = {}
+    ) => {
+      const silent =
+        Boolean(options.silent);
+
+      try {
+        setLoading(true);
+
+        const data =
+          await resolveScan(raw);
+
+        setResolved(data);
+
+        const foundItem =
+          getResolvedItem(data);
+
+        const zoneOptions =
+          getFgOptions(foundItem);
+
+        if (zoneOptions.length === 1) {
+          update("fgZoneCode", zoneOptions[0]);
+        }
+
+        if (!silent) {
+          showNotice(
+            "success",
+            "QR resolved",
+            "Item details loaded successfully."
+          );
+        }
+      } catch (e) {
+        setResolved(null);
+
+        showNotice(
+          "error",
+          "Scan failed",
+          getBackendMessage(
+            e,
+            "Unable to resolve QR"
+          )
+        );
+
+        setScannerActive(true);
+      } finally {
+        setLoading(false);
+      }
+    };
 
   const resetScan = () => {
     setScannerActive(true);
     setScanText("");
     setResolved(null);
+    setNotice(null);
+
     setForm((prev) => ({
       ...prev,
       fgZoneCode: "",
@@ -348,7 +500,8 @@ export default function ScanDispatchScreen({
       getZohoItemId(item);
 
     if (!zohoItemId) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Missing item",
         "Zoho item id not found."
       );
@@ -359,9 +512,10 @@ export default function ScanDispatchScreen({
       fgOptions.length > 0 &&
       !form.fgZoneCode
     ) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "FG Zone required",
-        "Please select FG zone."
+        "Please select FG zone before moving this item."
       );
       return;
     }
@@ -374,16 +528,19 @@ export default function ScanDispatchScreen({
         form.fgZoneCode
       );
 
-      Alert.alert(
-        "Moved to FG",
-        "Item moved to FG successfully. Please scan/refresh item again.",
-        [
+      if (scanText) {
+        await resolveQr(
+          scanText,
           {
-            text: "Refresh",
-            onPress: () =>
-              resolveQr(scanText),
-          },
-        ]
+            silent: true,
+          }
+        );
+      }
+
+      showNotice(
+        "success",
+        "Moved to FG",
+        "Item moved to FG and refreshed successfully."
       );
     } catch (e) {
       const statusCode =
@@ -392,12 +549,13 @@ export default function ScanDispatchScreen({
       const message =
         statusCode === 403
           ? "Only DISPATCH user can move item to FG."
-          : e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to move item to FG";
+          : getBackendMessage(
+              e,
+              "Unable to move item to FG"
+            );
 
-      Alert.alert(
+      showNotice(
+        "error",
         "Move failed",
         message
       );
@@ -408,7 +566,8 @@ export default function ScanDispatchScreen({
 
   const submitDispatch = async () => {
     if (!scanText) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "QR missing",
         "Please scan QR first."
       );
@@ -416,7 +575,8 @@ export default function ScanDispatchScreen({
     }
 
     if (!canDispatch) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Not ready",
         needsFgMove
           ? "Move item to FG first."
@@ -426,7 +586,8 @@ export default function ScanDispatchScreen({
     }
 
     if (!form.driverId) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Driver required",
         "Please select driver."
       );
@@ -434,7 +595,8 @@ export default function ScanDispatchScreen({
     }
 
     if (!form.vehicleId) {
-      Alert.alert(
+      showNotice(
+        "warning",
         "Vehicle required",
         "Please select vehicle."
       );
@@ -461,7 +623,7 @@ export default function ScanDispatchScreen({
         "Dispatch created",
         result?.challanNo
           ? `Dispatch created. Challan: ${result.challanNo}`
-          : "Dispatch Challan generated successfully.",
+          : "Dispatch challan generated successfully.",
         [
           {
             text: "View Challans",
@@ -475,12 +637,13 @@ export default function ScanDispatchScreen({
         ]
       );
     } catch (e) {
-      Alert.alert(
+      showNotice(
+        "error",
         "Dispatch failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to dispatch item"
+        getBackendMessage(
+          e,
+          "Unable to dispatch item"
+        )
       );
     } finally {
       setDispatching(false);
@@ -509,7 +672,7 @@ export default function ScanDispatchScreen({
           }
         >
           <Text style={styles.primaryText}>
-            Go to Trips / Delivery
+            Go to Trips / Challans
           </Text>
         </TouchableOpacity>
       </View>
@@ -559,8 +722,21 @@ export default function ScanDispatchScreen({
       </Text>
 
       <Text style={styles.sub}>
-        Scan one item, move to FG if required, then dispatch with driver and vehicle.
+        Scan one item, move to FG if required, then create dispatch challan.
       </Text>
+
+      <StatusNotice
+        notice={notice}
+        onClose={clearNotice}
+      />
+
+      <CompactStats
+        role={normalizedRole}
+        drivers={drivers.length}
+        vehicles={vehicles.length}
+        qrReady={Boolean(scanText)}
+        readiness={readiness}
+      />
 
       <View style={styles.cameraWrap}>
         {scannerActive ? (
@@ -611,7 +787,7 @@ export default function ScanDispatchScreen({
             disabled={loading}
           >
             <Text style={styles.secondaryText}>
-              Refresh
+              Refresh QR
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -637,8 +813,7 @@ export default function ScanDispatchScreen({
                   numberOfLines={2}
                 >
                   {clean(
-                    item?.itemName ||
-                    item?.name
+                    getItemName(item)
                   )}
                 </Text>
 
@@ -654,22 +829,36 @@ export default function ScanDispatchScreen({
               <View
                 style={[
                   styles.statusBadge,
-                  canDispatch
+                  readiness.tone === "success"
                     ? styles.readyBadge
-                    : styles.warnBadge,
+                    : readiness.tone === "warning"
+                      ? styles.warnBadge
+                      : styles.blockBadge,
                 ]}
               >
                 <Text
                   style={[
                     styles.statusText,
-                    canDispatch
+                    readiness.tone === "success"
                       ? styles.readyText
-                      : styles.warnText,
+                      : readiness.tone === "warning"
+                        ? styles.warnText
+                        : styles.blockText,
                   ]}
                 >
-                  {clean(status)}
+                  {readiness.label}
                 </Text>
               </View>
+            </View>
+
+            <View style={styles.readinessBox}>
+              <Text style={styles.readinessTitle}>
+                {formatStatus(status)}
+              </Text>
+
+              <Text style={styles.readinessText}>
+                {readiness.message}
+              </Text>
             </View>
 
             <View style={styles.grid}>
@@ -718,13 +907,13 @@ export default function ScanDispatchScreen({
           </View>
 
           {needsFgMove ? (
-            <View style={styles.panel}>
+            <View style={styles.panelWarning}>
               <Text style={styles.panelTitle}>
                 Move to FG Required
               </Text>
 
               <Text style={styles.panelSub}>
-                This item is still in packing/PKD location. Move it to FG before dispatch.
+                This item is still in packing / PKD location. Move it to FG before dispatch.
               </Text>
 
               {fgOptions.length > 0 ? (
@@ -733,18 +922,13 @@ export default function ScanDispatchScreen({
                     FG Zone
                   </Text>
 
-                  <View
-                    style={
-                      styles.selectWrap
-                    }
-                  >
+                  <View style={styles.selectWrap}>
                     {fgOptions.map((zone) => (
                       <TouchableOpacity
                         key={zone}
                         style={[
                           styles.zoneChip,
-                          form.fgZoneCode ===
-                            zone
+                          form.fgZoneCode === zone
                             ? styles.zoneChipActive
                             : null,
                         ]}
@@ -758,8 +942,7 @@ export default function ScanDispatchScreen({
                         <Text
                           style={[
                             styles.zoneChipText,
-                            form.fgZoneCode ===
-                              zone
+                            form.fgZoneCode === zone
                               ? styles.zoneChipTextActive
                               : null,
                           ]}
@@ -791,7 +974,11 @@ export default function ScanDispatchScreen({
           {canDispatch ? (
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>
-                Dispatch Trip Details
+                Dispatch Challan Details
+              </Text>
+
+              <Text style={styles.panelSub}>
+                Select driver, vehicle and trip start time to dispatch this item.
               </Text>
 
               <Field label="Driver">
@@ -825,42 +1012,63 @@ export default function ScanDispatchScreen({
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {selectedDriver ? (
+                  <Text style={styles.selectionHint}>
+                    Selected: {selectedDriver.name}
+                  </Text>
+                ) : null}
               </Field>
 
               <Field label="Vehicle">
                 <View style={styles.selectBox}>
-                  {vehicles.map((v) => (
-                    <TouchableOpacity
-                      key={v.id}
-                      style={[
-                        styles.optionChip,
-                        form.vehicleId === v.id
-                          ? styles.optionChipActive
-                          : null,
-                      ]}
-                      onPress={() =>
-                        update(
-                          "vehicleId",
-                          v.id
-                        )
-                      }
-                    >
-                      <Text
+                  {vehicles.map((v) => {
+                    const vehicleLabel =
+                      v.vehicleNumber ||
+                      v.registrationNumber ||
+                      v.name ||
+                      "Vehicle";
+
+                    return (
+                      <TouchableOpacity
+                        key={v.id}
                         style={[
-                          styles.optionText,
+                          styles.optionChip,
                           form.vehicleId === v.id
-                            ? styles.optionTextActive
+                            ? styles.optionChipActive
                             : null,
                         ]}
+                        onPress={() =>
+                          update(
+                            "vehicleId",
+                            v.id
+                          )
+                        }
                       >
-                        {v.vehicleNumber ||
-                          v.registrationNumber ||
-                          v.name ||
-                          "Vehicle"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.optionText,
+                            form.vehicleId === v.id
+                              ? styles.optionTextActive
+                              : null,
+                          ]}
+                        >
+                          {vehicleLabel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
+
+                {selectedVehicle ? (
+                  <Text style={styles.selectionHint}>
+                    Selected:{" "}
+                    {selectedVehicle.vehicleNumber ||
+                      selectedVehicle.registrationNumber ||
+                      selectedVehicle.name ||
+                      "Vehicle"}
+                  </Text>
+                ) : null}
               </Field>
 
               <TripStartPicker
@@ -904,6 +1112,133 @@ export default function ScanDispatchScreen({
         </>
       ) : null}
     </ScrollView>
+  );
+}
+
+function StatusNotice({
+  notice,
+  onClose,
+}) {
+  if (!notice) {
+    return null;
+  }
+
+  const isSuccess =
+    notice.type === "success";
+
+  const isWarning =
+    notice.type === "warning";
+
+  return (
+    <View
+      style={[
+        styles.noticeBox,
+        isSuccess
+          ? styles.noticeSuccess
+          : isWarning
+            ? styles.noticeWarning
+            : styles.noticeError,
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text
+          style={[
+            styles.noticeTitle,
+            isSuccess
+              ? styles.noticeSuccessText
+              : isWarning
+                ? styles.noticeWarningText
+                : styles.noticeErrorText,
+          ]}
+        >
+          {notice.title}
+        </Text>
+
+        <Text style={styles.noticeMessage}>
+          {notice.message}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.noticeClose}
+        onPress={onClose}
+      >
+        <Text style={styles.noticeCloseText}>
+          ×
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CompactStats({
+  role,
+  drivers,
+  vehicles,
+  qrReady,
+  readiness,
+}) {
+  return (
+    <View style={styles.statsGrid}>
+      <MiniStat
+        label="Role"
+        value={role || "—"}
+      />
+
+      <MiniStat
+        label="Drivers"
+        value={drivers}
+      />
+
+      <MiniStat
+        label="Vehicles"
+        value={vehicles}
+      />
+
+      <MiniStat
+        label="QR"
+        value={qrReady ? "YES" : "NO"}
+        active={qrReady}
+      />
+
+      <MiniStat
+        label="Status"
+        value={readiness.label}
+        active={readiness.tone === "success"}
+        warning={readiness.tone === "warning"}
+      />
+    </View>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  active,
+  warning,
+}) {
+  return (
+    <View
+      style={[
+        styles.miniStat,
+        active
+          ? styles.miniStatActive
+          : warning
+            ? styles.miniStatWarning
+            : null,
+      ]}
+    >
+      <Text
+        style={styles.miniStatValue}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+
+      <Text style={styles.miniStatLabel}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -974,21 +1309,130 @@ const styles = {
 
   title: {
     color: "#fff",
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: "900",
     marginTop: 4,
   },
 
   sub: {
     color: "#94a3b8",
-    marginTop: 6,
-    marginBottom: 16,
+    marginTop: 5,
+    marginBottom: 12,
     fontWeight: "700",
+    lineHeight: 18,
+    fontSize: 12,
+  },
+
+  noticeBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  noticeSuccess: {
+    backgroundColor: "rgba(16,185,129,.10)",
+    borderColor: "rgba(16,185,129,.24)",
+  },
+
+  noticeWarning: {
+    backgroundColor: "rgba(245,158,11,.10)",
+    borderColor: "rgba(245,158,11,.25)",
+  },
+
+  noticeError: {
+    backgroundColor: "rgba(239,68,68,.10)",
+    borderColor: "rgba(239,68,68,.25)",
+  },
+
+  noticeTitle: {
+    fontWeight: "900",
+    fontSize: 13,
+    marginBottom: 3,
+  },
+
+  noticeSuccessText: {
+    color: "#6ee7b7",
+  },
+
+  noticeWarningText: {
+    color: "#facc15",
+  },
+
+  noticeErrorText: {
+    color: "#fca5a5",
+  },
+
+  noticeMessage: {
+    color: "#cbd5e1",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  noticeClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.07)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  noticeCloseText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
     lineHeight: 20,
   },
 
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  miniStat: {
+    width: "31.6%",
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+
+  miniStatActive: {
+    borderColor: "rgba(16,185,129,.32)",
+    backgroundColor: "rgba(16,185,129,.08)",
+  },
+
+  miniStatWarning: {
+    borderColor: "rgba(245,158,11,.30)",
+    backgroundColor: "rgba(245,158,11,.08)",
+  },
+
+  miniStatValue: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  miniStatLabel: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
   cameraWrap: {
-    height: 320,
+    height: 300,
     borderRadius: 22,
     overflow: "hidden",
     backgroundColor: "#0f172a",
@@ -1026,8 +1470,8 @@ const styles = {
     position: "absolute",
     left: 46,
     right: 46,
-    top: 70,
-    bottom: 70,
+    top: 64,
+    bottom: 64,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: "rgba(96,165,250,.95)",
@@ -1061,6 +1505,8 @@ const styles = {
     padding: 16,
     alignItems: "center",
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
   },
 
   loadingText: {
@@ -1094,20 +1540,33 @@ const styles = {
     color: "#94a3b8",
     fontWeight: "700",
     marginTop: 5,
+    fontSize: 12,
   },
 
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+    marginLeft: 8,
+    maxWidth: 120,
   },
 
   readyBadge: {
     backgroundColor: "rgba(16,185,129,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.24)",
   },
 
   warnBadge: {
     backgroundColor: "rgba(245,158,11,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.24)",
+  },
+
+  blockBadge: {
+    backgroundColor: "rgba(239,68,68,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.24)",
   },
 
   statusText: {
@@ -1121,6 +1580,33 @@ const styles = {
 
   warnText: {
     color: "#facc15",
+  },
+
+  blockText: {
+    color: "#fca5a5",
+  },
+
+  readinessBox: {
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.07)",
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  readinessTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
+    marginBottom: 4,
+  },
+
+  readinessText: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 17,
   },
 
   grid: {
@@ -1179,6 +1665,15 @@ const styles = {
     marginBottom: 14,
   },
 
+  panelWarning: {
+    backgroundColor: "#0f172a",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.24)",
+    marginBottom: 14,
+  },
+
   panelTitle: {
     color: "#fff",
     fontSize: 18,
@@ -1191,6 +1686,7 @@ const styles = {
     fontWeight: "700",
     lineHeight: 19,
     marginBottom: 12,
+    fontSize: 12,
   },
 
   field: {
@@ -1279,6 +1775,13 @@ const styles = {
 
   optionTextActive: {
     color: "#6ee7b7",
+  },
+
+  selectionHint: {
+    color: "#6ee7b7",
+    fontWeight: "800",
+    fontSize: 11,
+    marginTop: 8,
   },
 
   moveBtn: {

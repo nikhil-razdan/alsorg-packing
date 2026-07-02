@@ -15,6 +15,7 @@ import {
   RefreshControl,
   TextInput,
   ScrollView,
+  Modal,
 } from "react-native";
 
 import {
@@ -48,6 +49,18 @@ const ALL_STATUSES = [
   "RESTORED",
 ];
 
+function formatStatus(value) {
+  const text =
+    String(value || "")
+      .trim();
+
+  if (!text || text === "ALL") {
+    return "All";
+  }
+
+  return text.replace(/_/g, " ");
+}
+
 function formatDateTime(value) {
   if (!value) {
     return "—";
@@ -65,20 +78,37 @@ function formatDateTime(value) {
       /z$/i.test(raw) ||
       /[+-]\d{2}:\d{2}$/.test(raw);
 
-    const utcSafeValue =
-      raw.includes("T") && !hasTimezone
-        ? `${raw}Z`
-        : raw;
+    let date;
 
-    const date =
-      new Date(utcSafeValue);
+    if (!hasTimezone && raw.includes("T")) {
+      const match =
+        raw.match(
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+        );
+
+      if (!match) {
+        return raw;
+      }
+
+      date =
+        new Date(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          Number(match[4]),
+          Number(match[5]),
+          Number(match[6] || 0)
+        );
+    } else {
+      date =
+        new Date(raw);
+    }
 
     if (Number.isNaN(date.getTime())) {
       return raw;
     }
 
     return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -153,6 +183,9 @@ export default function DispatchItemsScreen() {
   const [search, setSearch] =
     useState("");
 
+  const [itemNameFilter, setItemNameFilter] =
+    useState("");
+
   const [statusFilter, setStatusFilter] =
     useState("ALL");
 
@@ -161,6 +194,9 @@ export default function DispatchItemsScreen() {
 
   const [locationFilter, setLocationFilter] =
     useState("ALL");
+
+  const [filterOpen, setFilterOpen] =
+    useState(false);
 
   const [pageNo, setPageNo] =
     useState(1);
@@ -184,9 +220,9 @@ export default function DispatchItemsScreen() {
       Alert.alert(
         "Items failed",
         e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to load items"
+          e?.response?.data ||
+          e?.message ||
+          "Failed to load items"
       );
     } finally {
       setLoading(false);
@@ -209,9 +245,9 @@ export default function DispatchItemsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to refresh"
+          e?.response?.data ||
+          e?.message ||
+          "Failed to refresh"
       );
     } finally {
       setRefreshing(false);
@@ -224,137 +260,156 @@ export default function DispatchItemsScreen() {
     }, [])
   );
 
-  const statusOptions = useMemo(() => {
-    const existing =
-      new Set(
+  const statusOptions =
+    useMemo(() => {
+      const existing =
+        new Set(
+          items
+            .map((item) =>
+              normalizeStatus(item.status)
+            )
+            .filter(Boolean)
+            .filter((status) =>
+              ALL_STATUSES.includes(status)
+            )
+        );
+
+      const merged =
+        ALL_STATUSES.filter(
+          (status) =>
+            existing.has(status) ||
+            status === "READY" ||
+            status === "READY_TO_DISPATCH" ||
+            status === "DISPATCHED"
+        );
+
+      const extra =
+        [...existing].filter(
+          (status) =>
+            !merged.includes(status)
+        );
+
+      return [
+        "ALL",
+        ...merged,
+        ...extra,
+      ];
+    }, [items]);
+
+  const plantOptions =
+    useMemo(() => {
+      const plants =
         items
           .map((item) =>
-            normalizeStatus(item.status)
+            String(item.plantCode || "").trim()
           )
-          .filter(Boolean)
-          .filter((status) =>
-            ALL_STATUSES.includes(status)
-          )
-      );
+          .filter(Boolean);
 
-    const merged =
-      ALL_STATUSES.filter(
-        (status) =>
-          existing.has(status) ||
-          status === "READY" ||
-          status === "READY_TO_DISPATCH" ||
-          status === "DISPATCHED"
-      );
+      return [
+        "ALL",
+        ...Array.from(new Set(plants)).sort(),
+      ];
+    }, [items]);
 
-    const extra =
-      [...existing].filter(
-        (status) =>
-          !merged.includes(status)
-      );
+  const locationOptions =
+    useMemo(() => {
+      const locations =
+        items
+          .map(getItemLocation)
+          .filter((x) => x && x !== "—");
 
-    return [
-      "ALL",
-      ...merged,
-      ...extra,
-    ];
-  }, [items]);
+      return [
+        "ALL",
+        ...Array.from(new Set(locations)).sort(),
+      ];
+    }, [items]);
 
-  const plantOptions = useMemo(() => {
-    const plants =
-      items
-        .map((item) =>
-          String(item.plantCode || "").trim()
-        )
-        .filter(Boolean);
+  const filteredItems =
+    useMemo(() => {
+      const query =
+        normalizeText(search);
 
-    return [
-      "ALL",
-      ...Array.from(new Set(plants)).sort(),
-    ];
-  }, [items]);
+      const nameQuery =
+        normalizeText(itemNameFilter);
 
-  const locationOptions = useMemo(() => {
-    const locations =
-      items
-        .map(getItemLocation)
-        .filter((x) => x && x !== "—");
+      return items.filter((item) => {
+        const itemStatus =
+          normalizeStatus(item.status);
 
-    return [
-      "ALL",
-      ...Array.from(new Set(locations)).sort(),
-    ];
-  }, [items]);
+        const itemPlant =
+          String(item.plantCode || "").trim();
 
-  const filteredItems = useMemo(() => {
-    const query =
-      normalizeText(search);
+        const itemLocation =
+          getItemLocation(item);
 
-    return items.filter((item) => {
-      const itemStatus =
-        normalizeStatus(item.status);
+        const itemName =
+          normalizeText(getItemName(item));
 
-      const itemPlant =
-        String(item.plantCode || "").trim();
+        const matchesSearch =
+          !query ||
+          getSearchBlob(item).includes(query);
 
-      const itemLocation =
-        getItemLocation(item);
+        const matchesName =
+          !nameQuery ||
+          itemName.includes(nameQuery);
 
-      const matchesSearch =
-        !query ||
-        getSearchBlob(item).includes(query);
+        const matchesStatus =
+          statusFilter === "ALL" ||
+          itemStatus === statusFilter;
 
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        itemStatus === statusFilter;
+        const matchesPlant =
+          plantFilter === "ALL" ||
+          itemPlant === plantFilter;
 
-      const matchesPlant =
-        plantFilter === "ALL" ||
-        itemPlant === plantFilter;
+        const matchesLocation =
+          locationFilter === "ALL" ||
+          itemLocation === locationFilter;
 
-      const matchesLocation =
-        locationFilter === "ALL" ||
-        itemLocation === locationFilter;
+        return (
+          matchesSearch &&
+          matchesName &&
+          matchesStatus &&
+          matchesPlant &&
+          matchesLocation
+        );
+      });
+    }, [
+      items,
+      search,
+      itemNameFilter,
+      statusFilter,
+      plantFilter,
+      locationFilter,
+    ]);
 
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPlant &&
-        matchesLocation
-      );
-    });
-  }, [
-    items,
-    search,
-    statusFilter,
-    plantFilter,
-    locationFilter,
-  ]);
-
-  const totalPages = useMemo(
-    () =>
-      Math.max(
-        1,
-        Math.ceil(filteredItems.length / pageSize)
-      ),
-    [filteredItems.length, pageSize]
-  );
+  const totalPages =
+    useMemo(
+      () =>
+        Math.max(
+          1,
+          Math.ceil(filteredItems.length / pageSize)
+        ),
+      [filteredItems.length, pageSize]
+    );
 
   const currentPage =
     Math.min(pageNo, totalPages);
 
-  const paginatedItems = useMemo(
-    () =>
-      filteredItems.slice(
-        (currentPage - 1) * pageSize,
-        currentPage * pageSize
-      ),
-    [filteredItems, currentPage, pageSize]
-  );
+  const paginatedItems =
+    useMemo(
+      () =>
+        filteredItems.slice(
+          (currentPage - 1) * pageSize,
+          currentPage * pageSize
+        ),
+      [filteredItems, currentPage, pageSize]
+    );
 
   useEffect(() => {
     setPageNo(1);
   }, [
     search,
+    itemNameFilter,
     statusFilter,
     plantFilter,
     locationFilter,
@@ -367,46 +422,56 @@ export default function DispatchItemsScreen() {
     }
   }, [pageNo, totalPages]);
 
-  const readyItems = useMemo(
-    () =>
-      filteredItems.filter(
-        (item) =>
-          normalizeStatus(item.status) === "READY"
-      ),
-    [filteredItems]
-  );
+  const readyItems =
+    useMemo(
+      () =>
+        filteredItems.filter(
+          (item) =>
+            normalizeStatus(item.status) === "READY"
+        ),
+      [filteredItems]
+    );
 
-  const readyToDispatchItems = useMemo(
-    () =>
-      filteredItems.filter(
-        (item) =>
-          normalizeStatus(item.status) ===
-          "READY_TO_DISPATCH"
-      ),
-    [filteredItems]
-  );
+  const readyToDispatchItems =
+    useMemo(
+      () =>
+        filteredItems.filter(
+          (item) =>
+            normalizeStatus(item.status) ===
+            "READY_TO_DISPATCH"
+        ),
+      [filteredItems]
+    );
 
-  const dispatchedItems = useMemo(
-    () =>
-      filteredItems.filter(
-        (item) =>
-          normalizeStatus(item.status) === "DISPATCHED"
-      ),
-    [filteredItems]
-  );
+  const dispatchedItems =
+    useMemo(
+      () =>
+        filteredItems.filter(
+          (item) =>
+            normalizeStatus(item.status) === "DISPATCHED"
+        ),
+      [filteredItems]
+    );
+
+  const filterCount =
+    [
+      itemNameFilter.trim(),
+      statusFilter !== "ALL",
+      plantFilter !== "ALL",
+      locationFilter !== "ALL",
+    ].filter(Boolean).length;
+
+  const hasAnyFilter =
+    Boolean(search.trim()) ||
+    filterCount > 0;
 
   const clearFilters = () => {
     setSearch("");
+    setItemNameFilter("");
     setStatusFilter("ALL");
     setPlantFilter("ALL");
     setLocationFilter("ALL");
   };
-
-  const hasAnyFilter =
-    search.trim() ||
-    statusFilter !== "ALL" ||
-    plantFilter !== "ALL" ||
-    locationFilter !== "ALL";
 
   if (loading && items.length === 0) {
     return (
@@ -454,7 +519,7 @@ export default function DispatchItemsScreen() {
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search client, SKU, PD, DWG, item, challan..."
+                placeholder="Search client, SKU, PD, DWG, challan..."
                 placeholderTextColor="#64748b"
                 style={styles.searchInput}
                 autoCapitalize="none"
@@ -462,7 +527,9 @@ export default function DispatchItemsScreen() {
 
               {search ? (
                 <TouchableOpacity
-                  onPress={() => setSearch("")}
+                  onPress={() =>
+                    setSearch("")
+                  }
                   style={styles.searchClear}
                 >
                   <Text style={styles.searchClearText}>
@@ -470,77 +537,57 @@ export default function DispatchItemsScreen() {
                   </Text>
                 </TouchableOpacity>
               ) : null}
-            </View>
 
-            <FilterSection
-              title="Status"
-              options={statusOptions}
-              selected={statusFilter}
-              onSelect={setStatusFilter}
-            />
-
-            <FilterSection
-              title="Plant"
-              options={plantOptions}
-              selected={plantFilter}
-              onSelect={setPlantFilter}
-            />
-
-            <FilterSection
-              title="Location"
-              options={locationOptions}
-              selected={locationFilter}
-              onSelect={setLocationFilter}
-            />
-
-            {hasAnyFilter ? (
               <TouchableOpacity
-                style={styles.clearFiltersBtn}
-                onPress={clearFilters}
-              >
-                <Text style={styles.clearFiltersText}>
-                  Clear Filters
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
-            <View style={styles.summaryRow}>
-              <Summary
-                label="Showing"
-                value={filteredItems.length}
-              />
-
-              <Summary
-                label="Ready"
-                value={readyItems.length}
-              />
-
-              <Summary
-                label="Ready Dispatch"
-                value={readyToDispatchItems.length}
-              />
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Summary
-                label="Dispatched"
-                value={dispatchedItems.length}
-              />
-
-              <Summary
-                label="Total Access"
-                value={items.length}
-              />
-
-              <Summary
-                label="Filters"
-                value={
-                  hasAnyFilter
-                    ? "ON"
-                    : "OFF"
+                style={[
+                  styles.filterOpenBtn,
+                  filterCount > 0
+                    ? styles.filterOpenBtnActive
+                    : null,
+                ]}
+                onPress={() =>
+                  setFilterOpen(true)
                 }
-              />
+              >
+                <Text
+                  style={[
+                    styles.filterOpenText,
+                    filterCount > 0
+                      ? styles.filterOpenTextActive
+                      : null,
+                  ]}
+                >
+                  ⚙
+                </Text>
+
+                {filterCount > 0 ? (
+                  <View style={styles.filterCountBadge}>
+                    <Text style={styles.filterCountText}>
+                      {filterCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
             </View>
+
+            <ActiveFilterStrip
+              search={search}
+              itemNameFilter={itemNameFilter}
+              statusFilter={statusFilter}
+              plantFilter={plantFilter}
+              locationFilter={locationFilter}
+              hasAnyFilter={hasAnyFilter}
+              onClear={clearFilters}
+            />
+
+            <CompactStats
+              showing={filteredItems.length}
+              total={items.length}
+              ready={readyItems.length}
+              readyDispatch={readyToDispatchItems.length}
+              dispatched={dispatchedItems.length}
+              filtersOn={hasAnyFilter}
+            />
 
             <PaginationBar
               pageNo={currentPage}
@@ -567,6 +614,163 @@ export default function DispatchItemsScreen() {
           paddingBottom: 36,
         }}
       />
+
+      <FilterSheet
+        visible={filterOpen}
+        onClose={() =>
+          setFilterOpen(false)
+        }
+        itemNameFilter={itemNameFilter}
+        setItemNameFilter={setItemNameFilter}
+        statusOptions={statusOptions}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        plantOptions={plantOptions}
+        plantFilter={plantFilter}
+        setPlantFilter={setPlantFilter}
+        locationOptions={locationOptions}
+        locationFilter={locationFilter}
+        setLocationFilter={setLocationFilter}
+        clearFilters={clearFilters}
+      />
+    </View>
+  );
+}
+
+function ActiveFilterStrip({
+  search,
+  itemNameFilter,
+  statusFilter,
+  plantFilter,
+  locationFilter,
+  hasAnyFilter,
+  onClear,
+}) {
+  if (!hasAnyFilter) {
+    return null;
+  }
+
+  const chips = [];
+
+  if (search.trim()) {
+    chips.push(`Search: ${search.trim()}`);
+  }
+
+  if (itemNameFilter.trim()) {
+    chips.push(`Name: ${itemNameFilter.trim()}`);
+  }
+
+  if (statusFilter !== "ALL") {
+    chips.push(formatStatus(statusFilter));
+  }
+
+  if (plantFilter !== "ALL") {
+    chips.push(`Plant: ${plantFilter}`);
+  }
+
+  if (locationFilter !== "ALL") {
+    chips.push(`Location: ${locationFilter}`);
+  }
+
+  return (
+    <View style={styles.activeStripWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.activeStrip}
+      >
+        {chips.map((chip, index) => (
+          <View
+            key={`${chip}-${index}`}
+            style={styles.activeChip}
+          >
+            <Text
+              style={styles.activeChipText}
+              numberOfLines={1}
+            >
+              {chip}
+            </Text>
+          </View>
+        ))}
+
+        <TouchableOpacity
+          style={styles.activeClearBtn}
+          onPress={onClear}
+        >
+          <Text style={styles.activeClearText}>
+            Clear
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
+
+function CompactStats({
+  showing,
+  total,
+  ready,
+  readyDispatch,
+  dispatched,
+  filtersOn,
+}) {
+  return (
+    <View style={styles.statsGrid}>
+      <MiniStat
+        label="Showing"
+        value={showing}
+      />
+
+      <MiniStat
+        label="Ready"
+        value={ready}
+      />
+
+      <MiniStat
+        label="R.T.D."
+        value={readyDispatch}
+      />
+
+      <MiniStat
+        label="Dispatched"
+        value={dispatched}
+      />
+
+      <MiniStat
+        label="Total"
+        value={total}
+      />
+
+      <MiniStat
+        label="Filters"
+        value={filtersOn ? "ON" : "OFF"}
+        active={filtersOn}
+      />
+    </View>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  active,
+}) {
+  return (
+    <View
+      style={[
+        styles.miniStat,
+        active
+          ? styles.miniStatActive
+          : null,
+      ]}
+    >
+      <Text style={styles.miniStatValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.miniStatLabel}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -581,97 +785,227 @@ function PaginationBar({
 }) {
   return (
     <View style={styles.paginationBox}>
-      <Text style={styles.paginationText}>
-        Page {pageNo} of {totalPages} • {totalItems} items
-      </Text>
+      <View style={styles.paginationTop}>
+        <Text style={styles.paginationText}>
+          Page {pageNo}/{totalPages}
+        </Text>
+
+        <Text style={styles.paginationSubText}>
+          {totalItems} items
+        </Text>
+      </View>
 
       <View style={styles.paginationRow}>
-        {[10, 25, 50].map((size) => (
-          <TouchableOpacity
-            key={size}
-            style={[
-              styles.pageSizeBtn,
-              pageSize === size
-                ? styles.pageSizeBtnActive
-                : null,
-            ]}
-            onPress={() => {
-              setPageSize(size);
-              setPageNo(1);
-            }}
-          >
-            <Text
+        <View style={styles.pageSizes}>
+          {[10, 25, 50].map((size) => (
+            <TouchableOpacity
+              key={size}
               style={[
-                styles.pageSizeText,
+                styles.pageSizeBtn,
                 pageSize === size
-                  ? styles.pageSizeTextActive
+                  ? styles.pageSizeBtnActive
                   : null,
               ]}
+              onPress={() => {
+                setPageSize(size);
+                setPageNo(1);
+              }}
             >
-              {size}
+              <Text
+                style={[
+                  styles.pageSizeText,
+                  pageSize === size
+                    ? styles.pageSizeTextActive
+                    : null,
+                ]}
+              >
+                {size}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.pageNav}>
+          <TouchableOpacity
+            disabled={pageNo <= 1}
+            style={[
+              styles.pageBtn,
+              pageNo <= 1
+                ? styles.pageBtnDisabled
+                : null,
+            ]}
+            onPress={() =>
+              setPageNo((prev) =>
+                Math.max(1, prev - 1)
+              )
+            }
+          >
+            <Text style={styles.pageBtnText}>
+              ‹
             </Text>
           </TouchableOpacity>
-        ))}
 
-        <TouchableOpacity
-          disabled={pageNo <= 1}
-          style={[
-            styles.pageBtn,
-            pageNo <= 1
-              ? styles.pageBtnDisabled
-              : null,
-          ]}
-          onPress={() =>
-            setPageNo((prev) =>
-              Math.max(1, prev - 1)
-            )
-          }
-        >
-          <Text style={styles.pageBtnText}>
-            Prev
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          disabled={pageNo >= totalPages}
-          style={[
-            styles.pageBtn,
-            pageNo >= totalPages
-              ? styles.pageBtnDisabled
-              : null,
-          ]}
-          onPress={() =>
-            setPageNo((prev) =>
-              Math.min(totalPages, prev + 1)
-            )
-          }
-        >
-          <Text style={styles.pageBtnText}>
-            Next
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            disabled={pageNo >= totalPages}
+            style={[
+              styles.pageBtn,
+              pageNo >= totalPages
+                ? styles.pageBtnDisabled
+                : null,
+            ]}
+            onPress={() =>
+              setPageNo((prev) =>
+                Math.min(totalPages, prev + 1)
+              )
+            }
+          >
+            <Text style={styles.pageBtnText}>
+              ›
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 }
 
-function FilterSection({
+function FilterSheet({
+  visible,
+  onClose,
+  itemNameFilter,
+  setItemNameFilter,
+  statusOptions,
+  statusFilter,
+  setStatusFilter,
+  plantOptions,
+  plantFilter,
+  setPlantFilter,
+  locationOptions,
+  locationFilter,
+  setLocationFilter,
+  clearFilters,
+}) {
+  const handleClear = () => {
+    clearFilters();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <View style={styles.filterSheet}>
+          <View style={styles.filterHeader}>
+            <View>
+              <Text style={styles.filterSheetTitle}>
+                Filters
+              </Text>
+
+              <Text style={styles.filterSheetSub}>
+                Choose name, status, plant and location
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={onClose}
+            >
+              <Text style={styles.modalCloseText}>
+                ×
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: 12,
+            }}
+          >
+            <View style={styles.sheetField}>
+              <Text style={styles.sheetLabel}>
+                Item Name
+              </Text>
+
+              <TextInput
+                value={itemNameFilter}
+                onChangeText={setItemNameFilter}
+                placeholder="Type item name..."
+                placeholderTextColor="#64748b"
+                style={styles.sheetInput}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <FilterGroup
+              title="Status"
+              options={statusOptions}
+              selected={statusFilter}
+              onSelect={setStatusFilter}
+            />
+
+            <FilterGroup
+              title="Plant"
+              options={plantOptions}
+              selected={plantFilter}
+              onSelect={setPlantFilter}
+            />
+
+            <FilterGroup
+              title="Location"
+              options={locationOptions}
+              selected={locationFilter}
+              onSelect={setLocationFilter}
+            />
+          </ScrollView>
+
+          <View style={styles.sheetActions}>
+            <TouchableOpacity
+              style={styles.sheetClearBtn}
+              onPress={handleClear}
+            >
+              <Text style={styles.sheetClearText}>
+                Clear All
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sheetApplyBtn}
+              onPress={onClose}
+            >
+              <Text style={styles.sheetApplyText}>
+                Apply Filters
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function FilterGroup({
   title,
   options,
   selected,
   onSelect,
 }) {
   return (
-    <View style={styles.filterBlock}>
-      <Text style={styles.filterTitle}>
+    <View style={styles.filterGroup}>
+      <Text style={styles.sheetLabel}>
         {title}
       </Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterScroll}
-      >
+      <View style={styles.filterChipWrap}>
         {options.map((option) => {
           const active =
             selected === option;
@@ -697,14 +1031,12 @@ function FilterSection({
                     : null,
                 ]}
               >
-                {option === "ALL"
-                  ? "All"
-                  : option.replaceAll("_", " ")}
+                {formatStatus(option)}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -731,7 +1063,10 @@ function ItemCard({
     <View style={styles.card}>
       <View style={styles.cardTop}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.itemName}>
+          <Text
+            style={styles.itemName}
+            numberOfLines={2}
+          >
             {getItemName(item)}
           </Text>
 
@@ -766,7 +1101,7 @@ function ItemCard({
                 : null,
             ]}
           >
-            {status || "—"}
+            {formatStatus(status) || "—"}
           </Text>
         </View>
       </View>
@@ -802,7 +1137,7 @@ function ItemCard({
         />
 
         <Info
-          label="Zoho / Item ID"
+          label="Item ID"
           value={item.zohoItemId || "—"}
         />
 
@@ -853,9 +1188,9 @@ function ItemCard({
               Alert.alert(
                 "Action failed",
                 e?.response?.data?.message ||
-                e?.response?.data ||
-                e?.message ||
-                "Unable to update item"
+                  e?.response?.data ||
+                  e?.message ||
+                  "Unable to update item"
               );
             }
           }}
@@ -865,23 +1200,6 @@ function ItemCard({
           </Text>
         </TouchableOpacity>
       ) : null}
-    </View>
-  );
-}
-
-function Summary({
-  label,
-  value,
-}) {
-  return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryValue}>
-        {value}
-      </Text>
-
-      <Text style={styles.summaryLabel}>
-        {label}
-      </Text>
     </View>
   );
 }
@@ -928,15 +1246,17 @@ const styles = {
 
   title: {
     color: "#fff",
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: "900",
   },
 
   sub: {
     color: "#94a3b8",
     marginTop: 4,
-    marginBottom: 14,
+    marginBottom: 12,
     fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   searchBox: {
@@ -948,11 +1268,11 @@ const styles = {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    marginBottom: 14,
+    marginBottom: 8,
   },
 
   searchIcon: {
-    fontSize: 18,
+    fontSize: 17,
     marginRight: 8,
   },
 
@@ -960,18 +1280,18 @@ const styles = {
     flex: 1,
     color: "#fff",
     fontWeight: "800",
-    fontSize: 13,
+    fontSize: 12,
     minHeight: 48,
   },
 
   searchClear: {
-    width: 28,
-    height: 28,
+    width: 27,
+    height: 27,
     borderRadius: 999,
     backgroundColor: "rgba(148,163,184,.18)",
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
+    marginLeft: 6,
   },
 
   searchClearText: {
@@ -981,27 +1301,323 @@ const styles = {
     lineHeight: 20,
   },
 
-  filterBlock: {
+  filterOpenBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: "rgba(59,130,246,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+    position: "relative",
+  },
+
+  filterOpenBtnActive: {
+    backgroundColor: "rgba(16,185,129,.16)",
+    borderColor: "rgba(16,185,129,.35)",
+  },
+
+  filterOpenText: {
+    color: "#93c5fd",
+    fontWeight: "900",
+    fontSize: 17,
+  },
+
+  filterOpenTextActive: {
+    color: "#6ee7b7",
+  },
+
+  filterCountBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#020617",
+  },
+
+  filterCountText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  activeStripWrap: {
+    marginBottom: 9,
+  },
+
+  activeStrip: {
+    gap: 7,
+    paddingRight: 10,
+  },
+
+  activeChip: {
+    maxWidth: 180,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(16,185,129,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,.22)",
+    justifyContent: "center",
+  },
+
+  activeChipText: {
+    color: "#6ee7b7",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  activeClearBtn: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(239,68,68,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.24)",
+    justifyContent: "center",
+  },
+
+  activeClearText: {
+    color: "#fca5a5",
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  miniStat: {
+    width: "31.6%",
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+
+  miniStatActive: {
+    borderColor: "rgba(16,185,129,.32)",
+    backgroundColor: "rgba(16,185,129,.08)",
+  },
+
+  miniStatValue: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  miniStatLabel: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  paginationBox: {
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 15,
+    padding: 10,
     marginBottom: 12,
   },
 
-  filterTitle: {
+  paginationTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  paginationText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  paginationSubText: {
+    color: "#94a3b8",
+    fontWeight: "800",
+    fontSize: 11,
+  },
+
+  paginationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  pageSizes: {
+    flexDirection: "row",
+    gap: 7,
+  },
+
+  pageSizeBtn: {
+    minWidth: 38,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageSizeBtnActive: {
+    backgroundColor: "rgba(37,99,235,.22)",
+    borderColor: "rgba(37,99,235,.48)",
+  },
+
+  pageSizeText: {
+    color: "#94a3b8",
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  pageSizeTextActive: {
+    color: "#93c5fd",
+  },
+
+  pageNav: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  pageBtn: {
+    width: 36,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "rgba(59,130,246,.18)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pageBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  pageBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 18,
+    lineHeight: 20,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,.55)",
+  },
+
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  filterSheet: {
+    maxHeight: "86%",
+    backgroundColor: "#020617",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    padding: 16,
+  },
+
+  filterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+
+  filterSheetTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  filterSheetSub: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 3,
+  },
+
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  modalCloseText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 24,
+    lineHeight: 26,
+  },
+
+  sheetField: {
+    marginBottom: 15,
+  },
+
+  sheetLabel: {
     color: "#94a3b8",
     fontSize: 11,
     fontWeight: "900",
     marginBottom: 8,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
   },
 
-  filterScroll: {
+  sheetInput: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    backgroundColor: "rgba(255,255,255,.05)",
+    color: "#fff",
+    paddingHorizontal: 13,
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  filterGroup: {
+    marginBottom: 15,
+  },
+
+  filterChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    paddingRight: 10,
   },
 
   filterChip: {
-    minHeight: 36,
-    paddingHorizontal: 13,
+    minHeight: 34,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,.08)",
@@ -1017,7 +1633,7 @@ const styles = {
 
   filterChipText: {
     color: "#94a3b8",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "900",
   },
 
@@ -1025,49 +1641,42 @@ const styles = {
     color: "#93c5fd",
   },
 
-  clearFiltersBtn: {
-    height: 38,
-    borderRadius: 12,
+  sheetActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,.08)",
+  },
+
+  sheetClearBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: "rgba(239,68,68,.12)",
     borderWidth: 1,
     borderColor: "rgba(239,68,68,.28)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
   },
 
-  clearFiltersText: {
+  sheetClearText: {
     color: "#fca5a5",
     fontWeight: "900",
-    fontSize: 12,
   },
 
-  summaryRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
-
-  summaryCard: {
+  sheetApplyBtn: {
     flex: 1,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  summaryValue: {
+  sheetApplyText: {
     color: "#fff",
     fontWeight: "900",
-    fontSize: 18,
-  },
-
-  summaryLabel: {
-    color: "#94a3b8",
-    fontWeight: "700",
-    fontSize: 11,
-    marginTop: 4,
   },
 
   card: {
@@ -1103,7 +1712,8 @@ const styles = {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    maxWidth: 160,
+    maxWidth: 150,
+    marginLeft: 10,
   },
 
   readyBadge: {
@@ -1120,7 +1730,7 @@ const styles = {
 
   badgeText: {
     color: "#93c5fd",
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "900",
   },
 
@@ -1171,75 +1781,5 @@ const styles = {
     textAlign: "center",
     marginTop: 40,
     fontWeight: "700",
-  },
-
-  paginationBox: {
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 14,
-  },
-
-  paginationText: {
-    color: "#94a3b8",
-    fontWeight: "800",
-    fontSize: 12,
-    marginBottom: 10,
-  },
-
-  paginationRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    alignItems: "center",
-  },
-
-  pageSizeBtn: {
-    minWidth: 42,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  pageSizeBtnActive: {
-    backgroundColor: "rgba(37,99,235,.22)",
-    borderColor: "rgba(37,99,235,.48)",
-  },
-
-  pageSizeText: {
-    color: "#94a3b8",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  pageSizeTextActive: {
-    color: "#93c5fd",
-  },
-
-  pageBtn: {
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: "rgba(59,130,246,.18)",
-    borderWidth: 1,
-    borderColor: "rgba(59,130,246,.28)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  pageBtnDisabled: {
-    opacity: 0.35,
-  },
-
-  pageBtnText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 12,
   },
 };
