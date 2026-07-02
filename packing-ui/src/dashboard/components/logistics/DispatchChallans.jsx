@@ -66,7 +66,7 @@ function DispatchChallans({
         });
 
     const canManageTripEnd =
-        isLogisticsOrAdmin();
+        true;
 
     const loadData = async () => {
         try {
@@ -438,7 +438,7 @@ function DispatchChallans({
                     </Box>
 
                     <Box sx={subtitle}>
-                        Challan-wise dispatched items with driver, vehicle and PDF access
+                        Challan-wise dispatched items with driver, vehicle, PDF access and trip end-time control
                     </Box>
                 </Box>
 
@@ -633,18 +633,16 @@ function DispatchChallans({
                                             : "View Items"}
                                     </Button>
 
-                                    {canManageTripEnd ? (
-                                        <Button
-                                            onClick={() =>
-                                                openEndTripDialog(challan)
-                                            }
-                                            sx={endTimeButton}
-                                        >
-                                            {challan.tripEndedAt
-                                                ? "Edit End Time"
-                                                : "Enter End Time"}
-                                        </Button>
-                                    ) : null}
+                                    <Button
+                                        onClick={() =>
+                                            openEndTripDialog(challan)
+                                        }
+                                        sx={endTimeButton}
+                                    >
+                                        {challan.tripEndedAt
+                                            ? "Edit End Time"
+                                            : "Enter End Time"}
+                                    </Button>
                                 </Box>
                             </Box>
 
@@ -1483,13 +1481,14 @@ const endTimeButton = {
     height: 34,
     borderRadius: "10px",
     textTransform: "none",
-    fontWeight: 800,
-    color: "#fca5a5",
-    background: "rgba(239,68,68,.12)",
-    border: "1px solid rgba(239,68,68,.25)",
+    fontWeight: 900,
+    color: "#fff",
+    background: "linear-gradient(135deg,#dc2626,#ef4444)",
+    border: "1px solid rgba(248,113,113,.45)",
+    boxShadow: "0 10px 22px rgba(220,38,38,.22)",
 
     "&:hover": {
-        background: "rgba(239,68,68,.20)",
+        background: "linear-gradient(135deg,#b91c1c,#dc2626)",
     },
 };
 

@@ -14,7 +14,11 @@ import {
   Alert,
   RefreshControl,
   TextInput,
+  Modal,
+  Platform,
 } from "react-native";
+
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import {
   useFocusEffect,
@@ -157,6 +161,69 @@ function toDateTimeLocalInput(value) {
   }
 
   return "";
+}
+
+function parseLocalDateTime(value) {
+  if (!value) {
+    return new Date();
+  }
+
+  const raw =
+    String(value).trim();
+
+  const match =
+    raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+    );
+
+  if (match) {
+    return new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6] || 0)
+    );
+  }
+
+  const fallback =
+    new Date(raw);
+
+  return Number.isNaN(fallback.getTime())
+    ? new Date()
+    : fallback;
+}
+
+function dateToLocalInputValue(date) {
+  const d =
+    date instanceof Date &&
+      !Number.isNaN(date.getTime())
+      ? date
+      : new Date();
+
+  const yyyy =
+    d.getFullYear();
+
+  const mm =
+    String(d.getMonth() + 1).padStart(2, "0");
+
+  const dd =
+    String(d.getDate()).padStart(2, "0");
+
+  const hh =
+    String(d.getHours()).padStart(2, "0");
+
+  const mi =
+    String(d.getMinutes()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+function formatPickerDisplay(value) {
+  return formatDateTime(
+    toBackendLocalDateTime(value)
+  );
 }
 
 export default function TripsScreen() {
@@ -636,36 +703,13 @@ function ChallanCard({
       </View>
 
       {canManageTripEnd ? (
-        <View style={styles.endTimePanel}>
-          <Text style={styles.endTimeTitle}>
-            Trip End Time
-          </Text>
-
-          <TextInput
-            value={endTimeValue}
-            onChangeText={onEndTimeChange}
-            placeholder="YYYY-MM-DDTHH:mm"
-            placeholderTextColor="#64748b"
-            style={styles.endTimeInput}
-            autoCapitalize="none"
-          />
-
-          <TouchableOpacity
-            style={styles.endTimeBtn}
-            onPress={onSaveEndTime}
-            disabled={savingEndTrip}
-          >
-            {savingEndTrip ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.endTimeBtnText}>
-                {challan.tripEndedAt
-                  ? "Update End Time"
-                  : "Save End Time"}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        <EndTimePickerPanel
+          challan={challan}
+          value={endTimeValue}
+          onChange={onEndTimeChange}
+          onSave={onSaveEndTime}
+          saving={savingEndTrip}
+        />
       ) : null}
 
       <TouchableOpacity
@@ -735,6 +779,261 @@ function ChallanCard({
           )}
         </View>
       )}
+    </View>
+  );
+}
+
+function EndTimePickerPanel({
+  challan,
+  value,
+  onChange,
+  onSave,
+  saving,
+}) {
+  const [pickerOpen, setPickerOpen] =
+    useState(false);
+
+  const [pickerMode, setPickerMode] =
+    useState("date");
+
+  const [tempDate, setTempDate] =
+    useState(parseLocalDateTime(value));
+
+  const openPicker = () => {
+    setTempDate(
+      parseLocalDateTime(value)
+    );
+
+    setPickerMode("date");
+    setPickerOpen(true);
+  };
+
+  const applyNow = () => {
+    onChange(
+      dateToLocalInputValue(new Date())
+    );
+  };
+
+  const addMinutes = (minutes) => {
+    const base =
+      parseLocalDateTime(value);
+
+    base.setMinutes(
+      base.getMinutes() + minutes
+    );
+
+    onChange(
+      dateToLocalInputValue(base)
+    );
+  };
+
+  const onAndroidChange = (
+    event,
+    selectedDate
+  ) => {
+    if (event?.type === "dismissed") {
+      setPickerOpen(false);
+      return;
+    }
+
+    if (!selectedDate) {
+      return;
+    }
+
+    if (pickerMode === "date") {
+      const merged =
+        new Date(tempDate);
+
+      merged.setFullYear(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate()
+      );
+
+      setTempDate(merged);
+      setPickerMode("time");
+      return;
+    }
+
+    const finalDate =
+      new Date(tempDate);
+
+    finalDate.setHours(
+      selectedDate.getHours(),
+      selectedDate.getMinutes(),
+      0,
+      0
+    );
+
+    onChange(
+      dateToLocalInputValue(finalDate)
+    );
+
+    setPickerOpen(false);
+    setPickerMode("date");
+  };
+
+  const onIosChange = (
+    event,
+    selectedDate
+  ) => {
+    if (selectedDate) {
+      setTempDate(selectedDate);
+    }
+  };
+
+  const saveIosPicker = () => {
+    onChange(
+      dateToLocalInputValue(tempDate)
+    );
+
+    setPickerOpen(false);
+  };
+
+  return (
+    <View style={styles.endTimePanel}>
+      <View style={styles.endTimeTopRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.endTimeTitle}>
+            Trip End Time
+          </Text>
+
+          <Text style={styles.endTimeSub}>
+            {challan.tripEndedAt
+              ? "Existing end time can be edited."
+              : "Select the actual trip closing time."}
+          </Text>
+        </View>
+
+        <View style={styles.endStatusBadge}>
+          <Text style={styles.endStatusText}>
+            {challan.tripEndedAt
+              ? "ENDED"
+              : "RUNNING"}
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.datePickerBox}
+        onPress={openPicker}
+      >
+        <Text style={styles.datePickerLabel}>
+          Selected End Time
+        </Text>
+
+        <Text style={styles.datePickerValue}>
+          {formatPickerDisplay(value)}
+        </Text>
+
+        <Text style={styles.datePickerHint}>
+          Tap to choose date and time
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.quickTimeRow}>
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={applyNow}
+        >
+          <Text style={styles.quickTimeText}>
+            Now
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={() => addMinutes(30)}
+        >
+          <Text style={styles.quickTimeText}>
+            +30 min
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={() => addMinutes(60)}
+        >
+          <Text style={styles.quickTimeText}>
+            +1 hr
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={styles.endTimeBtn}
+        onPress={onSave}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.endTimeBtnText}>
+            {challan.tripEndedAt
+              ? "Update End Time"
+              : "Save End Time"}
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      {Platform.OS === "android" &&
+        pickerOpen ? (
+        <DateTimePicker
+          value={tempDate}
+          mode={pickerMode}
+          display="default"
+          is24Hour={false}
+          onChange={onAndroidChange}
+        />
+      ) : null}
+
+      {Platform.OS === "ios" ? (
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() =>
+            setPickerOpen(false)
+          }
+        >
+          <View style={styles.pickerModalOverlay}>
+            <View style={styles.pickerModalCard}>
+              <Text style={styles.pickerModalTitle}>
+                Select Trip End Time
+              </Text>
+
+              <DateTimePicker
+                value={tempDate}
+                mode="datetime"
+                display="spinner"
+                onChange={onIosChange}
+              />
+
+              <View style={styles.pickerModalActions}>
+                <TouchableOpacity
+                  style={styles.pickerCancelBtn}
+                  onPress={() =>
+                    setPickerOpen(false)
+                  }
+                >
+                  <Text style={styles.pickerCancelText}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.pickerSaveBtn}
+                  onPress={saveIosPicker}
+                >
+                  <Text style={styles.pickerSaveText}>
+                    Use Time
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -933,37 +1232,113 @@ const styles = {
 
   endTimePanel: {
     marginTop: 14,
-    padding: 12,
-    borderRadius: 14,
+    padding: 14,
+    borderRadius: 18,
     backgroundColor: "rgba(239,68,68,.08)",
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,.20)",
+    borderColor: "rgba(239,68,68,.22)",
+  },
+
+  endTimeTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
   },
 
   endTimeTitle: {
-    color: "#fca5a5",
+    color: "#fff",
     fontWeight: "900",
-    marginBottom: 8,
+    fontSize: 15,
   },
 
-  endTimeInput: {
-    minHeight: 46,
-    borderRadius: 12,
+  endTimeSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 11,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+
+  endStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(239,68,68,.16)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.28)",
+    marginLeft: 10,
+  },
+
+  endStatusText: {
+    color: "#fca5a5",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  datePickerBox: {
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,.10)",
-    backgroundColor: "rgba(255,255,255,.05)",
-    color: "#fff",
-    paddingHorizontal: 12,
-    fontWeight: "800",
+    backgroundColor: "rgba(255,255,255,.045)",
+    padding: 13,
     marginBottom: 10,
   },
 
+  datePickerLabel: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  datePickerValue: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 5,
+  },
+
+  datePickerHint: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+
+  quickTimeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  quickTimeBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,.055)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.09)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quickTimeText: {
+    color: "#cbd5e1",
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
   endTimeBtn: {
-    height: 44,
-    borderRadius: 12,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: "#dc2626",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#dc2626",
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   endTimeBtnText: {
@@ -971,6 +1346,63 @@ const styles = {
     fontWeight: "900",
   },
 
+  pickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18,
+  },
+
+  pickerModalCard: {
+    width: "100%",
+    borderRadius: 22,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.12)",
+    padding: 16,
+  },
+
+  pickerModalTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 17,
+    marginBottom: 12,
+  },
+
+  pickerModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  pickerCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pickerCancelText: {
+    color: "#cbd5e1",
+    fontWeight: "900",
+  },
+
+  pickerSaveBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: "#dc2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pickerSaveText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
   infoLabel: {
     color: "#64748b",
     fontSize: 11,

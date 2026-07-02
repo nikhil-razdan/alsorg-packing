@@ -73,19 +73,6 @@ export async function updateTripLocation() {
 }
 
 export async function endDispatchedChallanTrip(
-  challanNumber
-) {
-  const res =
-    await api.post(
-      `/api/dispatched/challans/${encodeURIComponent(
-        challanNumber
-      )}/end-trip`
-    );
-
-  return res.data;
-}
-
-export async function endDispatchedChallanTrip(
   challanNumber,
   tripEndedAt
 ) {
@@ -101,3 +88,4 @@ export async function endDispatchedChallanTrip(
 
   return res.data;
 }
+
