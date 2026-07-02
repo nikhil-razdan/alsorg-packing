@@ -754,20 +754,45 @@ function formatDateTime(value) {
             /z$/i.test(raw) ||
             /[+-]\d{2}:\d{2}$/.test(raw);
 
-        const utcSafeValue =
-            raw.includes("T") && !hasTimezone
-                ? `${raw}Z`
-                : raw;
+        let date;
 
-        const date =
-            new Date(utcSafeValue);
+        /*
+         * Backend LocalDateTime comes like:
+         * 2026-07-02T14:02:00
+         *
+         * This is already India business time.
+         * Do NOT append Z.
+         * Do NOT treat it as UTC.
+         */
+        if (!hasTimezone && raw.includes("T")) {
+            const match =
+                raw.match(
+                    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+                );
+
+            if (!match) {
+                return raw;
+            }
+
+            date =
+                new Date(
+                    Number(match[1]),
+                    Number(match[2]) - 1,
+                    Number(match[3]),
+                    Number(match[4]),
+                    Number(match[5]),
+                    Number(match[6] || 0)
+                );
+        } else {
+            date =
+                new Date(raw);
+        }
 
         if (Number.isNaN(date.getTime())) {
             return raw;
         }
 
         return new Intl.DateTimeFormat("en-IN", {
-            timeZone: "Asia/Kolkata",
             day: "2-digit",
             month: "2-digit",
             year: "numeric",

@@ -40,30 +40,41 @@ function formatDateTime(value) {
   }
 
   try {
-    /*
-     * Backend is returning UTC LocalDateTime without Z:
-     * 2026-07-01T09:14:00
-     *
-     * JS treats it as local time, so we must force it as UTC.
-     */
     const hasTimezone =
       /z$/i.test(raw) ||
       /[+-]\d{2}:\d{2}$/.test(raw);
 
-    const utcSafeValue =
-      raw.includes("T") && !hasTimezone
-        ? `${raw}Z`
-        : raw;
+    let date;
 
-    const date =
-      new Date(utcSafeValue);
+    if (!hasTimezone && raw.includes("T")) {
+      const match =
+        raw.match(
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+        );
+
+      if (!match) {
+        return raw;
+      }
+
+      date =
+        new Date(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          Number(match[4]),
+          Number(match[5]),
+          Number(match[6] || 0)
+        );
+    } else {
+      date =
+        new Date(raw);
+    }
 
     if (Number.isNaN(date.getTime())) {
       return raw;
     }
 
     return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
