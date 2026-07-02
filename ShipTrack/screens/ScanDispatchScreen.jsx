@@ -18,6 +18,8 @@ import {
   TextInput,
 } from "react-native";
 
+import TripStartPicker from "../components/TripStartPicker";
+
 import {
   CameraView,
   useCameraPermissions,
@@ -256,10 +258,15 @@ export default function ScanDispatchScreen({
 
   const canDispatch =
     resolved &&
-    status === "READY" &&
     (
-      isLegacyLocationMissing(item) ||
-      isFgLocation(item)
+      status === "READY_TO_DISPATCH" ||
+      (
+        status === "READY" &&
+        (
+          isLegacyLocationMissing(item) ||
+          isFgLocation(item)
+        )
+      )
     );
 
   const update = (key, value) => {
@@ -856,17 +863,12 @@ export default function ScanDispatchScreen({
                 </View>
               </Field>
 
-              <Field label="Trip Start Time">
-                <TextInput
-                  value={form.tripStart}
-                  onChangeText={(v) =>
-                    update("tripStart", v)
-                  }
-                  placeholder="YYYY-MM-DDTHH:mm"
-                  placeholderTextColor="#64748b"
-                  style={styles.input}
-                />
-              </Field>
+              <TripStartPicker
+                value={form.tripStart}
+                onChange={(value) =>
+                  update("tripStart", value)
+                }
+              />
 
               <Field label="Remarks">
                 <TextInput

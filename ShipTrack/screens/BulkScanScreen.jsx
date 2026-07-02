@@ -4,6 +4,8 @@ import React, {
   useState,
 } from "react";
 
+import TripStartPicker from "../components/TripStartPicker";
+
 import {
   View,
   Text,
@@ -1202,17 +1204,12 @@ export default function BulkScanScreen({
             </View>
           </Field>
 
-          <Field label="Trip Start Time">
-            <TextInput
-              value={form.tripStart}
-              onChangeText={(v) =>
-                update("tripStart", v)
-              }
-              placeholder="YYYY-MM-DDTHH:mm"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-          </Field>
+          <TripStartPicker
+            value={form.tripStart}
+            onChange={(value) =>
+              update("tripStart", value)
+            }
+          />
 
           <Field label="Remarks">
             <TextInput

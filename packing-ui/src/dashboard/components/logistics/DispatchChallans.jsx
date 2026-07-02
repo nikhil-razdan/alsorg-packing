@@ -199,6 +199,31 @@ function DispatchChallans({
             0
         );
 
+    function formatDuration(minutes) {
+        if (
+            minutes === null ||
+            minutes === undefined ||
+            Number.isNaN(Number(minutes))
+        ) {
+            return "—";
+        }
+
+        const total =
+            Math.max(0, Number(minutes));
+
+        const hours =
+            Math.floor(total / 60);
+
+        const mins =
+            total % 60;
+
+        if (hours <= 0) {
+            return `${mins} min`;
+        }
+
+        return `${hours} hr ${mins} min`;
+    }
+
     const getChallanPdfBlob =
         async (challanNumber) => {
             if (!challanNumber) {

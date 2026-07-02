@@ -34,8 +34,7 @@ public class ScannerDispatchService {
             StickerHistoryRepository stickerHistoryRepository,
             DispatchedItemRepository dispatchedItemRepository,
             PlantLocationService plantLocationService,
-            DispatchChallanService dispatchChallanService
-    ) {
+            DispatchChallanService dispatchChallanService) {
         this.packetItemRepository = packetItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
         this.dispatchedItemRepository = dispatchedItemRepository;
@@ -46,33 +45,24 @@ public class ScannerDispatchService {
     @Transactional(readOnly = true)
     public ScanResolveResponse resolveScan(
             String rawScanText,
-            Set<String> allowedPlants
-    ) {
-        ResolvedScan resolved =
-                resolve(rawScanText);
+            Set<String> allowedPlants) {
+        ResolvedScan resolved = resolve(rawScanText);
 
-        PacketItem packetItem =
-                resolved.packetItem;
+        PacketItem packetItem = resolved.packetItem;
 
-        DispatchedItem dispatchedItem =
-                resolved.dispatchedItem;
+        DispatchedItem dispatchedItem = resolved.dispatchedItem;
 
         assertScanPlantAccess(
                 dispatchedItem,
-                allowedPlants
-        );
+                allowedPlants);
 
-        boolean moveToFgRequired =
-                requiresMoveToFg(dispatchedItem);
+        boolean moveToFgRequired = requiresMoveToFg(dispatchedItem);
 
-        boolean dispatchAllowed =
-                canQrDispatchNow(dispatchedItem);
+        boolean dispatchAllowed = canQrDispatchNow(dispatchedItem);
 
-        List<String> fgZones =
-                getFgZones(dispatchedItem);
+        List<String> fgZones = getFgZones(dispatchedItem);
 
-        ScanResolveResponse dto =
-                new ScanResolveResponse();
+        ScanResolveResponse dto = new ScanResolveResponse();
 
         dto.setPacketItemId(packetItem.getId().toString());
         dto.setZohoItemId(dispatchedItem.getZohoItemId());
@@ -97,8 +87,7 @@ public class ScannerDispatchService {
         dto.setStatus(
                 dispatchedItem.getStatus() != null
                         ? dispatchedItem.getStatus().name()
-                        : ""
-        );
+                        : "");
 
         dto.setDispatchAllowed(dispatchAllowed);
 
@@ -106,8 +95,7 @@ public class ScannerDispatchService {
             dto.setMessage(
                     fgZones.isEmpty()
                             ? "Move item to FG before QR dispatch"
-                            : "Move item to FG before QR dispatch. Select FG zone."
-            );
+                            : "Move item to FG before QR dispatch. Select FG zone.");
         } else if (dispatchAllowed) {
             dto.setMessage("Item ready for QR dispatch");
         } else if (dispatchedItem.getStatus() == ItemDispatchStatus.DISPATCHED) {
@@ -115,8 +103,7 @@ public class ScannerDispatchService {
         } else {
             dto.setMessage(
                     "Item cannot be dispatched from current status: "
-                            + dispatchedItem.getStatus()
-            );
+                            + dispatchedItem.getStatus());
         }
 
         return dto;
@@ -129,23 +116,20 @@ public class ScannerDispatchService {
             Set<String> allowedPlants,
             UUID driverId,
             UUID vehicleId,
-            LocalDateTime tripStart
-    ) {
-        ResolvedScan resolved =
-                resolve(rawScanText);
+            LocalDateTime tripStart) {
+        ResolvedScan resolved = resolve(rawScanText);
 
         assertScanPlantAccess(
                 resolved.dispatchedItem,
-                allowedPlants
-        );
+                allowedPlants);
 
         return dispatchChallanService.generateAndDispatch(
                 List.of(resolved.dispatchedItem.getZohoItemId()),
                 driverId,
                 vehicleId,
+                tripStart,
                 username,
-                allowedPlants
-        );
+                allowedPlants);
     }
 
     @Transactional
@@ -155,74 +139,60 @@ public class ScannerDispatchService {
             Set<String> allowedPlants,
             UUID driverId,
             UUID vehicleId,
-            LocalDateTime tripStart
-    ) {
+            LocalDateTime tripStart) {
         if (rawScanTexts == null || rawScanTexts.isEmpty()) {
             throw new RuntimeException("No QR scans provided");
         }
 
-        Map<String, ResolvedScan> unique =
-                new LinkedHashMap<>();
+        Map<String, ResolvedScan> unique = new LinkedHashMap<>();
 
         for (String scanText : rawScanTexts) {
-            ResolvedScan resolved =
-                    resolve(scanText);
+            ResolvedScan resolved = resolve(scanText);
 
             assertScanPlantAccess(
                     resolved.dispatchedItem,
-                    allowedPlants
-            );
+                    allowedPlants);
 
-            String id =
-                    resolved.dispatchedItem.getZohoItemId();
+            String id = resolved.dispatchedItem.getZohoItemId();
 
             if (unique.containsKey(id)) {
                 throw new RuntimeException(
                         "Duplicate scan found for item: "
-                                + resolved.dispatchedItem.getName()
-                );
+                                + resolved.dispatchedItem.getName());
             }
 
             unique.put(
                     id,
-                    resolved
-            );
+                    resolved);
         }
 
-        List<String> itemIds =
-                unique.values()
-                        .stream()
-                        .map(resolved -> resolved.dispatchedItem.getZohoItemId())
-                        .toList();
+        List<String> itemIds = unique.values()
+                .stream()
+                .map(resolved -> resolved.dispatchedItem.getZohoItemId())
+                .toList();
 
         return dispatchChallanService.generateAndDispatch(
                 itemIds,
                 driverId,
                 vehicleId,
+                tripStart,
                 username,
-                allowedPlants
-        );
+                allowedPlants);
     }
 
     private ResolvedScan resolve(
-            String rawScanText
-    ) {
-        DecodedScan decoded =
-                decode(rawScanText);
+            String rawScanText) {
+        DecodedScan decoded = decode(rawScanText);
 
-        PacketItem packetItem =
-                resolvePacketItem(decoded);
+        PacketItem packetItem = resolvePacketItem(decoded);
 
         validateLatestSticker(
                 decoded,
-                packetItem
-        );
+                packetItem);
 
-        DispatchedItem dispatchedItem =
-                resolveDispatchedItem(packetItem);
+        DispatchedItem dispatchedItem = resolveDispatchedItem(packetItem);
 
-        ResolvedScan resolved =
-                new ResolvedScan();
+        ResolvedScan resolved = new ResolvedScan();
 
         resolved.packetItem = packetItem;
         resolved.dispatchedItem = dispatchedItem;
@@ -232,25 +202,21 @@ public class ScannerDispatchService {
     }
 
     private PacketItem resolvePacketItem(
-            DecodedScan decoded
-    ) {
+            DecodedScan decoded) {
         if (decoded.packetItemId != null) {
             return packetItemRepository.findById(decoded.packetItemId)
                     .orElseThrow(() -> new RuntimeException("Packet item not found"));
         }
 
         if (decoded.stickerNumber != null && !decoded.stickerNumber.isBlank()) {
-            Optional<PacketItem> current =
-                    packetItemRepository.findByStickerNumber(decoded.stickerNumber);
+            Optional<PacketItem> current = packetItemRepository.findByStickerNumber(decoded.stickerNumber);
 
             if (current.isPresent()) {
                 return current.get();
             }
 
-            Optional<StickerHistory> history =
-                    stickerHistoryRepository.findTopByStickerNumberOrderByGeneratedAtDesc(
-                            decoded.stickerNumber
-                    );
+            Optional<StickerHistory> history = stickerHistoryRepository.findTopByStickerNumberOrderByGeneratedAtDesc(
+                    decoded.stickerNumber);
 
             if (history.isPresent()) {
                 return history.get().getPacketItem();
@@ -261,25 +227,21 @@ public class ScannerDispatchService {
     }
 
     private DispatchedItem resolveDispatchedItem(
-            PacketItem packetItem
-    ) {
-        Optional<DispatchedItem> byPacketItemId =
-                dispatchedItemRepository.findByPacketItemId(packetItem.getId());
+            PacketItem packetItem) {
+        Optional<DispatchedItem> byPacketItemId = dispatchedItemRepository.findByPacketItemId(packetItem.getId());
 
         if (byPacketItemId.isPresent()) {
             return byPacketItemId.get();
         }
 
-        Optional<DispatchedItem> byId =
-                dispatchedItemRepository.findById(packetItem.getId().toString());
+        Optional<DispatchedItem> byId = dispatchedItemRepository.findById(packetItem.getId().toString());
 
         if (byId.isPresent()) {
             return byId.get();
         }
 
         if (packetItem.getZohoItemId() != null && !packetItem.getZohoItemId().isBlank()) {
-            Optional<DispatchedItem> byZoho =
-                    dispatchedItemRepository.findById(packetItem.getZohoItemId());
+            Optional<DispatchedItem> byZoho = dispatchedItemRepository.findById(packetItem.getZohoItemId());
 
             if (byZoho.isPresent()) {
                 return byZoho.get();
@@ -287,8 +249,8 @@ public class ScannerDispatchService {
         }
 
         if (packetItem.getStickerNumber() != null && !packetItem.getStickerNumber().isBlank()) {
-            Optional<DispatchedItem> bySticker =
-                    dispatchedItemRepository.findByStickerNumber(packetItem.getStickerNumber());
+            Optional<DispatchedItem> bySticker = dispatchedItemRepository
+                    .findByStickerNumber(packetItem.getStickerNumber());
 
             if (bySticker.isPresent()) {
                 return bySticker.get();
@@ -300,8 +262,7 @@ public class ScannerDispatchService {
 
     private void validateLatestSticker(
             DecodedScan decoded,
-            PacketItem packetItem
-    ) {
+            PacketItem packetItem) {
         if (decoded.stickerNumber == null || decoded.stickerNumber.isBlank()) {
             return;
         }
@@ -313,78 +274,64 @@ public class ScannerDispatchService {
         if (!decoded.stickerNumber.equals(packetItem.getStickerNumber())) {
             throw new RuntimeException(
                     "Old/reprinted sticker scanned. Please scan latest sticker: "
-                            + packetItem.getStickerNumber()
-            );
+                            + packetItem.getStickerNumber());
         }
     }
 
     private DecodedScan decode(
-            String rawScanText
-    ) {
+            String rawScanText) {
         if (rawScanText == null || rawScanText.trim().isEmpty()) {
             throw new RuntimeException("Empty QR scan");
         }
 
-        String scanText =
-                URLDecoder.decode(
-                        rawScanText.trim(),
-                        StandardCharsets.UTF_8
-                );
+        String scanText = URLDecoder.decode(
+                rawScanText.trim(),
+                StandardCharsets.UTF_8);
 
-        DecodedScan decoded =
-                new DecodedScan();
+        DecodedScan decoded = new DecodedScan();
 
         if (scanText.startsWith("ALSORG|")) {
-            String[] parts =
-                    scanText.split("\\|");
+            String[] parts = scanText.split("\\|");
 
             for (String part : parts) {
                 if (part.startsWith("PI=")) {
-                    decoded.packetItemId =
-                            UUID.fromString(part.substring(3).trim());
+                    decoded.packetItemId = UUID.fromString(part.substring(3).trim());
                 }
 
                 if (part.startsWith("SN=")) {
-                    decoded.stickerNumber =
-                            part.substring(3).trim();
+                    decoded.stickerNumber = part.substring(3).trim();
                 }
             }
 
             return decoded;
         }
 
-        Matcher uuidMatcher =
-                Pattern
-                        .compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-                        .matcher(scanText);
+        Matcher uuidMatcher = Pattern
+                .compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+                .matcher(scanText);
 
         if (uuidMatcher.find()) {
-            decoded.packetItemId =
-                    UUID.fromString(uuidMatcher.group());
+            decoded.packetItemId = UUID.fromString(uuidMatcher.group());
 
             return decoded;
         }
 
-        Matcher oldStickerMatcher =
-                Pattern
-                        .compile("SNo:\\s*([^\\r\\n]+)")
-                        .matcher(scanText);
+        Matcher oldStickerMatcher = Pattern
+                .compile("SNo:\\s*([^\\r\\n]+)")
+                .matcher(scanText);
 
         if (oldStickerMatcher.find()) {
-            decoded.stickerNumber =
-                    oldStickerMatcher.group(1).trim();
+            decoded.stickerNumber = oldStickerMatcher.group(1).trim();
 
             return decoded;
         }
 
-        Matcher snMatcher =
-                Pattern
-                        .compile("SN=([^|\\r\\n\\s]+)")
-                        .matcher(scanText);
+        Matcher snMatcher = Pattern
+                .compile("SN=([^|\\r\\n\\s]+)")
+                .matcher(scanText);
 
         if (snMatcher.find()) {
-            decoded.stickerNumber =
-                    snMatcher.group(1).trim();
+            decoded.stickerNumber = snMatcher.group(1).trim();
 
             return decoded;
         }
@@ -394,8 +341,7 @@ public class ScannerDispatchService {
 
     private void assertScanPlantAccess(
             DispatchedItem item,
-            Set<String> allowedPlants
-    ) {
+            Set<String> allowedPlants) {
         if (item == null) {
             throw new RuntimeException("Dispatch item missing");
         }
@@ -410,22 +356,19 @@ public class ScannerDispatchService {
 
         if (!allowedPlants.contains(item.getPlantCode())) {
             throw new RuntimeException(
-                    "User does not have access to plant: " + item.getPlantCode()
-            );
+                    "User does not have access to plant: " + item.getPlantCode());
         }
     }
 
     private boolean isLegacyLocationMissing(
-            DispatchedItem item
-    ) {
+            DispatchedItem item) {
         return item.getPlantCode() == null || item.getPlantCode().isBlank()
                 || item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()
                 || item.getFgAreaCode() == null || item.getFgAreaCode().isBlank();
     }
 
     private String currentLocation(
-            DispatchedItem item
-    ) {
+            DispatchedItem item) {
         if (item.getCurrentLocationCode() != null && !item.getCurrentLocationCode().isBlank()) {
             return item.getCurrentLocationCode().trim();
         }
@@ -438,17 +381,14 @@ public class ScannerDispatchService {
     }
 
     private boolean isPkdLocation(
-            DispatchedItem item
-    ) {
-        String location =
-                currentLocation(item);
+            DispatchedItem item) {
+        String location = currentLocation(item);
 
         if (location.isBlank()) {
             return false;
         }
 
-        String packedArea =
-                item.getPackedAreaCode();
+        String packedArea = item.getPackedAreaCode();
 
         if (packedArea != null && !packedArea.isBlank()) {
             return location.equals(packedArea)
@@ -460,13 +400,10 @@ public class ScannerDispatchService {
     }
 
     private boolean isFgLocation(
-            DispatchedItem item
-    ) {
-        String location =
-                currentLocation(item);
+            DispatchedItem item) {
+        String location = currentLocation(item);
 
-        String fg =
-                item.getFgAreaCode();
+        String fg = item.getFgAreaCode();
 
         if (location.isBlank() || fg == null || fg.isBlank()) {
             return false;
@@ -478,8 +415,7 @@ public class ScannerDispatchService {
     }
 
     private boolean requiresMoveToFg(
-            DispatchedItem item
-    ) {
+            DispatchedItem item) {
         return item.getStatus() == ItemDispatchStatus.READY
                 && !isLegacyLocationMissing(item)
                 && isPkdLocation(item)
@@ -487,8 +423,7 @@ public class ScannerDispatchService {
     }
 
     private boolean canQrDispatchNow(
-            DispatchedItem item
-    ) {
+            DispatchedItem item) {
         if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
             return true;
         }
@@ -501,26 +436,22 @@ public class ScannerDispatchService {
     }
 
     private List<String> getFgZones(
-            DispatchedItem item
-    ) {
+            DispatchedItem item) {
         if (item == null) {
             return List.of();
         }
 
-        String plantCode =
-                item.getPlantCode() == null
-                        ? ""
-                        : item.getPlantCode().trim();
+        String plantCode = item.getPlantCode() == null
+                ? ""
+                : item.getPlantCode().trim();
 
-        String fgAreaCode =
-                item.getFgAreaCode() == null
-                        ? ""
-                        : item.getFgAreaCode().trim();
+        String fgAreaCode = item.getFgAreaCode() == null
+                ? ""
+                : item.getFgAreaCode().trim();
 
         if (!plantCode.isBlank()) {
             try {
-                PlantLocationService.PlantConfig plant =
-                        plantLocationService.getPlantConfig(plantCode);
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
 
                 if (plant.fgZones() != null && !plant.fgZones().isEmpty()) {
                     return plant.fgZones();
@@ -529,10 +460,8 @@ public class ScannerDispatchService {
             }
         }
 
-        if (
-                "AL-P1".equalsIgnoreCase(plantCode)
-                        || "FG-1".equalsIgnoreCase(fgAreaCode)
-        ) {
+        if ("AL-P1".equalsIgnoreCase(plantCode)
+                || "FG-1".equalsIgnoreCase(fgAreaCode)) {
             return List.of("A", "B", "C");
         }
 

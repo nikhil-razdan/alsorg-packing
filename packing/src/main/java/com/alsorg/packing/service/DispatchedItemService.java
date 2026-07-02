@@ -649,32 +649,83 @@ public class DispatchedItemService {
                 null);
     }
 
-    public void markDispatchedFromChalaan(String zohoItemId, String username) {
-
+    public void markDispatchedFromChalaan(
+            String zohoItemId,
+            String username) {
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
-        if (item.getStatus() != ItemDispatchStatus.READY_TO_DISPATCH) {
-            throw new IllegalStateException("Item must be READY_TO_DISPATCH");
+        ItemDispatchStatus previousStatus = item.getStatus();
+
+        /*
+         * Allowed:
+         * 1. READY_TO_DISPATCH - normal dispatch flow.
+         * 2. READY - QR dispatch flow after FG movement / legacy-safe item.
+         */
+        if (previousStatus != ItemDispatchStatus.READY_TO_DISPATCH
+                && previousStatus != ItemDispatchStatus.READY) {
+            throw new IllegalStateException(
+                    "Item must be READY or READY_TO_DISPATCH before challan dispatch");
         }
 
+        /*
+         * If new plant/location tracking exists, READY item must already be in FG.
+         * Legacy records without plant/location are allowed.
+         */
+        if (previousStatus == ItemDispatchStatus.READY
+                && !canProceedFromPacked(item)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Move item to FG before dispatch action");
+        }
+
+        LocalDateTime nowIst = LocalDateTime.now(
+                java.time.ZoneId.of("Asia/Kolkata"));
+
         item.setStatus(ItemDispatchStatus.DISPATCHED);
-        item.setDispatchedBy(username);
-        item.setDispatchedAt(
-                LocalDateTime.now(
-                        java.time.ZoneId.of("Asia/Kolkata")));
+        item.setDispatchedBy(
+                username != null && !username.isBlank()
+                        ? username
+                        : "SYSTEM");
+
+        /*
+         * Do not overwrite if DispatchChallanService already set selected dispatch
+         * time.
+         */
+        if (item.getDispatchedAt() == null) {
+            item.setDispatchedAt(nowIst);
+        }
+
+        /*
+         * Trip timer starts from dispatch/challan time.
+         * Do not overwrite if already set by selected driver/vehicle dispatch form.
+         */
+        if (item.getTripStartedAt() == null) {
+            item.setTripStartedAt(item.getDispatchedAt());
+        }
+
+        /*
+         * Important:
+         * Do NOT set tripEndedAt here.
+         * Logistics/Admin ends the trip later.
+         */
+
         item.setStock(0);
 
         dispatchedRepo.save(item);
 
-        auditLogService.log(zohoItemId, "Dispatched via chalaan", username, "DISPATCH");
+        auditLogService.log(
+                zohoItemId,
+                "Dispatched via chalaan",
+                username,
+                "DISPATCH");
 
         activityLogService.log(
                 zohoItemId,
                 "DISPATCHED",
                 username,
                 "DISPATCH",
-                "READY_TO_DISPATCH",
+                previousStatus == null ? null : previousStatus.name(),
                 "DISPATCHED",
                 null);
     }

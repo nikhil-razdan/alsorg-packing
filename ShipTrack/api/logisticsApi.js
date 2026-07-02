@@ -71,3 +71,16 @@ export async function updateTripLocation() {
     "Live location flow has been removed."
   );
 }
+
+export async function endDispatchedChallanTrip(
+  challanNumber
+) {
+  const res =
+    await api.post(
+      `/api/dispatched/challans/${encodeURIComponent(
+        challanNumber
+      )}/end-trip`
+    );
+
+  return res.data;
+}

@@ -231,6 +231,8 @@ export async function createDispatchChallan({
   itemIds,
   driverId,
   vehicleId,
+  dispatchTime,
+  tripStart,
   preview = true,
 }) {
   const res = await fetch(
@@ -245,6 +247,8 @@ export async function createDispatchChallan({
         itemIds,
         driverId,
         vehicleId,
+        dispatchTime,
+        tripStart,
       }),
     }
   );

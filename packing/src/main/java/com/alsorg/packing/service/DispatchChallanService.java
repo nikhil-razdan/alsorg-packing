@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,7 +26,11 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class DispatchChallanService {
+
+    private static final ZoneId INDIA_ZONE =
+            ZoneId.of("Asia/Kolkata");
 
     private final ChalaanPdfService pdfService;
     private final DispatchedItemRepository dispatchedRepo;
@@ -40,7 +45,8 @@ public class DispatchChallanService {
             PacketItemRepository packetItemRepo,
             DriverRepository driverRepository,
             VehicleRepository vehicleRepository,
-            DispatchedItemService dispatchedItemService) {
+            DispatchedItemService dispatchedItemService
+    ) {
         this.pdfService = pdfService;
         this.dispatchedRepo = dispatchedRepo;
         this.packetItemRepo = packetItemRepo;
@@ -49,13 +55,45 @@ public class DispatchChallanService {
         this.dispatchedItemService = dispatchedItemService;
     }
 
-    @Transactional
+    /*
+     * Backward-compatible wrapper.
+     * Keeps old controller / mobile calls compiling.
+     */
     public DispatchTripPdfResult generateAndDispatch(
             List<String> rawItemIds,
             UUID driverId,
             UUID vehicleId,
             String username,
-            Set<String> allowedPlants) {
+            Set<String> allowedPlants
+    ) {
+        return generateAndDispatch(
+                rawItemIds,
+                driverId,
+                vehicleId,
+                null,
+                username,
+                allowedPlants
+        );
+    }
+
+    /*
+     * Main challan dispatch flow.
+     *
+     * dispatchTime / tripStart:
+     * - Comes from web/mobile selected "Dispatch / Trip Start Time".
+     * - If null, backend uses current India time.
+     *
+     * This is not old driver delivery/POD/live-location flow.
+     * This only starts a challan-level trip timer.
+     */
+    public DispatchTripPdfResult generateAndDispatch(
+            List<String> rawItemIds,
+            UUID driverId,
+            UUID vehicleId,
+            LocalDateTime dispatchTime,
+            String username,
+            Set<String> allowedPlants
+    ) {
         if (rawItemIds == null || rawItemIds.isEmpty()) {
             throw new RuntimeException("No items selected for challan");
         }
@@ -68,211 +106,372 @@ public class DispatchChallanService {
             throw new RuntimeException("Vehicle is required");
         }
 
-        Driver driver = driverRepository.findById(driverId)
-                .orElseThrow(() -> new RuntimeException("Driver not found"));
+        Driver driver =
+                driverRepository
+                        .findById(driverId)
+                        .orElseThrow(() -> new RuntimeException("Driver not found"));
 
-        Vehicle vehicle = vehicleRepository.findById(vehicleId)
-                .orElseThrow(() -> new RuntimeException("Vehicle not found"));
+        Vehicle vehicle =
+                vehicleRepository
+                        .findById(vehicleId)
+                        .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
-        List<String> itemIds = new ArrayList<>(
-                rawItemIds.stream()
-                        .filter(id -> id != null && !id.trim().isBlank())
-                        .map(String::trim)
-                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
+        List<String> itemIds =
+                cleanUniqueItemIds(rawItemIds);
 
         if (itemIds.isEmpty()) {
             throw new RuntimeException("No valid items selected for challan");
         }
 
-        List<DispatchedItem> items = new ArrayList<>();
+        List<DispatchedItem> items =
+                new ArrayList<>();
 
         for (String id : itemIds) {
-            DispatchedItem item = dispatchedRepo.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Item not found: " + id));
+            DispatchedItem item =
+                    dispatchedRepo
+                            .findById(id)
+                            .orElseThrow(() -> new RuntimeException("Item not found: " + id));
 
-            assertPlantAccess(item, allowedPlants);
-
-            item = prepareForChallan(
+            assertPlantAccess(
                     item,
-                    username,
-                    allowedPlants);
+                    allowedPlants
+            );
 
-            items.add(item);
-        }
-
-        String challanNo = "CH-" + System.currentTimeMillis();
-
-        ChalaanPdfData data = new ChalaanPdfData();
-
-        data.setVoucherNo(challanNo);
-        data.setDesignerName("-");
-        data.setOt("-");
-        data.setDriverName(driver.getName());
-        data.setVehicleNumber(vehicle.getVehicleNumber());
-
-        List<ChalaanItem> challanItems = new ArrayList<>();
-
-        for (DispatchedItem item : items) {
-            PacketItem packetItem = null;
-
-            if (item.getPacketItemId() != null) {
-                packetItem = packetItemRepo.findById(item.getPacketItemId())
-                        .orElse(null);
-            }
-
-            challanItems.add(
-                    buildChallanItem(
+            DispatchedItem prepared =
+                    prepareForChallan(
                             item,
-                            packetItem));
+                            username,
+                            allowedPlants
+                    );
+
+            items.add(prepared);
         }
 
-        data.setItems(challanItems);
+        String challanNo =
+                generateChallanNumber();
 
-        if (!challanItems.isEmpty()) {
-            data.setAddress(
-                    safe(challanItems.get(0).getClientAddress()));
-        }
+        ChalaanPdfData data =
+                buildPdfData(
+                        challanNo,
+                        driver,
+                        vehicle,
+                        items
+                );
 
-        byte[] pdf = pdfService.generateChalaan(data);
+        byte[] pdf =
+                pdfService.generateChalaan(data);
 
-        LocalDateTime now = LocalDateTime.now(
-                java.time.ZoneId.of("Asia/Kolkata"));
+        LocalDateTime dispatchTimeIst =
+                dispatchTime != null
+                        ? dispatchTime
+                        : LocalDateTime.now(INDIA_ZONE);
 
+        String actor =
+                safeActor(username);
+
+        /*
+         * Save challan metadata before marking DISPATCHED.
+         * markDispatchedFromChalaan will set status/stock/logs.
+         */
         for (DispatchedItem item : items) {
-            item.setChalaanNumber(challanNo);
-
-            item.setDriverId(driver.getId());
-            item.setDriverName(driver.getName());
-
-            item.setVehicleId(vehicle.getId());
-            item.setVehicleNumber(vehicle.getVehicleNumber());
-
-            item.setDispatchedAt(now);
-            item.setDispatchedBy(safeActor(username));
+            applyDispatchMetadata(
+                    item,
+                    challanNo,
+                    driver,
+                    vehicle,
+                    dispatchTimeIst,
+                    actor
+            );
         }
 
         dispatchedRepo.saveAll(items);
 
+        /*
+         * This logs and moves status to DISPATCHED.
+         * Then we re-apply the selected time after it, so even if older
+         * markDispatchedFromChalaan overwrites time, final saved time stays correct.
+         */
         for (DispatchedItem item : items) {
             dispatchedItemService.markDispatchedFromChalaan(
                     item.getZohoItemId(),
-                    safeActor(username));
+                    actor
+            );
         }
+
+        List<DispatchedItem> finalItems =
+                new ArrayList<>();
+
+        for (DispatchedItem item : items) {
+            DispatchedItem saved =
+                    dispatchedRepo
+                            .findById(item.getZohoItemId())
+                            .orElseThrow(() -> new RuntimeException(
+                                    "Item missing after dispatch: " + item.getZohoItemId()
+                            ));
+
+            applyDispatchMetadata(
+                    saved,
+                    challanNo,
+                    driver,
+                    vehicle,
+                    dispatchTimeIst,
+                    actor
+            );
+
+            saved.setStatus(ItemDispatchStatus.DISPATCHED);
+            saved.setStock(0);
+
+            finalItems.add(saved);
+        }
+
+        dispatchedRepo.saveAll(finalItems);
 
         return new DispatchTripPdfResult(
                 null,
                 challanNo,
-                pdf);
+                pdf
+        );
+    }
+
+    private List<String> cleanUniqueItemIds(
+            List<String> rawItemIds
+    ) {
+        LinkedHashSet<String> unique =
+                new LinkedHashSet<>();
+
+        for (String id : rawItemIds) {
+            if (id == null) {
+                continue;
+            }
+
+            String clean =
+                    id.trim();
+
+            if (!clean.isBlank()) {
+                unique.add(clean);
+            }
+        }
+
+        return new ArrayList<>(unique);
     }
 
     private DispatchedItem prepareForChallan(
             DispatchedItem item,
             String username,
-            Set<String> allowedPlants) {
-        if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
+            Set<String> allowedPlants
+    ) {
+        ItemDispatchStatus status =
+                item.getStatus();
+
+        if (status == ItemDispatchStatus.READY_TO_DISPATCH) {
             return item;
         }
 
-        if (item.getStatus() == ItemDispatchStatus.DISPATCHED) {
+        if (status == ItemDispatchStatus.DISPATCHED) {
             throw new RuntimeException(
-                    "Item already dispatched. Challan: " + safe(item.getChalaanNumber()));
+                    "Item already dispatched. Challan: "
+                            + safe(item.getChalaanNumber())
+            );
         }
 
-        if (item.getStatus() == ItemDispatchStatus.LOADED) {
+        if (status == ItemDispatchStatus.LOADED) {
             throw new RuntimeException(
                     "Item is in old queued state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
+                            + safe(item.getName())
+            );
         }
 
-        if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
+        if (status == ItemDispatchStatus.OUT_FOR_DELIVERY) {
             throw new RuntimeException(
                     "Item is in old delivery state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
+                            + safe(item.getName())
+            );
         }
 
-        if (item.getStatus() == ItemDispatchStatus.DELIVERED) {
+        if (status == ItemDispatchStatus.DELIVERED) {
             throw new RuntimeException(
                     "Item is in old delivered state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
+                            + safe(item.getName())
+            );
         }
 
-        if (item.getStatus() == ItemDispatchStatus.READY) {
+        if (status == ItemDispatchStatus.READY) {
             if (requiresMoveToFg(item)) {
                 throw new RuntimeException(
                         "Move item to FG before generating challan: "
-                                + safe(item.getName()));
+                                + safe(item.getName())
+                );
             }
 
             dispatchedItemService.updateDispatchStatus(
                     item.getZohoItemId(),
                     ItemDispatchStatus.READY_TO_DISPATCH,
                     safeActor(username),
-                    allowedPlants);
+                    allowedPlants
+            );
 
-            return dispatchedRepo.findById(item.getZohoItemId())
-                    .orElseThrow(() -> new RuntimeException("Item missing after status update"));
+            return dispatchedRepo
+                    .findById(item.getZohoItemId())
+                    .orElseThrow(() -> new RuntimeException(
+                            "Item missing after status update"
+                    ));
         }
 
         throw new RuntimeException(
                 "Item must be READY_TO_DISPATCH before challan. Current status: "
-                        + item.getStatus()
+                        + status
                         + " | Item: "
-                        + safe(item.getName()));
+                        + safe(item.getName())
+        );
+    }
+
+    private ChalaanPdfData buildPdfData(
+            String challanNo,
+            Driver driver,
+            Vehicle vehicle,
+            List<DispatchedItem> items
+    ) {
+        ChalaanPdfData data =
+                new ChalaanPdfData();
+
+        data.setVoucherNo(challanNo);
+        data.setDesignerName("-");
+        data.setOt("-");
+        data.setDriverName(safe(driver.getName()));
+        data.setVehicleNumber(safe(vehicle.getVehicleNumber()));
+
+        List<ChalaanItem> challanItems =
+                new ArrayList<>();
+
+        for (DispatchedItem item : items) {
+            PacketItem packetItem =
+                    null;
+
+            if (item.getPacketItemId() != null) {
+                packetItem =
+                        packetItemRepo
+                                .findById(item.getPacketItemId())
+                                .orElse(null);
+            }
+
+            challanItems.add(
+                    buildChallanItem(
+                            item,
+                            packetItem
+                    )
+            );
+        }
+
+        data.setItems(challanItems);
+
+        if (!challanItems.isEmpty()) {
+            data.setAddress(
+                    safe(challanItems.get(0).getClientAddress())
+            );
+        } else {
+            data.setAddress("-");
+        }
+
+        return data;
+    }
+
+    private void applyDispatchMetadata(
+            DispatchedItem item,
+            String challanNo,
+            Driver driver,
+            Vehicle vehicle,
+            LocalDateTime dispatchTimeIst,
+            String actor
+    ) {
+        item.setChalaanNumber(challanNo);
+
+        item.setDriverId(driver.getId());
+        item.setDriverName(safe(driver.getName()));
+
+        item.setVehicleId(vehicle.getId());
+        item.setVehicleNumber(safe(vehicle.getVehicleNumber()));
+
+        /*
+         * Main rule:
+         * selected dispatch time = dispatchedAt = tripStartedAt
+         */
+        item.setDispatchedAt(dispatchTimeIst);
+        item.setTripStartedAt(dispatchTimeIst);
+
+        /*
+         * Logistics/Admin ends it later from Dispatch Challans screen.
+         */
+        item.setTripEndedAt(null);
+
+        item.setDispatchedBy(actor);
     }
 
     private ChalaanItem buildChallanItem(
             DispatchedItem dispatchedItem,
-            PacketItem packetItem) {
-        ChalaanItem ci = new ChalaanItem();
+            PacketItem packetItem
+    ) {
+        ChalaanItem ci =
+                new ChalaanItem();
 
-        ci.setZohoItemId(dispatchedItem.getZohoItemId());
+        ci.setZohoItemId(
+                dispatchedItem.getZohoItemId()
+        );
 
         ci.setItemName(
                 packetItem != null && packetItem.getItemName() != null
                         ? packetItem.getItemName()
-                        : dispatchedItem.getName());
+                        : dispatchedItem.getName()
+        );
 
         ci.setPdNo(
                 packetItem != null && packetItem.getPdNo() != null
                         ? packetItem.getPdNo()
-                        : dispatchedItem.getPdNo());
+                        : dispatchedItem.getPdNo()
+        );
 
         ci.setClientName(
                 packetItem != null && packetItem.getClientName() != null
                         ? packetItem.getClientName()
-                        : dispatchedItem.getClientName());
+                        : dispatchedItem.getClientName()
+        );
 
         ci.setClientAddress(
                 packetItem != null && packetItem.getClientAddress() != null
                         ? packetItem.getClientAddress()
-                        : dispatchedItem.getClientAddress());
+                        : dispatchedItem.getClientAddress()
+        );
 
         ci.setDescription(
                 packetItem != null && packetItem.getDescription() != null
                         ? packetItem.getDescription()
-                        : dispatchedItem.getDescription());
+                        : dispatchedItem.getDescription()
+        );
 
         ci.setDrawingNo(
                 packetItem != null && packetItem.getDrawingNo() != null
                         ? packetItem.getDrawingNo()
-                        : dispatchedItem.getDrawingNo());
+                        : dispatchedItem.getDrawingNo()
+        );
 
         ci.setRemarks(
                 packetItem != null && packetItem.getRemarks() != null
                         ? packetItem.getRemarks()
-                        : dispatchedItem.getRemarks());
+                        : dispatchedItem.getRemarks()
+        );
 
         ci.setQty(
                 dispatchedItem.getQuantity() != null
                         ? String.valueOf(dispatchedItem.getQuantity())
-                        : "1");
+                        : "1"
+        );
 
         return ci;
     }
 
     private void assertPlantAccess(
             DispatchedItem item,
-            Set<String> allowedPlants) {
+            Set<String> allowedPlants
+    ) {
         if (allowedPlants == null || allowedPlants.isEmpty()) {
             return;
         }
@@ -283,12 +482,15 @@ public class DispatchChallanService {
 
         if (!allowedPlants.contains(item.getPlantCode())) {
             throw new RuntimeException(
-                    "User does not have access to plant: " + item.getPlantCode());
+                    "User does not have access to plant: "
+                            + item.getPlantCode()
+            );
         }
     }
 
     private boolean requiresMoveToFg(
-            DispatchedItem item) {
+            DispatchedItem item
+    ) {
         return item.getStatus() == ItemDispatchStatus.READY
                 && !isLegacyLocationMissing(item)
                 && isPkdLocation(item)
@@ -296,14 +498,16 @@ public class DispatchChallanService {
     }
 
     private boolean isLegacyLocationMissing(
-            DispatchedItem item) {
+            DispatchedItem item
+    ) {
         return item.getPlantCode() == null || item.getPlantCode().isBlank()
                 || item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()
                 || item.getFgAreaCode() == null || item.getFgAreaCode().isBlank();
     }
 
     private String currentLocation(
-            DispatchedItem item) {
+            DispatchedItem item
+    ) {
         if (item.getCurrentLocationCode() != null && !item.getCurrentLocationCode().isBlank()) {
             return item.getCurrentLocationCode().trim();
         }
@@ -316,53 +520,88 @@ public class DispatchChallanService {
     }
 
     private boolean isPkdLocation(
-            DispatchedItem item) {
-        String location = currentLocation(item);
+            DispatchedItem item
+    ) {
+        String location =
+                currentLocation(item);
 
         if (location.isBlank()) {
             return false;
         }
 
-        String packedArea = item.getPackedAreaCode();
+        String packedArea =
+                item.getPackedAreaCode();
+
+        String cleanLocation =
+                location.trim().toUpperCase();
 
         if (packedArea != null && !packedArea.isBlank()) {
-            return location.equals(packedArea)
-                    || location.startsWith(packedArea + "-")
-                    || location.startsWith(packedArea + " ");
+            String cleanPackedArea =
+                    packedArea.trim().toUpperCase();
+
+            return cleanLocation.equals(cleanPackedArea)
+                    || cleanLocation.startsWith(cleanPackedArea + "-")
+                    || cleanLocation.startsWith(cleanPackedArea + " ");
         }
 
-        return location.startsWith("PKD");
+        return cleanLocation.startsWith("PKD");
     }
 
     private boolean isFgLocation(
-            DispatchedItem item) {
-        String location = currentLocation(item);
+            DispatchedItem item
+    ) {
+        String location =
+                currentLocation(item);
 
-        String fg = item.getFgAreaCode();
+        String fg =
+                item.getFgAreaCode();
 
         if (location.isBlank() || fg == null || fg.isBlank()) {
             return false;
         }
 
-        return location.equals(fg)
-                || location.startsWith(fg + "-")
-                || location.startsWith(fg + " ");
+        String cleanLocation =
+                location.trim().toUpperCase();
+
+        String cleanFg =
+                fg.trim().toUpperCase();
+
+        return cleanLocation.equals(cleanFg)
+                || cleanLocation.startsWith(cleanFg + "-")
+                || cleanLocation.startsWith(cleanFg + " ");
+    }
+
+    private String generateChallanNumber() {
+        String date =
+                java.time.LocalDate.now(INDIA_ZONE)
+                        .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
+        String suffix =
+                UUID.randomUUID()
+                        .toString()
+                        .substring(0, 6)
+                        .toUpperCase();
+
+        return "CH-" + date + "-" + suffix;
     }
 
     private String safeActor(
-            String username) {
+            String username
+    ) {
         return username != null && !username.isBlank()
                 ? username.trim()
                 : "SYSTEM";
     }
 
     private String safe(
-            Object value) {
+            Object value
+    ) {
         if (value == null) {
             return "-";
         }
 
-        String text = value.toString().trim();
+        String text =
+                value.toString().trim();
 
         return text.isEmpty()
                 ? "-"

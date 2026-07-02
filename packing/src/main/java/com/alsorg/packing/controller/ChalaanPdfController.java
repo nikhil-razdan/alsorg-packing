@@ -39,8 +39,7 @@ public class ChalaanPdfController {
             ChalaanPdfService pdfService,
             DispatchedItemRepository dispatchedItemRepository,
             PacketItemRepository packetItemRepository,
-            CurrentUserService currentUserService
-    ) {
+            CurrentUserService currentUserService) {
         this.dispatchChallanService = dispatchChallanService;
         this.pdfService = pdfService;
         this.dispatchedItemRepository = dispatchedItemRepository;
@@ -53,8 +52,7 @@ public class ChalaanPdfController {
     public ResponseEntity<byte[]> generateDispatchChallan(
             @RequestBody ChallanDispatchRequest request,
             @RequestParam(defaultValue = "true") boolean preview,
-            @RequestHeader(value = "Authorization", required = false) String auth
-    ) {
+            @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isDispatch(user)) {
@@ -65,9 +63,11 @@ public class ChalaanPdfController {
                 request.itemIds(),
                 request.driverId(),
                 request.vehicleId(),
+                firstNonNull(
+                        request.dispatchTime(),
+                        request.tripStart()),
                 user.getUsername(),
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
 
         return buildPdfResponse(result, preview);
     }
@@ -79,8 +79,7 @@ public class ChalaanPdfController {
             @RequestParam UUID driverId,
             @RequestParam UUID vehicleId,
             @RequestParam(defaultValue = "false") boolean preview,
-            @RequestHeader(value = "Authorization", required = false) String auth
-    ) {
+            @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isDispatch(user)) {
@@ -91,9 +90,9 @@ public class ChalaanPdfController {
                 List.of(zohoItemId),
                 driverId,
                 vehicleId,
+                null,
                 user.getUsername(),
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
 
         return buildPdfResponse(result, preview);
     }
@@ -105,8 +104,7 @@ public class ChalaanPdfController {
             @RequestParam UUID driverId,
             @RequestParam UUID vehicleId,
             @RequestParam(defaultValue = "false") boolean preview,
-            @RequestHeader(value = "Authorization", required = false) String auth
-    ) {
+            @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isDispatch(user)) {
@@ -117,26 +115,21 @@ public class ChalaanPdfController {
                 ids,
                 driverId,
                 vehicleId,
+                null,
                 user.getUsername(),
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
 
         return buildPdfResponse(result, preview);
     }
 
-    @GetMapping(
-            value = "/dispatched/{challanNumber:.+}/download",
-            produces = MediaType.APPLICATION_PDF_VALUE
-    )
+    @GetMapping(value = "/dispatched/{challanNumber:.+}/download", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadExistingDispatchedChallan(
             @PathVariable String challanNumber,
-            @RequestHeader(value = "Authorization", required = false) String auth
-    ) {
+            @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
         List<ItemDispatchStatus> statuses = List.of(
-                ItemDispatchStatus.DISPATCHED
-        );
+                ItemDispatchStatus.DISPATCHED);
 
         List<DispatchedItem> sourceItems;
 
@@ -145,22 +138,18 @@ public class ChalaanPdfController {
         } else {
             sourceItems = dispatchedItemRepository.findVisibleByStatusesAndPlantsIncludingLegacy(
                     statuses,
-                    currentUserService.allowedPlants(user)
-            );
+                    currentUserService.allowedPlants(user));
         }
 
         List<DispatchedItem> items = sourceItems
                 .stream()
-                .filter(item ->
-                        item.getChalaanNumber() != null
-                                && item.getChalaanNumber().equals(challanNumber)
-                )
+                .filter(item -> item.getChalaanNumber() != null
+                        && item.getChalaanNumber().equals(challanNumber))
                 .toList();
 
         if (items.isEmpty()) {
             throw new RuntimeException(
-                    "No dispatched items found for challan: " + challanNumber
-            );
+                    "No dispatched items found for challan: " + challanNumber);
         }
 
         DispatchedItem first = items.get(0);
@@ -187,9 +176,7 @@ public class ChalaanPdfController {
             challanItems.add(
                     buildExistingChallanItem(
                             item,
-                            packetItem
-                    )
-            );
+                            packetItem));
         }
 
         data.setItems(challanItems);
@@ -204,47 +191,39 @@ public class ChalaanPdfController {
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=" + filename
-                )
+                        "attachment; filename=" + filename)
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
 
     private ResponseEntity<byte[]> buildPdfResponse(
             DispatchTripPdfResult result,
-            boolean preview
-    ) {
-        String challanNo =
-                result.getChallanNumber() == null || result.getChallanNumber().isBlank()
-                        ? "challan"
-                        : result.getChallanNumber();
+            boolean preview) {
+        String challanNo = result.getChallanNumber() == null || result.getChallanNumber().isBlank()
+                ? "challan"
+                : result.getChallanNumber();
 
-        String filename =
-                challanNo.replaceAll("[^a-zA-Z0-9._-]", "_") + ".pdf";
+        String filename = challanNo.replaceAll("[^a-zA-Z0-9._-]", "_") + ".pdf";
 
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
                         preview
                                 ? "inline; filename=" + filename
-                                : "attachment; filename=" + filename
-                )
+                                : "attachment; filename=" + filename)
                 .header(
                         "X-Challan-No",
-                        challanNo
-                )
+                        challanNo)
                 .header(
                         "Access-Control-Expose-Headers",
-                        "X-Challan-No, Content-Disposition"
-                )
+                        "X-Challan-No, Content-Disposition")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(result.getPdfBytes());
     }
 
     private ChalaanItem buildExistingChallanItem(
             DispatchedItem dispatchedItem,
-            PacketItem packetItem
-    ) {
+            PacketItem packetItem) {
         ChalaanItem ci = new ChalaanItem();
 
         ci.setZohoItemId(dispatchedItem.getZohoItemId());
@@ -252,62 +231,61 @@ public class ChalaanPdfController {
         ci.setItemName(
                 packetItem != null && packetItem.getItemName() != null
                         ? packetItem.getItemName()
-                        : dispatchedItem.getName()
-        );
+                        : dispatchedItem.getName());
 
         ci.setPdNo(
                 packetItem != null && packetItem.getPdNo() != null
                         ? packetItem.getPdNo()
-                        : dispatchedItem.getPdNo()
-        );
+                        : dispatchedItem.getPdNo());
 
         ci.setClientName(
                 packetItem != null && packetItem.getClientName() != null
                         ? packetItem.getClientName()
-                        : dispatchedItem.getClientName()
-        );
+                        : dispatchedItem.getClientName());
 
         ci.setClientAddress(
                 packetItem != null && packetItem.getClientAddress() != null
                         ? packetItem.getClientAddress()
-                        : dispatchedItem.getClientAddress()
-        );
+                        : dispatchedItem.getClientAddress());
 
         ci.setDrawingNo(
                 packetItem != null && packetItem.getDrawingNo() != null
                         ? packetItem.getDrawingNo()
-                        : dispatchedItem.getDrawingNo()
-        );
+                        : dispatchedItem.getDrawingNo());
 
         ci.setDescription(
                 packetItem != null && packetItem.getDescription() != null
                         ? packetItem.getDescription()
-                        : dispatchedItem.getDescription()
-        );
+                        : dispatchedItem.getDescription());
 
         ci.setRemarks(
                 packetItem != null && packetItem.getRemarks() != null
                         ? packetItem.getRemarks()
-                        : dispatchedItem.getRemarks()
-        );
+                        : dispatchedItem.getRemarks());
 
         ci.setQty(
                 dispatchedItem.getQuantity() != null
                         ? String.valueOf(dispatchedItem.getQuantity())
-                        : "1"
-        );
+                        : "1");
 
         return ci;
     }
 
     private String firstNonBlank(
-            String value
-    ) {
+            String value) {
         if (value == null || value.trim().isBlank()) {
             return "-";
         }
 
         return value.trim();
+    }
+
+    private LocalDateTime firstNonNull(
+            LocalDateTime first,
+            LocalDateTime second) {
+        return first != null
+                ? first
+                : second;
     }
 
     public record ChallanDispatchRequest(
@@ -320,7 +298,6 @@ public class ChalaanPdfController {
              * Not used for trip/delivery anymore.
              */
             LocalDateTime tripStart,
-            LocalDateTime dispatchTime
-    ) {
+            LocalDateTime dispatchTime) {
     }
 }

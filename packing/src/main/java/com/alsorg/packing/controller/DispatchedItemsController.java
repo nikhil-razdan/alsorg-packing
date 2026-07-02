@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 
 @RestController
 @RequestMapping("/api/dispatched")
@@ -369,6 +371,35 @@ public class DispatchedItemsController {
                     .max(LocalDateTime::compareTo)
                     .orElse(null);
 
+            LocalDateTime tripStartedAt = items
+                    .stream()
+                    .map(DispatchedItem::getTripStartedAt)
+                    .filter(date -> date != null)
+                    .min(LocalDateTime::compareTo)
+                    .orElse(dispatchedAt);
+
+            LocalDateTime tripEndedAt = items
+                    .stream()
+                    .map(DispatchedItem::getTripEndedAt)
+                    .filter(date -> date != null)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(null);
+
+            LocalDateTime durationEnd = tripEndedAt != null
+                    ? tripEndedAt
+                    : LocalDateTime.now(
+                            ZoneId.of("Asia/Kolkata"));
+
+            Long tripDurationMinutes = tripStartedAt == null
+                    ? null
+                    : ChronoUnit.MINUTES.between(
+                            tripStartedAt,
+                            durationEnd);
+
+            String tripStatus = tripEndedAt == null
+                    ? "RUNNING"
+                    : "ENDED";
+
             List<DispatchedChallanItemResponse> itemResponses = items
                     .stream()
                     .map(this::toDispatchedChallanItemResponse)
@@ -383,17 +414,95 @@ public class DispatchedItemsController {
                             first.getVehicleNumber(),
                             dispatchedAt,
                             first.getDispatchedBy(),
+                            tripStartedAt,
+                            tripEndedAt,
+                            tripDurationMinutes,
+                            tripStatus,
                             items.size(),
                             itemResponses));
         }
 
-        response.sort(
-                Comparator
-                        .comparing(
-                                DispatchedChallanResponse::dispatchedAt,
-                                Comparator.nullsLast(Comparator.reverseOrder())));
+        response.sort((a, b) -> {
+            LocalDateTime da = a.dispatchedAt();
+
+            LocalDateTime db = b.dispatchedAt();
+
+            if (da == null && db == null) {
+                return 0;
+            }
+
+            if (da == null) {
+                return 1;
+            }
+
+            if (db == null) {
+                return -1;
+            }
+
+            return db.compareTo(da);
+        });
 
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/challans/{challanNumber:.+}/end-trip")
+    public ResponseEntity<?> endDispatchedChallanTrip(
+            @PathVariable String challanNumber,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isLogistics(user)
+                && !currentUserService.isAdmin(user)) {
+            return ResponseEntity
+                    .status(403)
+                    .body("Only LOGISTICS / ADMIN user can end trip");
+        }
+
+        List<ItemDispatchStatus> statuses = List.of(ItemDispatchStatus.DISPATCHED);
+
+        List<DispatchedItem> sourceItems;
+
+        if (currentUserService.isAdmin(user)) {
+            sourceItems = repository.findByStatusIn(statuses);
+        } else {
+            sourceItems = repository.findVisibleByStatusesAndPlantsIncludingLegacy(
+                    statuses,
+                    currentUserService.allowedPlants(user));
+        }
+
+        List<DispatchedItem> items = sourceItems
+                .stream()
+                .filter(item -> item.getChalaanNumber() != null
+                        && item.getChalaanNumber().equals(challanNumber))
+                .toList();
+
+        if (items.isEmpty()) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("No dispatched items found for challan: " + challanNumber);
+        }
+
+        LocalDateTime nowIst = LocalDateTime.now(
+                ZoneId.of("Asia/Kolkata"));
+
+        for (DispatchedItem item : items) {
+            if (item.getTripStartedAt() == null) {
+                item.setTripStartedAt(
+                        item.getDispatchedAt() != null
+                                ? item.getDispatchedAt()
+                                : nowIst);
+            }
+
+            item.setTripEndedAt(nowIst);
+        }
+
+        repository.saveAll(items);
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "Trip ended successfully",
+                        "challanNumber", challanNumber,
+                        "tripEndedAt", nowIst.toString()));
     }
 
     private DispatchedChallanItemResponse toDispatchedChallanItemResponse(
@@ -443,6 +552,10 @@ public class DispatchedItemsController {
             String vehicleNumber,
             LocalDateTime dispatchedAt,
             String dispatchedBy,
+            LocalDateTime tripStartedAt,
+            LocalDateTime tripEndedAt,
+            Long tripDurationMinutes,
+            String tripStatus,
             int totalItems,
             List<DispatchedChallanItemResponse> items) {
     }

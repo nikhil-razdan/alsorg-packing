@@ -3958,7 +3958,7 @@ function DispatchedItemsPage() {
 
 					<TextField
 						variant="standard"
-						placeholder=" client, item, SKU, PD, DWG, location, status..."
+						placeholder="Search by client, item, SKU, PD, DWG, location, status..."
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						InputProps={{ disableUnderline: true }}
