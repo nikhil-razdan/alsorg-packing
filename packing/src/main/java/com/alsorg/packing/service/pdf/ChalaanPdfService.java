@@ -656,7 +656,7 @@ public class ChalaanPdfService {
             int pageNo,
             int totalPages) throws IOException {
 
-        String title = "CUSTOM CHALLAN";
+        String title = "REQUIREMENT CHALLAN";
 
         String subTitle = customChallanTypeLabel(request == null ? null : request.challanType());
 

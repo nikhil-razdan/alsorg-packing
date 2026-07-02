@@ -393,3 +393,37 @@ export async function createCustomChallan(
       "CUSTOM_CHALLAN",
   };
 }
+
+export async function fetchCustomChallans() {
+  return requestJson(
+    "/api/chalaan/custom",
+    {
+      errorMessage: "Failed to fetch custom challans",
+    }
+  );
+}
+
+export async function downloadCustomChallan(
+  challanNumber
+) {
+  if (!challanNumber) {
+    throw new Error("Custom challan number missing");
+  }
+
+  const res = await requestBlob(
+    `/api/chalaan/custom/${encodeURIComponent(challanNumber)}/download?preview=true`,
+    {
+      method: "GET",
+      errorMessage: "Failed to download custom challan",
+    }
+  );
+
+  const blob = await res.blob();
+
+  return {
+    blob,
+    challanNo:
+      res.headers.get("X-Challan-No") ||
+      challanNumber,
+  };
+}

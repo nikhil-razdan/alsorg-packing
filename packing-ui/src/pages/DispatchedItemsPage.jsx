@@ -1,15 +1,29 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { Chip, Box, Button, IconButton, TextField, MenuItem, Tooltip } from "@mui/material";
+import {
+	Chip,
+	Box,
+	Button,
+	IconButton,
+	TextField,
+	MenuItem,
+	Tooltip,
+	Collapse,
+} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon
 	from "@mui/icons-material/DescriptionOutlined";
+
 import {
 	fetchDrivers,
 	fetchVehicles,
 	createDispatchChallan,
 	createCustomChallan,
+	fetchCustomChallans,
+	downloadCustomChallan,
 } from "../dashboard/api/logisticsApi";
 
 import { useAuth } from "../auth/AuthContext";
@@ -666,6 +680,134 @@ const modalEmptyStateSx = {
 		"1px dashed rgba(255,255,255,.12)",
 
 	fontWeight: 700,
+};
+
+const customChallanAccent = "#8b5cf6";
+
+const customChallanSectionCardSx = (open) => ({
+	borderRadius: "14px",
+	background: open
+		? `linear-gradient(180deg, ${customChallanAccent}12, rgba(15,23,42,.82))`
+		: "rgba(15,23,42,.82)",
+	border: open
+		? `1px solid ${customChallanAccent}44`
+		: "1px solid rgba(255,255,255,.07)",
+	borderLeft: `3px solid ${customChallanAccent}`,
+	boxShadow: open
+		? `0 14px 32px ${customChallanAccent}16`
+		: "0 14px 28px rgba(2,6,23,.24)",
+	backdropFilter: "blur(18px)",
+	overflow: "hidden",
+	transition: "all .25s ease",
+});
+
+const customChallanHeaderSx = {
+	minHeight: 62,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+	px: 1.8,
+	py: 1.2,
+	background: "rgba(2,6,23,.24)",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
+};
+
+const customChallanLeftSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.3,
+	minWidth: 0,
+};
+
+const customChallanIconBtnSx = {
+	color: "#94a3b8",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.06)",
+	width: 32,
+	height: 32,
+	borderRadius: "9px",
+
+	"&:hover": {
+		background: "rgba(139,92,246,.16)",
+		color: "#fff",
+	},
+};
+
+const customChallanTitleSx = {
+	color: "#fff",
+	fontSize: 18,
+	fontWeight: 950,
+	lineHeight: 1.1,
+	letterSpacing: "-0.02em",
+};
+
+const customChallanSubSx = {
+	mt: 0.3,
+	color: "rgba(255,255,255,.52)",
+	fontSize: 11,
+	fontWeight: 650,
+};
+
+const customChallanRightSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	flexShrink: 0,
+};
+
+const customChallanCountChipSx = {
+	height: 22,
+	borderRadius: 999,
+	background: "rgba(139,92,246,.15)",
+	color: "#c4b5fd",
+	border: "1px solid rgba(139,92,246,.28)",
+	fontWeight: 900,
+	fontSize: 10.5,
+};
+
+const customChallanBodySx = {
+	background: "rgba(2,6,23,.18)",
+	p: 1.4,
+};
+
+const customChallanListSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 1,
+	maxHeight: 310,
+	overflowY: "auto",
+	pr: 0.8,
+
+	"&::-webkit-scrollbar": {
+		width: 8,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background: "rgba(255,255,255,.03)",
+		borderRadius: 999,
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background: "linear-gradient(180deg,#7c3aed,#a78bfa)",
+		borderRadius: 999,
+	},
+};
+
+const customChallanRowSx = {
+	display: "grid",
+	gridTemplateColumns: "220px 180px minmax(260px,1fr) 110px 110px",
+	alignItems: "center",
+	gap: 1.5,
+	p: 1.4,
+	borderRadius: "12px",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.07)",
+
+	"&:hover": {
+		background: "rgba(255,255,255,.055)",
+		borderColor: "rgba(139,92,246,.26)",
+	},
 };
 
 const historyCardSx = {
@@ -1645,6 +1787,10 @@ function DispatchedItemsPage() {
 		driverId: "",
 		vehicleId: "",
 	});
+
+	const [customChallanSectionOpen, setCustomChallanSectionOpen] = useState(false);
+	const [customChallans, setCustomChallans] = useState([]);
+	const [customChallansLoading, setCustomChallansLoading] = useState(false);
 
 	const [customChallanOpen, setCustomChallanOpen] = useState(false);
 	const [customChallanLoading, setCustomChallanLoading] = useState(false);
@@ -3495,6 +3641,10 @@ function DispatchedItemsPage() {
 		fetchData();
 		fetchPlantConfigs();
 		fetchLogisticsMasters();
+
+		if (isDispatch || isAdmin) {
+			loadCustomChallans();
+		}
 	}, []);
 
 
@@ -4005,6 +4155,7 @@ function DispatchedItemsPage() {
 				clientName: customChallanForm.clientName.trim(),
 				clientAddress: customChallanForm.clientAddress.trim(),
 				purpose: customChallanForm.purpose.trim(),
+				movementMode: "DIRECT_DISPATCH",
 				dispatchTime: getNowDateTimeLocal(),
 				items: cleanedItems,
 			});
@@ -4027,11 +4178,42 @@ function DispatchedItemsPage() {
 			setCustomChallanOpen(false);
 			resetCustomChallanForm();
 
+			await loadCustomChallans();
+
 		} catch (err) {
 			console.error(err);
 			alert(err.message || "Custom challan generation failed");
 		} finally {
 			setCustomChallanLoading(false);
+		}
+	};
+
+	const loadCustomChallans = async () => {
+		try {
+			setCustomChallansLoading(true);
+
+			const data = await fetchCustomChallans();
+
+			setCustomChallans(
+				Array.isArray(data)
+					? data
+					: []
+			);
+		} catch (err) {
+			console.error(err);
+			setCustomChallans([]);
+		} finally {
+			setCustomChallansLoading(false);
+		}
+	};
+
+	const toggleCustomChallanSection = async () => {
+		const nextOpen = !customChallanSectionOpen;
+
+		setCustomChallanSectionOpen(nextOpen);
+
+		if (nextOpen && customChallans.length === 0) {
+			await loadCustomChallans();
 		}
 	};
 
@@ -4096,26 +4278,6 @@ function DispatchedItemsPage() {
 
 						{isDispatch && (
 							<>
-								<Button
-									onClick={openCustomChallanModal}
-									sx={{
-										...qrDispatchButtonSx,
-										background:
-											"linear-gradient(135deg,#7c3aed,#8b5cf6)",
-										border:
-											"1px solid rgba(139,92,246,.35)",
-										boxShadow:
-											"0 10px 24px rgba(124,58,237,.28)",
-
-										"&:hover": {
-											background:
-												"linear-gradient(135deg,#6d28d9,#7c3aed)",
-										},
-									}}
-								>
-									🧾 Custom Challan
-								</Button>
-
 								<Button
 									onClick={() => {
 										setQrDispatchOpen(true);
@@ -4337,6 +4499,247 @@ function DispatchedItemsPage() {
 						<MenuItem value="CLIENT">Group by Client</MenuItem>
 					</TextField>
 				</Box>
+
+				{(isDispatch || isAdmin) && (
+					<Box sx={customChallanSectionCardSx(customChallanSectionOpen)}>
+						<Box sx={customChallanHeaderSx}>
+							<Box sx={customChallanLeftSx}>
+								<IconButton
+									size="small"
+									onClick={toggleCustomChallanSection}
+									sx={customChallanIconBtnSx}
+								>
+									{customChallanSectionOpen ? (
+										<ExpandLessIcon />
+									) : (
+										<ExpandMoreIcon />
+									)}
+								</IconButton>
+
+								<Box sx={{ minWidth: 0 }}>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 1,
+											flexWrap: "wrap",
+										}}
+									>
+										<Box sx={customChallanTitleSx}>
+											Custom Challans
+										</Box>
+
+										<Chip
+											size="small"
+											label={`${customChallans.length} Created`}
+											sx={customChallanCountChipSx}
+										/>
+									</Box>
+
+									<Box sx={customChallanSubSx}>
+										Customer care, hardware and site assembly challans generated manually
+									</Box>
+								</Box>
+							</Box>
+
+							<Box sx={customChallanRightSx}>
+								{customChallans.length > 0 && (
+									<Box
+										sx={{
+											color: "#94a3b8",
+											fontSize: 11,
+											fontWeight: 800,
+											textAlign: "right",
+											maxWidth: 220,
+											whiteSpace: "nowrap",
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+										}}
+										title={customChallans[0]?.challanNumber}
+									>
+										Latest:{" "}
+										<span style={{ color: "#c4b5fd" }}>
+											{customChallans[0]?.challanNumber}
+										</span>
+									</Box>
+								)}
+
+								<Button
+									onClick={openCustomChallanModal}
+									sx={{
+										...modalSecondaryButtonSx,
+										height: 34,
+										color: "#fff",
+										background: "rgba(139,92,246,.14)",
+										border: "1px solid rgba(139,92,246,.24)",
+
+										"&:hover": {
+											background: "rgba(139,92,246,.22)",
+										},
+									}}
+								>
+									+ Create
+								</Button>
+
+								<Button
+									onClick={loadCustomChallans}
+									sx={{
+										...modalSecondaryButtonSx,
+										height: 34,
+									}}
+								>
+									Refresh
+								</Button>
+							</Box>
+						</Box>
+
+						<Collapse
+							in={customChallanSectionOpen}
+							timeout="auto"
+							unmountOnExit
+						>
+							<Box sx={customChallanBodySx}>
+								{customChallansLoading && (
+									<Box sx={modalEmptyStateSx}>
+										Loading custom challans…
+									</Box>
+								)}
+
+								{!customChallansLoading && customChallans.length === 0 && (
+									<Box sx={modalEmptyStateSx}>
+										No custom challans generated yet.
+									</Box>
+								)}
+
+								{!customChallansLoading && customChallans.length > 0 && (
+									<Box sx={customChallanListSx}>
+										{customChallans.map((challan) => (
+											<Box
+												key={challan.challanNumber}
+												sx={customChallanRowSx}
+											>
+												<Box sx={{ minWidth: 0 }}>
+													<Box
+														sx={{
+															color: "#fff",
+															fontWeight: 900,
+															fontSize: 13,
+															whiteSpace: "nowrap",
+															overflow: "hidden",
+															textOverflow: "ellipsis",
+														}}
+														title={challan.challanNumber}
+													>
+														{challan.challanNumber}
+													</Box>
+
+													<Box
+														sx={{
+															color: "#94a3b8",
+															fontSize: 11,
+															fontWeight: 700,
+															mt: 0.4,
+														}}
+													>
+														{challan.generatedAt
+															? new Date(challan.generatedAt).toLocaleString()
+															: "—"}
+													</Box>
+												</Box>
+
+												<Chip
+													size="small"
+													label={challan.challanTypeLabel || challan.challanType}
+													sx={{
+														width: "fit-content",
+														color: "#c4b5fd",
+														fontWeight: 900,
+														background: "rgba(139,92,246,.14)",
+														border: "1px solid rgba(139,92,246,.24)",
+													}}
+												/>
+
+												<Box sx={{ minWidth: 0 }}>
+													<Box
+														sx={{
+															color: "#fff",
+															fontSize: 13,
+															fontWeight: 800,
+															whiteSpace: "nowrap",
+															overflow: "hidden",
+															textOverflow: "ellipsis",
+														}}
+														title={`${challan.fromLocation || "—"} → ${challan.toLocation || "—"}`}
+													>
+														{challan.fromLocation || "—"} → {challan.toLocation || "—"}
+													</Box>
+
+													<Box
+														sx={{
+															color: "rgba(255,255,255,.55)",
+															fontSize: 11,
+															fontWeight: 700,
+															mt: 0.4,
+															whiteSpace: "nowrap",
+															overflow: "hidden",
+															textOverflow: "ellipsis",
+														}}
+													>
+														{challan.clientName || "No client"} •{" "}
+														{challan.projectName || "No project"}
+													</Box>
+												</Box>
+
+												<Box
+													sx={{
+														color: "#cbd5e1",
+														fontSize: 12,
+														fontWeight: 800,
+													}}
+												>
+													{challan.totalItems || 0} item
+													{Number(challan.totalItems || 0) === 1 ? "" : "s"}
+												</Box>
+
+												<Button
+													size="small"
+													onClick={async () => {
+														try {
+															const result =
+																await downloadCustomChallan(
+																	challan.challanNumber
+																);
+
+															const url =
+																URL.createObjectURL(result.blob);
+
+															setChalaanPreview({
+																url,
+																id:
+																	result.challanNo ||
+																	challan.challanNumber,
+															});
+														} catch (err) {
+															console.error(err);
+															alert(err.message || "Download failed");
+														}
+													}}
+													sx={{
+														...modalSecondaryButtonSx,
+														height: 34,
+														color: "#fff",
+													}}
+												>
+													View PDF
+												</Button>
+											</Box>
+										))}
+									</Box>
+								)}
+							</Box>
+						</Collapse>
+					</Box>
+				)}
 
 				<div style={wrap}>
 
@@ -4888,7 +5291,7 @@ function DispatchedItemsPage() {
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Customer care / hardware / site assembly requirement without driver or vehicle
+											Customer Care / Site / Assembly / Other Movement
 										</Box>
 									</Box>
 								</Box>
@@ -4912,31 +5315,36 @@ function DispatchedItemsPage() {
 											mb: 2,
 										}}
 									>
-										<TextField
-											select
-											label="Challan Type"
-											value={customChallanForm.challanType}
-											onChange={(e) =>
-												updateCustomChallanField("challanType", e.target.value)
-											}
-											sx={formFieldSx}
-										>
-											<MenuItem value="CUSTOMER_CARE">
-												Customer Care
-											</MenuItem>
+										<Box>
+											<Box sx={dispatchTripFieldLabelSx}>
+												Challan Type
+											</Box>
 
-											<MenuItem value="HARDWARE_SITE_REQUIREMENT">
-												Hardware / Site Requirement
-											</MenuItem>
+											<Box
+												component="select"
+												value={customChallanForm.challanType}
+												onChange={(e) =>
+													updateCustomChallanField("challanType", e.target.value)
+												}
+												sx={dispatchTripNativeSelectSx}
+											>
+												<option value="CUSTOMER_CARE">
+													Customer Care
+												</option>
 
-											<MenuItem value="ASSEMBLY_SITE_REQUIREMENT">
-												Assembly / Site Requirement
-											</MenuItem>
+												<option value="HARDWARE_SITE_REQUIREMENT">
+													Hardware / Site Requirement
+												</option>
 
-											<MenuItem value="OTHER">
-												Other Movement
-											</MenuItem>
-										</TextField>
+												<option value="ASSEMBLY_SITE_REQUIREMENT">
+													Assembly / Site Requirement
+												</option>
+
+												<option value="OTHER">
+													Other Movement
+												</option>
+											</Box>
+										</Box>
 
 										<TextField
 											label="Movement Mode"
@@ -5142,27 +5550,35 @@ function DispatchedItemsPage() {
 													sx={formFieldSx}
 												/>
 
-												<TextField
-													select
-													label="Nature"
-													value={item.returnable ? "RETURNABLE" : "NON_RETURNABLE"}
-													onChange={(e) =>
-														updateCustomChallanItem(
-															index,
-															"returnable",
-															e.target.value === "RETURNABLE"
-														)
-													}
-													sx={formFieldSx}
-												>
-													<MenuItem value="NON_RETURNABLE">
-														Non Returnable
-													</MenuItem>
+												<Box>
+													<Box sx={dispatchTripFieldLabelSx}>
+														Nature
+													</Box>
 
-													<MenuItem value="RETURNABLE">
-														Returnable
-													</MenuItem>
-												</TextField>
+													<Box
+														component="select"
+														value={item.returnable ? "RETURNABLE" : "NON_RETURNABLE"}
+														onChange={(e) =>
+															updateCustomChallanItem(
+																index,
+																"returnable",
+																e.target.value === "RETURNABLE"
+															)
+														}
+														sx={{
+															...dispatchTripNativeSelectSx,
+															height: 56,
+														}}
+													>
+														<option value="NON_RETURNABLE">
+															Non Returnable
+														</option>
+
+														<option value="RETURNABLE">
+															Returnable
+														</option>
+													</Box>
+												</Box>
 											</Box>
 
 											<TextField
