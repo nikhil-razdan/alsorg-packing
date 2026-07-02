@@ -48,12 +48,25 @@ function DispatchChallans({
     const [pageSize, setPageSize] =
         useState(10);
 
+    const [endTripDialog, setEndTripDialog] =
+        useState({
+            open: false,
+            challanNumber: "",
+            endTime: getNowDateTimeLocal(),
+        });
+
+    const [endingTrip, setEndingTrip] =
+        useState(false);
+
     const [pdfPreview, setPdfPreview] =
         useState({
             open: false,
             url: "",
             challanNumber: "",
         });
+
+    const canManageTripEnd =
+        isLogisticsOrAdmin();
 
     const loadData = async () => {
         try {
@@ -327,6 +340,95 @@ function DispatchChallans({
         });
     };
 
+    const openEndTripDialog =
+        (challan) => {
+            setEndTripDialog({
+                open: true,
+                challanNumber: challan.challanNumber || "",
+                endTime: toDateTimeLocalInput(
+                    challan.tripEndedAt
+                ) || getNowDateTimeLocal(),
+            });
+        };
+
+    const closeEndTripDialog =
+        () => {
+            setEndTripDialog({
+                open: false,
+                challanNumber: "",
+                endTime: getNowDateTimeLocal(),
+            });
+        };
+
+    const submitEndTrip =
+        async () => {
+            if (!endTripDialog.challanNumber) {
+                showAlert?.(
+                    "Challan number missing",
+                    "error"
+                );
+                return;
+            }
+
+            if (!endTripDialog.endTime) {
+                showAlert?.(
+                    "Please select end time",
+                    "error"
+                );
+                return;
+            }
+
+            try {
+                setEndingTrip(true);
+
+                const res =
+                    await fetch(
+                        `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
+                            endTripDialog.challanNumber
+                        )}/end-trip`,
+                        {
+                            method: "POST",
+                            credentials: "include",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                tripEndedAt: toBackendLocalDateTime(
+                                    endTripDialog.endTime
+                                ),
+                            }),
+                        }
+                    );
+
+                if (!res.ok) {
+                    const text =
+                        await res.text();
+
+                    throw new Error(
+                        text || "Failed to save trip end time"
+                    );
+                }
+
+                showAlert?.(
+                    "Trip end time saved successfully",
+                    "success"
+                );
+
+                closeEndTripDialog();
+
+                await loadData();
+            } catch (e) {
+                console.error(e);
+
+                showAlert?.(
+                    e.message || "Failed to save trip end time",
+                    "error"
+                );
+            } finally {
+                setEndingTrip(false);
+            }
+        };
+
     return (
         <Box sx={wrap}>
             <Box sx={topRow}>
@@ -455,6 +557,34 @@ function DispatchChallans({
                                             )}
                                         </b>
                                     </Box>
+
+                                    <Box sx={challanMeta}>
+                                        Trip Start:{" "}
+                                        <b>
+                                            {formatDateTime(
+                                                challan.tripStartedAt
+                                            )}
+                                        </b>
+                                        {"  •  "}
+                                        Trip End:{" "}
+                                        <b>
+                                            {formatDateTime(
+                                                challan.tripEndedAt
+                                            )}
+                                        </b>
+                                        {"  •  "}
+                                        Duration:{" "}
+                                        <b>
+                                            {formatDuration(
+                                                challan.tripDurationMinutes
+                                            )}
+                                        </b>
+                                        {"  •  "}
+                                        Status:{" "}
+                                        <b>
+                                            {challan.tripStatus || "RUNNING"}
+                                        </b>
+                                    </Box>
                                 </Box>
 
                                 <Box sx={rightBox}>
@@ -502,6 +632,19 @@ function DispatchChallans({
                                             ? "Hide Items"
                                             : "View Items"}
                                     </Button>
+
+                                    {canManageTripEnd ? (
+                                        <Button
+                                            onClick={() =>
+                                                openEndTripDialog(challan)
+                                            }
+                                            sx={endTimeButton}
+                                        >
+                                            {challan.tripEndedAt
+                                                ? "Edit End Time"
+                                                : "Enter End Time"}
+                                        </Button>
+                                    ) : null}
                                 </Box>
                             </Box>
 
@@ -579,6 +722,92 @@ function DispatchChallans({
                     />
                 )}
 
+            <Dialog
+                open={endTripDialog.open}
+                onClose={closeEndTripDialog}
+                fullWidth
+                maxWidth="xs"
+                PaperProps={{
+                    sx: {
+                        borderRadius: "18px",
+                        background: "#020617",
+                        border: "1px solid rgba(255,255,255,.12)",
+                        color: "#fff",
+                    },
+                }}
+            >
+                <DialogTitle
+                    sx={{
+                        color: "#fff",
+                        fontWeight: 900,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        borderBottom: "1px solid rgba(255,255,255,.08)",
+                    }}
+                >
+                    Enter Trip End Time
+
+                    <IconButton
+                        onClick={closeEndTripDialog}
+                        sx={{
+                            color: "#fff",
+                        }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                </DialogTitle>
+
+                <DialogContent
+                    sx={{
+                        p: 2.5,
+                    }}
+                >
+                    <Box sx={endDialogLabel}>
+                        Challan No.
+                    </Box>
+
+                    <Box sx={endDialogChallan}>
+                        {endTripDialog.challanNumber || "—"}
+                    </Box>
+
+                    <TextField
+                        fullWidth
+                        label="Trip End Time"
+                        type="datetime-local"
+                        value={endTripDialog.endTime}
+                        onChange={(e) =>
+                            setEndTripDialog((prev) => ({
+                                ...prev,
+                                endTime: e.target.value,
+                            }))
+                        }
+                        InputLabelProps={{
+                            shrink: true,
+                        }}
+                        sx={endTimeInput}
+                    />
+
+                    <Box sx={endDialogActions}>
+                        <Button
+                            onClick={closeEndTripDialog}
+                            sx={cancelEndButton}
+                        >
+                            Cancel
+                        </Button>
+
+                        <Button
+                            onClick={submitEndTrip}
+                            disabled={endingTrip}
+                            sx={saveEndButton}
+                        >
+                            {endingTrip
+                                ? "Saving..."
+                                : "Save End Time"}
+                        </Button>
+                    </Box>
+                </DialogContent>
+            </Dialog>
             <Dialog
                 open={pdfPreview.open}
                 onClose={closePdfPreview}
@@ -756,14 +985,6 @@ function formatDateTime(value) {
 
         let date;
 
-        /*
-         * Backend LocalDateTime comes like:
-         * 2026-07-02T14:02:00
-         *
-         * This is already India business time.
-         * Do NOT append Z.
-         * Do NOT treat it as UTC.
-         */
         if (!hasTimezone && raw.includes("T")) {
             const match =
                 raw.match(
@@ -802,6 +1023,103 @@ function formatDateTime(value) {
         }).format(date);
     } catch {
         return raw;
+    }
+}
+
+function getNowDateTimeLocal() {
+    const d =
+        new Date();
+
+    d.setMinutes(
+        d.getMinutes() - d.getTimezoneOffset()
+    );
+
+    return d.toISOString().slice(0, 16);
+}
+
+function toBackendLocalDateTime(value) {
+    if (!value) {
+        return null;
+    }
+
+    return value.length === 16
+        ? `${value}:00`
+        : value;
+}
+
+function toDateTimeLocalInput(value) {
+    if (!value) {
+        return "";
+    }
+
+    const raw =
+        String(value).trim();
+
+    if (!raw) {
+        return "";
+    }
+
+    const match =
+        raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+        );
+
+    if (match) {
+        return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+    }
+
+    try {
+        const date =
+            new Date(raw);
+
+        if (Number.isNaN(date.getTime())) {
+            return "";
+        }
+
+        date.setMinutes(
+            date.getMinutes() - date.getTimezoneOffset()
+        );
+
+        return date.toISOString().slice(0, 16);
+    } catch {
+        return "";
+    }
+}
+
+function isLogisticsOrAdmin() {
+    const directRole =
+        String(
+            localStorage.getItem("role") ||
+            localStorage.getItem("userRole") ||
+            ""
+        )
+            .trim()
+            .toUpperCase();
+
+    if (
+        directRole === "LOGISTICS" ||
+        directRole === "ADMIN"
+    ) {
+        return true;
+    }
+
+    try {
+        const user =
+            JSON.parse(
+                localStorage.getItem("user") || "{}"
+            );
+
+        const role =
+            String(user.role || "")
+                .trim()
+                .toUpperCase();
+
+        return (
+            role === "LOGISTICS" ||
+            role === "ADMIN"
+        );
+    } catch {
+        return false;
     }
 }
 
@@ -1158,6 +1476,104 @@ const pageBadge = {
         "rgba(255,255,255,.055)",
     border:
         "1px solid rgba(255,255,255,.08)",
+};
+
+
+const endTimeButton = {
+    height: 34,
+    borderRadius: "10px",
+    textTransform: "none",
+    fontWeight: 800,
+    color: "#fca5a5",
+    background: "rgba(239,68,68,.12)",
+    border: "1px solid rgba(239,68,68,.25)",
+
+    "&:hover": {
+        background: "rgba(239,68,68,.20)",
+    },
+};
+
+const endDialogLabel = {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: 900,
+    mb: 0.7,
+};
+
+const endDialogChallan = {
+    color: "#fff",
+    fontWeight: 900,
+    fontFamily: "monospace",
+    mb: 2,
+    p: 1.2,
+    borderRadius: "12px",
+    background: "rgba(255,255,255,.045)",
+    border: "1px solid rgba(255,255,255,.08)",
+};
+
+const endTimeInput = {
+    mt: 1,
+
+    "& label": {
+        color: "#94a3b8",
+        fontWeight: 800,
+    },
+
+    "& label.Mui-focused": {
+        color: "#93c5fd",
+    },
+
+    "& .MuiInputBase-root": {
+        color: "#fff",
+        borderRadius: "12px",
+        background: "rgba(255,255,255,.04)",
+    },
+
+    "& .MuiOutlinedInput-notchedOutline": {
+        borderColor: "rgba(255,255,255,.12)",
+    },
+
+    "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+        borderColor: "rgba(147,197,253,.35)",
+    },
+
+    "& input": {
+        colorScheme: "dark",
+    },
+};
+
+const endDialogActions = {
+    display: "flex",
+    gap: 1.2,
+    justifyContent: "flex-end",
+    mt: 2.5,
+};
+
+const cancelEndButton = {
+    height: 38,
+    borderRadius: "10px",
+    textTransform: "none",
+    fontWeight: 800,
+    color: "#cbd5e1",
+    background: "rgba(255,255,255,.05)",
+};
+
+const saveEndButton = {
+    height: 38,
+    borderRadius: "10px",
+    textTransform: "none",
+    fontWeight: 900,
+    color: "#fff",
+    background: "linear-gradient(135deg,#dc2626,#ef4444)",
+
+    "&:hover": {
+        background: "linear-gradient(135deg,#b91c1c,#dc2626)",
+    },
+
+    "&:disabled": {
+        color: "rgba(255,255,255,.45)",
+        background: "rgba(255,255,255,.08)",
+    },
 };
 
 export default DispatchChallans;

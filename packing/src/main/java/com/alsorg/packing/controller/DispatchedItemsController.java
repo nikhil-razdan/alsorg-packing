@@ -8,6 +8,8 @@ import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
+import com.alsorg.packing.controller.dto.logistics.EndTripRequest;
+
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
@@ -448,6 +450,7 @@ public class DispatchedItemsController {
     @PostMapping("/challans/{challanNumber:.+}/end-trip")
     public ResponseEntity<?> endDispatchedChallanTrip(
             @PathVariable String challanNumber,
+            @RequestBody(required = false) EndTripRequest request,
             @RequestHeader(value = "Authorization", required = false) String auth) {
         User user = currentUserService.getCurrentUserFromAuth(auth);
 
@@ -470,10 +473,14 @@ public class DispatchedItemsController {
                     currentUserService.allowedPlants(user));
         }
 
+        String cleanChallanNumber = challanNumber == null
+                ? ""
+                : challanNumber.trim();
+
         List<DispatchedItem> items = sourceItems
                 .stream()
                 .filter(item -> item.getChalaanNumber() != null
-                        && item.getChalaanNumber().equals(challanNumber))
+                        && item.getChalaanNumber().trim().equals(cleanChallanNumber))
                 .toList();
 
         if (items.isEmpty()) {
@@ -485,24 +492,61 @@ public class DispatchedItemsController {
         LocalDateTime nowIst = LocalDateTime.now(
                 ZoneId.of("Asia/Kolkata"));
 
+        LocalDateTime selectedEndTime = firstNonNull(
+                request == null ? null : request.tripEndedAt(),
+                request == null ? null : request.endTime(),
+                request == null ? null : request.tripEnd());
+
+        LocalDateTime finalEndTime = selectedEndTime != null
+                ? selectedEndTime
+                : nowIst;
+
+        LocalDateTime tripStartedAt = items
+                .stream()
+                .map(DispatchedItem::getTripStartedAt)
+                .filter(date -> date != null)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+
+        if (tripStartedAt == null) {
+            tripStartedAt = items
+                    .stream()
+                    .map(DispatchedItem::getDispatchedAt)
+                    .filter(date -> date != null)
+                    .min(LocalDateTime::compareTo)
+                    .orElse(finalEndTime);
+        }
+
+        if (finalEndTime.isBefore(tripStartedAt)) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("Trip end time cannot be before trip start time");
+        }
+
         for (DispatchedItem item : items) {
             if (item.getTripStartedAt() == null) {
                 item.setTripStartedAt(
                         item.getDispatchedAt() != null
                                 ? item.getDispatchedAt()
-                                : nowIst);
+                                : tripStartedAt);
             }
 
-            item.setTripEndedAt(nowIst);
+            item.setTripEndedAt(finalEndTime);
         }
 
         repository.saveAll(items);
 
+        Long durationMinutes = ChronoUnit.MINUTES.between(
+                tripStartedAt,
+                finalEndTime);
+
         return ResponseEntity.ok(
                 Map.of(
-                        "message", "Trip ended successfully",
-                        "challanNumber", challanNumber,
-                        "tripEndedAt", nowIst.toString()));
+                        "message", "Trip end time saved successfully",
+                        "challanNumber", cleanChallanNumber,
+                        "tripStartedAt", tripStartedAt.toString(),
+                        "tripEndedAt", finalEndTime.toString(),
+                        "tripDurationMinutes", durationMinutes));
     }
 
     private DispatchedChallanItemResponse toDispatchedChallanItemResponse(
@@ -576,5 +620,26 @@ public class DispatchedItemsController {
             Integer quantity,
             LocalDateTime dispatchedAt,
             String dispatchedBy) {
+    }
+
+    private LocalDateTime firstNonNull(
+            LocalDateTime first,
+            LocalDateTime second,
+            LocalDateTime third) {
+        if (first != null) {
+            return first;
+        }
+
+        if (second != null) {
+            return second;
+        }
+
+        return third;
+    }
+
+    public record EndTripRequest(
+            LocalDateTime tripEndedAt,
+            LocalDateTime endTime,
+            LocalDateTime tripEnd) {
     }
 }

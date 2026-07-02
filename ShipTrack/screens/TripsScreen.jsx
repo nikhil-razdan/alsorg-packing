@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  TextInput,
 } from "react-native";
 
 import {
@@ -24,7 +25,12 @@ import {
 } from "../api/challanDownloadApi";
 
 import {
+  useAuth,
+} from "../auth/AuthContext";
+
+import {
   fetchDispatchedChallans,
+  endDispatchedChallanTrip,
 } from "../api/logisticsApi";
 
 function formatDateTime(value) {
@@ -87,6 +93,72 @@ function formatDateTime(value) {
   }
 }
 
+function formatDuration(minutes) {
+  if (
+    minutes === null ||
+    minutes === undefined ||
+    Number.isNaN(Number(minutes))
+  ) {
+    return "—";
+  }
+
+  const total =
+    Math.max(0, Number(minutes));
+
+  const hours =
+    Math.floor(total / 60);
+
+  const mins =
+    total % 60;
+
+  if (hours <= 0) {
+    return `${mins} min`;
+  }
+
+  return `${hours} hr ${mins} min`;
+}
+
+function getNowDateTimeLocal() {
+  const d =
+    new Date();
+
+  d.setMinutes(
+    d.getMinutes() - d.getTimezoneOffset()
+  );
+
+  return d.toISOString().slice(0, 16);
+}
+
+function toBackendLocalDateTime(value) {
+  if (!value) {
+    return null;
+  }
+
+  return value.length === 16
+    ? `${value}:00`
+    : value;
+}
+
+function toDateTimeLocalInput(value) {
+  if (!value) {
+    return "";
+  }
+
+  const raw =
+    String(value).trim();
+
+  const match =
+    raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+    );
+
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+  }
+
+  return "";
+}
+
 export default function TripsScreen() {
   const [loading, setLoading] =
     useState(false);
@@ -105,6 +177,25 @@ export default function TripsScreen() {
 
   const [pageSize, setPageSize] =
     useState(10);
+
+  const {
+    role,
+  } = useAuth();
+
+  const normalizedRole =
+    String(role || "")
+      .trim()
+      .toUpperCase();
+
+  const canManageTripEnd =
+    normalizedRole === "LOGISTICS" ||
+    normalizedRole === "ADMIN";
+
+  const [endTripDrafts, setEndTripDrafts] =
+    useState({});
+
+  const [savingEndTrip, setSavingEndTrip] =
+    useState("");
 
   const loadChallans = async () => {
     try {
@@ -130,6 +221,77 @@ export default function TripsScreen() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getEndTripDraft = (challan) => {
+    const challanNumber =
+      challan?.challanNumber || "";
+
+    return (
+      endTripDrafts[challanNumber] ||
+      toDateTimeLocalInput(challan?.tripEndedAt) ||
+      getNowDateTimeLocal()
+    );
+  };
+
+  const updateEndTripDraft = (
+    challanNumber,
+    value
+  ) => {
+    setEndTripDrafts((prev) => ({
+      ...prev,
+      [challanNumber]: value,
+    }));
+  };
+
+  const submitEndTrip = async (challan) => {
+    const challanNumber =
+      challan?.challanNumber || "";
+
+    if (!challanNumber) {
+      Alert.alert(
+        "Missing challan",
+        "Challan number missing."
+      );
+      return;
+    }
+
+    const value =
+      getEndTripDraft(challan);
+
+    if (!value) {
+      Alert.alert(
+        "End time required",
+        "Please enter trip end time."
+      );
+      return;
+    }
+
+    try {
+      setSavingEndTrip(challanNumber);
+
+      await endDispatchedChallanTrip(
+        challanNumber,
+        toBackendLocalDateTime(value)
+      );
+
+      Alert.alert(
+        "Saved",
+        "Trip end time saved successfully."
+      );
+
+      await loadChallans();
+    } catch (e) {
+      Alert.alert(
+        "Save failed",
+        e?.response?.data?.message ||
+        e?.response?.data ||
+        e?.message ||
+        "Unable to save trip end time"
+      );
+    } finally {
+      setSavingEndTrip("");
     }
   };
 
@@ -256,6 +418,20 @@ export default function TripsScreen() {
             expanded={
               expanded === item.challanNumber
             }
+            canManageTripEnd={canManageTripEnd}
+            endTimeValue={getEndTripDraft(item)}
+            savingEndTrip={
+              savingEndTrip === item.challanNumber
+            }
+            onEndTimeChange={(value) =>
+              updateEndTripDraft(
+                item.challanNumber,
+                value
+              )
+            }
+            onSaveEndTime={() =>
+              submitEndTrip(item)
+            }
             onToggle={() =>
               setExpanded((prev) =>
                 prev === item.challanNumber
@@ -362,6 +538,11 @@ function PaginationBar({
 function ChallanCard({
   challan,
   expanded,
+  canManageTripEnd,
+  endTimeValue,
+  savingEndTrip,
+  onEndTimeChange,
+  onSaveEndTime,
   onToggle,
 }) {
   const driverName =
@@ -421,12 +602,71 @@ function ChallanCard({
         />
 
         <Info
+          label="Trip Start"
+          value={formatDateTime(
+            challan.tripStartedAt
+          )}
+        />
+
+        <Info
+          label="Trip End"
+          value={formatDateTime(
+            challan.tripEndedAt
+          )}
+        />
+
+        <Info
+          label="Duration"
+          value={formatDuration(
+            challan.tripDurationMinutes
+          )}
+        />
+
+        <Info
+          label="Trip Status"
+          value={challan.tripStatus || "RUNNING"}
+        />
+
+        <Info
           label="Dispatch Time"
           value={formatDateTime(
             challan.dispatchedAt
           )}
         />
       </View>
+
+      {canManageTripEnd ? (
+        <View style={styles.endTimePanel}>
+          <Text style={styles.endTimeTitle}>
+            Trip End Time
+          </Text>
+
+          <TextInput
+            value={endTimeValue}
+            onChangeText={onEndTimeChange}
+            placeholder="YYYY-MM-DDTHH:mm"
+            placeholderTextColor="#64748b"
+            style={styles.endTimeInput}
+            autoCapitalize="none"
+          />
+
+          <TouchableOpacity
+            style={styles.endTimeBtn}
+            onPress={onSaveEndTime}
+            disabled={savingEndTrip}
+          >
+            {savingEndTrip ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.endTimeBtnText}>
+                {challan.tripEndedAt
+                  ? "Update End Time"
+                  : "Save End Time"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <TouchableOpacity
         style={styles.challanBtn}
@@ -689,6 +929,46 @@ const styles = {
   info: {
     width: "50%",
     padding: 4,
+  },
+
+  endTimePanel: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(239,68,68,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,.20)",
+  },
+
+  endTimeTitle: {
+    color: "#fca5a5",
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  endTimeInput: {
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    backgroundColor: "rgba(255,255,255,.05)",
+    color: "#fff",
+    paddingHorizontal: 12,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+
+  endTimeBtn: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#dc2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  endTimeBtnText: {
+    color: "#fff",
+    fontWeight: "900",
   },
 
   infoLabel: {
