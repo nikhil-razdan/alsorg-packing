@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.alsorg.packing.controller.dto.challan.CustomChallanRequest;
+
 @RestController
 @RequestMapping("/api/chalaan")
 public class ChalaanPdfController {
@@ -68,6 +70,30 @@ public class ChalaanPdfController {
                         request.tripStart()),
                 user.getUsername(),
                 currentUserService.allowedPlants(user));
+
+        return buildPdfResponse(result, preview);
+    }
+
+    @Transactional
+    @PostMapping(value = "/custom", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> generateCustomChallan(
+            @RequestBody CustomChallanRequest request,
+            @RequestParam(defaultValue = "true") boolean preview,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = currentUserService.getCurrentUserFromAuth(auth);
+
+        /*
+         * Requirement:
+         * Only DISPATCH user can create custom challan.
+         * ADMIN is intentionally not allowed here because you asked only dispatch user.
+         */
+        if (!currentUserService.isDispatch(user)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        DispatchTripPdfResult result = dispatchChallanService.generateCustomChallan(
+                request,
+                user.getUsername());
 
         return buildPdfResponse(result, preview);
     }

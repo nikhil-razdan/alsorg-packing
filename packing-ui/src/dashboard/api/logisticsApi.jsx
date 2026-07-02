@@ -1,9 +1,5 @@
 import { API_BASE_URL } from "../../config";
 
-/**
- * Logistics API
- * Uses HttpOnly cookie auth.
- */
 
 const requestJson = async (
   path,
@@ -374,4 +370,26 @@ export async function createVehicleExpense(
       errorMessage: "Failed to save vehicle expense",
     }
   );
+}
+
+export async function createCustomChallan(
+  payload
+) {
+  const res = await requestBlob(
+    "/api/chalaan/custom?preview=true",
+    {
+      method: "POST",
+      body: payload,
+      errorMessage: "Custom challan generation failed",
+    }
+  );
+
+  const blob = await res.blob();
+
+  return {
+    blob,
+    challanNo:
+      res.headers.get("X-Challan-No") ||
+      "CUSTOM_CHALLAN",
+  };
 }

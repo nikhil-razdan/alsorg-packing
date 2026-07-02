@@ -9,7 +9,9 @@ import {
 	fetchDrivers,
 	fetchVehicles,
 	createDispatchChallan,
+	createCustomChallan,
 } from "../dashboard/api/logisticsApi";
+
 import { useAuth } from "../auth/AuthContext";
 
 const page = {
@@ -1555,6 +1557,14 @@ const smartRowMatches = (row, search) => {
 	});
 };
 
+const createEmptyCustomChallanLine = () => ({
+	description: "",
+	drawingNo: "",
+	quantity: 1,
+	returnable: false,
+	remarks: "",
+});
+
 function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [loading, setLoading] = useState(false);
@@ -1634,6 +1644,22 @@ function DispatchedItemsPage() {
 	const [dispatchTripForm, setDispatchTripForm] = useState({
 		driverId: "",
 		vehicleId: "",
+	});
+
+	const [customChallanOpen, setCustomChallanOpen] = useState(false);
+	const [customChallanLoading, setCustomChallanLoading] = useState(false);
+
+	const [customChallanForm, setCustomChallanForm] = useState({
+		challanType: "CUSTOMER_CARE",
+		fromLocation: "",
+		toLocation: "",
+		pdNo: "",
+		projectName: "",
+		clientName: "",
+		clientAddress: "",
+		purpose: "",
+		movementMode: "DIRECT_DISPATCH",
+		items: [createEmptyCustomChallanLine()],
 	});
 	const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
 	const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
@@ -3869,6 +3895,146 @@ function DispatchedItemsPage() {
 		}
 	};
 
+	const resetCustomChallanForm = () => {
+		setCustomChallanForm({
+			challanType: "CUSTOMER_CARE",
+			fromLocation: "",
+			toLocation: "",
+			pdNo: "",
+			projectName: "",
+			clientName: "",
+			clientAddress: "",
+			purpose: "",
+			movementMode: "DIRECT_DISPATCH",
+			items: [createEmptyCustomChallanLine()],
+		});
+	};
+
+	const openCustomChallanModal = () => {
+		resetCustomChallanForm();
+		setCustomChallanOpen(true);
+	};
+
+	const updateCustomChallanField = (key, value) => {
+		setCustomChallanForm((prev) => ({
+			...prev,
+			[key]: value,
+		}));
+	};
+
+	const updateCustomChallanItem = (index, key, value) => {
+		setCustomChallanForm((prev) => ({
+			...prev,
+			items: prev.items.map((item, i) =>
+				i === index
+					? {
+						...item,
+						[key]: value,
+					}
+					: item
+			),
+		}));
+	};
+
+	const addCustomChallanItem = () => {
+		setCustomChallanForm((prev) => ({
+			...prev,
+			items: [
+				...prev.items,
+				createEmptyCustomChallanLine(),
+			],
+		}));
+	};
+
+	const removeCustomChallanItem = (index) => {
+		setCustomChallanForm((prev) => {
+			const nextItems =
+				prev.items.filter((_, i) => i !== index);
+
+			return {
+				...prev,
+				items:
+					nextItems.length > 0
+						? nextItems
+						: [createEmptyCustomChallanLine()],
+			};
+		});
+	};
+
+	const submitCustomChallan = async () => {
+		if (!isDispatch) {
+			alert("Only dispatch user can create custom challan");
+			return;
+		}
+
+		const cleanedItems =
+			(customChallanForm.items || [])
+				.map((item) => ({
+					description: String(item.description || "").trim(),
+					drawingNo: String(item.drawingNo || "").trim(),
+					quantity: Number(item.quantity || 1),
+					returnable: Boolean(item.returnable),
+					remarks: String(item.remarks || "").trim(),
+				}))
+				.filter((item) => item.description);
+
+		if (!customChallanForm.fromLocation.trim()) {
+			alert("From location is required");
+			return;
+		}
+
+		if (!customChallanForm.toLocation.trim()) {
+			alert("To location / site is required");
+			return;
+		}
+
+		if (cleanedItems.length === 0) {
+			alert("Add at least one item description");
+			return;
+		}
+
+		try {
+			setCustomChallanLoading(true);
+
+			const result = await createCustomChallan({
+				...customChallanForm,
+				fromLocation: customChallanForm.fromLocation.trim(),
+				toLocation: customChallanForm.toLocation.trim(),
+				pdNo: customChallanForm.pdNo.trim(),
+				projectName: customChallanForm.projectName.trim(),
+				clientName: customChallanForm.clientName.trim(),
+				clientAddress: customChallanForm.clientAddress.trim(),
+				purpose: customChallanForm.purpose.trim(),
+				dispatchTime: getNowDateTimeLocal(),
+				items: cleanedItems,
+			});
+
+			const blob = result.blob;
+
+			if (!blob) {
+				throw new Error("No custom challan PDF generated");
+			}
+
+			const url = URL.createObjectURL(blob);
+
+			setChalaanPreview({
+				url,
+				id:
+					result.challanNo ||
+					"CUSTOM_CHALLAN",
+			});
+
+			setCustomChallanOpen(false);
+			resetCustomChallanForm();
+
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Custom challan generation failed");
+		} finally {
+			setCustomChallanLoading(false);
+		}
+	};
+
 	return (
 		<div style={page}>
 			<div style={content}>
@@ -3929,20 +4095,42 @@ function DispatchedItemsPage() {
 						</Box>
 
 						{isDispatch && (
-							<Button
-								onClick={() => {
-									setQrDispatchOpen(true);
-									setScanMode("SINGLE");
-									setScannerText("");
-									setScanMessage("");
-									setScanCart([]);
-									setPendingQrFgItem(null);
-									setPendingQrFgZone("");
-								}}
-								sx={qrDispatchButtonSx}
-							>
-								📷 QR Dispatch
-							</Button>
+							<>
+								<Button
+									onClick={openCustomChallanModal}
+									sx={{
+										...qrDispatchButtonSx,
+										background:
+											"linear-gradient(135deg,#7c3aed,#8b5cf6)",
+										border:
+											"1px solid rgba(139,92,246,.35)",
+										boxShadow:
+											"0 10px 24px rgba(124,58,237,.28)",
+
+										"&:hover": {
+											background:
+												"linear-gradient(135deg,#6d28d9,#7c3aed)",
+										},
+									}}
+								>
+									🧾 Custom Challan
+								</Button>
+
+								<Button
+									onClick={() => {
+										setQrDispatchOpen(true);
+										setScanMode("SINGLE");
+										setScannerText("");
+										setScanMessage("");
+										setScanCart([]);
+										setPendingQrFgItem(null);
+										setPendingQrFgZone("");
+									}}
+									sx={qrDispatchButtonSx}
+								>
+									📷 QR Dispatch
+								</Button>
+							</>
 						)}
 					</Box>
 
@@ -4671,6 +4859,356 @@ function DispatchedItemsPage() {
 							</Button>
 						</div>
 					)}
+				{customChallanOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 5700 }}
+						onClick={() => {
+							if (!customChallanLoading) {
+								setCustomChallanOpen(false);
+							}
+						}}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 860,
+								maxHeight: "90vh",
+							}}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#8b5cf6")}>
+										🧾
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Custom Challan
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Customer care / hardware / site assembly requirement without driver or vehicle
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									sx={modalCloseButtonSx}
+									disabled={customChallanLoading}
+									onClick={() => setCustomChallanOpen(false)}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<Box sx={{ ...modalScrollBodySx, maxHeight: "64vh" }}>
+									<Box
+										sx={{
+											display: "grid",
+											gridTemplateColumns: "1fr 1fr",
+											gap: 2,
+											mb: 2,
+										}}
+									>
+										<TextField
+											select
+											label="Challan Type"
+											value={customChallanForm.challanType}
+											onChange={(e) =>
+												updateCustomChallanField("challanType", e.target.value)
+											}
+											sx={formFieldSx}
+										>
+											<MenuItem value="CUSTOMER_CARE">
+												Customer Care
+											</MenuItem>
+
+											<MenuItem value="HARDWARE_SITE_REQUIREMENT">
+												Hardware / Site Requirement
+											</MenuItem>
+
+											<MenuItem value="ASSEMBLY_SITE_REQUIREMENT">
+												Assembly / Site Requirement
+											</MenuItem>
+
+											<MenuItem value="OTHER">
+												Other Movement
+											</MenuItem>
+										</TextField>
+
+										<TextField
+											label="Movement Mode"
+											value="Direct Dispatch"
+											disabled
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="From Location"
+											placeholder="Dispatch / Customer Care / Store"
+											value={customChallanForm.fromLocation}
+											onChange={(e) =>
+												updateCustomChallanField("fromLocation", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="To Location / Site"
+											placeholder="Site / Customer / Assembly Area"
+											value={customChallanForm.toLocation}
+											onChange={(e) =>
+												updateCustomChallanField("toLocation", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="PD No."
+											value={customChallanForm.pdNo}
+											onChange={(e) =>
+												updateCustomChallanField("pdNo", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="Project Name"
+											value={customChallanForm.projectName}
+											onChange={(e) =>
+												updateCustomChallanField("projectName", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="Client Name"
+											value={customChallanForm.clientName}
+											onChange={(e) =>
+												updateCustomChallanField("clientName", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="Client Address"
+											value={customChallanForm.clientAddress}
+											onChange={(e) =>
+												updateCustomChallanField("clientAddress", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+									</Box>
+
+									<TextField
+										fullWidth
+										multiline
+										minRows={2}
+										label="Purpose / Requirement"
+										placeholder="Example: Customer care replacement, assembly hardware required at site, missing hinge/screw/accessory, etc."
+										value={customChallanForm.purpose}
+										onChange={(e) =>
+											updateCustomChallanField("purpose", e.target.value)
+										}
+										sx={{
+											...formFieldSx,
+											mb: 2,
+										}}
+									/>
+
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "space-between",
+											mb: 1.5,
+										}}
+									>
+										<Box
+											sx={{
+												color: "#fff",
+												fontWeight: 900,
+												fontSize: 15,
+											}}
+										>
+											Challan Items
+										</Box>
+
+										<Button
+											onClick={addCustomChallanItem}
+											sx={{
+												...modalSecondaryButtonSx,
+												color: "#fff",
+											}}
+										>
+											+ Add Item
+										</Button>
+									</Box>
+
+									{customChallanForm.items.map((item, index) => (
+										<Box
+											key={index}
+											sx={{
+												p: 1.6,
+												mb: 1.4,
+												borderRadius: "14px",
+												background: "rgba(255,255,255,.035)",
+												border: "1px solid rgba(255,255,255,.07)",
+											}}
+										>
+											<Box
+												sx={{
+													display: "flex",
+													justifyContent: "space-between",
+													alignItems: "center",
+													mb: 1.2,
+												}}
+											>
+												<Box
+													sx={{
+														color: "#93c5fd",
+														fontWeight: 900,
+														fontSize: 13,
+													}}
+												>
+													Item #{index + 1}
+												</Box>
+
+												<Button
+													size="small"
+													onClick={() => removeCustomChallanItem(index)}
+													sx={{
+														minWidth: 76,
+														height: 30,
+														borderRadius: "8px",
+														textTransform: "none",
+														fontWeight: 800,
+														color: "#fca5a5",
+														background: "rgba(239,68,68,.10)",
+														border: "1px solid rgba(239,68,68,.18)",
+													}}
+												>
+													Remove
+												</Button>
+											</Box>
+
+											<Box
+												sx={{
+													display: "grid",
+													gridTemplateColumns: "2fr 1fr 90px 170px",
+													gap: 1.4,
+													mb: 1.4,
+												}}
+											>
+												<TextField
+													label="Description"
+													value={item.description}
+													onChange={(e) =>
+														updateCustomChallanItem(
+															index,
+															"description",
+															e.target.value
+														)
+													}
+													sx={formFieldSx}
+												/>
+
+												<TextField
+													label="Dwg No."
+													value={item.drawingNo}
+													onChange={(e) =>
+														updateCustomChallanItem(
+															index,
+															"drawingNo",
+															e.target.value
+														)
+													}
+													sx={formFieldSx}
+												/>
+
+												<TextField
+													label="Qty"
+													type="number"
+													value={item.quantity}
+													onChange={(e) =>
+														updateCustomChallanItem(
+															index,
+															"quantity",
+															e.target.value
+														)
+													}
+													sx={formFieldSx}
+												/>
+
+												<TextField
+													select
+													label="Nature"
+													value={item.returnable ? "RETURNABLE" : "NON_RETURNABLE"}
+													onChange={(e) =>
+														updateCustomChallanItem(
+															index,
+															"returnable",
+															e.target.value === "RETURNABLE"
+														)
+													}
+													sx={formFieldSx}
+												>
+													<MenuItem value="NON_RETURNABLE">
+														Non Returnable
+													</MenuItem>
+
+													<MenuItem value="RETURNABLE">
+														Returnable
+													</MenuItem>
+												</TextField>
+											</Box>
+
+											<TextField
+												fullWidth
+												label="Remarks"
+												value={item.remarks}
+												onChange={(e) =>
+													updateCustomChallanItem(
+														index,
+														"remarks",
+														e.target.value
+													)
+												}
+												sx={formFieldSx}
+											/>
+										</Box>
+									))}
+								</Box>
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									disabled={customChallanLoading}
+									onClick={() => setCustomChallanOpen(false)}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={customChallanLoading}
+									onClick={submitCustomChallan}
+									sx={{
+										...premiumButton,
+										background:
+											"linear-gradient(135deg,#7c3aed,#8b5cf6)",
+									}}
+								>
+									{customChallanLoading
+										? "Generating..."
+										: "Generate Custom Challan"}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
 				{qrDispatchOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 5200 }}
