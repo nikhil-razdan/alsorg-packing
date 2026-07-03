@@ -1057,17 +1057,6 @@ function formatDateTime(value) {
     }
 }
 
-function getNowDateTimeLocal() {
-    const d =
-        new Date();
-
-    d.setMinutes(
-        d.getMinutes() - d.getTimezoneOffset()
-    );
-
-    return d.toISOString().slice(0, 16);
-}
-
 function toBackendLocalDateTime(value) {
     if (!value) {
         return null;
