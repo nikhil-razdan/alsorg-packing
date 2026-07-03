@@ -1240,16 +1240,6 @@ const headerRow = {
 	alignItems: "center",
 };
 
-const dateTimeFieldSx = {
-	...formFieldSx,
-
-	"& input::-webkit-calendar-picker-indicator": {
-		filter: "invert(1)",
-		opacity: 0.85,
-		cursor: "pointer",
-	},
-};
-
 const logo = {
 	color: "#fff",
 
@@ -1451,6 +1441,17 @@ const formFieldSx = {
 
 	"& input": {
 		color: "#fff",
+	},
+};
+
+
+const dateTimeFieldSx = {
+	...formFieldSx,
+
+	"& input::-webkit-calendar-picker-indicator": {
+		filter: "invert(1)",
+		opacity: 0.85,
+		cursor: "pointer",
 	},
 };
 
