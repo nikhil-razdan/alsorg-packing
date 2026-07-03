@@ -17,6 +17,8 @@ import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashb
 import InventorySidebar from
   "../dashboard/components/inventory/InventorySidebar";
 import { useAuth } from "../auth/AuthContext";
+import InventoryCommandCenter from
+  "../dashboard/components/inventory/InventoryCommandCenter";
 
 function StatCard({
   title,
@@ -471,13 +473,28 @@ function DashboardPage() {
         Number(stats.packetItems || 0)
       ) * 100;
 
+  const currentInventoryExceptions =
+    Number(stats.masterItemsWithoutPackets || 0) +
+    Number(stats.packetsWithoutPacketItems || 0) +
+    Number(stats.packetItemsWithoutMaster || 0) +
+    Number(stats.duplicateCurrentStickers || 0) +
+    Number(stats.readyItemsStillInPkd || 0);
+
+  const legacyDispatchExceptions =
+    Number(stats.dispatchedWithoutPacketItem || 0) +
+    Number(stats.dispatchedWithoutChallan || 0) +
+    Number(stats.dispatchedWithoutDriver || 0);
+
+  const totalDataExceptions =
+    currentInventoryExceptions + legacyDispatchExceptions;
+
   const inventoryAccuracy =
     Number(stats.packetItems || 0) === 0
       ? 100
       : (
         (
           Number(stats.packetItems || 0) -
-          Number(stats.exceptionsCount || 0)
+          currentInventoryExceptions
         ) /
         Number(stats.packetItems || 0)
       ) * 100;
@@ -717,8 +734,8 @@ function DashboardPage() {
                     <StatCard
                       accent="#f97316"
                       title="Data Exceptions"
-                      value={Number(stats.exceptionsCount || 0)}
-                      subtle="Needs admin review"
+                      value={totalDataExceptions}
+                      subtle={`${currentInventoryExceptions} current • ${legacyDispatchExceptions} legacy`}
                       active={activeStatCard === "exceptions"}
                       onClick={() => toggleStatCard("exceptions")}
                     />
@@ -1107,8 +1124,16 @@ function DashboardPage() {
                       <ActivityFeed logs={activityLogs} />
                     </div>
                   </div>
-
-                  {isAdmin && (
+                </>
+              )}
+              {inventorySection === "traceability" && (
+                <InventoryCommandCenter
+                  stats={stats}
+                />
+              )}
+              {inventorySection === "reports" && (
+                <>
+                  {isAdmin ? (
                     <>
                       <InventoryReports />
 
@@ -1116,10 +1141,19 @@ function DashboardPage() {
                         <ScheduledReports />
                       </div>
                     </>
+                  ) : (
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Reports
+                      </div>
+
+                      <div style={insightItem}>
+                        Reports are available for ADMIN users only.
+                      </div>
+                    </div>
                   )}
                 </>
               )}
-
               {inventorySection === "analytics" && (
                 <div style={analyticsSection}>
                   <div style={analyticsHeader}>
@@ -1129,7 +1163,8 @@ function DashboardPage() {
                       </div>
 
                       <div style={sectionSubtitle}>
-                        Advanced warehouse analytics and operational insights
+                        Real analytics from master items, packet items, stickers,
+                        dispatches, challans and exception checks.
                       </div>
                     </div>
                   </div>
@@ -1137,94 +1172,120 @@ function DashboardPage() {
                   <div style={analyticsGridLayout}>
                     <div style={analyticsCardLarge}>
                       <div style={analyticsCardTitle}>
-                        Inventory Aging Analysis
+                        Lifecycle Distribution
                       </div>
 
                       <div style={agingGrid}>
+                        <div style={agingItem("#38bdf8")}>
+                          <h2>{Number(stats.masterItems || 0)}</h2>
+                          <span>Master Items</span>
+                        </div>
+
+                        <div style={agingItem("#a78bfa")}>
+                          <h2>{Number(stats.packetItems || 0)}</h2>
+                          <span>Packet Items</span>
+                        </div>
+
                         <div style={agingItem("#22c55e")}>
-                          <h2>62%</h2>
-                          <span>0-7 Days</span>
+                          <h2>{Number(stats.packetItemsWithSticker || 0)}</h2>
+                          <span>Sticker Generated</span>
                         </div>
 
-                        <div style={agingItem("#3b82f6")}>
-                          <h2>24%</h2>
-                          <span>7-30 Days</span>
-                        </div>
-
-                        <div style={agingItem("#f59e0b")}>
-                          <h2>11%</h2>
-                          <span>30-90 Days</span>
-                        </div>
-
-                        <div style={agingItem("#ef4444")}>
-                          <h2>3%</h2>
-                          <span>90+ Days</span>
+                        <div style={agingItem("#8b5cf6")}>
+                          <h2>{Number(stats.dispatchedItems || 0)}</h2>
+                          <span>Dispatched</span>
                         </div>
                       </div>
                     </div>
 
                     <div style={analyticsCard}>
                       <div style={analyticsCardTitle}>
-                        Warehouse Utilization
+                        Packet Completion Rate
                       </div>
 
                       <div style={metricValue}>
-                        86%
+                        {percentLabel(packetCompletionRate)}
                       </div>
 
                       <div style={metricSubtle}>
-                        Rack occupancy across all zones
+                        Packet items with sticker divided by total packet items.
                       </div>
                     </div>
 
                     <div style={analyticsCard}>
                       <div style={analyticsCardTitle}>
-                        Average Packing Time
+                        Dispatch Conversion
                       </div>
 
                       <div style={metricValue}>
-                        2.4m
+                        {percentLabel(operationalEfficiency)}
                       </div>
 
                       <div style={metricSubtle}>
-                        Per inventory item
+                        Dispatched items divided by packet items.
                       </div>
                     </div>
 
                     <div style={analyticsCard}>
                       <div style={analyticsCardTitle}>
-                        Sticker Failure Rate
+                        Reprint Load
                       </div>
 
                       <div style={metricValue}>
-                        0.8%
+                        {Number(stats.stickerReprints || 0)}
                       </div>
 
                       <div style={metricSubtle}>
-                        Printer & scan errors
+                        Sticker history entries where print iteration is above 1.
+                      </div>
+                    </div>
+
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Dispatch Queue
+                      </div>
+
+                      <div style={metricValue}>
+                        {Number(stats.readyToDispatchItems || 0)}
+                      </div>
+
+                      <div style={metricSubtle}>
+                        Items ready and waiting for challan generation.
                       </div>
                     </div>
 
                     <div style={analyticsCardWide}>
                       <div style={analyticsCardTitle}>
-                        AI Operational Insights
+                        Operational Insights
                       </div>
 
                       <div style={insightsList}>
                         <div style={insightItem}>
-                          Dispatch volume increased by 14%
+                          Packet completion is {percentLabel(packetCompletionRate)}.
+                          {packetCompletionRate < 80
+                            ? " Packing queue needs attention."
+                            : " Packing flow is healthy."}
                         </div>
 
                         <div style={insightItem}>
-                          Packing efficiency improved this week
+                          Dispatch conversion is {percentLabel(operationalEfficiency)}.
+                          {operationalEfficiency < 50
+                            ? " Dispatch movement is slower than packing."
+                            : " Dispatch movement is aligned with inventory flow."}
                         </div>
 
                         <div style={insightItem}>
-                          Warehouse Zone B nearing capacity
+                          Current inventory exceptions: {currentInventoryExceptions}.
+                          {currentInventoryExceptions > 0
+                            ? " Review Traceability → Exceptions."
+                            : " Current inventory links are clean."}
                         </div>
 
                         <div style={insightItem}>
-                          Sticker print failures reduced significantly
+                          Running trips: {Number(stats.runningTrips || 0)}.
+                          {Number(stats.runningTrips || 0) > 0
+                            ? " Close trip end times from Dispatch Challans."
+                            : " No open trip-end risk found."}
                         </div>
                       </div>
                     </div>
@@ -1233,37 +1294,125 @@ function DashboardPage() {
               )}
 
               {inventorySection === "alerts" && (
-                <div style={analyticsCard}>
-                  <div style={analyticsCardTitle}>
-                    Live Inventory Alerts
+                <div style={analyticsSection}>
+                  <div style={analyticsHeader}>
+                    <div>
+                      <div style={sectionTitle}>
+                        Inventory Risk & Exception Center
+                      </div>
+
+                      <div style={sectionSubtitle}>
+                        Live operational risks from master items, packets, stickers,
+                        challans, dispatch and vehicle compliance.
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={insightsList}>
-                    <div style={insightItem}>
-                      ⚠ Data Exceptions: {Number(stats.exceptionsCount || 0)}
+                  <div style={analyticsGridLayout}>
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Current Inventory Exceptions
+                      </div>
+
+                      <div style={metricValue}>
+                        {currentInventoryExceptions}
+                      </div>
+
+                      <div style={metricSubtle}>
+                        Current packet/master/sticker issues affecting inventory accuracy.
+                      </div>
                     </div>
 
-                    <div style={insightItem}>
-                      ⚠ Master Items Without Packets: {Number(stats.masterItemsWithoutPackets || 0)}
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Legacy Dispatch Gaps
+                      </div>
+
+                      <div style={metricValue}>
+                        {legacyDispatchExceptions}
+                      </div>
+
+                      <div style={metricSubtle}>
+                        Older dispatch rows that may not be linked with packet_item_id.
+                      </div>
                     </div>
 
-                    <div style={insightItem}>
-                      ⚠ Pending Packet Items: {Number(stats.packetItemsPendingSticker || 0)}
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Running Trips
+                      </div>
+
+                      <div style={metricValue}>
+                        {Number(stats.runningTrips || 0)}
+                      </div>
+
+                      <div style={metricSubtle}>
+                        Challans where trip start exists but trip end is not closed.
+                      </div>
                     </div>
 
-                    <div style={insightItem}>
-                      ⚠ Ready Items Still In PKD: {Number(stats.readyItemsStillInPkd || 0)}
+                    <div style={analyticsCard}>
+                      <div style={analyticsCardTitle}>
+                        Expired Vehicle Docs
+                      </div>
+
+                      <div style={metricValue}>
+                        {Number(stats.expiredFitness || 0) +
+                          Number(stats.expiredInsurance || 0) +
+                          Number(stats.expiredPucc || 0)}
+                      </div>
+
+                      <div style={metricSubtle}>
+                        Fitness, insurance or PUCC expired for active vehicles.
+                      </div>
                     </div>
 
-                    <div style={insightItem}>
-                      ⚠ Running Trips Without End Time: {Number(stats.runningTrips || 0)}
-                    </div>
+                    <div style={analyticsCardWide}>
+                      <div style={analyticsCardTitle}>
+                        Exception Breakdown
+                      </div>
 
-                    <div style={insightItem}>
-                      ⚠ Expired Vehicle Documents:{" "}
-                      {Number(stats.expiredFitness || 0) +
-                        Number(stats.expiredInsurance || 0) +
-                        Number(stats.expiredPucc || 0)}
+                      <div style={insightsList}>
+                        <div style={insightItem}>
+                          ⚠ Master Items Without Packets:{" "}
+                          {Number(stats.masterItemsWithoutPackets || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Packets Without Packet Items:{" "}
+                          {Number(stats.packetsWithoutPacketItems || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Packet Items Without Master:{" "}
+                          {Number(stats.packetItemsWithoutMaster || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Dispatched Without Packet Link:{" "}
+                          {Number(stats.dispatchedWithoutPacketItem || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Dispatched Without Challan:{" "}
+                          {Number(stats.dispatchedWithoutChallan || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Dispatched Without Driver / Vehicle:{" "}
+                          {Number(stats.dispatchedWithoutDriver || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Duplicate Current Stickers:{" "}
+                          {Number(stats.duplicateCurrentStickers || 0)}
+                        </div>
+
+                        <div style={insightItem}>
+                          ⚠ Ready Items Still In PKD:{" "}
+                          {Number(stats.readyItemsStillInPkd || 0)}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1306,55 +1455,38 @@ function DashboardPage() {
 
 const page = {
   minHeight: "100vh",
-  padding: 18,
+  padding: 24,
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
 
   background: `
-    radial-gradient(circle at top left,
-    rgba(59,130,246,0.16),
-    transparent 22%),
-
-    radial-gradient(circle at bottom right,
-    rgba(14,165,233,0.12),
-    transparent 24%),
-
-    linear-gradient(
-      135deg,
-      #020617 0%,
-      #0f172a 45%,
-      #111827 100%
-    )
+    radial-gradient(circle at 12% 8%, rgba(59,130,246,.20), transparent 28%),
+    radial-gradient(circle at 84% 12%, rgba(14,165,233,.13), transparent 24%),
+    radial-gradient(circle at 72% 88%, rgba(168,85,247,.10), transparent 26%),
+    linear-gradient(135deg,#020617 0%,#08111f 42%,#0f172a 100%)
   `,
 
   backgroundAttachment: "fixed",
 };
 
 const backgroundText = {
-  position: "absolute",
-  fontSize: 140,
-  fontWeight: 900,
+  position: "fixed",
+  fontSize: 120,
+  fontWeight: 950,
 
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03))",
+    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.010))",
 
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
 
-  top: "50%",
-  left: "50%",
-
-  transform:
-    "translate(-50%, -50%)",
+  right: 32,
+  bottom: 18,
 
   pointerEvents: "none",
-
   letterSpacing: 8,
-
-  filter: "blur(1px)",
-
-  opacity: 0.55,
+  opacity: 0.45,
 };
 
 const emptyLogistics = {
@@ -1443,7 +1575,7 @@ const modeBtn = (active) => ({
 const kpiGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(220px,1fr))",
+    "repeat(auto-fit,minmax(210px,1fr))",
   gap: 14,
 };
 
@@ -1557,27 +1689,27 @@ const cardAccent = (accent) => ({
 const statCard = (accent, clickable = false, active = false) => ({
   position: "relative",
 
-  padding: "20px 20px 18px",
+  padding: "18px 18px 16px",
 
   borderRadius: 22,
 
   background: active
-    ? `linear-gradient(180deg, ${accent}22, rgba(15,23,42,.82))`
-    : "rgba(15,23,42,.78)",
+    ? `radial-gradient(circle at top right, ${accent}2E, transparent 45%), linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.78))`
+    : `radial-gradient(circle at top right, ${accent}18, transparent 42%), rgba(15,23,42,.82)`,
 
   border: active
-    ? `1px solid ${accent}66`
-    : "1px solid rgba(255,255,255,.06)",
+    ? `1px solid ${accent}77`
+    : "1px solid rgba(255,255,255,.075)",
 
   boxShadow: active
-    ? `0 18px 40px ${accent}26`
-    : "0 18px 35px rgba(2,6,23,.32)",
+    ? `0 22px 46px ${accent}24`
+    : "0 18px 38px rgba(2,6,23,.30)",
 
   overflow: "hidden",
 
-  minHeight: 118,
+  minHeight: 122,
 
-  backdropFilter: "blur(18px)",
+  backdropFilter: "blur(20px)",
 
   cursor: clickable ? "pointer" : "default",
 
@@ -1589,7 +1721,7 @@ const statCard = (accent, clickable = false, active = false) => ({
 
   fontFamily: "inherit",
 
-  transition: "all .25s ease",
+  transition: "transform .22s ease, border .22s ease, box-shadow .22s ease",
 });
 
 const statClickHint = {
@@ -2160,8 +2292,8 @@ const throughputMiniHint = {
 
 const workspaceGrid = {
   display: "grid",
-  gridTemplateColumns: "minmax(0,1.35fr) minmax(420px,.95fr)",
-  gap: 14,
+  gridTemplateColumns: "minmax(0,1.25fr) minmax(380px,.85fr)",
+  gap: 16,
   alignItems: "stretch",
 };
 

@@ -2,25 +2,37 @@ function InventorySidebar({
   section,
   setSection,
 }) {
-	const items = [
-	  {
-	    key: "summary",
-	    label: "Overview",
-	    icon: "📊",
-	  },
+const items = [
+  {
+    key: "summary",
+    label: "Overview",
+    icon: "📊",
+  },
 
-	  {
-	    key: "analytics",
-	    label: "Analytics",
-	    icon: "📈",
-	  },
+  {
+    key: "traceability",
+    label: "Traceability",
+    icon: "🧭",
+  },
 
-	  {
-	    key: "alerts",
-	    label: "Alerts",
-	    icon: "🚨",
-	  },
-	];
+  {
+    key: "reports",
+    label: "Reports",
+    icon: "📑",
+  },
+
+  {
+    key: "analytics",
+    label: "Analytics",
+    icon: "📈",
+  },
+
+  {
+    key: "alerts",
+    label: "Alerts",
+    icon: "🚨",
+  },
+];
 
   return (
     <div style={sidebar}>

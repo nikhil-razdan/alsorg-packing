@@ -89,3 +89,35 @@ export async function fetchDailyThroughputUsers(
 		"Failed to load throughput user data"
 	);
 }
+
+export async function fetchDashboardTrace({
+	type = "all",
+	from,
+	to,
+	search,
+	limit = 250,
+	offset = 0,
+} = {}) {
+	const params = new URLSearchParams();
+
+	params.set("type", type);
+	params.set("limit", String(limit));
+	params.set("offset", String(offset));
+
+	if (from) {
+		params.set("from", from);
+	}
+
+	if (to) {
+		params.set("to", to);
+	}
+
+	if (search) {
+		params.set("search", search);
+	}
+
+	return requestJson(
+		`/api/reports/dashboard/inventory-trace?${params.toString()}`,
+		"Failed to load inventory traceability"
+	);
+}
