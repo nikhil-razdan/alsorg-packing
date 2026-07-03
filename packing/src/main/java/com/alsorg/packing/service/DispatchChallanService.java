@@ -126,21 +126,22 @@ public class DispatchChallanService {
             items.add(prepared);
         }
 
-        String challanNo = generateChallanNumber();
-
-        ChalaanPdfData data = buildPdfData(
-                challanNo,
-                driver,
-                vehicle,
-                items);
-
-        byte[] pdf = pdfService.generateChalaan(data);
-
         LocalDateTime dispatchTimeIst = dispatchTime != null
                 ? dispatchTime
                 : LocalDateTime.now(INDIA_ZONE);
 
         String actor = safeActor(username);
+
+        String challanNo = generateChallanNumber(dispatchTimeIst);
+
+        ChalaanPdfData data = buildPdfData(
+                challanNo,
+                driver,
+                vehicle,
+                items,
+                dispatchTimeIst);
+
+        byte[] pdf = pdfService.generateChalaan(data);
 
         /*
          * Save challan metadata before marking DISPATCHED.
@@ -324,13 +325,15 @@ public class DispatchChallanService {
     }
 
     private ChalaanPdfData buildPdfData(
-            String challanNo,
-            Driver driver,
-            Vehicle vehicle,
-            List<DispatchedItem> items) {
+        String challanNo,
+        Driver driver,
+        Vehicle vehicle,
+        List<DispatchedItem> items,
+        LocalDateTime dispatchTimeIst) { 
         ChalaanPdfData data = new ChalaanPdfData();
 
         data.setVoucherNo(challanNo);
+        data.setDispatchTime(dispatchTimeIst);
         data.setDesignerName("-");
         data.setOt("-");
         data.setDriverName(safe(driver.getName()));
@@ -534,9 +537,12 @@ public class DispatchChallanService {
                 || cleanLocation.startsWith(cleanFg + " ");
     }
 
-    private String generateChallanNumber() {
-        String date = java.time.LocalDate.now(INDIA_ZONE)
-                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+    private String generateChallanNumber(
+            LocalDateTime dispatchTimeIst) {
+        String date = (dispatchTimeIst != null
+                ? dispatchTimeIst.toLocalDate()
+                : java.time.LocalDate.now(INDIA_ZONE)).format(
+                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
         String suffix = UUID.randomUUID()
                 .toString()

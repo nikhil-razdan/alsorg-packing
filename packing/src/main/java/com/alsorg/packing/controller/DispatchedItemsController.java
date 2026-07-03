@@ -8,14 +8,12 @@ import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
-import com.alsorg.packing.controller.dto.logistics.EndTripRequest;
 
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -370,7 +368,7 @@ public class DispatchedItemsController {
                     .stream()
                     .map(DispatchedItem::getDispatchedAt)
                     .filter(date -> date != null)
-                    .max(LocalDateTime::compareTo)
+                    .min(LocalDateTime::compareTo)
                     .orElse(null);
 
             LocalDateTime tripStartedAt = items

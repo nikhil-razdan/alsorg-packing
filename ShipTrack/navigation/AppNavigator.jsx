@@ -133,7 +133,7 @@ export default function AppNavigator() {
               name="Trips"
               component={TripsScreen}
               options={{
-                title: "Trips with Challans",
+                title: "",
               }}
             />
 

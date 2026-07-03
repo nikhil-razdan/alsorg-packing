@@ -87,10 +87,10 @@ function getItemPlant(item) {
 
 function getItemLocation(item) {
     return (
-        item.currentLocationCode ||
-        item.location ||
-        item.warehouseCode ||
-        item.fgZoneCode ||
+        item?.currentLocationCode ||
+        item?.location ||
+        item?.warehouseCode ||
+        item?.fgZoneCode ||
         "—"
     );
 }
@@ -1206,6 +1206,46 @@ function ItemCard({
                     </Text>
                 </View>
             ) : null}
+        </View>
+    );
+}
+
+function Info({
+    label,
+    value,
+}) {
+    return (
+        <View style={styles.info}>
+            <Text style={styles.infoLabel}>
+                {label}
+            </Text>
+
+            <Text
+                style={styles.infoValue}
+                numberOfLines={2}
+            >
+                {value}
+            </Text>
+        </View>
+    );
+}
+
+function Detail({
+    label,
+    value,
+}) {
+    return (
+        <View style={styles.detail}>
+            <Text style={styles.detailLabel}>
+                {label}
+            </Text>
+
+            <Text
+                style={styles.detailValue}
+                numberOfLines={2}
+            >
+                {value}
+            </Text>
         </View>
     );
 }

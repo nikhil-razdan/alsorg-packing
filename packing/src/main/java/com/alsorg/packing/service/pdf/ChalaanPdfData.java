@@ -1,6 +1,7 @@
 package com.alsorg.packing.service.pdf;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 public class ChalaanPdfData {
 
@@ -11,14 +12,20 @@ public class ChalaanPdfData {
     private String designerName;
     private String voucherNo;
     private String ot;
-    
+
     private String driverName;
 
     private String vehicleNumber;
 
     private List<ChalaanItem> items;
 
+    private LocalDateTime dispatchTime;
+
     // ================= GETTERS =================
+
+    public LocalDateTime getDispatchTime() {
+        return dispatchTime;
+    }
 
     public String getPdNo() {
         return pdNo;
@@ -50,6 +57,10 @@ public class ChalaanPdfData {
 
     // ================= SETTERS =================
 
+    public void setDispatchTime(LocalDateTime dispatchTime) {
+        this.dispatchTime = dispatchTime;
+    }
+
     public void setPdNo(String pdNo) {
         this.pdNo = pdNo;
     }
@@ -78,19 +89,19 @@ public class ChalaanPdfData {
         this.items = items;
     }
 
-	public String getDriverName() {
-		return driverName;
-	}
+    public String getDriverName() {
+        return driverName;
+    }
 
-	public void setDriverName(String driverName) {
-		this.driverName = driverName;
-	}
+    public void setDriverName(String driverName) {
+        this.driverName = driverName;
+    }
 
-	public String getVehicleNumber() {
-		return vehicleNumber;
-	}
+    public String getVehicleNumber() {
+        return vehicleNumber;
+    }
 
-	public void setVehicleNumber(String vehicleNumber) {
-		this.vehicleNumber = vehicleNumber;
-	}
+    public void setVehicleNumber(String vehicleNumber) {
+        this.vehicleNumber = vehicleNumber;
+    }
 }

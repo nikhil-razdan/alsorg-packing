@@ -1240,6 +1240,16 @@ const headerRow = {
 	alignItems: "center",
 };
 
+const dateTimeFieldSx = {
+	...formFieldSx,
+
+	"& input::-webkit-calendar-picker-indicator": {
+		filter: "invert(1)",
+		opacity: 0.85,
+		cursor: "pointer",
+	},
+};
+
 const logo = {
 	color: "#fff",
 
@@ -1786,6 +1796,7 @@ function DispatchedItemsPage() {
 	const [dispatchTripForm, setDispatchTripForm] = useState({
 		driverId: "",
 		vehicleId: "",
+		dispatchTime: "",
 	});
 
 	const [customChallanSectionOpen, setCustomChallanSectionOpen] = useState(false);
@@ -1805,6 +1816,7 @@ function DispatchedItemsPage() {
 		clientAddress: "",
 		purpose: "",
 		movementMode: "DIRECT_DISPATCH",
+		dispatchTime: "",
 		items: [createEmptyCustomChallanLine()],
 	});
 	const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
@@ -2244,6 +2256,21 @@ function DispatchedItemsPage() {
 			label: row.status || "—",
 			sx: pendingStatusChip,
 		};
+	};
+
+	const formatLocalDateTimeDisplay = (value) => {
+		if (!value) return "—";
+
+		const text = String(value);
+		const [datePart, timePart = ""] = text.split("T");
+
+		const [year, month, day] = datePart.split("-");
+
+		if (!year || !month || !day) {
+			return text;
+		}
+
+		return `${day}-${month}-${year} ${timePart.slice(0, 5)}`;
 	};
 
 	const getNowDateTimeLocal = () => {
@@ -2998,11 +3025,6 @@ function DispatchedItemsPage() {
 			setHistoryRows([]);
 			setHistoryItem(row.zohoItemId);
 
-			/*
-			 * Step 1:
-			 * Backend will create missing PacketItem / StickerHistory / PDF
-			 * for old legacy dispatched items.
-			 */
 			const ensureRes = await authFetch(
 				`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(row.zohoItemId)}/ensure-history`,
 				{
@@ -3647,7 +3669,6 @@ function DispatchedItemsPage() {
 		}
 	}, []);
 
-
 	const getActionStyle = (action = "") => {
 		const a = action.toLowerCase();
 
@@ -3953,12 +3974,19 @@ function DispatchedItemsPage() {
 		setDispatchTripForm({
 			driverId: "",
 			vehicleId: "",
+			dispatchTime: getNowDateTimeLocal(),
 		});
 
 		setDispatchTripOpen(true);
 	};
 
 	const submitDispatchTrip = async () => {
+
+		if (!dispatchTripForm.dispatchTime) {
+			alert("Please select challan date and time");
+			return;
+		}
+
 		if (!dispatchTripForm.driverId) {
 			alert("Please select driver");
 			return;
@@ -4002,6 +4030,7 @@ function DispatchedItemsPage() {
 				itemIds: finalItemIds,
 				driverId: dispatchTripForm.driverId,
 				vehicleId: dispatchTripForm.vehicleId,
+				dispatchTime: dispatchTripForm.dispatchTime,
 				preview: true,
 			});
 
@@ -4056,6 +4085,7 @@ function DispatchedItemsPage() {
 			clientAddress: "",
 			purpose: "",
 			movementMode: "DIRECT_DISPATCH",
+			dispatchTime: getNowDateTimeLocal(),
 			items: [createEmptyCustomChallanLine()],
 		});
 	};
@@ -4117,26 +4147,48 @@ function DispatchedItemsPage() {
 			return;
 		}
 
-		const cleanedItems =
-			(customChallanForm.items || [])
-				.map((item) => ({
-					description: String(item.description || "").trim(),
-					drawingNo: String(item.drawingNo || "").trim(),
-					quantity: Number(item.quantity || 1),
-					returnable: Boolean(item.returnable),
-					remarks: String(item.remarks || "").trim(),
-				}))
-				.filter((item) => item.description);
+		const selectedDispatchTime =
+			String(customChallanForm.dispatchTime || "").trim();
 
-		if (!customChallanForm.fromLocation.trim()) {
+		if (!selectedDispatchTime) {
+			alert("Please select challan date and time");
+			return;
+		}
+
+		const fromLocation =
+			String(customChallanForm.fromLocation || "").trim();
+
+		const toLocation =
+			String(customChallanForm.toLocation || "").trim();
+
+		if (!fromLocation) {
 			alert("From location is required");
 			return;
 		}
 
-		if (!customChallanForm.toLocation.trim()) {
+		if (!toLocation) {
 			alert("To location / site is required");
 			return;
 		}
+
+		const cleanedItems =
+			(customChallanForm.items || [])
+				.map((item) => {
+					const quantity =
+						Number(item.quantity || 1);
+
+					return {
+						description: String(item.description || "").trim(),
+						drawingNo: String(item.drawingNo || "").trim(),
+						quantity:
+							Number.isFinite(quantity) && quantity > 0
+								? quantity
+								: 1,
+						returnable: Boolean(item.returnable),
+						remarks: String(item.remarks || "").trim(),
+					};
+				})
+				.filter((item) => item.description);
 
 		if (cleanedItems.length === 0) {
 			alert("Add at least one item description");
@@ -4148,15 +4200,25 @@ function DispatchedItemsPage() {
 
 			const result = await createCustomChallan({
 				...customChallanForm,
-				fromLocation: customChallanForm.fromLocation.trim(),
-				toLocation: customChallanForm.toLocation.trim(),
-				pdNo: customChallanForm.pdNo.trim(),
-				projectName: customChallanForm.projectName.trim(),
-				clientName: customChallanForm.clientName.trim(),
-				clientAddress: customChallanForm.clientAddress.trim(),
-				purpose: customChallanForm.purpose.trim(),
+
+				fromLocation,
+				toLocation,
+
+				pdNo: String(customChallanForm.pdNo || "").trim(),
+				projectName: String(customChallanForm.projectName || "").trim(),
+				clientName: String(customChallanForm.clientName || "").trim(),
+				clientAddress: String(customChallanForm.clientAddress || "").trim(),
+				purpose: String(customChallanForm.purpose || "").trim(),
+
 				movementMode: "DIRECT_DISPATCH",
-				dispatchTime: getNowDateTimeLocal(),
+
+				/*
+				 * Important:
+				 * Do not fallback to current time here.
+				 * User-selected challan date/time should be the only source.
+				 */
+				dispatchTime: selectedDispatchTime,
+
 				items: cleanedItems,
 			});
 
@@ -4166,7 +4228,8 @@ function DispatchedItemsPage() {
 				throw new Error("No custom challan PDF generated");
 			}
 
-			const url = URL.createObjectURL(blob);
+			const url =
+				URL.createObjectURL(blob);
 
 			setChalaanPreview({
 				url,
@@ -4297,7 +4360,6 @@ function DispatchedItemsPage() {
 					</Box>
 
 				</div>
-
 
 				<Box sx={searchPanel}>
 					<SearchIcon
@@ -4641,9 +4703,7 @@ function DispatchedItemsPage() {
 															mt: 0.4,
 														}}
 													>
-														{challan.generatedAt
-															? new Date(challan.generatedAt).toLocaleString()
-															: "—"}
+														{formatLocalDateTimeDisplay(challan.generatedAt)}
 													</Box>
 												</Box>
 
@@ -5352,7 +5412,21 @@ function DispatchedItemsPage() {
 											disabled
 											sx={formFieldSx}
 										/>
+										<Box>
+											<Box sx={dispatchTripFieldLabelSx}>
+												Challan Date & Time
+											</Box>
 
+											<TextField
+												fullWidth
+												type="datetime-local"
+												value={customChallanForm.dispatchTime}
+												onChange={(e) =>
+													updateCustomChallanField("dispatchTime", e.target.value)
+												}
+												sx={dateTimeFieldSx}
+											/>
+										</Box>
 										<TextField
 											label="From Location"
 											placeholder="Dispatch / Customer Care / Store"
@@ -7509,6 +7583,25 @@ function DispatchedItemsPage() {
 									>
 										Mode: {dispatchTripContext.mode || "—"}
 									</Box>
+								</Box>
+
+								<Box sx={{ mb: 2 }}>
+									<Box sx={dispatchTripFieldLabelSx}>
+										Challan Date & Time
+									</Box>
+
+									<TextField
+										fullWidth
+										type="datetime-local"
+										value={dispatchTripForm.dispatchTime}
+										onChange={(e) =>
+											setDispatchTripForm((prev) => ({
+												...prev,
+												dispatchTime: e.target.value,
+											}))
+										}
+										sx={dateTimeFieldSx}
+									/>
 								</Box>
 
 								<Box sx={{ mb: 2 }}>

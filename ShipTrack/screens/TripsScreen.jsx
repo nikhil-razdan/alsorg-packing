@@ -252,10 +252,10 @@ function formatPickerDisplay(value) {
 
 function getItemLocation(item) {
   return (
-    item.currentLocationCode ||
-    item.location ||
-    item.warehouseCode ||
-    item.fgZoneCode ||
+    item?.currentLocationCode ||
+    item?.location ||
+    item?.warehouseCode ||
+    item?.fgZoneCode ||
     "—"
   );
 }
@@ -378,9 +378,9 @@ export default function TripsScreen() {
       Alert.alert(
         "Challans failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to load dispatched challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to load dispatched challans"
       );
     } finally {
       setLoading(false);
@@ -403,9 +403,9 @@ export default function TripsScreen() {
       Alert.alert(
         "Refresh failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Failed to refresh challans"
+        e?.response?.data ||
+        e?.message ||
+        "Failed to refresh challans"
       );
     } finally {
       setRefreshing(false);
@@ -758,9 +758,9 @@ export default function TripsScreen() {
       Alert.alert(
         "Save failed",
         e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
-          "Unable to save trip end time"
+        e?.response?.data ||
+        e?.message ||
+        "Unable to save trip end time"
       );
     } finally {
       setSavingEndTrip("");
@@ -1419,6 +1419,472 @@ function FilterGroup({
           );
         })}
       </View>
+    </View>
+  );
+}
+
+function ChallanCard({
+  challan,
+  expanded,
+  canManageTripEnd,
+  endTimeValue,
+  savingEndTrip,
+  onEndTimeChange,
+  onSaveEndTime,
+  onToggle,
+}) {
+  const driverName =
+    challan?.driverName || "—";
+
+  const vehicleNo =
+    challan?.vehicleNumber || "—";
+
+  const items =
+    Array.isArray(challan?.items)
+      ? challan.items
+      : [];
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.challan}>
+            {challan?.challanNumber || "—"}
+          </Text>
+
+          <Text style={styles.meta}>
+            {driverName} • {vehicleNo}
+          </Text>
+
+          <Text style={styles.smallMeta}>
+            By {challan?.dispatchedBy || "—"} •{" "}
+            {formatDateTime(challan?.dispatchedAt)}
+          </Text>
+        </View>
+
+        <View style={styles.dispatchedBadge}>
+          <Text style={styles.dispatchedText}>
+            DISPATCHED
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.infoGrid}>
+        <Info
+          label="Items"
+          value={String(
+            challan?.totalItems ||
+            items.length ||
+            0
+          )}
+        />
+
+        <Info
+          label="Driver"
+          value={driverName}
+        />
+
+        <Info
+          label="Vehicle"
+          value={vehicleNo}
+        />
+
+        <Info
+          label="Trip Start"
+          value={formatDateTime(
+            challan?.tripStartedAt
+          )}
+        />
+
+        <Info
+          label="Trip End"
+          value={formatDateTime(
+            challan?.tripEndedAt
+          )}
+        />
+
+        <Info
+          label="Duration"
+          value={formatDuration(
+            challan?.tripDurationMinutes
+          )}
+        />
+
+        <Info
+          label="Trip Status"
+          value={challan?.tripStatus || "RUNNING"}
+        />
+
+        <Info
+          label="Dispatch Time"
+          value={formatDateTime(
+            challan?.dispatchedAt
+          )}
+        />
+      </View>
+
+      {canManageTripEnd ? (
+        <EndTimePickerPanel
+          challan={challan}
+          value={endTimeValue}
+          onChange={onEndTimeChange}
+          onSave={onSaveEndTime}
+          saving={savingEndTrip}
+        />
+      ) : null}
+
+      <TouchableOpacity
+        style={styles.challanBtn}
+        onPress={() =>
+          safeOpenChallanPdf(
+            challan?.challanNumber
+          )
+        }
+      >
+        <Text style={styles.challanText}>
+          Open Challan PDF
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryBtn}
+        onPress={onToggle}
+      >
+        <Text style={styles.secondaryText}>
+          {expanded
+            ? "Hide Items"
+            : "View Items"}
+        </Text>
+      </TouchableOpacity>
+
+      {expanded ? (
+        <View style={styles.itemsBox}>
+          {items.length === 0 ? (
+            <Text style={styles.noItems}>
+              No items found in this challan.
+            </Text>
+          ) : (
+            items.map((item, index) => (
+              <View
+                key={
+                  item?.zohoItemId ||
+                  item?.packetItemId ||
+                  `${challan?.challanNumber}-${index}`
+                }
+                style={styles.itemCard}
+              >
+                <Text
+                  style={styles.itemName}
+                  numberOfLines={2}
+                >
+                  {index + 1}.{" "}
+                  {item?.name ||
+                    item?.itemName ||
+                    "—"}
+                </Text>
+
+                <Text
+                  style={styles.itemMeta}
+                  numberOfLines={2}
+                >
+                  SKU: {item?.sku || "—"}
+                </Text>
+
+                <Text style={styles.itemMeta}>
+                  PD: {item?.pdNo || "—"} • Client:{" "}
+                  {item?.clientName || "—"}
+                </Text>
+
+                <Text style={styles.itemMeta}>
+                  Plant: {item?.plantCode || "—"} • Location:{" "}
+                  {item?.currentLocationCode ||
+                    item?.location ||
+                    "—"}
+                </Text>
+
+                <Text style={styles.itemMeta}>
+                  Status: {item?.status || "DISPATCHED"}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function EndTimePickerPanel({
+  challan,
+  value,
+  onChange,
+  onSave,
+  saving,
+}) {
+  const [pickerOpen, setPickerOpen] =
+    useState(false);
+
+  const [pickerMode, setPickerMode] =
+    useState("date");
+
+  const [tempDate, setTempDate] =
+    useState(parseLocalDateTime(value));
+
+  const openPicker = () => {
+    setTempDate(
+      parseLocalDateTime(value)
+    );
+
+    setPickerMode("date");
+    setPickerOpen(true);
+  };
+
+  const applyNow = () => {
+    onChange(
+      dateToLocalInputValue(new Date())
+    );
+  };
+
+  const addMinutes = (minutes) => {
+    const base =
+      parseLocalDateTime(value);
+
+    base.setMinutes(
+      base.getMinutes() + minutes
+    );
+
+    onChange(
+      dateToLocalInputValue(base)
+    );
+  };
+
+  const onAndroidChange = (
+    event,
+    selectedDate
+  ) => {
+    if (event?.type === "dismissed") {
+      setPickerOpen(false);
+      return;
+    }
+
+    if (!selectedDate) {
+      return;
+    }
+
+    if (pickerMode === "date") {
+      const merged =
+        new Date(tempDate);
+
+      merged.setFullYear(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate()
+      );
+
+      setTempDate(merged);
+      setPickerMode("time");
+      return;
+    }
+
+    const finalDate =
+      new Date(tempDate);
+
+    finalDate.setHours(
+      selectedDate.getHours(),
+      selectedDate.getMinutes(),
+      0,
+      0
+    );
+
+    onChange(
+      dateToLocalInputValue(finalDate)
+    );
+
+    setPickerOpen(false);
+    setPickerMode("date");
+  };
+
+  const onIosChange = (
+    event,
+    selectedDate
+  ) => {
+    if (selectedDate) {
+      setTempDate(selectedDate);
+    }
+  };
+
+  const saveIosPicker = () => {
+    onChange(
+      dateToLocalInputValue(tempDate)
+    );
+
+    setPickerOpen(false);
+  };
+
+  return (
+    <View style={styles.endTimePanel}>
+      <View style={styles.endTimeTopRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.endTimeTitle}>
+            Trip End Time
+          </Text>
+
+          <Text style={styles.endTimeSub}>
+            {challan?.tripEndedAt
+              ? "Existing end time can be edited."
+              : "Select the actual trip closing time."}
+          </Text>
+        </View>
+
+        <View style={styles.endStatusBadge}>
+          <Text style={styles.endStatusText}>
+            {challan?.tripEndedAt
+              ? "ENDED"
+              : "RUNNING"}
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.datePickerBox}
+        onPress={openPicker}
+      >
+        <Text style={styles.datePickerLabel}>
+          Selected End Time
+        </Text>
+
+        <Text style={styles.datePickerValue}>
+          {formatPickerDisplay(value)}
+        </Text>
+
+        <Text style={styles.datePickerHint}>
+          Tap to choose date and time
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.quickTimeRow}>
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={applyNow}
+        >
+          <Text style={styles.quickTimeText}>
+            Now
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={() => addMinutes(30)}
+        >
+          <Text style={styles.quickTimeText}>
+            +30 min
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickTimeBtn}
+          onPress={() => addMinutes(60)}
+        >
+          <Text style={styles.quickTimeText}>
+            +1 hr
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={styles.endTimeBtn}
+        onPress={onSave}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.endTimeBtnText}>
+            {challan?.tripEndedAt
+              ? "Update End Time"
+              : "Save End Time"}
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      {Platform.OS === "android" &&
+        pickerOpen ? (
+        <DateTimePicker
+          value={tempDate}
+          mode={pickerMode}
+          display="default"
+          is24Hour={false}
+          onChange={onAndroidChange}
+        />
+      ) : null}
+
+      {Platform.OS === "ios" ? (
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() =>
+            setPickerOpen(false)
+          }
+        >
+          <View style={styles.pickerModalOverlay}>
+            <View style={styles.pickerModalCard}>
+              <Text style={styles.pickerModalTitle}>
+                Select Trip End Time
+              </Text>
+
+              <DateTimePicker
+                value={tempDate}
+                mode="datetime"
+                display="spinner"
+                onChange={onIosChange}
+              />
+
+              <View style={styles.pickerModalActions}>
+                <TouchableOpacity
+                  style={styles.pickerCancelBtn}
+                  onPress={() =>
+                    setPickerOpen(false)
+                  }
+                >
+                  <Text style={styles.pickerCancelText}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.pickerSaveBtn}
+                  onPress={saveIosPicker}
+                >
+                  <Text style={styles.pickerSaveText}>
+                    Use Time
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+    </View>
+  );
+}
+
+function Info({
+  label,
+  value,
+}) {
+  return (
+    <View style={styles.info}>
+      <Text style={styles.infoLabel}>
+        {label}
+      </Text>
+
+      <Text
+        style={styles.infoValue}
+        numberOfLines={2}
+      >
+        {value}
+      </Text>
     </View>
   );
 }

@@ -77,6 +77,51 @@ const requestBlob = async (
   return res;
 };
 
+const normalizeLocalDateTime = (value) => {
+  if (!value) {
+    return undefined;
+  }
+
+  /*
+   * IMPORTANT:
+   * Do not convert using new Date(value).toISOString().
+   * datetime-local already gives local business time:
+   * 2026-07-03T14:30
+   *
+   * Backend LocalDateTime expects this local format.
+   */
+  return String(value)
+    .trim()
+    .replace(" ", "T")
+    .slice(0, 16);
+};
+
+const getHeaderValue = (
+  res,
+  headerName,
+  fallback = ""
+) => {
+  return res.headers.get(headerName) || fallback;
+};
+
+const getPdfFilename = (
+  res,
+  fallback = "challan.pdf"
+) => {
+  const disposition =
+    res.headers.get("Content-Disposition") || "";
+
+  const match =
+    disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
+
+  const filename =
+    match?.[1] || match?.[2];
+
+  return filename
+    ? decodeURIComponent(filename)
+    : fallback;
+};
+
 export async function fetchDrivers() {
   return requestJson(
     "/api/logistics/drivers",
@@ -231,36 +276,64 @@ export async function createDispatchChallan({
   tripStart,
   preview = true,
 }) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/chalaan/dispatch?preview=${preview}`,
+  const finalDispatchTime =
+    normalizeLocalDateTime(dispatchTime || tripStart);
+
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    throw new Error("No items selected for challan");
+  }
+
+  if (!driverId) {
+    throw new Error("Driver is required");
+  }
+
+  if (!vehicleId) {
+    throw new Error("Vehicle is required");
+  }
+
+  if (!finalDispatchTime) {
+    throw new Error("Challan date and time is required");
+  }
+
+  const res = await requestBlob(
+    `/api/chalaan/dispatch?preview=${preview ? "true" : "false"}`,
     {
       method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      body: {
         itemIds,
         driverId,
         vehicleId,
-        dispatchTime,
-        tripStart,
-      }),
+
+        /*
+         * New backend field.
+         */
+        dispatchTime: finalDispatchTime,
+
+        /*
+         * Backward compatibility for older backend/mobile logic.
+         * Safe to send both.
+         */
+        tripStart: finalDispatchTime,
+      },
+      errorMessage: "Challan generation failed",
     }
   );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Challan generation failed");
-  }
 
   const blob = await res.blob();
 
   return {
     blob,
     challanNo:
-      res.headers.get("X-Challan-No") ||
-      "CHALAAN",
+      getHeaderValue(
+        res,
+        "X-Challan-No",
+        "CHALAAN"
+      ),
+    filename:
+      getPdfFilename(
+        res,
+        "challan.pdf"
+      ),
   };
 }
 
@@ -375,11 +448,21 @@ export async function createVehicleExpense(
 export async function createCustomChallan(
   payload
 ) {
+  const finalDispatchTime =
+    normalizeLocalDateTime(payload?.dispatchTime);
+
+  if (!finalDispatchTime) {
+    throw new Error("Custom challan date and time is required");
+  }
+
   const res = await requestBlob(
     "/api/chalaan/custom?preview=true",
     {
       method: "POST",
-      body: payload,
+      body: {
+        ...payload,
+        dispatchTime: finalDispatchTime,
+      },
       errorMessage: "Custom challan generation failed",
     }
   );
@@ -389,8 +472,16 @@ export async function createCustomChallan(
   return {
     blob,
     challanNo:
-      res.headers.get("X-Challan-No") ||
-      "CUSTOM_CHALLAN",
+      getHeaderValue(
+        res,
+        "X-Challan-No",
+        "CUSTOM_CHALLAN"
+      ),
+    filename:
+      getPdfFilename(
+        res,
+        "custom-challan.pdf"
+      ),
   };
 }
 
@@ -423,7 +514,15 @@ export async function downloadCustomChallan(
   return {
     blob,
     challanNo:
-      res.headers.get("X-Challan-No") ||
-      challanNumber,
+      getHeaderValue(
+        res,
+        "X-Challan-No",
+        challanNumber
+      ),
+    filename:
+      getPdfFilename(
+        res,
+        `${challanNumber}.pdf`
+      ),
   };
 }

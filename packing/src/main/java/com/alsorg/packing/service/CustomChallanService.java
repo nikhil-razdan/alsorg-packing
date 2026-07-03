@@ -22,39 +22,34 @@ import java.util.UUID;
 @Transactional
 public class CustomChallanService {
 
-    private static final ZoneId INDIA_ZONE =
-            ZoneId.of("Asia/Kolkata");
+    private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final CustomChallanRepository repository;
     private final ChalaanPdfService pdfService;
 
     public CustomChallanService(
             CustomChallanRepository repository,
-            ChalaanPdfService pdfService
-    ) {
+            ChalaanPdfService pdfService) {
         this.repository = repository;
         this.pdfService = pdfService;
     }
 
     public DispatchTripPdfResult generateAndSave(
             CustomChallanRequest request,
-            String username
-    ) {
+            String username) {
         validateRequest(request);
 
-        String actor =
-                safeActor(username);
+        String actor = safeActor(username);
 
-        String challanNo =
-                generateCustomChallanNumber(request.challanType());
+        LocalDateTime generatedAt = request.dispatchTime() != null
+                ? request.dispatchTime()
+                : LocalDateTime.now(INDIA_ZONE);
 
-        LocalDateTime generatedAt =
-                request.dispatchTime() != null
-                        ? request.dispatchTime()
-                        : LocalDateTime.now(INDIA_ZONE);
+        String challanNo = generateCustomChallanNumber(
+                request.challanType(),
+                generatedAt);
 
-        CustomChallan challan =
-                new CustomChallan();
+        CustomChallan challan = new CustomChallan();
 
         challan.setChallanNumber(challanNo);
         challan.setChallanType(clean(request.challanType()));
@@ -68,8 +63,7 @@ public class CustomChallanService {
         challan.setMovementMode(
                 isBlank(request.movementMode())
                         ? "DIRECT_DISPATCH"
-                        : clean(request.movementMode())
-        );
+                        : clean(request.movementMode()));
         challan.setGeneratedBy(actor);
         challan.setGeneratedAt(generatedAt);
 
@@ -78,8 +72,7 @@ public class CustomChallanService {
                 continue;
             }
 
-            CustomChallanItem item =
-                    new CustomChallanItem();
+            CustomChallanItem item = new CustomChallanItem();
 
             item.setChallan(challan);
             item.setDescription(clean(itemRequest.description()));
@@ -87,8 +80,7 @@ public class CustomChallanService {
             item.setQuantity(
                     itemRequest.quantity() == null || itemRequest.quantity() <= 0
                             ? 1
-                            : itemRequest.quantity()
-            );
+                            : itemRequest.quantity());
             item.setReturnable(Boolean.TRUE.equals(itemRequest.returnable()));
             item.setRemarks(clean(itemRequest.remarks()));
 
@@ -97,21 +89,17 @@ public class CustomChallanService {
 
         repository.save(challan);
 
-        CustomChallanRequest pdfRequest =
-                toRequest(challan);
+        CustomChallanRequest pdfRequest = toRequest(challan);
 
-        byte[] pdf =
-                pdfService.generateCustomChalaan(
-                        pdfRequest,
-                        challanNo,
-                        actor
-                );
+        byte[] pdf = pdfService.generateCustomChalaan(
+                pdfRequest,
+                challanNo,
+                actor);
 
         return new DispatchTripPdfResult(
                 null,
                 challanNo,
-                pdf
-        );
+                pdf);
     }
 
     @Transactional(readOnly = true)
@@ -125,37 +113,28 @@ public class CustomChallanService {
 
     @Transactional(readOnly = true)
     public DispatchTripPdfResult download(
-            String challanNumber
-    ) {
-        CustomChallan challan =
-                repository
-                        .findById(challanNumber)
-                        .orElseThrow(() -> new RuntimeException(
-                                "Custom challan not found: " + challanNumber
-                        ));
+            String challanNumber) {
+        CustomChallan challan = repository
+                .findById(challanNumber)
+                .orElseThrow(() -> new RuntimeException(
+                        "Custom challan not found: " + challanNumber));
 
-        CustomChallanRequest request =
-                toRequest(challan);
+        CustomChallanRequest request = toRequest(challan);
 
-        byte[] pdf =
-                pdfService.generateCustomChalaan(
-                        request,
-                        challan.getChallanNumber(),
-                        challan.getGeneratedBy()
-                );
+        byte[] pdf = pdfService.generateCustomChalaan(
+                request,
+                challan.getChallanNumber(),
+                challan.getGeneratedBy());
 
         return new DispatchTripPdfResult(
                 null,
                 challan.getChallanNumber(),
-                pdf
-        );
+                pdf);
     }
 
     private CustomChallanRequest toRequest(
-            CustomChallan challan
-    ) {
-        List<CustomChallanItemRequest> itemRequests =
-                new ArrayList<>();
+            CustomChallan challan) {
+        List<CustomChallanItemRequest> itemRequests = new ArrayList<>();
 
         for (CustomChallanItem item : challan.getItems()) {
             itemRequests.add(
@@ -164,9 +143,7 @@ public class CustomChallanService {
                             item.getDrawingNo(),
                             item.getQuantity(),
                             item.getReturnable(),
-                            item.getRemarks()
-                    )
-            );
+                            item.getRemarks()));
         }
 
         return new CustomChallanRequest(
@@ -180,13 +157,11 @@ public class CustomChallanService {
                 challan.getPurpose(),
                 challan.getMovementMode(),
                 challan.getGeneratedAt(),
-                itemRequests
-        );
+                itemRequests);
     }
 
     private CustomChallanSummaryResponse toSummary(
-            CustomChallan challan
-    ) {
+            CustomChallan challan) {
         return new CustomChallanSummaryResponse(
                 challan.getChallanNumber(),
                 challan.getChallanType(),
@@ -202,13 +177,11 @@ public class CustomChallanService {
                 challan.getGeneratedAt(),
                 challan.getItems() == null
                         ? 0
-                        : challan.getItems().size()
-        );
+                        : challan.getItems().size());
     }
 
     private void validateRequest(
-            CustomChallanRequest request
-    ) {
+            CustomChallanRequest request) {
         if (request == null) {
             throw new RuntimeException("Custom challan request missing");
         }
@@ -225,13 +198,10 @@ public class CustomChallanService {
             throw new RuntimeException("At least one item is required");
         }
 
-        boolean hasValidItem =
-                request.items()
-                        .stream()
-                        .anyMatch(item ->
-                                item != null &&
-                                        !isBlank(item.description())
-                        );
+        boolean hasValidItem = request.items()
+                .stream()
+                .anyMatch(item -> item != null &&
+                        !isBlank(item.description()));
 
         if (!hasValidItem) {
             throw new RuntimeException("At least one item description is required");
@@ -239,12 +209,11 @@ public class CustomChallanService {
     }
 
     private String generateCustomChallanNumber(
-            String challanType
-    ) {
-        String cleanType =
-                challanType == null
-                        ? ""
-                        : challanType.trim().toUpperCase();
+            String challanType,
+            LocalDateTime generatedAt) {
+        String cleanType = challanType == null
+                ? ""
+                : challanType.trim().toUpperCase();
 
         String prefix;
 
@@ -258,26 +227,24 @@ public class CustomChallanService {
             prefix = "CUS-CH";
         }
 
-        String date =
-                java.time.LocalDate.now(INDIA_ZONE)
-                        .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        String date = (generatedAt != null
+                ? generatedAt.toLocalDate()
+                : java.time.LocalDate.now(INDIA_ZONE)).format(
+                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
-        String suffix =
-                UUID.randomUUID()
-                        .toString()
-                        .substring(0, 6)
-                        .toUpperCase();
+        String suffix = UUID.randomUUID()
+                .toString()
+                .substring(0, 6)
+                .toUpperCase();
 
         return prefix + "-" + date + "-" + suffix;
     }
 
     private String challanTypeLabel(
-            String value
-    ) {
-        String clean =
-                value == null
-                        ? ""
-                        : value.trim().toUpperCase();
+            String value) {
+        String clean = value == null
+                ? ""
+                : value.trim().toUpperCase();
 
         if ("CUSTOMER_CARE".equals(clean)) {
             return "Customer Care";
@@ -295,22 +262,19 @@ public class CustomChallanService {
     }
 
     private String clean(
-            String value
-    ) {
+            String value) {
         return value == null
                 ? ""
                 : value.trim();
     }
 
     private boolean isBlank(
-            String value
-    ) {
+            String value) {
         return value == null || value.trim().isBlank();
     }
 
     private String safeActor(
-            String username
-    ) {
+            String username) {
         return username != null && !username.trim().isBlank()
                 ? username.trim()
                 : "SYSTEM";

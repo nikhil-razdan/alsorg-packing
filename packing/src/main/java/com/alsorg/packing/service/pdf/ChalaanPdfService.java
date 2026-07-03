@@ -6,6 +6,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
 
@@ -69,8 +70,8 @@ public class ChalaanPdfService {
 
         String vehicleNo = safe(data != null ? data.getVehicleNumber() : null);
 
-        String date = LocalDate.now(ZoneId.of("Asia/Kolkata"))
-                .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        String date = formatChallanDateTime(
+                data != null ? data.getDispatchTime() : null);
 
         try (PDDocument doc = new PDDocument()) {
             PDFont bold = PDType1Font.HELVETICA_BOLD;
@@ -439,7 +440,7 @@ public class ChalaanPdfService {
                 290,
                 "Address: " + safe(address));
 
-        drawText(cs, regular, 10, 350, 710, "Date: " + safe(date));
+        drawText(cs, regular, 10, 350, 710, "Date / Time: " + safe(date));
         drawText(cs, regular, 10, 350, 690, "Challan No: " + safe(challanNo));
         drawText(cs, regular, 10, 350, 670, "Driver Name: " + safe(driverName));
         drawText(cs, regular, 10, 350, 650, "Vehicle No: " + safe(vehicleNo));
@@ -660,12 +661,8 @@ public class ChalaanPdfService {
 
         String subTitle = customChallanTypeLabel(request == null ? null : request.challanType());
 
-        String date = request != null && request.dispatchTime() != null
-                ? request.dispatchTime()
-                        .toLocalDate()
-                        .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
-                : LocalDate.now(ZoneId.of("Asia/Kolkata"))
-                        .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        String date = formatChallanDateTime(
+                request == null ? null : request.dispatchTime());
 
         drawCenteredText(
                 cs,
@@ -767,7 +764,7 @@ public class ChalaanPdfService {
                 x3,
                 topY,
                 rowHeight,
-                "Date",
+                "Date / Time",
                 safe(date));
 
         drawCustomCell(
@@ -1150,5 +1147,15 @@ public class ChalaanPdfService {
         }
 
         return "SPECIAL MOVEMENT";
+    }
+
+    private String formatChallanDateTime(
+            LocalDateTime value) {
+        LocalDateTime finalValue = value != null
+                ? value
+                : LocalDateTime.now(ZoneId.of("Asia/Kolkata"));
+
+        return finalValue.format(
+                DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
     }
 }

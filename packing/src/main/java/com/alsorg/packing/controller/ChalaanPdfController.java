@@ -182,7 +182,15 @@ public class ChalaanPdfController {
 
         ChalaanPdfData data = new ChalaanPdfData();
 
+        LocalDateTime challanDateTime = items
+                .stream()
+                .map(DispatchedItem::getDispatchedAt)
+                .filter(date -> date != null)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+
         data.setVoucherNo(challanNumber);
+        data.setDispatchTime(challanDateTime);
         data.setDesignerName("-");
         data.setOt("-");
         data.setDriverName(first.getDriverName());

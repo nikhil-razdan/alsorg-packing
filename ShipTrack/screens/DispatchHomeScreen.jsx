@@ -42,7 +42,7 @@ export default function DispatchHomeScreen({
       <View style={styles.hero}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>
-            SHIPTRACK MOBILE
+            SHIPTRACK
           </Text>
 
           <Text style={styles.title}>
@@ -69,30 +69,9 @@ export default function DispatchHomeScreen({
         <>
           <View style={styles.statsGrid}>
             <MiniStat
-              label="Mode"
-              value="QR"
-              active
-            />
-
-            <MiniStat
               label="Access"
               value="Dispatch"
               active
-            />
-
-            <MiniStat
-              label="Flow"
-              value="Challan"
-            />
-
-            <MiniStat
-              label="POD"
-              value="Removed"
-            />
-
-            <MiniStat
-              label="Live Loc."
-              value="Off"
             />
 
             <MiniStat
@@ -148,15 +127,7 @@ export default function DispatchHomeScreen({
             />
           </View>
 
-          <View style={styles.noteBox}>
-            <Text style={styles.noteTitle}>
-              Current Mobile Flow
-            </Text>
-
-            <Text style={styles.noteText}>
-              Scan item → Move to FG if required → Select driver and vehicle → Generate dispatch challan.
-            </Text>
-          </View>
+          
         </>
       ) : (
         <View style={styles.permissionBox}>
