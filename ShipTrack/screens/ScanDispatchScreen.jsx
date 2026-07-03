@@ -172,9 +172,9 @@ function getFgOptions(item) {
         typeof zone === "string"
           ? zone
           : zone?.zoneCode ||
-            zone?.code ||
-            zone?.name ||
-            ""
+          zone?.code ||
+          zone?.name ||
+          ""
       )
       .filter(Boolean)
       .map(String);
@@ -550,9 +550,9 @@ export default function ScanDispatchScreen({
         statusCode === 403
           ? "Only DISPATCH user can move item to FG."
           : getBackendMessage(
-              e,
-              "Unable to move item to FG"
-            );
+            e,
+            "Unable to move item to FG"
+          );
 
       showNotice(
         "error",
@@ -603,6 +603,18 @@ export default function ScanDispatchScreen({
       return;
     }
 
+    const selectedDispatchTime =
+      toBackendDateTime(form.tripStart);
+
+    if (!selectedDispatchTime) {
+      showNotice(
+        "warning",
+        "Challan time required",
+        "Please select challan date and time."
+      );
+      return;
+    }
+
     try {
       setDispatching(true);
 
@@ -612,10 +624,15 @@ export default function ScanDispatchScreen({
           rawScan: scanText,
           driverId: form.driverId,
           vehicleId: form.vehicleId,
-          tripStart:
-            toBackendDateTime(
-              form.tripStart
-            ),
+
+          /*
+           * Send both fields.
+           * dispatchTime fixes PDF/challan date.
+           * tripStart keeps old scanner trip logic safe.
+           */
+          dispatchTime: selectedDispatchTime,
+          tripStart: selectedDispatchTime,
+
           remarks: form.remarks || "",
         });
 
@@ -978,7 +995,7 @@ export default function ScanDispatchScreen({
               </Text>
 
               <Text style={styles.panelSub}>
-                Select driver, vehicle and trip start time to dispatch this item.
+                Select driver, vehicle and challan date/time to dispatch this item.
               </Text>
 
               <Field label="Driver">

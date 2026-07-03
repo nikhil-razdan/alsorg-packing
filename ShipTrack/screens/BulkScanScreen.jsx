@@ -184,9 +184,9 @@ function getFgOptions(item) {
         typeof zone === "string"
           ? zone
           : zone?.zoneCode ||
-            zone?.code ||
-            zone?.name ||
-            ""
+          zone?.code ||
+          zone?.name ||
+          ""
       )
       .filter(Boolean)
       .map(String);
@@ -833,10 +833,10 @@ export default function BulkScanScreen({
       prev.map((r, i) =>
         i === index
           ? {
-              ...r,
-              fgZoneCode: zone,
-              manualFgZone: true,
-            }
+            ...r,
+            fgZoneCode: zone,
+            manualFgZone: true,
+          }
           : r
       )
     );
@@ -859,7 +859,7 @@ export default function BulkScanScreen({
     try {
       setMovingId(
         getZohoItemId(row.item) ||
-          String(index)
+        String(index)
       );
 
       const data =
@@ -986,9 +986,9 @@ export default function BulkScanScreen({
         statusCode === 403
           ? "Only DISPATCH user can move item to FG."
           : getBackendMessage(
-              e,
-              "Unable to move item to FG"
-            );
+            e,
+            "Unable to move item to FG"
+          );
 
       showNotice(
         "error",
@@ -1049,10 +1049,9 @@ export default function BulkScanScreen({
 
     Alert.alert(
       "Bulk Move To FG",
-      `Move ${pendingFgRows.length} item${
-        pendingFgRows.length > 1
-          ? "s"
-          : ""
+      `Move ${pendingFgRows.length} item${pendingFgRows.length > 1
+        ? "s"
+        : ""
       } to FG?`,
       [
         {
@@ -1206,6 +1205,18 @@ export default function BulkScanScreen({
       return;
     }
 
+    const selectedDispatchTime =
+      toBackendDateTime(form.tripStart);
+
+    if (!selectedDispatchTime) {
+      showNotice(
+        "warning",
+        "Challan time required",
+        "Please select challan date and time."
+      );
+      return;
+    }
+
     try {
       setDispatching(true);
 
@@ -1216,10 +1227,15 @@ export default function BulkScanScreen({
           ),
           driverId: form.driverId,
           vehicleId: form.vehicleId,
-          tripStart:
-            toBackendDateTime(
-              form.tripStart
-            ),
+
+          /*
+           * Send both fields.
+           * dispatchTime fixes PDF/challan date.
+           * tripStart keeps old scanner trip logic safe.
+           */
+          dispatchTime: selectedDispatchTime,
+          tripStart: selectedDispatchTime,
+
           remarks: form.remarks || "",
         });
 
@@ -1572,7 +1588,7 @@ export default function BulkScanScreen({
       ) : null}
 
       {filteredRows.length === 0 &&
-      rows.length > 0 ? (
+        rows.length > 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyText}>
             No scanned items match current filters.
@@ -1615,7 +1631,7 @@ export default function BulkScanScreen({
           </Text>
 
           <Text style={styles.panelSub}>
-            Select driver, vehicle and trip start time to create one dispatch challan for all ready items.
+            Select driver, vehicle and challan date/time to create one dispatch challan for all ready items.
           </Text>
 
           {!canBulkDispatch ? (

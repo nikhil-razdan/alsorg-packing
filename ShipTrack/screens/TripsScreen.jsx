@@ -700,11 +700,18 @@ export default function TripsScreen() {
     const challanNumber =
       challan?.challanNumber || "";
 
-    return (
-      endTripDrafts[challanNumber] ||
-      toDateTimeLocalInput(challan?.tripEndedAt) ||
-      getNowDateTimeLocal()
-    );
+    if (endTripDrafts[challanNumber]) {
+      return endTripDrafts[challanNumber];
+    }
+
+    const existingEnd =
+      toDateTimeLocalInput(challan?.tripEndedAt);
+
+    if (existingEnd) {
+      return existingEnd;
+    }
+
+    return getNowDateTimeLocal();
   };
 
   const updateEndTripDraft = (
