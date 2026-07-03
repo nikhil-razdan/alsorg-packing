@@ -144,6 +144,70 @@ const BarIcon = () => (
 
 const toNumber = (value) => Number(value ?? 0) || 0;
 
+const emptyDashboardStats = {
+  totalItems: 0,
+
+  warehouseItems: 0,
+  readyToDispatchItems: 0,
+  readyItems: 0,
+
+  packedItems: 0,
+  dispatchedItems: 0,
+  pendingItems: 0,
+  stickersGenerated: 0,
+
+  todayStickerGenerated: 0,
+  todayChallanGenerated: 0,
+
+  masterItems: 0,
+  totalPackets: 0,
+  packetItems: 0,
+
+  fullyPackedMasterItems: 0,
+  partiallyPackedMasterItems: 0,
+  unpackedMasterItems: 0,
+
+  packedPackets: 0,
+  pendingPackets: 0,
+
+  packetItemsWithSticker: 0,
+  packetItemsPendingSticker: 0,
+  stickerReprints: 0,
+
+  readyToStoreItems: 0,
+  warehouseRequestedItems: 0,
+  returnRequestedItems: 0,
+  queuedItems: 0,
+
+  pkdItems: 0,
+  fgItems: 0,
+
+  normalDispatchChallans: 0,
+  todayDispatchChallans: 0,
+  runningTrips: 0,
+  endedTrips: 0,
+
+  customChallans: 0,
+  todayCustomChallans: 0,
+  customChallanItems: 0,
+
+  activeDrivers: 0,
+  activeVehicles: 0,
+  expiredFitness: 0,
+  expiredInsurance: 0,
+  expiredPucc: 0,
+
+  exceptionsCount: 0,
+  masterItemsWithoutPackets: 0,
+  packetsWithoutPacketItems: 0,
+  packetItemsWithoutMaster: 0,
+  dispatchedWithoutPacketItem: 0,
+  dispatchedWithoutChallan: 0,
+  dispatchedWithoutDriver: 0,
+  duplicateCurrentStickers: 0,
+  readyItemsStillInPkd: 0,
+};
+
 const normalizeStats = (data) => {
   console.log("Dashboard stats API response:", data);
 
@@ -170,34 +234,20 @@ const normalizeStats = (data) => {
     warehouseItems + readyToDispatchItems + readyItems;
 
   return {
-    warehouseItems,
-    readyToDispatchItems,
-    readyItems,
+    ...emptyDashboardStats,
 
     totalItems:
       inventoryTotal ||
       toNumber(data?.totalItems ?? data?.total ?? data?.inventoryItems),
 
-    packedItems: toNumber(
-      data?.packedItems ??
-      data?.packed ??
-      data?.stickersGenerated
-    ),
+    warehouseItems,
+    readyToDispatchItems,
+    readyItems,
 
-    dispatchedItems: toNumber(
-      data?.dispatchedItems ??
-      data?.dispatched
-    ),
-
-    pendingItems: toNumber(
-      data?.pendingItems ??
-      data?.pending
-    ),
-
-    stickersGenerated: toNumber(
-      data?.stickersGenerated ??
-      data?.stickers
-    ),
+    packedItems: toNumber(data?.packedItems ?? data?.packed),
+    dispatchedItems: toNumber(data?.dispatchedItems ?? data?.dispatched),
+    pendingItems: toNumber(data?.pendingItems ?? data?.pending),
+    stickersGenerated: toNumber(data?.stickersGenerated ?? data?.stickers),
 
     todayStickerGenerated: toNumber(
       data?.todayStickerGenerated ??
@@ -210,6 +260,54 @@ const normalizeStats = (data) => {
       data?.todayChallansGenerated ??
       data?.challansGeneratedToday
     ),
+
+    masterItems: toNumber(data?.masterItems),
+    totalPackets: toNumber(data?.totalPackets),
+    packetItems: toNumber(data?.packetItems),
+
+    fullyPackedMasterItems: toNumber(data?.fullyPackedMasterItems),
+    partiallyPackedMasterItems: toNumber(data?.partiallyPackedMasterItems),
+    unpackedMasterItems: toNumber(data?.unpackedMasterItems),
+
+    packedPackets: toNumber(data?.packedPackets),
+    pendingPackets: toNumber(data?.pendingPackets),
+
+    packetItemsWithSticker: toNumber(data?.packetItemsWithSticker),
+    packetItemsPendingSticker: toNumber(data?.packetItemsPendingSticker),
+    stickerReprints: toNumber(data?.stickerReprints),
+
+    readyToStoreItems: toNumber(data?.readyToStoreItems),
+    warehouseRequestedItems: toNumber(data?.warehouseRequestedItems),
+    returnRequestedItems: toNumber(data?.returnRequestedItems),
+    queuedItems: toNumber(data?.queuedItems),
+
+    pkdItems: toNumber(data?.pkdItems),
+    fgItems: toNumber(data?.fgItems),
+
+    normalDispatchChallans: toNumber(data?.normalDispatchChallans),
+    todayDispatchChallans: toNumber(data?.todayDispatchChallans),
+    runningTrips: toNumber(data?.runningTrips),
+    endedTrips: toNumber(data?.endedTrips),
+
+    customChallans: toNumber(data?.customChallans),
+    todayCustomChallans: toNumber(data?.todayCustomChallans),
+    customChallanItems: toNumber(data?.customChallanItems),
+
+    activeDrivers: toNumber(data?.activeDrivers),
+    activeVehicles: toNumber(data?.activeVehicles),
+    expiredFitness: toNumber(data?.expiredFitness),
+    expiredInsurance: toNumber(data?.expiredInsurance),
+    expiredPucc: toNumber(data?.expiredPucc),
+
+    exceptionsCount: toNumber(data?.exceptionsCount),
+    masterItemsWithoutPackets: toNumber(data?.masterItemsWithoutPackets),
+    packetsWithoutPacketItems: toNumber(data?.packetsWithoutPacketItems),
+    packetItemsWithoutMaster: toNumber(data?.packetItemsWithoutMaster),
+    dispatchedWithoutPacketItem: toNumber(data?.dispatchedWithoutPacketItem),
+    dispatchedWithoutChallan: toNumber(data?.dispatchedWithoutChallan),
+    dispatchedWithoutDriver: toNumber(data?.dispatchedWithoutDriver),
+    duplicateCurrentStickers: toNumber(data?.duplicateCurrentStickers),
+    readyItemsStillInPkd: toNumber(data?.readyItemsStillInPkd),
   };
 };
 
@@ -299,21 +397,7 @@ function ThroughputUserModal({
 }
 
 function DashboardPage() {
-  const [stats, setStats] = useState({
-    totalItems: 0,
-
-    warehouseItems: 0,
-    readyToDispatchItems: 0,
-    readyItems: 0,
-
-    packedItems: 0,
-    dispatchedItems: 0,
-    pendingItems: 0,
-    stickersGenerated: 0,
-
-    todayStickerGenerated: 0,
-    todayChallanGenerated: 0,
-  });
+  const [stats, setStats] = useState(emptyDashboardStats);
 
   const [activityLogs, setActivityLogs] = useState([]);
   const [logistics, setLogistics] = useState(null);
@@ -344,6 +428,18 @@ function DashboardPage() {
 
   const isAdmin = cleanRole === "ADMIN";
 
+  const clampPercent = (value) => {
+    if (!Number.isFinite(value)) return 0;
+
+    return Math.max(
+      0,
+      Math.min(100, Math.round(value))
+    );
+  };
+
+  const percentLabel = (value) =>
+    `${clampPercent(value)}%`;
+
   const inventoryTotal =
     Number(stats.warehouseItems || 0) +
     Number(stats.readyToDispatchItems || 0) +
@@ -352,20 +448,8 @@ function DashboardPage() {
   const finalInventoryTotal =
     inventoryTotal || Number(stats.totalItems || 0);
 
-  const throughputPackedItems =
-    Number(stats.packedItems || 0);
-
-  const throughputDispatchedItems =
-    Number(stats.dispatchedItems || 0);
-
   const pending =
-    Number(stats.pendingItems || 0) ||
-    Math.max(
-      finalInventoryTotal -
-      Number(stats.packedItems || 0) -
-      Number(stats.dispatchedItems || 0),
-      0
-    );
+    Number(stats.pendingItems || 0);
 
   const todayPackedItems =
     Number(stats.todayStickerGenerated || 0);
@@ -373,8 +457,38 @@ function DashboardPage() {
   const todayDispatchedItems =
     Number(stats.todayChallanGenerated || 0);
 
+  const todayDistinctChallans =
+    Number(stats.todayDispatchChallans || 0);
+
   const dailyThroughput =
     todayPackedItems + todayDispatchedItems;
+
+  const packetCompletionRate =
+    Number(stats.packetItems || 0) === 0
+      ? 0
+      : (
+        Number(stats.packetItemsWithSticker || 0) /
+        Number(stats.packetItems || 0)
+      ) * 100;
+
+  const inventoryAccuracy =
+    Number(stats.packetItems || 0) === 0
+      ? 100
+      : (
+        (
+          Number(stats.packetItems || 0) -
+          Number(stats.exceptionsCount || 0)
+        ) /
+        Number(stats.packetItems || 0)
+      ) * 100;
+
+  const operationalEfficiency =
+    Number(stats.packetItems || 0) === 0
+      ? 0
+      : (
+        Number(stats.dispatchedItems || 0) /
+        Number(stats.packetItems || 0)
+      ) * 100;
 
   const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
 
@@ -521,38 +635,49 @@ function DashboardPage() {
                     />
 
                     <StatCard
+                      accent="#a78bfa"
+                      title="Master Items"
+                      value={Number(stats.masterItems || 0)}
+                      subtle="Main parent items"
+                      active={activeStatCard === "masterItems"}
+                      onClick={() => toggleStatCard("masterItems")}
+                    />
+
+                    <StatCard
+                      accent="#38bdf8"
+                      title="Packet Items"
+                      value={Number(stats.packetItems || 0)}
+                      subtle="All packet-level rows"
+                      active={activeStatCard === "packetItems"}
+                      onClick={() => toggleStatCard("packetItems")}
+                    />
+
+                    <StatCard
                       accent="#f472b6"
                       title="Stickers Generated"
                       value={Number(stats.stickersGenerated || 0)}
-                      subtle="Labels Printed"
+                      subtle={`${Number(stats.stickerReprints || 0)} reprints`}
                     />
 
                     <StatCard
                       accent="#34d399"
                       title="Packed Items"
                       value={Number(stats.packedItems || 0)}
-                      subtle="Sticker Generated"
+                      subtle="Sticker / packed packet items"
                     />
 
                     <StatCard
                       accent="#f59e0b"
                       title="Pending Items"
                       value={pending}
-                      subtle="Awaiting Processing"
-                    />
-
-                    <StatCard
-                      accent="#8b5cf6"
-                      title="Inventory Accuracy"
-                      value="98.4%"
-                      subtle="Warehouse Precision"
+                      subtle="Packet items pending sticker"
                     />
 
                     <StatCard
                       accent="#06b6d4"
                       title="Daily Throughput"
                       value={dailyThroughput}
-                      subtle="Today’s Sticker + Challan"
+                      subtle="Today’s Sticker + Dispatch"
                       active={activeStatCard === "dailyThroughput"}
                       onClick={() => toggleStatCard("dailyThroughput")}
                     />
@@ -566,9 +691,43 @@ function DashboardPage() {
 
                     <StatCard
                       accent="#22c55e"
+                      title="Inventory Accuracy"
+                      value={percentLabel(inventoryAccuracy)}
+                      subtle="Based on data exceptions"
+                    />
+
+                    <StatCard
+                      accent="#8b5cf6"
+                      title="Dispatch Challans"
+                      value={Number(stats.normalDispatchChallans || 0)}
+                      subtle={`${Number(stats.runningTrips || 0)} running trips`}
+                      active={activeStatCard === "challans"}
+                      onClick={() => toggleStatCard("challans")}
+                    />
+
+                    <StatCard
+                      accent="#ec4899"
+                      title="Custom Challans"
+                      value={Number(stats.customChallans || 0)}
+                      subtle={`${Number(stats.customChallanItems || 0)} manual items`}
+                      active={activeStatCard === "customChallans"}
+                      onClick={() => toggleStatCard("customChallans")}
+                    />
+
+                    <StatCard
+                      accent="#f97316"
+                      title="Data Exceptions"
+                      value={Number(stats.exceptionsCount || 0)}
+                      subtle="Needs admin review"
+                      active={activeStatCard === "exceptions"}
+                      onClick={() => toggleStatCard("exceptions")}
+                    />
+
+                    <StatCard
+                      accent="#22c55e"
                       title="Operational Efficiency"
-                      value="94%"
-                      subtle="AI Optimized"
+                      value={percentLabel(operationalEfficiency)}
+                      subtle="Dispatched / packet items"
                     />
                   </div>
 
@@ -632,7 +791,7 @@ function DashboardPage() {
                           </div>
 
                           <div style={detailItemSubtle}>
-                            Dispatched Today / Chalaan Generated Today
+                            {todayDistinctChallans} challan PDFs generated today
                           </div>
 
                           <div style={throughputCardHint}>
@@ -667,6 +826,201 @@ function DashboardPage() {
                           label: "Ready Items",
                           value: Number(stats.readyItems || 0),
                           subtle: "Ready / processed stock",
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {activeStatCard === "masterItems" && (
+                    <DetailStatCard
+                      accent="#a78bfa"
+                      title="Master Item Breakdown"
+                      subtitle="Parent item packing progress from master_item and packet_items"
+                      totalLabel="Master Items"
+                      totalValue={Number(stats.masterItems || 0)}
+                      rows={[
+                        {
+                          label: "Fully Packed Master Items",
+                          value: Number(stats.fullyPackedMasterItems || 0),
+                          subtle: "All related packet items are packed",
+                        },
+                        {
+                          label: "Partially Packed Master Items",
+                          value: Number(stats.partiallyPackedMasterItems || 0),
+                          subtle: "Some packet items packed, some pending",
+                        },
+                        {
+                          label: "Unpacked Master Items",
+                          value: Number(stats.unpackedMasterItems || 0),
+                          subtle: "No packet item packed yet",
+                        },
+                        {
+                          label: "Master Without Packets",
+                          value: Number(stats.masterItemsWithoutPackets || 0),
+                          subtle: "Created but no packet_items found",
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {activeStatCard === "packetItems" && (
+                    <DetailStatCard
+                      accent="#38bdf8"
+                      title="Packet Item Breakdown"
+                      subtitle="Actual operational packet-level inventory structure"
+                      totalLabel="Packet Items"
+                      totalValue={Number(stats.packetItems || 0)}
+                      rows={[
+                        {
+                          label: "Total Packets",
+                          value: Number(stats.totalPackets || 0),
+                          subtle: "Rows in packets table",
+                        },
+                        {
+                          label: "Packed Packets",
+                          value: Number(stats.packedPackets || 0),
+                          subtle: "Packets where all packet items are packed",
+                        },
+                        {
+                          label: "Pending Packets",
+                          value: Number(stats.pendingPackets || 0),
+                          subtle: "Packets pending full packing",
+                        },
+                        {
+                          label: "Packet Items With Sticker",
+                          value: Number(stats.packetItemsWithSticker || 0),
+                          subtle: "Sticker generated / packed rows",
+                        },
+                        {
+                          label: "Packet Items Pending Sticker",
+                          value: Number(stats.packetItemsPendingSticker || 0),
+                          subtle: "Still pending sticker generation",
+                        },
+                        {
+                          label: "Sticker Reprints",
+                          value: Number(stats.stickerReprints || 0),
+                          subtle: "Sticker history with print iteration above 1",
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {activeStatCard === "challans" && (
+                    <DetailStatCard
+                      accent="#8b5cf6"
+                      title="Dispatch Challan Breakdown"
+                      subtitle="Normal dispatch challans generated from dispatched_items"
+                      totalLabel="Total Challans"
+                      totalValue={Number(stats.normalDispatchChallans || 0)}
+                      rows={[
+                        {
+                          label: "Normal Dispatch Challans",
+                          value: Number(stats.normalDispatchChallans || 0),
+                          subtle: "Distinct chalaan_number in dispatched_items",
+                        },
+                        {
+                          label: "Today Dispatch Challans",
+                          value: Number(stats.todayDispatchChallans || 0),
+                          subtle: "Distinct challans generated today",
+                        },
+                        {
+                          label: "Today Dispatched Items",
+                          value: Number(stats.todayChallanGenerated || 0),
+                          subtle: "Total item rows dispatched today",
+                        },
+                        {
+                          label: "Running Trips",
+                          value: Number(stats.runningTrips || 0),
+                          subtle: "Trip started but not ended",
+                        },
+                        {
+                          label: "Ended Trips",
+                          value: Number(stats.endedTrips || 0),
+                          subtle: "Trip end time saved",
+                        },
+                        {
+                          label: "Queued Items",
+                          value: Number(stats.queuedItems || 0),
+                          subtle: "Loaded / queued for dispatch",
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {activeStatCard === "customChallans" && (
+                    <DetailStatCard
+                      accent="#ec4899"
+                      title="Custom Challan Breakdown"
+                      subtitle="Manual customer care / site / hardware movement challans"
+                      totalLabel="Custom Challans"
+                      totalValue={Number(stats.customChallans || 0)}
+                      rows={[
+                        {
+                          label: "Total Custom Challans",
+                          value: Number(stats.customChallans || 0),
+                          subtle: "Rows in custom_challans",
+                        },
+                        {
+                          label: "Today Custom Challans",
+                          value: Number(stats.todayCustomChallans || 0),
+                          subtle: "Generated today",
+                        },
+                        {
+                          label: "Custom Challan Items",
+                          value: Number(stats.customChallanItems || 0),
+                          subtle: "Rows in custom_challan_items",
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {activeStatCard === "exceptions" && (
+                    <DetailStatCard
+                      accent="#f97316"
+                      title="Data Exception Breakdown"
+                      subtitle="Data quality checks from master, packet, dispatch and sticker tables"
+                      totalLabel="Total Exceptions"
+                      totalValue={Number(stats.exceptionsCount || 0)}
+                      rows={[
+                        {
+                          label: "Master Items Without Packets",
+                          value: Number(stats.masterItemsWithoutPackets || 0),
+                          subtle: "master_item exists but packet_items missing",
+                        },
+                        {
+                          label: "Packets Without Packet Items",
+                          value: Number(stats.packetsWithoutPacketItems || 0),
+                          subtle: "packets row exists but no packet_items",
+                        },
+                        {
+                          label: "Packet Items Without Master",
+                          value: Number(stats.packetItemsWithoutMaster || 0),
+                          subtle: "packet_items missing master_item link",
+                        },
+                        {
+                          label: "Dispatched Without Packet Item",
+                          value: Number(stats.dispatchedWithoutPacketItem || 0),
+                          subtle: "dispatched_items missing packet_item_id link",
+                        },
+                        {
+                          label: "Dispatched Without Challan",
+                          value: Number(stats.dispatchedWithoutChallan || 0),
+                          subtle: "DISPATCHED status but no chalaan_number",
+                        },
+                        {
+                          label: "Dispatched Without Driver",
+                          value: Number(stats.dispatchedWithoutDriver || 0),
+                          subtle: "Missing driver / vehicle data",
+                        },
+                        {
+                          label: "Duplicate Current Stickers",
+                          value: Number(stats.duplicateCurrentStickers || 0),
+                          subtle: "Same sticker_number used on multiple packet_items",
+                        },
+                        {
+                          label: "Ready Items Still In PKD",
+                          value: Number(stats.readyItemsStillInPkd || 0),
+                          subtle: "Packed items still in packing area",
                         },
                       ]}
                     />
@@ -886,19 +1240,30 @@ function DashboardPage() {
 
                   <div style={insightsList}>
                     <div style={insightItem}>
-                      ⚠ Warehouse Zone B near capacity
+                      ⚠ Data Exceptions: {Number(stats.exceptionsCount || 0)}
                     </div>
 
                     <div style={insightItem}>
-                      ⚠ Dispatch delays detected
+                      ⚠ Master Items Without Packets: {Number(stats.masterItemsWithoutPackets || 0)}
                     </div>
 
                     <div style={insightItem}>
-                      ⚠ Sticker printer maintenance due
+                      ⚠ Pending Packet Items: {Number(stats.packetItemsPendingSticker || 0)}
                     </div>
 
                     <div style={insightItem}>
-                      ⚠ Packing queue exceeding threshold
+                      ⚠ Ready Items Still In PKD: {Number(stats.readyItemsStillInPkd || 0)}
+                    </div>
+
+                    <div style={insightItem}>
+                      ⚠ Running Trips Without End Time: {Number(stats.runningTrips || 0)}
+                    </div>
+
+                    <div style={insightItem}>
+                      ⚠ Expired Vehicle Documents:{" "}
+                      {Number(stats.expiredFitness || 0) +
+                        Number(stats.expiredInsurance || 0) +
+                        Number(stats.expiredPucc || 0)}
                     </div>
                   </div>
                 </div>
