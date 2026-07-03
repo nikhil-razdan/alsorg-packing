@@ -342,12 +342,17 @@ function DispatchChallans({
 
     const openEndTripDialog =
         (challan) => {
+            const existingEndTime =
+                toDateTimeLocalInput(
+                    challan.tripEndedAt
+                );
+
             setEndTripDialog({
                 open: true,
                 challanNumber: challan.challanNumber || "",
-                endTime: toDateTimeLocalInput(
-                    challan.tripEndedAt
-                ) || getNowDateTimeLocal(),
+                endTime:
+                    existingEndTime ||
+                    getNowDateTimeLocal(),
             });
         };
 
@@ -370,7 +375,12 @@ function DispatchChallans({
                 return;
             }
 
-            if (!endTripDialog.endTime) {
+            const finalEndTime =
+                toBackendLocalDateTime(
+                    endTripDialog.endTime
+                );
+
+            if (!finalEndTime) {
                 showAlert?.(
                     "Please select end time",
                     "error"
@@ -393,9 +403,13 @@ function DispatchChallans({
                                 "Content-Type": "application/json",
                             },
                             body: JSON.stringify({
-                                tripEndedAt: toBackendLocalDateTime(
-                                    endTripDialog.endTime
-                                ),
+                                /*
+                                 * Send LocalDateTime:
+                                 * 2026-07-03T18:30:00
+                                 *
+                                 * Never send UTC ISO here.
+                                 */
+                                tripEndedAt: finalEndTime,
                             }),
                         }
                     );
@@ -550,10 +564,10 @@ function DispatchChallans({
                                             {challan.dispatchedBy || "—"}
                                         </b>
                                         {"  •  "}
-                                        Date:{" "}
+                                        Challan Date/Time:{" "}
                                         <b>
                                             {formatDateTime(
-                                                challan.dispatchedAt
+                                                getChallanBusinessTime(challan)
                                             )}
                                         </b>
                                     </Box>
@@ -562,7 +576,7 @@ function DispatchChallans({
                                         Trip Start:{" "}
                                         <b>
                                             {formatDateTime(
-                                                challan.tripStartedAt
+                                                getTripStartTime(challan)
                                             )}
                                         </b>
                                         {"  •  "}
@@ -964,6 +978,18 @@ function SummaryCard({
     );
 }
 
+
+function getNowDateTimeLocal() {
+    const d =
+        new Date();
+
+    d.setMinutes(
+        d.getMinutes() - d.getTimezoneOffset()
+    );
+
+    return d.toISOString().slice(0, 16);
+}
+
 function formatDateTime(value) {
     if (!value) {
         return "—";
@@ -983,6 +1009,13 @@ function formatDateTime(value) {
 
         let date;
 
+        /*
+         * Backend LocalDateTime:
+         * 2026-07-03T14:30:00
+         *
+         * Treat this as local business time.
+         * Do not convert it as UTC.
+         */
         if (!hasTimezone && raw.includes("T")) {
             const match =
                 raw.match(
@@ -1040,9 +1073,23 @@ function toBackendLocalDateTime(value) {
         return null;
     }
 
-    return value.length === 16
-        ? `${value}:00`
-        : value;
+    /*
+     * IMPORTANT:
+     * Do not do new Date(value).toISOString().
+     * Backend expects LocalDateTime, not UTC.
+     */
+    const text =
+        String(value)
+            .trim()
+            .replace(" ", "T");
+
+    if (!text) {
+        return null;
+    }
+
+    return text.length === 16
+        ? `${text}:00`
+        : text;
 }
 
 function toDateTimeLocalInput(value) {
@@ -1057,15 +1104,29 @@ function toDateTimeLocalInput(value) {
         return "";
     }
 
-    const match =
+    /*
+     * Backend LocalDateTime:
+     * 2026-07-03T14:30:00
+     *
+     * Return exactly for datetime-local input:
+     * 2026-07-03T14:30
+     */
+    const localMatch =
         raw.match(
             /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
         );
 
-    if (match) {
-        return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+    if (
+        localMatch &&
+        !/z$/i.test(raw) &&
+        !/[+-]\d{2}:\d{2}$/.test(raw)
+    ) {
+        return `${localMatch[1]}-${localMatch[2]}-${localMatch[3]}T${localMatch[4]}:${localMatch[5]}`;
     }
 
+    /*
+     * Only timezone/UTC values are converted to browser local time.
+     */
     try {
         const date =
             new Date(raw);
@@ -1082,6 +1143,23 @@ function toDateTimeLocalInput(value) {
     } catch {
         return "";
     }
+}
+
+function getChallanBusinessTime(challan) {
+    return (
+        challan?.dispatchedAt ||
+        challan?.tripStartedAt ||
+        challan?.generatedAt ||
+        null
+    );
+}
+
+function getTripStartTime(challan) {
+    return (
+        challan?.tripStartedAt ||
+        challan?.dispatchedAt ||
+        null
+    );
 }
 
 function isLogisticsOrAdmin() {
@@ -1537,7 +1615,14 @@ const endTimeInput = {
     },
 
     "& input": {
+        color: "#fff",
         colorScheme: "dark",
+    },
+
+    "& input::-webkit-calendar-picker-indicator": {
+        filter: "invert(1)",
+        opacity: 0.85,
+        cursor: "pointer",
     },
 };
 
