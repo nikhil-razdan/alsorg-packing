@@ -1450,4 +1450,104 @@ public class PacketService {
                                         "User does not have access to plant: " + plantCode);
                 }
         }
+
+        @Transactional(readOnly = true)
+        public byte[] getLatestStickerPdfForPacketItem(
+                        UUID itemId,
+                        Set<String> allowedPlants) {
+
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException("Packet item not found"));
+
+                /*
+                 * Use legacy-safe access because old records may not have plantCode.
+                 */
+                assertLegacyPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+
+                List<StickerHistory> historyList = stickerHistoryRepository.findByPacketItem_IdOrderByGeneratedAtDesc(
+                                itemId);
+
+                for (StickerHistory history : historyList) {
+                        if (history.getPdfData() != null &&
+                                        history.getPdfData().length > 0) {
+                                return history.getPdfData();
+                        }
+                }
+
+                /*
+                 * Safe fallback:
+                 * If sticker number exists but old PDF BLOB is missing,
+                 * rebuild PDF from current packet_items data without changing sticker number.
+                 */
+                if (item.getStickerNumber() != null &&
+                                !item.getStickerNumber().isBlank()) {
+
+                        long iteration = item.getPrintIteration() == null ||
+                                        item.getPrintIteration() <= 0
+                                                        ? 1
+                                                        : item.getPrintIteration();
+
+                        StickerPdfData pdf = buildStickerPdfData(
+                                        item,
+                                        item.getStickerNumber(),
+                                        item.getFloor(),
+                                        true,
+                                        iteration,
+                                        false);
+
+                        return pdfService.generateSticker(pdf);
+                }
+
+                throw new RuntimeException("Sticker PDF not available for this packet item");
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] getStickerHistoryPdf(
+                        UUID historyId,
+                        Set<String> allowedPlants) {
+
+                StickerHistory history = stickerHistoryRepository.findById(historyId)
+                                .orElseThrow(() -> new RuntimeException("Sticker history not found"));
+
+                PacketItem item = history.getPacketItem();
+
+                if (item == null) {
+                        throw new RuntimeException("Sticker history has no packet item linked");
+                }
+
+                assertLegacyPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+
+                if (history.getPdfData() != null &&
+                                history.getPdfData().length > 0) {
+                        return history.getPdfData();
+                }
+
+                String stickerNumber = history.getStickerNumber() != null &&
+                                !history.getStickerNumber().isBlank()
+                                                ? history.getStickerNumber()
+                                                : item.getStickerNumber();
+
+                if (stickerNumber == null || stickerNumber.isBlank()) {
+                        throw new RuntimeException("Sticker PDF data missing and sticker number not available");
+                }
+
+                long iteration = history.getPrintIteration() == null ||
+                                history.getPrintIteration() <= 0
+                                                ? 1
+                                                : history.getPrintIteration();
+
+                StickerPdfData pdf = buildStickerPdfData(
+                                item,
+                                stickerNumber,
+                                item.getFloor(),
+                                true,
+                                iteration,
+                                false);
+
+                return pdfService.generateSticker(pdf);
+        }
 }

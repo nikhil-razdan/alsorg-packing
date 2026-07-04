@@ -136,6 +136,400 @@ function InventorySidePanel({
   );
 }
 
+function InventoryMasterWorkbench({
+  rows = [],
+  isAdmin,
+  onGenerate,
+  onAdd,
+  onCustomAdd,
+  onEdit,
+  onPreviewSticker,
+  onDownloadSticker,
+}) {
+  const [openMap, setOpenMap] =
+    useState({});
+
+  const groups =
+    useMemo(() => {
+      const map =
+        new Map();
+
+      rows.forEach((row) => {
+        const key =
+          row.masterItemId ||
+          [
+            row.itemName,
+            row.pdNo,
+            row.drawingNo,
+            row.clientName,
+          ]
+            .filter(Boolean)
+            .join("|") ||
+          row.itemId;
+
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            masterItemId: row.masterItemId,
+            itemName: row.itemName || "Unknown Item",
+            clientName: row.clientName || "—",
+            pdNo: row.pdNo || "—",
+            drawingNo: row.drawingNo || "—",
+            plantCode: row.plantCode || "Unassigned",
+            rows: [],
+          });
+        }
+
+        map.get(key).rows.push(row);
+      });
+
+      return Array.from(map.values())
+        .map((group) => {
+          const total =
+            group.rows.length;
+
+          const generated =
+            group.rows.filter((row) => row.stickerNumber).length;
+
+          const pending =
+            total - generated;
+
+          const percent =
+            total > 0
+              ? Math.round((generated / total) * 100)
+              : 0;
+
+          const dispatched =
+            group.rows.filter((row) =>
+              String(row.status || "")
+                .toUpperCase()
+                .includes("DISPATCH")
+            ).length;
+
+          return {
+            ...group,
+            total,
+            generated,
+            pending,
+            percent,
+            dispatched,
+          };
+        })
+        .sort((a, b) =>
+          String(a.itemName).localeCompare(String(b.itemName))
+        );
+    }, [rows]);
+
+  const totals =
+    useMemo(() => {
+      const totalPackets =
+        rows.length;
+
+      const generated =
+        rows.filter((row) => row.stickerNumber).length;
+
+      const pending =
+        totalPackets - generated;
+
+      const masters =
+        groups.length;
+
+      return {
+        masters,
+        totalPackets,
+        generated,
+        pending,
+        percent:
+          totalPackets > 0
+            ? Math.round((generated / totalPackets) * 100)
+            : 0,
+      };
+    }, [rows, groups]);
+
+  const toggleGroup = (key) => {
+    setOpenMap((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  return (
+    <Box sx={inventoryWorkbenchShellSx}>
+      <Box sx={inventoryHeroSx}>
+        <Box>
+          <Box sx={inventoryChipRowSx}>
+            <Chip
+              label="INVENTORY WORKBENCH"
+              sx={inventoryLabelChipSx}
+            />
+
+            <Chip
+              label={`${totals.masters} Master Items`}
+              sx={inventorySoftChipSx}
+            />
+
+            <Chip
+              label={`${totals.percent}% Sticker Health`}
+              sx={totals.pending > 0 ? inventoryWarnChipSx : inventoryOkChipSx}
+            />
+          </Box>
+
+          <Box sx={inventoryHeroTitleSx}>
+            Master Item Packet Control
+          </Box>
+
+          <Box sx={inventoryHeroSubSx}>
+            Review every master item with its packet-wise sticker status,
+            PDF preview, download, reprint and packet expansion in one place.
+          </Box>
+        </Box>
+
+        <Box sx={inventoryHeroStatsSx}>
+          <InventoryMiniStat
+            label="Packets"
+            value={totals.totalPackets}
+            accent="#60a5fa"
+          />
+
+          <InventoryMiniStat
+            label="Generated"
+            value={totals.generated}
+            accent="#22c55e"
+          />
+
+          <InventoryMiniStat
+            label="Pending"
+            value={totals.pending}
+            accent="#f59e0b"
+          />
+        </Box>
+      </Box>
+
+      <Box sx={inventorySectionListSx}>
+        {groups.map((group) => {
+          const isOpen =
+            Boolean(openMap[group.key]);
+
+          const accent =
+            group.pending > 0
+              ? "#f59e0b"
+              : "#22c55e";
+
+          return (
+            <Box
+              key={group.key}
+              sx={inventoryMasterCardSx(accent, isOpen)}
+            >
+              <Box sx={inventoryMasterHeaderSx}>
+                <Box sx={inventoryMasterLeftSx}>
+                  <IconButton
+                    size="small"
+                    onClick={() => toggleGroup(group.key)}
+                    sx={inventoryExpandBtnSx}
+                  >
+                    {isOpen ? "−" : "+"}
+                  </IconButton>
+
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={inventoryMasterTitleRowSx}>
+                      <Box sx={inventoryMasterTitleSx}>
+                        {group.itemName}
+                      </Box>
+
+                      <Chip
+                        size="small"
+                        label={`${group.total} Packets`}
+                        sx={inventorySoftChipSx}
+                      />
+
+                      <Chip
+                        size="small"
+                        label={group.plantCode}
+                        sx={inventoryPlantMiniChipSx}
+                      />
+                    </Box>
+
+                    <Box sx={inventoryMasterMetaSx}>
+                      Client: {group.clientName} • PD: {group.pdNo} • DWG: {group.drawingNo}
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box sx={inventoryMasterRightSx}>
+                  <Box sx={inventoryProgressBlockSx}>
+                    <Box sx={inventoryProgressTopSx}>
+                      <span>Sticker Progress</span>
+                      <b>{group.percent}%</b>
+                    </Box>
+
+                    <LinearProgress
+                      variant="determinate"
+                      value={group.percent}
+                      sx={inventoryProgressSx(accent)}
+                    />
+                  </Box>
+
+                  <Box sx={inventoryMasterCountSx}>
+                    <span>{group.generated}</span>
+                    Generated
+                  </Box>
+
+                  <Box sx={inventoryMasterCountSx}>
+                    <span>{group.pending}</span>
+                    Pending
+                  </Box>
+                </Box>
+              </Box>
+
+              <Collapse in={isOpen}>
+                <Box sx={inventoryPacketTableSx}>
+                  <Box sx={inventoryPacketHeadSx}>
+                    <div>Packet</div>
+                    <div>SKU</div>
+                    <div>Description</div>
+                    <div>Location</div>
+                    <div>Sticker</div>
+                    <div>Actions</div>
+                  </Box>
+
+                  {group.rows.map((row) => (
+                    <Box
+                      key={row.itemId || row.id || row.packetItemId}
+                      sx={inventoryPacketRowSx}
+                    >
+                      <Box sx={inventoryPacketTextSx}>
+                        {row.packetNumber ||
+                          (row.sku?.match(/Pkt-\d+/)?.[0]) ||
+                          "—"}
+                      </Box>
+
+                      <Box sx={inventoryPacketMonoSx}>
+                        {row.sku || "—"}
+                      </Box>
+
+                      <Box sx={inventoryPacketSubSx}>
+                        {row.description || "—"}
+                      </Box>
+
+                      <Box sx={inventoryPacketSubSx}>
+                        {row.currentLocationCode ||
+                          row.location ||
+                          row.packedAreaCode ||
+                          "—"}
+                      </Box>
+
+                      <Box>
+                        <Chip
+                          size="small"
+                          label={
+                            row.stickerNumber
+                              ? row.stickerNumber
+                              : "Not Generated"
+                          }
+                          sx={
+                            row.stickerNumber
+                              ? printedChipSx
+                              : createdChipSx
+                          }
+                        />
+                      </Box>
+
+                      <Box sx={inventoryPacketActionsSx}>
+                        <Button
+                          size="small"
+                          onClick={() => onGenerate(row)}
+                          disabled={row.stickerNumber && !isAdmin}
+                          sx={inventoryMiniBtnSx("#60a5fa")}
+                        >
+                          {row.stickerNumber && isAdmin
+                            ? "Reprint"
+                            : row.stickerNumber
+                              ? "Generated"
+                              : "Generate"}
+                        </Button>
+
+                        {row.stickerNumber && (
+                          <>
+                            <Button
+                              size="small"
+                              onClick={() => onPreviewSticker(row)}
+                              sx={inventoryMiniBtnSx("#a78bfa")}
+                            >
+                              Preview
+                            </Button>
+
+                            <Button
+                              size="small"
+                              onClick={() => onDownloadSticker(row)}
+                              sx={inventoryMiniBtnSx("#22c55e")}
+                            >
+                              Download
+                            </Button>
+                          </>
+                        )}
+
+                        <Button
+                          size="small"
+                          onClick={() => onEdit(row)}
+                          sx={inventoryMiniBtnSx("#f59e0b")}
+                        >
+                          Edit
+                        </Button>
+                      </Box>
+                    </Box>
+                  ))}
+
+                  <Box sx={inventoryPacketFooterSx}>
+                    <Button
+                      size="small"
+                      onClick={() => onAdd(group.rows[group.rows.length - 1])}
+                      sx={inventoryMiniBtnSx("#60a5fa")}
+                    >
+                      + Add Packets
+                    </Button>
+
+                    <Button
+                      size="small"
+                      onClick={() => onCustomAdd(group.rows[group.rows.length - 1])}
+                      sx={inventoryMiniBtnSx("#22c55e")}
+                    >
+                      + Custom Packet
+                    </Button>
+                  </Box>
+                </Box>
+              </Collapse>
+            </Box>
+          );
+        })}
+
+        {groups.length === 0 && (
+          <Box sx={inventoryEmptyWorkbenchSx}>
+            No master items found for current filters.
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function InventoryMiniStat({
+  label,
+  value,
+  accent,
+}) {
+  return (
+    <Box sx={inventoryMiniStatSx(accent)}>
+      <Box sx={inventoryMiniStatValueSx}>
+        {value}
+      </Box>
+
+      <Box sx={inventoryMiniStatLabelSx}>
+        {label}
+      </Box>
+    </Box>
+  );
+}
+
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
@@ -630,28 +1024,78 @@ function ZohoItemsPage() {
     }
   };
 
-  const normalizeUtcDateTime = (value) => {
+  const IST_OFFSET_MINUTES = 330;
+
+  const parseAppDateTime = (value) => {
     if (!value) return null;
 
-    let text = String(value).trim();
-
-    // If backend already sends timezone, keep it.
-    const hasTimezone =
-      text.endsWith("Z") ||
-      /[+-]\d{2}:\d{2}$/.test(text);
-
-    // Java LocalDateTime sometimes sends micro/nano seconds.
-    // JS Date works best with milliseconds.
-    text = text.replace(
-      /\.(\d{3})\d+/,
-      ".$1"
-    );
-
-    if (!hasTimezone) {
-      text = `${text}Z`;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime())
+        ? null
+        : value;
     }
 
-    return text;
+    let raw =
+      String(value)
+        .trim()
+        .replace(" ", "T");
+
+    if (!raw) return null;
+
+    raw =
+      raw.replace(
+        /\.(\d{3})\d+/,
+        ".$1"
+      );
+
+    const hasTimezone =
+      /[zZ]$/.test(raw) ||
+      /[+-]\d{2}:?\d{2}$/.test(raw);
+
+    if (hasTimezone) {
+      const date =
+        new Date(raw);
+
+      return Number.isNaN(date.getTime())
+        ? null
+        : date;
+    }
+
+    const match =
+      raw.match(
+        /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/
+      );
+
+    if (!match) {
+      const fallback =
+        new Date(raw);
+
+      return Number.isNaN(fallback.getTime())
+        ? null
+        : fallback;
+    }
+
+    const utcMs =
+      Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4] || 0),
+        Number(match[5] || 0),
+        Number(match[6] || 0)
+      ) -
+      IST_OFFSET_MINUTES * 60 * 1000;
+
+    return new Date(utcMs);
+  };
+
+  const normalizeUtcDateTime = (value) => {
+    const date =
+      parseAppDateTime(value);
+
+    return date
+      ? date.toISOString()
+      : null;
   };
 
   const formatHistoryDateTime = (value) => {
@@ -1988,6 +2432,130 @@ function ZohoItemsPage() {
     }, 1000);
   };
 
+  const fetchProtectedPdfBlob = async (path) => {
+    const res =
+      await authFetch(
+        `${API_BASE_URL}${path}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/pdf",
+          },
+        }
+      );
+
+    const contentType =
+      res.headers.get("content-type") || "";
+
+    if (!res.ok || !contentType.includes("pdf")) {
+      const message =
+        await readApiErrorMessage(res);
+
+      throw new Error(
+        message || "Failed to load PDF"
+      );
+    }
+
+    return res.blob();
+  };
+
+  const latestStickerPdfPath = (
+    row,
+    download = false
+  ) => {
+    const itemId =
+      getPacketItemId(row);
+
+    if (!itemId) {
+      return "";
+    }
+
+    return `/api/inventory/stickers/packet-items/${encodeURIComponent(
+      itemId
+    )}/latest?download=${download ? "true" : "false"}`;
+  };
+
+  const previewExistingStickerPdf = async (row) => {
+    const path =
+      latestStickerPdfPath(row, false);
+
+    if (!path) {
+      showUiAlert("error", "Packet item id missing");
+      return;
+    }
+
+    if (!row?.stickerNumber) {
+      showUiAlert("error", "Sticker is not generated for this packet yet");
+      return;
+    }
+
+    try {
+      setStickerReviewOpen(true);
+      setStickerReviewLoading(true);
+      setSelectedItem(row);
+
+      if (stickerReviewPdf) {
+        URL.revokeObjectURL(stickerReviewPdf);
+      }
+
+      setStickerReviewPdf(null);
+
+      const blob =
+        await fetchProtectedPdfBlob(path);
+
+      const url =
+        URL.createObjectURL(blob);
+
+      setStickerReviewPdf(url);
+    } catch (e) {
+      console.error(e);
+
+      showUiAlert(
+        "error",
+        e.message || "Failed to preview sticker PDF"
+      );
+    } finally {
+      setStickerReviewLoading(false);
+    }
+  };
+
+  const downloadExistingStickerPdf = async (row) => {
+    const path =
+      latestStickerPdfPath(row, true);
+
+    if (!path) {
+      showUiAlert("error", "Packet item id missing");
+      return;
+    }
+
+    if (!row?.stickerNumber) {
+      showUiAlert("error", "Sticker is not generated for this packet yet");
+      return;
+    }
+
+    try {
+      const blob =
+        await fetchProtectedPdfBlob(path);
+
+      triggerDownloadFromBlob(
+        blob,
+        getStickerFileName(row)
+      );
+
+      showUiAlert(
+        "success",
+        "Sticker downloaded successfully"
+      );
+    } catch (e) {
+      console.error(e);
+
+      showUiAlert(
+        "error",
+        e.message || "Failed to download sticker PDF"
+      );
+    }
+  };
+
   const closeStickerReviewModal = () => {
     if (stickerReviewPdf) {
       URL.revokeObjectURL(stickerReviewPdf);
@@ -2388,6 +2956,16 @@ function ZohoItemsPage() {
           )}
         </Box>
 
+        <InventoryMasterWorkbench
+          rows={filteredRows}
+          isAdmin={isAdmin}
+          onGenerate={openGenerateStickerPanel}
+          onAdd={openAddPacketsModal}
+          onCustomAdd={openCustomAddModal}
+          onEdit={openEditModal}
+          onPreviewSticker={previewExistingStickerPdf}
+          onDownloadSticker={downloadExistingStickerPdf}
+        />
         <div style={wrap}>
           <Box sx={tableWrapper}>
             <div
@@ -2411,6 +2989,7 @@ function ZohoItemsPage() {
                 <div>Address</div>
                 <div>Description</div>
                 <div>Status</div>
+                <div>Sticker PDF</div>
               </div>
 
               <div style={tableBody}>
@@ -2600,6 +3179,38 @@ function ZohoItemsPage() {
                           size="small"
                           sx={row.stickerNumber ? printedChipSx : createdChipSx}
                         />
+                      </div>
+
+                      <div style={tableCellWrap}>
+                        {row.stickerNumber ? (
+                          <Box sx={actionCell}>
+                            <Button
+                              size="small"
+                              onClick={() => previewExistingStickerPdf(row)}
+                              sx={{
+                                ...actionSecondary,
+                                ...smallActionButton,
+                              }}
+                            >
+                              Preview
+                            </Button>
+
+                            <Button
+                              size="small"
+                              onClick={() => downloadExistingStickerPdf(row)}
+                              sx={{
+                                ...actionPrimary,
+                                ...smallActionButton,
+                              }}
+                            >
+                              Download
+                            </Button>
+                          </Box>
+                        ) : (
+                          <span style={simpleMutedText}>
+                            —
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -4429,9 +5040,9 @@ function ZohoItemsPage() {
 /* ===================== STYLES ===================== */
 
 const inventoryGrid =
-  "130px 190px 110px 110px 260px 300px 120px 150px 140px 170px 180px 260px 260px 180px";
+  "130px 190px 110px 110px 260px 300px 120px 150px 140px 170px 180px 260px 260px 180px 170px";
 
-const inventoryMinWidth = 2760;
+const inventoryMinWidth = 2940;
 
 const page = {
   minHeight: "100vh",
@@ -4940,6 +5551,374 @@ const uiAlertMessageSx = {
   fontWeight: 650,
   lineHeight: 1.4,
   color: "rgba(255,255,255,.82)",
+};
+
+const inventoryWorkbenchShellSx = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+  mb: 2,
+};
+
+const inventoryHeroSx = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "stretch",
+  gap: "16px",
+  flexWrap: "wrap",
+  p: "16px",
+  borderRadius: "14px",
+  background:
+    "radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.88), rgba(15,23,42,.74))",
+  border: "1px solid rgba(255,255,255,.08)",
+  boxShadow: "0 16px 32px rgba(2,6,23,.28)",
+  backdropFilter: "blur(18px)",
+};
+
+const inventoryChipRowSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+  mb: "10px",
+};
+
+const inventoryLabelChipSx = {
+  height: 26,
+  borderRadius: 999,
+  background: "rgba(59,130,246,.14)",
+  color: "#60a5fa",
+  border: "1px solid rgba(59,130,246,.24)",
+  fontWeight: 900,
+  fontSize: 11,
+  letterSpacing: ".07em",
+};
+
+const inventorySoftChipSx = {
+  height: 24,
+  borderRadius: 999,
+  background: "rgba(255,255,255,.06)",
+  color: "#cbd5e1",
+  border: "1px solid rgba(255,255,255,.10)",
+  fontWeight: 850,
+  fontSize: 11,
+};
+
+const inventoryOkChipSx = {
+  ...inventorySoftChipSx,
+  color: "#4ade80",
+  background: "rgba(34,197,94,.12)",
+  border: "1px solid rgba(34,197,94,.24)",
+};
+
+const inventoryWarnChipSx = {
+  ...inventorySoftChipSx,
+  color: "#fbbf24",
+  background: "rgba(245,158,11,.13)",
+  border: "1px solid rgba(245,158,11,.24)",
+};
+
+const inventoryPlantMiniChipSx = {
+  ...inventorySoftChipSx,
+  color: "#93c5fd",
+  background: "rgba(59,130,246,.12)",
+  border: "1px solid rgba(59,130,246,.22)",
+};
+
+const inventoryHeroTitleSx = {
+  color: "#fff",
+  fontSize: {
+    xs: 22,
+    md: 30,
+  },
+  fontWeight: 950,
+  lineHeight: 1.05,
+  letterSpacing: "-0.04em",
+};
+
+const inventoryHeroSubSx = {
+  mt: "8px",
+  color: "rgba(255,255,255,.68)",
+  fontSize: 13,
+  fontWeight: 650,
+  lineHeight: 1.5,
+  maxWidth: 820,
+};
+
+const inventoryHeroStatsSx = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(90px, 1fr))",
+  gap: "8px",
+  minWidth: 310,
+};
+
+const inventoryMiniStatSx = (accent) => ({
+  p: "12px",
+  borderRadius: "12px",
+  background: `${accent}10`,
+  border: `1px solid ${accent}26`,
+  minHeight: 70,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+});
+
+const inventoryMiniStatValueSx = {
+  color: "#fff",
+  fontSize: 22,
+  fontWeight: 950,
+  lineHeight: 1,
+};
+
+const inventoryMiniStatLabelSx = {
+  mt: "6px",
+  color: "rgba(255,255,255,.58)",
+  fontSize: 10,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".07em",
+};
+
+const inventorySectionListSx = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+};
+
+const inventoryMasterCardSx = (accent, open) => ({
+  borderRadius: "12px",
+  background: open
+    ? `linear-gradient(180deg, ${accent}11, rgba(15,23,42,.80))`
+    : "rgba(15,23,42,.80)",
+  border: open
+    ? `1px solid ${accent}44`
+    : "1px solid rgba(255,255,255,.07)",
+  borderLeft: `3px solid ${accent}`,
+  boxShadow: open
+    ? `0 14px 28px ${accent}15`
+    : "0 14px 28px rgba(2,6,23,.24)",
+  backdropFilter: "blur(18px)",
+  overflow: "hidden",
+  transition: "all .25s ease",
+});
+
+const inventoryMasterHeaderSx = {
+  minHeight: 62,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  px: "14px",
+  py: "10px",
+  background: "rgba(2,6,23,.22)",
+  borderBottom: "1px solid rgba(255,255,255,.07)",
+  flexWrap: "wrap",
+};
+
+const inventoryMasterLeftSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  minWidth: 0,
+  flex: 1,
+};
+
+const inventoryExpandBtnSx = {
+  color: "#94a3b8",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.06)",
+  width: 30,
+  height: 30,
+  borderRadius: "8px",
+  fontWeight: 950,
+
+  "&:hover": {
+    background: "rgba(59,130,246,.14)",
+    color: "#fff",
+  },
+};
+
+const inventoryMasterTitleRowSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+
+const inventoryMasterTitleSx = {
+  color: "#fff",
+  fontSize: 17,
+  fontWeight: 950,
+  letterSpacing: "-0.02em",
+  maxWidth: 580,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const inventoryMasterMetaSx = {
+  mt: "3px",
+  color: "rgba(255,255,255,.52)",
+  fontSize: 11,
+  fontWeight: 650,
+};
+
+const inventoryMasterRightSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+};
+
+const inventoryProgressBlockSx = {
+  width: 190,
+};
+
+const inventoryProgressTopSx = {
+  display: "flex",
+  justifyContent: "space-between",
+  color: "rgba(255,255,255,.58)",
+  fontSize: 10,
+  fontWeight: 900,
+  mb: "6px",
+
+  "& b": {
+    color: "#fff",
+  },
+};
+
+const inventoryProgressSx = (accent) => ({
+  height: 7,
+  borderRadius: 999,
+  background: "rgba(255,255,255,.06)",
+
+  "& .MuiLinearProgress-bar": {
+    borderRadius: 999,
+    background: accent,
+  },
+});
+
+const inventoryMasterCountSx = {
+  minWidth: 64,
+  color: "rgba(255,255,255,.55)",
+  fontSize: 10,
+  fontWeight: 850,
+  textAlign: "center",
+
+  "& span": {
+    display: "block",
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: 950,
+    lineHeight: 1,
+    mb: "4px",
+  },
+};
+
+const inventoryPacketTableSx = {
+  background: "rgba(2,6,23,.18)",
+  overflowX: "auto",
+};
+
+const inventoryPacketHeadSx = {
+  display: "grid",
+  gridTemplateColumns:
+    "90px minmax(220px,1.2fr) minmax(260px,1.3fr) 140px minmax(180px,1fr) minmax(320px,1.4fr)",
+  color: "rgba(255,255,255,.54)",
+  fontSize: 10,
+  fontWeight: 900,
+  borderBottom: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(2,6,23,.34)",
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+  minWidth: 1210,
+
+  "& > div": {
+    padding: "10px 9px",
+  },
+};
+
+const inventoryPacketRowSx = {
+  display: "grid",
+  gridTemplateColumns:
+    "90px minmax(220px,1.2fr) minmax(260px,1.3fr) 140px minmax(180px,1fr) minmax(320px,1.4fr)",
+  alignItems: "center",
+  borderBottom: "1px solid rgba(255,255,255,.06)",
+  minHeight: 46,
+  background: "rgba(255,255,255,.025)",
+  minWidth: 1210,
+
+  "& > div": {
+    padding: "6px 9px",
+  },
+};
+
+const inventoryPacketTextSx = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 12,
+};
+
+const inventoryPacketMonoSx = {
+  color: "#cbd5e1",
+  fontFamily: "monospace",
+  fontWeight: 800,
+  fontSize: 11,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const inventoryPacketSubSx = {
+  color: "rgba(255,255,255,.58)",
+  fontSize: 11,
+  fontWeight: 650,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const inventoryPacketActionsSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  flexWrap: "wrap",
+};
+
+const inventoryMiniBtnSx = (accent) => ({
+  minHeight: 30,
+  px: 1.1,
+  borderRadius: "8px",
+  textTransform: "none",
+  fontSize: 10.5,
+  fontWeight: 900,
+  color: "#fff",
+  background: `${accent}18`,
+  border: `1px solid ${accent}30`,
+
+  "&:hover": {
+    background: `${accent}28`,
+  },
+});
+
+const inventoryPacketFooterSx = {
+  minHeight: 42,
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  px: "14px",
+  background: "rgba(2,6,23,.30)",
+  borderTop: "1px solid rgba(255,255,255,.06)",
+};
+
+const inventoryEmptyWorkbenchSx = {
+  p: "24px",
+  borderRadius: "12px",
+  background: "rgba(15,23,42,.75)",
+  border: "1px dashed rgba(255,255,255,.14)",
+  color: "rgba(255,255,255,.62)",
+  fontWeight: 800,
+  textAlign: "center",
 };
 
 const uiAlertCloseSx = {

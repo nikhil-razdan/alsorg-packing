@@ -319,4 +319,97 @@ export async function downloadDashboardPdf(
 			"Failed to download PDF"
 		);
 	}
+
+	export async function fetchProtectedDashboardPdfBlob(path) {
+		const url =
+			buildDashboardFileUrl(path);
+
+		if (!url) {
+			throw new Error("PDF URL missing");
+		}
+
+		const res =
+			await fetch(url, {
+				method: "GET",
+				credentials: "include",
+				cache: "no-store",
+				headers: {
+					Accept: "application/pdf",
+				},
+			});
+
+		const contentType =
+			res.headers.get("content-type") || "";
+
+		if (!res.ok || !contentType.includes("pdf")) {
+			const text =
+				await res.text();
+
+			throw new Error(
+				text || "Failed to load PDF"
+			);
+		}
+
+		return res.blob();
+	}
+
+	export async function openProtectedDashboardPdf(path) {
+		try {
+			const blob =
+				await fetchProtectedDashboardPdfBlob(path);
+
+			const objectUrl =
+				window.URL.createObjectURL(blob);
+
+			window.open(
+				objectUrl,
+				"_blank",
+				"noopener,noreferrer"
+			);
+
+			setTimeout(() => {
+				window.URL.revokeObjectURL(objectUrl);
+			}, 30000);
+		} catch (e) {
+			console.error(e);
+			alert(e.message || "Failed to open PDF");
+		}
+	}
+
+	export async function downloadProtectedDashboardPdf(
+		path,
+		filename = "document.pdf"
+	) {
+		try {
+			const blob =
+				await fetchProtectedDashboardPdfBlob(path);
+
+			const objectUrl =
+				window.URL.createObjectURL(blob);
+
+			const link =
+				document.createElement("a");
+
+			link.href = objectUrl;
+			link.download = filename;
+
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
+			window.URL.revokeObjectURL(objectUrl);
+		} catch (e) {
+			console.error(e);
+			alert(e.message || "Failed to download PDF");
+		}
+	}
+
+	export function latestStickerPdfPath(
+		packetItemId,
+		download = false
+	) {
+		return `/api/inventory/stickers/packet-items/${encodeURIComponent(
+			packetItemId
+		)}/latest?download=${download ? "true" : "false"}`;
+	}
 }

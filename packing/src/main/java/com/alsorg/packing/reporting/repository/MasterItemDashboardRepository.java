@@ -343,91 +343,80 @@ public class MasterItemDashboardRepository {
     public List<MasterPacketRow> fetchPackets(
             UUID masterItemId) {
         String sql = """
-                    with latest_sticker as (
-                        select distinct on (sh.packet_item_id)
-                            sh.packet_item_id,
-                            sh.sticker_number,
-                            sh.generated_at,
-                            sh.generated_by,
-                            sh.print_iteration
-                        from sticker_history sh
-                        order by
-                            sh.packet_item_id,
-                            sh.generated_at desc nulls last
-                    ),
-                    latest_dispatch as (
-                        select distinct on (d.packet_item_id)
-                            d.packet_item_id,
-                            d.chalaan_number,
-                            d.status,
-                            d.gate_pass_number,
-                            d.dispatched_at,
-                            d.created_at,
-                            d.dispatched_by,
-                            d.created_by,
-                            d.driver_name,
-                            d.vehicle_number,
-                            d.trip_started_at,
-                            d.trip_ended_at
-                        from dispatched_items d
-                        where d.packet_item_id is not null
-                        order by
-                            d.packet_item_id,
-                            d.dispatched_at desc nulls last,
-                            d.created_at desc nulls last
-                    )
                     select
                         pi.id as packet_id,
-                        pi.id as packet_item_id,
-                        pi.packet_number,
-                        coalesce(pi.sticker_number, ls.sticker_number) as sticker_number,
-                        coalesce(pi.status, ld.status::text) as status,
+
+                        nullif(
+                            regexp_replace(
+                                coalesce(pi.packet_number, ''),
+                                '[^0-9]',
+                                '',
+                                'g'
+                            ),
+                            ''
+                        )::int as packet_number,
+
+                        pi.sticker_number,
+                        pi.status,
                         pi.floor as factory_floor,
-                        coalesce(pi.warehouse_code, '') as warehouse_code,
-                        ld.gate_pass_number,
-                        ld.chalaan_number as challan_number,
+                        pi.warehouse_code,
+                        pi.gate_pass_number,
+                        max(d.chalaan_number) as challan_number,
 
                         coalesce(
                             pi.packed_at,
-                            ls.generated_at,
-                            ld.dispatched_at,
-                            ld.created_at
+                            max(sh.generated_at),
+                            max(d.dispatched_at),
+                            max(d.created_at)
                         ) as created_at,
 
-                        coalesce(
-                            pi.created_by,
-                            ls.generated_by,
-                            ld.dispatched_by,
-                            ld.created_by,
-                            'SYSTEM'
-                        ) as created_by,
+                        pi.created_by,
 
                         1 as packet_items,
 
                         case
                             when pi.sticker_number is not null
                               or pi.packed_at is not null
-                              or ls.packet_item_id is not null
+                              or count(sh.id) > 0
                             then 1
                             else 0
                         end as packed_items,
 
                         case
-                            when upper(coalesce(ld.status::text, '')) = 'DISPATCHED'
-                              or ld.chalaan_number is not null
+                            when count(
+                                case
+                                    when upper(coalesce(d.status, '')) = 'DISPATCHED'
+                                    then 1
+                                end
+                            ) > 0
                             then 1
                             else 0
                         end as dispatched_items
 
                     from packet_items pi
-                    left join latest_sticker ls
-                        on ls.packet_item_id = pi.id
-                    left join latest_dispatch ld
-                        on ld.packet_item_id = pi.id
+
+                    left join sticker_history sh
+                        on sh.packet_item_id = pi.id
+
+                    left join dispatched_items d
+                        on d.packet_item_id = pi.id
+
                     where pi.master_item_id = :masterItemId
+
+                    group by
+                        pi.id,
+                        pi.packet_number,
+                        pi.sticker_number,
+                        pi.status,
+                        pi.floor,
+                        pi.warehouse_code,
+                        pi.gate_pass_number,
+                        pi.packed_at,
+                        pi.created_by
+
                     order by
-                        nullif(regexp_replace(coalesce(pi.packet_number, ''), '[^0-9]', '', 'g'), '')::int asc nulls last,
-                        pi.packet_number asc nulls last
+                        packet_number asc nulls last,
+                        pi.id asc
                 """;
 
         return jdbc.query(
