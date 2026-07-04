@@ -7,8 +7,8 @@ import {
 import {
     fetchMasterItemReport,
     fetchMasterItemDetail,
-    openDashboardPdf,
-    downloadDashboardPdf,
+    openProtectedDashboardPdf,
+    downloadProtectedDashboardPdf,
 } from "../../api/dashboardApi";
 
 const IST_OFFSET_MINUTES = 330;
@@ -188,7 +188,9 @@ const getPacketStickerPreviewUrl = (packet) => {
 
     return (
         packet?.stickerPreviewUrl ||
-        `/api/reports/dashboard/packet-items/${packetItemId}/sticker/preview`
+        `/api/inventory/stickers/packet-items/${encodeURIComponent(
+            packetItemId
+        )}/latest?download=false`
     );
 };
 
@@ -206,7 +208,9 @@ const getPacketStickerDownloadUrl = (packet) => {
 
     return (
         packet?.stickerDownloadUrl ||
-        `/api/reports/dashboard/packet-items/${packetItemId}/sticker/download`
+        `/api/inventory/stickers/packet-items/${encodeURIComponent(
+            packetItemId
+        )}/latest?download=true`
     );
 };
 
@@ -240,6 +244,9 @@ function MasterItemsModal({
 
     const [detailLoading, setDetailLoading] =
         useState(false);
+
+    const [detailError, setDetailError] =
+        useState("");
 
     const [error, setError] =
         useState("");
@@ -354,6 +361,7 @@ function MasterItemsModal({
             setSelectedId(id);
             setSelectedFallback(row);
             setDetail(null);
+            setDetailError("");
             setDetailLoading(true);
             setExpandedPacket("");
             setActiveTab("overview");
@@ -365,6 +373,7 @@ function MasterItemsModal({
 
             const firstPacketId =
                 data?.packets?.[0]?.packetId ||
+                data?.packets?.[0]?.packetItemId ||
                 data?.packets?.[0]?.id ||
                 "";
 
@@ -380,6 +389,11 @@ function MasterItemsModal({
                 packetItems: [],
                 challans: [],
             });
+
+            setDetailError(
+                e.message ||
+                "Failed to load packets, stickers and challans for this master item"
+            );
         } finally {
             setDetailLoading(false);
         }
@@ -1026,23 +1040,13 @@ function OverviewPanel({
 
                 <MetricBox
                     label="Actual Packets"
-                    value={
-                        safe(
-                            master.actualPackets ??
-                            packets.length
-                        )
-                    }
+                    value={safe(master.actualPackets ?? packets.length)}
                     accent="#38bdf8"
                 />
 
                 <MetricBox
                     label="Packet Items"
-                    value={
-                        safe(
-                            master.packetItems ??
-                            packetItems.length
-                        )
-                    }
+                    value={safe(master.packetItems ?? packetItems.length)}
                     accent="#a78bfa"
                 />
 
@@ -1072,72 +1076,9 @@ function OverviewPanel({
 
                 <MetricBox
                     label="Challans"
-                    value={
-                        safe(
-                            master.challanCount ??
-                            challans.length
-                        )
-                    }
+                    value={safe(master.challanCount ?? challans.length)}
                     accent="#ec4899"
                 />
-                {packets.length > 0 && (
-                    <div style={overviewDocPanel}>
-                        <div style={overviewDocTitle}>
-                            Packet Stickers
-                        </div>
-
-                        <div style={overviewDocList}>
-                            {packets.map((packet) => (
-                                <div
-                                    key={packet.packetId}
-                                    style={overviewDocRow}
-                                >
-                                    <div>
-                                        <div style={overviewDocNo}>
-                                            Packet {safe(packet.packetNumber)}
-                                        </div>
-
-                                        <div style={overviewDocMeta}>
-                                            Sticker: {safe(packet.stickerNumber)} •{" "}
-                                            Items: {safe(packet.packetItems)}
-                                        </div>
-                                    </div>
-
-                                    <div style={docActions}>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                openDashboardPdf(
-                                                    getPacketStickerPreviewUrl(packet)
-                                                )
-                                            }
-                                            style={docBtn("#38bdf8")}
-                                        >
-                                            Preview
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                downloadDashboardPdf(
-                                                    getPacketStickerDownloadUrl(packet),
-                                                    `Sticker_Packet_${filenameSafe(
-                                                        packet.packetNumber ||
-                                                        packet.packetId
-                                                    )}.pdf`
-                                                )
-                                            }
-                                            style={docBtn("#22c55e")}
-                                        >
-                                            Download
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
             </div>
 
             <div style={timelineGrid}>
@@ -1176,64 +1117,8 @@ function OverviewPanel({
                     value={safe(master.lastDispatchedBy)}
                 />
             </div>
+
             <div style={overviewDocsGrid}>
-                {challans.length > 0 && (
-                    <div style={overviewDocPanel}>
-                        <div style={overviewDocTitle}>
-                            Master Item Challans
-                        </div>
-
-                        <div style={overviewDocScroll}>
-                            {challans.map((challan) => (
-                                <div
-                                    key={challan.challanNumber}
-                                    style={overviewDocRow}
-                                >
-                                    <div style={overviewDocInfo}>
-                                        <div style={overviewDocNo}>
-                                            {safe(challan.challanNumber)}
-                                        </div>
-
-                                        <div style={overviewDocMeta}>
-                                            Items: {safe(challan.itemCount)} •{" "}
-                                            {formatDateTime(challan.lastDispatchedAt)}
-                                        </div>
-                                    </div>
-
-                                    <div style={docActions}>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                openDashboardPdf(
-                                                    getChallanPreviewUrl(challan)
-                                                )
-                                            }
-                                            style={docBtn("#8b5cf6")}
-                                        >
-                                            Preview
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                downloadDashboardPdf(
-                                                    getChallanDownloadUrl(challan),
-                                                    `Challan_${filenameSafe(
-                                                        challan.challanNumber
-                                                    )}.pdf`
-                                                )
-                                            }
-                                            style={docBtn("#22c55e")}
-                                        >
-                                            Download
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
                 {packets.length > 0 && (
                     <div style={overviewDocPanel}>
                         <div style={overviewDocTitle}>
@@ -1242,6 +1127,9 @@ function OverviewPanel({
 
                         <div style={overviewDocScroll}>
                             {packets.map((packet) => {
+                                const packetItemId =
+                                    getLogicalPacketItemId(packet);
+
                                 const previewUrl =
                                     getPacketStickerPreviewUrl(packet);
 
@@ -1250,7 +1138,7 @@ function OverviewPanel({
 
                                 return (
                                     <div
-                                        key={getLogicalPacketItemId(packet)}
+                                        key={packetItemId || packet.packetId}
                                         style={overviewDocRow}
                                     >
                                         <div style={overviewDocInfo}>
@@ -1268,7 +1156,7 @@ function OverviewPanel({
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    openDashboardPdf(previewUrl)
+                                                    openProtectedDashboardPdf(previewUrl)
                                                 }
                                                 style={docBtn("#38bdf8")}
                                                 disabled={!previewUrl}
@@ -1279,12 +1167,77 @@ function OverviewPanel({
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    downloadDashboardPdf(
+                                                    downloadProtectedDashboardPdf(
                                                         downloadUrl,
                                                         `Sticker_${filenameSafe(
                                                             packet.stickerNumber ||
                                                             packet.packetNumber ||
-                                                            getLogicalPacketItemId(packet)
+                                                            packetItemId
+                                                        )}.pdf`
+                                                    )
+                                                }
+                                                style={docBtn("#22c55e")}
+                                                disabled={!downloadUrl}
+                                            >
+                                                Download
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {challans.length > 0 && (
+                    <div style={overviewDocPanel}>
+                        <div style={overviewDocTitle}>
+                            Master Item Challans
+                        </div>
+
+                        <div style={overviewDocScroll}>
+                            {challans.map((challan) => {
+                                const previewUrl =
+                                    getChallanPreviewUrl(challan);
+
+                                const downloadUrl =
+                                    getChallanDownloadUrl(challan);
+
+                                return (
+                                    <div
+                                        key={challan.challanNumber}
+                                        style={overviewDocRow}
+                                    >
+                                        <div style={overviewDocInfo}>
+                                            <div style={overviewDocNo}>
+                                                {safe(challan.challanNumber)}
+                                            </div>
+
+                                            <div style={overviewDocMeta}>
+                                                Items: {safe(challan.itemCount)} •{" "}
+                                                {formatDateTime(challan.lastDispatchedAt)}
+                                            </div>
+                                        </div>
+
+                                        <div style={docActions}>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    openProtectedDashboardPdf(previewUrl)
+                                                }
+                                                style={docBtn("#8b5cf6")}
+                                                disabled={!previewUrl}
+                                            >
+                                                Preview
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    downloadProtectedDashboardPdf(
+                                                        downloadUrl,
+                                                        `Challan_${filenameSafe(
+                                                            challan.challanNumber
                                                         )}.pdf`
                                                     )
                                                 }
@@ -1301,62 +1254,6 @@ function OverviewPanel({
                     </div>
                 )}
             </div>
-            {challans.length > 0 && (
-                <div style={overviewDocPanel}>
-                    <div style={overviewDocTitle}>
-                        Master Item Challans
-                    </div>
-
-                    <div style={overviewDocList}>
-                        {challans.map((challan) => (
-                            <div
-                                key={challan.challanNumber}
-                                style={overviewDocRow}
-                            >
-                                <div>
-                                    <div style={overviewDocNo}>
-                                        {safe(challan.challanNumber)}
-                                    </div>
-
-                                    <div style={overviewDocMeta}>
-                                        Items: {safe(challan.itemCount)} •{" "}
-                                        {formatDateTime(challan.lastDispatchedAt)}
-                                    </div>
-                                </div>
-
-                                <div style={docActions}>
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            openDashboardPdf(
-                                                getChallanPreviewUrl(challan)
-                                            )
-                                        }
-                                        style={docBtn("#8b5cf6")}
-                                    >
-                                        Preview
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            downloadDashboardPdf(
-                                                getChallanDownloadUrl(challan),
-                                                `Challan_${filenameSafe(
-                                                    challan.challanNumber
-                                                )}.pdf`
-                                            )
-                                        }
-                                        style={docBtn("#22c55e")}
-                                    >
-                                        Download
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {master.exceptionReason && (
                 <div style={exceptionBanner}>
@@ -1470,7 +1367,7 @@ function PacketsPanel({
                                         onClick={(e) => {
                                             e.stopPropagation();
 
-                                            openDashboardPdf(
+                                            openProtectedDashboardPdf(
                                                 getPacketStickerPreviewUrl(packet)
                                             );
                                         }}
@@ -1485,7 +1382,7 @@ function PacketsPanel({
                                         onClick={(e) => {
                                             e.stopPropagation();
 
-                                            downloadDashboardPdf(
+                                            downloadProtectedDashboardPdf(
                                                 getPacketStickerDownloadUrl(packet),
                                                 `Sticker_${filenameSafe(
                                                     packet.stickerNumber ||
@@ -1675,7 +1572,7 @@ function ChallansPanel({
                         <button
                             type="button"
                             onClick={() =>
-                                openDashboardPdf(
+                                openProtectedDashboardPdf(
                                     getChallanPreviewUrl(challan)
                                 )
                             }
@@ -1688,7 +1585,7 @@ function ChallansPanel({
                         <button
                             type="button"
                             onClick={() =>
-                                downloadDashboardPdf(
+                                downloadProtectedDashboardPdf(
                                     getChallanDownloadUrl(challan),
                                     `Challan_${filenameSafe(
                                         challan.challanNumber
@@ -2418,8 +2315,12 @@ const docBtn = (accent) => ({
     fontWeight: 950,
     cursor: "pointer",
     whiteSpace: "nowrap",
-});
 
+    "&:disabled": {
+        opacity: 0.4,
+        cursor: "not-allowed",
+    },
+});
 const challanActions = {
     display: "flex",
     gap: 8,

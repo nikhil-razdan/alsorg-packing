@@ -6,6 +6,7 @@ import {
   Box,
   Chip,
   IconButton,
+  Collapse,
   LinearProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";

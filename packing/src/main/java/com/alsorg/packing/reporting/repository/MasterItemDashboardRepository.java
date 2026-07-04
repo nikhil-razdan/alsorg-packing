@@ -73,7 +73,17 @@ public class MasterItemDashboardRepository {
                         mi.packed_area_code,
                         mi.fg_area_code,
                         mi.allowed_warehouse_codes,
-                        mi.total_packets as expected_packets,
+
+                        /*
+                         * Corrected:
+                         * If old master_item.total_packets is stale,
+                         * use actual packet_items count as expected minimum.
+                         */
+                        greatest(
+                            coalesce(mi.total_packets, 0),
+                            count(distinct pi.id)::int
+                        ) as expected_packets,
+
                         mi.created_at,
 
                         count(distinct pi.id) as actual_packets,
@@ -95,7 +105,7 @@ public class MasterItemDashboardRepository {
                         end) as pending_packet_items,
 
                         count(distinct case
-                            when upper(coalesce(d.status, '')) = 'DISPATCHED'
+                            when upper(coalesce(cast(d.status as varchar), '')) = 'DISPATCHED'
                             then pi.id
                         end) as dispatched_packet_items,
 
@@ -119,17 +129,24 @@ public class MasterItemDashboardRepository {
 
                         lpu.packed_by as last_packed_by,
                         ldu.dispatched_by as last_dispatched_by
+
                     from master_item mi
+
                     left join packet_items pi
                         on pi.master_item_id = mi.id
+
                     left join sticker_history sh
                         on sh.packet_item_id = pi.id
+
                     left join dispatched_items d
                         on d.packet_item_id = pi.id
+
                     left join latest_packed_user lpu
                         on lpu.master_item_id = mi.id
+
                     left join latest_dispatch_user ldu
                         on ldu.master_item_id = mi.id
+
                     group by
                         mi.id,
                         mi.item_name,
@@ -168,6 +185,7 @@ public class MasterItemDashboardRepository {
                             when b.packed_packet_items > 0 then 'PARTIALLY_PACKED'
                             else 'UNPACKED'
                         end as packing_status
+
                     from base b
                 )
                 select *
@@ -345,22 +363,15 @@ public class MasterItemDashboardRepository {
         String sql = """
                     select
                         pi.id as packet_id,
+                        pi.id as packet_item_id,
+                        pi.packet_number as packet_number,
 
-                        nullif(
-                            regexp_replace(
-                                coalesce(pi.packet_number, ''),
-                                '[^0-9]',
-                                '',
-                                'g'
-                            ),
-                            ''
-                        )::int as packet_number,
-
-                        pi.sticker_number,
+                        coalesce(pi.sticker_number, max(sh.sticker_number)) as sticker_number,
                         pi.status,
                         pi.floor as factory_floor,
                         pi.warehouse_code,
                         pi.gate_pass_number,
+
                         max(d.chalaan_number) as challan_number,
 
                         coalesce(
@@ -370,7 +381,13 @@ public class MasterItemDashboardRepository {
                             max(d.created_at)
                         ) as created_at,
 
-                        pi.created_by,
+                        coalesce(
+                            pi.created_by,
+                            max(sh.generated_by),
+                            max(d.packed_by),
+                            max(d.created_by),
+                            'SYSTEM'
+                        ) as created_by,
 
                         1 as packet_items,
 
@@ -385,10 +402,11 @@ public class MasterItemDashboardRepository {
                         case
                             when count(
                                 case
-                                    when upper(coalesce(d.status, '')) = 'DISPATCHED'
+                                    when upper(coalesce(cast(d.status as varchar), '')) = 'DISPATCHED'
                                     then 1
                                 end
                             ) > 0
+                              or max(d.chalaan_number) is not null
                             then 1
                             else 0
                         end as dispatched_items
@@ -415,7 +433,16 @@ public class MasterItemDashboardRepository {
                         pi.created_by
 
                     order by
-                        packet_number asc nulls last,
+                        nullif(
+                            regexp_replace(
+                                coalesce(pi.packet_number, ''),
+                                '[^0-9]',
+                                '',
+                                'g'
+                            ),
+                            ''
+                        )::int asc nulls last,
+                        pi.packet_number asc nulls last,
                         pi.id asc
                 """;
 
@@ -591,25 +618,32 @@ public class MasterItemDashboardRepository {
 
     private RowMapper<MasterPacketRow> packetMapper() {
         return (rs, rowNum) -> {
+            UUID packetId = getUuid(rs, "packet_id");
+
             UUID packetItemId = getUuid(rs, "packet_item_id");
 
-            String stickerPreviewUrl = packetItemId == null
-                    ? null
-                    : "/api/reports/dashboard/packet-items/"
-                            + packetItemId
-                            + "/sticker/preview";
+            String stickerNumber = rs.getString("sticker_number");
 
-            String stickerDownloadUrl = packetItemId == null
+            boolean hasSticker = stickerNumber != null &&
+                    !stickerNumber.isBlank();
+
+            String stickerPreviewUrl = packetItemId == null || !hasSticker
                     ? null
-                    : "/api/reports/dashboard/packet-items/"
+                    : "/api/inventory/stickers/packet-items/"
                             + packetItemId
-                            + "/sticker/download";
+                            + "/latest?download=false";
+
+            String stickerDownloadUrl = packetItemId == null || !hasSticker
+                    ? null
+                    : "/api/inventory/stickers/packet-items/"
+                            + packetItemId
+                            + "/latest?download=true";
 
             return new MasterPacketRow(
-                    getUuid(rs, "packet_id"),
+                    packetId,
                     packetItemId,
                     rs.getString("packet_number"),
-                    rs.getString("sticker_number"),
+                    stickerNumber,
                     rs.getString("status"),
                     rs.getString("factory_floor"),
                     rs.getString("warehouse_code"),
