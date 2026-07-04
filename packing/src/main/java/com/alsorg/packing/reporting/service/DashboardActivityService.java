@@ -1,5 +1,6 @@
 package com.alsorg.packing.reporting.service;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -30,10 +31,26 @@ public class DashboardActivityService {
     public List<DashboardActivityRow> getRecentActivity(
             int limit
     ) {
+        return getRecentActivity(
+                limit,
+                0
+        );
+    }
+
+    public List<DashboardActivityRow> getRecentActivity(
+            int limit,
+            int offset
+    ) {
         int safeLimit =
                 Math.min(
                         Math.max(limit, 1),
                         50
+                );
+
+        int safeOffset =
+                Math.max(
+                        offset,
+                        0
                 );
 
         return jdbc.query(
@@ -71,12 +88,12 @@ public class DashboardActivityService {
                         al.id desc
 
                     limit ?
+                    offset ?
                 """,
                 (rs, rowNum) -> {
                     LocalDateTime createdAt =
-                            rs.getObject(
-                                    "created_at",
-                                    LocalDateTime.class
+                            readLocalDateTime(
+                                    rs.getObject("created_at")
                             );
 
                     return new DashboardActivityRow(
@@ -92,8 +109,34 @@ public class DashboardActivityService {
                             toIsoIst(createdAt)
                     );
                 },
-                safeLimit
+                safeLimit,
+                safeOffset
         );
+    }
+
+    private LocalDateTime readLocalDateTime(
+            Object value
+    ) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime;
+        }
+
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+
+        try {
+            return LocalDateTime.parse(
+                    String.valueOf(value)
+                            .replace(" ", "T")
+            );
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String toIsoIst(

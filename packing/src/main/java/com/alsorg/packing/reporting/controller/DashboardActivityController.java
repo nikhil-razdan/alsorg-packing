@@ -21,9 +21,12 @@ public class DashboardActivityController {
 
     @GetMapping
     public List<DashboardActivityRow> getActivity(
-            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(defaultValue = "12") int limit,
             @RequestParam(defaultValue = "0") int offset
     ) {
-        return service.getRecentActivity(limit, offset);
+        return service.getRecentActivity(
+                limit,
+                offset
+        );
     }
 }
