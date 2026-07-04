@@ -425,69 +425,6 @@ function ThroughputUserModal({
   );
 }
 
-function ExecutivePulse({
-  stats,
-  health,
-  packetCompletion,
-  operationalEfficiency,
-  currentExceptions,
-  legacyExceptions,
-}) {
-  const pulseItems = [
-    {
-      label: "Inventory Health",
-      value: `${Math.round(health)}%`,
-      subtle: "current data quality",
-      accent: "#22c55e",
-    },
-    {
-      label: "Packet Completion",
-      value: `${Math.round(packetCompletion)}%`,
-      subtle: `${Number(stats.packetItemsWithSticker || 0)} packed packets`,
-      accent: "#38bdf8",
-    },
-    {
-      label: "Dispatch Conversion",
-      value: `${Math.round(operationalEfficiency)}%`,
-      subtle: `${Number(stats.dispatchedItems || 0)} dispatched rows`,
-      accent: "#8b5cf6",
-    },
-    {
-      label: "Risk Queue",
-      value: currentExceptions + legacyExceptions,
-      subtle: `${currentExceptions} current • ${legacyExceptions} legacy`,
-      accent: "#f97316",
-    },
-  ];
-
-  return (
-    <div style={pulseWrap}>
-      <div>
-        <div style={pulseTitle}>
-          Executive Inventory Pulse
-        </div>
-
-        <div style={pulseSubtitle}>
-          Master item, packet, sticker, challan and dispatch visibility in one control layer.
-        </div>
-      </div>
-
-      <div style={pulseGrid}>
-        {pulseItems.map((item) => (
-          <div
-            key={item.label}
-            style={pulseItem(item.accent)}
-          >
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <small>{item.subtle}</small>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function DashboardPage() {
   const [stats, setStats] = useState(emptyDashboardStats);
 
@@ -882,15 +819,6 @@ function DashboardPage() {
             <div style={inventoryMain}>
               {inventorySection === "summary" && (
                 <>
-                  <ExecutivePulse
-                    stats={stats}
-                    health={inventoryAccuracy}
-                    packetCompletion={packetCompletionRate}
-                    operationalEfficiency={operationalEfficiency}
-                    currentExceptions={currentInventoryExceptions}
-                    legacyExceptions={legacyDispatchExceptions}
-                  />
-
                   <div style={kpiGrid}>
                     {summaryKpis.map((card) => (
                       <StatCard
