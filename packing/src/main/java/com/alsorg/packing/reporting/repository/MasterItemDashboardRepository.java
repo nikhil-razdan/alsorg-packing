@@ -530,20 +530,38 @@ public class MasterItemDashboardRepository {
     }
 
     private RowMapper<MasterPacketRow> packetMapper() {
-        return (rs, rowNum) -> new MasterPacketRow(
-                getUuid(rs, "packet_id"),
-                getInteger(rs, "packet_number"),
-                rs.getString("sticker_number"),
-                rs.getString("status"),
-                rs.getString("factory_floor"),
-                rs.getString("warehouse_code"),
-                rs.getString("gate_pass_number"),
-                rs.getString("challan_number"),
-                getLocalDateTime(rs, "created_at"),
-                rs.getString("created_by"),
-                rs.getLong("packet_items"),
-                rs.getLong("packed_items"),
-                rs.getLong("dispatched_items"));
+        return (rs, rowNum) -> {
+            UUID packetId = getUuid(rs, "packet_id");
+
+            String stickerPreviewUrl = packetId == null
+                    ? null
+                    : "/api/reports/dashboard/packets/"
+                            + packetId
+                            + "/sticker/preview";
+
+            String stickerDownloadUrl = packetId == null
+                    ? null
+                    : "/api/reports/dashboard/packets/"
+                            + packetId
+                            + "/sticker/download";
+
+            return new MasterPacketRow(
+                    packetId,
+                    getInteger(rs, "packet_number"),
+                    rs.getString("sticker_number"),
+                    rs.getString("status"),
+                    rs.getString("factory_floor"),
+                    rs.getString("warehouse_code"),
+                    rs.getString("gate_pass_number"),
+                    rs.getString("challan_number"),
+                    getLocalDateTime(rs, "created_at"),
+                    rs.getString("created_by"),
+                    rs.getLong("packet_items"),
+                    rs.getLong("packed_items"),
+                    rs.getLong("dispatched_items"),
+                    stickerPreviewUrl,
+                    stickerDownloadUrl);
+        };
     }
 
     private RowMapper<MasterPacketItemRow> packetItemMapper() {
@@ -579,16 +597,40 @@ public class MasterItemDashboardRepository {
     }
 
     private RowMapper<MasterChallanRow> challanMapper() {
-        return (rs, rowNum) -> new MasterChallanRow(
-                rs.getString("chalaan_number"),
-                rs.getLong("item_count"),
-                getLocalDateTime(rs, "first_dispatched_at"),
-                getLocalDateTime(rs, "last_dispatched_at"),
-                rs.getString("dispatched_by"),
-                rs.getString("driver_name"),
-                rs.getString("vehicle_number"),
-                getLocalDateTime(rs, "trip_started_at"),
-                getLocalDateTime(rs, "trip_ended_at"));
+        return (rs, rowNum) -> {
+            String challanNumber = rs.getString("chalaan_number");
+
+            String encoded = challanNumber == null
+                    ? null
+                    : java.net.URLEncoder.encode(
+                            challanNumber,
+                            java.nio.charset.StandardCharsets.UTF_8);
+
+            String previewUrl = encoded == null
+                    ? null
+                    : "/api/reports/dashboard/challans/"
+                            + encoded
+                            + "/preview";
+
+            String downloadUrl = encoded == null
+                    ? null
+                    : "/api/reports/dashboard/challans/"
+                            + encoded
+                            + "/download";
+
+            return new MasterChallanRow(
+                    challanNumber,
+                    rs.getLong("item_count"),
+                    getLocalDateTime(rs, "first_dispatched_at"),
+                    getLocalDateTime(rs, "last_dispatched_at"),
+                    rs.getString("dispatched_by"),
+                    rs.getString("driver_name"),
+                    rs.getString("vehicle_number"),
+                    getLocalDateTime(rs, "trip_started_at"),
+                    getLocalDateTime(rs, "trip_ended_at"),
+                    previewUrl,
+                    downloadUrl);
+        };
     }
 
     private UUID getUuid(

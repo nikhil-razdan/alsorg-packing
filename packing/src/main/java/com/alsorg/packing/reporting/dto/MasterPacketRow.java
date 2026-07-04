@@ -16,6 +16,8 @@ public record MasterPacketRow(
         String createdBy,
         long packetItems,
         long packedItems,
-        long dispatchedItems
+        long dispatchedItems,
+        String stickerPreviewUrl,
+        String stickerDownloadUrl
 ) {
 }

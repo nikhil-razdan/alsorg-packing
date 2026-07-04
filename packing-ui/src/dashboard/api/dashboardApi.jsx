@@ -240,3 +240,55 @@ export async function fetchMasterItemDetail(
 		"Failed to load master item details"
 	);
 }
+
+export function buildDashboardFileUrl(path) {
+	if (!path) {
+		return "";
+	}
+
+	if (/^https?:\/\//i.test(path)) {
+		return path;
+	}
+
+	return `${API_BASE_URL}${path}`;
+}
+
+export function openDashboardPdf(path) {
+	const url =
+		buildDashboardFileUrl(path);
+
+	if (!url) {
+		alert("PDF is not available.");
+		return;
+	}
+
+	window.open(
+		url,
+		"_blank",
+		"noopener,noreferrer"
+	);
+}
+
+export function downloadDashboardPdf(
+	path,
+	filename = "document.pdf"
+) {
+	const url =
+		buildDashboardFileUrl(path);
+
+	if (!url) {
+		alert("PDF is not available.");
+		return;
+	}
+
+	const link =
+		document.createElement("a");
+
+	link.href = url;
+	link.download = filename;
+	link.rel = "noopener noreferrer";
+
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+}

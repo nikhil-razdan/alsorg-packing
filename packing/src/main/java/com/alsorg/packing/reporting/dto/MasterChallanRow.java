@@ -11,6 +11,8 @@ public record MasterChallanRow(
         String driverName,
         String vehicleNumber,
         LocalDateTime tripStartedAt,
-        LocalDateTime tripEndedAt
+        LocalDateTime tripEndedAt,
+        String challanPreviewUrl,
+        String challanDownloadUrl
 ) {
 }
