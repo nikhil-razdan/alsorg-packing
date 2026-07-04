@@ -1,21 +1,75 @@
 import { API_BASE_URL } from "../../config";
 
-/**
- * Dashboard API
- * Uses HttpOnly cookie auth.
- */
+const getStoredToken = () => {
+	const possibleKeys = [
+		"token",
+		"authToken",
+		"jwt",
+		"accessToken",
+	];
+
+	for (const key of possibleKeys) {
+		const value =
+			localStorage.getItem(key);
+
+		if (value && value.trim()) {
+			const token =
+				value.trim();
+
+			return token.startsWith("Bearer ")
+				? token
+				: `Bearer ${token}`;
+		}
+	}
+
+	return "";
+};
+
+const buildAuthHeaders = (
+	extra = {}
+) => {
+	const headers = {
+		...extra,
+	};
+
+	const token =
+		getStoredToken();
+
+	if (token) {
+		headers.Authorization = token;
+	}
+
+	return headers;
+};
 
 const requestJson = async (
 	path,
 	errorMessage
 ) => {
-	const res = await fetch(`${API_BASE_URL}${path}`, {
-		credentials: "include",
-	});
+	const res =
+		await fetch(`${API_BASE_URL}${path}`, {
+			method: "GET",
+			credentials: "include",
+			cache: "no-store",
+			headers: buildAuthHeaders({
+				Accept: "application/json",
+			}),
+		});
 
 	if (!res.ok) {
-		const text = await res.text();
-		throw new Error(text || errorMessage);
+		const text =
+			await res.text();
+
+		if (res.status === 401) {
+			throw new Error(
+				text ||
+				"Unauthorized. Please login again or refresh your session."
+			);
+		}
+
+		throw new Error(
+			text || errorMessage
+		);
 	}
 
 	return res.json();
@@ -336,9 +390,9 @@ export async function fetchProtectedDashboardPdfBlob(path) {
 			method: "GET",
 			credentials: "include",
 			cache: "no-store",
-			headers: {
+			headers: buildAuthHeaders({
 				Accept: "application/pdf",
-			},
+			}),
 		});
 
 	const contentType =

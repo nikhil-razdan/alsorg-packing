@@ -6,6 +6,7 @@ import {
   Box,
   Chip,
   IconButton,
+  LinearProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
