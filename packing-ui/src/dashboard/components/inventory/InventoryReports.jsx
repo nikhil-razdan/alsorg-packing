@@ -13,6 +13,7 @@ import {
   fetchDispatchReport,
   fetchCombinedReport,
   fetchInventoryAging,
+  fetchMasterItemReport,
 } from "../../api/dashboardApi";
 
 const pad = (value) =>
@@ -505,6 +506,9 @@ function InventoryReports() {
   const [agingRows, setAgingRows] =
     useState([]);
 
+  const [masterRows, setMasterRows] =
+    useState([]);
+
   useEffect(() => {
     let active = true;
 
@@ -520,6 +524,11 @@ function InventoryReports() {
       fetchDispatchReport(from, to).catch(() => []),
       fetchCombinedReport(from, to).catch(() => []),
       fetchInventoryAging().catch(() => []),
+      fetchMasterItemReport({
+        from,
+        to,
+        limit: 1000,
+      }).catch(() => []),
     ])
       .then(
         ([
@@ -528,6 +537,7 @@ function InventoryReports() {
           dispatchData,
           combinedData,
           agingData,
+          masterData,
         ]) => {
           if (!active) return;
 
@@ -552,6 +562,11 @@ function InventoryReports() {
           setAgingRows(
             Array.isArray(agingData)
               ? agingData
+              : []
+          );
+          setMasterRows(
+            Array.isArray(masterData)
+              ? masterData
               : []
           );
         }
@@ -592,12 +607,18 @@ function InventoryReports() {
         dispatchData,
         combinedData,
         agingData,
+        masterData,
       ] = await Promise.all([
         fetchDashboardStats().catch(() => ({})),
         fetchPackingReport(from, to).catch(() => []),
         fetchDispatchReport(from, to).catch(() => []),
         fetchCombinedReport(from, to).catch(() => []),
         fetchInventoryAging().catch(() => []),
+        fetchMasterItemReport({
+          from,
+          to,
+          limit: 1000,
+        }).catch(() => []),
       ]);
 
       setStats(
@@ -621,6 +642,11 @@ function InventoryReports() {
       setAgingRows(
         Array.isArray(agingData)
           ? agingData
+          : []
+      );
+      setMasterRows(
+        Array.isArray(masterData)
+          ? masterData
           : []
       );
     } catch (e) {
@@ -1044,6 +1070,29 @@ function InventoryReports() {
     dispatchItemPacketRows,
   ]);
 
+  const masterItemColumns = [
+    ["itemName", "Master Item"],
+    ["pdNo", "PD No"],
+    ["drawingName", "Drawing"],
+    ["clientName", "Client"],
+    ["plantCode", "Plant"],
+    ["floor", "Floor"],
+    ["expectedPackets", "Expected Packets"],
+    ["actualPackets", "Actual Packets"],
+    ["packetItems", "Packet Items"],
+    ["packedPacketItems", "Packed"],
+    ["pendingPacketItems", "Pending"],
+    ["dispatchedPacketItems", "Dispatched"],
+    ["packingProgress", "Progress %"],
+    ["packingStatus", "Packing Status"],
+    ["latestStatus", "Latest Status"],
+    ["stickerCount", "Stickers"],
+    ["challanCount", "Challans"],
+    ["lastPackedBy", "Last Packed By"],
+    ["lastDispatchedBy", "Last Dispatched By"],
+    ["exceptionReason", "Exception"],
+  ];
+
   const tableConfigs = {
     DATE: {
       title: "Date-wise Throughput",
@@ -1054,6 +1103,22 @@ function InventoryReports() {
         ["total", "Total"],
       ],
       rows: dateWiseRows,
+    },
+
+    MASTER_ITEMS: {
+      title: "Master Item Register",
+      columns: masterItemColumns,
+      rows: masterRows.map((row, index) => ({
+        key: row.masterItemId || `master-${index}`,
+        ...row,
+        packingProgress:
+          row.packingProgress !== undefined &&
+            row.packingProgress !== null
+            ? `${Math.round(Number(row.packingProgress || 0))}%`
+            : "0%",
+        exceptionReason:
+          row.exceptionReason || "Clear",
+      })),
     },
 
     PACKING_USER: {
@@ -1195,6 +1260,22 @@ function InventoryReports() {
           argb: "FF0F172A",
         },
       };
+      addRowsSheet(
+        "Master Items",
+        "Master Item Register",
+        masterItemColumns,
+        masterRows.map((row, index) => ({
+          key: row.masterItemId || `master-${index}`,
+          ...row,
+          packingProgress:
+            row.packingProgress !== undefined &&
+              row.packingProgress !== null
+              ? `${Math.round(Number(row.packingProgress || 0))}%`
+              : "0%",
+          exceptionReason:
+            row.exceptionReason || "Clear",
+        }))
+      );
 
       sheet.getRow(1).height = 28;
     };
@@ -1838,6 +1919,7 @@ function InventoryReports() {
       <div style={modeTabs}>
         {[
           ["DATE", "Date Wise"],
+          ["MASTER_ITEMS", "Master Items"],
           ["PACKING_USER", "Packing Users"],
           ["DISPATCH_USER", "Dispatch Users"],
           ["CLIENT", "Client Wise"],

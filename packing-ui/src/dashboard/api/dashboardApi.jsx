@@ -121,3 +121,45 @@ export async function fetchDashboardTrace({
 		"Failed to load inventory traceability"
 	);
 }
+
+export async function fetchMasterItemReport({
+	status = "ALL",
+	search = "",
+	plantCode = "",
+	client = "",
+	from,
+	to,
+	limit = 500,
+	offset = 0,
+} = {}) {
+	const params = new URLSearchParams();
+
+	params.set("status", status);
+	params.set("limit", String(limit));
+	params.set("offset", String(offset));
+
+	if (search) {
+		params.set("search", search);
+	}
+
+	if (plantCode) {
+		params.set("plantCode", plantCode);
+	}
+
+	if (client) {
+		params.set("client", client);
+	}
+
+	if (from) {
+		params.set("from", from);
+	}
+
+	if (to) {
+		params.set("to", to);
+	}
+
+	return requestJson(
+		`/api/reports/dashboard/master-items?${params.toString()}`,
+		"Failed to load master item report"
+	);
+}

@@ -19,12 +19,17 @@ import InventorySidebar from
 import { useAuth } from "../auth/AuthContext";
 import InventoryCommandCenter from
   "../dashboard/components/inventory/InventoryCommandCenter";
+import MasterItemsModal from
+  "../dashboard/components/inventory/MasterItemsModal";
 
 function StatCard({
   title,
   value,
   subtle,
   accent = "#60a5fa",
+  icon = "◇",
+  trend,
+  trendLabel,
   onClick,
   active = false,
 }) {
@@ -36,17 +41,39 @@ function StatCard({
       onClick={onClick}
       style={statCard(accent, clickable, active)}
     >
-      <div style={cardAccent(accent)} />
+      <div style={cardGlow(accent)} />
 
-      <p style={statTitle}>{title}</p>
+      <div style={statTopRow}>
+        <div style={statIconBox(accent)}>
+          {icon}
+        </div>
 
-      <h2 style={statValue}>{value}</h2>
+        {trend !== undefined && trend !== null && (
+          <div style={trendPill(accent)}>
+            {trend}
+          </div>
+        )}
+      </div>
 
-      {subtle && <div style={statSubtle}>{subtle}</div>}
+      <div style={statTitle}>{title}</div>
+
+      <div style={statValue}>{value}</div>
+
+      {subtle && (
+        <div style={statSubtle}>
+          {subtle}
+        </div>
+      )}
+
+      {trendLabel && (
+        <div style={trendLabelStyle}>
+          {trendLabel}
+        </div>
+      )}
 
       {clickable && (
         <div style={statClickHint}>
-          {active ? "Hide details" : "View details"}
+          {active ? "Opened" : "View details"}
         </div>
       )}
     </button>
@@ -398,6 +425,69 @@ function ThroughputUserModal({
   );
 }
 
+function ExecutivePulse({
+  stats,
+  health,
+  packetCompletion,
+  operationalEfficiency,
+  currentExceptions,
+  legacyExceptions,
+}) {
+  const pulseItems = [
+    {
+      label: "Inventory Health",
+      value: `${Math.round(health)}%`,
+      subtle: "current data quality",
+      accent: "#22c55e",
+    },
+    {
+      label: "Packet Completion",
+      value: `${Math.round(packetCompletion)}%`,
+      subtle: `${Number(stats.packetItemsWithSticker || 0)} packed packets`,
+      accent: "#38bdf8",
+    },
+    {
+      label: "Dispatch Conversion",
+      value: `${Math.round(operationalEfficiency)}%`,
+      subtle: `${Number(stats.dispatchedItems || 0)} dispatched rows`,
+      accent: "#8b5cf6",
+    },
+    {
+      label: "Risk Queue",
+      value: currentExceptions + legacyExceptions,
+      subtle: `${currentExceptions} current • ${legacyExceptions} legacy`,
+      accent: "#f97316",
+    },
+  ];
+
+  return (
+    <div style={pulseWrap}>
+      <div>
+        <div style={pulseTitle}>
+          Executive Inventory Pulse
+        </div>
+
+        <div style={pulseSubtitle}>
+          Master item, packet, sticker, challan and dispatch visibility in one control layer.
+        </div>
+      </div>
+
+      <div style={pulseGrid}>
+        {pulseItems.map((item) => (
+          <div
+            key={item.label}
+            style={pulseItem(item.accent)}
+          >
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.subtle}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const [stats, setStats] = useState(emptyDashboardStats);
 
@@ -420,6 +510,9 @@ function DashboardPage() {
     loading: false,
     error: "",
   });
+
+  const [masterItemsModalOpen, setMasterItemsModalOpen] =
+    useState(false);
 
   const { role } = useAuth();
 
@@ -601,6 +694,154 @@ function DashboardPage() {
     });
   };
 
+  const summaryKpis = [
+    {
+      key: "inventoryItems",
+      icon: "📦",
+      accent: "#60a5fa",
+      title: "Inventory Items",
+      value: finalInventoryTotal,
+      subtle: "Warehouse + Ready To Dispatch + Ready",
+      trend: percentLabel(packetCompletionRate),
+      trendLabel: "packet completion",
+      active: activeStatCard === "inventoryItems",
+      onClick: () => toggleStatCard("inventoryItems"),
+    },
+
+    {
+      key: "masterItems",
+      icon: "🧩",
+      accent: "#a78bfa",
+      title: "Master Items",
+      value: Number(stats.masterItems || 0),
+      subtle: "Parent item register",
+      trend: `${Number(stats.fullyPackedMasterItems || 0)} full`,
+      trendLabel: "click to open full list",
+      active: masterItemsModalOpen,
+      onClick: () => setMasterItemsModalOpen(true),
+    },
+
+    {
+      key: "packetItems",
+      icon: "📑",
+      accent: "#38bdf8",
+      title: "Packet Items",
+      value: Number(stats.packetItems || 0),
+      subtle: "Operational packet-level rows",
+      trend: `${Number(stats.totalPackets || 0)} packets`,
+      active: activeStatCard === "packetItems",
+      onClick: () => toggleStatCard("packetItems"),
+    },
+
+    {
+      key: "stickers",
+      icon: "🏷️",
+      accent: "#f472b6",
+      title: "Stickers Generated",
+      value: Number(stats.stickersGenerated || 0),
+      subtle: "Sticker history records",
+      trend: `${Number(stats.stickerReprints || 0)} reprints`,
+    },
+
+    {
+      key: "packed",
+      icon: "✅",
+      accent: "#34d399",
+      title: "Packed Items",
+      value: Number(stats.packedItems || 0),
+      subtle: "Sticker / packed packet items",
+      trend: percentLabel(packetCompletionRate),
+    },
+
+    {
+      key: "pending",
+      icon: "⏳",
+      accent: "#f59e0b",
+      title: "Pending Items",
+      value: pending,
+      subtle: "Packet items pending sticker",
+      trend: `${Number(stats.packetItemsPendingSticker || 0)} pending`,
+    },
+
+    {
+      key: "dailyThroughput",
+      icon: "⚡",
+      accent: "#06b6d4",
+      title: "Daily Throughput",
+      value: dailyThroughput,
+      subtle: "Today’s sticker + dispatch",
+      trend: `${todayDistinctChallans} challans`,
+      active: activeStatCard === "dailyThroughput",
+      onClick: () => toggleStatCard("dailyThroughput"),
+    },
+
+    {
+      key: "readyToDispatch",
+      icon: "🚚",
+      accent: "#ef4444",
+      title: "Ready to Dispatch",
+      value: Number(stats.readyToDispatchItems || 0),
+      subtle: "Dispatch action pending",
+      trend: `${Number(stats.queuedItems || 0)} queued`,
+    },
+
+    {
+      key: "accuracy",
+      icon: "🎯",
+      accent: "#22c55e",
+      title: "Inventory Accuracy",
+      value: percentLabel(inventoryAccuracy),
+      subtle: "Based on current exceptions",
+      trend: `${currentInventoryExceptions} issues`,
+    },
+
+    {
+      key: "challans",
+      icon: "📄",
+      accent: "#8b5cf6",
+      title: "Dispatch Challans",
+      value: Number(stats.normalDispatchChallans || 0),
+      subtle: `${Number(stats.runningTrips || 0)} running trips`,
+      trend: `${Number(stats.todayDispatchChallans || 0)} today`,
+      active: activeStatCard === "challans",
+      onClick: () => toggleStatCard("challans"),
+    },
+
+    {
+      key: "customChallans",
+      icon: "🧾",
+      accent: "#ec4899",
+      title: "Custom Challans",
+      value: Number(stats.customChallans || 0),
+      subtle: `${Number(stats.customChallanItems || 0)} manual items`,
+      trend: `${Number(stats.todayCustomChallans || 0)} today`,
+      active: activeStatCard === "customChallans",
+      onClick: () => toggleStatCard("customChallans"),
+    },
+
+    {
+      key: "exceptions",
+      icon: "⚠️",
+      accent: "#f97316",
+      title: "Data Exceptions",
+      value: totalDataExceptions,
+      subtle: `${currentInventoryExceptions} current • ${legacyDispatchExceptions} legacy`,
+      trend: "review",
+      active: activeStatCard === "exceptions",
+      onClick: () => toggleStatCard("exceptions"),
+    },
+
+    {
+      key: "efficiency",
+      icon: "📈",
+      accent: "#14b8a6",
+      title: "Operational Efficiency",
+      value: percentLabel(operationalEfficiency),
+      subtle: "Dispatched / packet items",
+      trend: "live",
+    },
+  ];
+
   return (
     <div style={page}>
       <div style={backgroundText}>Alsorg</div>
@@ -641,111 +882,30 @@ function DashboardPage() {
             <div style={inventoryMain}>
               {inventorySection === "summary" && (
                 <>
+                  <ExecutivePulse
+                    stats={stats}
+                    health={inventoryAccuracy}
+                    packetCompletion={packetCompletionRate}
+                    operationalEfficiency={operationalEfficiency}
+                    currentExceptions={currentInventoryExceptions}
+                    legacyExceptions={legacyDispatchExceptions}
+                  />
+
                   <div style={kpiGrid}>
-                    <StatCard
-                      accent="#60a5fa"
-                      title="Inventory Items"
-                      value={finalInventoryTotal}
-                      subtle="Warehouse + Ready To Dispatch + Ready"
-                      active={activeStatCard === "inventoryItems"}
-                      onClick={() => toggleStatCard("inventoryItems")}
-                    />
-
-                    <StatCard
-                      accent="#a78bfa"
-                      title="Master Items"
-                      value={Number(stats.masterItems || 0)}
-                      subtle="Main parent items"
-                      active={activeStatCard === "masterItems"}
-                      onClick={() => toggleStatCard("masterItems")}
-                    />
-
-                    <StatCard
-                      accent="#38bdf8"
-                      title="Packet Items"
-                      value={Number(stats.packetItems || 0)}
-                      subtle="All packet-level rows"
-                      active={activeStatCard === "packetItems"}
-                      onClick={() => toggleStatCard("packetItems")}
-                    />
-
-                    <StatCard
-                      accent="#f472b6"
-                      title="Stickers Generated"
-                      value={Number(stats.stickersGenerated || 0)}
-                      subtle={`${Number(stats.stickerReprints || 0)} reprints`}
-                    />
-
-                    <StatCard
-                      accent="#34d399"
-                      title="Packed Items"
-                      value={Number(stats.packedItems || 0)}
-                      subtle="Sticker / packed packet items"
-                    />
-
-                    <StatCard
-                      accent="#f59e0b"
-                      title="Pending Items"
-                      value={pending}
-                      subtle="Packet items pending sticker"
-                    />
-
-                    <StatCard
-                      accent="#06b6d4"
-                      title="Daily Throughput"
-                      value={dailyThroughput}
-                      subtle="Today’s Sticker + Dispatch"
-                      active={activeStatCard === "dailyThroughput"}
-                      onClick={() => toggleStatCard("dailyThroughput")}
-                    />
-
-                    <StatCard
-                      accent="#ef4444"
-                      title="Ready to Dispatch"
-                      value={Number(stats.readyToDispatchItems || 0)}
-                      subtle="Dispatch action pending"
-                    />
-
-                    <StatCard
-                      accent="#22c55e"
-                      title="Inventory Accuracy"
-                      value={percentLabel(inventoryAccuracy)}
-                      subtle="Based on data exceptions"
-                    />
-
-                    <StatCard
-                      accent="#8b5cf6"
-                      title="Dispatch Challans"
-                      value={Number(stats.normalDispatchChallans || 0)}
-                      subtle={`${Number(stats.runningTrips || 0)} running trips`}
-                      active={activeStatCard === "challans"}
-                      onClick={() => toggleStatCard("challans")}
-                    />
-
-                    <StatCard
-                      accent="#ec4899"
-                      title="Custom Challans"
-                      value={Number(stats.customChallans || 0)}
-                      subtle={`${Number(stats.customChallanItems || 0)} manual items`}
-                      active={activeStatCard === "customChallans"}
-                      onClick={() => toggleStatCard("customChallans")}
-                    />
-
-                    <StatCard
-                      accent="#f97316"
-                      title="Data Exceptions"
-                      value={totalDataExceptions}
-                      subtle={`${currentInventoryExceptions} current • ${legacyDispatchExceptions} legacy`}
-                      active={activeStatCard === "exceptions"}
-                      onClick={() => toggleStatCard("exceptions")}
-                    />
-
-                    <StatCard
-                      accent="#22c55e"
-                      title="Operational Efficiency"
-                      value={percentLabel(operationalEfficiency)}
-                      subtle="Dispatched / packet items"
-                    />
+                    {summaryKpis.map((card) => (
+                      <StatCard
+                        key={card.key}
+                        icon={card.icon}
+                        accent={card.accent}
+                        title={card.title}
+                        value={card.value}
+                        subtle={card.subtle}
+                        trend={card.trend}
+                        trendLabel={card.trendLabel}
+                        active={card.active}
+                        onClick={card.onClick}
+                      />
+                    ))}
                   </div>
 
                   {activeStatCard === "dailyThroughput" && (
@@ -1449,6 +1609,10 @@ function DashboardPage() {
         error={throughputModal.error}
         onClose={closeThroughputUserModal}
       />
+      <MasterItemsModal
+        open={masterItemsModalOpen}
+        onClose={() => setMasterItemsModalOpen(false)}
+      />
     </div>
   );
 }
@@ -1461,10 +1625,10 @@ const page = {
   overflowY: "auto",
 
   background: `
-    radial-gradient(circle at 12% 8%, rgba(59,130,246,.20), transparent 28%),
-    radial-gradient(circle at 84% 12%, rgba(14,165,233,.13), transparent 24%),
-    radial-gradient(circle at 72% 88%, rgba(168,85,247,.10), transparent 26%),
-    linear-gradient(135deg,#020617 0%,#08111f 42%,#0f172a 100%)
+    radial-gradient(circle at 10% 6%, rgba(59,130,246,.22), transparent 30%),
+    radial-gradient(circle at 86% 12%, rgba(14,165,233,.14), transparent 24%),
+    radial-gradient(circle at 72% 90%, rgba(168,85,247,.11), transparent 28%),
+    linear-gradient(135deg,#020617 0%,#07111f 44%,#0f172a 100%)
   `,
 
   backgroundAttachment: "fixed",
@@ -1521,15 +1685,16 @@ const heroRow = {
   justifyContent: "space-between",
   gap: 16,
   flexWrap: "wrap",
-  marginBottom: 4,
+  marginBottom: 8,
+  padding: "4px 2px",
 };
 
 const heroTitle = {
   margin: 0,
-  fontSize: 34,
-  fontWeight: 900,
+  fontSize: 36,
+  fontWeight: 950,
   color: "#fff",
-  letterSpacing: 0.3,
+  letterSpacing: 0.2,
 };
 
 const heroSubtitle = {
@@ -1546,37 +1711,137 @@ const heroActions = {
 };
 
 const modeBtn = (active) => ({
-  height: 46,
+  height: 44,
   padding: "0 18px",
-
   borderRadius: 999,
 
   border: active
-    ? "1px solid rgba(59,130,246,.4)"
-    : "1px solid rgba(255,255,255,.06)",
+    ? "1px solid rgba(96,165,250,.48)"
+    : "1px solid rgba(255,255,255,.08)",
 
   cursor: "pointer",
 
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-    : "rgba(15,23,42,.78)",
+    : "rgba(15,23,42,.70)",
 
   color: "#fff",
-
-  fontWeight: 800,
+  fontWeight: 900,
 
   boxShadow: active
-    ? "0 12px 28px rgba(37,99,235,.35)"
-    : "none",
+    ? "0 14px 30px rgba(37,99,235,.32)"
+    : "0 12px 24px rgba(2,6,23,.18)",
 
+  backdropFilter: "blur(16px)",
   transition: "all .25s ease",
 });
 
 const kpiGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(210px,1fr))",
-  gap: 14,
+    "repeat(auto-fit,minmax(215px,1fr))",
+  gap: 16,
+};
+
+const pulseWrap = {
+  display: "grid",
+  gridTemplateColumns: "minmax(280px,.9fr) minmax(420px,1.4fr)",
+  gap: 16,
+  alignItems: "stretch",
+  padding: 20,
+  borderRadius: 28,
+  background:
+    "linear-gradient(135deg, rgba(15,23,42,.92), rgba(15,23,42,.70))",
+  border: "1px solid rgba(255,255,255,.08)",
+  boxShadow: "0 24px 58px rgba(2,6,23,.36)",
+  backdropFilter: "blur(22px)",
+};
+
+const pulseTitle = {
+  color: "#fff",
+  fontSize: 24,
+  fontWeight: 950,
+};
+
+const pulseSubtitle = {
+  marginTop: 7,
+  color: "rgba(255,255,255,.58)",
+  fontSize: 13,
+  fontWeight: 650,
+  lineHeight: 1.6,
+};
+
+const pulseGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+  gap: 12,
+};
+
+const pulseItem = (accent) => ({
+  padding: 14,
+  borderRadius: 18,
+  background:
+    `radial-gradient(circle at top right, ${accent}24, transparent 44%), rgba(255,255,255,.035)`,
+  border: `1px solid ${accent}33`,
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+  color: "rgba(255,255,255,.60)",
+  fontSize: 11,
+  fontWeight: 850,
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+});
+
+const cardGlow = (accent) => ({
+  position: "absolute",
+  inset: 0,
+  background:
+    `radial-gradient(circle at top right, ${accent}2B, transparent 42%)`,
+  pointerEvents: "none",
+});
+
+const statTopRow = {
+  position: "relative",
+  zIndex: 1,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 14,
+};
+
+const statIconBox = (accent) => ({
+  width: 38,
+  height: 38,
+  borderRadius: 14,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: `${accent}1F`,
+  border: `1px solid ${accent}3D`,
+  fontSize: 18,
+});
+
+const trendPill = (accent) => ({
+  minHeight: 26,
+  padding: "0 9px",
+  borderRadius: 999,
+  display: "flex",
+  alignItems: "center",
+  background: `${accent}1C`,
+  border: `1px solid ${accent}36`,
+  color: accent,
+  fontSize: 11,
+  fontWeight: 950,
+});
+
+const trendLabelStyle = {
+  position: "relative",
+  zIndex: 1,
+  marginTop: 7,
+  color: "rgba(255,255,255,.42)",
+  fontSize: 11,
+  fontWeight: 750,
 };
 
 const panelSurface = {
@@ -1689,46 +1954,73 @@ const cardAccent = (accent) => ({
 const statCard = (accent, clickable = false, active = false) => ({
   position: "relative",
 
-  padding: "18px 18px 16px",
-
-  borderRadius: 22,
+  padding: 18,
+  borderRadius: 24,
 
   background: active
-    ? `radial-gradient(circle at top right, ${accent}2E, transparent 45%), linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.78))`
-    : `radial-gradient(circle at top right, ${accent}18, transparent 42%), rgba(15,23,42,.82)`,
+    ? `linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.82))`
+    : "linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.70))",
 
   border: active
     ? `1px solid ${accent}77`
     : "1px solid rgba(255,255,255,.075)",
 
   boxShadow: active
-    ? `0 22px 46px ${accent}24`
-    : "0 18px 38px rgba(2,6,23,.30)",
+    ? `0 24px 52px ${accent}22`
+    : "0 18px 40px rgba(2,6,23,.28)",
 
   overflow: "hidden",
+  minHeight: 154,
 
-  minHeight: 122,
-
-  backdropFilter: "blur(20px)",
+  backdropFilter: "blur(22px)",
 
   cursor: clickable ? "pointer" : "default",
-
   textAlign: "left",
-
   width: "100%",
-
   color: "#fff",
-
   fontFamily: "inherit",
 
-  transition: "transform .22s ease, border .22s ease, box-shadow .22s ease",
+  transition:
+    "transform .22s ease, border-color .22s ease, box-shadow .22s ease",
 });
 
+const statTitle = {
+  position: "relative",
+  zIndex: 1,
+  color: "rgba(255,255,255,.58)",
+  marginBottom: 8,
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+  textTransform: "uppercase",
+};
+
+const statValue = {
+  position: "relative",
+  zIndex: 1,
+  margin: 0,
+  fontSize: 32,
+  fontWeight: 950,
+  lineHeight: 1,
+  color: "#fff",
+};
+
+const statSubtle = {
+  position: "relative",
+  zIndex: 1,
+  marginTop: 8,
+  fontSize: 11,
+  fontWeight: 650,
+  color: "rgba(255,255,255,.52)",
+};
+
 const statClickHint = {
+  position: "relative",
+  zIndex: 1,
   marginTop: 10,
   fontSize: 11,
-  fontWeight: 800,
-  color: "rgba(255,255,255,.72)",
+  fontWeight: 900,
+  color: "rgba(255,255,255,.74)",
 };
 
 const detailCard = (accent) => ({
@@ -2028,42 +2320,6 @@ const detailItemValue = {
 const detailItemSubtle = {
   marginTop: 6,
   fontSize: 12,
-  color: "rgba(255,255,255,.52)",
-};
-
-const statTitle = {
-  color: "rgba(255,255,255,.62)",
-
-  marginBottom: 10,
-
-  fontSize: 12,
-
-  fontWeight: 700,
-
-  letterSpacing: "0.08em",
-
-  textTransform: "uppercase",
-};
-
-const statValue = {
-  margin: 0,
-
-  fontSize: 30,
-
-  fontWeight: 900,
-
-  lineHeight: 1,
-
-  color: "#fff",
-};
-
-const statSubtle = {
-  marginTop: 8,
-
-  fontSize: 11,
-
-  fontWeight: 600,
-
   color: "rgba(255,255,255,.52)",
 };
 

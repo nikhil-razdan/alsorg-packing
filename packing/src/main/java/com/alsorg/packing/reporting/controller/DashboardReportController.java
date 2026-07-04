@@ -15,6 +15,12 @@ import java.time.LocalDateTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import com.alsorg.packing.reporting.dto.DashboardTraceRow;
 import com.alsorg.packing.reporting.service.DashboardTraceService;
+import java.time.LocalDateTime;
+
+import org.springframework.format.annotation.DateTimeFormat;
+
+import com.alsorg.packing.reporting.dto.MasterItemReportRow;
+import com.alsorg.packing.reporting.service.MasterItemReportService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard")
@@ -23,14 +29,17 @@ public class DashboardReportController {
     private final DashboardReportService service;
     private final CurrentUserService currentUserService;
     private final DashboardTraceService traceService;
+    private final MasterItemReportService masterItemReportService;
 
     public DashboardReportController(
             DashboardReportService service,
             CurrentUserService currentUserService,
-            DashboardTraceService traceService) {
+            DashboardTraceService traceService,
+            MasterItemReportService masterItemReportService) {
         this.service = service;
         this.currentUserService = currentUserService;
         this.traceService = traceService;
+        this.masterItemReportService = masterItemReportService;
     }
 
     @GetMapping
@@ -77,6 +86,34 @@ public class DashboardReportController {
                 from,
                 to,
                 search,
+                limit,
+                offset);
+    }
+
+    @GetMapping("/master-items")
+    public List<MasterItemReportRow> getMasterItems(
+            @RequestParam(defaultValue = "ALL") String status,
+
+            @RequestParam(required = false) String search,
+
+            @RequestParam(required = false) String plantCode,
+
+            @RequestParam(required = false) String client,
+
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+
+            @RequestParam(defaultValue = "500") int limit,
+
+            @RequestParam(defaultValue = "0") int offset) {
+        return masterItemReportService.getMasterItems(
+                status,
+                search,
+                plantCode,
+                client,
+                from,
+                to,
                 limit,
                 offset);
     }
