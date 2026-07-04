@@ -131,12 +131,30 @@ export async function fetchMasterItemReport({
 	to,
 	limit = 500,
 	offset = 0,
+	page,
+	size,
 } = {}) {
 	const params = new URLSearchParams();
 
-	params.set("status", status);
-	params.set("limit", String(limit));
-	params.set("offset", String(offset));
+	const finalLimit =
+		Number(limit || size || 500);
+
+	const finalOffset =
+		Number(offset || 0);
+
+	const finalPage =
+		page !== undefined && page !== null
+			? Number(page)
+			: Math.floor(finalOffset / finalLimit);
+
+	params.set("status", status || "ALL");
+	params.set("packingStatus", status || "ALL");
+
+	params.set("limit", String(finalLimit));
+	params.set("offset", String(finalOffset));
+
+	params.set("page", String(finalPage));
+	params.set("size", String(finalLimit));
 
 	if (search) {
 		params.set("search", search);
@@ -148,6 +166,7 @@ export async function fetchMasterItemReport({
 
 	if (client) {
 		params.set("client", client);
+		params.set("clientName", client);
 	}
 
 	if (from) {
@@ -161,5 +180,63 @@ export async function fetchMasterItemReport({
 	return requestJson(
 		`/api/reports/dashboard/master-items?${params.toString()}`,
 		"Failed to load master item report"
+	);
+}
+
+export async function fetchMasterItems({
+	search = "",
+	packingStatus = "ALL",
+	plantCode = "",
+	clientName = "",
+	from = "",
+	to = "",
+	page = 0,
+	size = 20,
+} = {}) {
+	const params = new URLSearchParams();
+
+	if (search) {
+		params.set("search", search);
+	}
+
+	if (packingStatus && packingStatus !== "ALL") {
+		params.set("packingStatus", packingStatus);
+	}
+
+	if (plantCode) {
+		params.set("plantCode", plantCode);
+	}
+
+	if (clientName) {
+		params.set("clientName", clientName);
+	}
+
+	if (from) {
+		params.set("from", from);
+	}
+
+	if (to) {
+		params.set("to", to);
+	}
+
+	params.set("page", String(page));
+	params.set("size", String(size));
+
+	return requestJson(
+		`/api/reports/dashboard/master-items?${params.toString()}`,
+		"Failed to load master items"
+	);
+}
+
+export async function fetchMasterItemDetail(
+	masterItemId
+) {
+	if (!masterItemId) {
+		throw new Error("Master item id missing");
+	}
+
+	return requestJson(
+		`/api/reports/dashboard/master-items/${encodeURIComponent(masterItemId)}`,
+		"Failed to load master item details"
 	);
 }

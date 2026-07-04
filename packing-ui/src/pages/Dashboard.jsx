@@ -936,38 +936,6 @@ function DashboardPage() {
                     />
                   )}
 
-                  {activeStatCard === "masterItems" && (
-                    <DetailStatCard
-                      accent="#a78bfa"
-                      title="Master Item Breakdown"
-                      subtitle="Parent item packing progress from master_item and packet_items"
-                      totalLabel="Master Items"
-                      totalValue={Number(stats.masterItems || 0)}
-                      rows={[
-                        {
-                          label: "Fully Packed Master Items",
-                          value: Number(stats.fullyPackedMasterItems || 0),
-                          subtle: "All related packet items are packed",
-                        },
-                        {
-                          label: "Partially Packed Master Items",
-                          value: Number(stats.partiallyPackedMasterItems || 0),
-                          subtle: "Some packet items packed, some pending",
-                        },
-                        {
-                          label: "Unpacked Master Items",
-                          value: Number(stats.unpackedMasterItems || 0),
-                          subtle: "No packet item packed yet",
-                        },
-                        {
-                          label: "Master Without Packets",
-                          value: Number(stats.masterItemsWithoutPackets || 0),
-                          subtle: "Created but no packet_items found",
-                        },
-                      ]}
-                    />
-                  )}
-
                   {activeStatCard === "packetItems" && (
                     <DetailStatCard
                       accent="#38bdf8"
