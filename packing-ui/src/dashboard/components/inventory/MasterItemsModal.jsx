@@ -2511,32 +2511,4 @@ const docActions = {
     justifyContent: "flex-end",
 };
 
-const docBtn = (accent) => ({
-    minHeight: 30,
-    padding: "0 10px",
-    borderRadius: 999,
-    border: `1px solid ${accent}55`,
-    background: `${accent}1F`,
-    color: accent,
-    fontSize: 10,
-    fontWeight: 950,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-});
-
-const challanActions = {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    marginTop: 10,
-    marginBottom: 8,
-};
-
-const overviewDocMeta = {
-    marginTop: 4,
-    fontSize: 11,
-    color: "rgba(255,255,255,.58)",
-    fontWeight: 750,
-};
-
 export default MasterItemsModal;
