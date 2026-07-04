@@ -1,82 +1,284 @@
 package com.alsorg.packing.reporting.controller;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.alsorg.packing.domain.sticker.StickerHistory;
+import com.alsorg.packing.repository.StickerHistoryRepository;
+import com.alsorg.packing.service.pdf.ChalaanItem;
+import com.alsorg.packing.service.pdf.ChalaanPdfData;
+import com.alsorg.packing.service.pdf.ChalaanPdfService;
+
 @RestController
 @RequestMapping("/api/reports/dashboard")
 public class DashboardDocumentController {
 
+    private final StickerHistoryRepository stickerHistoryRepository;
     private final JdbcTemplate jdbc;
-
-    private final String stickerStoragePath;
+    private final ChalaanPdfService chalaanPdfService;
 
     public DashboardDocumentController(
+            StickerHistoryRepository stickerHistoryRepository,
             JdbcTemplate jdbc,
-            @Value("${sticker.storage.path:./stickers}") String stickerStoragePath
+            ChalaanPdfService chalaanPdfService
     ) {
+        this.stickerHistoryRepository = stickerHistoryRepository;
         this.jdbc = jdbc;
-        this.stickerStoragePath = stickerStoragePath;
+        this.chalaanPdfService = chalaanPdfService;
     }
 
     /*
      * =====================================================
-     * PACKET STICKER PDF
+     * STICKER PDF
+     * Correct source:
+     * sticker_history.pdf_data by packet_item_id
      * =====================================================
      */
 
-    @GetMapping("/packets/{packetId}/sticker/preview")
-    public ResponseEntity<Resource> previewPacketSticker(
-            @PathVariable UUID packetId
+    @GetMapping("/packet-items/{packetItemId}/sticker/preview")
+    public ResponseEntity<Resource> previewSticker(
+            @PathVariable UUID packetItemId
     ) {
-        return servePacketSticker(
-                packetId,
+        return serveSticker(
+                packetItemId,
                 false
         );
     }
 
-    @GetMapping("/packets/{packetId}/sticker/download")
-    public ResponseEntity<Resource> downloadPacketSticker(
-            @PathVariable UUID packetId
+    @GetMapping("/packet-items/{packetItemId}/sticker/download")
+    public ResponseEntity<Resource> downloadSticker(
+            @PathVariable UUID packetItemId
     ) {
-        return servePacketSticker(
-                packetId,
+        return serveSticker(
+                packetItemId,
                 true
         );
     }
 
-    private ResponseEntity<Resource> servePacketSticker(
-            UUID packetId,
+    private ResponseEntity<Resource> serveSticker(
+            UUID packetItemId,
             boolean download
     ) {
-        PacketStickerDocument doc =
-                findPacketStickerDocument(packetId);
+        List<StickerHistory> history =
+                stickerHistoryRepository
+                        .findByPacketItem_IdOrderByGeneratedAtDesc(
+                                packetItemId
+                        );
 
-        Resource resource =
-                doc.resource();
+        StickerHistory selected =
+                history.stream()
+                        .filter(h ->
+                                h.getPdfData() != null
+                                        && h.getPdfData().length > 100
+                        )
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Sticker PDF not found for packet item " + packetItemId
+                                )
+                        );
+
+        String stickerNumber =
+                selected.getStickerNumber() == null
+                        || selected.getStickerNumber().isBlank()
+                                ? packetItemId.toString()
+                                : selected.getStickerNumber();
 
         String filename =
-                doc.filename();
+                cleanFileName(
+                        "Sticker_"
+                                + stickerNumber
+                                + ".pdf"
+                );
+
+        return pdfResponse(
+                selected.getPdfData(),
+                filename,
+                download
+        );
+    }
+
+    /*
+     * =====================================================
+     * CHALLAN PDF
+     * Correct source:
+     * dispatched_items by chalaan_number
+     * PDF generated through existing ChalaanPdfService.
+     * =====================================================
+     */
+
+    @GetMapping("/challan/preview")
+    public ResponseEntity<Resource> previewChallan(
+            @RequestParam String challanNumber
+    ) {
+        return serveChallan(
+                challanNumber,
+                false
+        );
+    }
+
+    @GetMapping("/challan/download")
+    public ResponseEntity<Resource> downloadChallan(
+            @RequestParam String challanNumber
+    ) {
+        return serveChallan(
+                challanNumber,
+                true
+        );
+    }
+
+    private ResponseEntity<Resource> serveChallan(
+            String challanNumber,
+            boolean download
+    ) {
+        if (challanNumber == null || challanNumber.trim().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Challan number missing"
+            );
+        }
+
+        String cleanChallan =
+                challanNumber.trim();
+
+        List<ChalaanItem> items =
+                jdbc.query(
+                        """
+                            select
+                                d.name,
+                                d.sku,
+                                d.pd_no,
+                                d.drawing_no,
+                                d.description,
+                                d.remarks,
+                                d.client_name,
+                                d.client_address
+                            from dispatched_items d
+                            where d.chalaan_number = ?
+                            order by d.name asc nulls last
+                        """,
+                        (rs, rowNum) -> {
+                            ChalaanItem item =
+                                    new ChalaanItem();
+
+                            item.setItemName(rs.getString("name"));
+                            item.setPdNo(rs.getString("pd_no"));
+                            item.setDrawingNo(rs.getString("drawing_no"));
+                            item.setDescription(rs.getString("description"));
+                            item.setRemarks(rs.getString("remarks"));
+                            item.setClientName(rs.getString("client_name"));
+                            item.setClientAddress(rs.getString("client_address"));
+
+                            return item;
+                        },
+                        cleanChallan
+                );
+
+        if (items.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No dispatched items found for challan " + cleanChallan
+            );
+        }
+
+        ChallanHeader header =
+                jdbc.query(
+                        """
+                            select
+                                max(d.driver_name) as driver_name,
+                                max(d.vehicle_number) as vehicle_number,
+                                max(d.client_address) as address,
+                                min(d.dispatched_at) as dispatch_time
+                            from dispatched_items d
+                            where d.chalaan_number = ?
+                        """,
+                        rs -> {
+                            if (!rs.next()) {
+                                return null;
+                            }
+
+                            return new ChallanHeader(
+                                    rs.getString("driver_name"),
+                                    rs.getString("vehicle_number"),
+                                    rs.getString("address"),
+                                    rs.getTimestamp("dispatch_time") == null
+                                            ? null
+                                            : rs.getTimestamp("dispatch_time")
+                                                    .toLocalDateTime()
+                            );
+                        },
+                        cleanChallan
+                );
+
+        ChalaanPdfData data =
+                new ChalaanPdfData();
+
+        data.setVoucherNo(cleanChallan);
+        data.setItems(items);
+
+        if (header != null) {
+            data.setDriverName(header.driverName());
+            data.setVehicleNumber(header.vehicleNumber());
+            data.setAddress(header.address());
+            data.setDispatchTime(header.dispatchTime());
+        }
+
+        byte[] pdf =
+                chalaanPdfService.generateChalaan(
+                        data
+                );
+
+        String filename =
+                cleanFileName(
+                        "Challan_"
+                                + cleanChallan
+                                + ".pdf"
+                );
+
+        return pdfResponse(
+                pdf,
+                filename,
+                download
+        );
+    }
+
+    private ResponseEntity<Resource> pdfResponse(
+            byte[] pdf,
+            String filename,
+            boolean download
+    ) {
+        if (pdf == null || pdf.length == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "PDF not found"
+            );
+        }
 
         ContentDisposition disposition =
                 download
                         ? ContentDisposition
                                 .attachment()
-                                .filename(filename)
+                                .filename(
+                                        filename,
+                                        StandardCharsets.UTF_8
+                                )
                                 .build()
                         : ContentDisposition
                                 .inline()
-                                .filename(filename)
+                                .filename(
+                                        filename,
+                                        StandardCharsets.UTF_8
+                                )
                                 .build();
 
         return ResponseEntity
@@ -86,128 +288,9 @@ public class DashboardDocumentController {
                         HttpHeaders.CONTENT_DISPOSITION,
                         disposition.toString()
                 )
-                .body(resource);
-    }
-
-    private PacketStickerDocument findPacketStickerDocument(
-            UUID packetId
-    ) {
-        String stickerPath =
-                jdbc.query("""
-                    select sticker_path
-                    from packets
-                    where id = ?
-                """, rs -> {
-                    if (!rs.next()) {
-                        return null;
-                    }
-
-                    return rs.getString("sticker_path");
-                }, packetId);
-
-        if (stickerPath != null && !stickerPath.trim().isBlank()) {
-            Path path =
-                    Path.of(stickerPath.trim());
-
-            if (!path.isAbsolute()) {
-                path =
-                        Path.of(stickerStoragePath)
-                                .resolve(stickerPath.trim())
-                                .normalize();
-            }
-
-            if (Files.exists(path) && Files.isRegularFile(path)) {
-                return new PacketStickerDocument(
-                        new FileSystemResource(path),
-                        cleanFileName(path.getFileName().toString())
+                .body(
+                        new ByteArrayResource(pdf)
                 );
-            }
-        }
-
-        /*
-         * Fallback:
-         * If packet.sticker_path is not filled, try latest sticker_history PDF
-         * linked through packet_items.
-         *
-         * This works only if your pdf_data column is bytea.
-         * If your pdf_data is PostgreSQL oid, keep sticker_path updated
-         * during sticker generation.
-         */
-        byte[] bytes =
-                jdbc.query("""
-                    select sh.pdf_data
-                    from sticker_history sh
-                    join packet_items pi
-                        on pi.id = sh.packet_item_id
-                    where pi.packet_id = ?
-                      and sh.pdf_data is not null
-                    order by sh.generated_at desc nulls last
-                    limit 1
-                """, rs -> {
-                    if (!rs.next()) {
-                        return null;
-                    }
-
-                    try {
-                        return rs.getBytes("pdf_data");
-                    } catch (Exception e) {
-                        return null;
-                    }
-                }, packetId);
-
-        if (bytes != null && bytes.length > 0) {
-            return new PacketStickerDocument(
-                    new ByteArrayResource(bytes),
-                    "packet-sticker-" + packetId + ".pdf"
-            );
-        }
-
-        throw new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Sticker PDF not found for packet " + packetId
-        );
-    }
-
-    /*
-     * =====================================================
-     * CHALLAN PDF
-     *
-     * These endpoints are dashboard aliases.
-     * They redirect to your existing challan PDF endpoint.
-     *
-     * Replace EXISTING_CHALLAN_ENDPOINT below with the endpoint
-     * you already use in challanDownloadApi.js if different.
-     * =====================================================
-     */
-
-    @GetMapping("/challans/{challanNumber}/preview")
-    public ResponseEntity<Void> previewChallan(
-            @PathVariable String challanNumber
-    ) {
-        String location =
-                "/api/logistics/challans/"
-                        + challanNumber
-                        + "/pdf?mode=preview";
-
-        return ResponseEntity
-                .status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location)
-                .build();
-    }
-
-    @GetMapping("/challans/{challanNumber}/download")
-    public ResponseEntity<Void> downloadChallan(
-            @PathVariable String challanNumber
-    ) {
-        String location =
-                "/api/logistics/challans/"
-                        + challanNumber
-                        + "/pdf?mode=download";
-
-        return ResponseEntity
-                .status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location)
-                .build();
     }
 
     private String cleanFileName(
@@ -221,9 +304,11 @@ public class DashboardDocumentController {
         return text.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
-    private record PacketStickerDocument(
-            Resource resource,
-            String filename
+    private record ChallanHeader(
+            String driverName,
+            String vehicleNumber,
+            String address,
+            LocalDateTime dispatchTime
     ) {
     }
 }

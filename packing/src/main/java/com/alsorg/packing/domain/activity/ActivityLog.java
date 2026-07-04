@@ -1,6 +1,7 @@
 package com.alsorg.packing.domain.activity;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import jakarta.persistence.*;
 
@@ -8,47 +9,119 @@ import jakarta.persistence.*;
 @Table(name = "activity_logs")
 public class ActivityLog {
 
+    private static final ZoneId APP_ZONE =
+            ZoneId.of("Asia/Kolkata");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String zohoItemId;
+
     private String action;
+
     private String performedBy;
+
     private String role;
 
     private String fromStatus;
+
     private String toStatus;
 
     @Column(columnDefinition = "TEXT")
     private String remarks;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
-    /* ===== Getters & Setters ===== */
+    @PrePersist
+    public void beforeSave() {
+        if (createdAt == null) {
+            createdAt =
+                    LocalDateTime.now(APP_ZONE);
+        }
+    }
 
-    public Long getId() { return id; }
+    public Long getId() {
+        return id;
+    }
 
-    public String getZohoItemId() { return zohoItemId; }
-    public void setZohoItemId(String zohoItemId) { this.zohoItemId = zohoItemId; }
+    public String getZohoItemId() {
+        return zohoItemId;
+    }
 
-    public String getAction() { return action; }
-    public void setAction(String action) { this.action = action; }
+    public void setZohoItemId(
+            String zohoItemId
+    ) {
+        this.zohoItemId = zohoItemId;
+    }
 
-    public String getPerformedBy() { return performedBy; }
-    public void setPerformedBy(String performedBy) { this.performedBy = performedBy; }
+    public String getAction() {
+        return action;
+    }
 
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
+    public void setAction(
+            String action
+    ) {
+        this.action = action;
+    }
 
-    public String getFromStatus() { return fromStatus; }
-    public void setFromStatus(String fromStatus) { this.fromStatus = fromStatus; }
+    public String getPerformedBy() {
+        return performedBy;
+    }
 
-    public String getToStatus() { return toStatus; }
-    public void setToStatus(String toStatus) { this.toStatus = toStatus; }
+    public void setPerformedBy(
+            String performedBy
+    ) {
+        this.performedBy = performedBy;
+    }
 
-    public String getRemarks() { return remarks; }
-    public void setRemarks(String remarks) { this.remarks = remarks; }
+    public String getRole() {
+        return role;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setRole(
+            String role
+    ) {
+        this.role = role;
+    }
+
+    public String getFromStatus() {
+        return fromStatus;
+    }
+
+    public void setFromStatus(
+            String fromStatus
+    ) {
+        this.fromStatus = fromStatus;
+    }
+
+    public String getToStatus() {
+        return toStatus;
+    }
+
+    public void setToStatus(
+            String toStatus
+    ) {
+        this.toStatus = toStatus;
+    }
+
+    public String getRemarks() {
+        return remarks;
+    }
+
+    public void setRemarks(
+            String remarks
+    ) {
+        this.remarks = remarks;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(
+            LocalDateTime createdAt
+    ) {
+        this.createdAt = createdAt;
+    }
 }

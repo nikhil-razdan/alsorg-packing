@@ -269,7 +269,7 @@ export function openDashboardPdf(path) {
 	);
 }
 
-export function downloadDashboardPdf(
+export async function downloadDashboardPdf(
 	path,
 	filename = "document.pdf"
 ) {
@@ -281,14 +281,42 @@ export function downloadDashboardPdf(
 		return;
 	}
 
-	const link =
-		document.createElement("a");
+	try {
+		const res =
+			await fetch(url, {
+				credentials: "include",
+			});
 
-	link.href = url;
-	link.download = filename;
-	link.rel = "noopener noreferrer";
+		if (!res.ok) {
+			const text =
+				await res.text();
 
-	document.body.appendChild(link);
-	link.click();
-	document.body.removeChild(link);
+			throw new Error(
+				text || "Failed to download PDF"
+			);
+		}
+
+		const blob =
+			await res.blob();
+
+		const objectUrl =
+			window.URL.createObjectURL(blob);
+
+		const link =
+			document.createElement("a");
+
+		link.href = objectUrl;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+
+		document.body.removeChild(link);
+		window.URL.revokeObjectURL(objectUrl);
+	} catch (e) {
+		console.error(e);
+		alert(
+			e.message ||
+			"Failed to download PDF"
+		);
+	}
 }

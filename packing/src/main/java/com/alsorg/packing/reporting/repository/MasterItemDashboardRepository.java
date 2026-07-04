@@ -76,7 +76,7 @@ public class MasterItemDashboardRepository {
                         mi.total_packets as expected_packets,
                         mi.created_at,
 
-                        count(distinct pi.packet_id) as actual_packets,
+                        count(distinct pi.id) as actual_packets,
                         count(distinct pi.id) as packet_items,
 
                         count(distinct case
@@ -99,7 +99,11 @@ public class MasterItemDashboardRepository {
                             then pi.id
                         end) as dispatched_packet_items,
 
-                        count(distinct sh.id) as sticker_count,
+                        count(distinct case
+                            when pi.sticker_number is not null
+                              or sh.id is not null
+                            then pi.id
+                        end) as sticker_count,
 
                         count(distinct case
                             when d.chalaan_number is not null
@@ -339,54 +343,91 @@ public class MasterItemDashboardRepository {
     public List<MasterPacketRow> fetchPackets(
             UUID masterItemId) {
         String sql = """
+                    with latest_sticker as (
+                        select distinct on (sh.packet_item_id)
+                            sh.packet_item_id,
+                            sh.sticker_number,
+                            sh.generated_at,
+                            sh.generated_by,
+                            sh.print_iteration
+                        from sticker_history sh
+                        order by
+                            sh.packet_item_id,
+                            sh.generated_at desc nulls last
+                    ),
+                    latest_dispatch as (
+                        select distinct on (d.packet_item_id)
+                            d.packet_item_id,
+                            d.chalaan_number,
+                            d.status,
+                            d.gate_pass_number,
+                            d.dispatched_at,
+                            d.created_at,
+                            d.dispatched_by,
+                            d.created_by,
+                            d.driver_name,
+                            d.vehicle_number,
+                            d.trip_started_at,
+                            d.trip_ended_at
+                        from dispatched_items d
+                        where d.packet_item_id is not null
+                        order by
+                            d.packet_item_id,
+                            d.dispatched_at desc nulls last,
+                            d.created_at desc nulls last
+                    )
                     select
-                        p.id as packet_id,
-                        p.packet_number,
-                        p.sticker_number,
-                        p.status,
-                        p.factory_floor,
-                        p.warehouse_code,
-                        p.gate_pass_number,
-                        p.challan_number,
-                        p.created_at,
-                        p.created_by,
+                        pi.id as packet_id,
+                        pi.id as packet_item_id,
+                        pi.packet_number,
+                        coalesce(pi.sticker_number, ls.sticker_number) as sticker_number,
+                        coalesce(pi.status, ld.status::text) as status,
+                        pi.floor as factory_floor,
+                        coalesce(pi.warehouse_code, '') as warehouse_code,
+                        ld.gate_pass_number,
+                        ld.chalaan_number as challan_number,
 
-                        count(distinct pi.id) as packet_items,
+                        coalesce(
+                            pi.packed_at,
+                            ls.generated_at,
+                            ld.dispatched_at,
+                            ld.created_at
+                        ) as created_at,
 
-                        count(distinct case
+                        coalesce(
+                            pi.created_by,
+                            ls.generated_by,
+                            ld.dispatched_by,
+                            ld.created_by,
+                            'SYSTEM'
+                        ) as created_by,
+
+                        1 as packet_items,
+
+                        case
                             when pi.sticker_number is not null
                               or pi.packed_at is not null
-                              or sh.id is not null
-                            then pi.id
-                        end) as packed_items,
+                              or ls.packet_item_id is not null
+                            then 1
+                            else 0
+                        end as packed_items,
 
-                        count(distinct case
-                            when upper(coalesce(d.status, '')) = 'DISPATCHED'
-                            then pi.id
-                        end) as dispatched_items
+                        case
+                            when upper(coalesce(ld.status::text, '')) = 'DISPATCHED'
+                              or ld.chalaan_number is not null
+                            then 1
+                            else 0
+                        end as dispatched_items
 
                     from packet_items pi
-                    join packets p
-                        on p.id = pi.packet_id
-                    left join sticker_history sh
-                        on sh.packet_item_id = pi.id
-                    left join dispatched_items d
-                        on d.packet_item_id = pi.id
+                    left join latest_sticker ls
+                        on ls.packet_item_id = pi.id
+                    left join latest_dispatch ld
+                        on ld.packet_item_id = pi.id
                     where pi.master_item_id = :masterItemId
-                    group by
-                        p.id,
-                        p.packet_number,
-                        p.sticker_number,
-                        p.status,
-                        p.factory_floor,
-                        p.warehouse_code,
-                        p.gate_pass_number,
-                        p.challan_number,
-                        p.created_at,
-                        p.created_by
                     order by
-                        p.packet_number asc nulls last,
-                        p.created_at asc nulls last
+                        nullif(regexp_replace(coalesce(pi.packet_number, ''), '[^0-9]', '', 'g'), '')::int asc nulls last,
+                        pi.packet_number asc nulls last
                 """;
 
         return jdbc.query(
@@ -401,9 +442,52 @@ public class MasterItemDashboardRepository {
     public List<MasterPacketItemRow> fetchPacketItems(
             UUID masterItemId) {
         String sql = """
+                    with latest_dispatch as (
+                        select distinct on (d.packet_item_id)
+                            d.packet_item_id,
+                            d.chalaan_number,
+                            d.dispatched_at,
+                            coalesce(d.dispatched_by, d.created_by, 'SYSTEM') as dispatched_by,
+                            d.status as dispatch_status,
+                            d.driver_name,
+                            d.vehicle_number,
+                            d.trip_started_at,
+                            d.trip_ended_at
+                        from dispatched_items d
+                        where d.packet_item_id is not null
+                        order by
+                            d.packet_item_id,
+                            d.dispatched_at desc nulls last,
+                            d.created_at desc nulls last
+                    ),
+                    latest_sticker as (
+                        select distinct on (sh.packet_item_id)
+                            sh.packet_item_id,
+                            sh.generated_at,
+                            sh.generated_by,
+                            sh.print_iteration,
+                            sh.sticker_number
+                        from sticker_history sh
+                        order by
+                            sh.packet_item_id,
+                            sh.generated_at desc nulls last
+                    ),
+                    sticker_counts as (
+                        select
+                            sh.packet_item_id,
+                            count(*) as sticker_history_count
+                        from sticker_history sh
+                        group by sh.packet_item_id
+                    )
                     select
                         pi.id as packet_item_id,
-                        pi.packet_id,
+
+                        /*
+                         * Dashboard logical packet id.
+                         * Do NOT use packet table here.
+                         */
+                        pi.id as packet_id,
+
                         pi.packet_number,
                         pi.item_name,
                         pi.sku,
@@ -412,51 +496,38 @@ public class MasterItemDashboardRepository {
                         pi.description,
                         pi.quantity,
                         pi.status,
-                        pi.sticker_number,
-                        pi.print_iteration,
+                        coalesce(pi.sticker_number, ls.sticker_number) as sticker_number,
+                        coalesce(pi.print_iteration, ls.print_iteration, 1) as print_iteration,
                         pi.packed_at,
                         pi.created_by,
                         pi.warehouse_code,
                         pi.current_location_code,
                         pi.plant_code,
 
-                        (
-                            select count(*)
-                            from sticker_history sh
-                            where sh.packet_item_id = pi.id
-                        ) as sticker_history_count,
+                        coalesce(sc.sticker_history_count, 0) as sticker_history_count,
+                        ls.generated_at as last_sticker_generated_at,
+                        ls.generated_by as last_sticker_generated_by,
 
-                        (
-                            select max(sh.generated_at)
-                            from sticker_history sh
-                            where sh.packet_item_id = pi.id
-                        ) as last_sticker_generated_at,
-
-                        (
-                            select sh.generated_by
-                            from sticker_history sh
-                            where sh.packet_item_id = pi.id
-                            order by sh.generated_at desc nulls last
-                            limit 1
-                        ) as last_sticker_generated_by,
-
-                        d.chalaan_number,
-                        d.dispatched_at,
-                        coalesce(d.dispatched_by, d.created_by, 'SYSTEM') as dispatched_by,
-                        d.status as dispatch_status,
-                        d.driver_name,
-                        d.vehicle_number,
-                        d.trip_started_at,
-                        d.trip_ended_at
+                        ld.chalaan_number,
+                        ld.dispatched_at,
+                        ld.dispatched_by,
+                        ld.dispatch_status,
+                        ld.driver_name,
+                        ld.vehicle_number,
+                        ld.trip_started_at,
+                        ld.trip_ended_at
 
                     from packet_items pi
-                    left join dispatched_items d
-                        on d.packet_item_id = pi.id
+                    left join latest_dispatch ld
+                        on ld.packet_item_id = pi.id
+                    left join latest_sticker ls
+                        on ls.packet_item_id = pi.id
+                    left join sticker_counts sc
+                        on sc.packet_item_id = pi.id
                     where pi.master_item_id = :masterItemId
                     order by
-                        pi.packet_number asc nulls last,
-                        pi.packed_at desc nulls last,
-                        pi.item_name asc nulls last
+                        nullif(regexp_replace(coalesce(pi.packet_number, ''), '[^0-9]', '', 'g'), '')::int asc nulls last,
+                        pi.packet_number asc nulls last
                 """;
 
         return jdbc.query(
@@ -531,23 +602,24 @@ public class MasterItemDashboardRepository {
 
     private RowMapper<MasterPacketRow> packetMapper() {
         return (rs, rowNum) -> {
-            UUID packetId = getUuid(rs, "packet_id");
+            UUID packetItemId = getUuid(rs, "packet_item_id");
 
-            String stickerPreviewUrl = packetId == null
+            String stickerPreviewUrl = packetItemId == null
                     ? null
-                    : "/api/reports/dashboard/packets/"
-                            + packetId
+                    : "/api/reports/dashboard/packet-items/"
+                            + packetItemId
                             + "/sticker/preview";
 
-            String stickerDownloadUrl = packetId == null
+            String stickerDownloadUrl = packetItemId == null
                     ? null
-                    : "/api/reports/dashboard/packets/"
-                            + packetId
+                    : "/api/reports/dashboard/packet-items/"
+                            + packetItemId
                             + "/sticker/download";
 
             return new MasterPacketRow(
-                    packetId,
-                    getInteger(rs, "packet_number"),
+                    getUuid(rs, "packet_id"),
+                    packetItemId,
+                    rs.getString("packet_number"),
                     rs.getString("sticker_number"),
                     rs.getString("status"),
                     rs.getString("factory_floor"),
@@ -608,15 +680,13 @@ public class MasterItemDashboardRepository {
 
             String previewUrl = encoded == null
                     ? null
-                    : "/api/reports/dashboard/challans/"
-                            + encoded
-                            + "/preview";
+                    : "/api/reports/dashboard/challan/preview?challanNumber="
+                            + encoded;
 
             String downloadUrl = encoded == null
                     ? null
-                    : "/api/reports/dashboard/challans/"
-                            + encoded
-                            + "/download";
+                    : "/api/reports/dashboard/challan/download?challanNumber="
+                            + encoded;
 
             return new MasterChallanRow(
                     challanNumber,

@@ -168,34 +168,63 @@ const filenameSafe = (value) =>
         .replace(/[\\/:*?"<>|]+/g, "_")
         .replace(/\s+/g, "_");
 
-const getPacketStickerPreviewUrl = (packet) =>
-    packet?.stickerPreviewUrl ||
-    (packet?.packetId
-        ? `/api/reports/dashboard/packets/${packet.packetId}/sticker/preview`
-        : "");
+const getLogicalPacketItemId = (packet) =>
+    packet?.packetItemId ||
+    packet?.packetId ||
+    packet?.packet_item_id ||
+    "";
 
-const getPacketStickerDownloadUrl = (packet) =>
-    packet?.stickerDownloadUrl ||
-    (packet?.packetId
-        ? `/api/reports/dashboard/packets/${packet.packetId}/sticker/download`
-        : "");
+const getPacketStickerPreviewUrl = (packet) => {
+    const packetItemId =
+        getLogicalPacketItemId(packet);
+
+    const hasSticker =
+        Boolean(packet?.stickerNumber) ||
+        Number(packet?.packedItems || 0) > 0;
+
+    if (!packetItemId || !hasSticker) {
+        return "";
+    }
+
+    return (
+        packet?.stickerPreviewUrl ||
+        `/api/reports/dashboard/packet-items/${packetItemId}/sticker/preview`
+    );
+};
+
+const getPacketStickerDownloadUrl = (packet) => {
+    const packetItemId =
+        getLogicalPacketItemId(packet);
+
+    const hasSticker =
+        Boolean(packet?.stickerNumber) ||
+        Number(packet?.packedItems || 0) > 0;
+
+    if (!packetItemId || !hasSticker) {
+        return "";
+    }
+
+    return (
+        packet?.stickerDownloadUrl ||
+        `/api/reports/dashboard/packet-items/${packetItemId}/sticker/download`
+    );
+};
 
 const getChallanPreviewUrl = (challan) =>
     challan?.challanPreviewUrl ||
     (challan?.challanNumber
-        ? `/api/reports/dashboard/challans/${encodeURIComponent(
+        ? `/api/reports/dashboard/challan/preview?challanNumber=${encodeURIComponent(
             challan.challanNumber
-        )}/preview`
+        )}`
         : "");
 
 const getChallanDownloadUrl = (challan) =>
     challan?.challanDownloadUrl ||
     (challan?.challanNumber
-        ? `/api/reports/dashboard/challans/${encodeURIComponent(
+        ? `/api/reports/dashboard/challan/download?challanNumber=${encodeURIComponent(
             challan.challanNumber
-        )}/download`
+        )}`
         : "");
-
 function MasterItemsModal({
     open,
     onClose,
@@ -1147,6 +1176,131 @@ function OverviewPanel({
                     value={safe(master.lastDispatchedBy)}
                 />
             </div>
+            <div style={overviewDocsGrid}>
+                {challans.length > 0 && (
+                    <div style={overviewDocPanel}>
+                        <div style={overviewDocTitle}>
+                            Master Item Challans
+                        </div>
+
+                        <div style={overviewDocScroll}>
+                            {challans.map((challan) => (
+                                <div
+                                    key={challan.challanNumber}
+                                    style={overviewDocRow}
+                                >
+                                    <div style={overviewDocInfo}>
+                                        <div style={overviewDocNo}>
+                                            {safe(challan.challanNumber)}
+                                        </div>
+
+                                        <div style={overviewDocMeta}>
+                                            Items: {safe(challan.itemCount)} •{" "}
+                                            {formatDateTime(challan.lastDispatchedAt)}
+                                        </div>
+                                    </div>
+
+                                    <div style={docActions}>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                openDashboardPdf(
+                                                    getChallanPreviewUrl(challan)
+                                                )
+                                            }
+                                            style={docBtn("#8b5cf6")}
+                                        >
+                                            Preview
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                downloadDashboardPdf(
+                                                    getChallanDownloadUrl(challan),
+                                                    `Challan_${filenameSafe(
+                                                        challan.challanNumber
+                                                    )}.pdf`
+                                                )
+                                            }
+                                            style={docBtn("#22c55e")}
+                                        >
+                                            Download
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {packets.length > 0 && (
+                    <div style={overviewDocPanel}>
+                        <div style={overviewDocTitle}>
+                            Packet Stickers
+                        </div>
+
+                        <div style={overviewDocScroll}>
+                            {packets.map((packet) => {
+                                const previewUrl =
+                                    getPacketStickerPreviewUrl(packet);
+
+                                const downloadUrl =
+                                    getPacketStickerDownloadUrl(packet);
+
+                                return (
+                                    <div
+                                        key={getLogicalPacketItemId(packet)}
+                                        style={overviewDocRow}
+                                    >
+                                        <div style={overviewDocInfo}>
+                                            <div style={overviewDocNo}>
+                                                Packet {safe(packet.packetNumber)}
+                                            </div>
+
+                                            <div style={overviewDocMeta}>
+                                                Sticker: {safe(packet.stickerNumber)} •{" "}
+                                                Items: {safe(packet.packetItems)}
+                                            </div>
+                                        </div>
+
+                                        <div style={docActions}>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    openDashboardPdf(previewUrl)
+                                                }
+                                                style={docBtn("#38bdf8")}
+                                                disabled={!previewUrl}
+                                            >
+                                                Preview
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    downloadDashboardPdf(
+                                                        downloadUrl,
+                                                        `Sticker_${filenameSafe(
+                                                            packet.stickerNumber ||
+                                                            packet.packetNumber ||
+                                                            getLogicalPacketItemId(packet)
+                                                        )}.pdf`
+                                                    )
+                                                }
+                                                style={docBtn("#22c55e")}
+                                                disabled={!downloadUrl}
+                                            >
+                                                Download
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
             {challans.length > 0 && (
                 <div style={overviewDocPanel}>
                     <div style={overviewDocTitle}>
@@ -1333,8 +1487,10 @@ function PacketsPanel({
 
                                             downloadDashboardPdf(
                                                 getPacketStickerDownloadUrl(packet),
-                                                `Sticker_Packet_${filenameSafe(
-                                                    packet.packetNumber || packet.packetId
+                                                `Sticker_${filenameSafe(
+                                                    packet.stickerNumber ||
+                                                    packet.packetNumber ||
+                                                    getLogicalPacketItemId(packet)
                                                 )}.pdf`
                                             );
                                         }}
@@ -2316,6 +2472,103 @@ const overviewDocNo = {
     fontSize: 13,
     fontWeight: 950,
     color: "#ddd6fe",
+};
+
+const overviewDocsGrid = {
+    marginTop: 14,
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(auto-fit,minmax(280px,1fr))",
+    gap: 12,
+    alignItems: "start",
+};
+
+const overviewDocPanel = {
+    minHeight: 0,
+    padding: 14,
+    borderRadius: 18,
+    background: "rgba(139,92,246,.08)",
+    border: "1px solid rgba(139,92,246,.22)",
+};
+
+const overviewDocTitle = {
+    fontSize: 14,
+    fontWeight: 950,
+    color: "#fff",
+    marginBottom: 10,
+};
+
+const overviewDocScroll = {
+    maxHeight: 230,
+    overflowY: "auto",
+    paddingRight: 4,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+};
+
+const overviewDocRow = {
+    display: "grid",
+    gridTemplateColumns: "minmax(0,1fr) auto",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 15,
+    background: "rgba(255,255,255,.04)",
+    border: "1px solid rgba(255,255,255,.07)",
+};
+
+const overviewDocInfo = {
+    minWidth: 0,
+};
+
+const overviewDocNo = {
+    fontFamily: "monospace",
+    fontSize: 13,
+    fontWeight: 950,
+    color: "#ddd6fe",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+};
+
+const overviewDocMeta = {
+    marginTop: 4,
+    fontSize: 11,
+    color: "rgba(255,255,255,.58)",
+    fontWeight: 750,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+};
+
+const docActions = {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+};
+
+const docBtn = (accent) => ({
+    minHeight: 30,
+    padding: "0 10px",
+    borderRadius: 999,
+    border: `1px solid ${accent}55`,
+    background: `${accent}1F`,
+    color: accent,
+    fontSize: 10,
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+});
+
+const challanActions = {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 10,
+    marginBottom: 8,
 };
 
 const overviewDocMeta = {

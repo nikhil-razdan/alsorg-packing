@@ -5,7 +5,8 @@ import java.util.UUID;
 
 public record MasterPacketRow(
         UUID packetId,
-        Integer packetNumber,
+        UUID packetItemId,
+        String packetNumber,
         String stickerNumber,
         String status,
         String factoryFloor,
