@@ -619,6 +619,7 @@ function ZohoItemsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [uiAlert, setUiAlert] = useState(null);
   const [generatedHistoryOpen, setGeneratedHistoryOpen] = useState(false);
+  const [masterWorkbenchOpen, setMasterWorkbenchOpen] = useState(false);
   const [generatedHistoryRows, setGeneratedHistoryRows] = useState([]);
   const [generatedHistoryLoading, setGeneratedHistoryLoading] = useState(false);
   const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
@@ -2859,6 +2860,12 @@ function ZohoItemsPage() {
             }}
           >
             <Button
+              onClick={() => setMasterWorkbenchOpen(true)}
+              sx={historyHeaderButtonSx}
+            >
+              🧩 Master Packet Control
+            </Button>
+            <Button
               onClick={openGeneratedHistory}
               sx={historyHeaderButtonSx}
             >
@@ -2958,16 +2965,7 @@ function ZohoItemsPage() {
           )}
         </Box>
 
-        <InventoryMasterWorkbench
-          rows={filteredRows}
-          isAdmin={isAdmin}
-          onGenerate={openGenerateStickerPanel}
-          onAdd={openAddPacketsModal}
-          onCustomAdd={openCustomAddModal}
-          onEdit={openEditModal}
-          onPreviewSticker={previewExistingStickerPdf}
-          onDownloadSticker={downloadExistingStickerPdf}
-        />
+
         <div style={wrap}>
           <Box sx={tableWrapper}>
             <div
@@ -3407,6 +3405,57 @@ function ZohoItemsPage() {
           )}
         </InventoryModal>
 
+
+        <InventoryModal
+          open={masterWorkbenchOpen}
+          onClose={() => setMasterWorkbenchOpen(false)}
+          icon="🧩"
+          title="Master Item Packet Control"
+          subtitle="Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
+          width={1560}
+          footer={
+            <>
+              <Button
+                onClick={() => fetchItems()}
+                sx={modalSecondaryButtonSx}
+              >
+                Refresh
+              </Button>
+
+              <Button
+                onClick={() => setMasterWorkbenchOpen(false)}
+                sx={premiumButton}
+              >
+                Close
+              </Button>
+            </>
+          }
+        >
+          <Box sx={masterWorkbenchModalBodySx}>
+            <InventoryMasterWorkbench
+              rows={filteredRows}
+              isAdmin={isAdmin}
+              onGenerate={(row) => {
+                setMasterWorkbenchOpen(false);
+                openGenerateStickerPanel(row);
+              }}
+              onAdd={(row) => {
+                setMasterWorkbenchOpen(false);
+                openAddPacketsModal(row);
+              }}
+              onCustomAdd={(row) => {
+                setMasterWorkbenchOpen(false);
+                openCustomAddModal(row);
+              }}
+              onEdit={(row) => {
+                setMasterWorkbenchOpen(false);
+                openEditModal(row);
+              }}
+              onPreviewSticker={previewExistingStickerPdf}
+              onDownloadSticker={downloadExistingStickerPdf}
+            />
+          </Box>
+        </InventoryModal>
         {/* ===================== DRAWER ===================== */}
         <InventorySidePanel
           open={drawerOpen}
@@ -5878,6 +5927,13 @@ const inventoryPacketSubSx = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+const masterWorkbenchModalBodySx = {
+  maxHeight: "68vh",
+  overflowY: "auto",
+  pr: 1,
+  pb: 1,
 };
 
 const inventoryPacketActionsSx = {
