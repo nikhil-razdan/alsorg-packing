@@ -40,7 +40,7 @@ public class MasterItemDashboardService {
                 from,
                 to,
                 Math.max(page, 0),
-                Math.min(Math.max(size, 10), 100)
+                Math.min(Math.max(size, 10), 700)
         );
     }
 
