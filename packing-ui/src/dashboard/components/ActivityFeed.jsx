@@ -940,26 +940,6 @@ const statusFlow = {
   flexWrap: "wrap",
 };
 
-const statusMini = {
-  maxWidth: 140,
-  padding: "4px 8px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.07)",
-  color: "rgba(255,255,255,.62)",
-  fontSize: 10,
-  fontWeight: 900,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const arrow = {
-  color: "rgba(255,255,255,.42)",
-  fontSize: 12,
-  fontWeight: 900,
-};
-
 const remarks = {
   marginTop: 7,
   maxWidth: "100%",
@@ -1017,13 +997,7 @@ const userAvatar = {
   fontWeight: 900,
 };
 
-const statusFlow = {
-  marginTop: 8,
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-};
+
 
 const statusMini = {
   maxWidth: 140,
