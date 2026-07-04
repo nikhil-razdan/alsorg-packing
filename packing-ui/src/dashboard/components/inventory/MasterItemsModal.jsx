@@ -2407,13 +2407,6 @@ const challanMeta = {
     fontWeight: 700,
 };
 
-const docActions = {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    flexWrap: "wrap",
-};
-
 const docBtn = (accent) => ({
     minHeight: 30,
     padding: "0 10px",
@@ -2443,13 +2436,6 @@ const overviewDocPanel = {
     border: "1px solid rgba(139,92,246,.22)",
 };
 
-const overviewDocTitle = {
-    fontSize: 14,
-    fontWeight: 950,
-    color: "#fff",
-    marginBottom: 10,
-};
-
 const overviewDocList = {
     display: "flex",
     flexDirection: "column",
@@ -2467,13 +2453,6 @@ const overviewDocRow = {
     border: "1px solid rgba(255,255,255,.07)",
 };
 
-const overviewDocNo = {
-    fontFamily: "monospace",
-    fontSize: 13,
-    fontWeight: 950,
-    color: "#ddd6fe",
-};
-
 const overviewDocsGrid = {
     marginTop: 14,
     display: "grid",
@@ -2483,13 +2462,6 @@ const overviewDocsGrid = {
     alignItems: "start",
 };
 
-const overviewDocPanel = {
-    minHeight: 0,
-    padding: 14,
-    borderRadius: 18,
-    background: "rgba(139,92,246,.08)",
-    border: "1px solid rgba(139,92,246,.22)",
-};
 
 const overviewDocTitle = {
     fontSize: 14,
@@ -2505,17 +2477,6 @@ const overviewDocScroll = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
-};
-
-const overviewDocRow = {
-    display: "grid",
-    gridTemplateColumns: "minmax(0,1fr) auto",
-    alignItems: "center",
-    gap: 10,
-    padding: 12,
-    borderRadius: 15,
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.07)",
 };
 
 const overviewDocInfo = {
