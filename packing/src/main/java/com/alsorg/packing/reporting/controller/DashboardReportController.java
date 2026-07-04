@@ -19,8 +19,6 @@ import com.alsorg.packing.reporting.service.DashboardReportService;
 import com.alsorg.packing.reporting.service.DashboardTraceService;
 import com.alsorg.packing.reporting.service.MasterItemDashboardService;
 import com.alsorg.packing.service.CurrentUserService;
-import com.alsorg.packing.reporting.dto.DashboardActivityRow;
-import com.alsorg.packing.reporting.service.DashboardActivityService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard")
@@ -30,19 +28,17 @@ public class DashboardReportController {
     private final CurrentUserService currentUserService;
     private final DashboardTraceService traceService;
     private final MasterItemDashboardService masterItemDashboardService;
-    private final DashboardActivityService activityService;
 
     public DashboardReportController(
             DashboardReportService service,
             CurrentUserService currentUserService,
             DashboardTraceService traceService,
-            MasterItemDashboardService masterItemDashboardService,
-            DashboardActivityService activityService) {
+            MasterItemDashboardService masterItemDashboardService
+            ) {
         this.service = service;
         this.currentUserService = currentUserService;
         this.traceService = traceService;
         this.masterItemDashboardService = masterItemDashboardService;
-        this.activityService = activityService;
     }
 
     @GetMapping
@@ -184,12 +180,5 @@ public class DashboardReportController {
         }
 
         return fallback;
-    }
-
-    @GetMapping("/activity")
-    public List<DashboardActivityRow> getDashboardActivity(
-            @RequestParam(defaultValue = "12") int limit) {
-        return activityService.getRecentActivity(
-                limit);
     }
 }
