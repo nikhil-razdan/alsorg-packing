@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.reporting.dto.DispatchReportRow;
+import java.time.LocalDate;
 
 @Repository
 public class DispatchReportRepository {

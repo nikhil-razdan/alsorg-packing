@@ -27,251 +27,247 @@ public class MasterItemReportRepository {
             LocalDateTime from,
             LocalDateTime to,
             int limit,
-            int offset
-    ) {
-        int safeLimit =
-                Math.min(
-                        Math.max(limit, 1),
-                        1000
-                );
+            int offset) {
+        int safeLimit = Math.min(
+                Math.max(limit, 1),
+                1000);
 
-        int safeOffset =
-                Math.max(offset, 0);
+        int safeOffset = Math.max(offset, 0);
 
-        String normalizedStatus =
-                normalizeStatus(status);
+        String normalizedStatus = normalizeStatus(status);
 
-        StringBuilder sql =
-                new StringBuilder("""
-                    with latest_packed_user as (
-                        select distinct on (pi.master_item_id)
-                            pi.master_item_id,
-                            coalesce(pi.created_by, sh.generated_by, 'SYSTEM') as packed_by
-                        from packet_items pi
-                        left join sticker_history sh
-                            on sh.packet_item_id = pi.id
-                        where pi.master_item_id is not null
-                          and (
-                                pi.packed_at is not null
-                                or pi.sticker_number is not null
-                                or sh.id is not null
-                          )
-                        order by
-                            pi.master_item_id,
-                            coalesce(pi.packed_at, sh.generated_at) desc nulls last
-                    ),
+        StringBuilder sql = new StringBuilder(
+                """
+                                                    with latest_packed_user as (
+                                                        select distinct on (pi.master_item_id)
+                                                            pi.master_item_id,
+                                                            coalesce(pi.created_by, sh.generated_by, 'SYSTEM') as packed_by
+                                                        from packet_items pi
+                                                        left join sticker_history sh
+                                                            on sh.packet_item_id = pi.id
+                                                        where pi.master_item_id is not null
+                                                          and (
+                                                                pi.packed_at is not null
+                                                                or pi.sticker_number is not null
+                                                                or sh.id is not null
+                                                          )
+                                                        order by
+                                                            pi.master_item_id,
+                                                            coalesce(pi.packed_at, sh.generated_at) desc nulls last
+                                                    ),
 
-                    latest_dispatch_user as (
-                        select distinct on (pi.master_item_id)
-                            pi.master_item_id,
-                            coalesce(d.dispatched_by, d.created_by, 'SYSTEM') as dispatched_by
-                        from packet_items pi
-                        join dispatched_items d
-                            on d.packet_item_id = pi.id
-                        where pi.master_item_id is not null
-                          and d.dispatched_at is not null
-                        order by
-                            pi.master_item_id,
-                            d.dispatched_at desc nulls last
-                    ),
+                                                    latest_dispatch_user as (
+                                                        select distinct on (pi.master_item_id)
+                                                            pi.master_item_id,
+                                                            coalesce(d.dispatched_by, d.created_by, 'SYSTEM') as dispatched_by
+                                                        from packet_items pi
+                                                        join dispatched_items d
+                                                            on d.packet_item_id = pi.id
+                                                        where pi.master_item_id is not null
+                                                          and d.dispatched_at is not null
+                                                        order by
+                                                            pi.master_item_id,
+                                                            d.dispatched_at desc nulls last
+                                                    ),
 
-                    base as (
-                        select
-                            mi.id as master_item_id,
+                                                    base as (
+                                                        select
+                                    mi.id as master_item_id,
+                                    mi.created_at,
 
-                            mi.item_name,
-                            mi.pd_no,
-                            mi.drawing_name,
-                            mi.client_name,
-                            mi.address as client_address,
+                                    mi.item_name,
+                                    mi.pd_no,
+                                    mi.drawing_name,
+                                    mi.client_name,
+                                    mi.address as client_address,
 
-                            mi.floor,
-                            mi.plant_code,
-                            mi.packed_area_code,
-                            mi.fg_area_code,
-                            mi.allowed_warehouse_codes,
+                                                            mi.floor,
+                                                            mi.plant_code,
+                                                            mi.packed_area_code,
+                                                            mi.fg_area_code,
+                                                            mi.allowed_warehouse_codes,
 
-                            mi.total_packets as expected_packets,
+                                                            mi.total_packets as expected_packets,
 
-                            count(distinct pi.packet_id) as actual_packets,
-                            count(distinct pi.id) as packet_items,
+                                                            count(distinct pi.packet_id) as actual_packets,
+                                                            count(distinct pi.id) as packet_items,
 
-                            count(distinct case
-                                when pi.sticker_number is not null
-                                  or pi.packed_at is not null
-                                  or sh.id is not null
-                                then pi.id
-                            end) as packed_packet_items,
+                                                            count(distinct case
+                                                                when pi.sticker_number is not null
+                                                                  or pi.packed_at is not null
+                                                                  or sh.id is not null
+                                                                then pi.id
+                                                            end) as packed_packet_items,
 
-                            count(distinct case
-                                when pi.id is not null
-                                  and pi.sticker_number is null
-                                  and pi.packed_at is null
-                                  and sh.id is null
-                                then pi.id
-                            end) as pending_packet_items,
+                                                            count(distinct case
+                                                                when pi.id is not null
+                                                                  and pi.sticker_number is null
+                                                                  and pi.packed_at is null
+                                                                  and sh.id is null
+                                                                then pi.id
+                                                            end) as pending_packet_items,
 
-                            count(distinct case
-                                when upper(coalesce(d.status, '')) = 'DISPATCHED'
-                                then pi.id
-                            end) as dispatched_packet_items,
+                                                            count(distinct case
+                                                                when upper(coalesce(d.status, '')) = 'DISPATCHED'
+                                                                then pi.id
+                                                            end) as dispatched_packet_items,
 
-                            count(distinct sh.id) as sticker_count,
+                                                            count(distinct sh.id) as sticker_count,
 
-                            count(distinct case
-                                when d.chalaan_number is not null
-                                  and trim(d.chalaan_number) <> ''
-                                then d.chalaan_number
-                            end) as challan_count,
+                                                            count(distinct case
+                                                                when d.chalaan_number is not null
+                                                                  and trim(d.chalaan_number) <> ''
+                                                                then d.chalaan_number
+                                                            end) as challan_count,
 
-                            min(coalesce(pi.packed_at, sh.generated_at)) as first_packed_at,
-                            max(coalesce(pi.packed_at, sh.generated_at)) as last_packed_at,
+                                                            min(coalesce(pi.packed_at, sh.generated_at)) as first_packed_at,
+                                                            max(coalesce(pi.packed_at, sh.generated_at)) as last_packed_at,
 
-                            min(d.dispatched_at) as first_dispatched_at,
-                            max(d.dispatched_at) as last_dispatched_at,
+                                                            min(d.dispatched_at) as first_dispatched_at,
+                                                            max(d.dispatched_at) as last_dispatched_at,
 
-                            lpu.packed_by as last_packed_by,
-                            ldu.dispatched_by as last_dispatched_by
+                                                            lpu.packed_by as last_packed_by,
+                                                            ldu.dispatched_by as last_dispatched_by
 
-                        from master_item mi
+                                                        from master_item mi
 
-                        left join packet_items pi
-                            on pi.master_item_id = mi.id
+                                                        left join packet_items pi
+                                                            on pi.master_item_id = mi.id
 
-                        left join sticker_history sh
-                            on sh.packet_item_id = pi.id
+                                                        left join sticker_history sh
+                                                            on sh.packet_item_id = pi.id
 
-                        left join dispatched_items d
-                            on d.packet_item_id = pi.id
+                                                        left join dispatched_items d
+                                                            on d.packet_item_id = pi.id
 
-                        left join latest_packed_user lpu
-                            on lpu.master_item_id = mi.id
+                                                        left join latest_packed_user lpu
+                                                            on lpu.master_item_id = mi.id
 
-                        left join latest_dispatch_user ldu
-                            on ldu.master_item_id = mi.id
+                                                        left join latest_dispatch_user ldu
+                                                            on ldu.master_item_id = mi.id
 
-                        group by
-                            mi.id,
-                            mi.item_name,
-                            mi.pd_no,
-                            mi.drawing_name,
-                            mi.client_name,
-                            mi.address,
-                            mi.floor,
-                            mi.plant_code,
-                            mi.packed_area_code,
-                            mi.fg_area_code,
-                            mi.allowed_warehouse_codes,
-                            mi.total_packets,
-                            lpu.packed_by,
-                            ldu.dispatched_by
-                    ),
+                                                        group by
+                        mi.id,
+                        mi.created_at,
+                        mi.item_name,
+                        mi.pd_no,
+                                                            mi.drawing_name,
+                                                            mi.client_name,
+                                                            mi.address,
+                                                            mi.floor,
+                                                            mi.plant_code,
+                                                            mi.packed_area_code,
+                                                            mi.fg_area_code,
+                                                            mi.allowed_warehouse_codes,
+                                                            mi.total_packets,
+                                                            lpu.packed_by,
+                                                            ldu.dispatched_by
+                                                    ),
 
-                    final_rows as (
-                        select
-                            b.*,
+                                                    final_rows as (
+                                                        select
+                                                            b.*,
 
-                            case
-                                when b.packet_items = 0 then 0
-                                else round(
-                                    (
-                                        b.packed_packet_items::numeric
-                                        / nullif(b.packet_items, 0)
-                                    ) * 100,
-                                    2
-                                )
-                            end as packing_progress,
+                                                            case
+                                                                when b.packet_items = 0 then 0
+                                                                else round(
+                                                                    (
+                                                                        b.packed_packet_items::numeric
+                                                                        / nullif(b.packet_items, 0)
+                                                                    ) * 100,
+                                                                    2
+                                                                )
+                                                            end as packing_progress,
 
-                            case
-                                when b.packet_items = 0
-                                    then 'NO_PACKETS'
-                                when b.packet_items = b.packed_packet_items
-                                    then 'FULLY_PACKED'
-                                when b.packed_packet_items > 0
-                                    then 'PARTIALLY_PACKED'
-                                else 'UNPACKED'
-                            end as packing_status,
+                                                            case
+                                                                when b.packet_items = 0
+                                                                    then 'NO_PACKETS'
+                                                                when b.packet_items = b.packed_packet_items
+                                                                    then 'FULLY_PACKED'
+                                                                when b.packed_packet_items > 0
+                                                                    then 'PARTIALLY_PACKED'
+                                                                else 'UNPACKED'
+                                                            end as packing_status,
 
-                            case
-                                when b.dispatched_packet_items > 0
-                                    then 'DISPATCHED'
-                                when b.packed_packet_items > 0
-                                    then 'PACKED'
-                                when b.packet_items > 0
-                                    then 'CREATED'
-                                else 'NO_PACKETS'
-                            end as latest_status,
+                                                            case
+                                                                when b.dispatched_packet_items > 0
+                                                                    then 'DISPATCHED'
+                                                                when b.packed_packet_items > 0
+                                                                    then 'PACKED'
+                                                                when b.packet_items > 0
+                                                                    then 'CREATED'
+                                                                else 'NO_PACKETS'
+                                                            end as latest_status,
 
-                            nullif(trim(concat_ws('; ',
-                                case
-                                    when b.packet_items = 0
-                                        then 'Master item has no packet items'
-                                end,
-                                case
-                                    when b.expected_packets is not null
-                                         and b.expected_packets <> b.actual_packets
-                                        then 'Expected packet count does not match actual packets'
-                                end,
-                                case
-                                    when b.packet_items > 0
-                                         and b.actual_packets = 0
-                                        then 'Packet items exist but packet link missing'
-                                end
-                            )), '') as exception_reason
+                                                            nullif(trim(concat_ws('; ',
+                                                                case
+                                                                    when b.packet_items = 0
+                                                                        then 'Master item has no packet items'
+                                                                end,
+                                                                case
+                                                                    when b.expected_packets is not null
+                                                                         and b.expected_packets <> b.actual_packets
+                                                                        then 'Expected packet count does not match actual packets'
+                                                                end,
+                                                                case
+                                                                    when b.packet_items > 0
+                                                                         and b.actual_packets = 0
+                                                                        then 'Packet items exist but packet link missing'
+                                                                end
+                                                            )), '') as exception_reason
 
-                        from base b
-                    )
+                                                        from base b
+                                                    )
 
-                    select
-                        f.master_item_id,
+                                                    select
+                                                        f.master_item_id,
 
-                        f.item_name,
-                        f.pd_no,
-                        f.drawing_name,
-                        f.client_name,
-                        f.client_address,
+                                                        f.item_name,
+                                                        f.pd_no,
+                                                        f.drawing_name,
+                                                        f.client_name,
+                                                        f.client_address,
 
-                        f.floor,
-                        f.plant_code,
-                        f.packed_area_code,
-                        f.fg_area_code,
-                        f.allowed_warehouse_codes,
+                                                        f.floor,
+                                                        f.plant_code,
+                                                        f.packed_area_code,
+                                                        f.fg_area_code,
+                                                        f.allowed_warehouse_codes,
 
-                        f.expected_packets,
-                        f.actual_packets,
-                        f.packet_items,
+                                                        f.expected_packets,
+                                                        f.actual_packets,
+                                                        f.packet_items,
 
-                        f.packed_packet_items,
-                        f.pending_packet_items,
-                        f.dispatched_packet_items,
+                                                        f.packed_packet_items,
+                                                        f.pending_packet_items,
+                                                        f.dispatched_packet_items,
 
-                        f.sticker_count,
-                        f.challan_count,
+                                                        f.sticker_count,
+                                                        f.challan_count,
 
-                        f.packing_progress,
+                                                        f.packing_progress,
 
-                        f.packing_status,
-                        f.latest_status,
+                                                        f.packing_status,
+                                                        f.latest_status,
 
-                        f.created_at,
-                        f.first_packed_at,
-                        f.last_packed_at,
-                        f.first_dispatched_at,
-                        f.last_dispatched_at,
+                                                        f.created_at,
+                                                        f.first_packed_at,
+                                                        f.last_packed_at,
+                                                        f.first_dispatched_at,
+                                                        f.last_dispatched_at,
 
-                        f.last_packed_by,
-                        f.last_dispatched_by,
+                                                        f.last_packed_by,
+                                                        f.last_dispatched_by,
 
-                        f.exception_reason
+                                                        f.exception_reason
 
-                    from final_rows f
-                    where 1 = 1
-                """);
+                                                    from final_rows f
+                                                    where 1 = 1
+                                                """);
 
         appendStatusFilter(
                 sql,
-                normalizedStatus
-        );
+                normalizedStatus);
 
         if (from != null) {
             sql.append(" and f.created_at >= :from ");
@@ -283,49 +279,48 @@ public class MasterItemReportRepository {
 
         if (plantCode != null && !plantCode.isBlank()) {
             sql.append("""
-                and upper(coalesce(f.plant_code, '')) = :plantCode
-            """);
+                        and upper(coalesce(f.plant_code, '')) = :plantCode
+                    """);
         }
 
         if (client != null && !client.isBlank()) {
             sql.append("""
-                and lower(coalesce(f.client_name, '')) like :client
-            """);
+                        and lower(coalesce(f.client_name, '')) like :client
+                    """);
         }
 
         if (search != null && !search.isBlank()) {
             sql.append("""
-                and lower(concat_ws(' ',
-                    f.master_item_id::text,
-                    f.item_name,
-                    f.pd_no,
-                    f.drawing_name,
-                    f.client_name,
-                    f.client_address,
-                    f.floor,
-                    f.plant_code,
-                    f.packed_area_code,
-                    f.fg_area_code,
-                    f.allowed_warehouse_codes,
-                    f.packing_status,
-                    f.latest_status,
-                    f.last_packed_by,
-                    f.last_dispatched_by,
-                    f.exception_reason
-                )) like :search
-            """);
+                        and lower(concat_ws(' ',
+                            f.master_item_id::text,
+                            f.item_name,
+                            f.pd_no,
+                            f.drawing_name,
+                            f.client_name,
+                            f.client_address,
+                            f.floor,
+                            f.plant_code,
+                            f.packed_area_code,
+                            f.fg_area_code,
+                            f.allowed_warehouse_codes,
+                            f.packing_status,
+                            f.latest_status,
+                            f.last_packed_by,
+                            f.last_dispatched_by,
+                            f.exception_reason
+                        )) like :search
+                    """);
         }
 
         sql.append("""
-            order by
-                f.created_at desc nulls last,
-                f.item_name asc nulls last
-            limit :limit
-            offset :offset
-        """);
+                    order by
+                        f.created_at desc nulls last,
+                        f.item_name asc nulls last
+                    limit :limit
+                    offset :offset
+                """);
 
-        Query query =
-                em.createNativeQuery(sql.toString());
+        Query query = em.createNativeQuery(sql.toString());
 
         if (from != null) {
             query.setParameter("from", from);
@@ -338,30 +333,26 @@ public class MasterItemReportRepository {
         if (plantCode != null && !plantCode.isBlank()) {
             query.setParameter(
                     "plantCode",
-                    plantCode.trim().toUpperCase()
-            );
+                    plantCode.trim().toUpperCase());
         }
 
         if (client != null && !client.isBlank()) {
             query.setParameter(
                     "client",
-                    "%" + client.trim().toLowerCase() + "%"
-            );
+                    "%" + client.trim().toLowerCase() + "%");
         }
 
         if (search != null && !search.isBlank()) {
             query.setParameter(
                     "search",
-                    "%" + search.trim().toLowerCase() + "%"
-            );
+                    "%" + search.trim().toLowerCase() + "%");
         }
 
         query.setParameter("limit", safeLimit);
         query.setParameter("offset", safeOffset);
 
         @SuppressWarnings("unchecked")
-        List<Object[]> rows =
-                query.getResultList();
+        List<Object[]> rows = query.getResultList();
 
         return rows.stream()
                 .map(this::mapRow)
@@ -370,26 +361,25 @@ public class MasterItemReportRepository {
 
     private void appendStatusFilter(
             StringBuilder sql,
-            String status
-    ) {
+            String status) {
         switch (status) {
             case "FULLY_PACKED" ->
-                    sql.append(" and f.packing_status = 'FULLY_PACKED' ");
+                sql.append(" and f.packing_status = 'FULLY_PACKED' ");
 
             case "PARTIALLY_PACKED" ->
-                    sql.append(" and f.packing_status = 'PARTIALLY_PACKED' ");
+                sql.append(" and f.packing_status = 'PARTIALLY_PACKED' ");
 
             case "UNPACKED" ->
-                    sql.append(" and f.packing_status = 'UNPACKED' ");
+                sql.append(" and f.packing_status = 'UNPACKED' ");
 
             case "NO_PACKETS" ->
-                    sql.append(" and f.packing_status = 'NO_PACKETS' ");
+                sql.append(" and f.packing_status = 'NO_PACKETS' ");
 
             case "DISPATCHED" ->
-                    sql.append(" and f.dispatched_packet_items > 0 ");
+                sql.append(" and f.dispatched_packet_items > 0 ");
 
             case "EXCEPTIONS" ->
-                    sql.append(" and f.exception_reason is not null ");
+                sql.append(" and f.exception_reason is not null ");
 
             default -> {
             }
@@ -397,18 +387,15 @@ public class MasterItemReportRepository {
     }
 
     private String normalizeStatus(
-            String value
-    ) {
+            String value) {
         if (value == null || value.isBlank()) {
             return "ALL";
         }
 
-        return switch (
-                value.trim()
-                        .replace("-", "_")
-                        .replace(" ", "_")
-                        .toUpperCase()
-        ) {
+        return switch (value.trim()
+                .replace("-", "_")
+                .replace(" ", "_")
+                .toUpperCase()) {
             case "FULLY_PACKED" -> "FULLY_PACKED";
             case "PARTIALLY_PACKED", "PARTIAL" -> "PARTIALLY_PACKED";
             case "UNPACKED" -> "UNPACKED";
@@ -420,8 +407,7 @@ public class MasterItemReportRepository {
     }
 
     private MasterItemReportRow mapRow(
-            Object[] row
-    ) {
+            Object[] row) {
         return new MasterItemReportRow(
                 asUuid(row[0]),
 
@@ -462,8 +448,7 @@ public class MasterItemReportRepository {
                 asString(row[27]),
                 asString(row[28]),
 
-                asString(row[29])
-        );
+                asString(row[29]));
     }
 
     private UUID asUuid(Object value) {
@@ -487,8 +472,7 @@ public class MasterItemReportRepository {
             return null;
         }
 
-        String text =
-                String.valueOf(value).trim();
+        String text = String.valueOf(value).trim();
 
         return text.isBlank()
                 ? null

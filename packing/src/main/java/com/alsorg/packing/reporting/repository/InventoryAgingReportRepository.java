@@ -3,6 +3,7 @@ package com.alsorg.packing.reporting.repository;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.time.ZoneId;
 
 import org.springframework.stereotype.Repository;
 
@@ -14,65 +15,57 @@ import com.alsorg.packing.repository.DispatchedItemRepository;
 @Repository
 public class InventoryAgingReportRepository {
 
-    private final DispatchedItemRepository repo;
+        private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
+        private final DispatchedItemRepository repo;
 
-    public InventoryAgingReportRepository(
-            DispatchedItemRepository repo
-    ) {
-        this.repo = repo;
-    }
+        public InventoryAgingReportRepository(
+                        DispatchedItemRepository repo) {
+                this.repo = repo;
+        }
 
-    public List<InventoryAgingRow> fetchInventoryAging() {
+        public List<InventoryAgingRow> fetchInventoryAging() {
 
-        List<DispatchedItem> items =
-                repo.findByStatusIn(
-                        List.of(
-                                ItemDispatchStatus.IN_WAREHOUSE,
-                                ItemDispatchStatus.READY_TO_STORE,
-                                ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                                ItemDispatchStatus.READY_TO_DISPATCH,
-                                ItemDispatchStatus.READY
-                        )
-                );
+                List<DispatchedItem> items = repo.findByStatusIn(
+                                List.of(
+                                                ItemDispatchStatus.IN_WAREHOUSE,
+                                                ItemDispatchStatus.READY_TO_STORE,
+                                                ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                                                ItemDispatchStatus.READY_TO_DISPATCH,
+                                                ItemDispatchStatus.READY));
 
-        LocalDateTime now =
-                LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(ZONE);
 
-        return items.stream()
-                .map(item -> {
+                return items.stream()
+                                .map(item -> {
 
-                    LocalDateTime start =
-                            item.getStoredAt() != null
-                                    ? item.getStoredAt()
-                                    : item.getPackedAt();
+                                        LocalDateTime start = item.getStoredAt() != null
+                                                        ? item.getStoredAt()
+                                                        : item.getPackedAt();
 
-                    long days = 0;
+                                        long days = 0;
 
-                    if (start != null) {
-                        days = ChronoUnit.DAYS.between(
-                                start,
-                                now
-                        );
-                    }
+                                        if (start != null) {
+                                                days = ChronoUnit.DAYS.between(
+                                                                start,
+                                                                now);
+                                        }
 
-                    String status =
-                            item.getStatus() != null
-                                    ? item.getStatus().name()
-                                    : "UNKNOWN";
+                                        String status = item.getStatus() != null
+                                                        ? item.getStatus().name()
+                                                        : "UNKNOWN";
 
-                    return new InventoryAgingRow(
-                            item.getZohoItemId(),
-                            item.getName(),
-                            item.getClientName(),
+                                        return new InventoryAgingRow(
+                                                        item.getZohoItemId(),
+                                                        item.getName(),
+                                                        item.getClientName(),
 
-                            item.getZohoItemId(),
-                            item.getName(),
+                                                        item.getZohoItemId(),
+                                                        item.getName(),
 
-                            status,
-                            start,
-                            days
-                    );
-                })
-                .toList();
-    }
+                                                        status,
+                                                        start,
+                                                        days);
+                                })
+                                .toList();
+        }
 }
