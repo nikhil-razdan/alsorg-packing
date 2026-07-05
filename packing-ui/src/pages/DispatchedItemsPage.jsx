@@ -14,8 +14,8 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
-import DescriptionOutlinedIcon
-	from "@mui/icons-material/DescriptionOutlined";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import MasterItemsModal from "../dashboard/components/inventory/MasterItemsModal";
 
 import {
 	fetchDrivers,
@@ -1562,6 +1562,215 @@ const popupBox = {
 	...darkModalBox,
 };
 
+const dispatchControlDockSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+	flexWrap: "wrap",
+	p: 1.6,
+	mb: 2,
+	borderRadius: "22px",
+	background:
+		"radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 36%), rgba(15,23,42,.72)",
+	border: "1px solid rgba(255,255,255,.075)",
+	boxShadow: "0 18px 42px rgba(2,6,23,.28)",
+	backdropFilter: "blur(18px)",
+};
+
+const dispatchControlLeftSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.4,
+	minWidth: 0,
+};
+
+const dispatchControlIconSx = {
+	width: 42,
+	height: 42,
+	borderRadius: "16px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	background: "rgba(59,130,246,.14)",
+	border: "1px solid rgba(96,165,250,.24)",
+	fontSize: 20,
+};
+
+const dispatchControlTitleSx = {
+	color: "#fff",
+	fontSize: 16,
+	fontWeight: 950,
+	letterSpacing: "-.02em",
+};
+
+const dispatchControlSubSx = {
+	mt: 0.25,
+	color: "rgba(255,255,255,.54)",
+	fontSize: 11,
+	fontWeight: 700,
+};
+
+const dispatchControlActionsSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const dispatchDockBtnSx = (accent) => ({
+	height: 36,
+	px: 1.7,
+	borderRadius: "13px",
+	textTransform: "none",
+	fontSize: 12,
+	fontWeight: 950,
+	color: "#fff",
+	background:
+		`linear-gradient(180deg, ${accent}24, rgba(255,255,255,.045))`,
+	border: `1px solid ${accent}44`,
+	boxShadow: `0 10px 24px ${accent}18`,
+
+	"&:hover": {
+		background:
+			`linear-gradient(180deg, ${accent}34, rgba(255,255,255,.070))`,
+	},
+});
+
+const historyStatsGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+	gap: 1.2,
+	mb: 2,
+};
+
+const historyMiniStatSx = (accent) => ({
+	p: 1.4,
+	borderRadius: "16px",
+	background:
+		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(255,255,255,.035)`,
+	border: `1px solid ${accent}33`,
+});
+
+const historyMiniLabelSx = {
+	color: "rgba(255,255,255,.54)",
+	fontSize: 10,
+	fontWeight: 950,
+	textTransform: "uppercase",
+	letterSpacing: ".08em",
+};
+
+const historyMiniValueSx = {
+	mt: 0.6,
+	color: "#fff",
+	fontSize: 24,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const premiumHistoryListSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 1.1,
+	maxHeight: "56vh",
+	overflowY: "auto",
+	pr: 0.5,
+};
+
+const premiumHistoryRowSx = (accent) => ({
+	display: "grid",
+	gridTemplateColumns: "44px minmax(0,1fr) auto auto",
+	alignItems: "center",
+	gap: 1.3,
+	p: 1.4,
+	borderRadius: "16px",
+	background:
+		`linear-gradient(90deg, ${accent}10, rgba(255,255,255,.030))`,
+	border: `1px solid ${accent}26`,
+});
+
+const historyDocIconSx = (accent) => ({
+	width: 38,
+	height: 38,
+	borderRadius: "14px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	background: `${accent}18`,
+	border: `1px solid ${accent}33`,
+	fontSize: 18,
+});
+
+const historyDocTitleSx = {
+	color: "#fff",
+	fontSize: 13,
+	fontWeight: 950,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const historyDocMetaSx = {
+	mt: 0.4,
+	color: "rgba(255,255,255,.58)",
+	fontSize: 11,
+	fontWeight: 750,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const historyDocDateSx = {
+	mt: 0.35,
+	color: "rgba(255,255,255,.42)",
+	fontSize: 10.5,
+	fontWeight: 750,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const historySectionTitleSx = {
+	mt: 1.4,
+	mb: 1,
+	color: "#93c5fd",
+	fontSize: 11,
+	fontWeight: 950,
+	letterSpacing: ".13em",
+	textTransform: "uppercase",
+};
+
+const challanHistoryRowSx = (accent) => ({
+	display: "grid",
+	gridTemplateColumns: "minmax(0,1fr) auto",
+	alignItems: "center",
+	gap: 1.5,
+	p: 1.5,
+	mb: 1.1,
+	borderRadius: "17px",
+	background:
+		`radial-gradient(circle at top right, ${accent}16, transparent 42%), rgba(255,255,255,.035)`,
+	border: `1px solid ${accent}30`,
+});
+
+const challanHistoryNoSx = {
+	color: "#fff",
+	fontFamily: "monospace",
+	fontSize: 14,
+	fontWeight: 950,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const historyActionBtnsSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
 const normalizeSmartSearch = (value) => {
 	return String(value || "")
 		.toLowerCase()
@@ -1755,7 +1964,10 @@ function DispatchedItemsPage() {
 	const [moveFgModal, setMoveFgModal] = useState(null);
 	const [selectedFgZone, setSelectedFgZone] = useState("");
 	const [moveFgLoading, setMoveFgLoading] = useState(false);
-
+	const [generatedHistoryOpen, setGeneratedHistoryOpen] = useState(false);
+	const [challanHistoryOpen, setChallanHistoryOpen] = useState(false);
+	const [masterItemsModalOpen, setMasterItemsModalOpen] = useState(false);
+	const [historySearch, setHistorySearch] = useState("");
 
 	const [bulkMoveFgOpen, setBulkMoveFgOpen] = useState(false);
 	const [bulkSelectedFgZone, setBulkSelectedFgZone] = useState("");
@@ -4281,6 +4493,312 @@ function DispatchedItemsPage() {
 		}
 	};
 
+	const getDispatchChallanNo = (row) =>
+		row?.challanNumber ||
+		row?.chalaanNumber ||
+		row?.dispatchChallanNumber ||
+		row?.chalaanNo ||
+		"";
+
+	const getRowGeneratedTime = (row) =>
+		row?.dispatchedAt ||
+		row?.packedAt ||
+		row?.createdAt ||
+		row?.updatedAt ||
+		"";
+
+	const previewProtectedPdfPath = async (
+		path,
+		id = "DOCUMENT"
+	) => {
+		try {
+			const res =
+				await authFetch(
+					`${API_BASE_URL}${path}`,
+					{
+						method: "GET",
+						headers: {
+							Accept: "application/pdf",
+						},
+					}
+				);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "PDF preview failed");
+			}
+
+			const blob =
+				await res.blob();
+
+			if (!blob || blob.size === 0) {
+				throw new Error("Empty PDF received");
+			}
+
+			const url =
+				URL.createObjectURL(blob);
+
+			setChalaanPreview({
+				url,
+				id,
+			});
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "PDF preview failed");
+		}
+	};
+
+	const previewNormalChallanByNumber = async (challanNumber) => {
+		if (!challanNumber) {
+			alert("Challan number missing");
+			return;
+		}
+
+		await previewProtectedPdfPath(
+			`/api/reports/dashboard/challan/preview?challanNumber=${encodeURIComponent(
+				challanNumber
+			)}`,
+			challanNumber
+		);
+	};
+
+	const downloadNormalChallanByNumber = async (challanNumber) => {
+		if (!challanNumber) {
+			alert("Challan number missing");
+			return;
+		}
+
+		try {
+			const res =
+				await authFetch(
+					`${API_BASE_URL}/api/reports/dashboard/challan/download?challanNumber=${encodeURIComponent(
+						challanNumber
+					)}`,
+					{
+						method: "GET",
+						headers: {
+							Accept: "application/pdf",
+						},
+					}
+				);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Challan download failed");
+			}
+
+			const blob =
+				await res.blob();
+
+			const url =
+				URL.createObjectURL(blob);
+
+			const a =
+				document.createElement("a");
+
+			a.href = url;
+			a.download = `CHALLAN_${challanNumber}.pdf`;
+
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+
+			setTimeout(() => {
+				URL.revokeObjectURL(url);
+			}, 10000);
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Challan download failed");
+		}
+	};
+
+	const openChallanHistoryModal = async () => {
+		setChallanHistoryOpen(true);
+
+		if (
+			(isDispatch || isAdmin) &&
+			customChallans.length === 0
+		) {
+			await loadCustomChallans();
+		}
+	};
+
+	const generatedHistoryRows = useMemo(() => {
+		const docs = [];
+
+		(rows || []).forEach((row) => {
+			if (row?.stickerNumber) {
+				docs.push({
+					type: "Sticker",
+					icon: "🏷️",
+					number: row.stickerNumber,
+					title: row.name || row.itemName || "Sticker Generated",
+					client: row.clientName || "—",
+					status: row.status || "—",
+					time: row.packedAt || row.createdAt || "",
+					accent: "#a78bfa",
+				});
+			}
+
+			if (row?.gatePassNumber) {
+				docs.push({
+					type: "Gate Pass",
+					icon: "🏭",
+					number: row.gatePassNumber,
+					title: row.name || row.itemName || "Gate Pass Generated",
+					client: row.clientName || "—",
+					status: row.status || "—",
+					time: row.updatedAt || row.createdAt || "",
+					accent: "#10b981",
+				});
+			}
+
+			const challanNo =
+				getDispatchChallanNo(row);
+
+			if (challanNo) {
+				docs.push({
+					type: "Dispatch Challan",
+					icon: "🚚",
+					number: challanNo,
+					title: row.name || row.itemName || "Dispatch Challan Generated",
+					client: row.clientName || "—",
+					status: row.status || "—",
+					time: row.dispatchedAt || row.createdAt || "",
+					accent: "#60a5fa",
+					challanNumber: challanNo,
+				});
+			}
+		});
+
+		return docs
+			.filter((doc) => {
+				const q =
+					normalizeSmartSearch(historySearch);
+
+				if (!q) return true;
+
+				return normalizeSmartSearch(
+					[
+						doc.type,
+						doc.number,
+						doc.title,
+						doc.client,
+						doc.status,
+					].join(" ")
+				).includes(q);
+			})
+			.sort((a, b) => {
+				return (
+					new Date(b.time || 0).getTime() -
+					new Date(a.time || 0).getTime()
+				);
+			})
+			.slice(0, 250);
+	}, [rows, historySearch]);
+
+	const normalChallanHistory = useMemo(() => {
+		const map = new Map();
+
+		(rows || []).forEach((row) => {
+			const challanNumber =
+				getDispatchChallanNo(row);
+
+			if (!challanNumber) return;
+
+			const existing =
+				map.get(challanNumber) || {
+					type: "NORMAL",
+					challanNumber,
+					itemCount: 0,
+					clients: new Set(),
+					pdNos: new Set(),
+					driverName: row.driverName || "",
+					vehicleNumber: row.vehicleNumber || "",
+					firstTime: getRowGeneratedTime(row),
+					lastTime: getRowGeneratedTime(row),
+					status: row.status || "",
+				};
+
+			existing.itemCount += 1;
+
+			if (row.clientName) {
+				existing.clients.add(row.clientName);
+			}
+
+			if (row.pdNo) {
+				existing.pdNos.add(row.pdNo);
+			}
+
+			const currentTime =
+				getRowGeneratedTime(row);
+
+			if (
+				currentTime &&
+				(
+					!existing.lastTime ||
+					new Date(currentTime).getTime() >
+					new Date(existing.lastTime).getTime()
+				)
+			) {
+				existing.lastTime = currentTime;
+			}
+
+			map.set(challanNumber, existing);
+		});
+
+		return Array.from(map.values())
+			.map((row) => ({
+				...row,
+				clientText: Array.from(row.clients).slice(0, 3).join(", ") || "—",
+				pdText: Array.from(row.pdNos).slice(0, 4).join(", ") || "—",
+			}))
+			.filter((row) => {
+				const q =
+					normalizeSmartSearch(historySearch);
+
+				if (!q) return true;
+
+				return normalizeSmartSearch(
+					[
+						row.challanNumber,
+						row.clientText,
+						row.pdText,
+						row.driverName,
+						row.vehicleNumber,
+					].join(" ")
+				).includes(q);
+			})
+			.sort((a, b) => {
+				return (
+					new Date(b.lastTime || 0).getTime() -
+					new Date(a.lastTime || 0).getTime()
+				);
+			});
+	}, [rows, historySearch]);
+
+	const customChallanHistoryRows = useMemo(() => {
+		return (customChallans || [])
+			.filter((challan) => {
+				const q =
+					normalizeSmartSearch(historySearch);
+
+				if (!q) return true;
+
+				return normalizeSmartSearch(
+					[
+						challan.challanNumber,
+						challan.challanType,
+						challan.challanTypeLabel,
+						challan.clientName,
+						challan.projectName,
+						challan.fromLocation,
+						challan.toLocation,
+					].join(" ")
+				).includes(q);
+			});
+	}, [customChallans, historySearch]);
+
 	return (
 		<div style={page}>
 			<div style={content}>
@@ -4361,6 +4879,53 @@ function DispatchedItemsPage() {
 					</Box>
 
 				</div>
+
+				<Box sx={dispatchControlDockSx}>
+					<Box sx={dispatchControlLeftSx}>
+						<Box sx={dispatchControlIconSx}>
+							🧭
+						</Box>
+
+						<Box sx={{ minWidth: 0 }}>
+							<Box sx={dispatchControlTitleSx}>
+								Dispatch Control Center
+							</Box>
+
+							<Box sx={dispatchControlSubSx}>
+								Generated PDFs, challan history and master item packet control
+							</Box>
+						</Box>
+					</Box>
+
+					<Box sx={dispatchControlActionsSx}>
+						<Button
+							onClick={() => {
+								setHistorySearch("");
+								setGeneratedHistoryOpen(true);
+							}}
+							sx={dispatchDockBtnSx("#a78bfa")}
+						>
+							🏷️ Generated History
+						</Button>
+
+						<Button
+							onClick={() => {
+								setHistorySearch("");
+								openChallanHistoryModal();
+							}}
+							sx={dispatchDockBtnSx("#60a5fa")}
+						>
+							📄 Challan History
+						</Button>
+
+						<Button
+							onClick={() => setMasterItemsModalOpen(true)}
+							sx={dispatchDockBtnSx("#22c55e")}
+						>
+							🧩 Master Items
+						</Button>
+					</Box>
+				</Box>
 
 				<Box sx={searchPanel}>
 					<SearchIcon
@@ -7752,8 +8317,472 @@ function DispatchedItemsPage() {
 						</div>
 					</div>
 				)}
+
+				{generatedHistoryOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 5900 }}
+						onClick={() => setGeneratedHistoryOpen(false)}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 980,
+								maxHeight: "88vh",
+							}}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#a78bfa")}>
+										🏷️
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Generated History
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Sticker, gate pass and dispatch document generation overview
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									sx={modalCloseButtonSx}
+									onClick={() => setGeneratedHistoryOpen(false)}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<TextField
+									fullWidth
+									value={historySearch}
+									onChange={(e) => setHistorySearch(e.target.value)}
+									placeholder="Search generated history..."
+									sx={{
+										...formFieldSx,
+										mb: 2,
+									}}
+								/>
+
+								<Box sx={historyStatsGridSx}>
+									<HistoryMiniStat
+										label="Generated Docs"
+										value={generatedHistoryRows.length}
+										accent="#a78bfa"
+									/>
+
+									<HistoryMiniStat
+										label="Stickers"
+										value={
+											generatedHistoryRows.filter(
+												(x) => x.type === "Sticker"
+											).length
+										}
+										accent="#f472b6"
+									/>
+
+									<HistoryMiniStat
+										label="Gate Pass"
+										value={
+											generatedHistoryRows.filter(
+												(x) => x.type === "Gate Pass"
+											).length
+										}
+										accent="#10b981"
+									/>
+
+									<HistoryMiniStat
+										label="Challans"
+										value={
+											generatedHistoryRows.filter(
+												(x) => x.type === "Dispatch Challan"
+											).length
+										}
+										accent="#60a5fa"
+									/>
+								</Box>
+
+								{generatedHistoryRows.length === 0 && (
+									<Box sx={modalEmptyStateSx}>
+										No generated history found.
+									</Box>
+								)}
+
+								{generatedHistoryRows.length > 0 && (
+									<Box sx={premiumHistoryListSx}>
+										{generatedHistoryRows.map((doc, index) => (
+											<Box
+												key={`${doc.type}-${doc.number}-${index}`}
+												sx={premiumHistoryRowSx(doc.accent)}
+											>
+												<Box sx={historyDocIconSx(doc.accent)}>
+													{doc.icon}
+												</Box>
+
+												<Box sx={{ minWidth: 0 }}>
+													<Box sx={historyDocTitleSx}>
+														{doc.title}
+													</Box>
+
+													<Box sx={historyDocMetaSx}>
+														{doc.type} • {doc.number} • {doc.client}
+													</Box>
+
+													<Box sx={historyDocDateSx}>
+														{formatLocalDateTimeDisplay(doc.time)}
+													</Box>
+												</Box>
+
+												<Chip
+													size="small"
+													label={doc.status}
+													sx={{
+														color: doc.accent,
+														background: `${doc.accent}18`,
+														border: `1px solid ${doc.accent}33`,
+														fontWeight: 900,
+													}}
+												/>
+
+												{doc.challanNumber && (
+													<Button
+														size="small"
+														onClick={() =>
+															previewNormalChallanByNumber(
+																doc.challanNumber
+															)
+														}
+														sx={modalSecondaryButtonSx}
+													>
+														Preview
+													</Button>
+												)}
+											</Box>
+										))}
+									</Box>
+								)}
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									onClick={() => setGeneratedHistoryOpen(false)}
+									sx={modalSecondaryButtonSx}
+								>
+									Close
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+
+				{challanHistoryOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 6000 }}
+						onClick={() => setChallanHistoryOpen(false)}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 1120,
+								maxHeight: "90vh",
+							}}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#60a5fa")}>
+										📄
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Challan History
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Normal dispatch challans and custom challans in one place
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									sx={modalCloseButtonSx}
+									onClick={() => setChallanHistoryOpen(false)}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<TextField
+									fullWidth
+									value={historySearch}
+									onChange={(e) => setHistorySearch(e.target.value)}
+									placeholder="Search challan number, client, PD, driver, vehicle..."
+									sx={{
+										...formFieldSx,
+										mb: 2,
+									}}
+								/>
+
+								<Box sx={historyStatsGridSx}>
+									<HistoryMiniStat
+										label="Normal Challans"
+										value={normalChallanHistory.length}
+										accent="#60a5fa"
+									/>
+
+									<HistoryMiniStat
+										label="Custom Challans"
+										value={customChallanHistoryRows.length}
+										accent="#8b5cf6"
+									/>
+
+									<HistoryMiniStat
+										label="Total Items"
+										value={
+											normalChallanHistory.reduce(
+												(sum, row) => sum + Number(row.itemCount || 0),
+												0
+											) +
+											customChallanHistoryRows.reduce(
+												(sum, row) => sum + Number(row.totalItems || 0),
+												0
+											)
+										}
+										accent="#22c55e"
+									/>
+								</Box>
+
+								<Box sx={modalScrollBodySx}>
+									<Box sx={historySectionTitleSx}>
+										Normal Dispatch Challans
+									</Box>
+
+									{normalChallanHistory.length === 0 && (
+										<Box sx={modalEmptyStateSx}>
+											No normal dispatch challan found.
+										</Box>
+									)}
+
+									{normalChallanHistory.map((challan) => (
+										<Box
+											key={challan.challanNumber}
+											sx={challanHistoryRowSx("#60a5fa")}
+										>
+											<Box sx={{ minWidth: 0 }}>
+												<Box sx={challanHistoryNoSx}>
+													{challan.challanNumber}
+												</Box>
+
+												<Box sx={historyDocMetaSx}>
+													{challan.itemCount} item
+													{challan.itemCount === 1 ? "" : "s"} •{" "}
+													{challan.clientText}
+												</Box>
+
+												<Box sx={historyDocDateSx}>
+													PD: {challan.pdText} •{" "}
+													{formatLocalDateTimeDisplay(challan.lastTime)}
+												</Box>
+
+												<Box sx={historyDocDateSx}>
+													Driver: {challan.driverName || "—"} • Vehicle:{" "}
+													{challan.vehicleNumber || "—"}
+												</Box>
+											</Box>
+
+											<Box sx={historyActionBtnsSx}>
+												<Button
+													size="small"
+													onClick={() =>
+														previewNormalChallanByNumber(
+															challan.challanNumber
+														)
+													}
+													sx={modalSecondaryButtonSx}
+												>
+													Preview
+												</Button>
+
+												<Button
+													size="small"
+													onClick={() =>
+														downloadNormalChallanByNumber(
+															challan.challanNumber
+														)
+													}
+													sx={modalSecondaryButtonSx}
+												>
+													Download
+												</Button>
+											</Box>
+										</Box>
+									))}
+
+									<Box sx={historySectionTitleSx}>
+										Custom Challans
+									</Box>
+
+									{customChallansLoading && (
+										<Box sx={modalEmptyStateSx}>
+											Loading custom challans...
+										</Box>
+									)}
+
+									{!customChallansLoading &&
+										customChallanHistoryRows.length === 0 && (
+											<Box sx={modalEmptyStateSx}>
+												No custom challan found.
+											</Box>
+										)}
+
+									{!customChallansLoading &&
+										customChallanHistoryRows.map((challan) => (
+											<Box
+												key={challan.challanNumber}
+												sx={challanHistoryRowSx("#8b5cf6")}
+											>
+												<Box sx={{ minWidth: 0 }}>
+													<Box sx={challanHistoryNoSx}>
+														{challan.challanNumber}
+													</Box>
+
+													<Box sx={historyDocMetaSx}>
+														{challan.challanTypeLabel ||
+															challan.challanType ||
+															"Custom Challan"}{" "}
+														• {challan.totalItems || 0} item
+														{Number(challan.totalItems || 0) === 1
+															? ""
+															: "s"}
+													</Box>
+
+													<Box sx={historyDocDateSx}>
+														{challan.fromLocation || "—"} →{" "}
+														{challan.toLocation || "—"}
+													</Box>
+
+													<Box sx={historyDocDateSx}>
+														{challan.clientName || "No client"} •{" "}
+														{formatLocalDateTimeDisplay(challan.generatedAt)}
+													</Box>
+												</Box>
+
+												<Box sx={historyActionBtnsSx}>
+													<Button
+														size="small"
+														onClick={async () => {
+															try {
+																const result =
+																	await downloadCustomChallan(
+																		challan.challanNumber
+																	);
+
+																const url =
+																	URL.createObjectURL(result.blob);
+
+																setChalaanPreview({
+																	url,
+																	id:
+																		result.challanNo ||
+																		challan.challanNumber,
+																});
+															} catch (err) {
+																console.error(err);
+																alert(
+																	err.message ||
+																	"Custom challan preview failed"
+																);
+															}
+														}}
+														sx={modalSecondaryButtonSx}
+													>
+														Preview
+													</Button>
+
+													<Button
+														size="small"
+														onClick={async () => {
+															try {
+																const result =
+																	await downloadCustomChallan(
+																		challan.challanNumber
+																	);
+
+																const url =
+																	URL.createObjectURL(result.blob);
+
+																const a =
+																	document.createElement("a");
+
+																a.href = url;
+																a.download = `CUSTOM_CHALLAN_${challan.challanNumber}.pdf`;
+																document.body.appendChild(a);
+																a.click();
+																a.remove();
+
+																setTimeout(() => {
+																	URL.revokeObjectURL(url);
+																}, 10000);
+															} catch (err) {
+																console.error(err);
+																alert(
+																	err.message ||
+																	"Custom challan download failed"
+																);
+															}
+														}}
+														sx={modalSecondaryButtonSx}
+													>
+														Download
+													</Button>
+												</Box>
+											</Box>
+										))}
+								</Box>
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									onClick={() => setChallanHistoryOpen(false)}
+									sx={modalSecondaryButtonSx}
+								>
+									Close
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+
+				<MasterItemsModal
+					open={masterItemsModalOpen}
+					onClose={() => setMasterItemsModalOpen(false)}
+				/>
 			</div>
 		</div>
+	);
+}
+
+function HistoryMiniStat({
+	label,
+	value,
+	accent,
+}) {
+	return (
+		<Box sx={historyMiniStatSx(accent)}>
+			<Box sx={historyMiniLabelSx}>
+				{label}
+			</Box>
+
+			<Box sx={historyMiniValueSx}>
+				{value}
+			</Box>
+		</Box>
 	);
 }
 
