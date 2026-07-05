@@ -21,12 +21,11 @@ public class VenFlowController {
         this.service = service;
     }
 
-    @PostMapping("/entries")
-    public VenFlowEntry create(
-            @RequestBody CreateRequest req
-    ) {
-        return service.create(req);
-    }
+    /*
+     * =========================================================
+     * MAIN LIST / DASHBOARD / REPORTS
+     * =========================================================
+     */
 
     @GetMapping("/entries")
     public Page<VenFlowEntry> list(
@@ -51,6 +50,89 @@ public class VenFlowController {
         );
     }
 
+    @GetMapping("/entries/{id}")
+    public VenFlowEntry get(
+            @PathVariable UUID id
+    ) {
+        return service.get(id);
+    }
+
+    @GetMapping("/dashboard")
+    public DashboardResponse dashboard() {
+        return service.dashboard();
+    }
+
+    @GetMapping("/reports/summary")
+    public ReportSummaryResponse reportSummary() {
+        return service.reportSummary();
+    }
+
+    @GetMapping("/audit/{entryId}")
+    public List<VenFlowAuditLog> audit(
+            @PathVariable UUID entryId
+    ) {
+        return service.auditLogs(entryId);
+    }
+
+    /*
+     * =========================================================
+     * ENGINEERING DESK
+     * Engineering creates BOM / Indent and sends it to AKG Store.
+     * =========================================================
+     */
+
+    @PostMapping("/entries")
+    public VenFlowEntry create(
+            @RequestBody CreateRequest req
+    ) {
+        return service.create(req);
+    }
+
+    @PatchMapping("/entries/{id}/send-to-store")
+    public VenFlowEntry sendToStore(
+            @PathVariable UUID id
+    ) {
+        return service.sendToStore(id);
+    }
+
+    /*
+     * =========================================================
+     * AKG STORE DESK - STOCK / RESERVE / PR
+     * Store checks stock and decides available / not available.
+     * =========================================================
+     */
+
+    @PatchMapping("/entries/{id}/store-review")
+    public VenFlowEntry storeReview(
+            @PathVariable UUID id,
+            @RequestBody StoreReviewRequest req
+    ) {
+        return service.storeReview(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/reserve-material")
+    public VenFlowEntry reserveMaterial(
+            @PathVariable UUID id,
+            @RequestBody ReserveMaterialRequest req
+    ) {
+        return service.reserveMaterial(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/purchase-request")
+    public VenFlowEntry raisePurchaseRequest(
+            @PathVariable UUID id,
+            @RequestBody PurchaseRequestRequest req
+    ) {
+        return service.raisePurchaseRequest(id, req);
+    }
+
+    /*
+     * =========================================================
+     * PURCHASE DESK
+     * Purchase sees Store PR, raises PO and follows vendor.
+     * =========================================================
+     */
+
     @GetMapping("/purchase-desk")
     public Page<VenFlowEntry> purchaseDesk(
             @RequestParam(required = false) String search,
@@ -68,12 +150,150 @@ public class VenFlowController {
         );
     }
 
-    @GetMapping("/entries/{id}")
-    public VenFlowEntry get(
+    @PatchMapping("/entries/{id}/po-raise")
+    public VenFlowEntry raisePo(
+            @PathVariable UUID id,
+            @RequestBody PoRequest req
+    ) {
+        return service.raisePo(id, req);
+    }
+
+    /*
+     * Optional legacy/approval endpoint.
+     * If you still want manager/admin PO sign-off, keep this.
+     */
+    @PatchMapping("/entries/{id}/po-approve")
+    public VenFlowEntry approvePo(
             @PathVariable UUID id
     ) {
-        return service.get(id);
+        return service.approvePo(id);
     }
+
+    /*
+     * =========================================================
+     * AKG STORE DESK - RECEIVING / GRN / QC / INVENTORY
+     * Store receives material, makes GRN, checks QC and accepts/rejects.
+     * =========================================================
+     */
+
+    @PatchMapping("/entries/{id}/material-received")
+    public VenFlowEntry materialReceived(
+            @PathVariable UUID id,
+            @RequestBody MaterialReceivedRequest req
+    ) {
+        return service.materialReceived(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/grn")
+    public VenFlowEntry grnEntry(
+            @PathVariable UUID id,
+            @RequestBody GrnRequest req
+    ) {
+        return service.grnEntry(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/qc")
+    public VenFlowEntry qualityCheck(
+            @PathVariable UUID id,
+            @RequestBody QcRequest req
+    ) {
+        return service.qualityCheck(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/accept-inventory")
+    public VenFlowEntry acceptInventory(
+            @PathVariable UUID id
+    ) {
+        return service.acceptInventory(id);
+    }
+
+    @PatchMapping("/entries/{id}/inform-production")
+    public VenFlowEntry informProduction(
+            @PathVariable UUID id
+    ) {
+        return service.informProduction(id);
+    }
+
+    @PatchMapping("/entries/{id}/issue-material")
+    public VenFlowEntry issueMaterial(
+            @PathVariable UUID id,
+            @RequestBody IssueMaterialRequest req
+    ) {
+        return service.issueMaterial(id, req);
+    }
+
+    /*
+     * =========================================================
+     * PROCESSING / PRODUCTION DESK
+     * Production adds process details, starts processing and completes.
+     * =========================================================
+     */
+
+    @PatchMapping("/entries/{id}/production-details")
+    public VenFlowEntry productionDetails(
+            @PathVariable UUID id,
+            @RequestBody ProductionDetailsRequest req
+    ) {
+        return service.productionDetails(id, req);
+    }
+
+    @PatchMapping("/entries/{id}/processing-start")
+    public VenFlowEntry startProcessing(
+            @PathVariable UUID id
+    ) {
+        return service.startProcessing(id);
+    }
+
+    @PatchMapping("/entries/{id}/process-complete")
+    public VenFlowEntry completeProcess(
+            @PathVariable UUID id,
+            @RequestBody ProcessingRequest req
+    ) {
+        return service.completeProcess(id, req);
+    }
+
+    /*
+     * =========================================================
+     * SUPERVISOR CLOSURE
+     * Supervisor/person is informed and material is ready for next stage.
+     * =========================================================
+     */
+
+    @PatchMapping("/entries/{id}/supervisor-informed")
+    public VenFlowEntry supervisorInformed(
+            @PathVariable UUID id
+    ) {
+        return service.supervisorInformed(id);
+    }
+
+    @PatchMapping("/entries/{id}/ready-next-stage")
+    public VenFlowEntry readyForNextStage(
+            @PathVariable UUID id
+    ) {
+        return service.readyForNextStage(id);
+    }
+
+    /*
+     * =========================================================
+     * COMMON
+     * =========================================================
+     */
+
+    @PatchMapping("/entries/{id}/remarks")
+    public VenFlowEntry updateRemarks(
+            @PathVariable UUID id,
+            @RequestBody RemarksRequest req
+    ) {
+        return service.updateRemarks(id, req);
+    }
+
+    /*
+     * =========================================================
+     * LEGACY ENDPOINTS - KEEP TEMPORARILY ONLY
+     * These prevent your old frontend from breaking during transition.
+     * Remove later after new UI is live.
+     * =========================================================
+     */
 
     @PatchMapping("/entries/{id}/product-details")
     public VenFlowEntry updateProductDetails(
@@ -114,21 +334,6 @@ public class VenFlowController {
         return service.updateOrderedQty(id, req);
     }
 
-    @PatchMapping("/entries/{id}/po-raise")
-    public VenFlowEntry raisePo(
-            @PathVariable UUID id,
-            @RequestBody PoRequest req
-    ) {
-        return service.raisePo(id, req);
-    }
-
-    @PatchMapping("/entries/{id}/po-approve")
-    public VenFlowEntry approvePo(
-            @PathVariable UUID id
-    ) {
-        return service.approvePo(id);
-    }
-
     @PatchMapping("/entries/{id}/expected-date")
     public VenFlowEntry updateExpectedDate(
             @PathVariable UUID id,
@@ -137,33 +342,12 @@ public class VenFlowController {
         return service.updateExpectedDate(id, req);
     }
 
-    /*
-     * Old endpoint kept.
-     */
     @PatchMapping("/entries/{id}/received-qty")
     public VenFlowEntry updateReceivedQty(
             @PathVariable UUID id,
             @RequestBody ReceivedQtyRequest req
     ) {
         return service.updateReceivedQty(id, req);
-    }
-
-    /*
-     * New better endpoint name.
-     */
-    @PatchMapping("/entries/{id}/material-received")
-    public VenFlowEntry materialReceived(
-            @PathVariable UUID id,
-            @RequestBody MaterialReceivedRequest req
-    ) {
-        return service.materialReceived(id, req);
-    }
-
-    @PatchMapping("/entries/{id}/inform-production")
-    public VenFlowEntry informProduction(
-            @PathVariable UUID id
-    ) {
-        return service.informProduction(id);
     }
 
     @PatchMapping("/entries/{id}/production-start")
@@ -182,39 +366,10 @@ public class VenFlowController {
         return service.jobDone(id, req);
     }
 
-    @PatchMapping("/entries/{id}/remarks")
-    public VenFlowEntry updateRemarks(
-            @PathVariable UUID id,
-            @RequestBody RemarksRequest req
-    ) {
-        return service.updateRemarks(id, req);
-    }
-
-    /*
-     * Old endpoint kept for safety.
-     * Internally maps to JOB_DONE logic.
-     */
     @PatchMapping("/entries/{id}/complete")
     public VenFlowEntry complete(
             @PathVariable UUID id
     ) {
         return service.complete(id);
-    }
-
-    @GetMapping("/dashboard")
-    public DashboardResponse dashboard() {
-        return service.dashboard();
-    }
-
-    @GetMapping("/reports/summary")
-    public ReportSummaryResponse reportSummary() {
-        return service.reportSummary();
-    }
-
-    @GetMapping("/audit/{entryId}")
-    public List<VenFlowAuditLog> audit(
-            @PathVariable UUID entryId
-    ) {
-        return service.auditLogs(entryId);
     }
 }

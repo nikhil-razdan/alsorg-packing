@@ -22,23 +22,18 @@ public class VenFlowAccessService {
     }
 
     public User currentUser() {
-        Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || auth.getName() == null || auth.getName().isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "User not authenticated"
-            );
+                    "User not authenticated");
         }
 
         return userRepository.findByUsername(auth.getName())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "User not found"
-                        )
-                );
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "User not found"));
     }
 
     public String currentRole() {
@@ -101,8 +96,7 @@ public class VenFlowAccessService {
         if (cleanPlant.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Plant code is required"
-            );
+                    "Plant code is required");
         }
 
         if (isAdminOrManager()) {
@@ -121,8 +115,7 @@ public class VenFlowAccessService {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant
-            );
+                    "No access for plant: " + cleanPlant);
         }
 
         Set<String> allowed = allowedPlantCodes();
@@ -130,26 +123,19 @@ public class VenFlowAccessService {
         if (allowed.isEmpty() || !allowed.contains(cleanPlant)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant
-            );
+                    "No access for plant: " + cleanPlant);
         }
     }
 
     public void requireProduction() {
-        if (!isProduction()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Production access required"
-            );
-        }
+        requireProcessing();
     }
 
     public void requireStore() {
         if (!isStore()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Store access required"
-            );
+                    "Store access required");
         }
     }
 
@@ -157,8 +143,7 @@ public class VenFlowAccessService {
         if (!isPurchase()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Purchase access required"
-            );
+                    "Purchase access required");
         }
     }
 
@@ -166,8 +151,60 @@ public class VenFlowAccessService {
         if (!isAdminOrManager()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Manager/Admin approval required"
-            );
+                    "Manager/Admin approval required");
+        }
+    }
+
+    public boolean isEngineering() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_ENGINEERING".equals(role);
+    }
+
+    public boolean isProcessing() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_PRODUCTION".equals(role);
+    }
+
+    public boolean isSupervisor() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_SUPERVISOR".equals(role);
+    }
+
+    public void requireEngineering() {
+        if (!isEngineering()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Engineering access required");
+        }
+    }
+
+    public void requireProcessing() {
+        if (!isProcessing()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Processing/Production access required");
+        }
+    }
+
+    public void requireSupervisor() {
+        if (!isSupervisor()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Supervisor access required");
+        }
+    }
+
+    public void requireProcessingOrSupervisor() {
+        if (!isProcessing() && !isSupervisor()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Processing/Supervisor access required");
         }
     }
 }

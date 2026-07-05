@@ -10,18 +10,28 @@ import RadioButtonUncheckedRoundedIcon from "@mui/icons-material/RadioButtonUnch
 
 const STEPS = [
 	{
-		key: "PRODUCTION_RAISED",
-		label: "Production Raised",
-		dept: "Production",
+		key: "INDENT_CREATED",
+		label: "BOM / Indent Created",
+		dept: "Engineering",
+	},
+	{
+		key: "SENT_TO_STORE",
+		label: "Sent to AKG Store",
+		dept: "Engineering",
 	},
 	{
 		key: "STORE_REVIEWED",
-		label: "Store Reviewed",
+		label: "Store Stock Review",
 		dept: "Store",
 	},
 	{
-		key: "SENT_TO_PURCHASE",
-		label: "Sent to Purchase",
+		key: "MATERIAL_RESERVED",
+		label: "Material Reserved",
+		dept: "Store",
+	},
+	{
+		key: "PURCHASE_REQUEST_RAISED",
+		label: "Purchase Request",
 		dept: "Store",
 	},
 	{
@@ -30,29 +40,59 @@ const STEPS = [
 		dept: "Purchase",
 	},
 	{
-		key: "PO_APPROVED",
-		label: "PO Approved",
-		dept: "Manager",
-	},
-	{
-		key: "MATERIAL_RECEIVED",
+		key: "MATERIAL_RECEIVED_AT_STORE",
 		label: "Material Received",
 		dept: "Store",
 	},
 	{
-		key: "MATERIAL_INFORMED",
+		key: "GRN_DONE",
+		label: "GRN Entry",
+		dept: "Store",
+	},
+	{
+		key: "QC_OK",
+		label: "QC OK",
+		dept: "QC / Store",
+	},
+	{
+		key: "MATERIAL_ACCEPTED_IN_STORE",
+		label: "Accepted in Inventory",
+		dept: "Store",
+	},
+	{
+		key: "PRODUCTION_INFORMED",
 		label: "Production Informed",
 		dept: "Store",
 	},
 	{
-		key: "PRODUCTION_STARTED",
-		label: "Production Started",
+		key: "PRODUCTION_DETAILS_ADDED",
+		label: "Production Details",
 		dept: "Production",
 	},
 	{
-		key: "JOB_DONE",
-		label: "Job Done",
+		key: "MATERIAL_ISSUED_TO_PRODUCTION",
+		label: "Issued to Harender",
+		dept: "Store",
+	},
+	{
+		key: "PROCESSING_STARTED",
+		label: "Processing Started",
 		dept: "Production",
+	},
+	{
+		key: "PROCESS_COMPLETED",
+		label: "Process Completed",
+		dept: "Production",
+	},
+	{
+		key: "SUPERVISOR_INFORMED",
+		label: "Supervisor Informed",
+		dept: "Production",
+	},
+	{
+		key: "READY_FOR_NEXT_STAGE",
+		label: "Ready Next Stage",
+		dept: "Supervisor",
 	},
 ];
 
@@ -147,8 +187,9 @@ const stepsSx = {
 	display: "grid",
 	gridTemplateColumns: {
 		xs: "1fr",
-		md: "repeat(3, minmax(0, 1fr))",
-		lg: "repeat(9, minmax(0, 1fr))",
+		md: "repeat(2, minmax(0, 1fr))",
+		lg: "repeat(4, minmax(0, 1fr))",
+		xl: "repeat(5, minmax(0, 1fr))",
 	},
 	gap: 1.4,
 };

@@ -1,15 +1,33 @@
 import { normalizeRole } from "./permissions";
 
+const readStoredRole = () => {
+	try {
+		const currentUser = JSON.parse(
+			localStorage.getItem("currentUser") || "{}"
+		);
+
+		return (
+			currentUser?.role ||
+			localStorage.getItem("role") ||
+			""
+		);
+	} catch {
+		return localStorage.getItem("role") || "";
+	}
+};
+
 export const VENFLOW_ROLES = {
 	ADMIN: "ADMIN",
 	MANAGER: "VENFLOW_MANAGER",
-	PRODUCTION: "VENFLOW_PRODUCTION",
+	ENGINEERING: "VENFLOW_ENGINEERING",
 	STORE: "VENFLOW_STORE",
 	PURCHASE: "VENFLOW_PURCHASE",
+	PRODUCTION: "VENFLOW_PRODUCTION",
+	SUPERVISOR: "VENFLOW_SUPERVISOR",
 };
 
 export const getVenFlowRole = (role) => {
-	return normalizeRole(role);
+	return normalizeRole(role || readStoredRole());
 };
 
 export const isVenFlowAdmin = (role) => {
@@ -29,12 +47,12 @@ export const isVenFlowAdminOrManager = (role) => {
 	);
 };
 
-export const isVenFlowProduction = (role) => {
+export const isVenFlowEngineering = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
 	return (
 		isVenFlowAdminOrManager(cleanRole) ||
-		cleanRole === VENFLOW_ROLES.PRODUCTION
+		cleanRole === VENFLOW_ROLES.ENGINEERING
 	);
 };
 
@@ -56,12 +74,34 @@ export const isVenFlowPurchase = (role) => {
 	);
 };
 
-export const canCreateVenFlowRequirement = (role) => {
+export const isVenFlowProduction = (role) => {
+	const cleanRole = getVenFlowRole(role);
+
+	return (
+		isVenFlowAdminOrManager(cleanRole) ||
+		cleanRole === VENFLOW_ROLES.PRODUCTION
+	);
+};
+
+export const isVenFlowProcessing = (role) => {
 	return isVenFlowProduction(role);
 };
 
-export const canOpenProductionDesk = (role) => {
-	return isVenFlowProduction(role);
+export const isVenFlowSupervisor = (role) => {
+	const cleanRole = getVenFlowRole(role);
+
+	return (
+		isVenFlowAdminOrManager(cleanRole) ||
+		cleanRole === VENFLOW_ROLES.SUPERVISOR
+	);
+};
+
+export const canCreateVenFlowRequirement = (role) => {
+	return isVenFlowEngineering(role);
+};
+
+export const canOpenEngineeringDesk = (role) => {
+	return isVenFlowEngineering(role);
 };
 
 export const canOpenStoreDesk = (role) => {
@@ -70,6 +110,14 @@ export const canOpenStoreDesk = (role) => {
 
 export const canOpenPurchaseDesk = (role) => {
 	return isVenFlowPurchase(role);
+};
+
+export const canOpenProcessingDesk = (role) => {
+	return isVenFlowProcessing(role);
+};
+
+export const canOpenSupervisorDesk = (role) => {
+	return isVenFlowSupervisor(role);
 };
 
 export const canOpenFullTracker = (role) => {
@@ -106,8 +154,8 @@ export const canAccessVenFlowScreen = (
 		return canCreateVenFlowRequirement(cleanRole);
 	}
 
-	if (screen === "production") {
-		return canOpenProductionDesk(cleanRole);
+	if (screen === "engineering") {
+		return canOpenEngineeringDesk(cleanRole);
 	}
 
 	if (screen === "store") {
@@ -116,6 +164,23 @@ export const canAccessVenFlowScreen = (
 
 	if (screen === "purchase") {
 		return canOpenPurchaseDesk(cleanRole);
+	}
+
+	if (screen === "processing") {
+		return canOpenProcessingDesk(cleanRole);
+	}
+
+	if (screen === "supervisor") {
+		return canOpenSupervisorDesk(cleanRole);
+	}
+
+	/*
+	 * Legacy route support.
+	 * If your old route still uses /venflow/production,
+	 * keep this until you rename it to /venflow/processing.
+	 */
+	if (screen === "production") {
+		return canOpenProcessingDesk(cleanRole);
 	}
 
 	if (screen === "entries") {
@@ -132,8 +197,8 @@ export const defaultVenFlowPathForRole = (role) => {
 		return "/venflow/dashboard";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
-		return "/venflow/production";
+	if (cleanRole === VENFLOW_ROLES.ENGINEERING) {
+		return "/venflow/engineering";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.STORE) {
@@ -142,6 +207,14 @@ export const defaultVenFlowPathForRole = (role) => {
 
 	if (cleanRole === VENFLOW_ROLES.PURCHASE) {
 		return "/venflow/purchase";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
+		return "/venflow/processing";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.SUPERVISOR) {
+		return "/venflow/supervisor";
 	}
 
 	return "/modules";
@@ -158,16 +231,24 @@ export const venFlowRoleLabel = (role) => {
 		return "VenFlow Manager";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
-		return "Production User";
+	if (cleanRole === VENFLOW_ROLES.ENGINEERING) {
+		return "Engineering User";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.STORE) {
-		return "Store User";
+		return "AKG Store User";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.PURCHASE) {
 		return "Purchase User";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
+		return "Processing User";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.SUPERVISOR) {
+		return "Supervisor User";
 	}
 
 	return "VenFlow User";

@@ -2,24 +2,27 @@ import React from "react";
 import { Chip } from "@mui/material";
 
 const STAGE_LABELS = {
-	HEADER_CREATED: "Header Created",
-	PRODUCT_DETAILS_FILLED: "Product Details Filled",
-	STORE_STATUS_UPDATED: "Store Status Updated",
-	REQUISITION_UPDATED: "Requisition Updated",
-	ORDER_QTY_UPDATED: "Ordered Qty Updated",
-	EXPECTED_DATE_UPDATED: "Expected Date Updated",
-	RECEIVED_QTY_UPDATED: "Receiving Updated",
-	COMPLETED: "Completed",
-
-	PRODUCTION_RAISED: "Production Raised",
+	INDENT_CREATED: "BOM / Indent Created",
+	SENT_TO_STORE: "Sent to AKG Store",
 	STORE_REVIEWED: "Store Reviewed",
-	SENT_TO_PURCHASE: "Sent to Purchase",
+	STOCK_AVAILABLE: "Stock Available",
+	MATERIAL_RESERVED: "Material Reserved",
+	PURCHASE_REQUEST_RAISED: "Purchase Request Raised",
 	PO_RAISED: "PO Raised",
-	PO_APPROVED: "PO Approved",
-	MATERIAL_RECEIVED: "Material Received",
-	MATERIAL_INFORMED: "Production Informed",
-	PRODUCTION_STARTED: "Production Started",
-	JOB_DONE: "Job Done",
+	MATERIAL_RECEIVED_AT_STORE: "Material Received at Store",
+	GRN_DONE: "GRN Done",
+	QC_PENDING: "QC Pending",
+	QC_OK: "QC OK",
+	QC_NOT_OK: "QC Not OK",
+	MATERIAL_ACCEPTED_IN_STORE: "Accepted in Inventory",
+	MATERIAL_REJECTED_HOLD_RETURN: "Rejected / Hold / Return",
+	PRODUCTION_INFORMED: "Production Informed",
+	PRODUCTION_DETAILS_ADDED: "Production Details Added",
+	MATERIAL_ISSUED_TO_PRODUCTION: "Issued to Production",
+	PROCESSING_STARTED: "Processing Started",
+	PROCESS_COMPLETED: "Process Completed",
+	SUPERVISOR_INFORMED: "Supervisor Informed",
+	READY_FOR_NEXT_STAGE: "Ready for Next Stage",
 };
 
 const CONFIG = {

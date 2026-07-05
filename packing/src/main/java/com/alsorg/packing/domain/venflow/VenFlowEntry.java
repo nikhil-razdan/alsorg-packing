@@ -157,6 +157,133 @@ public class VenFlowEntry {
 
     public LocalDateTime updatedAt;
 
+    @Column(name = "drawing_no")
+    public String drawingNo;
+
+    @Column(name = "material_name")
+    public String materialName;
+
+    @Column(name = "thickness")
+    public String thickness;
+
+    @Column(name = "sample_image_url", length = 2000)
+    public String sampleImageUrl;
+
+    @Column(name = "required_qty", precision = 12, scale = 3)
+    public BigDecimal requiredQty;
+
+    @Column(name = "available_qty", precision = 12, scale = 3)
+    public BigDecimal availableQty;
+
+    @Column(name = "reserved_qty", precision = 12, scale = 3)
+    public BigDecimal reservedQty;
+
+    @Column(name = "issued_qty", precision = 12, scale = 3)
+    public BigDecimal issuedQty;
+
+    @Column(name = "used_qty", precision = 12, scale = 3)
+    public BigDecimal usedQty;
+
+    @Column(name = "wastage_qty", precision = 12, scale = 3)
+    public BigDecimal wastageQty;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_decision")
+    public VenFlowStockDecision stockDecision = VenFlowStockDecision.PENDING;
+
+    @Column(name = "purchase_request_no")
+    public String purchaseRequestNo;
+
+    @Column(name = "purchase_request_by")
+    public String purchaseRequestBy;
+
+    @Column(name = "purchase_request_at")
+    public LocalDateTime purchaseRequestAt;
+
+    @Column(name = "grn_no")
+    public String grnNo;
+
+    @Column(name = "grn_date")
+    public LocalDate grnDate;
+
+    @Column(name = "grn_by")
+    public String grnBy;
+
+    @Column(name = "grn_at")
+    public LocalDateTime grnAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "qc_status")
+    public VenFlowQcStatus qcStatus = VenFlowQcStatus.NOT_REQUIRED;
+
+    @Column(name = "qc_checked_by")
+    public String qcCheckedBy;
+
+    @Column(name = "qc_checked_at")
+    public LocalDateTime qcCheckedAt;
+
+    @Column(name = "qc_remarks", length = 2000)
+    public String qcRemarks;
+
+    @Column(name = "rejection_reason", length = 2000)
+    public String rejectionReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "issue_status")
+    public VenFlowIssueStatus issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+
+    @Column(name = "reserved_by")
+    public String reservedBy;
+
+    @Column(name = "reserved_at")
+    public LocalDateTime reservedAt;
+
+    @Column(name = "issued_to")
+    public String issuedTo;
+
+    @Column(name = "issued_by")
+    public String issuedBy;
+
+    @Column(name = "issued_at")
+    public LocalDateTime issuedAt;
+
+    @Column(name = "production_details", length = 2000)
+    public String productionDetails;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "processing_status")
+    public VenFlowProcessingStatus processingStatus = VenFlowProcessingStatus.NOT_STARTED;
+
+    @Column(name = "processing_started_by")
+    public String processingStartedBy;
+
+    @Column(name = "processing_started_at")
+    public LocalDateTime processingStartedAt;
+
+    @Column(name = "process_completed_by")
+    public String processCompletedBy;
+
+    @Column(name = "process_completed_at")
+    public LocalDateTime processCompletedAt;
+
+    @Column(name = "output_image_url", length = 2000)
+    public String outputImageUrl;
+
+    @Column(name = "supervisor_name")
+    public String supervisorName;
+
+    @Column(name = "supervisor_informed_by")
+    public String supervisorInformedBy;
+
+    @Column(name = "supervisor_informed_at")
+    public LocalDateTime supervisorInformedAt;
+
+    @Column(name = "next_stage_ready_by")
+    public String nextStageReadyBy;
+
+    @Column(name = "next_stage_ready_at")
+    public LocalDateTime nextStageReadyAt;
+
     @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();
@@ -177,6 +304,26 @@ public class VenFlowEntry {
 
         if (productionStatus == null) {
             productionStatus = VenFlowProductionStatus.NOT_STARTED;
+        }
+
+        if (stage == null) {
+            stage = VenFlowStage.INDENT_CREATED;
+        }
+
+        if (stockDecision == null) {
+            stockDecision = VenFlowStockDecision.PENDING;
+        }
+
+        if (qcStatus == null) {
+            qcStatus = VenFlowQcStatus.NOT_REQUIRED;
+        }
+
+        if (issueStatus == null) {
+            issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+        }
+
+        if (processingStatus == null) {
+            processingStatus = VenFlowProcessingStatus.NOT_STARTED;
         }
     }
 

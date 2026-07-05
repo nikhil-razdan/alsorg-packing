@@ -1,5 +1,9 @@
 package com.alsorg.packing.controller.dto;
 
+import com.alsorg.packing.domain.venflow.VenFlowIssueStatus;
+import com.alsorg.packing.domain.venflow.VenFlowProcessingStatus;
+import com.alsorg.packing.domain.venflow.VenFlowQcStatus;
+import com.alsorg.packing.domain.venflow.VenFlowStockDecision;
 import com.alsorg.packing.domain.venflow.VenFlowStoreStatus;
 import com.alsorg.packing.domain.venflow.VenFlowUnit;
 
@@ -12,18 +16,126 @@ public final class VenFlowDtos {
     }
 
     /*
-     * Production raises veneer requirement.
-     * Plant is mandatory because entries are plant-wise/access-wise.
+     * =========================================================
+     * NEW MAIN FLOW DTOs
+     * Engineering BOM / Indent → Store → Purchase / Inventory
+     * → GRN / QC → Issue → Processing → Supervisor Closure
+     * =========================================================
      */
+
     public record CreateRequest(
             String plantCode,
             LocalDate orderDate,
             String pdNo,
+            String drawingNo,
             String clientName,
+            String materialName,
+            String veneerType,
+            String thickness,
+            String size,
+            BigDecimal requiredQty,
+            VenFlowUnit unit,
             String bomReference,
-            String bomAttachmentUrl
+            String bomAttachmentUrl,
+            String sampleImageUrl,
+            String remarks
     ) {
     }
+
+    public record StoreReviewRequest(
+            VenFlowStockDecision stockDecision,
+            BigDecimal availableQty,
+            String remarks
+    ) {
+    }
+
+    public record ReserveMaterialRequest(
+            BigDecimal reservedQty,
+            String remarks
+    ) {
+    }
+
+    public record PurchaseRequestRequest(
+            String purchaseRequestNo,
+            LocalDate requisitionDate,
+            String remarks
+    ) {
+    }
+
+    public record PoRequest(
+            String vendorName,
+            String poNo,
+            LocalDate poDate,
+            BigDecimal poAmount,
+            String poDocumentUrl,
+            String remarks
+    ) {
+    }
+
+    public record MaterialReceivedRequest(
+            BigDecimal receivedQty,
+            LocalDate actualInHouseDate,
+            String remarks
+    ) {
+    }
+
+    public record GrnRequest(
+            String grnNo,
+            LocalDate grnDate,
+            String remarks
+    ) {
+    }
+
+    public record QcRequest(
+            VenFlowQcStatus qcStatus,
+            String qcRemarks,
+            String rejectionReason
+    ) {
+    }
+
+    public record ProductionDetailsRequest(
+            String productionDetails,
+            String supervisorName,
+            String remarks
+    ) {
+    }
+
+    public record IssueMaterialRequest(
+            BigDecimal issuedQty,
+            String issuedTo,
+            String remarks
+    ) {
+    }
+
+    public record ProcessingRequest(
+            BigDecimal usedQty,
+            BigDecimal wastageQty,
+            BigDecimal balanceQty,
+            String outputImageUrl,
+            String remarks
+    ) {
+    }
+
+    /*
+     * Optional status update DTOs if later needed directly.
+     */
+    public record IssueStatusRequest(
+            VenFlowIssueStatus issueStatus
+    ) {
+    }
+
+    public record ProcessingStatusRequest(
+            VenFlowProcessingStatus processingStatus
+    ) {
+    }
+
+    /*
+     * =========================================================
+     * LEGACY DTOs
+     * Keep these temporarily because old controller/service endpoints
+     * still reference them.
+     * =========================================================
+     */
 
     public record ProductDetailsRequest(
             String productDescription,
@@ -54,42 +166,12 @@ public final class VenFlowDtos {
     ) {
     }
 
-    /*
-     * Keep old received endpoint compatible.
-     */
     public record ReceivedQtyRequest(
             BigDecimal receivedQty,
             LocalDate actualInHouseDate
     ) {
     }
 
-    /*
-     * New material receiving endpoint.
-     * Same data as receivedQty, but with remarks.
-     */
-    public record MaterialReceivedRequest(
-            BigDecimal receivedQty,
-            LocalDate actualInHouseDate,
-            String remarks
-    ) {
-    }
-
-    /*
-     * Purchase department PO entry.
-     */
-    public record PoRequest(
-            String vendorName,
-            String poNo,
-            LocalDate poDate,
-            BigDecimal poAmount,
-            String poDocumentUrl,
-            String remarks
-    ) {
-    }
-
-    /*
-     * Production start / job done request.
-     */
     public record ProductionActionRequest(
             String remarks
     ) {
@@ -101,9 +183,11 @@ public final class VenFlowDtos {
     }
 
     /*
-     * Keep old dashboard fields and add new fields.
-     * This avoids breaking old frontend immediately.
+     * =========================================================
+     * DASHBOARD / REPORTS
+     * =========================================================
      */
+
     public record DashboardResponse(
             long totalEntries,
 
@@ -127,9 +211,6 @@ public final class VenFlowDtos {
     ) {
     }
 
-    /*
-     * Reports page summary.
-     */
     public record ReportSummaryResponse(
             long totalOrders,
             long pendingStoreCheck,

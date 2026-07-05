@@ -66,4 +66,43 @@ export const venflowApi = {
 
 	getAudit: (id) =>
 		API.get(`/venflow/audit/${id}`),
+
+	sendToStore: (id) =>
+		API.patch(`/venflow/entries/${id}/send-to-store`),
+
+	storeReview: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/store-review`, payload),
+
+	reserveMaterial: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/reserve-material`, payload),
+
+	raisePurchaseRequest: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/purchase-request`, payload),
+
+	grnEntry: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/grn`, payload),
+
+	qualityCheck: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/qc`, payload),
+
+	acceptInventory: (id) =>
+		API.patch(`/venflow/entries/${id}/accept-inventory`),
+
+	productionDetails: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/production-details`, payload),
+
+	issueMaterial: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/issue-material`, payload),
+
+	startProcessing: (id) =>
+		API.patch(`/venflow/entries/${id}/processing-start`),
+
+	completeProcess: (id, payload) =>
+		API.patch(`/venflow/entries/${id}/process-complete`, payload),
+
+	supervisorInformed: (id) =>
+		API.patch(`/venflow/entries/${id}/supervisor-informed`),
+
+	readyForNextStage: (id) =>
+		API.patch(`/venflow/entries/${id}/ready-next-stage`),
 };
