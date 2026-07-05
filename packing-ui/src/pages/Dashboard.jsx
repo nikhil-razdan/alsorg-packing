@@ -1144,15 +1144,6 @@ function DashboardPage() {
 
                           <button
                             type="button"
-                            title="Line chart"
-                            style={chartToggleBtn}
-                            onClick={() => setChartType("line")}
-                          >
-                            <LineIcon />
-                          </button>
-
-                          <button
-                            type="button"
                             title="Bar chart"
                             style={chartToggleBtn}
                             onClick={() => setChartType("bar")}
