@@ -5247,53 +5247,6 @@ function DispatchedItemsPage() {
 
 				</div>
 
-				<Box sx={dispatchControlDockSx}>
-					<Box sx={dispatchControlLeftSx}>
-						<Box sx={dispatchControlIconSx}>
-							🧭
-						</Box>
-
-						<Box sx={{ minWidth: 0 }}>
-							<Box sx={dispatchControlTitleSx}>
-								Dispatch Control Center
-							</Box>
-
-							<Box sx={dispatchControlSubSx}>
-								Generated PDFs, challan history and master item packet control
-							</Box>
-						</Box>
-					</Box>
-
-					<Box sx={dispatchControlActionsSx}>
-						<Button
-							onClick={() => {
-								setHistorySearch("");
-								setGeneratedHistoryOpen(true);
-							}}
-							sx={dispatchDockBtnSx("#a78bfa")}
-						>
-							🏷️ Generated History
-						</Button>
-
-						<Button
-							onClick={() => {
-								setHistorySearch("");
-								openChallanHistoryModal();
-							}}
-							sx={dispatchDockBtnSx("#60a5fa")}
-						>
-							📄 Challan History
-						</Button>
-
-						<Button
-							onClick={() => setMasterItemsModalOpen(true)}
-							sx={dispatchDockBtnSx("#22c55e")}
-						>
-							🧩 Master Items
-						</Button>
-					</Box>
-				</Box>
-
 				<Box sx={searchPanel}>
 					<SearchIcon
 						sx={{
