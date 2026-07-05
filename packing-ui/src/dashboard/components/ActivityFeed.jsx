@@ -745,8 +745,8 @@ const topBar = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 12,
+  gap: 10,
+  marginBottom: 9,
 };
 
 const headingRow = {
@@ -756,30 +756,30 @@ const headingRow = {
 };
 
 const headingIcon = {
-  width: 32,
-  height: 32,
-  borderRadius: 13,
+  width: 30,
+  height: 30,
+  borderRadius: 12,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background:
     "linear-gradient(135deg, rgba(37,99,235,.30), rgba(14,165,233,.14))",
   border: "1px solid rgba(96,165,250,.22)",
-  boxShadow: "0 10px 22px rgba(37,99,235,.18)",
-  fontSize: 15,
+  boxShadow: "0 8px 18px rgba(37,99,235,.16)",
+  fontSize: 14,
 };
 
 const heading = {
-  fontSize: 17,
+  fontSize: 16,
   fontWeight: 950,
   color: "#fff",
   letterSpacing: "-.02em",
 };
 
 const subHeading = {
-  fontSize: 10.5,
-  color: "rgba(255,255,255,.52)",
-  marginTop: 3,
+  fontSize: 10,
+  color: "rgba(255,255,255,.50)",
+  marginTop: 2,
   fontWeight: 650,
 };
 
@@ -829,23 +829,26 @@ const countBadge = {
 const feedArea = {
   flex: "1 1 auto",
   minHeight: 0,
-  overflowY: "auto",
-  paddingRight: 4,
-  paddingBottom: 2,
+  overflow: "hidden",
+  paddingRight: 0,
+  paddingBottom: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 7,
 };
 
 const activityCard = {
   position: "relative",
   display: "grid",
-  gridTemplateColumns: "32px minmax(0,1fr) 72px",
-  gap: 9,
+  gridTemplateColumns: "30px minmax(0,1fr) 68px",
+  gap: 8,
   alignItems: "center",
-  padding: "10px 11px 10px 13px",
-  borderRadius: 16,
-  marginBottom: 8,
+  padding: "8px 10px 8px 12px",
+  borderRadius: 15,
+  marginBottom: 0,
   background:
     "linear-gradient(180deg, rgba(255,255,255,.052), rgba(255,255,255,.020))",
-  boxShadow: "0 10px 22px rgba(2,6,23,.16)",
+  boxShadow: "0 9px 18px rgba(2,6,23,.14)",
   backdropFilter: "blur(14px)",
   overflow: "hidden",
 };
@@ -859,17 +862,6 @@ const leftGlow = {
   borderRadius: "0 999px 999px 0",
 };
 
-const iconBubble = {
-  width: 30,
-  height: 30,
-  borderRadius: 12,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 14,
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)",
-};
-
 const contentArea = {
   minWidth: 0,
 };
@@ -879,42 +871,6 @@ const actionRow = {
   alignItems: "center",
   gap: 8,
   minWidth: 0,
-};
-
-const actionText = {
-  fontWeight: 950,
-  fontSize: 12,
-  color: "#fff",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  minWidth: 0,
-};
-
-const typeChip = {
-  flex: "0 0 auto",
-  padding: "3px 7px",
-  borderRadius: 999,
-  fontSize: 9,
-  fontWeight: 950,
-};
-
-const itemName = {
-  marginTop: 3,
-  fontSize: 11,
-  color: "rgba(255,255,255,.70)",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  fontWeight: 750,
-};
-
-const statusFlow = {
-  marginTop: 5,
-  display: "flex",
-  alignItems: "center",
-  gap: 5,
-  flexWrap: "wrap",
 };
 
 const remarks = {
@@ -929,62 +885,12 @@ const remarks = {
   whiteSpace: "nowrap",
 };
 
-const timeRow = {
-  marginTop: 5,
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-};
-
-const relativeTime = {
-  padding: "3px 7px",
-  borderRadius: 999,
-  fontSize: 9,
-  fontWeight: 950,
-};
-
-const absoluteTime = {
-  fontSize: 10,
-  color: "rgba(255,255,255,.46)",
-  fontWeight: 750,
-};
-
 const userArea = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-end",
   gap: 4,
   minWidth: 0,
-};
-
-const userAvatar = {
-  width: 28,
-  height: 28,
-  borderRadius: 999,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background:
-    "linear-gradient(135deg, rgba(59,130,246,.24), rgba(147,197,253,.10))",
-  border: "1px solid rgba(147,197,253,.20)",
-  color: "#dbeafe",
-  fontSize: 10,
-  fontWeight: 950,
-};
-
-const statusMini = {
-  maxWidth: 120,
-  padding: "3px 7px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.07)",
-  color: "rgba(255,255,255,.58)",
-  fontSize: 9,
-  fontWeight: 950,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
 };
 
 const statusMiniActive = (meta) => ({
@@ -1012,10 +918,107 @@ const remarksText = {
   whiteSpace: "nowrap",
 };
 
-const userName = {
-  maxWidth: 74,
+const iconBubble = {
+  width: 28,
+  height: 28,
+  borderRadius: 11,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 13,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)",
+};
+
+const actionText = {
+  fontWeight: 950,
+  fontSize: 11.5,
   color: "#fff",
-  fontSize: 9.5,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  minWidth: 0,
+};
+
+const typeChip = {
+  flex: "0 0 auto",
+  padding: "2px 6px",
+  borderRadius: 999,
+  fontSize: 8.5,
+  fontWeight: 950,
+};
+
+const itemName = {
+  marginTop: 2,
+  fontSize: 10.5,
+  color: "rgba(255,255,255,.70)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  fontWeight: 750,
+};
+
+const statusFlow = {
+  marginTop: 4,
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  flexWrap: "wrap",
+};
+
+const timeRow = {
+  marginTop: 4,
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  flexWrap: "wrap",
+};
+
+const statusMini = {
+  maxWidth: 108,
+  padding: "2px 6px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.045)",
+  border: "1px solid rgba(255,255,255,.07)",
+  color: "rgba(255,255,255,.58)",
+  fontSize: 8.5,
+  fontWeight: 950,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const relativeTime = {
+  padding: "2px 6px",
+  borderRadius: 999,
+  fontSize: 8.5,
+  fontWeight: 950,
+};
+
+const absoluteTime = {
+  fontSize: 9,
+  color: "rgba(255,255,255,.46)",
+  fontWeight: 750,
+};
+
+const userAvatar = {
+  width: 25,
+  height: 25,
+  borderRadius: 999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,.24), rgba(147,197,253,.10))",
+  border: "1px solid rgba(147,197,253,.20)",
+  color: "#dbeafe",
+  fontSize: 9,
+  fontWeight: 950,
+};
+
+const userName = {
+  maxWidth: 68,
+  color: "#fff",
+  fontSize: 9,
   fontWeight: 950,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1023,49 +1026,52 @@ const userName = {
 };
 
 const roleChip = {
-  maxWidth: 76,
-  padding: "3px 6px",
+  maxWidth: 70,
+  padding: "2px 5px",
   borderRadius: 999,
   background: "rgba(255,255,255,.05)",
   border: "1px solid rgba(255,255,255,.06)",
   color: "rgba(255,255,255,.62)",
-  fontSize: 8,
+  fontSize: 7.5,
   fontWeight: 950,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
-
 const pagination = {
   flexShrink: 0,
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  gap: 8,
-  paddingTop: 8,
-  marginTop: 4,
-  borderTop: "1px solid rgba(255,255,255,.06)",
+  gap: 6,
+  paddingTop: 6,
+  marginTop: 6,
+  borderTop: "1px solid rgba(255,255,255,.055)",
 };
 
 const pageBtn = {
-  padding: "7px 12px",
+  height: 26,
+  padding: "0 10px",
   borderRadius: 999,
   border: "1px solid rgba(255,255,255,.08)",
   background:
     "linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.045))",
   color: "#fff",
   fontWeight: 950,
-  fontSize: 11,
+  fontSize: 10,
 };
 
 const pageIndicator = {
-  padding: "6px 10px",
+  height: 26,
+  padding: "0 9px",
   borderRadius: 999,
   background: "rgba(255,255,255,.04)",
   border: "1px solid rgba(255,255,255,.06)",
-  fontSize: 10,
+  fontSize: 9.5,
   color: "rgba(255,255,255,.62)",
   fontWeight: 950,
+  display: "flex",
+  alignItems: "center",
 };
 
 const empty = {

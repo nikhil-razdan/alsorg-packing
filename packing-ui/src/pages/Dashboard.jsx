@@ -1775,7 +1775,7 @@ const panelSurface = {
   display: "flex",
   flexDirection: "column",
   height: 430,
-  minHeight: 430,
+  minHeight: 360,
   padding: 16,
   borderRadius: 22,
   background:
