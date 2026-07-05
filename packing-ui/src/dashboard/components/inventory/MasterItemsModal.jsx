@@ -1,13 +1,14 @@
 import {
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
 import {
     fetchMasterItemReport,
     fetchMasterItemDetail,
-    openProtectedDashboardPdf,
+    fetchProtectedDashboardPdfBlob,
     downloadProtectedDashboardPdf,
 } from "../../api/dashboardApi";
 
@@ -283,6 +284,96 @@ function MasterItemsModal({
 
     const [activeTab, setActiveTab] =
         useState("overview");
+
+    const pdfObjectUrlRef =
+        useRef("");
+
+    const [pdfPreview, setPdfPreview] =
+        useState({
+            open: false,
+            title: "PDF Preview",
+            url: "",
+            loading: false,
+            error: "",
+        });
+
+    const closePdfPreview = () => {
+        if (pdfObjectUrlRef.current) {
+            window.URL.revokeObjectURL(pdfObjectUrlRef.current);
+            pdfObjectUrlRef.current = "";
+        }
+
+        setPdfPreview({
+            open: false,
+            title: "PDF Preview",
+            url: "",
+            loading: false,
+            error: "",
+        });
+    };
+
+    const previewPdfInModal = async (
+        path,
+        title = "PDF Preview"
+    ) => {
+        if (!path) {
+            alert("PDF is not available.");
+            return;
+        }
+
+        if (pdfObjectUrlRef.current) {
+            window.URL.revokeObjectURL(pdfObjectUrlRef.current);
+            pdfObjectUrlRef.current = "";
+        }
+
+        setPdfPreview({
+            open: true,
+            title,
+            url: "",
+            loading: true,
+            error: "",
+        });
+
+        try {
+            const blob =
+                await fetchProtectedDashboardPdfBlob(path);
+
+            const objectUrl =
+                window.URL.createObjectURL(blob);
+
+            pdfObjectUrlRef.current =
+                objectUrl;
+
+            setPdfPreview({
+                open: true,
+                title,
+                url: objectUrl,
+                loading: false,
+                error: "",
+            });
+        } catch (e) {
+            console.error(e);
+
+            setPdfPreview({
+                open: true,
+                title,
+                url: "",
+                loading: false,
+                error:
+                    e.message ||
+                    "Failed to load PDF preview",
+            });
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (pdfObjectUrlRef.current) {
+                window.URL.revokeObjectURL(pdfObjectUrlRef.current);
+                pdfObjectUrlRef.current = "";
+            }
+        };
+    }, []);
 
     const loadData = async () => {
         try {
@@ -944,6 +1035,7 @@ function MasterItemsModal({
                                         packets={packets}
                                         packetItems={packetItems}
                                         challans={challans}
+                                        onPreviewPdf={previewPdfInModal}
                                     />
                                 )}
 
@@ -953,12 +1045,14 @@ function MasterItemsModal({
                                         packetItemsByPacketId={packetItemsByPacketId}
                                         expandedPacket={expandedPacket}
                                         setExpandedPacket={setExpandedPacket}
+                                        onPreviewPdf={previewPdfInModal}
                                     />
                                 )}
 
                                 {activeTab === "challans" && (
                                     <ChallansPanel
                                         challans={challans}
+                                        onPreviewPdf={previewPdfInModal}
                                     />
                                 )}
                             </>
@@ -966,6 +1060,13 @@ function MasterItemsModal({
                     </div>
                 </div>
             </div>
+
+            {pdfPreview.open && (
+                <PdfPreviewLayer
+                    preview={pdfPreview}
+                    onClose={closePdfPreview}
+                />
+            )}
         </div>
     );
 }
@@ -1028,6 +1129,7 @@ function OverviewPanel({
     packets,
     packetItems,
     challans,
+    onPreviewPdf,
 }) {
     return (
         <>
@@ -1156,7 +1258,14 @@ function OverviewPanel({
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    openProtectedDashboardPdf(previewUrl)
+                                                    onPreviewPdf(
+                                                        previewUrl,
+                                                        `Sticker - ${safe(
+                                                            packet.stickerNumber ||
+                                                            packet.packetNumber ||
+                                                            packetItemId
+                                                        )}`
+                                                    )
                                                 }
                                                 style={docBtn("#38bdf8")}
                                                 disabled={!previewUrl}
@@ -1223,7 +1332,10 @@ function OverviewPanel({
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    openProtectedDashboardPdf(previewUrl)
+                                                    onPreviewPdf(
+                                                        previewUrl,
+                                                        `Challan - ${safe(challan.challanNumber)}`
+                                                    )
                                                 }
                                                 style={docBtn("#8b5cf6")}
                                                 disabled={!previewUrl}
@@ -1649,6 +1761,69 @@ function ChallansPanel({
                     </div>
                 </div>
             ))}
+        </div>
+    );
+}
+
+function PdfPreviewLayer({
+    preview,
+    onClose,
+}) {
+    return (
+        <div
+            style={pdfPreviewOverlay}
+            onMouseDown={onClose}
+        >
+            <div
+                style={pdfPreviewCard}
+                onMouseDown={(e) =>
+                    e.stopPropagation()
+                }
+            >
+                <div style={pdfPreviewHeader}>
+                    <div>
+                        <div style={pdfPreviewEyebrow}>
+                            DOCUMENT PREVIEW
+                        </div>
+
+                        <div style={pdfPreviewTitle}>
+                            {preview.title}
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        style={pdfPreviewCloseBtn}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div style={pdfPreviewBody}>
+                    {preview.loading && (
+                        <div style={pdfPreviewMessage}>
+                            Loading PDF preview...
+                        </div>
+                    )}
+
+                    {!preview.loading && preview.error && (
+                        <div style={pdfPreviewError}>
+                            {preview.error}
+                        </div>
+                    )}
+
+                    {!preview.loading &&
+                        !preview.error &&
+                        preview.url && (
+                            <iframe
+                                title={preview.title}
+                                src={preview.url}
+                                style={pdfFrame}
+                            />
+                        )}
+                </div>
+            </div>
         </div>
     );
 }
@@ -2410,6 +2585,111 @@ const docActions = {
     gap: 7,
     flexWrap: "wrap",
     justifyContent: "flex-end",
+};
+
+const pdfPreviewOverlay = {
+    position: "fixed",
+    inset: 0,
+    zIndex: 12000,
+    background: "rgba(2,6,23,.86)",
+    backdropFilter: "blur(14px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+};
+
+const pdfPreviewCard = {
+    width: "min(1060px, 96vw)",
+    height: "min(88vh, 860px)",
+    borderRadius: 26,
+    background:
+        "linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,17,31,.96))",
+    border: "1px solid rgba(255,255,255,.12)",
+    boxShadow: "0 34px 100px rgba(0,0,0,.70)",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    color: "#fff",
+};
+
+const pdfPreviewHeader = {
+    flexShrink: 0,
+    padding: "16px 18px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    borderBottom: "1px solid rgba(255,255,255,.08)",
+    background:
+        "radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 36%), rgba(15,23,42,.92)",
+};
+
+const pdfPreviewEyebrow = {
+    color: "#93c5fd",
+    fontSize: 10,
+    fontWeight: 950,
+    letterSpacing: ".16em",
+};
+
+const pdfPreviewTitle = {
+    marginTop: 5,
+    fontSize: 18,
+    fontWeight: 950,
+    color: "#fff",
+};
+
+const pdfPreviewCloseBtn = {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,.14)",
+    background: "rgba(255,255,255,.07)",
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 1,
+    cursor: "pointer",
+};
+
+const pdfPreviewBody = {
+    flex: 1,
+    minHeight: 0,
+    padding: 14,
+    background: "rgba(2,6,23,.50)",
+};
+
+const pdfFrame = {
+    width: "100%",
+    height: "100%",
+    border: "none",
+    borderRadius: 18,
+    background: "#fff",
+};
+
+const pdfPreviewMessage = {
+    height: "100%",
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(255,255,255,.04)",
+    border: "1px dashed rgba(255,255,255,.14)",
+    color: "#bfdbfe",
+    fontWeight: 900,
+};
+
+const pdfPreviewError = {
+    height: "100%",
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    background: "rgba(239,68,68,.10)",
+    border: "1px solid rgba(239,68,68,.22)",
+    color: "#fecaca",
+    fontWeight: 900,
+    textAlign: "center",
 };
 
 export default MasterItemsModal;

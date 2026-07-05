@@ -1,5 +1,38 @@
 import { API_BASE_URL } from "../../config";
 
+export async function fetchProtectedDashboardPdfBlob(path) {
+	const url =
+		buildDashboardFileUrl(path);
+
+	if (!url) {
+		throw new Error("PDF URL missing");
+	}
+
+	const res =
+		await fetch(url, {
+			method: "GET",
+			credentials: "include",
+			cache: "no-store",
+			headers: {
+				Accept: "application/pdf",
+			},
+		});
+
+	const contentType =
+		res.headers.get("content-type") || "";
+
+	if (!res.ok || !contentType.includes("pdf")) {
+		const text =
+			await res.text();
+
+		throw new Error(
+			text || "Failed to load PDF"
+		);
+	}
+
+	return res.blob();
+}
+
 const getStoredToken = () => {
 	const possibleKeys = [
 		"token",
