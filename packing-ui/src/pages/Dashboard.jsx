@@ -21,6 +21,7 @@ import InventoryCommandCenter from
   "../dashboard/components/inventory/InventoryCommandCenter";
 import MasterItemsModal from
   "../dashboard/components/inventory/MasterItemsModal";
+import StatusCorporateChart from "../dashboard/components/StatusCorporateChart";
 
 function StatCard({
   title,
@@ -168,6 +169,14 @@ const BarIcon = () => (
     <rect x="4" y="10" width="4" height="10" fill="currentColor" />
     <rect x="10" y="6" width="4" height="14" fill="currentColor" />
     <rect x="16" y="3" width="4" height="17" fill="currentColor" />
+  </svg>
+);
+
+const CorporateIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+    <rect x="4" y="5" width="16" height="4" rx="1.5" fill="currentColor" />
+    <rect x="4" y="11" width="10" height="4" rx="1.5" fill="currentColor" />
+    <rect x="4" y="17" width="14" height="4" rx="1.5" fill="currentColor" />
   </svg>
 );
 
@@ -537,7 +546,12 @@ function DashboardPage() {
         Number(stats.packetItems || 0)
       ) * 100;
 
-  const chartIndex = { donut: 0, line: 1, bar: 2 }[chartType];
+  const chartIndex = {
+    donut: 0,
+    line: 1,
+    bar: 2,
+    corporate: 3,
+  }[chartType] || 0;
 
   useEffect(() => {
     fetchLogisticsStats()
@@ -1146,6 +1160,15 @@ function DashboardPage() {
                           >
                             <BarIcon />
                           </button>
+
+                          <button
+                            type="button"
+                            title="Corporate chart"
+                            style={chartToggleBtn}
+                            onClick={() => setChartType("corporate")}
+                          >
+                            <CorporateIcon />
+                          </button>
                         </div>
                       </div>
 
@@ -1168,6 +1191,14 @@ function DashboardPage() {
 
                         {chartType === "bar" && (
                           <StatusBarChart
+                            warehouse={stats.warehouseItems}
+                            readyToDispatch={stats.readyToDispatchItems}
+                            ready={stats.readyItems}
+                          />
+                        )}
+
+                        {chartType === "corporate" && (
+                          <StatusCorporateChart
                             warehouse={stats.warehouseItems}
                             readyToDispatch={stats.readyToDispatchItems}
                             ready={stats.readyItems}
@@ -1743,44 +1774,26 @@ const trendLabelStyle = {
 const panelSurface = {
   display: "flex",
   flexDirection: "column",
-
-  minHeight: 300,
-
-  padding: 18,
-
-  borderRadius: 24,
-
+  minHeight: 390,
+  maxHeight: 430,
+  padding: 16,
+  borderRadius: 22,
   background:
-    "rgba(15,23,42,.78)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 18px 40px rgba(2,6,23,.34)",
-
+    "radial-gradient(circle at top right, rgba(34,211,238,.10), transparent 34%), rgba(15,23,42,.78)",
+  border: "1px solid rgba(255,255,255,.065)",
+  boxShadow: "0 18px 42px rgba(2,6,23,.34)",
   overflow: "hidden",
-
   backdropFilter: "blur(18px)",
 };
 
 const chartToggleWrap = {
   position: "relative",
-
   display: "inline-flex",
-
   gap: 8,
-
   padding: 5,
-
   borderRadius: 999,
-
-  background:
-    "rgba(15,23,42,.92)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
+  background: "rgba(15,23,42,.92)",
+  border: "1px solid rgba(255,255,255,.06)",
   width: "fit-content",
 };
 
@@ -2444,35 +2457,27 @@ const throughputMiniHint = {
 
 const workspaceGrid = {
   display: "grid",
-  gridTemplateColumns: "minmax(0,1.25fr) minmax(380px,.85fr)",
-  gap: 16,
-  alignItems: "stretch",
+  gridTemplateColumns: "minmax(0,1.05fr) minmax(360px,.72fr)",
+  gap: 14,
+  alignItems: "start",
+
+  "@media (max-width: 1180px)": {
+    gridTemplateColumns: "1fr",
+  },
 };
 
 const chartPanelSurface = {
   position: "relative",
-
-  height: "100%",
-
-  minHeight: 520,
-
-  padding: 22,
-
-  borderRadius: 28,
-
+  minHeight: 390,
+  maxHeight: 430,
+  padding: 16,
+  borderRadius: 22,
   background:
-    "radial-gradient(circle at top left, rgba(37,99,235,.18), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.68))",
-
-  border:
-    "1px solid rgba(255,255,255,.08)",
-
-  boxShadow:
-    "0 22px 55px rgba(2,6,23,.36)",
-
+    "radial-gradient(circle at top left, rgba(37,99,235,.15), transparent 32%), linear-gradient(180deg, rgba(15,23,42,.88), rgba(15,23,42,.70))",
+  border: "1px solid rgba(255,255,255,.075)",
+  boxShadow: "0 18px 42px rgba(2,6,23,.34)",
   backdropFilter: "blur(18px)",
-
   overflow: "hidden",
-
   display: "flex",
   flexDirection: "column",
 };
@@ -2481,41 +2486,34 @@ const chartPanelTop = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 16,
-  marginBottom: 16,
+  gap: 12,
+  marginBottom: 12,
 };
 
 const chartPanelTitle = {
-  fontSize: 18,
-  fontWeight: 900,
+  fontSize: 16,
+  fontWeight: 950,
   color: "#fff",
+  letterSpacing: "-.02em",
 };
 
 const chartPanelSubtitle = {
-  marginTop: 5,
-  fontSize: 12,
-  color: "rgba(255,255,255,.56)",
+  marginTop: 4,
+  fontSize: 11,
+  color: "rgba(255,255,255,.54)",
+  fontWeight: 650,
 };
 
 const chartPanelBody = {
   flex: 1,
-
   minHeight: 0,
-
-  padding: 18,
-
-  borderRadius: 24,
-
+  padding: 12,
+  borderRadius: 18,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.022))",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
+    "linear-gradient(180deg, rgba(255,255,255,.040), rgba(255,255,255,.018))",
+  border: "1px solid rgba(255,255,255,.055)",
   display: "flex",
-
   alignItems: "center",
-
   justifyContent: "center",
 };
 

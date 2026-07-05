@@ -525,7 +525,7 @@ function ActivityFeed({
         <div style={headerRight}>
           <div style={livePill}>
             <span style={liveDot} />
-            Live IST
+            Live
           </div>
 
           <div style={countBadge}>
@@ -601,27 +601,6 @@ function ActivityFeed({
                 <div style={itemName}>
                   {log._itemName}
                 </div>
-                {(log.fromStatus || log.toStatus) && (
-                  <div style={statusFlow}>
-                    <span style={statusMini}>
-                      {String(log.fromStatus || "—").replaceAll("_", " ")}
-                    </span>
-
-                    <span style={arrow}>
-                      →
-                    </span>
-
-                    <span style={statusMiniActive(meta)}>
-                      {String(log.toStatus || "—").replaceAll("_", " ")}
-                    </span>
-                  </div>
-                )}
-
-                {log.remarks && (
-                  <div style={remarksText}>
-                    {log.remarks}
-                  </div>
-                )}
 
                 {hasStatusFlow && (
                   <div style={statusFlow}>
@@ -661,7 +640,7 @@ function ActivityFeed({
                       border: `1px solid ${meta.border}`,
                     }}
                   >
-                    {formatRelativeTime(activityTime)}
+                    {formatRelativeTime(activityTime, nowMs)}
                   </span>
 
                   <span style={absoluteTime}>
@@ -765,8 +744,8 @@ const topBar = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 14,
-  marginBottom: 18,
+  gap: 12,
+  marginBottom: 12,
 };
 
 const headingRow = {
@@ -776,32 +755,31 @@ const headingRow = {
 };
 
 const headingIcon = {
-  width: 38,
-  height: 38,
-  borderRadius: 16,
+  width: 32,
+  height: 32,
+  borderRadius: 13,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background:
-    "linear-gradient(135deg, rgba(37,99,235,.34), rgba(14,165,233,.16))",
-  border:
-    "1px solid rgba(96,165,250,.25)",
-  boxShadow:
-    "0 12px 28px rgba(37,99,235,.22)",
-  fontSize: 17,
+    "linear-gradient(135deg, rgba(37,99,235,.30), rgba(14,165,233,.14))",
+  border: "1px solid rgba(96,165,250,.22)",
+  boxShadow: "0 10px 22px rgba(37,99,235,.18)",
+  fontSize: 15,
 };
 
 const heading = {
-  fontSize: 22,
-  fontWeight: 900,
+  fontSize: 17,
+  fontWeight: 950,
   color: "#fff",
   letterSpacing: "-.02em",
 };
 
 const subHeading = {
-  fontSize: 12,
-  color: "rgba(255,255,255,.58)",
-  marginTop: 4,
+  fontSize: 10.5,
+  color: "rgba(255,255,255,.52)",
+  marginTop: 3,
+  fontWeight: 650,
 };
 
 const headerRight = {
@@ -811,18 +789,17 @@ const headerRight = {
 };
 
 const livePill = {
-  height: 34,
-  padding: "0 11px",
+  height: 28,
+  padding: "0 10px",
   borderRadius: 999,
   display: "flex",
   alignItems: "center",
-  gap: 7,
+  gap: 6,
   background: "rgba(34,197,94,.10)",
-  border:
-    "1px solid rgba(34,197,94,.22)",
+  border: "1px solid rgba(34,197,94,.20)",
   color: "#86efac",
-  fontSize: 11,
-  fontWeight: 900,
+  fontSize: 10,
+  fontWeight: 950,
 };
 
 const liveDot = {
@@ -835,18 +812,16 @@ const liveDot = {
 };
 
 const countBadge = {
-  minWidth: 38,
-  height: 38,
+  minWidth: 32,
+  height: 32,
   borderRadius: 999,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-  boxShadow:
-    "0 12px 26px rgba(37,99,235,.32)",
-  fontWeight: 900,
-  fontSize: 13,
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow: "0 10px 22px rgba(37,99,235,.26)",
+  fontWeight: 950,
+  fontSize: 12,
   color: "#fff",
 };
 
@@ -859,39 +834,37 @@ const feedArea = {
 const activityCard = {
   position: "relative",
   display: "grid",
-  gridTemplateColumns: "44px minmax(0,1fr) 112px",
-  gap: 12,
+  gridTemplateColumns: "34px minmax(0,1fr) 78px",
+  gap: 10,
   alignItems: "center",
-  padding: "15px 15px 15px 18px",
-  borderRadius: 22,
-  marginBottom: 12,
+  padding: "11px 12px 11px 14px",
+  borderRadius: 17,
+  marginBottom: 9,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.065), rgba(255,255,255,.028))",
-  boxShadow:
-    "0 16px 34px rgba(2,6,23,.20)",
-  backdropFilter: "blur(16px)",
+    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.022))",
+  boxShadow: "0 12px 26px rgba(2,6,23,.18)",
+  backdropFilter: "blur(14px)",
   overflow: "hidden",
 };
 
 const leftGlow = {
   position: "absolute",
   left: 0,
-  top: 14,
-  bottom: 14,
-  width: 4,
+  top: 11,
+  bottom: 11,
+  width: 3,
   borderRadius: "0 999px 999px 0",
 };
 
 const iconBubble = {
-  width: 40,
-  height: 40,
-  borderRadius: 16,
+  width: 32,
+  height: 32,
+  borderRadius: 13,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 18,
-  boxShadow:
-    "inset 0 1px 0 rgba(255,255,255,.08)",
+  fontSize: 15,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)",
 };
 
 const contentArea = {
@@ -906,8 +879,8 @@ const actionRow = {
 };
 
 const actionText = {
-  fontWeight: 900,
-  fontSize: 14,
+  fontWeight: 950,
+  fontSize: 12.5,
   color: "#fff",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -917,26 +890,27 @@ const actionText = {
 
 const typeChip = {
   flex: "0 0 auto",
-  padding: "4px 8px",
+  padding: "3px 7px",
   borderRadius: 999,
-  fontSize: 10,
-  fontWeight: 900,
+  fontSize: 9,
+  fontWeight: 950,
 };
 
 const itemName = {
-  marginTop: 5,
-  fontSize: 13,
-  color: "rgba(255,255,255,.74)",
+  marginTop: 4,
+  fontSize: 11.5,
+  color: "rgba(255,255,255,.72)",
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+  fontWeight: 750,
 };
 
 const statusFlow = {
-  marginTop: 8,
+  marginTop: 6,
   display: "flex",
   alignItems: "center",
-  gap: 6,
+  gap: 5,
   flexWrap: "wrap",
 };
 
@@ -953,61 +927,58 @@ const remarks = {
 };
 
 const timeRow = {
-  marginTop: 8,
+  marginTop: 6,
   display: "flex",
   alignItems: "center",
-  gap: 8,
+  gap: 7,
   flexWrap: "wrap",
 };
 
 const relativeTime = {
-  padding: "4px 8px",
+  padding: "3px 7px",
   borderRadius: 999,
-  fontSize: 10,
-  fontWeight: 900,
+  fontSize: 9,
+  fontWeight: 950,
 };
 
 const absoluteTime = {
-  fontSize: 11,
-  color: "rgba(255,255,255,.48)",
-  fontWeight: 700,
+  fontSize: 10,
+  color: "rgba(255,255,255,.46)",
+  fontWeight: 750,
 };
 
 const userArea = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-end",
-  gap: 5,
+  gap: 4,
   minWidth: 0,
 };
 
 const userAvatar = {
-  width: 34,
-  height: 34,
+  width: 28,
+  height: 28,
   borderRadius: 999,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,.28), rgba(147,197,253,.12))",
-  border:
-    "1px solid rgba(147,197,253,.22)",
+    "linear-gradient(135deg, rgba(59,130,246,.24), rgba(147,197,253,.10))",
+  border: "1px solid rgba(147,197,253,.20)",
   color: "#dbeafe",
-  fontSize: 11,
-  fontWeight: 900,
+  fontSize: 10,
+  fontWeight: 950,
 };
 
-
-
 const statusMini = {
-  maxWidth: 140,
-  padding: "4px 8px",
+  maxWidth: 120,
+  padding: "3px 7px",
   borderRadius: 999,
   background: "rgba(255,255,255,.045)",
   border: "1px solid rgba(255,255,255,.07)",
-  color: "rgba(255,255,255,.62)",
-  fontSize: 10,
-  fontWeight: 900,
+  color: "rgba(255,255,255,.58)",
+  fontSize: 9,
+  fontWeight: 950,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1039,26 +1010,24 @@ const remarksText = {
 };
 
 const userName = {
-  maxWidth: 105,
+  maxWidth: 74,
   color: "#fff",
-  fontSize: 11,
-  fontWeight: 900,
+  fontSize: 9.5,
+  fontWeight: 950,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
 
 const roleChip = {
-  maxWidth: 100,
-  padding: "4px 8px",
+  maxWidth: 76,
+  padding: "3px 6px",
   borderRadius: 999,
-  background:
-    "rgba(255,255,255,.05)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
-  color: "rgba(255,255,255,.68)",
-  fontSize: 9,
-  fontWeight: 900,
+  background: "rgba(255,255,255,.05)",
+  border: "1px solid rgba(255,255,255,.06)",
+  color: "rgba(255,255,255,.62)",
+  fontSize: 8,
+  fontWeight: 950,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1068,31 +1037,29 @@ const pagination = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  gap: 12,
-  marginTop: 12,
+  gap: 9,
+  marginTop: 8,
 };
 
 const pageBtn = {
-  padding: "8px 14px",
+  padding: "7px 12px",
   borderRadius: 999,
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  border: "1px solid rgba(255,255,255,.08)",
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.055))",
+    "linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.045))",
   color: "#fff",
-  fontWeight: 900,
+  fontWeight: 950,
+  fontSize: 11,
 };
 
 const pageIndicator = {
-  padding: "7px 11px",
+  padding: "6px 10px",
   borderRadius: 999,
-  background:
-    "rgba(255,255,255,.045)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
-  fontSize: 11,
-  color: "rgba(255,255,255,.66)",
-  fontWeight: 900,
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.06)",
+  fontSize: 10,
+  color: "rgba(255,255,255,.62)",
+  fontWeight: 950,
 };
 
 const empty = {

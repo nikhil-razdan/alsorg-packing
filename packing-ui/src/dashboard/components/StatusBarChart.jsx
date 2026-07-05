@@ -47,11 +47,11 @@ function StatusBarChart({
     <div style={chartCard}>
       <div style={chartHeader}>
         <div>
-		<div style={chartTitle}>Status Volume</div>
+          <div style={chartTitle}>Status Volume</div>
 
-		<div style={chartSubtitle}>
-		  Stage-wise count comparison across current stock status
-		</div>
+          <div style={chartSubtitle}>
+            Stage-wise count comparison across current stock status
+          </div>
         </div>
 
         <div style={chartBadge}>
@@ -147,9 +147,9 @@ function StatusBarChart({
                 item.value === 0
                   ? 5
                   : Math.max(
-                      (item.value / max) * maxBarHeight,
-                      9
-                    );
+                    (item.value / max) * maxBarHeight,
+                    9
+                  );
 
               const y = baseY - height;
 
@@ -276,38 +276,30 @@ const chartHeader = {
 };
 
 const chartTitle = {
-  fontSize: 22,
-  fontWeight: 900,
+  fontSize: 17,
+  fontWeight: 950,
   color: "#fff",
 };
 
 const chartSubtitle = {
-  marginTop: 5,
-  fontSize: 12,
-  color: "rgba(255,255,255,.56)",
+  marginTop: 4,
+  fontSize: 11,
+  color: "rgba(255,255,255,.52)",
+  fontWeight: 650,
 };
 
 const chartBadge = {
-  minWidth: 44,
-  height: 44,
-
-  borderRadius: 16,
-
+  minWidth: 38,
+  height: 38,
+  borderRadius: 14,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-  boxShadow:
-    "0 14px 30px rgba(37,99,235,.32)",
-
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow: "0 10px 22px rgba(37,99,235,.26)",
   color: "#fff",
-
-  fontSize: 15,
-
-  fontWeight: 900,
+  fontSize: 13,
+  fontWeight: 950,
 };
 
 const barLayout = {
@@ -326,17 +318,11 @@ const barLayout = {
 
 const barWrap = {
   position: "relative",
-
   width: "100%",
-
   aspectRatio: "1 / 1",
-
-  maxHeight: 260,
-
+  maxHeight: 220,
   display: "flex",
-
   alignItems: "center",
-
   justifyContent: "center",
 };
 
@@ -350,22 +336,14 @@ const legendPanel = {
 
 const legendRow = {
   display: "flex",
-
   justifyContent: "space-between",
-
   alignItems: "center",
-
-  gap: 12,
-
-  padding: "14px 14px",
-
-  borderRadius: 18,
-
+  gap: 10,
+  padding: "10px 11px",
+  borderRadius: 14,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025))",
-
-  border:
-    "1px solid rgba(255,255,255,.07)",
+    "linear-gradient(180deg, rgba(255,255,255,.050), rgba(255,255,255,.022))",
+  border: "1px solid rgba(255,255,255,.065)",
 };
 
 const legendLeft = {
@@ -387,8 +365,8 @@ const legendDot = {
 };
 
 const legendLabel = {
-  fontSize: 13,
-  fontWeight: 900,
+  fontSize: 12,
+  fontWeight: 950,
   color: "#fff",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -396,24 +374,19 @@ const legendLabel = {
 };
 
 const legendPercent = {
-  marginTop: 3,
-  fontSize: 11,
-  color: "rgba(255,255,255,.48)",
-  fontWeight: 700,
+  marginTop: 2,
+  fontSize: 10,
+  color: "rgba(255,255,255,.45)",
+  fontWeight: 750,
 };
 
 const legendValue = {
-  minWidth: 50,
-
-  padding: "7px 11px",
-
+  minWidth: 44,
+  padding: "6px 9px",
   borderRadius: 999,
-
   textAlign: "center",
-
-  fontSize: 13,
-
-  fontWeight: 900,
+  fontSize: 12,
+  fontWeight: 950,
 };
 
 export default StatusBarChart;
