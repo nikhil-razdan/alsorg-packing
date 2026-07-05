@@ -261,6 +261,59 @@ public class CustomChallanService {
         return "Other Movement";
     }
 
+    @Transactional(readOnly = true)
+    public List<CustomChallanSummaryResponse> listForUser(
+            String username,
+            boolean admin) {
+        String currentUsername = cleanLower(username);
+
+        return repository
+                .findAllByOrderByGeneratedAtDesc()
+                .stream()
+                .filter(challan -> {
+                    if (admin) {
+                        return true;
+                    }
+
+                    return cleanLower(challan.getGeneratedBy())
+                            .equals(currentUsername);
+                })
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DispatchTripPdfResult downloadForUser(
+            String challanNumber,
+            String username,
+            boolean admin) {
+        CustomChallan challan = repository
+                .findById(challanNumber)
+                .orElseThrow(() -> new RuntimeException(
+                        "Custom challan not found: " + challanNumber));
+
+        if (!admin) {
+            String currentUsername = cleanLower(username);
+
+            if (!cleanLower(challan.getGeneratedBy()).equals(currentUsername)) {
+                throw new RuntimeException(
+                        "You do not have access to this custom challan");
+            }
+        }
+
+        CustomChallanRequest request = toRequest(challan);
+
+        byte[] pdf = pdfService.generateCustomChalaan(
+                request,
+                challan.getChallanNumber(),
+                challan.getGeneratedBy());
+
+        return new DispatchTripPdfResult(
+                null,
+                challan.getChallanNumber(),
+                pdf);
+    }
+
     private String clean(
             String value) {
         return value == null
@@ -278,5 +331,13 @@ public class CustomChallanService {
         return username != null && !username.trim().isBlank()
                 ? username.trim()
                 : "SYSTEM";
+    }
+
+    private String cleanLower(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return value.trim().toLowerCase();
     }
 }

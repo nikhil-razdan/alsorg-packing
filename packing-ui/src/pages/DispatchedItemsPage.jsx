@@ -1585,6 +1585,206 @@ const dispatchControlLeftSx = {
 	minWidth: 0,
 };
 
+const challanHistoryButtonSx = {
+	height: 40,
+	px: 2,
+	borderRadius: "14px",
+	textTransform: "none",
+	fontWeight: 900,
+	fontSize: 13,
+	color: "#fff",
+	background:
+		"linear-gradient(135deg,rgba(96,165,250,.22),rgba(59,130,246,.18))",
+	border: "1px solid rgba(96,165,250,.28)",
+	boxShadow: "0 12px 26px rgba(59,130,246,.18)",
+
+	"&:hover": {
+		background:
+			"linear-gradient(135deg,rgba(96,165,250,.30),rgba(59,130,246,.24))",
+	},
+};
+
+const challanHistoryStatsGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+	gap: 1.2,
+	mb: 2,
+};
+
+const challanHistoryStatSx = (accent) => ({
+	p: 1.4,
+	borderRadius: "16px",
+	background:
+		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(255,255,255,.035)`,
+	border: `1px solid ${accent}33`,
+});
+
+const challanHistoryStatLabelSx = {
+	color: "rgba(255,255,255,.54)",
+	fontSize: 10,
+	fontWeight: 950,
+	textTransform: "uppercase",
+	letterSpacing: ".08em",
+};
+
+const challanHistoryStatValueSx = {
+	mt: 0.6,
+	color: "#fff",
+	fontSize: 24,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const challanHistoryScrollSx = {
+	maxHeight: "58vh",
+	overflowY: "auto",
+	pr: 0.8,
+};
+
+const challanHistorySectionTitleSx = {
+	mt: 1.2,
+	mb: 1,
+	color: "#93c5fd",
+	fontSize: 11,
+	fontWeight: 950,
+	letterSpacing: ".14em",
+	textTransform: "uppercase",
+};
+
+const masterChallanCardSx = {
+	mb: 1.4,
+	p: 1.4,
+	borderRadius: "18px",
+	background:
+		"radial-gradient(circle at top left, rgba(96,165,250,.13), transparent 38%), rgba(255,255,255,.035)",
+	border: "1px solid rgba(96,165,250,.18)",
+};
+
+const masterChallanHeaderSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0,1fr) auto",
+	gap: 1.4,
+	alignItems: "flex-start",
+	mb: 1.2,
+};
+
+const masterChallanTitleSx = {
+	color: "#fff",
+	fontSize: 15,
+	fontWeight: 950,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const masterChallanMetaSx = {
+	mt: 0.4,
+	color: "rgba(255,255,255,.55)",
+	fontSize: 11,
+	fontWeight: 750,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const masterChallanCountSx = {
+	minWidth: 74,
+	p: 1,
+	borderRadius: "14px",
+	textAlign: "center",
+	background: "rgba(96,165,250,.12)",
+	border: "1px solid rgba(96,165,250,.22)",
+};
+
+const masterChallanCountValueSx = {
+	color: "#fff",
+	fontSize: 22,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const masterChallanCountLabelSx = {
+	mt: 0.4,
+	color: "#bfdbfe",
+	fontSize: 10,
+	fontWeight: 900,
+};
+
+const challanRowsWrapSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 1,
+};
+
+const challanHistoryRowSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0,1fr) auto",
+	alignItems: "center",
+	gap: 1.4,
+	p: 1.2,
+	borderRadius: "15px",
+	background: "rgba(15,23,42,.62)",
+	border: "1px solid rgba(255,255,255,.07)",
+};
+
+const customChallanHistoryCardSx = {
+	display: "grid",
+	gridTemplateColumns: "minmax(0,1fr) auto",
+	alignItems: "center",
+	gap: 1.4,
+	p: 1.4,
+	mb: 1.1,
+	borderRadius: "16px",
+	background:
+		"radial-gradient(circle at top right, rgba(139,92,246,.15), transparent 42%), rgba(255,255,255,.035)",
+	border: "1px solid rgba(139,92,246,.24)",
+};
+
+const challanHistoryNoSx = {
+	color: "#fff",
+	fontFamily: "monospace",
+	fontSize: 14,
+	fontWeight: 950,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const challanHistoryMetaSx = {
+	mt: 0.4,
+	color: "rgba(255,255,255,.58)",
+	fontSize: 11,
+	fontWeight: 750,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const challanHistoryActionsSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const tripStatusChipSx = (status) => {
+	const running =
+		String(status || "")
+			.toUpperCase() === "RUNNING";
+
+	return {
+		color: running ? "#fcd34d" : "#6ee7b7",
+		fontWeight: 900,
+		background: running
+			? "rgba(245,158,11,.13)"
+			: "rgba(16,185,129,.13)",
+		border: running
+			? "1px solid rgba(245,158,11,.24)"
+			: "1px solid rgba(16,185,129,.24)",
+	};
+};
+
 const dispatchControlIconSx = {
 	width: 42,
 	height: 42,
@@ -1968,7 +2168,10 @@ function DispatchedItemsPage() {
 	const [challanHistoryOpen, setChallanHistoryOpen] = useState(false);
 	const [masterItemsModalOpen, setMasterItemsModalOpen] = useState(false);
 	const [historySearch, setHistorySearch] = useState("");
-
+	const [challanHistoryOpen, setChallanHistoryOpen] = useState(false);
+	const [challanHistoryLoading, setChallanHistoryLoading] = useState(false);
+	const [challanHistoryRows, setChallanHistoryRows] = useState([]);
+	const [challanHistorySearch, setChallanHistorySearch] = useState("");
 	const [bulkMoveFgOpen, setBulkMoveFgOpen] = useState(false);
 	const [bulkSelectedFgZone, setBulkSelectedFgZone] = useState("");
 	const [bulkMoveFgLoading, setBulkMoveFgLoading] = useState(false);
@@ -4799,6 +5002,288 @@ function DispatchedItemsPage() {
 			});
 	}, [customChallans, historySearch]);
 
+	const getChallanNumber = (value) =>
+		String(
+			value?.challanNumber ||
+			value?.chalaanNumber ||
+			value?.dispatchChallanNumber ||
+			""
+		).trim();
+
+	const fetchChallanHistoryRows = async () => {
+		const res =
+			await authFetch(`${API_BASE_URL}/api/dispatched/challans`, {
+				method: "GET",
+			});
+
+		if (!res.ok) {
+			const text = await res.text();
+			throw new Error(text || "Failed to load challan history");
+		}
+
+		const data =
+			await res.json();
+
+		return Array.isArray(data)
+			? data
+			: [];
+	};
+
+	const openChallanHistory = async () => {
+		try {
+			setChallanHistoryOpen(true);
+			setChallanHistoryLoading(true);
+			setChallanHistorySearch("");
+
+			const [normalRows] =
+				await Promise.all([
+					fetchChallanHistoryRows(),
+					loadCustomChallans(),
+				]);
+
+			setChallanHistoryRows(normalRows);
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Failed to load challan history");
+			setChallanHistoryRows([]);
+		} finally {
+			setChallanHistoryLoading(false);
+		}
+	};
+
+	const previewExistingChallanPdf = async (challanNumber) => {
+		if (!challanNumber) {
+			alert("Challan number missing");
+			return;
+		}
+
+		try {
+			const res =
+				await authFetch(
+					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
+						challanNumber
+					)}/download?preview=true`,
+					{
+						method: "GET",
+						headers: {
+							Accept: "application/pdf",
+						},
+					}
+				);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Challan preview failed");
+			}
+
+			const blob =
+				await res.blob();
+
+			if (!blob || blob.size === 0) {
+				throw new Error("Empty challan PDF received");
+			}
+
+			const url =
+				URL.createObjectURL(blob);
+
+			setChalaanPreview({
+				url,
+				id: challanNumber,
+			});
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Challan preview failed");
+		}
+	};
+
+	const downloadExistingChallanPdf = async (challanNumber) => {
+		if (!challanNumber) {
+			alert("Challan number missing");
+			return;
+		}
+
+		try {
+			const res =
+				await authFetch(
+					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
+						challanNumber
+					)}/download?preview=false`,
+					{
+						method: "GET",
+						headers: {
+							Accept: "application/pdf",
+						},
+					}
+				);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Challan download failed");
+			}
+
+			const blob =
+				await res.blob();
+
+			const url =
+				URL.createObjectURL(blob);
+
+			const a =
+				document.createElement("a");
+
+			a.href = url;
+			a.download = `CHALLAN_${challanNumber}.pdf`;
+
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+
+			setTimeout(() => {
+				URL.revokeObjectURL(url);
+			}, 10000);
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Challan download failed");
+		}
+	};
+
+	const getMasterHistoryKey = (item) => {
+		return [
+			item?.clientName || "",
+			item?.clientAddress || "",
+			item?.pdNo || "",
+			item?.drawingNo || "",
+		]
+			.map((v) => String(v || "").trim().toLowerCase())
+			.join("|");
+	};
+
+	const challanHistoryMasterGroups = useMemo(() => {
+		const groups = new Map();
+
+		(challanHistoryRows || []).forEach((challan) => {
+			const challanNumber =
+				getChallanNumber(challan);
+
+			(challan.items || []).forEach((item) => {
+				const key =
+					getMasterHistoryKey(item) ||
+					`${challanNumber}-${item.zohoItemId}`;
+
+				if (!groups.has(key)) {
+					groups.set(key, {
+						key,
+						itemName: item.name || "Master Item",
+						clientName: item.clientName || "—",
+						clientAddress: item.clientAddress || "—",
+						pdNo: item.pdNo || "—",
+						drawingNo: item.drawingNo || "—",
+						challans: new Map(),
+						totalItems: 0,
+						lastDate: challan.dispatchedAt || item.dispatchedAt || "",
+					});
+				}
+
+				const group =
+					groups.get(key);
+
+				group.totalItems += 1;
+
+				if (!group.challans.has(challanNumber)) {
+					group.challans.set(challanNumber, {
+						challanNumber,
+						driverName: challan.driverName || "—",
+						vehicleNumber: challan.vehicleNumber || "—",
+						dispatchedAt: challan.dispatchedAt,
+						dispatchedBy: challan.dispatchedBy || "—",
+						tripStatus: challan.tripStatus || "—",
+						items: [],
+					});
+				}
+
+				group.challans.get(challanNumber).items.push(item);
+
+				const currentDate =
+					challan.dispatchedAt || item.dispatchedAt || "";
+
+				if (
+					currentDate &&
+					(
+						!group.lastDate ||
+						new Date(currentDate).getTime() >
+						new Date(group.lastDate).getTime()
+					)
+				) {
+					group.lastDate = currentDate;
+				}
+			});
+		});
+
+		const searchText =
+			normalizeSmartSearch(challanHistorySearch);
+
+		return Array.from(groups.values())
+			.map((group) => ({
+				...group,
+				challans: Array.from(group.challans.values()),
+			}))
+			.filter((group) => {
+				if (!searchText) {
+					return true;
+				}
+
+				const text =
+					normalizeSmartSearch(
+						[
+							group.itemName,
+							group.clientName,
+							group.clientAddress,
+							group.pdNo,
+							group.drawingNo,
+							group.challans
+								.map((c) => c.challanNumber)
+								.join(" "),
+						].join(" ")
+					);
+
+				return text.includes(searchText);
+			})
+			.sort((a, b) => {
+				return (
+					new Date(b.lastDate || 0).getTime() -
+					new Date(a.lastDate || 0).getTime()
+				);
+			});
+	}, [challanHistoryRows, challanHistorySearch]);
+
+	const customChallanHistoryRows = useMemo(() => {
+		const searchText =
+			normalizeSmartSearch(challanHistorySearch);
+
+		return (customChallans || [])
+			.filter((challan) => {
+				if (!searchText) {
+					return true;
+				}
+
+				const text =
+					normalizeSmartSearch(
+						[
+							challan.challanNumber,
+							challan.challanType,
+							challan.challanTypeLabel,
+							challan.fromLocation,
+							challan.toLocation,
+							challan.clientName,
+							challan.projectName,
+							challan.pdNo,
+							challan.generatedBy,
+						].join(" ")
+					);
+
+				return text.includes(searchText);
+			});
+	}, [customChallans, challanHistorySearch]);
+
 	return (
 		<div style={page}>
 			<div style={content}>
@@ -4857,6 +5342,13 @@ function DispatchedItemsPage() {
 								{filteredRows.length}
 							</span>
 						</Box>
+
+						<Button
+							onClick={openChallanHistory}
+							sx={challanHistoryButtonSx}
+						>
+							📄 Challan History
+						</Button>
 
 						{isDispatch && (
 							<>
@@ -8255,6 +8747,342 @@ function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				{challanHistoryOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 5900 }}
+						onClick={() => setChallanHistoryOpen(false)}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 1120,
+								maxHeight: "90vh",
+							}}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#60a5fa")}>
+										📄
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Challan History
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Master item wise challan history. Admin sees all, users see their own only.
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									sx={modalCloseButtonSx}
+									onClick={() => setChallanHistoryOpen(false)}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<TextField
+									fullWidth
+									value={challanHistorySearch}
+									onChange={(e) =>
+										setChallanHistorySearch(e.target.value)
+									}
+									placeholder="Search challan, master item, client, PD, drawing, driver, vehicle..."
+									sx={{
+										...formFieldSx,
+										mb: 2,
+									}}
+								/>
+
+								<Box sx={challanHistoryStatsGridSx}>
+									<ChallanHistoryStat
+										label="Master Groups"
+										value={challanHistoryMasterGroups.length}
+										accent="#60a5fa"
+									/>
+
+									<ChallanHistoryStat
+										label="Dispatch Challans"
+										value={challanHistoryRows.length}
+										accent="#22c55e"
+									/>
+
+									<ChallanHistoryStat
+										label="Custom Challans"
+										value={customChallanHistoryRows.length}
+										accent="#8b5cf6"
+									/>
+
+									<ChallanHistoryStat
+										label="Total Items"
+										value={
+											challanHistoryRows.reduce(
+												(sum, challan) =>
+													sum + Number(challan.totalItems || 0),
+												0
+											) +
+											customChallanHistoryRows.reduce(
+												(sum, challan) =>
+													sum + Number(challan.totalItems || 0),
+												0
+											)
+										}
+										accent="#f59e0b"
+									/>
+								</Box>
+
+								{challanHistoryLoading && (
+									<Box sx={modalEmptyStateSx}>
+										Loading challan history…
+									</Box>
+								)}
+
+								{!challanHistoryLoading && (
+									<Box sx={challanHistoryScrollSx}>
+										<Box sx={challanHistorySectionTitleSx}>
+											Master Item Wise Dispatch Challans
+										</Box>
+
+										{challanHistoryMasterGroups.length === 0 && (
+											<Box sx={modalEmptyStateSx}>
+												No dispatch challan history found.
+											</Box>
+										)}
+
+										{challanHistoryMasterGroups.map((group) => (
+											<Box
+												key={group.key}
+												sx={masterChallanCardSx}
+											>
+												<Box sx={masterChallanHeaderSx}>
+													<Box sx={{ minWidth: 0 }}>
+														<Box sx={masterChallanTitleSx}>
+															{group.itemName}
+														</Box>
+
+														<Box sx={masterChallanMetaSx}>
+															Client: {group.clientName} • PD: {group.pdNo} • DWG: {group.drawingNo}
+														</Box>
+
+														<Box sx={masterChallanMetaSx}>
+															{group.clientAddress}
+														</Box>
+													</Box>
+
+													<Box sx={masterChallanCountSx}>
+														<Box sx={masterChallanCountValueSx}>
+															{group.challans.length}
+														</Box>
+
+														<Box sx={masterChallanCountLabelSx}>
+															Challan
+														</Box>
+													</Box>
+												</Box>
+
+												<Box sx={challanRowsWrapSx}>
+													{group.challans.map((challan) => (
+														<Box
+															key={challan.challanNumber}
+															sx={challanHistoryRowSx}
+														>
+															<Box sx={{ minWidth: 0 }}>
+																<Box sx={challanHistoryNoSx}>
+																	{challan.challanNumber}
+																</Box>
+
+																<Box sx={challanHistoryMetaSx}>
+																	{challan.items.length} item
+																	{challan.items.length === 1 ? "" : "s"} •{" "}
+																	{formatLocalDateTimeDisplay(challan.dispatchedAt)}
+																</Box>
+
+																<Box sx={challanHistoryMetaSx}>
+																	By: {challan.dispatchedBy} • Driver: {challan.driverName} • Vehicle: {challan.vehicleNumber}
+																</Box>
+															</Box>
+
+															<Box sx={challanHistoryActionsSx}>
+																<Chip
+																	size="small"
+																	label={challan.tripStatus}
+																	sx={tripStatusChipSx(
+																		challan.tripStatus
+																	)}
+																/>
+
+																<Button
+																	size="small"
+																	onClick={() =>
+																		previewExistingChallanPdf(
+																			challan.challanNumber
+																		)
+																	}
+																	sx={modalSecondaryButtonSx}
+																>
+																	Preview
+																</Button>
+
+																<Button
+																	size="small"
+																	onClick={() =>
+																		downloadExistingChallanPdf(
+																			challan.challanNumber
+																		)
+																	}
+																	sx={modalSecondaryButtonSx}
+																>
+																	Download
+																</Button>
+															</Box>
+														</Box>
+													))}
+												</Box>
+											</Box>
+										))}
+
+										<Box sx={challanHistorySectionTitleSx}>
+											Custom Challans
+										</Box>
+
+										{customChallansLoading && (
+											<Box sx={modalEmptyStateSx}>
+												Loading custom challans…
+											</Box>
+										)}
+
+										{!customChallansLoading &&
+											customChallanHistoryRows.length === 0 && (
+												<Box sx={modalEmptyStateSx}>
+													No custom challan history found.
+												</Box>
+											)}
+
+										{!customChallansLoading &&
+											customChallanHistoryRows.map((challan) => (
+												<Box
+													key={challan.challanNumber}
+													sx={customChallanHistoryCardSx}
+												>
+													<Box sx={{ minWidth: 0 }}>
+														<Box sx={challanHistoryNoSx}>
+															{challan.challanNumber}
+														</Box>
+
+														<Box sx={challanHistoryMetaSx}>
+															{challan.challanTypeLabel ||
+																challan.challanType ||
+																"Custom Challan"}{" "}
+															• {challan.totalItems || 0} item
+															{Number(challan.totalItems || 0) === 1
+																? ""
+																: "s"}
+														</Box>
+
+														<Box sx={challanHistoryMetaSx}>
+															{challan.fromLocation || "—"} →{" "}
+															{challan.toLocation || "—"}
+														</Box>
+
+														<Box sx={challanHistoryMetaSx}>
+															Client: {challan.clientName || "—"} • By:{" "}
+															{challan.generatedBy || "—"} •{" "}
+															{formatLocalDateTimeDisplay(challan.generatedAt)}
+														</Box>
+													</Box>
+
+													<Box sx={challanHistoryActionsSx}>
+														<Button
+															size="small"
+															onClick={async () => {
+																try {
+																	const result =
+																		await downloadCustomChallan(
+																			challan.challanNumber
+																		);
+
+																	const url =
+																		URL.createObjectURL(result.blob);
+
+																	setChalaanPreview({
+																		url,
+																		id:
+																			result.challanNo ||
+																			challan.challanNumber,
+																	});
+																} catch (err) {
+																	console.error(err);
+																	alert(
+																		err.message ||
+																		"Custom challan preview failed"
+																	);
+																}
+															}}
+															sx={modalSecondaryButtonSx}
+														>
+															Preview
+														</Button>
+
+														<Button
+															size="small"
+															onClick={async () => {
+																try {
+																	const result =
+																		await downloadCustomChallan(
+																			challan.challanNumber
+																		);
+
+																	const url =
+																		URL.createObjectURL(result.blob);
+
+																	const a =
+																		document.createElement("a");
+
+																	a.href = url;
+																	a.download = `CUSTOM_CHALLAN_${challan.challanNumber}.pdf`;
+
+																	document.body.appendChild(a);
+																	a.click();
+																	a.remove();
+
+																	setTimeout(() => {
+																		URL.revokeObjectURL(url);
+																	}, 10000);
+																} catch (err) {
+																	console.error(err);
+																	alert(
+																		err.message ||
+																		"Custom challan download failed"
+																	);
+																}
+															}}
+															sx={modalSecondaryButtonSx}
+														>
+															Download
+														</Button>
+													</Box>
+												</Box>
+											))}
+									</Box>
+								)}
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									onClick={() => setChallanHistoryOpen(false)}
+									sx={modalSecondaryButtonSx}
+								>
+									Close
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
 				{chalaanPreview && (
 					<div
 						style={popupOverlay}
@@ -8765,6 +9593,24 @@ function DispatchedItemsPage() {
 				/>
 			</div>
 		</div>
+	);
+}
+
+function ChallanHistoryStat({
+	label,
+	value,
+	accent,
+}) {
+	return (
+		<Box sx={challanHistoryStatSx(accent)}>
+			<Box sx={challanHistoryStatLabelSx}>
+				{label}
+			</Box>
+
+			<Box sx={challanHistoryStatValueSx}>
+				{value}
+			</Box>
+		</Box>
 	);
 }
 
