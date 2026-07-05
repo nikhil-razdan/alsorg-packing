@@ -151,6 +151,12 @@ function InventoryMasterWorkbench({
   const [openMap, setOpenMap] =
     useState({});
 
+  const [pageNo, setPageNo] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(10);
+
   const groups =
     useMemo(() => {
       const map =
@@ -221,6 +227,52 @@ function InventoryMasterWorkbench({
           String(a.itemName).localeCompare(String(b.itemName))
         );
     }, [rows]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(groups.length / pageSize)
+    );
+
+  const safePageNo =
+    Math.min(pageNo, totalPages);
+
+  const pageStartIndex =
+    (safePageNo - 1) * pageSize;
+
+  const pageEndIndex =
+    Math.min(
+      pageStartIndex + pageSize,
+      groups.length
+    );
+
+  const paginatedGroups =
+    useMemo(() => {
+      return groups.slice(
+        pageStartIndex,
+        pageEndIndex
+      );
+    }, [
+      groups,
+      pageStartIndex,
+      pageEndIndex,
+    ]);
+
+  useEffect(() => {
+    setPageNo(1);
+  }, [
+    rows.length,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (pageNo > totalPages) {
+      setPageNo(totalPages);
+    }
+  }, [
+    pageNo,
+    totalPages,
+  ]);
 
   const totals =
     useMemo(() => {
@@ -308,7 +360,7 @@ function InventoryMasterWorkbench({
       </Box>
 
       <Box sx={inventorySectionListSx}>
-        {groups.map((group) => {
+        {paginatedGroups.map((group) => {
           const isOpen =
             Boolean(openMap[group.key]);
 
@@ -510,6 +562,91 @@ function InventoryMasterWorkbench({
           </Box>
         )}
       </Box>
+
+      {groups.length > 0 && (
+        <Box sx={inventoryWorkbenchPaginationSx}>
+          <Box sx={inventoryPaginationLeftSx}>
+            <Box sx={inventoryPaginationTextSx}>
+              Showing{" "}
+              <b>
+                {pageStartIndex + 1}
+              </b>
+              {" - "}
+              <b>
+                {pageEndIndex}
+              </b>
+              {" of "}
+              <b>
+                {groups.length}
+              </b>
+              {" master items"}
+            </Box>
+          </Box>
+
+          <Box sx={inventoryPaginationCenterSx}>
+            <Button
+              disabled={safePageNo === 1}
+              onClick={() =>
+                setPageNo((prev) =>
+                  Math.max(1, prev - 1)
+                )
+              }
+              sx={inventoryPaginationButtonSx}
+            >
+              ◀ Previous
+            </Button>
+
+            <Box sx={inventoryPageCountSx}>
+              Page{" "}
+              <span>
+                {safePageNo}
+              </span>
+              {" of "}
+              {totalPages}
+            </Box>
+
+            <Button
+              disabled={safePageNo === totalPages}
+              onClick={() =>
+                setPageNo((prev) =>
+                  Math.min(totalPages, prev + 1)
+                )
+              }
+              sx={{
+                ...inventoryPaginationButtonSx,
+                background:
+                  "linear-gradient(180deg,#2563eb,#1d4ed8)",
+              }}
+            >
+              Next ▶
+            </Button>
+          </Box>
+
+          <Box sx={inventoryPaginationRightSx}>
+            <Box sx={inventoryPaginationTextSx}>
+              Show
+            </Box>
+
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPageNo(1);
+              }}
+              style={inventoryPageSizeSelectStyle}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+
+            <Box sx={inventoryPaginationTextSx}>
+              per page
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -5772,6 +5909,110 @@ const inventoryMasterLeftSx = {
   gap: "10px",
   minWidth: 0,
   flex: 1,
+};
+
+const inventoryWorkbenchPaginationSx = {
+  marginTop: "12px",
+  padding: "12px",
+  borderRadius: "12px",
+  background: "rgba(15,23,42,.78)",
+  border: "1px solid rgba(255,255,255,.07)",
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",
+  alignItems: "center",
+  gap: "12px",
+
+  "@media (max-width: 900px)": {
+    gridTemplateColumns: "1fr",
+  },
+};
+
+const inventoryPaginationLeftSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: "8px",
+};
+
+const inventoryPaginationCenterSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+
+const inventoryPaginationRightSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: "8px",
+};
+
+const inventoryPaginationTextSx = {
+  color: "rgba(255,255,255,.62)",
+  fontSize: 12,
+  fontWeight: 800,
+
+  "& b": {
+    color: "#fff",
+    fontWeight: 950,
+  },
+};
+
+const inventoryPaginationButtonSx = {
+  height: 34,
+  borderRadius: "9px",
+  textTransform: "none",
+  fontWeight: 900,
+  fontSize: 12,
+  color: "#fff",
+  background: "rgba(255,255,255,.055)",
+  border: "1px solid rgba(255,255,255,.09)",
+  minWidth: 104,
+
+  "&:hover": {
+    background: "rgba(59,130,246,.16)",
+    borderColor: "rgba(59,130,246,.30)",
+  },
+
+  "&.Mui-disabled": {
+    color: "rgba(255,255,255,.28)",
+    background: "rgba(255,255,255,.025)",
+    borderColor: "rgba(255,255,255,.05)",
+  },
+};
+
+const inventoryPageCountSx = {
+  minHeight: 34,
+  padding: "0 12px",
+  borderRadius: "9px",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.07)",
+  display: "flex",
+  alignItems: "center",
+  color: "rgba(255,255,255,.70)",
+  fontSize: 12,
+  fontWeight: 850,
+
+  "& span": {
+    margin: "0 6px",
+    color: "#60a5fa",
+    fontWeight: 950,
+  },
+};
+
+const inventoryPageSizeSelectStyle = {
+  height: 34,
+  minWidth: 72,
+  borderRadius: 9,
+  border: "1px solid rgba(255,255,255,.10)",
+  background: "#0f172a",
+  color: "#fff",
+  padding: "0 10px",
+  outline: "none",
+  fontWeight: 900,
+  colorScheme: "dark",
 };
 
 const inventoryExpandBtnSx = {
