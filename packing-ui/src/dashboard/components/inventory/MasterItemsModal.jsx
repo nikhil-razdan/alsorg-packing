@@ -187,12 +187,9 @@ const getPacketStickerPreviewUrl = (packet) => {
         return "";
     }
 
-    return (
-        packet?.stickerPreviewUrl ||
-        `/api/inventory/stickers/packet-items/${encodeURIComponent(
-            packetItemId
-        )}/latest?download=false`
-    );
+    return `/api/inventory/stickers/packet-items/${encodeURIComponent(
+        packetItemId
+    )}/latest?download=false`;
 };
 
 const getPacketStickerDownloadUrl = (packet) => {
@@ -207,12 +204,9 @@ const getPacketStickerDownloadUrl = (packet) => {
         return "";
     }
 
-    return (
-        packet?.stickerDownloadUrl ||
-        `/api/inventory/stickers/packet-items/${encodeURIComponent(
-            packetItemId
-        )}/latest?download=true`
-    );
+    return `/api/inventory/stickers/packet-items/${encodeURIComponent(
+        packetItemId
+    )}/latest?download=true`;
 };
 
 const getChallanPreviewUrl = (challan) =>
@@ -284,6 +278,12 @@ function MasterItemsModal({
 
     const [activeTab, setActiveTab] =
         useState("overview");
+
+    const [page, setPage] =
+        useState(0);
+
+    const [size, setSize] =
+        useState(25);
 
     const pdfObjectUrlRef =
         useRef("");
@@ -375,7 +375,10 @@ function MasterItemsModal({
         };
     }, []);
 
-    const loadData = async () => {
+    const loadData = async (
+        nextPage = page,
+        nextSize = size
+    ) => {
         try {
             setLoading(true);
             setError("");
@@ -388,8 +391,10 @@ function MasterItemsModal({
                     client: client.trim(),
                     from: toStartDateTime(fromDate),
                     to: toEndDateTime(toDate),
-                    limit: 700,
-                    offset: 0,
+                    limit: nextSize,
+                    offset: nextPage * nextSize,
+                    page: nextPage,
+                    size: nextSize,
                 });
 
             const nextRows =
@@ -492,10 +497,10 @@ function MasterItemsModal({
 
     useEffect(() => {
         if (open) {
-            loadData();
+            loadData(page, size);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, status]);
+    }, [open, status, page, size]);
 
     const summary =
         useMemo(() => {
@@ -557,6 +562,28 @@ function MasterItemsModal({
             };
         }, [rows]);
 
+    const applyFilters = () => {
+        if (page === 0) {
+            loadData(0, size);
+            return;
+        }
+
+        setPage(0);
+    };
+
+    const goToPage = (nextPage) => {
+        const bounded =
+            Math.max(
+                0,
+                Math.min(
+                    nextPage,
+                    totalPages - 1
+                )
+            );
+
+        setPage(bounded);
+    };
+
     const clearFilters = () => {
         setStatus("ALL");
         setFromDate("");
@@ -564,6 +591,7 @@ function MasterItemsModal({
         setSearch("");
         setPlantCode("");
         setClient("");
+        setPage(0);
     };
 
     const master =
@@ -606,12 +634,36 @@ function MasterItemsModal({
             return map;
         }, [packetItems]);
 
+
+    const totalPages =
+        Math.max(
+            1,
+            Math.ceil(Number(total || 0) / Number(size || 25))
+        );
+
+    const safePage =
+        Math.min(
+            page,
+            totalPages - 1
+        );
+
+    const showingFrom =
+        rows.length === 0
+            ? 0
+            : safePage * size + 1;
+
+    const showingTo =
+        rows.length === 0
+            ? 0
+            : safePage * size + rows.length;
+
     if (!open) {
         return null;
     }
 
     return (
         <div style={overlay}>
+            <style>{premiumModalCss}</style>
             <div style={modal}>
                 <div style={header}>
                     <div>
@@ -685,9 +737,10 @@ function MasterItemsModal({
                 <div style={filters}>
                     <select
                         value={status}
-                        onChange={(e) =>
-                            setStatus(e.target.value)
-                        }
+                        onChange={(e) => {
+                            setStatus(e.target.value);
+                            setPage(0);
+                        }}
                         style={input}
                     >
                         <option value="ALL">
@@ -771,7 +824,7 @@ function MasterItemsModal({
 
                     <button
                         type="button"
-                        onClick={loadData}
+                        onClick={applyFilters}
                         disabled={loading}
                         style={primaryBtn}
                     >
@@ -802,7 +855,7 @@ function MasterItemsModal({
                                 </div>
 
                                 <div style={panelSub}>
-                                    Showing {rows.length} of {total || rows.length}
+                                    Showing {showingFrom}-{showingTo} of {total || rows.length}
                                 </div>
                             </div>
 
@@ -811,7 +864,7 @@ function MasterItemsModal({
                             </div>
                         </div>
 
-                        <div style={tableWrap}>
+                        <div style={tableWrap} className="premium-scroll">
                             <table style={table}>
                                 <thead>
                                     <tr>
@@ -987,9 +1040,68 @@ function MasterItemsModal({
                                 </tbody>
                             </table>
                         </div>
+                        <div style={masterPager}>
+                            <div style={pagerInfo}>
+                                Page <b>{safePage + 1}</b> of <b>{totalPages}</b>
+                            </div>
+
+                            <select
+                                value={size}
+                                onChange={(e) => {
+                                    const nextSize =
+                                        Number(e.target.value);
+
+                                    setSize(nextSize);
+                                    setPage(0);
+                                }}
+                                style={pageSizeSelect}
+                            >
+                                <option value={25}>25 / page</option>
+                                <option value={50}>50 / page</option>
+                                <option value={100}>100 / page</option>
+                            </select>
+
+                            <div style={pagerBtns}>
+                                <button
+                                    type="button"
+                                    onClick={() => goToPage(0)}
+                                    disabled={safePage === 0}
+                                    style={pagerBtn(safePage === 0)}
+                                >
+                                    First
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => goToPage(safePage - 1)}
+                                    disabled={safePage === 0}
+                                    style={pagerBtn(safePage === 0)}
+                                >
+                                    ← Prev
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => goToPage(safePage + 1)}
+                                    disabled={safePage >= totalPages - 1}
+                                    style={pagerBtn(safePage >= totalPages - 1)}
+                                >
+                                    Next →
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => goToPage(totalPages - 1)}
+                                    disabled={safePage >= totalPages - 1}
+                                    style={pagerBtn(safePage >= totalPages - 1)}
+                                >
+                                    Last
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div style={detailPanel}>
+                    <div style={detailPanel} className="premium-scroll">
                         {detailLoading && (
                             <div style={emptyDetail}>
                                 Loading selected master item details...
@@ -1227,7 +1339,7 @@ function OverviewPanel({
                             Packet Stickers
                         </div>
 
-                        <div style={overviewDocScroll}>
+                        <div style={overviewDocScroll} className="premium-scroll">
                             {packets.map((packet) => {
                                 const packetItemId =
                                     getLogicalPacketItemId(packet);
@@ -1304,7 +1416,7 @@ function OverviewPanel({
                             Master Item Challans
                         </div>
 
-                        <div style={overviewDocScroll}>
+                        <div style={overviewDocScroll} className="premium-scroll">
                             {challans.map((challan) => {
                                 const previewUrl =
                                     getChallanPreviewUrl(challan);
@@ -1382,6 +1494,7 @@ function PacketsPanel({
     packetItemsByPacketId,
     expandedPacket,
     setExpandedPacket,
+    onPreviewPdf,
 }) {
     if (!packets.length) {
         return (
@@ -1479,8 +1592,13 @@ function PacketsPanel({
                                         onClick={(e) => {
                                             e.stopPropagation();
 
-                                            openProtectedDashboardPdf(
-                                                getPacketStickerPreviewUrl(packet)
+                                            onPreviewPdf(
+                                                getPacketStickerPreviewUrl(packet),
+                                                `Sticker - ${safe(
+                                                    packet.stickerNumber ||
+                                                    packet.packetNumber ||
+                                                    getLogicalPacketItemId(packet)
+                                                )}`
                                             );
                                         }}
                                         style={docBtn("#38bdf8")}
@@ -1517,7 +1635,7 @@ function PacketsPanel({
                         </button>
 
                         {isOpen && (
-                            <div style={packetTableWrap}>
+                            <div style={packetTableWrap} className="premium-scroll">
                                 <table style={packetTable}>
                                     <thead>
                                         <tr>
@@ -1660,6 +1778,7 @@ function PacketsPanel({
 
 function ChallansPanel({
     challans,
+    onPreviewPdf,
 }) {
     if (!challans.length) {
         return (
@@ -1684,8 +1803,9 @@ function ChallansPanel({
                         <button
                             type="button"
                             onClick={() =>
-                                openProtectedDashboardPdf(
-                                    getChallanPreviewUrl(challan)
+                                onPreviewPdf(
+                                    getChallanPreviewUrl(challan),
+                                    `Challan - ${safe(challan.challanNumber)}`
                                 )
                             }
                             style={docBtn("#8b5cf6")}
@@ -2344,6 +2464,95 @@ const timelineGrid = {
     gap: 10,
 };
 
+const premiumModalCss = `
+    .premium-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(96,165,250,.55) rgba(15,23,42,.35);
+    }
+
+    .premium-scroll::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .premium-scroll::-webkit-scrollbar-track {
+        background: rgba(15,23,42,.42);
+        border-radius: 999px;
+    }
+
+    .premium-scroll::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, rgba(96,165,250,.85), rgba(59,130,246,.45));
+        border-radius: 999px;
+        border: 2px solid rgba(15,23,42,.72);
+    }
+
+    .premium-scroll::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, rgba(147,197,253,.95), rgba(59,130,246,.62));
+    }
+
+    .premium-scroll::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+`;
+
+const masterPager = {
+    flexShrink: 0,
+    minHeight: 54,
+    padding: "10px 12px",
+    borderTop: "1px solid rgba(255,255,255,.075)",
+    background:
+        "linear-gradient(180deg, rgba(15,23,42,.96), rgba(8,17,31,.92))",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
+};
+
+const pagerInfo = {
+    color: "rgba(255,255,255,.62)",
+    fontSize: 11,
+    fontWeight: 850,
+};
+
+const pageSizeSelect = {
+    height: 32,
+    borderRadius: 999,
+    border: "1px solid rgba(96,165,250,.22)",
+    background: "rgba(15,23,42,.92)",
+    color: "#bfdbfe",
+    padding: "0 10px",
+    outline: "none",
+    fontSize: 11,
+    fontWeight: 900,
+    colorScheme: "dark",
+};
+
+const pagerBtns = {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    flexWrap: "wrap",
+};
+
+const pagerBtn = (disabled) => ({
+    height: 32,
+    padding: "0 11px",
+    borderRadius: 999,
+    border: disabled
+        ? "1px solid rgba(255,255,255,.06)"
+        : "1px solid rgba(96,165,250,.25)",
+    background: disabled
+        ? "rgba(255,255,255,.035)"
+        : "linear-gradient(135deg, rgba(37,99,235,.30), rgba(59,130,246,.16))",
+    color: disabled
+        ? "rgba(255,255,255,.34)"
+        : "#dbeafe",
+    fontSize: 10,
+    fontWeight: 950,
+    cursor: disabled ? "not-allowed" : "pointer",
+});
+
 const infoLine = {
     padding: 12,
     borderRadius: 15,
@@ -2590,9 +2799,9 @@ const docActions = {
 const pdfPreviewOverlay = {
     position: "fixed",
     inset: 0,
-    zIndex: 12000,
-    background: "rgba(2,6,23,.86)",
-    backdropFilter: "blur(14px)",
+    zIndex: 2147483000,
+    background: "rgba(2,6,23,.88)",
+    backdropFilter: "blur(16px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -2600,13 +2809,13 @@ const pdfPreviewOverlay = {
 };
 
 const pdfPreviewCard = {
-    width: "min(1060px, 96vw)",
-    height: "min(88vh, 860px)",
-    borderRadius: 26,
+    width: "min(1080px, 96vw)",
+    height: "min(90vh, 880px)",
+    borderRadius: 28,
     background:
-        "linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,17,31,.96))",
-    border: "1px solid rgba(255,255,255,.12)",
-    boxShadow: "0 34px 100px rgba(0,0,0,.70)",
+        "radial-gradient(circle at top left, rgba(59,130,246,.20), transparent 32%), linear-gradient(180deg, rgba(15,23,42,.99), rgba(8,17,31,.97))",
+    border: "1px solid rgba(147,197,253,.16)",
+    boxShadow: "0 40px 120px rgba(0,0,0,.78)",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",

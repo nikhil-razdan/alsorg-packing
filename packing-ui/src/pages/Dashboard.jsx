@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import StatusDonutChart from "../dashboard/components/StatusDonutChart";
-import StatusLineChart from "../dashboard/components/StatusLineChart";
 import StatusBarChart from "../dashboard/components/StatusBarChart";
 import ActivityFeed from "../dashboard/components/ActivityFeed";
 import InventoryReports from "../dashboard/components/inventory/InventoryReports";
@@ -1175,14 +1174,6 @@ function DashboardPage() {
                       <div style={chartPanelBody}>
                         {chartType === "donut" && (
                           <StatusDonutChart
-                            warehouse={stats.warehouseItems}
-                            readyToDispatch={stats.readyToDispatchItems}
-                            ready={stats.readyItems}
-                          />
-                        )}
-
-                        {chartType === "line" && (
-                          <StatusLineChart
                             warehouse={stats.warehouseItems}
                             readyToDispatch={stats.readyToDispatchItems}
                             ready={stats.readyItems}

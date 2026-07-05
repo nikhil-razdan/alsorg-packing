@@ -49,8 +49,9 @@ function StatusDonutChart({
           </div>
         </div>
 
-        <div style={chartBadge}>
-          {total}
+        <div style={totalBadge}>
+          <span>Total</span>
+          <strong>{total}</strong>
         </div>
       </div>
 
@@ -244,6 +245,21 @@ const donutWrap = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+};
+
+const totalBadge = {
+  minWidth: 66,
+  padding: "7px 9px",
+  borderRadius: 13,
+  background: "rgba(37,99,235,.14)",
+  border: "1px solid rgba(96,165,250,.24)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  textAlign: "right",
+  color: "rgba(255,255,255,.72)",
+  fontSize: 10,
+  fontWeight: 850,
 };
 
 const donutCenter = {

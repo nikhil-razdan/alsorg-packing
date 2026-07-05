@@ -506,7 +506,10 @@ function InventoryMasterWorkbench({
                           <>
                             <Button
                               size="small"
-                              onClick={() => onPreviewSticker(row)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPreviewSticker(row);
+                              }}
                               sx={inventoryMiniBtnSx("#a78bfa")}
                             >
                               Preview
@@ -514,7 +517,10 @@ function InventoryMasterWorkbench({
 
                             <Button
                               size="small"
-                              onClick={() => onDownloadSticker(row)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDownloadSticker(row);
+                              }}
                               sx={inventoryMiniBtnSx("#22c55e")}
                             >
                               Download
@@ -2615,24 +2621,39 @@ function ZohoItemsPage() {
     )}/latest?download=${download ? "true" : "false"}`;
   };
 
-  const previewExistingStickerPdf = async (row) => {
-    const path =
-      latestStickerPdfPath(row, false);
+  const getPacketItemIdForSticker = (row) =>
+    row?.packetItemId ||
+    row?.itemId ||
+    row?.id ||
+    row?.packet_item_id ||
+    "";
 
-    if (!path) {
+  const previewExistingStickerPdf = async (row) => {
+    const packetItemId =
+      getPacketItemIdForSticker(row);
+
+    if (!packetItemId) {
       showUiAlert("error", "Packet item id missing");
       return;
     }
 
-    if (!row?.stickerNumber) {
+    const stickerNumber =
+      row?.stickerNumber ||
+      row?.sticker_number ||
+      "";
+
+    if (!stickerNumber) {
       showUiAlert("error", "Sticker is not generated for this packet yet");
       return;
     }
 
+    const path =
+      latestStickerPdfPath(packetItemId, false);
+
     try {
+      setSelectedItem(row);
       setStickerReviewOpen(true);
       setStickerReviewLoading(true);
-      setSelectedItem(row);
 
       if (stickerReviewPdf) {
         URL.revokeObjectURL(stickerReviewPdf);
@@ -2654,38 +2675,61 @@ function ZohoItemsPage() {
         "error",
         e.message || "Failed to preview sticker PDF"
       );
+
+      setStickerReviewOpen(false);
     } finally {
       setStickerReviewLoading(false);
     }
   };
 
-  const downloadExistingStickerPdf = async (row) => {
-    const path =
-      latestStickerPdfPath(row, true);
+  const filenameSafe = (value) =>
+    String(value || "document")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_");
 
-    if (!path) {
+  const downloadExistingStickerPdf = async (row) => {
+    const packetItemId =
+      getPacketItemIdForSticker(row);
+
+    if (!packetItemId) {
       showUiAlert("error", "Packet item id missing");
       return;
     }
 
-    if (!row?.stickerNumber) {
+    const stickerNumber =
+      row?.stickerNumber ||
+      row?.sticker_number ||
+      "";
+
+    if (!stickerNumber) {
       showUiAlert("error", "Sticker is not generated for this packet yet");
       return;
     }
+
+    const path =
+      latestStickerPdfPath(packetItemId, true);
 
     try {
       const blob =
         await fetchProtectedPdfBlob(path);
 
-      triggerDownloadFromBlob(
-        blob,
-        getStickerFileName(row)
-      );
+      const objectUrl =
+        URL.createObjectURL(blob);
 
-      showUiAlert(
-        "success",
-        "Sticker downloaded successfully"
-      );
+      const link =
+        document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = `Sticker_${filenameSafe(
+        stickerNumber || packetItemId
+      )}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(objectUrl);
     } catch (e) {
       console.error(e);
 

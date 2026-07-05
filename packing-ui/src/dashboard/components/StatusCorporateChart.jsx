@@ -41,7 +41,7 @@ function StatusCorporateChart({
       <div style={chartHeader}>
         <div>
           <div style={chartTitle}>
-            Corporate Inventory Mix
+            Inventory Board
           </div>
 
           <div style={chartSubtitle}>
