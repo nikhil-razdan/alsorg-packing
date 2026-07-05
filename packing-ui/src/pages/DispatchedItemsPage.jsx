@@ -1542,6 +1542,90 @@ const wrap = {
 		"1px solid rgba(255,255,255,.06)",
 };
 
+const pdfPreviewOverlaySx = {
+	position: "fixed",
+	inset: 0,
+	zIndex: 9000,
+
+	background: `
+		radial-gradient(circle at 20% 10%, rgba(59,130,246,.16), transparent 30%),
+		radial-gradient(circle at 80% 90%, rgba(16,185,129,.10), transparent 32%),
+		rgba(2,6,23,.82)
+	`,
+
+	backdropFilter: "blur(16px)",
+	WebkitBackdropFilter: "blur(16px)",
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+
+	p: 2,
+};
+
+const pdfPreviewModalSx = {
+	width: "min(1120px, 94vw)",
+	height: "min(86vh, 820px)",
+
+	display: "flex",
+	flexDirection: "column",
+
+	borderRadius: "22px",
+
+	overflow: "hidden",
+
+	background:
+		"linear-gradient(180deg,#0f172a,#111827)",
+
+	border:
+		"1px solid rgba(255,255,255,.10)",
+
+	boxShadow:
+		"0 45px 120px rgba(0,0,0,.72)",
+
+	color: "#fff",
+};
+
+const pdfPreviewHeaderSx = {
+	height: 68,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+
+	px: 2.5,
+
+	borderBottom:
+		"1px solid rgba(255,255,255,.08)",
+
+	background:
+		"rgba(15,23,42,.92)",
+};
+
+const pdfPreviewBodySx = {
+	flex: 1,
+	p: 1.5,
+	minHeight: 0,
+	background: "rgba(2,6,23,.45)",
+};
+
+const pdfPreviewFooterSx = {
+	height: 64,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1.2,
+
+	px: 2.5,
+
+	borderTop:
+		"1px solid rgba(255,255,255,.08)",
+
+	background:
+		"rgba(15,23,42,.92)",
+};
+
 const popupOverlay = {
 	position: "fixed",
 	inset: 0,
@@ -5158,6 +5242,14 @@ function DispatchedItemsPage() {
 				return text.includes(searchText);
 			});
 	}, [customChallans, challanHistorySearch]);
+
+	const closeChalaanPreview = () => {
+		if (chalaanPreview?.url) {
+			URL.revokeObjectURL(chalaanPreview.url);
+		}
+
+		setChalaanPreview(null);
+	};
 
 	return (
 		<div style={page}>
@@ -8912,66 +9004,117 @@ function DispatchedItemsPage() {
 					</Box>
 				)}
 				{chalaanPreview && (
-					<div
-						style={popupOverlay}
-						onClick={() => {
-							URL.revokeObjectURL(chalaanPreview.url);
-							setChalaanPreview(null);
-						}}
+					<Box
+						sx={pdfPreviewOverlaySx}
+						onClick={closeChalaanPreview}
 					>
-						<div
-							style={{
-								width: 800,
-
-								padding: 24,
-
-								...darkModalBox,
-							}}
+						<Box
+							sx={pdfPreviewModalSx}
 							onClick={(e) => e.stopPropagation()}
 						>
-							<h2 style={{ marginBottom: 10 }}>Chalaan Preview</h2>
+							<Box sx={pdfPreviewHeaderSx}>
+								<Box
+									sx={{
+										display: "flex",
+										alignItems: "center",
+										gap: 1.4,
+										minWidth: 0,
+									}}
+								>
+									<Box
+										sx={{
+											width: 42,
+											height: 42,
+											borderRadius: "14px",
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "center",
+											background: "rgba(96,165,250,.16)",
+											border: "1px solid rgba(96,165,250,.28)",
+											fontSize: 20,
+										}}
+									>
+										📄
+									</Box>
 
-							<iframe
-								src={chalaanPreview.url}
-								style={{
-									width: "100%",
-									height: "500px",
-									border: "none",
-									borderRadius: 8,
-									marginBottom: 12,
-								}}
-							/>
+									<Box sx={{ minWidth: 0 }}>
+										<Box
+											sx={{
+												color: "#fff",
+												fontSize: 18,
+												fontWeight: 950,
+												whiteSpace: "nowrap",
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+											}}
+										>
+											Challan Preview
+										</Box>
 
-							<Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
+										<Box
+											sx={{
+												color: "rgba(255,255,255,.55)",
+												fontSize: 12,
+												fontWeight: 700,
+												mt: 0.3,
+												whiteSpace: "nowrap",
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+											}}
+										>
+											{chalaanPreview.id || "Generated Challan"}
+										</Box>
+									</Box>
+								</Box>
 
-								{/* DOWNLOAD BUTTON */}
+								<IconButton
+									onClick={closeChalaanPreview}
+									sx={modalCloseButtonSx}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={pdfPreviewBodySx}>
+								<iframe
+									title={`Challan Preview ${chalaanPreview.id || ""}`}
+									src={chalaanPreview.url}
+									style={{
+										width: "100%",
+										height: "100%",
+										border: "none",
+										borderRadius: "14px",
+										background: "#fff",
+									}}
+								/>
+							</Box>
+
+							<Box sx={pdfPreviewFooterSx}>
 								<Button
-									variant="contained"
 									onClick={() => {
 										const a = document.createElement("a");
+
 										a.href = chalaanPreview.url;
-										a.download = `CHALAAN_${chalaanPreview.id}.pdf`;
+										a.download = `CHALLAN_${chalaanPreview.id || "PREVIEW"}.pdf`;
+
 										document.body.appendChild(a);
 										a.click();
 										a.remove();
 									}}
+									sx={premiumButton}
 								>
-									Download
+									Download PDF
 								</Button>
 
-								{/* CLOSE */}
 								<Button
-									onClick={() => {
-										URL.revokeObjectURL(chalaanPreview.url);
-										setChalaanPreview(null);
-									}}
+									onClick={closeChalaanPreview}
+									sx={modalSecondaryButtonSx}
 								>
 									Close
 								</Button>
-
 							</Box>
-						</div>
-					</div>
+						</Box>
+					</Box>
 				)}
 
 				{generatedHistoryOpen && (
