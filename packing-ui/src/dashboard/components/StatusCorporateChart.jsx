@@ -38,11 +38,14 @@ function StatusCorporateChart({
 
   return (
     <div style={card}>
-      <div style={header}>
+      <div style={chartHeader}>
         <div>
-          <div style={title}>Corporate Inventory Mix</div>
-          <div style={subtitle}>
-            Clean board-room view of stock distribution
+          <div style={chartTitle}>
+            Corporate Inventory Mix
+          </div>
+
+          <div style={chartSubtitle}>
+            Board-room view of stock distribution
           </div>
         </div>
 
@@ -96,7 +99,10 @@ function StatusCorporateChart({
                 : 0;
 
             return (
-              <div key={row.key} style={barRow}>
+              <div
+                key={row.key}
+                style={barRow}
+              >
                 <div style={barHead}>
                   <div style={barName}>
                     <span style={scoreDot(row.color)} />
@@ -128,117 +134,135 @@ function StatusCorporateChart({
 const card = {
   width: "100%",
   height: "100%",
+  minHeight: 0,
+  overflow: "hidden",
   color: "#fff",
   display: "flex",
   flexDirection: "column",
-  minHeight: 0,
 };
 
-const header = {
+const chartHeader = {
+  flexShrink: 0,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
-  marginBottom: 14,
+  marginBottom: 10,
 };
 
-const title = {
+const chartTitle = {
   fontSize: 17,
   fontWeight: 950,
   color: "#fff",
+  letterSpacing: "-.02em",
 };
 
-const subtitle = {
-  marginTop: 4,
-  fontSize: 11,
-  color: "rgba(255,255,255,.54)",
+const chartSubtitle = {
+  marginTop: 3,
+  fontSize: 10.5,
+  color: "rgba(255,255,255,.52)",
   fontWeight: 650,
 };
 
 const totalBadge = {
-  minWidth: 78,
-  padding: "8px 10px",
-  borderRadius: 14,
+  minWidth: 66,
+  padding: "7px 9px",
+  borderRadius: 13,
   background: "rgba(37,99,235,.14)",
-  border: "1px solid rgba(96,165,250,.22)",
+  border: "1px solid rgba(96,165,250,.24)",
   display: "flex",
   flexDirection: "column",
   gap: 2,
   textAlign: "right",
+  color: "rgba(255,255,255,.72)",
+  fontSize: 10,
+  fontWeight: 850,
 };
 
 const body = {
   flex: 1,
   minHeight: 0,
+  overflow: "hidden",
   display: "grid",
-  gridTemplateColumns: "minmax(210px,.82fr) minmax(0,1.18fr)",
-  gap: 14,
+  gridTemplateColumns: "minmax(190px,.72fr) minmax(0,1.28fr)",
+  gap: 12,
   alignItems: "stretch",
 };
 
 const scoreGrid = {
+  minHeight: 0,
   display: "grid",
-  gridTemplateRows: "repeat(3,1fr)",
-  gap: 9,
+  gridTemplateRows: "repeat(3,minmax(0,1fr))",
+  gap: 8,
 };
 
 const scoreCard = (accent) => ({
-  padding: 11,
-  borderRadius: 15,
-  background:
-    `radial-gradient(circle at top right, ${accent}20, transparent 42%), rgba(255,255,255,.035)`,
-  border: `1px solid ${accent}30`,
   minHeight: 0,
+  overflow: "hidden",
+  padding: "9px 10px",
+  borderRadius: 14,
+  background:
+    `radial-gradient(circle at top right, ${accent}1F, transparent 42%), rgba(255,255,255,.034)`,
+  border: `1px solid ${accent}30`,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
 });
 
 const scoreTop = {
   display: "flex",
   alignItems: "center",
-  gap: 7,
+  gap: 6,
   color: "rgba(255,255,255,.62)",
-  fontSize: 10,
+  fontSize: 9.5,
   fontWeight: 950,
   letterSpacing: ".07em",
 };
 
 const scoreDot = (accent) => ({
-  width: 8,
-  height: 8,
+  width: 7,
+  height: 7,
   borderRadius: 999,
   background: accent,
-  boxShadow: `0 0 14px ${accent}88`,
+  boxShadow: `0 0 12px ${accent}88`,
   flexShrink: 0,
 });
 
 const scoreValue = {
-  marginTop: 6,
-  fontSize: 22,
+  marginTop: 5,
+  fontSize: 20,
   lineHeight: 1,
   fontWeight: 950,
 };
 
 const scoreLabel = {
-  marginTop: 5,
-  color: "rgba(255,255,255,.48)",
-  fontSize: 10.5,
-  fontWeight: 700,
+  marginTop: 4,
+  color: "rgba(255,255,255,.46)",
+  fontSize: 9.5,
+  fontWeight: 750,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const barPanel = {
+  minHeight: 0,
+  overflow: "hidden",
   padding: 12,
   borderRadius: 16,
-  background: "rgba(2,6,23,.30)",
+  background:
+    "linear-gradient(180deg, rgba(2,6,23,.36), rgba(2,6,23,.22))",
   border: "1px solid rgba(255,255,255,.055)",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-  gap: 15,
+  gap: 13,
 };
 
 const barRow = {
   display: "flex",
   flexDirection: "column",
-  gap: 7,
+  gap: 6,
 };
 
 const barHead = {
@@ -253,18 +277,22 @@ const barName = {
   alignItems: "center",
   gap: 7,
   color: "#fff",
-  fontSize: 12,
-  fontWeight: 900,
+  fontSize: 11.5,
+  fontWeight: 950,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const barValue = {
   color: "rgba(255,255,255,.58)",
-  fontSize: 11,
-  fontWeight: 850,
+  fontSize: 10.5,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
 };
 
 const track = {
-  height: 9,
+  height: 8,
   borderRadius: 999,
   background: "rgba(255,255,255,.07)",
   overflow: "hidden",
@@ -274,7 +302,7 @@ const fill = (accent) => ({
   height: "100%",
   borderRadius: 999,
   background: `linear-gradient(90deg, ${accent}, ${accent}99)`,
-  boxShadow: `0 0 18px ${accent}55`,
+  boxShadow: `0 0 16px ${accent}55`,
 });
 
 export default StatusCorporateChart;

@@ -6,7 +6,7 @@ import {
 
 const IST_OFFSET_MINUTES = 330;
 
-const ITEMS_PER_PAGE = 4;
+const ITEMS_PER_PAGE = 3;
 
 const ACTION_LABELS = {
   "ITEM PACKED": "Item Packed",
@@ -737,6 +737,7 @@ const wrapper = {
   display: "flex",
   flexDirection: "column",
   height: "100%",
+  minHeight: 0,
   color: "#fff",
 };
 
@@ -826,23 +827,25 @@ const countBadge = {
 };
 
 const feedArea = {
-  flex: 1,
+  flex: "1 1 auto",
+  minHeight: 0,
   overflowY: "auto",
   paddingRight: 4,
+  paddingBottom: 2,
 };
 
 const activityCard = {
   position: "relative",
   display: "grid",
-  gridTemplateColumns: "34px minmax(0,1fr) 78px",
-  gap: 10,
+  gridTemplateColumns: "32px minmax(0,1fr) 72px",
+  gap: 9,
   alignItems: "center",
-  padding: "11px 12px 11px 14px",
-  borderRadius: 17,
-  marginBottom: 9,
+  padding: "10px 11px 10px 13px",
+  borderRadius: 16,
+  marginBottom: 8,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.022))",
-  boxShadow: "0 12px 26px rgba(2,6,23,.18)",
+    "linear-gradient(180deg, rgba(255,255,255,.052), rgba(255,255,255,.020))",
+  boxShadow: "0 10px 22px rgba(2,6,23,.16)",
   backdropFilter: "blur(14px)",
   overflow: "hidden",
 };
@@ -857,13 +860,13 @@ const leftGlow = {
 };
 
 const iconBubble = {
-  width: 32,
-  height: 32,
-  borderRadius: 13,
+  width: 30,
+  height: 30,
+  borderRadius: 12,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 15,
+  fontSize: 14,
   boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)",
 };
 
@@ -880,7 +883,7 @@ const actionRow = {
 
 const actionText = {
   fontWeight: 950,
-  fontSize: 12.5,
+  fontSize: 12,
   color: "#fff",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -897,9 +900,9 @@ const typeChip = {
 };
 
 const itemName = {
-  marginTop: 4,
-  fontSize: 11.5,
-  color: "rgba(255,255,255,.72)",
+  marginTop: 3,
+  fontSize: 11,
+  color: "rgba(255,255,255,.70)",
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -907,7 +910,7 @@ const itemName = {
 };
 
 const statusFlow = {
-  marginTop: 6,
+  marginTop: 5,
   display: "flex",
   alignItems: "center",
   gap: 5,
@@ -927,10 +930,10 @@ const remarks = {
 };
 
 const timeRow = {
-  marginTop: 6,
+  marginTop: 5,
   display: "flex",
   alignItems: "center",
-  gap: 7,
+  gap: 6,
   flexWrap: "wrap",
 };
 
@@ -1034,11 +1037,14 @@ const roleChip = {
 };
 
 const pagination = {
+  flexShrink: 0,
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  gap: 9,
-  marginTop: 8,
+  gap: 8,
+  paddingTop: 8,
+  marginTop: 4,
+  borderTop: "1px solid rgba(255,255,255,.06)",
 };
 
 const pageBtn = {

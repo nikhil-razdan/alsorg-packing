@@ -1666,8 +1666,8 @@ const modeBtn = (active) => ({
 const kpiGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(215px,1fr))",
-  gap: 16,
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 14,
 };
 
 const pulseWrap = {
@@ -1734,31 +1734,31 @@ const statTopRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 14,
+  marginBottom: 11,
 };
 
 const statIconBox = (accent) => ({
-  width: 38,
-  height: 38,
-  borderRadius: 14,
+  width: 34,
+  height: 34,
+  borderRadius: 13,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background: `${accent}1F`,
   border: `1px solid ${accent}3D`,
-  fontSize: 18,
+  fontSize: 16,
 });
 
 const trendPill = (accent) => ({
-  minHeight: 26,
-  padding: "0 9px",
+  minHeight: 24,
+  padding: "0 8px",
   borderRadius: 999,
   display: "flex",
   alignItems: "center",
   background: `${accent}1C`,
   border: `1px solid ${accent}36`,
   color: accent,
-  fontSize: 11,
+  fontSize: 10.5,
   fontWeight: 950,
 });
 
@@ -1774,8 +1774,8 @@ const trendLabelStyle = {
 const panelSurface = {
   display: "flex",
   flexDirection: "column",
-  minHeight: 390,
-  maxHeight: 430,
+  height: 430,
+  minHeight: 430,
   padding: 16,
   borderRadius: 22,
   background:
@@ -1863,11 +1863,11 @@ const cardAccent = (accent) => ({
 const statCard = (accent, clickable = false, active = false) => ({
   position: "relative",
 
-  padding: 18,
-  borderRadius: 24,
+  padding: 15,
+  borderRadius: 20,
 
   background: active
-    ? `linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.82))`
+    ? "linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.82))"
     : "linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.70))",
 
   border: active
@@ -1875,11 +1875,11 @@ const statCard = (accent, clickable = false, active = false) => ({
     : "1px solid rgba(255,255,255,.075)",
 
   boxShadow: active
-    ? `0 24px 52px ${accent}22`
-    : "0 18px 40px rgba(2,6,23,.28)",
+    ? `0 20px 42px ${accent}22`
+    : "0 14px 32px rgba(2,6,23,.24)",
 
   overflow: "hidden",
-  minHeight: 154,
+  minHeight: 132,
 
   backdropFilter: "blur(22px)",
 
@@ -1896,10 +1896,10 @@ const statCard = (accent, clickable = false, active = false) => ({
 const statTitle = {
   position: "relative",
   zIndex: 1,
-  color: "rgba(255,255,255,.58)",
-  marginBottom: 8,
-  fontSize: 11,
-  fontWeight: 900,
+  color: "rgba(255,255,255,.56)",
+  marginBottom: 7,
+  fontSize: 10.5,
+  fontWeight: 950,
   letterSpacing: ".08em",
   textTransform: "uppercase",
 };
@@ -1908,7 +1908,7 @@ const statValue = {
   position: "relative",
   zIndex: 1,
   margin: 0,
-  fontSize: 32,
+  fontSize: 29,
   fontWeight: 950,
   lineHeight: 1,
   color: "#fff",
@@ -1917,18 +1917,18 @@ const statValue = {
 const statSubtle = {
   position: "relative",
   zIndex: 1,
-  marginTop: 8,
-  fontSize: 11,
-  fontWeight: 650,
-  color: "rgba(255,255,255,.52)",
+  marginTop: 7,
+  fontSize: 10.5,
+  fontWeight: 700,
+  color: "rgba(255,255,255,.50)",
 };
 
 const statClickHint = {
   position: "relative",
   zIndex: 1,
-  marginTop: 10,
-  fontSize: 11,
-  fontWeight: 900,
+  marginTop: 8,
+  fontSize: 10.5,
+  fontWeight: 950,
   color: "rgba(255,255,255,.74)",
 };
 
@@ -2468,8 +2468,8 @@ const workspaceGrid = {
 
 const chartPanelSurface = {
   position: "relative",
-  minHeight: 390,
-  maxHeight: 430,
+  height: 430,
+  minHeight: 430,
   padding: 16,
   borderRadius: 22,
   background:
@@ -2507,6 +2507,7 @@ const chartPanelSubtitle = {
 const chartPanelBody = {
   flex: 1,
   minHeight: 0,
+  overflow: "hidden",
   padding: 12,
   borderRadius: 18,
   background:
