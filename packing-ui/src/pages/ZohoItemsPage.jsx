@@ -7591,22 +7591,6 @@ const historyReportRow = {
   fontSize: 12,
 };
 
-const historyInlinePdfHeaderSx = {
-  px: 2,
-  py: 1.3,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 2,
-  borderBottom: "1px solid rgba(255,255,255,.08)",
-};
-
-const historyInlinePdfTitleSx = {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 950,
-};
-
 const historyInlinePdfSubSx = {
   color: "rgba(255,255,255,.5)",
   fontSize: 11,
@@ -7669,13 +7653,6 @@ const historyInlinePdfTitleSx = {
   color: "#fff",
   fontSize: 14,
   fontWeight: 950,
-};
-
-const historyInlinePdfSubSx = {
-  mt: 0.3,
-  color: "rgba(255,255,255,.55)",
-  fontSize: 11,
-  fontWeight: 700,
 };
 
 const historyInlinePdfFrameWrapSx = {
