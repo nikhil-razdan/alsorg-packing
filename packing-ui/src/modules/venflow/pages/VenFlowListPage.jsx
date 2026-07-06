@@ -252,15 +252,25 @@ export default function VenFlowListPage() {
                         SelectProps={{ MenuProps: darkMenuProps }}
                     >
                         <MenuItem value="">All</MenuItem>
-                        <MenuItem value="PRODUCTION_RAISED">Production Raised</MenuItem>
+                        <MenuItem value="INDENT_CREATED">BOM / Indent Created</MenuItem>
+                        <MenuItem value="SENT_TO_STORE">Sent to AKG Store</MenuItem>
                         <MenuItem value="STORE_REVIEWED">Store Reviewed</MenuItem>
-                        <MenuItem value="SENT_TO_PURCHASE">Sent to Purchase</MenuItem>
+                        <MenuItem value="STOCK_AVAILABLE">Stock Available</MenuItem>
+                        <MenuItem value="MATERIAL_RESERVED">Material Reserved</MenuItem>
+                        <MenuItem value="PURCHASE_REQUEST_RAISED">Purchase Request Raised</MenuItem>
                         <MenuItem value="PO_RAISED">PO Raised</MenuItem>
-                        <MenuItem value="PO_APPROVED">PO Approved</MenuItem>
-                        <MenuItem value="MATERIAL_RECEIVED">Material Received</MenuItem>
-                        <MenuItem value="MATERIAL_INFORMED">Production Informed</MenuItem>
-                        <MenuItem value="PRODUCTION_STARTED">Production Started</MenuItem>
-                        <MenuItem value="JOB_DONE">Job Done</MenuItem>
+                        <MenuItem value="MATERIAL_RECEIVED_AT_STORE">Material Received at Store</MenuItem>
+                        <MenuItem value="GRN_DONE">GRN Done</MenuItem>
+                        <MenuItem value="QC_PENDING">QC Pending</MenuItem>
+                        <MenuItem value="QC_OK">QC OK</MenuItem>
+                        <MenuItem value="MATERIAL_ACCEPTED_IN_STORE">Accepted in Inventory</MenuItem>
+                        <MenuItem value="PRODUCTION_INFORMED">Production Informed</MenuItem>
+                        <MenuItem value="PRODUCTION_DETAILS_ADDED">Production Details Added</MenuItem>
+                        <MenuItem value="MATERIAL_ISSUED_TO_PRODUCTION">Issued to Production</MenuItem>
+                        <MenuItem value="PROCESSING_STARTED">Processing Started</MenuItem>
+                        <MenuItem value="PROCESS_COMPLETED">Process Completed</MenuItem>
+                        <MenuItem value="SUPERVISOR_INFORMED">Supervisor Informed</MenuItem>
+                        <MenuItem value="READY_FOR_NEXT_STAGE">Ready for Next Stage</MenuItem>
                     </TextField>
 
                     <TextField
@@ -328,7 +338,7 @@ export default function VenFlowListPage() {
                     </Box>
                 ) : (
                     <>
-                        <TableContainer sx={{ tableContainerSx }}>
+                        <TableContainer sx={tableContainerSx}>
                             <Table size="small" sx={{ minWidth: 1700 }}>
                                 <TableHead>
                                     <TableRow>

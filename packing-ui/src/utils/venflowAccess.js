@@ -209,7 +209,7 @@ export const defaultVenFlowPathForRole = (role) => {
 	}
 
 	if (cleanRole === VENFLOW_ROLES.ENGINEERING) {
-		return "/venflow/engineering";
+		return "/venflow/create";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.STORE) {
@@ -221,11 +221,11 @@ export const defaultVenFlowPathForRole = (role) => {
 	}
 
 	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
-		return "/venflow/processing";
+		return "/venflow/production";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.SUPERVISOR) {
-		return "/venflow/supervisor";
+		return "/venflow/production";
 	}
 
 	return "/modules";

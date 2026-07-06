@@ -132,8 +132,8 @@ export default function VenFlowDashboard() {
                     </Typography>
 
                     <Typography sx={pageSubSx}>
-                        Live tracking of veneer requirement, store status, requisition,
-                        ordered quantity, receiving and balance closure.
+                        Live tracking of BOM / Indent creation, AKG Store review, purchase request,
+                        PO, GRN, QC, inventory acceptance, issue to production and process closure.
                     </Typography>
                 </Box>
                 <Button
@@ -144,7 +144,7 @@ export default function VenFlowDashboard() {
                     Open My Work
                 </Button>
 
-                {(role === "VENFLOW_PRODUCTION" || isAdminManager) && (
+                {(role === "VENFLOW_ENGINEERING" || isAdminManager) && (
                     <Button
                         variant="contained"
                         onClick={() => navigate("/venflow/create")}

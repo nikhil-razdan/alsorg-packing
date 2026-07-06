@@ -147,7 +147,7 @@ export default function VenFlowPurchaseDeskPage() {
                     </Box>
                 ) : (
                     <>
-                        <TableContainer sx={{ tableContainerSx }}>
+                        <TableContainer sx={tableContainerSx}>
                             <Table size="small" sx={{ minWidth: 1300 }}>
                                 <TableHead>
                                     <TableRow>

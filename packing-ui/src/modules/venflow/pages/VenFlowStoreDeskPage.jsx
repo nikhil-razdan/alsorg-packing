@@ -39,19 +39,43 @@ import {
 
 const VIEW_OPTIONS = [
 	{
-		value: "PRODUCTION_RAISED",
+		value: "SENT_TO_STORE",
 		label: "Pending Store Review",
 	},
 	{
-		value: "PO_APPROVED",
-		label: "PO Approved - Receiving Pending",
+		value: "STORE_REVIEWED",
+		label: "Store Reviewed / PR Pending",
 	},
 	{
-		value: "MATERIAL_RECEIVED",
-		label: "Material Received - Inform Production",
+		value: "STOCK_AVAILABLE",
+		label: "Stock Available / Reserve Pending",
 	},
 	{
-		value: "MATERIAL_INFORMED",
+		value: "MATERIAL_RESERVED",
+		label: "Material Reserved",
+	},
+	{
+		value: "PO_RAISED",
+		label: "PO Raised / Receiving Pending",
+	},
+	{
+		value: "MATERIAL_RECEIVED_AT_STORE",
+		label: "Material Received / GRN Pending",
+	},
+	{
+		value: "GRN_DONE",
+		label: "GRN Done / QC Pending",
+	},
+	{
+		value: "QC_OK",
+		label: "QC OK / Accept Pending",
+	},
+	{
+		value: "MATERIAL_ACCEPTED_IN_STORE",
+		label: "Accepted / Inform Production",
+	},
+	{
+		value: "PRODUCTION_INFORMED",
 		label: "Production Informed",
 	},
 ];
@@ -67,7 +91,7 @@ export default function VenFlowStoreDeskPage() {
 
 	const [filters, setFilters] = useState({
 		search: "",
-		stage: "PRODUCTION_RAISED",
+		stage: "SENT_TO_STORE",
 		storeStatus: "",
 	});
 
@@ -192,7 +216,7 @@ export default function VenFlowStoreDeskPage() {
 					</Box>
 				) : (
 					<>
-						<TableContainer sx={{ tableContainerSx }}>
+						<TableContainer sx={tableContainerSx}>
 							<Table size="small" sx={{ minWidth: 1250 }}>
 								<TableHead>
 									<TableRow>

@@ -39,20 +39,32 @@ import {
 
 const VIEW_OPTIONS = [
 	{
-		value: "PRODUCTION_RAISED",
-		label: "Raised / Product Details Pending",
+		value: "PRODUCTION_INFORMED",
+		label: "Production Informed / Details Pending",
 	},
 	{
-		value: "MATERIAL_INFORMED",
-		label: "Material Available - Start Pending",
+		value: "PRODUCTION_DETAILS_ADDED",
+		label: "Production Details Added",
 	},
 	{
-		value: "PRODUCTION_STARTED",
-		label: "Production Started",
+		value: "MATERIAL_ISSUED_TO_PRODUCTION",
+		label: "Material Issued / Start Pending",
 	},
 	{
-		value: "JOB_DONE",
-		label: "Job Done",
+		value: "PROCESSING_STARTED",
+		label: "Processing Started",
+	},
+	{
+		value: "PROCESS_COMPLETED",
+		label: "Process Completed / Supervisor Pending",
+	},
+	{
+		value: "SUPERVISOR_INFORMED",
+		label: "Supervisor Informed",
+	},
+	{
+		value: "READY_FOR_NEXT_STAGE",
+		label: "Ready for Next Stage",
 	},
 ];
 
@@ -67,7 +79,7 @@ export default function VenFlowProductionDeskPage() {
 
 	const [filters, setFilters] = useState({
 		search: "",
-		stage: "PRODUCTION_RAISED",
+		stage: "PRODUCTION_INFORMED",
 	});
 
 	const load = async (targetPage = page) => {
@@ -176,7 +188,7 @@ export default function VenFlowProductionDeskPage() {
 					</Box>
 				) : (
 					<>
-						<TableContainer sx={{ tableContainerSx }}>
+						<TableContainer sx={tableContainerSx}>
 							<Table size="small" sx={{ minWidth: 1200 }}>
 								<TableHead>
 									<TableRow>
