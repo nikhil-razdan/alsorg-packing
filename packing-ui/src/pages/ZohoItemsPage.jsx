@@ -398,11 +398,18 @@ function InventoryMasterWorkbench({
               <Box sx={inventoryMasterHeaderSx}>
                 <Box sx={inventoryMasterLeftSx}>
                   <IconButton
+                    disableRipple
                     size="small"
-                    onClick={() => toggleGroup(group.key)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup(group.key);
+                    }}
                     sx={inventoryExpandBtnSx}
+                    aria-label={isOpen ? "Collapse master item" : "Expand master item"}
                   >
-                    {isOpen ? "−" : "+"}
+                    <Box component="span" sx={inventoryExpandSymbolSx}>
+                      {isOpen ? "−" : "+"}
+                    </Box>
                   </IconButton>
 
                   <Box sx={{ minWidth: 0 }}>
@@ -6197,16 +6204,19 @@ const inventoryMasterCardSx = (accent, open) => ({
 });
 
 const inventoryMasterHeaderSx = {
-  minHeight: 62,
+  minHeight: 52,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "12px",
   px: "14px",
-  py: "10px",
+  py: "8px",
+
   background: "rgba(2,6,23,.22)",
   borderBottom: "1px solid rgba(255,255,255,.07)",
-  flexWrap: "wrap",
+
+  flexWrap: "nowrap",
+  overflow: "visible",
 };
 
 const inventoryMasterLeftSx = {
@@ -6214,7 +6224,8 @@ const inventoryMasterLeftSx = {
   alignItems: "center",
   gap: "10px",
   minWidth: 0,
-  flex: 1,
+  flex: "1 1 auto",
+  overflow: "hidden",
 };
 
 const masterWorkbenchModalBodySx = {
@@ -6377,21 +6388,52 @@ const inventoryPageSizeSelectStyle = {
 };
 
 const inventoryExpandBtnSx = {
-  color: "#94a3b8",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.06)",
-  width: 30,
-  height: 30,
-  borderRadius: "8px",
-  fontWeight: 950,
+  width: 32,
+  height: 32,
+  minWidth: 32,
+  maxWidth: 32,
+  p: 0,
+  m: 0,
+  flex: "0 0 32px",
+  alignSelf: "center",
+
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  color: "#cbd5e1",
+  background: "rgba(255,255,255,.045)",
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: "9px",
+
+  lineHeight: 1,
+  overflow: "hidden",
 
   "&:hover": {
-    background: "rgba(59,130,246,.14)",
+    background: "rgba(59,130,246,.16)",
+    borderColor: "rgba(96,165,250,.34)",
     color: "#fff",
   },
 };
 
+const inventoryExpandSymbolSx = {
+  width: "100%",
+  height: "100%",
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  fontSize: 19,
+  fontWeight: 950,
+  lineHeight: 1,
+
+  transform: "translateY(-1px)",
+  userSelect: "none",
+};
+
 const inventoryMasterTitleRowSx = {
+  minHeight: 30,
   display: "flex",
   alignItems: "center",
   gap: "8px",
@@ -6402,8 +6444,9 @@ const inventoryMasterTitleSx = {
   color: "#fff",
   fontSize: 17,
   fontWeight: 950,
+  lineHeight: "22px",
   letterSpacing: "-0.02em",
-  maxWidth: 580,
+  maxWidth: 640,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
