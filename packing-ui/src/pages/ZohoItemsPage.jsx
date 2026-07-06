@@ -25,6 +25,7 @@ function InventoryModal({
   title,
   subtitle,
   width = 620,
+  height = "auto",
   children,
   footer,
 }) {
@@ -39,7 +40,11 @@ function InventoryModal({
         sx={{
           ...enhancedModalSx,
           width,
-          maxHeight: "88vh",
+          height,
+          maxHeight: "92vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -70,12 +75,28 @@ function InventoryModal({
           </IconButton>
         </Box>
 
-        <Box sx={modalContentSx}>
+        <Box
+          sx={{
+            ...modalContentSx,
+            ...(height !== "auto"
+              ? {
+                flex: 1,
+                minHeight: 0,
+                overflow: "hidden",
+              }
+              : {}),
+          }}
+        >
           {children}
         </Box>
 
         {footer && (
-          <Box sx={modalFooterSx}>
+          <Box
+            sx={{
+              ...modalFooterSx,
+              flexShrink: 0,
+            }}
+          >
             {footer}
           </Box>
         )}
@@ -794,6 +815,11 @@ function ZohoItemsPage() {
 
   const [generatedHistoryTimeTo, setGeneratedHistoryTimeTo] =
     useState("");
+  const [generatedHistoryPageNo, setGeneratedHistoryPageNo] =
+    useState(1);
+
+  const [generatedHistoryPageSize, setGeneratedHistoryPageSize] =
+    useState(50);
   const [historyPdfPreview, setHistoryPdfPreview] = useState(null);
   const [stickerReviewOpen, setStickerReviewOpen] = useState(false);
   const [stickerReviewLoading, setStickerReviewLoading] = useState(false);
@@ -2110,6 +2136,76 @@ function ZohoItemsPage() {
   }, [
     filteredGeneratedHistoryRows,
     generatedHistoryReportMode,
+  ]);
+
+  const activeGeneratedHistoryRows =
+    generatedHistoryReportMode === "DETAILED"
+      ? filteredGeneratedHistoryRows
+      : generatedHistoryReportRows;
+
+  const generatedHistoryTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        activeGeneratedHistoryRows.length /
+        generatedHistoryPageSize
+      )
+    );
+
+  const generatedHistorySafePageNo =
+    Math.min(
+      generatedHistoryPageNo,
+      generatedHistoryTotalPages
+    );
+
+  const generatedHistoryPageStart =
+    (generatedHistorySafePageNo - 1) *
+    generatedHistoryPageSize;
+
+  const generatedHistoryPageEnd =
+    Math.min(
+      generatedHistoryPageStart + generatedHistoryPageSize,
+      activeGeneratedHistoryRows.length
+    );
+
+  const generatedHistoryShowingStart =
+    activeGeneratedHistoryRows.length === 0
+      ? 0
+      : generatedHistoryPageStart + 1;
+
+  const paginatedGeneratedHistoryRows =
+    useMemo(() => {
+      return activeGeneratedHistoryRows.slice(
+        generatedHistoryPageStart,
+        generatedHistoryPageEnd
+      );
+    }, [
+      activeGeneratedHistoryRows,
+      generatedHistoryPageStart,
+      generatedHistoryPageEnd,
+    ]);
+
+  useEffect(() => {
+    setGeneratedHistoryPageNo(1);
+  }, [
+    generatedHistorySearch,
+    generatedHistoryFilters,
+    generatedHistoryDateFrom,
+    generatedHistoryDateTo,
+    generatedHistoryTimeFrom,
+    generatedHistoryTimeTo,
+    generatedHistoryReportMode,
+    generatedHistoryPageSize,
+    generatedHistoryUserFilter,
+  ]);
+
+  useEffect(() => {
+    if (generatedHistoryPageNo > generatedHistoryTotalPages) {
+      setGeneratedHistoryPageNo(generatedHistoryTotalPages);
+    }
+  }, [
+    generatedHistoryPageNo,
+    generatedHistoryTotalPages,
   ]);
 
   const isLastPacket = (row) => {
@@ -3592,6 +3688,7 @@ function ZohoItemsPage() {
           title="Preview Sticker"
           subtitle="Check sticker details before final generation"
           width={920}
+          height="92vh"
           footer={
             stickerReviewMode === "EXISTING" ? (
               <>
@@ -3674,6 +3771,7 @@ function ZohoItemsPage() {
           title="Master Item Packet Control"
           subtitle="Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
           width={1560}
+          height="92vh"
           footer={
             <>
               <Button
@@ -4704,6 +4802,7 @@ function ZohoItemsPage() {
           title="Edit Packet Item"
           subtitle="Update editable packet information"
           width={620}
+          height="92vh"
           footer={
             <>
               <Button
@@ -4806,6 +4905,7 @@ function ZohoItemsPage() {
           title="Generated Packet History"
           subtitle="Search, filter, report and preview generated sticker records"
           width={1520}
+          height="92vh"
           footer={
             <>
               <Button
@@ -4824,538 +4924,621 @@ function ZohoItemsPage() {
             </>
           }
         >
-          <Box sx={historyTopBarSx}>
-            <Box sx={historySmartRowSx}>
-              <TextField
-                variant="standard"
-                placeholder='Smart search: client:abc pd:PD-12 sku:PKT name:wardrobe dwg:04/15 or any text'
-                value={generatedHistorySearch}
-                onChange={(e) => setGeneratedHistorySearch(e.target.value)}
-                InputProps={{ disableUnderline: true }}
-                sx={historySearchInputSx}
-              />
+          <Box sx={historyModalBodySx}>
+            <Box sx={historyTopBarSx}>
+              <Box sx={historySmartRowSx}>
+                <TextField
+                  variant="standard"
+                  placeholder='Smart search: client:abc pd:PD-12 sku:PKT name:wardrobe dwg:04/15 or any text'
+                  value={generatedHistorySearch}
+                  onChange={(e) => setGeneratedHistorySearch(e.target.value)}
+                  InputProps={{ disableUnderline: true }}
+                  sx={historySearchInputSx}
+                />
 
-              <TextField
-                select
-                size="small"
-                label="Generated By"
-                value={generatedHistoryUserFilter}
-                onChange={async (e) => {
-                  const value = e.target.value;
-                  setGeneratedHistoryUserFilter(value);
-                  await fetchGeneratedHistory(value);
-                }}
-                sx={historyMiniFilterFieldSx}
-                slotProps={selectMenuSlotProps}
-              >
-                <MenuItem value="ALL">All Users</MenuItem>
+                <TextField
+                  select
+                  size="small"
+                  label="Generated By"
+                  value={generatedHistoryUserFilter}
+                  onChange={async (e) => {
+                    const value = e.target.value;
+                    setGeneratedHistoryUserFilter(value);
+                    await fetchGeneratedHistory(value);
+                  }}
+                  sx={historyMiniFilterFieldSx}
+                  slotProps={selectMenuSlotProps}
+                >
+                  <MenuItem value="ALL">All Users</MenuItem>
 
-                {generatedHistoryUsers.map((user) => (
-                  <MenuItem key={user} value={user}>
-                    {user}
-                  </MenuItem>
-                ))}
-              </TextField>
+                  {generatedHistoryUsers.map((user) => (
+                    <MenuItem key={user} value={user}>
+                      {user}
+                    </MenuItem>
+                  ))}
+                </TextField>
 
-              <TextField
-                select
-                size="small"
-                label="Packing Report Type"
-                value={generatedHistoryReportMode}
-                onChange={(e) =>
-                  setGeneratedHistoryReportMode(e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-                slotProps={selectMenuSlotProps}
-              >
-                {generatedHistoryReportModes.map((mode) => (
-                  <MenuItem
-                    key={mode.value}
-                    value={mode.value}
-                  >
-                    {mode.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Box>
-
-            <Box sx={historyFilterGridSx}>
-              <TextField
-                size="small"
-                label="Client"
-                value={generatedHistoryFilters.client}
-                onChange={(e) =>
-                  updateGeneratedHistoryFilter("client", e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-              />
-
-              <TextField
-                size="small"
-                label="PD No"
-                value={generatedHistoryFilters.pdNo}
-                onChange={(e) =>
-                  updateGeneratedHistoryFilter("pdNo", e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-              />
-
-              <TextField
-                size="small"
-                label="SKU"
-                value={generatedHistoryFilters.sku}
-                onChange={(e) =>
-                  updateGeneratedHistoryFilter("sku", e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-              />
-
-              <TextField
-                size="small"
-                label="Item Name"
-                value={generatedHistoryFilters.itemName}
-                onChange={(e) =>
-                  updateGeneratedHistoryFilter("itemName", e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-              />
-
-              <TextField
-                size="small"
-                label="DWG No"
-                value={generatedHistoryFilters.drawingNo}
-                onChange={(e) =>
-                  updateGeneratedHistoryFilter("drawingNo", e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-              />
-
-              <TextField
-                size="small"
-                label="Sticker / Packet"
-                value={
-                  generatedHistoryFilters.stickerNumber ||
-                  generatedHistoryFilters.packetNumber
-                }
-                onChange={(e) => {
-                  updateGeneratedHistoryFilter("stickerNumber", e.target.value);
-                  updateGeneratedHistoryFilter("packetNumber", e.target.value);
-                }}
-                sx={historyMiniFilterFieldSx}
-              />
-            </Box>
-
-            <Box sx={historyDateReportRowSx}>
-              <TextField
-                size="small"
-                label="Date From"
-                type="date"
-                value={generatedHistoryDateFrom}
-                onChange={(e) =>
-                  setGeneratedHistoryDateFrom(e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-
-              <TextField
-                size="small"
-                label="Date To"
-                type="date"
-                value={generatedHistoryDateTo}
-                onChange={(e) =>
-                  setGeneratedHistoryDateTo(e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-
-              <TextField
-                size="small"
-                label="Time From"
-                type="time"
-                value={generatedHistoryTimeFrom}
-                onChange={(e) =>
-                  setGeneratedHistoryTimeFrom(e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-
-              <TextField
-                size="small"
-                label="Time To"
-                type="time"
-                value={generatedHistoryTimeTo}
-                onChange={(e) =>
-                  setGeneratedHistoryTimeTo(e.target.value)
-                }
-                sx={historyMiniFilterFieldSx}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-
-              <Button
-                onClick={exportGeneratedHistoryReport}
-                sx={modalSecondaryButtonSx}
-              >
-                Export Excel
-              </Button>
-
-              <Button
-                onClick={resetGeneratedHistoryFilters}
-                sx={modalSecondaryButtonSx}
-              >
-                Clear
-              </Button>
-
-              <Box sx={historyCountBadgeSx}>
-                {generatedHistoryReportMode === "DETAILED"
-                  ? `${filteredGeneratedHistoryRows.length} Records`
-                  : `${generatedHistoryReportRows.length} Groups`}
-              </Box>
-            </Box>
-          </Box>
-
-          <Box
-            sx={
-              historyPdfPreview?.url
-                ? historyMainContentSplitSx
-                : historyMainContentSx
-            }
-          >
-            {generatedHistoryReportMode !== "DETAILED" ? (
-              <Box sx={historyTableViewportSx}>
-                <Box sx={historyReportTitleSx}>
-                  {getHistoryReportLabel(generatedHistoryReportMode)} Packing Report
-                </Box>
-
-                <div style={historyReportHeader}>
-                  <div>Group</div>
-                  <div>Total</div>
-                  <div>Initial</div>
-                  <div>Reprint</div>
-                  <div>Client</div>
-                  <div>SKU</div>
-                  <div>PD / DWG</div>
-                  <div>First Generated</div>
-                  <div>Last Generated</div>
-                </div>
-
-                {generatedHistoryReportRows.length === 0 && (
-                  <Box sx={historyEmptySx}>
-                    No packing report data found.
-                  </Box>
-                )}
-
-                {generatedHistoryReportRows.map((row) => (
-                  <div
-                    key={row.key}
-                    style={historyReportRow}
-                  >
-                    <div style={historyCellWrap}>
-                      <span
-                        style={historyMainText}
-                        title={row.key}
-                      >
-                        {row.key}
-                      </span>
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <Chip
-                        label={row.totalPackets}
-                        size="small"
-                        sx={historyInitialChipSx}
-                      />
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      {row.initialCount}
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      {row.reprintCount}
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <span
-                        style={historySubText}
-                        title={row.clientsText}
-                      >
-                        {row.clientsText}
-                      </span>
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <span
-                        style={historyMonoText}
-                        title={row.skusText}
-                      >
-                        {row.skusText}
-                      </span>
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <span
-                        style={historySubText}
-                        title={`${row.pdNosText} / ${row.dwgNosText}`}
-                      >
-                        {row.pdNosText} / {row.dwgNosText}
-                      </span>
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <span style={historyDateText}>
-                        {formatHistoryDateTime(row.firstGeneratedAt)}
-                      </span>
-                    </div>
-
-                    <div style={historyCellWrap}>
-                      <span style={historyDateText}>
-                        {formatHistoryDateTime(row.lastGeneratedAt)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </Box>
-            ) : (
-              <Box sx={historyTableViewportSx}>
-                <div style={historyTableHeader}>
-                  <div>Date / Time</div>
-                  <div>Generated By</div>
-                  <div>Item</div>
-                  <div>Description</div>
-                  <div>SKU</div>
-                  <div>PD No</div>
-                  <div>Packet</div>
-                  <div>Sticker No</div>
-                  <div>Reason</div>
-                  <div>Action</div>
-                </div>
-
-                {generatedHistoryLoading && (
-                  <Box sx={historyEmptySx}>
-                    Loading generated history...
-                  </Box>
-                )}
-
-                {!generatedHistoryLoading &&
-                  filteredGeneratedHistoryRows.length === 0 && (
-                    <Box sx={historyEmptySx}>
-                      No generated packet history found.
-                    </Box>
-                  )}
-
-                {!generatedHistoryLoading &&
-                  filteredGeneratedHistoryRows.map((row) => (
-                    <div
-                      key={row.historyId}
-                      style={historyTableRow}
+                <TextField
+                  select
+                  size="small"
+                  label="Packing Report Type"
+                  value={generatedHistoryReportMode}
+                  onChange={(e) =>
+                    setGeneratedHistoryReportMode(e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                  slotProps={selectMenuSlotProps}
+                >
+                  {generatedHistoryReportModes.map((mode) => (
+                    <MenuItem
+                      key={mode.value}
+                      value={mode.value}
                     >
-                      <div style={historyCellWrap}>
-                        <span style={historyDateText}>
-                          {formatHistoryDateTime(row.generatedAt)}
-                        </span>
-                      </div>
+                      {mode.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
 
-                      <div style={historyCellWrap}>
-                        <span style={historyUserText}>
-                          {row.generatedBy || "—"}
-                        </span>
-                      </div>
+              <Box sx={historyFilterGridSx}>
+                <TextField
+                  size="small"
+                  label="Client"
+                  value={generatedHistoryFilters.client}
+                  onChange={(e) =>
+                    updateGeneratedHistoryFilter("client", e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                />
 
-                      <div style={historyCellWrap}>
-                        <span
-                          style={historyMainText}
-                          title={row.itemName}
-                        >
-                          {row.itemName || "—"}
-                        </span>
+                <TextField
+                  size="small"
+                  label="PD No"
+                  value={generatedHistoryFilters.pdNo}
+                  onChange={(e) =>
+                    updateGeneratedHistoryFilter("pdNo", e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                />
 
-                        <span
-                          style={historySubText}
-                          title={row.clientName}
-                        >
-                          {row.clientName || "—"}
-                        </span>
-                      </div>
+                <TextField
+                  size="small"
+                  label="SKU"
+                  value={generatedHistoryFilters.sku}
+                  onChange={(e) =>
+                    updateGeneratedHistoryFilter("sku", e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                />
 
-                      <div style={historyCellWrap}>
-                        <span
-                          style={historyMainText}
-                          title={row.description}
-                        >
-                          {row.description || "—"}
-                        </span>
+                <TextField
+                  size="small"
+                  label="Item Name"
+                  value={generatedHistoryFilters.itemName}
+                  onChange={(e) =>
+                    updateGeneratedHistoryFilter("itemName", e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                />
 
-                        {row.remarks && (
+                <TextField
+                  size="small"
+                  label="DWG No"
+                  value={generatedHistoryFilters.drawingNo}
+                  onChange={(e) =>
+                    updateGeneratedHistoryFilter("drawingNo", e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                />
+
+                <TextField
+                  size="small"
+                  label="Sticker / Packet"
+                  value={
+                    generatedHistoryFilters.stickerNumber ||
+                    generatedHistoryFilters.packetNumber
+                  }
+                  onChange={(e) => {
+                    updateGeneratedHistoryFilter("stickerNumber", e.target.value);
+                    updateGeneratedHistoryFilter("packetNumber", e.target.value);
+                  }}
+                  sx={historyMiniFilterFieldSx}
+                />
+              </Box>
+
+              <Box sx={historyDateReportRowSx}>
+                <TextField
+                  size="small"
+                  label="Date From"
+                  type="date"
+                  value={generatedHistoryDateFrom}
+                  onChange={(e) =>
+                    setGeneratedHistoryDateFrom(e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+
+                <TextField
+                  size="small"
+                  label="Date To"
+                  type="date"
+                  value={generatedHistoryDateTo}
+                  onChange={(e) =>
+                    setGeneratedHistoryDateTo(e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+
+                <TextField
+                  size="small"
+                  label="Time From"
+                  type="time"
+                  value={generatedHistoryTimeFrom}
+                  onChange={(e) =>
+                    setGeneratedHistoryTimeFrom(e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+
+                <TextField
+                  size="small"
+                  label="Time To"
+                  type="time"
+                  value={generatedHistoryTimeTo}
+                  onChange={(e) =>
+                    setGeneratedHistoryTimeTo(e.target.value)
+                  }
+                  sx={historyMiniFilterFieldSx}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+
+                <Button
+                  onClick={exportGeneratedHistoryReport}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Export Excel
+                </Button>
+
+                <Button
+                  onClick={resetGeneratedHistoryFilters}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Clear
+                </Button>
+
+                <Box sx={historyCountBadgeSx}>
+                  {generatedHistoryReportMode === "DETAILED"
+                    ? `${filteredGeneratedHistoryRows.length} Records`
+                    : `${generatedHistoryReportRows.length} Groups`}
+                </Box>
+              </Box>
+            </Box>
+
+            <Box
+              sx={
+                historyPdfPreview?.url
+                  ? historyMainContentSplitSx
+                  : historyMainContentSx
+              }
+            >
+              <Box sx={historyTablePanelSx}>
+                {generatedHistoryReportMode !== "DETAILED" ? (
+                  <Box sx={historyTableViewportSx}>
+                    <Box sx={historyReportTitleSx}>
+                      {getHistoryReportLabel(generatedHistoryReportMode)} Packing Report
+                    </Box>
+
+                    <div style={historyReportHeader}>
+                      <div>Group</div>
+                      <div>Total</div>
+                      <div>Initial</div>
+                      <div>Reprint</div>
+                      <div>Client</div>
+                      <div>SKU</div>
+                      <div>PD / DWG</div>
+                      <div>First Generated</div>
+                      <div>Last Generated</div>
+                    </div>
+
+                    {generatedHistoryReportRows.length === 0 && (
+                      <Box sx={historyEmptySx}>
+                        No packing report data found.
+                      </Box>
+                    )}
+
+                    {paginatedGeneratedHistoryRows.map((row) => (
+                      <div
+                        key={row.key}
+                        style={historyReportRow}
+                      >
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historyMainText}
+                            title={row.key}
+                          >
+                            {row.key}
+                          </span>
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          <Chip
+                            label={row.totalPackets}
+                            size="small"
+                            sx={historyInitialChipSx}
+                          />
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          {row.initialCount}
+                        </div>
+
+                        <div style={historyCellWrap}>
+                          {row.reprintCount}
+                        </div>
+
+                        <div style={historyCellWrap}>
                           <span
                             style={historySubText}
-                            title={row.remarks}
+                            title={row.clientsText}
                           >
-                            Remarks: {row.remarks}
+                            {row.clientsText}
                           </span>
-                        )}
-                      </div>
+                        </div>
 
-                      <div style={historyCellWrap}>
-                        <span
-                          style={historyMonoText}
-                          title={row.sku}
-                        >
-                          {row.sku || "—"}
-                        </span>
-                      </div>
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historyMonoText}
+                            title={row.skusText}
+                          >
+                            {row.skusText}
+                          </span>
+                        </div>
 
-                      <div style={historyCellWrap}>
-                        <span style={historyMainText}>
-                          {row.pdNo || "—"}
-                        </span>
-                      </div>
+                        <div style={historyCellWrap}>
+                          <span
+                            style={historySubText}
+                            title={`${row.pdNosText} / ${row.dwgNosText}`}
+                          >
+                            {row.pdNosText} / {row.dwgNosText}
+                          </span>
+                        </div>
 
-                      <div style={historyCellWrap}>
-                        <span style={historyMainText}>
-                          {row.packetNumber || "—"}
-                        </span>
-                      </div>
+                        <div style={historyCellWrap}>
+                          <span style={historyDateText}>
+                            {formatHistoryDateTime(row.firstGeneratedAt)}
+                          </span>
+                        </div>
 
-                      <div style={historyCellWrap}>
-                        <span
-                          style={historyMonoText}
-                          title={row.stickerNumber}
-                        >
-                          {row.stickerNumber || "—"}
-                        </span>
+                        <div style={historyCellWrap}>
+                          <span style={historyDateText}>
+                            {formatHistoryDateTime(row.lastGeneratedAt)}
+                          </span>
+                        </div>
                       </div>
-
-                      <div style={historyCellWrap}>
-                        <Chip
-                          label={
-                            row.reason === "REPRINT"
-                              ? `Reprint #${row.printIteration || ""}`
-                              : "Initial"
-                          }
-                          size="small"
-                          sx={
-                            row.reason === "REPRINT"
-                              ? historyReprintChipSx
-                              : historyInitialChipSx
-                          }
-                        />
-                      </div>
-
-                      <div style={historyCellWrap}>
-                        <Button
-                          size="small"
-                          onClick={() => openHistoryPdf(row.historyId)}
-                          sx={historyViewButtonSx}
-                        >
-                          View PDF
-                        </Button>
-                      </div>
+                    ))}
+                  </Box>
+                ) : (
+                  <Box sx={historyTableViewportSx}>
+                    <div style={historyTableHeader}>
+                      <div>Date / Time</div>
+                      <div>Generated By</div>
+                      <div>Item</div>
+                      <div>Description</div>
+                      <div>SKU</div>
+                      <div>PD No</div>
+                      <div>Packet</div>
+                      <div>Sticker No</div>
+                      <div>Reason</div>
+                      <div>Action</div>
                     </div>
-                  ))}
-              </Box>
-            )}
 
-            {historyPdfPreview?.url && (
-              <Box sx={historyInlinePdfSx}>
-                <Box sx={historyInlinePdfHeaderSx}>
-                  <Box>
-                    <Box sx={historyInlinePdfTitleSx}>
-                      Sticker PDF Preview
+                    {generatedHistoryLoading && (
+                      <Box sx={historyEmptySx}>
+                        Loading generated history...
+                      </Box>
+                    )}
+
+                    {!generatedHistoryLoading &&
+                      filteredGeneratedHistoryRows.length === 0 && (
+                        <Box sx={historyEmptySx}>
+                          No generated packet history found.
+                        </Box>
+                      )}
+
+                    {!generatedHistoryLoading &&
+                      paginatedGeneratedHistoryRows.map((row) => (
+                        <div
+                          key={row.historyId}
+                          style={historyTableRow}
+                        >
+                          <div style={historyCellWrap}>
+                            <span style={historyDateText}>
+                              {formatHistoryDateTime(row.generatedAt)}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span style={historyUserText}>
+                              {row.generatedBy || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historyMainText}
+                              title={row.itemName}
+                            >
+                              {row.itemName || "—"}
+                            </span>
+
+                            <span
+                              style={historySubText}
+                              title={row.clientName}
+                            >
+                              {row.clientName || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historyMainText}
+                              title={row.description}
+                            >
+                              {row.description || "—"}
+                            </span>
+
+                            {row.remarks && (
+                              <span
+                                style={historySubText}
+                                title={row.remarks}
+                              >
+                                Remarks: {row.remarks}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historyMonoText}
+                              title={row.sku}
+                            >
+                              {row.sku || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span style={historyMainText}>
+                              {row.pdNo || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span style={historyMainText}>
+                              {row.packetNumber || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historyMonoText}
+                              title={row.stickerNumber}
+                            >
+                              {row.stickerNumber || "—"}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <Chip
+                              label={
+                                row.reason === "REPRINT"
+                                  ? `Reprint #${row.printIteration || ""}`
+                                  : "Initial"
+                              }
+                              size="small"
+                              sx={
+                                row.reason === "REPRINT"
+                                  ? historyReprintChipSx
+                                  : historyInitialChipSx
+                              }
+                            />
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <Button
+                              size="small"
+                              onClick={() => openHistoryPdf(row.historyId)}
+                              sx={historyViewButtonSx}
+                            >
+                              View PDF
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </Box>
+                )}
+                {activeGeneratedHistoryRows.length > 0 && (
+                  <Box sx={historyPaginationBarSx}>
+                    <Box sx={historyPaginationTextSx}>
+                      Showing{" "}
+                      <b>{generatedHistoryShowingStart}</b>
+                      {" - "}
+                      <b>{generatedHistoryPageEnd}</b>
+                      {" of "}
+                      <b>{activeGeneratedHistoryRows.length}</b>
+                      {generatedHistoryReportMode === "DETAILED"
+                        ? " records"
+                        : " groups"}
                     </Box>
 
-                    <Box sx={historyInlinePdfSubSx}>
-                      Preview opens inside Generated History, not as a second modal.
+                    <Box sx={historyPaginationControlsSx}>
+                      <Button
+                        disabled={generatedHistorySafePageNo === 1}
+                        onClick={() =>
+                          setGeneratedHistoryPageNo((prev) =>
+                            Math.max(1, prev - 1)
+                          )
+                        }
+                        sx={historyPaginationButtonSx}
+                      >
+                        ◀ Previous
+                      </Button>
+
+                      <Box sx={historyPageCountSx}>
+                        Page{" "}
+                        <span>{generatedHistorySafePageNo}</span>
+                        {" of "}
+                        {generatedHistoryTotalPages}
+                      </Box>
+
+                      <Button
+                        disabled={
+                          generatedHistorySafePageNo ===
+                          generatedHistoryTotalPages
+                        }
+                        onClick={() =>
+                          setGeneratedHistoryPageNo((prev) =>
+                            Math.min(
+                              generatedHistoryTotalPages,
+                              prev + 1
+                            )
+                          )
+                        }
+                        sx={{
+                          ...historyPaginationButtonSx,
+                          background:
+                            "linear-gradient(180deg,#2563eb,#1d4ed8)",
+                        }}
+                      >
+                        Next ▶
+                      </Button>
+                    </Box>
+
+                    <Box sx={historyPageSizeWrapSx}>
+                      <span>Show</span>
+
+                      <select
+                        value={generatedHistoryPageSize}
+                        onChange={(e) => {
+                          setGeneratedHistoryPageSize(Number(e.target.value));
+                          setGeneratedHistoryPageNo(1);
+                        }}
+                        style={historyPageSizeSelectStyle}
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={200}>200</option>
+                      </select>
+
+                      <span>per page</span>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+              {historyPdfPreview?.url && (
+                <Box sx={historyInlinePdfSx}>
+                  <Box sx={historyInlinePdfHeaderSx}>
+                    <Box>
+                      <Box sx={historyInlinePdfTitleSx}>
+                        Sticker PDF Preview
+                      </Box>
+
+                      <Box sx={historyInlinePdfSubSx}>
+                        Preview opens inside Generated History, not as a second modal.
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        onClick={() => {
+                          const a = document.createElement("a");
+                          a.href = historyPdfPreview.url;
+                          a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                        }}
+                        sx={modalSecondaryButtonSx}
+                      >
+                        Download
+                      </Button>
+
+                      <Button
+                        onClick={closeHistoryPdfPreview}
+                        sx={modalSecondaryButtonSx}
+                      >
+                        Close Preview
+                      </Button>
                     </Box>
                   </Box>
 
-                  <Box sx={{ display: "flex", gap: 1 }}>
-                    <Button
-                      onClick={() => {
-                        const a = document.createElement("a");
-                        a.href = historyPdfPreview.url;
-                        a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
+                  <Box sx={historyInlinePdfFrameWrapSx}>
+                    <iframe
+                      src={getPdfPreviewSrc(historyPdfPreview.url)}
+                      width="100%"
+                      height="100%"
+                      title="Generated Sticker PDF Preview"
+                      style={{
+                        border: "1px solid rgba(255,255,255,.08)",
+                        borderRadius: 12,
+                        background: "#fff",
                       }}
-                      sx={modalSecondaryButtonSx}
-                    >
-                      Download
-                    </Button>
-
-                    <Button
-                      onClick={closeHistoryPdfPreview}
-                      sx={modalSecondaryButtonSx}
-                    >
-                      Close Preview
-                    </Button>
+                    />
                   </Box>
                 </Box>
-
-                <Box sx={historyInlinePdfFrameWrapSx}>
-                  <iframe
-                    src={getPdfPreviewSrc(historyPdfPreview.url)}
-                    width="100%"
-                    height="100%"
-                    title="Generated Sticker PDF Preview"
-                    style={{
-                      border: "1px solid rgba(255,255,255,.08)",
-                      borderRadius: 12,
-                      background: "#fff",
-                    }}
-                  />
-                </Box>
-              </Box>
-            )}
+              )}
+            </Box>
           </Box>
         </InventoryModal>
       </div>
-      {uiAlert && (
-        <Box sx={uiAlertWrapSx}>
-          <Box
-            sx={{
-              ...uiAlertBoxSx,
-              ...(uiAlert.type === "success"
-                ? uiAlertSuccessSx
-                : uiAlertErrorSx),
-            }}
-          >
-            <Box sx={uiAlertIconSx}>
-              {uiAlert.type === "success" ? "✅" : "❌"}
-            </Box>
-
-            <Box sx={{ minWidth: 0 }}>
-              <Box sx={uiAlertTitleSx}>
-                {uiAlert.type === "success" ? "Success" : "Error"}
-              </Box>
-
-              <Box sx={uiAlertMessageSx}>
-                {uiAlert.message}
-              </Box>
-            </Box>
-
-            <IconButton
-              size="small"
-              onClick={() => setUiAlert(null)}
-              sx={uiAlertCloseSx}
+      {
+        uiAlert && (
+          <Box sx={uiAlertWrapSx}>
+            <Box
+              sx={{
+                ...uiAlertBoxSx,
+                ...(uiAlert.type === "success"
+                  ? uiAlertSuccessSx
+                  : uiAlertErrorSx),
+              }}
             >
-              ×
-            </IconButton>
+              <Box sx={uiAlertIconSx}>
+                {uiAlert.type === "success" ? "✅" : "❌"}
+              </Box>
+
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={uiAlertTitleSx}>
+                  {uiAlert.type === "success" ? "Success" : "Error"}
+                </Box>
+
+                <Box sx={uiAlertMessageSx}>
+                  {uiAlert.message}
+                </Box>
+              </Box>
+
+              <IconButton
+                size="small"
+                onClick={() => setUiAlert(null)}
+                sx={uiAlertCloseSx}
+              >
+                ×
+              </IconButton>
+            </Box>
           </Box>
-        </Box>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 
@@ -5876,19 +6059,13 @@ const uiAlertMessageSx = {
   color: "rgba(255,255,255,.82)",
 };
 
-const inventoryWorkbenchShellSx = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "12px",
-  mb: 2,
-};
-
 const inventoryHeroSx = {
+  flexWrap: "wrap",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "stretch",
   gap: "16px",
-  flexWrap: "wrap",
+  flexShrink: 0,
   p: "16px",
   borderRadius: "14px",
   background:
@@ -6002,12 +6179,6 @@ const inventoryMiniStatLabelSx = {
   letterSpacing: ".07em",
 };
 
-const inventorySectionListSx = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
-};
-
 const inventoryMasterCardSx = (accent, open) => ({
   borderRadius: "12px",
   background: open
@@ -6046,12 +6217,59 @@ const inventoryMasterLeftSx = {
   flex: 1,
 };
 
+const masterWorkbenchModalBodySx = {
+  height: "100%",
+  minHeight: 0,
+  overflow: "hidden",
+};
+
+const inventoryWorkbenchShellSx = {
+  height: "100%",
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+  overflow: "hidden",
+};
+
+const inventorySectionListSx = {
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+  overflowY: "auto",
+  overflowX: "hidden",
+  pr: "8px",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+
+  "&::-webkit-scrollbar": {
+    width: 10,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background: "rgba(15,23,42,.85)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(180deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+    border: "2px solid rgba(15,23,42,.95)",
+  },
+};
+
 const inventoryWorkbenchPaginationSx = {
-  marginTop: "12px",
+  flexShrink: 0,
+  marginTop: "0px",
   padding: "12px",
-  borderRadius: "12px",
-  background: "rgba(15,23,42,.78)",
-  border: "1px solid rgba(255,255,255,.07)",
+  borderRadius: "14px",
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.94), rgba(2,6,23,.88))",
+  border: "1px solid rgba(96,165,250,.15)",
+  boxShadow: "0 18px 40px rgba(2,6,23,.30)",
   display: "grid",
   gridTemplateColumns: "1fr auto 1fr",
   alignItems: "center",
@@ -6067,6 +6285,14 @@ const inventoryPaginationLeftSx = {
   alignItems: "center",
   justifyContent: "flex-start",
   gap: "8px",
+};
+
+const historyModalBodySx = {
+  height: "100%",
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
 };
 
 const inventoryPaginationCenterSx = {
@@ -6303,13 +6529,6 @@ const inventoryPacketSubSx = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
-};
-
-const masterWorkbenchModalBodySx = {
-  maxHeight: "68vh",
-  overflowY: "auto",
-  pr: 1,
-  pb: 1,
 };
 
 const inventoryPacketActionsSx = {
@@ -7405,8 +7624,9 @@ const historyEmptySx = {
 };
 
 const historyTopBarSx = {
+  flexShrink: 0,
   p: 2,
-  mb: 1.8,
+  mb: 1.4,
   borderRadius: "18px",
   background:
     "linear-gradient(180deg, rgba(30,41,59,.72), rgba(15,23,42,.72))",
@@ -7600,30 +7820,163 @@ const historyInlinePdfSubSx = {
 
 const historyMainContentSx = {
   width: "100%",
-  maxHeight: "58vh",
-  minHeight: 420,
+  flex: 1,
+  minHeight: 0,
   overflow: "hidden",
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
 };
 
 const historyMainContentSplitSx = {
   width: "100%",
-  height: "58vh",
-  minHeight: 460,
+  flex: 1,
+  minHeight: 0,
   display: "grid",
-  gridTemplateColumns: "minmax(0,1.15fr) minmax(420px,.85fr)",
+  gridTemplateColumns: "minmax(0, 1.15fr) minmax(420px, .85fr)",
   gap: 1.6,
   alignItems: "stretch",
   overflow: "hidden",
 };
 
+const historyTablePanelSx = {
+  minHeight: 0,
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  gap: 1.2,
+};
+
 const historyTableViewportSx = {
-  height: "100%",
-  maxHeight: "58vh",
+  flex: 1,
   minHeight: 0,
   overflow: "auto",
   borderRadius: "16px",
   border: "1px solid rgba(255,255,255,.08)",
   background: "rgba(15,23,42,.58)",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+
+  "&::-webkit-scrollbar": {
+    width: 10,
+    height: 10,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background: "rgba(15,23,42,.85)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background:
+      "linear-gradient(180deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+    border: "2px solid rgba(15,23,42,.95)",
+  },
+};
+
+const historyPaginationBarSx = {
+  flexShrink: 0,
+  minHeight: 54,
+  px: 1.4,
+  py: 1,
+  borderRadius: "14px",
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",
+  alignItems: "center",
+  gap: 1.4,
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(2,6,23,.88))",
+  border: "1px solid rgba(96,165,250,.16)",
+  boxShadow:
+    "0 16px 36px rgba(2,6,23,.32)",
+
+  "@media (max-width: 900px)": {
+    gridTemplateColumns: "1fr",
+  },
+};
+
+const historyPaginationTextSx = {
+  color: "rgba(255,255,255,.62)",
+  fontSize: 12,
+  fontWeight: 850,
+
+  "& b": {
+    color: "#fff",
+    fontWeight: 950,
+  },
+};
+
+const historyPaginationControlsSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 1,
+  flexWrap: "wrap",
+};
+
+const historyPaginationButtonSx = {
+  height: 34,
+  minWidth: 104,
+  borderRadius: "10px",
+  textTransform: "none",
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#fff",
+  background: "rgba(255,255,255,.055)",
+  border: "1px solid rgba(255,255,255,.09)",
+
+  "&:hover": {
+    background: "rgba(59,130,246,.16)",
+    borderColor: "rgba(59,130,246,.30)",
+  },
+
+  "&.Mui-disabled": {
+    color: "rgba(255,255,255,.28)",
+    background: "rgba(255,255,255,.025)",
+    borderColor: "rgba(255,255,255,.05)",
+  },
+};
+
+const historyPageCountSx = {
+  minHeight: 34,
+  px: 1.5,
+  borderRadius: "10px",
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.07)",
+  display: "flex",
+  alignItems: "center",
+  color: "rgba(255,255,255,.70)",
+  fontSize: 12,
+  fontWeight: 850,
+
+  "& span": {
+    mx: 0.8,
+    color: "#60a5fa",
+    fontWeight: 950,
+  },
+};
+
+const historyPageSizeWrapSx = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 1,
+  color: "rgba(255,255,255,.62)",
+  fontSize: 12,
+  fontWeight: 850,
+};
+
+const historyPageSizeSelectStyle = {
+  height: 34,
+  minWidth: 76,
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,.10)",
+  background: "#0f172a",
+  color: "#fff",
+  padding: "0 10px",
+  outline: "none",
+  fontWeight: 900,
+  colorScheme: "dark",
 };
 
 const historyInlinePdfSx = {
@@ -7649,17 +8002,17 @@ const historyInlinePdfHeaderSx = {
   background: "rgba(255,255,255,.035)",
 };
 
-const historyInlinePdfTitleSx = {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 950,
-};
-
 const historyInlinePdfFrameWrapSx = {
   flex: 1,
   minHeight: 0,
   p: 1.2,
   overflow: "hidden",
+};
+
+const historyInlinePdfTitleSx = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 950,
 };
 
 const historyInitialChipSx = {
