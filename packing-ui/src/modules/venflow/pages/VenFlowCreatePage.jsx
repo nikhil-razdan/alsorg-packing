@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import API from "../../../services/api";
+import { useAuth } from "../../../auth/AuthContext";
 import { venflowApi } from "../api/venflowApi";
 
 import {
@@ -25,18 +26,6 @@ import {
     primaryBtnSx,
     secondaryBtnSx,
 } from "../venflowTheme";
-
-const safeJson = (key, fallback) => {
-    try {
-        return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-    } catch {
-        return fallback;
-    }
-};
-
-const readCurrentUser = () => {
-    return safeJson("currentUser", {});
-};
 
 const normalizePlantCode = (value) => {
     if (!value) return "";
@@ -87,45 +76,22 @@ const extractPlantOptionsFromResponse = (data) => {
     return [];
 };
 
-const readStoredPlantCodes = () => {
-    const currentUser = readCurrentUser();
-
-    const possibleSources = [
-        currentUser.plantCodes,
-        currentUser.effectivePlantCodes,
-        currentUser.allowedPlantCodes,
-        currentUser.plants,
-        safeJson("plantCodes", []),
-        safeJson("effectivePlantCodes", []),
-        safeJson("allowedPlantCodes", []),
-        safeJson("plants", []),
-    ];
-
-    for (const source of possibleSources) {
-        if (Array.isArray(source) && source.length > 0) {
-            const plants = uniquePlants(source);
-
-            if (plants.length > 0) {
-                return plants;
-            }
-        }
-    }
-
-    return [];
-};
-
 export default function VenFlowCreatePage() {
     const navigate = useNavigate();
 
-    const currentUser = useMemo(() => readCurrentUser(), []);
+    const {
+        user,
+        role,
+        plantCodes,
+    } = useAuth();
 
-    const role = String(
-        currentUser.role ||
-        localStorage.getItem("role") ||
-        ""
-    )
+    const cleanRole = String(role || user?.role || "")
         .trim()
         .toUpperCase();
+
+    const isAdminManager =
+        cleanRole === "ADMIN" ||
+        cleanRole === "VENFLOW_MANAGER";
 
     const [plantOptions, setPlantOptions] = useState([]);
     const [plantLoading, setPlantLoading] = useState(true);
@@ -134,52 +100,80 @@ export default function VenFlowCreatePage() {
         plantCode: "",
         orderDate: "",
         pdNo: "",
+        drawingNo: "",
         clientName: "",
+        materialName: "",
+        veneerType: "",
+        thickness: "",
+        size: "",
+        requiredQty: "",
+        unit: "SHEET",
         bomReference: "",
+        remarks: "",
     });
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
 
+    const authPlants = useMemo(() => {
+        return uniquePlants(
+            Array.isArray(plantCodes) && plantCodes.length > 0
+                ? plantCodes
+                : user?.plantCodes || []
+        );
+    }, [plantCodes, user]);
+
     useEffect(() => {
         const loadPlants = async () => {
             setPlantLoading(true);
+            setError("");
 
             try {
-                const storedPlants = readStoredPlantCodes();
-
-                if (storedPlants.length > 0) {
-                    setPlantOptions(storedPlants);
+                if (authPlants.length > 0) {
+                    setPlantOptions(authPlants);
 
                     setForm((prev) => ({
                         ...prev,
-                        plantCode: prev.plantCode || storedPlants[0],
+                        plantCode: prev.plantCode || authPlants[0],
                     }));
 
                     return;
                 }
 
                 /*
-                 * Fallback: load plant master.
-                 * This is needed when localStorage/currentUser does not contain plantCodes.
+                 * Only ADMIN / VENFLOW_MANAGER can fallback to all plant master.
+                 * Normal VenFlow users must have plant access assigned.
                  */
-                const res = await API.get("/plants");
+                if (isAdminManager) {
+                    const res = await API.get("/plants");
+                    const apiPlants = extractPlantOptionsFromResponse(res.data);
 
-                const apiPlants = extractPlantOptionsFromResponse(res.data);
+                    setPlantOptions(apiPlants);
 
-                setPlantOptions(apiPlants);
+                    setForm((prev) => ({
+                        ...prev,
+                        plantCode: prev.plantCode || apiPlants[0] || "",
+                    }));
 
-                setForm((prev) => ({
-                    ...prev,
-                    plantCode: prev.plantCode || apiPlants[0] || "",
-                }));
+                    if (apiPlants.length === 0) {
+                        setError("No plants found in plant master.");
+                    }
+
+                    return;
+                }
+
+                setPlantOptions([]);
+                setError(
+                    "No plant access assigned to this user. Please assign plant access from User Management."
+                );
             } catch (err) {
                 console.error("Failed to load VenFlow plants", err);
 
                 setPlantOptions([]);
-
                 setError(
-                    "No plant access found for this user. Please assign plant access from User Management or check /plants API response."
+                    err?.response?.data?.message ||
+                    err?.response?.data?.error ||
+                    "Failed to load plant list."
                 );
             } finally {
                 setPlantLoading(false);
@@ -187,7 +181,7 @@ export default function VenFlowCreatePage() {
         };
 
         loadPlants();
-    }, []);
+    }, [authPlants, isAdminManager]);
 
     const update = (key, value) => {
         setForm((prev) => ({
@@ -215,8 +209,30 @@ export default function VenFlowCreatePage() {
                 return;
             }
 
+            if (!form.drawingNo.trim()) {
+                setError("Drawing No. is required.");
+                return;
+            }
+
             if (!form.clientName.trim()) {
                 setError("Client Name is required.");
+                return;
+            }
+
+            if (!form.materialName.trim()) {
+                setError("Material Name is required.");
+                return;
+            }
+
+            const requiredQty = Number(form.requiredQty);
+
+            if (!requiredQty || requiredQty <= 0) {
+                setError("Required Qty must be greater than zero.");
+                return;
+            }
+
+            if (!form.unit) {
+                setError("Unit is required.");
                 return;
             }
 
@@ -226,8 +242,16 @@ export default function VenFlowCreatePage() {
                 plantCode: form.plantCode,
                 orderDate: form.orderDate,
                 pdNo: form.pdNo.trim(),
+                drawingNo: form.drawingNo.trim(),
                 clientName: form.clientName.trim(),
+                materialName: form.materialName.trim(),
+                veneerType: form.veneerType.trim(),
+                thickness: form.thickness.trim(),
+                size: form.size.trim(),
+                requiredQty,
+                unit: form.unit,
                 bomReference: form.bomReference.trim(),
+                remarks: form.remarks.trim(),
             });
 
             const id = res.data?.id;
@@ -250,15 +274,15 @@ export default function VenFlowCreatePage() {
     };
 
     return (
-        <Box sx={{ maxWidth: 920 }}>
+        <Box sx={{ maxWidth: 980 }}>
             <Typography sx={pageTitleSx}>
                 New Veneer Requirement
             </Typography>
 
             <Typography sx={pageSubSx}>
-                Create a new veneer indent/BOM requirement. The entry will move
-                department-wise from Engineering to Store, Purchase, Processing and
-                final next-stage readiness.
+                Engineering creates the BOM / indent here. After creation,
+                the requirement can be sent to AKG Store for stock review,
+                reservation, purchase request, GRN, QC, issue and processing tracking.
             </Typography>
 
             <Card sx={{ ...cardSx, mt: 2.5 }}>
@@ -292,10 +316,7 @@ export default function VenFlowCreatePage() {
                                 </MenuItem>
                             ) : (
                                 plantOptions.map((plant) => (
-                                    <MenuItem
-                                        key={plant}
-                                        value={plant}
-                                    >
+                                    <MenuItem key={plant} value={plant}>
                                         {plant}
                                     </MenuItem>
                                 ))
@@ -325,6 +346,16 @@ export default function VenFlowCreatePage() {
                         />
 
                         <TextField
+                            label="Drawing No."
+                            value={form.drawingNo}
+                            onChange={(e) =>
+                                update("drawingNo", e.target.value)
+                            }
+                            required
+                            sx={fieldSx}
+                        />
+
+                        <TextField
                             label="Client Name"
                             value={form.clientName}
                             onChange={(e) =>
@@ -333,6 +364,75 @@ export default function VenFlowCreatePage() {
                             required
                             sx={fieldSx}
                         />
+
+                        <TextField
+                            label="Material Name"
+                            value={form.materialName}
+                            onChange={(e) =>
+                                update("materialName", e.target.value)
+                            }
+                            required
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Veneer / Flitch Type"
+                            value={form.veneerType}
+                            onChange={(e) =>
+                                update("veneerType", e.target.value)
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Thickness"
+                            value={form.thickness}
+                            onChange={(e) =>
+                                update("thickness", e.target.value)
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Size"
+                            value={form.size}
+                            onChange={(e) =>
+                                update("size", e.target.value)
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Required Qty"
+                            type="number"
+                            value={form.requiredQty}
+                            onChange={(e) =>
+                                update("requiredQty", e.target.value)
+                            }
+                            required
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            select
+                            label="Unit"
+                            value={form.unit}
+                            onChange={(e) =>
+                                update("unit", e.target.value)
+                            }
+                            required
+                            sx={fieldSx}
+                            SelectProps={{
+                                MenuProps: darkMenuProps,
+                            }}
+                        >
+                            <MenuItem value="SHEET">Sheet</MenuItem>
+                            <MenuItem value="PCS">Pcs</MenuItem>
+                            <MenuItem value="NO">No</MenuItem>
+                            <MenuItem value="SQFT">Sqft</MenuItem>
+                            <MenuItem value="SQM">Sqm</MenuItem>
+                            <MenuItem value="METER">Meter</MenuItem>
+                        </TextField>
 
                         <TextField
                             label="BOM Reference / BOM No."
@@ -344,16 +444,31 @@ export default function VenFlowCreatePage() {
                         />
                     </Box>
 
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Remarks"
+                        value={form.remarks}
+                        onChange={(e) =>
+                            update("remarks", e.target.value)
+                        }
+                        sx={{
+                            ...fieldSx,
+                            mt: 2,
+                        }}
+                    />
+
                     <Box sx={noteSx}>
                         <Typography sx={noteTitleSx}>
                             Controlled plant-wise VenFlow process
                         </Typography>
 
                         <Typography sx={noteTextSx}>
-                            This requirement will be visible only to users having access
-                            to the selected plant. Store, Purchase, Processing and
-                            Supervisor actions will open step-by-step based on role and
-                            workflow stage.
+                            This entry will be visible only to users having access
+                            to the selected plant. The workflow will move through
+                            Engineering, AKG Store, Purchase, Processing and
+                            Supervisor closure.
                         </Typography>
                     </Box>
 

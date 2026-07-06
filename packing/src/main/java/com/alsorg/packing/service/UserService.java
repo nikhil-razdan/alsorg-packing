@@ -223,10 +223,11 @@ public class UserService {
                  * ADMIN can have no selected plant because ADMIN can access all.
                  * Non-driver, non-admin operational users should have explicit plant access.
                  */
-                if (!"ADMIN".equals(role)
-                                && cleanPlants.isEmpty()
+                boolean plantRequired = !"ADMIN".equals(role)
                                 && !role.startsWith("BOMFLOW_")
-                                && !role.startsWith("VENFLOW_")) {
+                                && !"VENFLOW_MANAGER".equals(role);
+
+                if (plantRequired && cleanPlants.isEmpty()) {
                         throw new RuntimeException(
                                         "Plant access is required for this user");
                 }

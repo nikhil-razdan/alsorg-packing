@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -22,18 +23,42 @@ public class VenFlowAccessService {
     }
 
     public User currentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Authentication auth =
+                SecurityContextHolder.getContext().getAuthentication();
 
-        if (auth == null || auth.getName() == null || auth.getName().isBlank()) {
+        if (
+                auth == null
+                        || !auth.isAuthenticated()
+                        || auth instanceof AnonymousAuthenticationToken
+                        || auth.getName() == null
+                        || auth.getName().isBlank()
+                        || "anonymousUser".equalsIgnoreCase(auth.getName())
+        ) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "User not authenticated");
+                    "User not authenticated"
+            );
         }
 
-        return userRepository.findByUsername(auth.getName())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "User not found"));
+        String username = auth.getName().trim();
+
+        User user =
+                userRepository.findByUsernameIgnoreCase(username)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.UNAUTHORIZED,
+                                        "User not found: " + username
+                                )
+                        );
+
+        if (!user.isEnabled()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "User is disabled"
+            );
+        }
+
+        return user;
     }
 
     public String currentRole() {
@@ -51,11 +76,11 @@ public class VenFlowAccessService {
                 || "VENFLOW_MANAGER".equals(role);
     }
 
-    public boolean isProduction() {
+    public boolean isEngineering() {
         String role = currentRole();
 
         return isAdminOrManager()
-                || "VENFLOW_PRODUCTION".equals(role);
+                || "VENFLOW_ENGINEERING".equals(role);
     }
 
     public boolean isStore() {
@@ -70,6 +95,24 @@ public class VenFlowAccessService {
 
         return isAdminOrManager()
                 || "VENFLOW_PURCHASE".equals(role);
+    }
+
+    public boolean isProcessing() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_PRODUCTION".equals(role);
+    }
+
+    public boolean isProduction() {
+        return isProcessing();
+    }
+
+    public boolean isSupervisor() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_SUPERVISOR".equals(role);
     }
 
     public Set<String> allowedPlantCodes() {
@@ -96,14 +139,15 @@ public class VenFlowAccessService {
         if (cleanPlant.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Plant code is required");
+                    "Plant code is required"
+            );
         }
 
         if (isAdminOrManager()) {
             Set<String> allowed = allowedPlantCodes();
 
             /*
-             * Empty plant access for ADMIN/MANAGER means all plants.
+             * ADMIN / VENFLOW_MANAGER with no plant assignment means all plants.
              */
             if (allowed.isEmpty()) {
                 return;
@@ -115,7 +159,8 @@ public class VenFlowAccessService {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant);
+                    "No access for plant: " + cleanPlant
+            );
         }
 
         Set<String> allowed = allowedPlantCodes();
@@ -123,19 +168,26 @@ public class VenFlowAccessService {
         if (allowed.isEmpty() || !allowed.contains(cleanPlant)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant);
+                    "No access for plant: " + cleanPlant
+            );
         }
     }
 
-    public void requireProduction() {
-        requireProcessing();
+    public void requireEngineering() {
+        if (!isEngineering()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Engineering access required"
+            );
+        }
     }
 
     public void requireStore() {
         if (!isStore()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Store access required");
+                    "Store access required"
+            );
         }
     }
 
@@ -143,44 +195,8 @@ public class VenFlowAccessService {
         if (!isPurchase()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Purchase access required");
-        }
-    }
-
-    public void requireManagerApproval() {
-        if (!isAdminOrManager()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Manager/Admin approval required");
-        }
-    }
-
-    public boolean isEngineering() {
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "VENFLOW_ENGINEERING".equals(role);
-    }
-
-    public boolean isProcessing() {
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "VENFLOW_PRODUCTION".equals(role);
-    }
-
-    public boolean isSupervisor() {
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "VENFLOW_SUPERVISOR".equals(role);
-    }
-
-    public void requireEngineering() {
-        if (!isEngineering()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Engineering access required");
+                    "Purchase access required"
+            );
         }
     }
 
@@ -188,15 +204,21 @@ public class VenFlowAccessService {
         if (!isProcessing()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Processing/Production access required");
+                    "Processing/Production access required"
+            );
         }
+    }
+
+    public void requireProduction() {
+        requireProcessing();
     }
 
     public void requireSupervisor() {
         if (!isSupervisor()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Supervisor access required");
+                    "Supervisor access required"
+            );
         }
     }
 
@@ -204,7 +226,17 @@ public class VenFlowAccessService {
         if (!isProcessing() && !isSupervisor()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Processing/Supervisor access required");
+                    "Processing/Supervisor access required"
+            );
+        }
+    }
+
+    public void requireManagerApproval() {
+        if (!isAdminOrManager()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Manager/Admin approval required"
+            );
         }
     }
 }
