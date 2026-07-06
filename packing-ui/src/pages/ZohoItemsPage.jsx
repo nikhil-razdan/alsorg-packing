@@ -780,6 +780,8 @@ function ZohoItemsPage() {
   const [generatedHistoryReportMode, setGeneratedHistoryReportMode] =
     useState("DETAILED");
 
+  const [stickerReviewMode, setStickerReviewMode] = useState("GENERATE");
+
   const [generatedHistoryDateFrom, setGeneratedHistoryDateFrom] =
     useState("");
 
@@ -2530,8 +2532,26 @@ function ZohoItemsPage() {
     return valid;
   };
 
+  const getPacketItemIdForSticker = (rowOrId) => {
+    if (!rowOrId) {
+      return "";
+    }
+
+    if (typeof rowOrId === "string") {
+      return rowOrId.trim();
+    }
+
+    return (
+      rowOrId.packetItemId ||
+      rowOrId.itemId ||
+      rowOrId.id ||
+      rowOrId.packet_item_id ||
+      ""
+    );
+  };
+
   const getPacketItemId = (row) => {
-    return row?.itemId || row?.id || row?.packetItemId || "";
+    return getPacketItemIdForSticker(row);
   };
 
   const safeFileName = (value) => {
@@ -2541,11 +2561,18 @@ function ZohoItemsPage() {
       .slice(0, 80);
   };
 
+  const filenameSafe = (value) =>
+    String(value || "document")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_");
+
   const getStickerFileName = (row) => {
     const sku =
       row?.sku ||
       row?.stickerNumber ||
       row?.itemId ||
+      row?.packetItemId ||
       row?.id ||
       "packet";
 
@@ -2578,55 +2605,86 @@ function ZohoItemsPage() {
     }, 1000);
   };
 
-  const fetchProtectedPdfBlob = async (path) => {
-    const res =
-      await authFetch(
-        `${API_BASE_URL}${path}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/pdf",
-          },
-        }
-      );
-
-    const contentType =
-      res.headers.get("content-type") || "";
-
-    if (!res.ok || !contentType.includes("pdf")) {
-      const message =
-        await readApiErrorMessage(res);
-
-      throw new Error(
-        message || "Failed to load PDF"
-      );
-    }
-
-    return res.blob();
-  };
-
   const latestStickerPdfPath = (
-    row,
+    rowOrId,
     download = false
   ) => {
-    const itemId =
-      getPacketItemId(row);
+    const packetItemId =
+      getPacketItemIdForSticker(rowOrId);
 
-    if (!itemId) {
+    if (!packetItemId) {
       return "";
     }
 
     return `/api/inventory/stickers/packet-items/${encodeURIComponent(
-      itemId
+      packetItemId
     )}/latest?download=${download ? "true" : "false"}`;
   };
 
-  const getPacketItemIdForSticker = (row) =>
-    row?.packetItemId ||
-    row?.itemId ||
-    row?.id ||
-    row?.packet_item_id ||
-    "";
+  const buildProtectedFileUrl = (path) => {
+    const cleanPath =
+      String(path || "").trim();
+
+    if (!cleanPath) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(cleanPath)) {
+      return cleanPath;
+    }
+
+    return `${API_BASE_URL}${cleanPath.startsWith("/") ? cleanPath : `/${cleanPath}`}`;
+  };
+
+  const fetchProtectedPdfBlob = async (path) => {
+    const url =
+      buildProtectedFileUrl(path);
+
+    if (!url) {
+      throw new Error("PDF path missing");
+    }
+
+    const res =
+      await authFetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/pdf",
+        },
+      });
+
+    const contentType =
+      res.headers.get("content-type") || "";
+
+    if (!res.ok) {
+      const message =
+        await readApiErrorMessage(res);
+
+      throw new Error(
+        message ||
+        (res.status === 401
+          ? "Unauthorized. Please login again."
+          : "Failed to load PDF")
+      );
+    }
+
+    if (!contentType.toLowerCase().includes("pdf")) {
+      const message =
+        await readApiErrorMessage(res);
+
+      throw new Error(
+        message || "Backend did not return a PDF file"
+      );
+    }
+
+    const blob =
+      await res.blob();
+
+    if (!blob || blob.size === 0) {
+      throw new Error("Empty PDF received");
+    }
+
+    return blob;
+  };
 
   const previewExistingStickerPdf = async (row) => {
     const packetItemId =
@@ -2648,10 +2706,11 @@ function ZohoItemsPage() {
     }
 
     const path =
-      latestStickerPdfPath(packetItemId, false);
+      latestStickerPdfPath(row, false);
 
     try {
       setSelectedItem(row);
+      setStickerReviewMode("EXISTING");
       setStickerReviewOpen(true);
       setStickerReviewLoading(true);
 
@@ -2682,12 +2741,6 @@ function ZohoItemsPage() {
     }
   };
 
-  const filenameSafe = (value) =>
-    String(value || "document")
-      .trim()
-      .replace(/[\\/:*?"<>|]+/g, "_")
-      .replace(/\s+/g, "_");
-
   const downloadExistingStickerPdf = async (row) => {
     const packetItemId =
       getPacketItemIdForSticker(row);
@@ -2708,7 +2761,7 @@ function ZohoItemsPage() {
     }
 
     const path =
-      latestStickerPdfPath(packetItemId, true);
+      latestStickerPdfPath(row, true);
 
     try {
       const blob =
@@ -2729,7 +2782,9 @@ function ZohoItemsPage() {
       link.click();
       document.body.removeChild(link);
 
-      URL.revokeObjectURL(objectUrl);
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 1000);
     } catch (e) {
       console.error(e);
 
@@ -2788,6 +2843,7 @@ function ZohoItemsPage() {
     }
 
     setSelectedItem(row);
+    setStickerReviewMode("GENERATE");
     setStickerReviewPdf(null);
     setStickerReviewOpen(true);
     setStickerReviewLoading(true);
@@ -3537,30 +3593,54 @@ function ZohoItemsPage() {
           subtitle="Check sticker details before final generation"
           width={920}
           footer={
-            <>
-              <Button
-                onClick={() => {
-                  const row = selectedItem;
-
-                  closeStickerReviewModal();
-
-                  if (row) {
-                    openEditModal(row);
+            stickerReviewMode === "EXISTING" ? (
+              <>
+                <Button
+                  disabled={!stickerReviewPdf || stickerReviewLoading}
+                  onClick={() =>
+                    triggerDownloadFromUrl(
+                      stickerReviewPdf,
+                      getStickerFileName(selectedItem)
+                    )
                   }
-                }}
-                sx={modalSecondaryButtonSx}
-              >
-                Not Done - Edit Details
-              </Button>
+                  sx={modalSecondaryButtonSx}
+                >
+                  Download
+                </Button>
 
-              <Button
-                disabled={!stickerReviewPdf || stickerReviewLoading}
-                onClick={() => openGenerateStickerDrawer(selectedItem)}
-                sx={premiumButton}
-              >
-                Done - Continue Generate
-              </Button>
-            </>
+                <Button
+                  onClick={closeStickerReviewModal}
+                  sx={premiumButton}
+                >
+                  Close
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => {
+                    const row = selectedItem;
+
+                    closeStickerReviewModal();
+
+                    if (row) {
+                      openEditModal(row);
+                    }
+                  }}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Not Done - Edit Details
+                </Button>
+
+                <Button
+                  disabled={!stickerReviewPdf || stickerReviewLoading}
+                  onClick={() => openGenerateStickerDrawer(selectedItem)}
+                  sx={premiumButton}
+                >
+                  Done - Continue Generate
+                </Button>
+              </>
+            )
           }
         >
           {stickerReviewLoading && (
@@ -3632,8 +3712,13 @@ function ZohoItemsPage() {
                 setMasterWorkbenchOpen(false);
                 openEditModal(row);
               }}
-              onPreviewSticker={previewExistingStickerPdf}
-              onDownloadSticker={downloadExistingStickerPdf}
+              onPreviewSticker={(row) => {
+                setMasterWorkbenchOpen(false);
+                previewExistingStickerPdf(row);
+              }}
+              onDownloadSticker={(row) => {
+                downloadExistingStickerPdf(row);
+              }}
             />
           </Box>
         </InventoryModal>
@@ -4939,7 +5024,13 @@ function ZohoItemsPage() {
             </Box>
           </Box>
 
-          <Box sx={historyMainContentSx}>
+          <Box
+            sx={
+              historyPdfPreview?.url
+                ? historyMainContentSplitSx
+                : historyMainContentSx
+            }
+          >
             {generatedHistoryReportMode !== "DETAILED" ? (
               <Box sx={historyTableViewportSx}>
                 <Box sx={historyReportTitleSx}>
@@ -7425,24 +7516,6 @@ const historyMiniFilterFieldSx = {
   },
 };
 
-const historyMainContentSx = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 1.6,
-  width: "100%",
-  minWidth: 0,
-};
-
-const historyTableViewportSx = {
-  width: "100%",
-  maxWidth: "100%",
-  maxHeight: "calc(88vh - 355px)",
-  overflow: "auto",
-  borderRadius: "16px",
-  background: "rgba(15,23,42,.86)",
-  border: "1px solid rgba(148,163,184,.14)",
-};
-
 const historyDetailedGrid =
   "150px 130px 260px 280px 210px 120px 110px 190px 125px 125px";
 
@@ -7518,15 +7591,6 @@ const historyReportRow = {
   fontSize: 12,
 };
 
-const historyInlinePdfSx = {
-  borderRadius: "18px",
-  overflow: "hidden",
-  background:
-    "linear-gradient(180deg, rgba(15,23,42,.96), rgba(2,6,23,.96))",
-  border: "1px solid rgba(96,165,250,.18)",
-  boxShadow: "0 18px 48px rgba(0,0,0,.35)",
-};
-
 const historyInlinePdfHeaderSx = {
   px: 2,
   py: 1.3,
@@ -7550,10 +7614,75 @@ const historyInlinePdfSubSx = {
   mt: 0.3,
 };
 
-const historyInlinePdfFrameWrapSx = {
-  height: 540,
+const historyMainContentSx = {
+  width: "100%",
+  maxHeight: "58vh",
+  minHeight: 420,
+  overflow: "hidden",
+};
+
+const historyMainContentSplitSx = {
+  width: "100%",
+  height: "58vh",
+  minHeight: 460,
+  display: "grid",
+  gridTemplateColumns: "minmax(0,1.15fr) minmax(420px,.85fr)",
+  gap: 1.6,
+  alignItems: "stretch",
+  overflow: "hidden",
+};
+
+const historyTableViewportSx = {
+  height: "100%",
+  maxHeight: "58vh",
+  minHeight: 0,
+  overflow: "auto",
+  borderRadius: "16px",
+  border: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(15,23,42,.58)",
+};
+
+const historyInlinePdfSx = {
+  height: "100%",
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  borderRadius: "18px",
+  background:
+    "linear-gradient(180deg,rgba(15,23,42,.96),rgba(2,6,23,.96))",
+  border: "1px solid rgba(96,165,250,.20)",
+  overflow: "hidden",
+};
+
+const historyInlinePdfHeaderSx = {
+  flexShrink: 0,
   p: 1.4,
-  background: "rgba(255,255,255,.025)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 1.4,
+  borderBottom: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(255,255,255,.035)",
+};
+
+const historyInlinePdfTitleSx = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 950,
+};
+
+const historyInlinePdfSubSx = {
+  mt: 0.3,
+  color: "rgba(255,255,255,.55)",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const historyInlinePdfFrameWrapSx = {
+  flex: 1,
+  minHeight: 0,
+  p: 1.2,
+  overflow: "hidden",
 };
 
 const historyInitialChipSx = {
