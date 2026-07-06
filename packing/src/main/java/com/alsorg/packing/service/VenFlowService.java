@@ -33,1336 +33,1308 @@ import java.util.UUID;
 @Transactional
 public class VenFlowService {
 
-    private final VenFlowEntryRepository entryRepo;
-    private final VenFlowAuditLogRepository auditRepo;
-    private final VenFlowAccessService access;
+        private final VenFlowEntryRepository entryRepo;
+        private final VenFlowAuditLogRepository auditRepo;
+        private final VenFlowAccessService access;
 
-    public VenFlowService(
-            VenFlowEntryRepository entryRepo,
-            VenFlowAuditLogRepository auditRepo,
-            VenFlowAccessService access
-    ) {
-        this.entryRepo = entryRepo;
-        this.auditRepo = auditRepo;
-        this.access = access;
-    }
-
-    /*
-     * =========================================================
-     * ENGINEERING - CREATE BOM / INDENT
-     * =========================================================
-     */
-
-    public VenFlowEntry create(CreateRequest req) {
-        access.requireEngineering();
-
-        require(req, "Request body is required.");
-        requireText(req.plantCode(), "Plant is required.");
-        require(req.orderDate(), "Order Date is required.");
-        requireText(req.pdNo(), "PD No. is required.");
-        requireText(req.drawingNo(), "Drawing No. is required.");
-        requireText(req.clientName(), "Client Name is required.");
-        requireText(req.materialName(), "Material Name is required.");
-        require(req.requiredQty(), "Required Qty is required.");
-        require(req.unit(), "Unit is required.");
-
-        if (req.requiredQty().compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest("Required Qty must be greater than zero.");
+        public VenFlowService(
+                        VenFlowEntryRepository entryRepo,
+                        VenFlowAuditLogRepository auditRepo,
+                        VenFlowAccessService access) {
+                this.entryRepo = entryRepo;
+                this.auditRepo = auditRepo;
+                this.access = access;
         }
-
-        String plantCode = cleanUpper(req.plantCode());
-
-        access.assertPlantAccess(plantCode);
-
-        VenFlowEntry e = new VenFlowEntry();
-
-        e.plantCode = plantCode;
-        e.orderDate = req.orderDate();
-
-        e.pdNo = clean(req.pdNo());
-        e.drawingNo = clean(req.drawingNo());
-        e.clientName = clean(req.clientName());
-
-        e.materialName = clean(req.materialName());
-        e.veneerType = clean(req.veneerType());
-        e.thickness = clean(req.thickness());
-        e.size = clean(req.size());
-
-        e.requiredQty = req.requiredQty();
-        e.orderedQty = req.requiredQty();
-        e.unit = req.unit();
-        e.balanceQty = req.requiredQty();
-
-        e.bomReference = clean(req.bomReference());
-        e.bomAttachmentUrl = clean(req.bomAttachmentUrl());
-        e.sampleImageUrl = clean(req.sampleImageUrl());
-
-        e.remarks = clean(req.remarks());
-
-        e.stage = VenFlowStage.INDENT_CREATED;
-        e.stockDecision = VenFlowStockDecision.PENDING;
-        e.poStatus = VenFlowPoStatus.NOT_RAISED;
-        e.qcStatus = VenFlowQcStatus.NOT_REQUIRED;
-        e.issueStatus = VenFlowIssueStatus.NOT_RESERVED;
-        e.processingStatus = VenFlowProcessingStatus.NOT_STARTED;
-
-        e.raisedBy = actor();
-        e.raisedAt = LocalDateTime.now();
-
-        e.createdBy = actor();
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                saved.id,
-                "INDENT_CREATED",
-                null,
-                "Plant=" + saved.plantCode
-                        + ", PD=" + saved.pdNo
-                        + ", Drawing=" + saved.drawingNo
-                        + ", Client=" + saved.clientName
-                        + ", Material=" + saved.materialName
-                        + ", Qty=" + saved.requiredQty + " " + saved.unit
-        );
-
-        return saved;
-    }
-
-    public VenFlowEntry sendToStore(UUID id) {
-        access.requireEngineering();
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.INDENT_CREATED) {
-            throw badRequest("Only newly created indent can be sent to Store.");
-        }
-
-        String oldValue = String.valueOf(e.stage);
-
-        e.stage = VenFlowStage.SENT_TO_STORE;
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(id, "SENT_TO_STORE", oldValue, String.valueOf(saved.stage));
-
-        return saved;
-    }
-
-    /*
-     * =========================================================
-     * STORE - STOCK REVIEW
-     * =========================================================
-     */
-
-    public VenFlowEntry storeReview(UUID id, StoreReviewRequest req) {
-        access.requireStore();
-
-        require(req, "Request body is required.");
-        require(req.stockDecision(), "Stock decision is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.SENT_TO_STORE
-                && e.stage != VenFlowStage.STORE_REVIEWED
-                && e.stage != VenFlowStage.STOCK_AVAILABLE) {
-            throw badRequest("Store can review only after indent is sent to Store.");
-        }
-
-        String oldValue = "Decision=" + e.stockDecision
-                + ", Available Qty=" + e.availableQty
-                + ", Stage=" + e.stage;
-
-        e.stockDecision = req.stockDecision();
-        e.availableQty = req.availableQty();
-
-        if (req.stockDecision() == VenFlowStockDecision.AVAILABLE
-                || req.stockDecision() == VenFlowStockDecision.PARTIALLY_AVAILABLE) {
-            e.stage = VenFlowStage.STOCK_AVAILABLE;
-        } else {
-            e.stage = VenFlowStage.STORE_REVIEWED;
-        }
-
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
-        }
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                id,
-                "STORE_REVIEWED",
-                oldValue,
-                "Decision=" + saved.stockDecision
-                        + ", Available Qty=" + saved.availableQty
-                        + ", Stage=" + saved.stage
-        );
-
-        return saved;
-    }
-
-    public VenFlowEntry reserveMaterial(UUID id, ReserveMaterialRequest req) {
-        access.requireStore();
-
-        require(req, "Request body is required.");
-        require(req.reservedQty(), "Reserved Qty is required.");
-
-        if (req.reservedQty().compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest("Reserved Qty must be greater than zero.");
-        }
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        boolean allowedStage =
-                e.stage == VenFlowStage.STOCK_AVAILABLE
-                        || e.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
-
-        if (!allowedStage) {
-            throw badRequest("Material can be reserved only after stock availability or accepted inventory.");
-        }
-
-        String oldValue = "Reserved=" + e.reservedQty
-                + ", Issue Status=" + e.issueStatus
-                + ", Stage=" + e.stage;
-
-        e.reservedQty = req.reservedQty();
-        e.issueStatus = VenFlowIssueStatus.RESERVED;
-        e.stage = VenFlowStage.MATERIAL_RESERVED;
-
-        e.reservedBy = actor();
-        e.reservedAt = LocalDateTime.now();
-
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
-        }
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                id,
-                "MATERIAL_RESERVED",
-                oldValue,
-                "Reserved=" + saved.reservedQty
-                        + ", Issue Status=" + saved.issueStatus
-                        + ", Stage=" + saved.stage
-        );
-
-        return saved;
-    }
-
-    public VenFlowEntry raisePurchaseRequest(UUID id, PurchaseRequestRequest req) {
-        access.requireStore();
-
-        require(req, "Request body is required.");
-        requireText(req.purchaseRequestNo(), "Purchase Request No. is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.STORE_REVIEWED
-                && e.stage != VenFlowStage.STOCK_AVAILABLE) {
-            throw badRequest("Store review must be done before raising purchase request.");
-        }
-
-        if (e.stockDecision != VenFlowStockDecision.NOT_AVAILABLE
-                && e.stockDecision != VenFlowStockDecision.PARTIALLY_AVAILABLE
-                && e.stockDecision != VenFlowStockDecision.HOLD) {
-            throw badRequest("Purchase request is allowed only when stock is not available, partial, or on hold.");
-        }
-
-        String oldValue = "PR=" + e.purchaseRequestNo
-                + ", Stage=" + e.stage;
-
-        e.purchaseRequestNo = clean(req.purchaseRequestNo());
-        e.requisitionSlipNo = clean(req.purchaseRequestNo());
-        e.requisitionDate = req.requisitionDate();
-
-        e.purchaseRequestBy = actor();
-        e.purchaseRequestAt = LocalDateTime.now();
-
-        e.stage = VenFlowStage.PURCHASE_REQUEST_RAISED;
-
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
-        }
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                id,
-                "PURCHASE_REQUEST_RAISED",
-                oldValue,
-                "PR=" + saved.purchaseRequestNo
-                        + ", Stage=" + saved.stage
-        );
-
-        return saved;
-    }
-
-    /*
-     * =========================================================
-     * PURCHASE - PO
-     * =========================================================
-     */
-
-    public VenFlowEntry raisePo(UUID id, PoRequest req) {
-        access.requirePurchase();
-
-        require(req, "Request body is required.");
-        requireText(req.vendorName(), "Vendor Name is required.");
-        requireText(req.poNo(), "PO No. is required.");
-        require(req.poDate(), "PO Date is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.PURCHASE_REQUEST_RAISED
-                && e.stage != VenFlowStage.PO_RAISED) {
-            throw badRequest("Purchase request must be raised before PO.");
-        }
-
-        String oldValue = "PO=" + e.poNo
-                + ", Vendor=" + e.vendorName
-                + ", Status=" + e.poStatus
-                + ", Stage=" + e.stage;
-
-        e.vendorName = clean(req.vendorName());
-        e.poNo = clean(req.poNo());
-        e.poDate = req.poDate();
-        e.poAmount = req.poAmount();
-        e.poDocumentUrl = clean(req.poDocumentUrl());
-
-        e.poStatus = VenFlowPoStatus.RAISED;
-        e.stage = VenFlowStage.PO_RAISED;
-
-        e.poRaisedBy = actor();
-        e.poRaisedAt = LocalDateTime.now();
-
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
-        }
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                id,
-                "PO_RAISED",
-                oldValue,
-                "PO=" + saved.poNo
-                        + ", Vendor=" + saved.vendorName
-                        + ", Status=" + saved.poStatus
-                        + ", Stage=" + saved.stage
-        );
-
-        return saved;
-    }
-
-    public VenFlowEntry approvePo(UUID id) {
-        access.requireManagerApproval();
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.poStatus != VenFlowPoStatus.RAISED) {
-            throw badRequest("PO must be raised before approval.");
-        }
-
-        String oldValue = "PO Status=" + e.poStatus;
-
-        e.poStatus = VenFlowPoStatus.APPROVED;
 
         /*
-         * New flow does not need separate PO_APPROVED stage.
-         * Keep stage as PO_RAISED so Store can receive material.
+         * =========================================================
+         * ENGINEERING - CREATE BOM / INDENT
+         * =========================================================
          */
-        if (e.stage != VenFlowStage.PO_RAISED) {
-            e.stage = VenFlowStage.PO_RAISED;
+
+        public VenFlowEntry create(CreateRequest req) {
+                access.requireEngineering();
+
+                require(req, "Request body is required.");
+                requireText(req.plantCode(), "Plant is required.");
+                require(req.orderDate(), "Order Date is required.");
+                requireText(req.pdNo(), "PD No. is required.");
+                requireText(req.drawingNo(), "Drawing No. is required.");
+                requireText(req.clientName(), "Client Name is required.");
+                requireText(req.materialName(), "Material Name is required.");
+                require(req.requiredQty(), "Required Qty is required.");
+                require(req.unit(), "Unit is required.");
+
+                if (req.requiredQty().compareTo(BigDecimal.ZERO) <= 0) {
+                        throw badRequest("Required Qty must be greater than zero.");
+                }
+
+                String plantCode = cleanUpper(req.plantCode());
+
+                access.assertPlantAccess(plantCode);
+
+                VenFlowEntry e = new VenFlowEntry();
+
+                e.plantCode = plantCode;
+                e.orderDate = req.orderDate();
+
+                e.pdNo = clean(req.pdNo());
+                e.drawingNo = clean(req.drawingNo());
+                e.clientName = clean(req.clientName());
+
+                e.materialName = clean(req.materialName());
+                e.productDescription = clean(req.materialName());
+                e.veneerType = clean(req.veneerType());
+                e.thickness = clean(req.thickness());
+                e.size = clean(req.size());
+
+                e.requiredQty = req.requiredQty();
+                e.orderedQty = req.requiredQty();
+                e.unit = req.unit();
+                e.balanceQty = req.requiredQty();
+
+                e.bomReference = clean(req.bomReference());
+                e.bomAttachmentUrl = clean(req.bomAttachmentUrl());
+                e.sampleImageUrl = clean(req.sampleImageUrl());
+
+                e.remarks = clean(req.remarks());
+
+                e.stage = VenFlowStage.INDENT_CREATED;
+                e.stockDecision = VenFlowStockDecision.PENDING;
+                e.poStatus = VenFlowPoStatus.NOT_RAISED;
+                e.qcStatus = VenFlowQcStatus.NOT_REQUIRED;
+                e.issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+                e.processingStatus = VenFlowProcessingStatus.NOT_STARTED;
+
+                e.raisedBy = actor();
+                e.raisedAt = LocalDateTime.now();
+
+                e.createdBy = actor();
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                saved.id,
+                                "INDENT_CREATED",
+                                null,
+                                "Plant=" + saved.plantCode
+                                                + ", PD=" + saved.pdNo
+                                                + ", Drawing=" + saved.drawingNo
+                                                + ", Client=" + saved.clientName
+                                                + ", Material=" + saved.materialName
+                                                + ", Qty=" + saved.requiredQty + " " + saved.unit);
+
+                return saved;
         }
 
-        e.poApprovedBy = actor();
-        e.poApprovedAt = LocalDateTime.now();
+        public VenFlowEntry sendToStore(UUID id) {
+                access.requireEngineering();
 
-        e.updatedBy = actor();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        VenFlowEntry saved = entryRepo.save(e);
+                if (e.stage != VenFlowStage.INDENT_CREATED) {
+                        throw badRequest("Only newly created indent can be sent to Store.");
+                }
 
-        audit(
-                id,
-                "PO_APPROVED",
-                oldValue,
-                "PO Status=" + saved.poStatus
-        );
+                String oldValue = String.valueOf(e.stage);
 
-        return saved;
-    }
+                e.stage = VenFlowStage.SENT_TO_STORE;
+                e.updatedBy = actor();
 
-    /*
-     * =========================================================
-     * STORE - RECEIVING / GRN / QC / ACCEPTANCE
-     * =========================================================
-     */
+                VenFlowEntry saved = entryRepo.save(e);
 
-    public VenFlowEntry materialReceived(UUID id, MaterialReceivedRequest req) {
-        access.requireStore();
+                audit(id, "SENT_TO_STORE", oldValue, String.valueOf(saved.stage));
 
-        require(req, "Request body is required.");
-        require(req.receivedQty(), "Received Qty is required.");
-
-        if (req.receivedQty().compareTo(BigDecimal.ZERO) < 0) {
-            throw badRequest("Received Qty cannot be negative.");
+                return saved;
         }
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+        /*
+         * =========================================================
+         * STORE - STOCK REVIEW
+         * =========================================================
+         */
 
-        if (e.stage != VenFlowStage.PO_RAISED) {
-            throw badRequest("PO must be raised before material receiving.");
+        public VenFlowEntry storeReview(UUID id, StoreReviewRequest req) {
+                access.requireStore();
+
+                require(req, "Request body is required.");
+                require(req.stockDecision(), "Stock decision is required.");
+
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                if (e.stage != VenFlowStage.SENT_TO_STORE
+                                && e.stage != VenFlowStage.STORE_REVIEWED
+                                && e.stage != VenFlowStage.STOCK_AVAILABLE) {
+                        throw badRequest("Store can review only after indent is sent to Store.");
+                }
+
+                String oldValue = "Decision=" + e.stockDecision
+                                + ", Available Qty=" + e.availableQty
+                                + ", Stage=" + e.stage;
+
+                e.stockDecision = req.stockDecision();
+                e.availableQty = req.availableQty();
+
+                if (req.stockDecision() == VenFlowStockDecision.AVAILABLE
+                                || req.stockDecision() == VenFlowStockDecision.PARTIALLY_AVAILABLE) {
+                        e.stage = VenFlowStage.STOCK_AVAILABLE;
+                } else {
+                        e.stage = VenFlowStage.STORE_REVIEWED;
+                }
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "STORE_REVIEWED",
+                                oldValue,
+                                "Decision=" + saved.stockDecision
+                                                + ", Available Qty=" + saved.availableQty
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = "Received=" + e.receivedQty
-                + ", Stage=" + e.stage;
+        public VenFlowEntry reserveMaterial(UUID id, ReserveMaterialRequest req) {
+                access.requireStore();
 
-        e.receivedQty = req.receivedQty();
-        e.actualInHouseDate = req.actualInHouseDate();
-        e.balanceQty = calculateBalance(e.requiredQty, e.receivedQty);
+                require(req, "Request body is required.");
+                require(req.reservedQty(), "Reserved Qty is required.");
 
-        e.stage = VenFlowStage.MATERIAL_RECEIVED_AT_STORE;
+                if (req.reservedQty().compareTo(BigDecimal.ZERO) <= 0) {
+                        throw badRequest("Reserved Qty must be greater than zero.");
+                }
 
-        e.materialReceivedBy = actor();
-        e.materialReceivedAt = LocalDateTime.now();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
+                boolean allowedStage = e.stage == VenFlowStage.STOCK_AVAILABLE
+                                || e.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
+
+                if (!allowedStage) {
+                        throw badRequest(
+                                        "Material can be reserved only after stock availability or accepted inventory.");
+                }
+
+                String oldValue = "Reserved=" + e.reservedQty
+                                + ", Issue Status=" + e.issueStatus
+                                + ", Stage=" + e.stage;
+
+                e.reservedQty = req.reservedQty();
+                e.issueStatus = VenFlowIssueStatus.RESERVED;
+                e.stage = VenFlowStage.MATERIAL_RESERVED;
+
+                e.reservedBy = actor();
+                e.reservedAt = LocalDateTime.now();
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "MATERIAL_RESERVED",
+                                oldValue,
+                                "Reserved=" + saved.reservedQty
+                                                + ", Issue Status=" + saved.issueStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        public VenFlowEntry raisePurchaseRequest(UUID id, PurchaseRequestRequest req) {
+                access.requireStore();
 
-        VenFlowEntry saved = entryRepo.save(e);
+                require(req, "Request body is required.");
+                requireText(req.purchaseRequestNo(), "Purchase Request No. is required.");
 
-        audit(
-                id,
-                "MATERIAL_RECEIVED_AT_STORE",
-                oldValue,
-                "Received=" + saved.receivedQty
-                        + ", Stage=" + saved.stage
-        );
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        return saved;
-    }
+                if (e.stage != VenFlowStage.STORE_REVIEWED
+                                && e.stage != VenFlowStage.STOCK_AVAILABLE) {
+                        throw badRequest("Store review must be done before raising purchase request.");
+                }
 
-    public VenFlowEntry grnEntry(UUID id, GrnRequest req) {
-        access.requireStore();
+                if (e.stockDecision != VenFlowStockDecision.NOT_AVAILABLE
+                                && e.stockDecision != VenFlowStockDecision.PARTIALLY_AVAILABLE
+                                && e.stockDecision != VenFlowStockDecision.HOLD) {
+                        throw badRequest(
+                                        "Purchase request is allowed only when stock is not available, partial, or on hold.");
+                }
 
-        require(req, "Request body is required.");
-        requireText(req.grnNo(), "GRN No. is required.");
-        require(req.grnDate(), "GRN Date is required.");
+                String oldValue = "PR=" + e.purchaseRequestNo
+                                + ", Stage=" + e.stage;
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.purchaseRequestNo = clean(req.purchaseRequestNo());
+                e.requisitionSlipNo = clean(req.purchaseRequestNo());
+                e.requisitionDate = req.requisitionDate();
 
-        if (e.stage != VenFlowStage.MATERIAL_RECEIVED_AT_STORE) {
-            throw badRequest("Material must be received before GRN entry.");
+                e.purchaseRequestBy = actor();
+                e.purchaseRequestAt = LocalDateTime.now();
+
+                e.stage = VenFlowStage.PURCHASE_REQUEST_RAISED;
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PURCHASE_REQUEST_RAISED",
+                                oldValue,
+                                "PR=" + saved.purchaseRequestNo
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = "GRN=" + e.grnNo
-                + ", QC=" + e.qcStatus
-                + ", Stage=" + e.stage;
+        /*
+         * =========================================================
+         * PURCHASE - PO
+         * =========================================================
+         */
 
-        e.grnNo = clean(req.grnNo());
-        e.grnDate = req.grnDate();
+        public VenFlowEntry raisePo(UUID id, PoRequest req) {
+                access.requirePurchase();
 
-        e.grnBy = actor();
-        e.grnAt = LocalDateTime.now();
+                require(req, "Request body is required.");
+                requireText(req.vendorName(), "Vendor Name is required.");
+                requireText(req.poNo(), "PO No. is required.");
+                require(req.poDate(), "PO Date is required.");
 
-        e.qcStatus = VenFlowQcStatus.PENDING;
-        e.stage = VenFlowStage.GRN_DONE;
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
+                if (e.stage != VenFlowStage.PURCHASE_REQUEST_RAISED
+                                && e.stage != VenFlowStage.PO_RAISED) {
+                        throw badRequest("Purchase request must be raised before PO.");
+                }
+
+                String oldValue = "PO=" + e.poNo
+                                + ", Vendor=" + e.vendorName
+                                + ", Status=" + e.poStatus
+                                + ", Stage=" + e.stage;
+
+                e.vendorName = clean(req.vendorName());
+                e.poNo = clean(req.poNo());
+                e.poDate = req.poDate();
+                e.poAmount = req.poAmount();
+                e.poDocumentUrl = clean(req.poDocumentUrl());
+
+                e.poStatus = VenFlowPoStatus.RAISED;
+                e.stage = VenFlowStage.PO_RAISED;
+
+                e.poRaisedBy = actor();
+                e.poRaisedAt = LocalDateTime.now();
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PO_RAISED",
+                                oldValue,
+                                "PO=" + saved.poNo
+                                                + ", Vendor=" + saved.vendorName
+                                                + ", Status=" + saved.poStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        public VenFlowEntry approvePo(UUID id) {
+                access.requireManagerApproval();
 
-        VenFlowEntry saved = entryRepo.save(e);
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        audit(
-                id,
-                "GRN_DONE",
-                oldValue,
-                "GRN=" + saved.grnNo
-                        + ", QC=" + saved.qcStatus
-                        + ", Stage=" + saved.stage
-        );
+                if (e.poStatus != VenFlowPoStatus.RAISED) {
+                        throw badRequest("PO must be raised before approval.");
+                }
 
-        return saved;
-    }
+                String oldValue = "PO Status=" + e.poStatus;
 
-    public VenFlowEntry qualityCheck(UUID id, QcRequest req) {
-        access.requireStore();
+                e.poStatus = VenFlowPoStatus.APPROVED;
 
-        require(req, "Request body is required.");
-        require(req.qcStatus(), "QC Status is required.");
+                /*
+                 * New flow does not need separate PO_APPROVED stage.
+                 * Keep stage as PO_RAISED so Store can receive material.
+                 */
+                if (e.stage != VenFlowStage.PO_RAISED) {
+                        e.stage = VenFlowStage.PO_RAISED;
+                }
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.poApprovedBy = actor();
+                e.poApprovedAt = LocalDateTime.now();
 
-        if (e.stage != VenFlowStage.GRN_DONE
-                && e.stage != VenFlowStage.QC_PENDING) {
-            throw badRequest("GRN must be done before QC.");
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PO_APPROVED",
+                                oldValue,
+                                "PO Status=" + saved.poStatus);
+
+                return saved;
         }
 
-        String oldValue = "QC=" + e.qcStatus
-                + ", Stage=" + e.stage;
+        /*
+         * =========================================================
+         * STORE - RECEIVING / GRN / QC / ACCEPTANCE
+         * =========================================================
+         */
 
-        e.qcStatus = req.qcStatus();
-        e.qcRemarks = clean(req.qcRemarks());
-        e.rejectionReason = clean(req.rejectionReason());
+        public VenFlowEntry materialReceived(UUID id, MaterialReceivedRequest req) {
+                access.requireStore();
 
-        e.qcCheckedBy = actor();
-        e.qcCheckedAt = LocalDateTime.now();
+                require(req, "Request body is required.");
+                require(req.receivedQty(), "Received Qty is required.");
 
-        if (req.qcStatus() == VenFlowQcStatus.OK) {
-            e.stage = VenFlowStage.QC_OK;
-        } else if (req.qcStatus() == VenFlowQcStatus.PENDING) {
-            e.stage = VenFlowStage.QC_PENDING;
-        } else {
-            e.stage = VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN;
+                if (req.receivedQty().compareTo(BigDecimal.ZERO) < 0) {
+                        throw badRequest("Received Qty cannot be negative.");
+                }
+
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                if (e.stage != VenFlowStage.PO_RAISED) {
+                        throw badRequest("PO must be raised before material receiving.");
+                }
+
+                String oldValue = "Received=" + e.receivedQty
+                                + ", Stage=" + e.stage;
+
+                e.receivedQty = req.receivedQty();
+                e.actualInHouseDate = req.actualInHouseDate();
+                e.balanceQty = calculateBalance(e.requiredQty, e.receivedQty);
+
+                e.stage = VenFlowStage.MATERIAL_RECEIVED_AT_STORE;
+
+                e.materialReceivedBy = actor();
+                e.materialReceivedAt = LocalDateTime.now();
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "MATERIAL_RECEIVED_AT_STORE",
+                                oldValue,
+                                "Received=" + saved.receivedQty
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        public VenFlowEntry grnEntry(UUID id, GrnRequest req) {
+                access.requireStore();
 
-        VenFlowEntry saved = entryRepo.save(e);
+                require(req, "Request body is required.");
+                requireText(req.grnNo(), "GRN No. is required.");
+                require(req.grnDate(), "GRN Date is required.");
 
-        audit(
-                id,
-                "QUALITY_CHECK",
-                oldValue,
-                "QC=" + saved.qcStatus
-                        + ", Stage=" + saved.stage
-        );
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        return saved;
-    }
+                if (e.stage != VenFlowStage.MATERIAL_RECEIVED_AT_STORE) {
+                        throw badRequest("Material must be received before GRN entry.");
+                }
 
-    public VenFlowEntry acceptInventory(UUID id) {
-        access.requireStore();
+                String oldValue = "GRN=" + e.grnNo
+                                + ", QC=" + e.qcStatus
+                                + ", Stage=" + e.stage;
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.grnNo = clean(req.grnNo());
+                e.grnDate = req.grnDate();
 
-        if (e.stage != VenFlowStage.QC_OK) {
-            throw badRequest("QC must be OK before accepting material in Store Inventory.");
+                e.grnBy = actor();
+                e.grnAt = LocalDateTime.now();
+
+                e.qcStatus = VenFlowQcStatus.PENDING;
+                e.stage = VenFlowStage.GRN_DONE;
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "GRN_DONE",
+                                oldValue,
+                                "GRN=" + saved.grnNo
+                                                + ", QC=" + saved.qcStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = String.valueOf(e.stage);
+        public VenFlowEntry qualityCheck(UUID id, QcRequest req) {
+                access.requireStore();
 
-        e.stage = VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
-        e.updatedBy = actor();
+                require(req, "Request body is required.");
+                require(req.qcStatus(), "QC Status is required.");
 
-        VenFlowEntry saved = entryRepo.save(e);
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        audit(id, "MATERIAL_ACCEPTED_IN_STORE", oldValue, String.valueOf(saved.stage));
+                if (e.stage != VenFlowStage.GRN_DONE
+                                && e.stage != VenFlowStage.QC_PENDING) {
+                        throw badRequest("GRN must be done before QC.");
+                }
 
-        return saved;
-    }
+                String oldValue = "QC=" + e.qcStatus
+                                + ", Stage=" + e.stage;
 
-    public VenFlowEntry informProduction(UUID id) {
-        access.requireStore();
+                e.qcStatus = req.qcStatus();
+                e.qcRemarks = clean(req.qcRemarks());
+                e.rejectionReason = clean(req.rejectionReason());
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.qcCheckedBy = actor();
+                e.qcCheckedAt = LocalDateTime.now();
 
-        if (e.stage != VenFlowStage.MATERIAL_RESERVED
-                && e.stage != VenFlowStage.MATERIAL_ACCEPTED_IN_STORE) {
-            throw badRequest("Material must be reserved or accepted in inventory before informing Production.");
+                if (req.qcStatus() == VenFlowQcStatus.OK) {
+                        e.stage = VenFlowStage.QC_OK;
+                } else if (req.qcStatus() == VenFlowQcStatus.PENDING) {
+                        e.stage = VenFlowStage.QC_PENDING;
+                } else {
+                        e.stage = VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN;
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "QUALITY_CHECK",
+                                oldValue,
+                                "QC=" + saved.qcStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = String.valueOf(e.stage);
+        public VenFlowEntry acceptInventory(UUID id) {
+                access.requireStore();
 
-        e.stage = VenFlowStage.PRODUCTION_INFORMED;
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        e.materialInformedBy = actor();
-        e.materialInformedAt = LocalDateTime.now();
+                if (e.stage != VenFlowStage.QC_OK) {
+                        throw badRequest("QC must be OK before accepting material in Store Inventory.");
+                }
 
-        e.updatedBy = actor();
+                String oldValue = String.valueOf(e.stage);
 
-        VenFlowEntry saved = entryRepo.save(e);
+                e.stage = VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
+                e.updatedBy = actor();
 
-        audit(id, "PRODUCTION_INFORMED", oldValue, String.valueOf(saved.stage));
+                VenFlowEntry saved = entryRepo.save(e);
 
-        return saved;
-    }
+                audit(id, "MATERIAL_ACCEPTED_IN_STORE", oldValue, String.valueOf(saved.stage));
 
-    public VenFlowEntry issueMaterial(UUID id, IssueMaterialRequest req) {
-        access.requireStore();
-
-        require(req, "Request body is required.");
-        require(req.issuedQty(), "Issued Qty is required.");
-        requireText(req.issuedTo(), "Issued To is required.");
-
-        if (req.issuedQty().compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest("Issued Qty must be greater than zero.");
+                return saved;
         }
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+        public VenFlowEntry informProduction(UUID id) {
+                access.requireStore();
 
-        if (e.stage != VenFlowStage.PRODUCTION_DETAILS_ADDED
-                && e.stage != VenFlowStage.MATERIAL_RESERVED
-                && e.stage != VenFlowStage.PRODUCTION_INFORMED) {
-            throw badRequest("Material can be issued only after reservation/inventory acceptance and production information.");
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                if (e.stage != VenFlowStage.MATERIAL_RESERVED
+                                && e.stage != VenFlowStage.MATERIAL_ACCEPTED_IN_STORE) {
+                        throw badRequest(
+                                        "Material must be reserved or accepted in inventory before informing Production.");
+                }
+
+                String oldValue = String.valueOf(e.stage);
+
+                e.stage = VenFlowStage.PRODUCTION_INFORMED;
+
+                e.materialInformedBy = actor();
+                e.materialInformedAt = LocalDateTime.now();
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(id, "PRODUCTION_INFORMED", oldValue, String.valueOf(saved.stage));
+
+                return saved;
         }
 
-        String oldValue = "Issued=" + e.issuedQty
-                + ", Status=" + e.issueStatus
-                + ", Stage=" + e.stage;
+        public VenFlowEntry issueMaterial(UUID id, IssueMaterialRequest req) {
+                access.requireStore();
 
-        e.issuedQty = req.issuedQty();
-        e.issuedTo = clean(req.issuedTo());
+                require(req, "Request body is required.");
+                require(req.issuedQty(), "Issued Qty is required.");
+                requireText(req.issuedTo(), "Issued To is required.");
 
-        e.issueStatus = VenFlowIssueStatus.ISSUED;
-        e.stage = VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION;
+                if (req.issuedQty().compareTo(BigDecimal.ZERO) <= 0) {
+                        throw badRequest("Issued Qty must be greater than zero.");
+                }
 
-        e.issuedBy = actor();
-        e.issuedAt = LocalDateTime.now();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
+                if (e.stage != VenFlowStage.PRODUCTION_DETAILS_ADDED
+                                && e.stage != VenFlowStage.MATERIAL_RESERVED
+                                && e.stage != VenFlowStage.PRODUCTION_INFORMED) {
+                        throw badRequest(
+                                        "Material can be issued only after reservation/inventory acceptance and production information.");
+                }
+
+                String oldValue = "Issued=" + e.issuedQty
+                                + ", Status=" + e.issueStatus
+                                + ", Stage=" + e.stage;
+
+                e.issuedQty = req.issuedQty();
+                e.issuedTo = clean(req.issuedTo());
+
+                e.issueStatus = VenFlowIssueStatus.ISSUED;
+                e.stage = VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION;
+
+                e.issuedBy = actor();
+                e.issuedAt = LocalDateTime.now();
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "MATERIAL_ISSUED_TO_PRODUCTION",
+                                oldValue,
+                                "Issued=" + saved.issuedQty
+                                                + ", To=" + saved.issuedTo
+                                                + ", Status=" + saved.issueStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        /*
+         * =========================================================
+         * PROCESSING / PRODUCTION
+         * =========================================================
+         */
 
-        VenFlowEntry saved = entryRepo.save(e);
+        public VenFlowEntry productionDetails(UUID id, ProductionDetailsRequest req) {
+                access.requireProcessing();
 
-        audit(
-                id,
-                "MATERIAL_ISSUED_TO_PRODUCTION",
-                oldValue,
-                "Issued=" + saved.issuedQty
-                        + ", To=" + saved.issuedTo
-                        + ", Status=" + saved.issueStatus
-                        + ", Stage=" + saved.stage
-        );
+                require(req, "Request body is required.");
+                requireText(req.productionDetails(), "Production details are required.");
 
-        return saved;
-    }
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-    /*
-     * =========================================================
-     * PROCESSING / PRODUCTION
-     * =========================================================
-     */
+                if (e.stage != VenFlowStage.PRODUCTION_INFORMED
+                                && e.stage != VenFlowStage.MATERIAL_RESERVED) {
+                        throw badRequest("Production details can be added only after Store informs Production.");
+                }
 
-    public VenFlowEntry productionDetails(UUID id, ProductionDetailsRequest req) {
-        access.requireProcessing();
+                String oldValue = "Production Details=" + e.productionDetails
+                                + ", Supervisor=" + e.supervisorName
+                                + ", Stage=" + e.stage;
 
-        require(req, "Request body is required.");
-        requireText(req.productionDetails(), "Production details are required.");
+                e.productionDetails = clean(req.productionDetails());
+                e.supervisorName = clean(req.supervisorName());
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.stage = VenFlowStage.PRODUCTION_DETAILS_ADDED;
 
-        if (e.stage != VenFlowStage.PRODUCTION_INFORMED
-                && e.stage != VenFlowStage.MATERIAL_RESERVED) {
-            throw badRequest("Production details can be added only after Store informs Production.");
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PRODUCTION_DETAILS_ADDED",
+                                oldValue,
+                                "Production Details=" + saved.productionDetails
+                                                + ", Supervisor=" + saved.supervisorName
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = "Production Details=" + e.productionDetails
-                + ", Supervisor=" + e.supervisorName
-                + ", Stage=" + e.stage;
+        public VenFlowEntry startProcessing(UUID id) {
+                access.requireProcessing();
 
-        e.productionDetails = clean(req.productionDetails());
-        e.supervisorName = clean(req.supervisorName());
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        e.stage = VenFlowStage.PRODUCTION_DETAILS_ADDED;
+                if (e.stage != VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION) {
+                        throw badRequest("Material must be issued to Production/Harender before processing starts.");
+                }
 
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
+                String oldValue = "Processing=" + e.processingStatus
+                                + ", Stage=" + e.stage;
+
+                e.processingStatus = VenFlowProcessingStatus.STARTED;
+                e.stage = VenFlowStage.PROCESSING_STARTED;
+
+                e.processingStartedBy = actor();
+                e.processingStartedAt = LocalDateTime.now();
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PROCESSING_STARTED",
+                                oldValue,
+                                "Processing=" + saved.processingStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        public VenFlowEntry completeProcess(UUID id, ProcessingRequest req) {
+                access.requireProcessing();
 
-        VenFlowEntry saved = entryRepo.save(e);
+                require(req, "Request body is required.");
 
-        audit(
-                id,
-                "PRODUCTION_DETAILS_ADDED",
-                oldValue,
-                "Production Details=" + saved.productionDetails
-                        + ", Supervisor=" + saved.supervisorName
-                        + ", Stage=" + saved.stage
-        );
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        return saved;
-    }
+                if (e.stage != VenFlowStage.PROCESSING_STARTED) {
+                        throw badRequest("Processing must be started before completion update.");
+                }
 
-    public VenFlowEntry startProcessing(UUID id) {
-        access.requireProcessing();
+                String oldValue = "Used=" + e.usedQty
+                                + ", Wastage=" + e.wastageQty
+                                + ", Balance=" + e.balanceQty
+                                + ", Processing=" + e.processingStatus
+                                + ", Stage=" + e.stage;
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                e.usedQty = req.usedQty();
+                e.wastageQty = req.wastageQty();
+                e.balanceQty = req.balanceQty();
+                e.outputImageUrl = clean(req.outputImageUrl());
 
-        if (e.stage != VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION) {
-            throw badRequest("Material must be issued to Production/Harender before processing starts.");
+                e.processingStatus = VenFlowProcessingStatus.COMPLETED;
+                e.stage = VenFlowStage.PROCESS_COMPLETED;
+
+                e.processCompletedBy = actor();
+                e.processCompletedAt = LocalDateTime.now();
+
+                if (hasText(req.remarks())) {
+                        e.remarks = clean(req.remarks());
+                }
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "PROCESS_COMPLETED",
+                                oldValue,
+                                "Used=" + saved.usedQty
+                                                + ", Wastage=" + saved.wastageQty
+                                                + ", Balance=" + saved.balanceQty
+                                                + ", Processing=" + saved.processingStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        String oldValue = "Processing=" + e.processingStatus
-                + ", Stage=" + e.stage;
+        /*
+         * =========================================================
+         * SUPERVISOR CLOSURE
+         * =========================================================
+         */
 
-        e.processingStatus = VenFlowProcessingStatus.STARTED;
-        e.stage = VenFlowStage.PROCESSING_STARTED;
+        public VenFlowEntry supervisorInformed(UUID id) {
+                access.requireProcessingOrSupervisor();
 
-        e.processingStartedBy = actor();
-        e.processingStartedAt = LocalDateTime.now();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        e.updatedBy = actor();
+                if (e.stage != VenFlowStage.PROCESS_COMPLETED) {
+                        throw badRequest("Process must be completed before informing supervisor.");
+                }
 
-        VenFlowEntry saved = entryRepo.save(e);
+                String oldValue = String.valueOf(e.stage);
 
-        audit(
-                id,
-                "PROCESSING_STARTED",
-                oldValue,
-                "Processing=" + saved.processingStatus
-                        + ", Stage=" + saved.stage
-        );
+                e.stage = VenFlowStage.SUPERVISOR_INFORMED;
 
-        return saved;
-    }
+                e.supervisorInformedBy = actor();
+                e.supervisorInformedAt = LocalDateTime.now();
 
-    public VenFlowEntry completeProcess(UUID id, ProcessingRequest req) {
-        access.requireProcessing();
+                e.updatedBy = actor();
 
-        require(req, "Request body is required.");
+                VenFlowEntry saved = entryRepo.save(e);
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+                audit(id, "SUPERVISOR_INFORMED", oldValue, String.valueOf(saved.stage));
 
-        if (e.stage != VenFlowStage.PROCESSING_STARTED) {
-            throw badRequest("Processing must be started before completion update.");
+                return saved;
         }
 
-        String oldValue = "Used=" + e.usedQty
-                + ", Wastage=" + e.wastageQty
-                + ", Balance=" + e.balanceQty
-                + ", Processing=" + e.processingStatus
-                + ", Stage=" + e.stage;
+        public VenFlowEntry readyForNextStage(UUID id) {
+                access.requireSupervisor();
 
-        e.usedQty = req.usedQty();
-        e.wastageQty = req.wastageQty();
-        e.balanceQty = req.balanceQty();
-        e.outputImageUrl = clean(req.outputImageUrl());
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        e.processingStatus = VenFlowProcessingStatus.COMPLETED;
-        e.stage = VenFlowStage.PROCESS_COMPLETED;
+                if (e.stage != VenFlowStage.SUPERVISOR_INFORMED) {
+                        throw badRequest("Supervisor must be informed before marking ready for next stage.");
+                }
 
-        e.processCompletedBy = actor();
-        e.processCompletedAt = LocalDateTime.now();
+                String oldValue = "Processing=" + e.processingStatus
+                                + ", Stage=" + e.stage;
 
-        if (hasText(req.remarks())) {
-            e.remarks = clean(req.remarks());
+                e.processingStatus = VenFlowProcessingStatus.READY_FOR_NEXT_STAGE;
+                e.stage = VenFlowStage.READY_FOR_NEXT_STAGE;
+
+                e.nextStageReadyBy = actor();
+                e.nextStageReadyAt = LocalDateTime.now();
+
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(
+                                id,
+                                "READY_FOR_NEXT_STAGE",
+                                oldValue,
+                                "Processing=" + saved.processingStatus
+                                                + ", Stage=" + saved.stage);
+
+                return saved;
         }
 
-        e.updatedBy = actor();
+        /*
+         * =========================================================
+         * LISTS / DESKS
+         * =========================================================
+         */
 
-        VenFlowEntry saved = entryRepo.save(e);
+        @Transactional(readOnly = true)
+        public Page<VenFlowEntry> list(
+                        String search,
+                        String plantCode,
+                        String stage,
+                        String storeStatus,
+                        String poStatus,
+                        String productionStatus,
+                        int page,
+                        int size) {
+                if (hasText(plantCode)) {
+                        access.assertPlantAccess(plantCode);
+                }
 
-        audit(
-                id,
-                "PROCESS_COMPLETED",
-                oldValue,
-                "Used=" + saved.usedQty
-                        + ", Wastage=" + saved.wastageQty
-                        + ", Balance=" + saved.balanceQty
-                        + ", Processing=" + saved.processingStatus
-                        + ", Stage=" + saved.stage
-        );
+                Specification<VenFlowEntry> spec = visibleSpec()
+                                .and(VenFlowSpecifications.search(search))
+                                .and(VenFlowSpecifications.plantCode(plantCode))
+                                .and(VenFlowSpecifications.stage(stage))
+                                .and(VenFlowSpecifications.storeStatus(storeStatus))
+                                .and(VenFlowSpecifications.poStatus(poStatus))
+                                .and(VenFlowSpecifications.productionStatus(productionStatus));
 
-        return saved;
-    }
+                Pageable pageable = PageRequest.of(
+                                Math.max(page, 0),
+                                Math.min(Math.max(size, 1), 100),
+                                Sort.by(Sort.Direction.DESC, "createdAt"));
 
-    /*
-     * =========================================================
-     * SUPERVISOR CLOSURE
-     * =========================================================
-     */
-
-    public VenFlowEntry supervisorInformed(UUID id) {
-        access.requireProcessingOrSupervisor();
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.PROCESS_COMPLETED) {
-            throw badRequest("Process must be completed before informing supervisor.");
+                return entryRepo.findAll(spec, pageable);
         }
 
-        String oldValue = String.valueOf(e.stage);
+        @Transactional(readOnly = true)
+        public Page<VenFlowEntry> purchaseDesk(
+                        String search,
+                        String plantCode,
+                        String poStatus,
+                        int page,
+                        int size) {
+                access.requirePurchase();
 
-        e.stage = VenFlowStage.SUPERVISOR_INFORMED;
+                if (hasText(plantCode)) {
+                        access.assertPlantAccess(plantCode);
+                }
 
-        e.supervisorInformedBy = actor();
-        e.supervisorInformedAt = LocalDateTime.now();
+                Specification<VenFlowEntry> spec = visibleSpec()
+                                .and(VenFlowSpecifications.search(search))
+                                .and(VenFlowSpecifications.plantCode(plantCode))
+                                .and(VenFlowSpecifications.poStatus(poStatus))
+                                .and(VenFlowSpecifications.stagesIn(List.of(
+                                                VenFlowStage.PURCHASE_REQUEST_RAISED,
+                                                VenFlowStage.PO_RAISED,
+                                                VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN)));
 
-        e.updatedBy = actor();
+                Pageable pageable = PageRequest.of(
+                                Math.max(page, 0),
+                                Math.min(Math.max(size, 1), 100),
+                                Sort.by(Sort.Direction.DESC, "purchaseRequestAt")
+                                                .and(Sort.by(Sort.Direction.DESC, "createdAt")));
 
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(id, "SUPERVISOR_INFORMED", oldValue, String.valueOf(saved.stage));
-
-        return saved;
-    }
-
-    public VenFlowEntry readyForNextStage(UUID id) {
-        access.requireSupervisor();
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stage != VenFlowStage.SUPERVISOR_INFORMED) {
-            throw badRequest("Supervisor must be informed before marking ready for next stage.");
+                return entryRepo.findAll(spec, pageable);
         }
 
-        String oldValue = "Processing=" + e.processingStatus
-                + ", Stage=" + e.stage;
-
-        e.processingStatus = VenFlowProcessingStatus.READY_FOR_NEXT_STAGE;
-        e.stage = VenFlowStage.READY_FOR_NEXT_STAGE;
-
-        e.nextStageReadyBy = actor();
-        e.nextStageReadyAt = LocalDateTime.now();
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(
-                id,
-                "READY_FOR_NEXT_STAGE",
-                oldValue,
-                "Processing=" + saved.processingStatus
-                        + ", Stage=" + saved.stage
-        );
-
-        return saved;
-    }
-
-    /*
-     * =========================================================
-     * LISTS / DESKS
-     * =========================================================
-     */
-
-    @Transactional(readOnly = true)
-    public Page<VenFlowEntry> list(
-            String search,
-            String plantCode,
-            String stage,
-            String storeStatus,
-            String poStatus,
-            String productionStatus,
-            int page,
-            int size
-    ) {
-        if (hasText(plantCode)) {
-            access.assertPlantAccess(plantCode);
+        @Transactional(readOnly = true)
+        public VenFlowEntry get(UUID id) {
+                return getVisibleOrThrow(id);
         }
 
-        Specification<VenFlowEntry> spec = visibleSpec()
-                .and(VenFlowSpecifications.search(search))
-                .and(VenFlowSpecifications.plantCode(plantCode))
-                .and(VenFlowSpecifications.stage(stage))
-                .and(VenFlowSpecifications.storeStatus(storeStatus))
-                .and(VenFlowSpecifications.poStatus(poStatus))
-                .and(VenFlowSpecifications.productionStatus(productionStatus));
+        /*
+         * =========================================================
+         * DASHBOARD / REPORTS
+         * =========================================================
+         */
 
-        Pageable pageable = PageRequest.of(
-                Math.max(page, 0),
-                Math.min(Math.max(size, 1), 100),
-                Sort.by(Sort.Direction.DESC, "createdAt")
-        );
+        @Transactional(readOnly = true)
+        public DashboardResponse dashboard() {
+                List<VenFlowEntry> all = entryRepo.findAll(visibleSpec());
+                LocalDate today = LocalDate.now();
 
-        return entryRepo.findAll(spec, pageable);
-    }
+                long total = all.size();
 
-    @Transactional(readOnly = true)
-    public Page<VenFlowEntry> purchaseDesk(
-            String search,
-            String plantCode,
-            String poStatus,
-            int page,
-            int size
-    ) {
-        access.requirePurchase();
+                long pendingStoreCheck = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.SENT_TO_STORE)
+                                .count();
 
-        if (hasText(plantCode)) {
-            access.assertPlantAccess(plantCode);
+                long pendingRequisition = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.STORE_REVIEWED
+                                                || e.stage == VenFlowStage.STOCK_AVAILABLE)
+                                .filter(e -> !hasText(e.purchaseRequestNo))
+                                .count();
+
+                long pendingOrderQty = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
+                                .filter(e -> e.orderedQty == null)
+                                .count();
+
+                long pendingReceiving = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
+                                .count();
+
+                long balancePending = all.stream()
+                                .filter(e -> e.balanceQty != null)
+                                .filter(e -> e.balanceQty.compareTo(BigDecimal.ZERO) > 0)
+                                .count();
+
+                long delayedItems = all.stream()
+                                .filter(e -> e.expectedDate != null)
+                                .filter(e -> e.expectedDate.isBefore(today))
+                                .filter(e -> e.stage != VenFlowStage.READY_FOR_NEXT_STAGE)
+                                .count();
+
+                long completedEntries = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.READY_FOR_NEXT_STAGE)
+                                .count();
+
+                long sentToPurchase = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
+                                .count();
+
+                long pendingPoRaise = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
+                                .filter(e -> !hasText(e.poNo))
+                                .count();
+
+                long pendingPoApproval = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
+                                .filter(e -> e.poStatus == VenFlowPoStatus.RAISED)
+                                .count();
+
+                long pendingMaterialReceiving = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
+                                .count();
+
+                long materialReceivedNotInformed = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.MATERIAL_RECEIVED_AT_STORE
+                                                || e.stage == VenFlowStage.GRN_DONE
+                                                || e.stage == VenFlowStage.QC_PENDING
+                                                || e.stage == VenFlowStage.QC_OK
+                                                || e.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE)
+                                .count();
+
+                long productionNotStarted = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PRODUCTION_INFORMED
+                                                || e.stage == VenFlowStage.PRODUCTION_DETAILS_ADDED
+                                                || e.stage == VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION)
+                                .count();
+
+                long productionStarted = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PROCESSING_STARTED)
+                                .count();
+
+                long jobDone = all.stream()
+                                .filter(e -> e.stage == VenFlowStage.PROCESS_COMPLETED
+                                                || e.stage == VenFlowStage.SUPERVISOR_INFORMED
+                                                || e.stage == VenFlowStage.READY_FOR_NEXT_STAGE)
+                                .count();
+
+                long totalPendingWorkLoading = all.stream()
+                                .filter(e -> e.stage != VenFlowStage.READY_FOR_NEXT_STAGE)
+                                .count();
+
+                return new DashboardResponse(
+                                total,
+                                pendingStoreCheck,
+                                pendingRequisition,
+                                pendingOrderQty,
+                                pendingReceiving,
+                                balancePending,
+                                delayedItems,
+                                completedEntries,
+                                sentToPurchase,
+                                pendingPoRaise,
+                                pendingPoApproval,
+                                pendingMaterialReceiving,
+                                materialReceivedNotInformed,
+                                productionNotStarted,
+                                productionStarted,
+                                jobDone,
+                                totalPendingWorkLoading);
         }
 
-        Specification<VenFlowEntry> spec = visibleSpec()
-                .and(VenFlowSpecifications.search(search))
-                .and(VenFlowSpecifications.plantCode(plantCode))
-                .and(VenFlowSpecifications.poStatus(poStatus))
-                .and(VenFlowSpecifications.stagesIn(List.of(
-                        VenFlowStage.PURCHASE_REQUEST_RAISED,
-                        VenFlowStage.PO_RAISED,
-                        VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN
-                )));
+        @Transactional(readOnly = true)
+        public ReportSummaryResponse reportSummary() {
+                DashboardResponse d = dashboard();
 
-        Pageable pageable = PageRequest.of(
-                Math.max(page, 0),
-                Math.min(Math.max(size, 1), 100),
-                Sort.by(Sort.Direction.DESC, "purchaseRequestAt")
-                        .and(Sort.by(Sort.Direction.DESC, "createdAt"))
-        );
-
-        return entryRepo.findAll(spec, pageable);
-    }
-
-    @Transactional(readOnly = true)
-    public VenFlowEntry get(UUID id) {
-        return getVisibleOrThrow(id);
-    }
-
-    /*
-     * =========================================================
-     * DASHBOARD / REPORTS
-     * =========================================================
-     */
-
-    @Transactional(readOnly = true)
-    public DashboardResponse dashboard() {
-        List<VenFlowEntry> all = entryRepo.findAll(visibleSpec());
-        LocalDate today = LocalDate.now();
-
-        long total = all.size();
-
-        long pendingStoreCheck = all.stream()
-                .filter(e -> e.stage == VenFlowStage.SENT_TO_STORE)
-                .count();
-
-        long pendingRequisition = all.stream()
-                .filter(e -> e.stage == VenFlowStage.STORE_REVIEWED
-                        || e.stage == VenFlowStage.STOCK_AVAILABLE)
-                .filter(e -> !hasText(e.purchaseRequestNo))
-                .count();
-
-        long pendingOrderQty = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
-                .filter(e -> e.orderedQty == null)
-                .count();
-
-        long pendingReceiving = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
-                .count();
-
-        long balancePending = all.stream()
-                .filter(e -> e.balanceQty != null)
-                .filter(e -> e.balanceQty.compareTo(BigDecimal.ZERO) > 0)
-                .count();
-
-        long delayedItems = all.stream()
-                .filter(e -> e.expectedDate != null)
-                .filter(e -> e.expectedDate.isBefore(today))
-                .filter(e -> e.stage != VenFlowStage.READY_FOR_NEXT_STAGE)
-                .count();
-
-        long completedEntries = all.stream()
-                .filter(e -> e.stage == VenFlowStage.READY_FOR_NEXT_STAGE)
-                .count();
-
-        long sentToPurchase = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
-                .count();
-
-        long pendingPoRaise = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED)
-                .filter(e -> !hasText(e.poNo))
-                .count();
-
-        long pendingPoApproval = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
-                .filter(e -> e.poStatus == VenFlowPoStatus.RAISED)
-                .count();
-
-        long pendingMaterialReceiving = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PO_RAISED)
-                .count();
-
-        long materialReceivedNotInformed = all.stream()
-                .filter(e -> e.stage == VenFlowStage.MATERIAL_RECEIVED_AT_STORE
-                        || e.stage == VenFlowStage.GRN_DONE
-                        || e.stage == VenFlowStage.QC_PENDING
-                        || e.stage == VenFlowStage.QC_OK
-                        || e.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE)
-                .count();
-
-        long productionNotStarted = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PRODUCTION_INFORMED
-                        || e.stage == VenFlowStage.PRODUCTION_DETAILS_ADDED
-                        || e.stage == VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION)
-                .count();
-
-        long productionStarted = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PROCESSING_STARTED)
-                .count();
-
-        long jobDone = all.stream()
-                .filter(e -> e.stage == VenFlowStage.PROCESS_COMPLETED
-                        || e.stage == VenFlowStage.SUPERVISOR_INFORMED
-                        || e.stage == VenFlowStage.READY_FOR_NEXT_STAGE)
-                .count();
-
-        long totalPendingWorkLoading = all.stream()
-                .filter(e -> e.stage != VenFlowStage.READY_FOR_NEXT_STAGE)
-                .count();
-
-        return new DashboardResponse(
-                total,
-                pendingStoreCheck,
-                pendingRequisition,
-                pendingOrderQty,
-                pendingReceiving,
-                balancePending,
-                delayedItems,
-                completedEntries,
-                sentToPurchase,
-                pendingPoRaise,
-                pendingPoApproval,
-                pendingMaterialReceiving,
-                materialReceivedNotInformed,
-                productionNotStarted,
-                productionStarted,
-                jobDone,
-                totalPendingWorkLoading
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public ReportSummaryResponse reportSummary() {
-        DashboardResponse d = dashboard();
-
-        return new ReportSummaryResponse(
-                d.totalEntries(),
-                d.pendingStoreCheck(),
-                d.sentToPurchase(),
-                d.pendingPoRaise(),
-                d.pendingPoApproval(),
-                d.pendingMaterialReceiving(),
-                d.materialReceivedNotInformed(),
-                d.productionNotStarted(),
-                d.productionStarted(),
-                d.jobDone(),
-                d.delayedItems(),
-                d.totalPendingWorkLoading()
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public List<VenFlowAuditLog> auditLogs(UUID entryId) {
-        getVisibleOrThrow(entryId);
-
-        return auditRepo.findByEntryIdOrderByChangedAtDesc(entryId);
-    }
-
-    /*
-     * =========================================================
-     * COMMON / LEGACY COMPATIBILITY
-     * =========================================================
-     */
-
-    public VenFlowEntry updateRemarks(UUID id, RemarksRequest req) {
-        require(req, "Request body is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        String oldValue = e.remarks;
-
-        e.remarks = req.remarks();
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(id, "UPDATE_REMARKS", oldValue, saved.remarks);
-
-        return saved;
-    }
-
-    public VenFlowEntry updateProductDetails(UUID id, ProductDetailsRequest req) {
-        access.requireEngineering();
-
-        require(req, "Request body is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        String oldValue = "Product=" + e.productDescription
-                + ", Veneer=" + e.veneerType
-                + ", Size=" + e.size;
-
-        e.productDescription = clean(req.productDescription());
-        e.materialName = clean(req.productDescription());
-        e.veneerType = clean(req.veneerType());
-        e.size = clean(req.size());
-
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(id, "UPDATE_PRODUCT_DETAILS", oldValue,
-                "Product=" + saved.productDescription
-                        + ", Veneer=" + saved.veneerType
-                        + ", Size=" + saved.size);
-
-        return saved;
-    }
-
-    public VenFlowEntry updateStoreStatus(UUID id, StoreStatusRequest req) {
-        access.requireStore();
-
-        require(req, "Request body is required.");
-        require(req.storeStatus(), "Store Status is required.");
-
-        VenFlowStockDecision decision = switch (req.storeStatus()) {
-            case AVAILABLE_IN_STORE -> VenFlowStockDecision.AVAILABLE;
-            case PARTIALLY_AVAILABLE -> VenFlowStockDecision.PARTIALLY_AVAILABLE;
-            case NOT_AVAILABLE -> VenFlowStockDecision.NOT_AVAILABLE;
-            case HOLD -> VenFlowStockDecision.HOLD;
-            case PENDING -> VenFlowStockDecision.PENDING;
-        };
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-        e.storeStatus = req.storeStatus();
-        entryRepo.save(e);
-
-        return storeReview(
-                id,
-                new StoreReviewRequest(
-                        decision,
-                        e.availableQty,
-                        "Updated from legacy store-status endpoint."
-                )
-        );
-    }
-
-    public VenFlowEntry sendToPurchase(UUID id) {
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        if (e.stockDecision == null || e.stockDecision == VenFlowStockDecision.PENDING) {
-            e.stockDecision = VenFlowStockDecision.NOT_AVAILABLE;
-            entryRepo.save(e);
+                return new ReportSummaryResponse(
+                                d.totalEntries(),
+                                d.pendingStoreCheck(),
+                                d.sentToPurchase(),
+                                d.pendingPoRaise(),
+                                d.pendingPoApproval(),
+                                d.pendingMaterialReceiving(),
+                                d.materialReceivedNotInformed(),
+                                d.productionNotStarted(),
+                                d.productionStarted(),
+                                d.jobDone(),
+                                d.delayedItems(),
+                                d.totalPendingWorkLoading());
         }
 
-        return raisePurchaseRequest(
-                id,
-                new PurchaseRequestRequest(
-                        hasText(e.purchaseRequestNo)
-                                ? e.purchaseRequestNo
-                                : "PR-" + id.toString().substring(0, 8).toUpperCase(),
-                        LocalDate.now(),
-                        "Created from legacy send-to-purchase endpoint."
-                )
-        );
-    }
+        @Transactional(readOnly = true)
+        public List<VenFlowAuditLog> auditLogs(UUID entryId) {
+                getVisibleOrThrow(entryId);
 
-    public VenFlowEntry updateRequisition(UUID id, RequisitionRequest req) {
-        require(req, "Request body is required.");
-
-        return raisePurchaseRequest(
-                id,
-                new PurchaseRequestRequest(
-                        req.requisitionSlipNo(),
-                        req.requisitionDate(),
-                        "Updated from legacy requisition endpoint."
-                )
-        );
-    }
-
-    public VenFlowEntry updateOrderedQty(UUID id, OrderedQtyRequest req) {
-        access.requirePurchase();
-
-        require(req, "Request body is required.");
-        require(req.orderedQty(), "Ordered Qty is required.");
-        require(req.unit(), "Unit is required.");
-
-        if (req.orderedQty().compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest("Ordered Qty must be greater than zero.");
+                return auditRepo.findByEntryIdOrderByChangedAtDesc(entryId);
         }
 
-        VenFlowEntry e = getVisibleOrThrow(id);
+        /*
+         * =========================================================
+         * COMMON / LEGACY COMPATIBILITY
+         * =========================================================
+         */
 
-        String oldValue = "Ordered=" + e.orderedQty
-                + ", Unit=" + e.unit
-                + ", Balance=" + e.balanceQty;
+        public VenFlowEntry updateRemarks(UUID id, RemarksRequest req) {
+                require(req, "Request body is required.");
 
-        e.orderedQty = req.orderedQty();
-        e.unit = req.unit();
-        e.balanceQty = calculateBalance(e.requiredQty, e.receivedQty);
-        e.updatedBy = actor();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        VenFlowEntry saved = entryRepo.save(e);
+                String oldValue = e.remarks;
 
-        audit(id, "UPDATE_ORDERED_QTY", oldValue,
-                "Ordered=" + saved.orderedQty
-                        + ", Unit=" + saved.unit
-                        + ", Balance=" + saved.balanceQty);
+                e.remarks = req.remarks();
+                e.updatedBy = actor();
 
-        return saved;
-    }
+                VenFlowEntry saved = entryRepo.save(e);
 
-    public VenFlowEntry updateExpectedDate(UUID id, ExpectedDateRequest req) {
-        access.requireEngineering();
+                audit(id, "UPDATE_REMARKS", oldValue, saved.remarks);
 
-        require(req, "Request body is required.");
-        require(req.expectedDate(), "Expected Date is required.");
-
-        VenFlowEntry e = getVisibleOrThrow(id);
-
-        String oldValue = String.valueOf(e.expectedDate);
-
-        e.expectedDate = req.expectedDate();
-        e.updatedBy = actor();
-
-        VenFlowEntry saved = entryRepo.save(e);
-
-        audit(id, "UPDATE_EXPECTED_DATE", oldValue, String.valueOf(saved.expectedDate));
-
-        return saved;
-    }
-
-    public VenFlowEntry updateReceivedQty(UUID id, ReceivedQtyRequest req) {
-        require(req, "Request body is required.");
-
-        return materialReceived(
-                id,
-                new MaterialReceivedRequest(
-                        req.receivedQty(),
-                        req.actualInHouseDate(),
-                        "Updated from legacy received-qty endpoint."
-                )
-        );
-    }
-
-    public VenFlowEntry startProduction(UUID id, ProductionActionRequest req) {
-        return startProcessing(id);
-    }
-
-    public VenFlowEntry jobDone(UUID id, ProductionActionRequest req) {
-        return completeProcess(
-                id,
-                new ProcessingRequest(
-                        null,
-                        null,
-                        null,
-                        null,
-                        req == null ? "Completed from legacy job-done endpoint." : req.remarks()
-                )
-        );
-    }
-
-    public VenFlowEntry complete(UUID id) {
-        return jobDone(
-                id,
-                new ProductionActionRequest("Completed from legacy complete endpoint.")
-        );
-    }
-
-    /*
-     * =========================================================
-     * VALIDATION / ACCESS HELPERS
-     * =========================================================
-     */
-
-    private void requireHeader(VenFlowEntry e) {
-        require(e.orderDate, "Order Date must be entered first.");
-        requireText(e.pdNo, "PD No. must be entered first.");
-        requireText(e.clientName, "Client Name must be entered first.");
-        requireText(e.plantCode, "Plant must be entered first.");
-    }
-
-    private void require(Object value, String message) {
-        if (value == null) {
-            throw badRequest(message);
-        }
-    }
-
-    private void requireText(String value, String message) {
-        if (!hasText(value)) {
-            throw badRequest(message);
-        }
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
-
-    private String clean(String value) {
-        return value == null ? null : value.trim();
-    }
-
-    private String cleanUpper(String value) {
-        return value == null ? null : value.trim().toUpperCase();
-    }
-
-    private BigDecimal calculateBalance(BigDecimal requiredQty, BigDecimal receivedQty) {
-        if (requiredQty == null) {
-            return null;
+                return saved;
         }
 
-        BigDecimal received = receivedQty == null
-                ? BigDecimal.ZERO
-                : receivedQty;
+        public VenFlowEntry updateProductDetails(UUID id, ProductDetailsRequest req) {
+                access.requireEngineering();
 
-        return requiredQty.subtract(received);
-    }
+                require(req, "Request body is required.");
 
-    private Specification<VenFlowEntry> visibleSpec() {
-        Set<String> plants = access.allowedPlantCodes();
+                VenFlowEntry e = getVisibleOrThrow(id);
 
-        boolean allPlants = access.isAdminOrManager()
-                && plants.isEmpty();
+                String oldValue = "Product=" + e.productDescription
+                                + ", Veneer=" + e.veneerType
+                                + ", Size=" + e.size;
 
-        return VenFlowSpecifications.visiblePlants(plants, allPlants);
-    }
+                e.productDescription = clean(req.productDescription());
+                e.materialName = clean(req.productDescription());
+                e.veneerType = clean(req.veneerType());
+                e.size = clean(req.size());
 
-    private VenFlowEntry getVisibleOrThrow(UUID id) {
-        VenFlowEntry e = entryRepo.findById(id)
-                .orElseThrow(() -> notFound("VenFlow entry not found."));
+                e.updatedBy = actor();
 
-        access.assertPlantAccess(e.plantCode);
+                VenFlowEntry saved = entryRepo.save(e);
 
-        return e;
-    }
+                audit(id, "UPDATE_PRODUCT_DETAILS", oldValue,
+                                "Product=" + saved.productDescription
+                                                + ", Veneer=" + saved.veneerType
+                                                + ", Size=" + saved.size);
 
-    /*
-     * =========================================================
-     * AUDIT / ACTOR / EXCEPTION
-     * =========================================================
-     */
-
-    private void audit(UUID entryId, String action, Object oldValue, Object newValue) {
-        VenFlowAuditLog log = new VenFlowAuditLog();
-
-        log.entryId = entryId;
-        log.action = action;
-        log.oldValue = oldValue == null ? null : String.valueOf(oldValue);
-        log.newValue = newValue == null ? null : String.valueOf(newValue);
-        log.changedBy = actor();
-
-        auditRepo.save(log);
-    }
-
-    private String actor() {
-        Authentication auth = SecurityContextHolder
-                .getContext()
-                .getAuthentication();
-
-        if (auth == null || auth.getName() == null || auth.getName().isBlank()) {
-            return "SYSTEM";
+                return saved;
         }
 
-        return auth.getName();
-    }
+        public VenFlowEntry updateStoreStatus(UUID id, StoreStatusRequest req) {
+                access.requireStore();
 
-    private ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
-    }
+                require(req, "Request body is required.");
+                require(req.storeStatus(), "Store Status is required.");
 
-    private ResponseStatusException notFound(String message) {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
-    }
+                VenFlowStockDecision decision = switch (req.storeStatus()) {
+                        case AVAILABLE_IN_STORE -> VenFlowStockDecision.AVAILABLE;
+                        case PARTIALLY_AVAILABLE -> VenFlowStockDecision.PARTIALLY_AVAILABLE;
+                        case NOT_AVAILABLE -> VenFlowStockDecision.NOT_AVAILABLE;
+                        case HOLD -> VenFlowStockDecision.HOLD;
+                        case PENDING -> VenFlowStockDecision.PENDING;
+                };
+
+                VenFlowEntry e = getVisibleOrThrow(id);
+                e.storeStatus = req.storeStatus();
+                entryRepo.save(e);
+
+                return storeReview(
+                                id,
+                                new StoreReviewRequest(
+                                                decision,
+                                                e.availableQty,
+                                                "Updated from legacy store-status endpoint."));
+        }
+
+        public VenFlowEntry sendToPurchase(UUID id) {
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                if (e.stockDecision == null || e.stockDecision == VenFlowStockDecision.PENDING) {
+                        e.stockDecision = VenFlowStockDecision.NOT_AVAILABLE;
+                        entryRepo.save(e);
+                }
+
+                return raisePurchaseRequest(
+                                id,
+                                new PurchaseRequestRequest(
+                                                hasText(e.purchaseRequestNo)
+                                                                ? e.purchaseRequestNo
+                                                                : "PR-" + id.toString().substring(0, 8).toUpperCase(),
+                                                LocalDate.now(),
+                                                "Created from legacy send-to-purchase endpoint."));
+        }
+
+        public VenFlowEntry updateRequisition(UUID id, RequisitionRequest req) {
+                require(req, "Request body is required.");
+
+                return raisePurchaseRequest(
+                                id,
+                                new PurchaseRequestRequest(
+                                                req.requisitionSlipNo(),
+                                                req.requisitionDate(),
+                                                "Updated from legacy requisition endpoint."));
+        }
+
+        public VenFlowEntry updateOrderedQty(UUID id, OrderedQtyRequest req) {
+                access.requirePurchase();
+
+                require(req, "Request body is required.");
+                require(req.orderedQty(), "Ordered Qty is required.");
+                require(req.unit(), "Unit is required.");
+
+                if (req.orderedQty().compareTo(BigDecimal.ZERO) <= 0) {
+                        throw badRequest("Ordered Qty must be greater than zero.");
+                }
+
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                String oldValue = "Ordered=" + e.orderedQty
+                                + ", Unit=" + e.unit
+                                + ", Balance=" + e.balanceQty;
+
+                e.orderedQty = req.orderedQty();
+                e.unit = req.unit();
+                e.balanceQty = calculateBalance(e.requiredQty, e.receivedQty);
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(id, "UPDATE_ORDERED_QTY", oldValue,
+                                "Ordered=" + saved.orderedQty
+                                                + ", Unit=" + saved.unit
+                                                + ", Balance=" + saved.balanceQty);
+
+                return saved;
+        }
+
+        public VenFlowEntry updateExpectedDate(UUID id, ExpectedDateRequest req) {
+                access.requireEngineering();
+
+                require(req, "Request body is required.");
+                require(req.expectedDate(), "Expected Date is required.");
+
+                VenFlowEntry e = getVisibleOrThrow(id);
+
+                String oldValue = String.valueOf(e.expectedDate);
+
+                e.expectedDate = req.expectedDate();
+                e.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(e);
+
+                audit(id, "UPDATE_EXPECTED_DATE", oldValue, String.valueOf(saved.expectedDate));
+
+                return saved;
+        }
+
+        public VenFlowEntry updateReceivedQty(UUID id, ReceivedQtyRequest req) {
+                require(req, "Request body is required.");
+
+                return materialReceived(
+                                id,
+                                new MaterialReceivedRequest(
+                                                req.receivedQty(),
+                                                req.actualInHouseDate(),
+                                                "Updated from legacy received-qty endpoint."));
+        }
+
+        public VenFlowEntry startProduction(UUID id, ProductionActionRequest req) {
+                return startProcessing(id);
+        }
+
+        public VenFlowEntry jobDone(UUID id, ProductionActionRequest req) {
+                return completeProcess(
+                                id,
+                                new ProcessingRequest(
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                req == null ? "Completed from legacy job-done endpoint."
+                                                                : req.remarks()));
+        }
+
+        public VenFlowEntry complete(UUID id) {
+                return jobDone(
+                                id,
+                                new ProductionActionRequest("Completed from legacy complete endpoint."));
+        }
+
+        /*
+         * =========================================================
+         * VALIDATION / ACCESS HELPERS
+         * =========================================================
+         */
+
+        private void requireHeader(VenFlowEntry e) {
+                require(e.orderDate, "Order Date must be entered first.");
+                requireText(e.pdNo, "PD No. must be entered first.");
+                requireText(e.clientName, "Client Name must be entered first.");
+                requireText(e.plantCode, "Plant must be entered first.");
+        }
+
+        private void require(Object value, String message) {
+                if (value == null) {
+                        throw badRequest(message);
+                }
+        }
+
+        private void requireText(String value, String message) {
+                if (!hasText(value)) {
+                        throw badRequest(message);
+                }
+        }
+
+        private boolean hasText(String value) {
+                return value != null && !value.trim().isEmpty();
+        }
+
+        private String clean(String value) {
+                return value == null ? null : value.trim();
+        }
+
+        private String cleanUpper(String value) {
+                return value == null ? null : value.trim().toUpperCase();
+        }
+
+        private BigDecimal calculateBalance(BigDecimal requiredQty, BigDecimal receivedQty) {
+                if (requiredQty == null) {
+                        return null;
+                }
+
+                BigDecimal received = receivedQty == null
+                                ? BigDecimal.ZERO
+                                : receivedQty;
+
+                return requiredQty.subtract(received);
+        }
+
+        private Specification<VenFlowEntry> visibleSpec() {
+                Set<String> plants = access.allowedPlantCodes();
+
+                boolean allPlants = access.isAdminOrManager()
+                                && plants.isEmpty();
+
+                return VenFlowSpecifications.visiblePlants(plants, allPlants);
+        }
+
+        private VenFlowEntry getVisibleOrThrow(UUID id) {
+                VenFlowEntry e = entryRepo.findById(id)
+                                .orElseThrow(() -> notFound("VenFlow entry not found."));
+
+                access.assertPlantAccess(e.plantCode);
+
+                return e;
+        }
+
+        /*
+         * =========================================================
+         * AUDIT / ACTOR / EXCEPTION
+         * =========================================================
+         */
+
+        private void audit(UUID entryId, String action, Object oldValue, Object newValue) {
+                VenFlowAuditLog log = new VenFlowAuditLog();
+
+                log.entryId = entryId;
+                log.action = action;
+                log.oldValue = oldValue == null ? null : String.valueOf(oldValue);
+                log.newValue = newValue == null ? null : String.valueOf(newValue);
+                log.changedBy = actor();
+
+                auditRepo.save(log);
+        }
+
+        private String actor() {
+                Authentication auth = SecurityContextHolder
+                                .getContext()
+                                .getAuthentication();
+
+                if (auth == null || auth.getName() == null || auth.getName().isBlank()) {
+                        return "SYSTEM";
+                }
+
+                return auth.getName();
+        }
+
+        private ResponseStatusException badRequest(String message) {
+                return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+
+        private ResponseStatusException notFound(String message) {
+                return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
+        }
 }

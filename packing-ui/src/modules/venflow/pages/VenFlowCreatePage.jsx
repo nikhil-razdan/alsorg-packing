@@ -85,13 +85,21 @@ export default function VenFlowCreatePage() {
         plantCodes,
     } = useAuth();
 
-    const cleanRole = String(role || user?.role || "")
-        .trim()
-        .toUpperCase();
+    const cleanRole = String(role || "").trim().toUpperCase();
 
-    const isAdminManager =
-        cleanRole === "ADMIN" ||
-        cleanRole === "VENFLOW_MANAGER";
+    const assignedPlants = useMemo(() => {
+        const fromAuth = Array.isArray(plantCodes)
+            ? plantCodes
+            : [];
+
+        const fromUser = Array.isArray(user?.plantCodes)
+            ? user.plantCodes
+            : [];
+
+        return uniquePlants(
+            fromAuth.length > 0 ? fromAuth : fromUser
+        );
+    }, [plantCodes, user]);
 
     const [plantOptions, setPlantOptions] = useState([]);
     const [plantLoading, setPlantLoading] = useState(true);
@@ -115,37 +123,29 @@ export default function VenFlowCreatePage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
 
-    const authPlants = useMemo(() => {
-        return uniquePlants(
-            Array.isArray(plantCodes) && plantCodes.length > 0
-                ? plantCodes
-                : user?.plantCodes || []
-        );
-    }, [plantCodes, user]);
-
     useEffect(() => {
         const loadPlants = async () => {
             setPlantLoading(true);
             setError("");
 
             try {
-                if (authPlants.length > 0) {
-                    setPlantOptions(authPlants);
+                if (assignedPlants.length > 0) {
+                    setPlantOptions(assignedPlants);
 
                     setForm((prev) => ({
                         ...prev,
-                        plantCode: prev.plantCode || authPlants[0],
+                        plantCode: prev.plantCode || assignedPlants[0],
                     }));
 
                     return;
                 }
 
                 /*
-                 * Only ADMIN / VENFLOW_MANAGER can fallback to all plant master.
-                 * Normal VenFlow users must have plant access assigned.
+                 * Admin / VenFlow Manager can load all plants if no explicit plant access.
                  */
-                if (isAdminManager) {
+                if (cleanRole === "ADMIN" || cleanRole === "VENFLOW_MANAGER") {
                     const res = await API.get("/plants");
+
                     const apiPlants = extractPlantOptionsFromResponse(res.data);
 
                     setPlantOptions(apiPlants);
@@ -155,16 +155,12 @@ export default function VenFlowCreatePage() {
                         plantCode: prev.plantCode || apiPlants[0] || "",
                     }));
 
-                    if (apiPlants.length === 0) {
-                        setError("No plants found in plant master.");
-                    }
-
                     return;
                 }
 
                 setPlantOptions([]);
                 setError(
-                    "No plant access assigned to this user. Please assign plant access from User Management."
+                    "No plant access found for this user. Please assign plant access from User Management."
                 );
             } catch (err) {
                 console.error("Failed to load VenFlow plants", err);
@@ -181,7 +177,7 @@ export default function VenFlowCreatePage() {
         };
 
         loadPlants();
-    }, [authPlants, isAdminManager]);
+    }, [assignedPlants, cleanRole]);
 
     const update = (key, value) => {
         setForm((prev) => ({
@@ -224,9 +220,7 @@ export default function VenFlowCreatePage() {
                 return;
             }
 
-            const requiredQty = Number(form.requiredQty);
-
-            if (!requiredQty || requiredQty <= 0) {
+            if (!form.requiredQty || Number(form.requiredQty) <= 0) {
                 setError("Required Qty must be greater than zero.");
                 return;
             }
@@ -248,7 +242,7 @@ export default function VenFlowCreatePage() {
                 veneerType: form.veneerType.trim(),
                 thickness: form.thickness.trim(),
                 size: form.size.trim(),
-                requiredQty,
+                requiredQty: form.requiredQty,
                 unit: form.unit,
                 bomReference: form.bomReference.trim(),
                 remarks: form.remarks.trim(),
@@ -280,9 +274,9 @@ export default function VenFlowCreatePage() {
             </Typography>
 
             <Typography sx={pageSubSx}>
-                Engineering creates the BOM / indent here. After creation,
-                the requirement can be sent to AKG Store for stock review,
-                reservation, purchase request, GRN, QC, issue and processing tracking.
+                Engineering creates the BOM / Indent and sends it to AKG Store.
+                Store will review stock, reserve material or raise purchase request
+                based on availability.
             </Typography>
 
             <Card sx={{ ...cardSx, mt: 2.5 }}>
@@ -316,7 +310,10 @@ export default function VenFlowCreatePage() {
                                 </MenuItem>
                             ) : (
                                 plantOptions.map((plant) => (
-                                    <MenuItem key={plant} value={plant}>
+                                    <MenuItem
+                                        key={plant}
+                                        value={plant}
+                                    >
                                         {plant}
                                     </MenuItem>
                                 ))
@@ -376,7 +373,7 @@ export default function VenFlowCreatePage() {
                         />
 
                         <TextField
-                            label="Veneer / Flitch Type"
+                            label="Veneer Type"
                             value={form.veneerType}
                             onChange={(e) =>
                                 update("veneerType", e.target.value)
@@ -453,22 +450,18 @@ export default function VenFlowCreatePage() {
                         onChange={(e) =>
                             update("remarks", e.target.value)
                         }
-                        sx={{
-                            ...fieldSx,
-                            mt: 2,
-                        }}
+                        sx={{ ...fieldSx, mt: 2 }}
                     />
 
                     <Box sx={noteSx}>
                         <Typography sx={noteTitleSx}>
-                            Controlled plant-wise VenFlow process
+                            Plant-wise controlled indent
                         </Typography>
 
                         <Typography sx={noteTextSx}>
                             This entry will be visible only to users having access
-                            to the selected plant. The workflow will move through
-                            Engineering, AKG Store, Purchase, Processing and
-                            Supervisor closure.
+                            to the selected plant. After creation, Engineering can send
+                            the indent to Store for stock review.
                         </Typography>
                     </Box>
 
@@ -490,7 +483,7 @@ export default function VenFlowCreatePage() {
                             }
                             sx={primaryBtnSx}
                         >
-                            {saving ? "Creating..." : "Create & Continue"}
+                            {saving ? "Creating..." : "Create Requirement"}
                         </Button>
 
                         <Button
