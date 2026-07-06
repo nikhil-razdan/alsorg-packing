@@ -38,9 +38,24 @@ export default function VenFlowLayout() {
 	const navigate = useNavigate();
 	const location = useLocation();
 
-	const { role } = useAuth();
+	const { user, role } = useAuth();
 
 	const venFlowRole = getVenFlowRole(role);
+
+	const currentUsername =
+		user?.username ||
+		localStorage.getItem("username") ||
+		"User";
+
+	const userInitial =
+		currentUsername?.charAt(0)?.toUpperCase() || "U";
+
+	const plantText =
+		Array.isArray(user?.plantCodes) && user.plantCodes.length > 0
+			? user.plantCodes.join(", ")
+			: venFlowRole === "ADMIN" || venFlowRole === "VENFLOW_MANAGER"
+				? "All Plants"
+				: "No Plant";
 
 	const navItems = [
 		{
@@ -122,13 +137,35 @@ export default function VenFlowLayout() {
 						</Box>
 					</Box>
 
-					<Button
-						startIcon={<AppsIcon />}
-						onClick={() => navigate("/modules")}
-						sx={moduleBtnSx}
-					>
-						Module Hub
-					</Button>
+					<Box sx={heroRightSx}>
+						<Box sx={currentUserCardSx}>
+							<Box sx={userAvatarSx}>
+								{userInitial}
+							</Box>
+
+							<Box sx={{ minWidth: 0 }}>
+								<Typography sx={currentUserLabelSx}>
+									Current User
+								</Typography>
+
+								<Typography sx={currentUserNameSx}>
+									{currentUsername}
+								</Typography>
+
+								<Typography sx={currentUserMetaSx}>
+									{venFlowRoleLabel(venFlowRole)} • {plantText}
+								</Typography>
+							</Box>
+						</Box>
+
+						<Button
+							startIcon={<AppsIcon />}
+							onClick={() => navigate("/modules")}
+							sx={moduleBtnSx}
+						>
+							Module Hub
+						</Button>
+					</Box>
 				</Box>
 
 				<Box sx={tabsRowSx}>
@@ -305,4 +342,75 @@ const tabBtnSx = (active) => ({
 
 const outletSx = {
 	mt: 1,
+};
+
+const heroRightSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1.5,
+	flexWrap: "wrap",
+};
+
+const currentUserCardSx = {
+	height: 54,
+	minWidth: { xs: "100%", sm: 280 },
+	maxWidth: { xs: "100%", sm: 390 },
+	display: "flex",
+	alignItems: "center",
+	gap: 1.3,
+	px: 1.5,
+	borderRadius: "18px",
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.88), rgba(15,23,42,.68))",
+	border: "1px solid rgba(255,255,255,.10)",
+	boxShadow:
+		"0 16px 34px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.04)",
+	backdropFilter: "blur(18px)",
+};
+
+const userAvatarSx = {
+	width: 36,
+	height: 36,
+	borderRadius: "14px",
+	display: "grid",
+	placeItems: "center",
+	flexShrink: 0,
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	color: "#fff",
+	fontWeight: 950,
+	fontSize: 15,
+	boxShadow: "0 10px 22px rgba(37,99,235,.34)",
+	border: "1px solid rgba(255,255,255,.14)",
+};
+
+const currentUserLabelSx = {
+	color: "rgba(255,255,255,.45)",
+	fontSize: 10,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".08em",
+	lineHeight: 1,
+};
+
+const currentUserNameSx = {
+	mt: 0.45,
+	color: "#fff",
+	fontSize: 14,
+	fontWeight: 950,
+	lineHeight: 1.15,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const currentUserMetaSx = {
+	mt: 0.3,
+	color: "rgba(191,219,254,.78)",
+	fontSize: 11,
+	fontWeight: 750,
+	lineHeight: 1.2,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
 };
