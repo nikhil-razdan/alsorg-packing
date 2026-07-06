@@ -176,7 +176,7 @@ function InventoryMasterWorkbench({
     useState(1);
 
   const [pageSize, setPageSize] =
-    useState(10);
+    useState(6);
 
   const groups =
     useMemo(() => {
@@ -322,10 +322,15 @@ function InventoryMasterWorkbench({
     }, [rows, groups]);
 
   const toggleGroup = (key) => {
-    setOpenMap((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setOpenMap((prev) => {
+      const willOpen = !prev[key];
+
+      return willOpen
+        ? {
+          [key]: true,
+        }
+        : {};
+    });
   };
 
   return (
@@ -463,7 +468,12 @@ function InventoryMasterWorkbench({
                 </Box>
               </Box>
 
-              <Collapse in={isOpen}>
+              <Collapse
+                in={isOpen}
+                timeout={220}
+                unmountOnExit
+                sx={inventoryCollapseSx}
+              >
                 <Box sx={inventoryPacketTableSx}>
                   <Box sx={inventoryPacketHeadSx}>
                     <div>Packet</div>
@@ -669,10 +679,9 @@ function InventoryMasterWorkbench({
               }}
               style={inventoryPageSizeSelectStyle}
             >
-              <option value={5}>5</option>
+              <option value={6}>6</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
-              <option value={50}>50</option>
             </select>
 
             <Box sx={inventoryPaginationTextSx}>
@@ -6187,36 +6196,37 @@ const inventoryMiniStatLabelSx = {
 };
 
 const inventoryMasterCardSx = (accent, open) => ({
+  flexShrink: 0,
   borderRadius: "12px",
   background: open
-    ? `linear-gradient(180deg, ${accent}11, rgba(15,23,42,.80))`
+    ? `linear-gradient(180deg, ${accent}13, rgba(15,23,42,.86))`
     : "rgba(15,23,42,.80)",
   border: open
-    ? `1px solid ${accent}44`
+    ? `1px solid ${accent}50`
     : "1px solid rgba(255,255,255,.07)",
   borderLeft: `3px solid ${accent}`,
   boxShadow: open
-    ? `0 14px 28px ${accent}15`
+    ? `0 18px 36px ${accent}18`
     : "0 14px 28px rgba(2,6,23,.24)",
   backdropFilter: "blur(18px)",
   overflow: "hidden",
-  transition: "all .25s ease",
+  transition: "box-shadow .22s ease, border-color .22s ease, background .22s ease",
 });
 
 const inventoryMasterHeaderSx = {
-  minHeight: 52,
+  minHeight: 64,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "12px",
   px: "14px",
-  py: "8px",
+  py: "9px",
 
-  background: "rgba(2,6,23,.22)",
+  background: "rgba(2,6,23,.24)",
   borderBottom: "1px solid rgba(255,255,255,.07)",
 
   flexWrap: "nowrap",
-  overflow: "visible",
+  overflow: "hidden",
 };
 
 const inventoryMasterLeftSx = {
@@ -6226,12 +6236,15 @@ const inventoryMasterLeftSx = {
   minWidth: 0,
   flex: "1 1 auto",
   overflow: "hidden",
+  alignSelf: "stretch",
 };
 
 const masterWorkbenchModalBodySx = {
   height: "100%",
   minHeight: 0,
   overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
 };
 
 const inventoryWorkbenchShellSx = {
@@ -6244,7 +6257,7 @@ const inventoryWorkbenchShellSx = {
 };
 
 const inventorySectionListSx = {
-  flex: 1,
+  flex: "1 1 auto",
   minHeight: 0,
   display: "flex",
   flexDirection: "column",
@@ -6252,6 +6265,9 @@ const inventorySectionListSx = {
   overflowY: "auto",
   overflowX: "hidden",
   pr: "8px",
+  pb: "8px",
+
+  overscrollBehavior: "contain",
   scrollbarWidth: "thin",
   scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
 
@@ -6265,8 +6281,7 @@ const inventorySectionListSx = {
   },
 
   "&::-webkit-scrollbar-thumb": {
-    background:
-      "linear-gradient(180deg,#2563eb,#60a5fa)",
+    background: "linear-gradient(180deg,#2563eb,#60a5fa)",
     borderRadius: 999,
     border: "2px solid rgba(15,23,42,.95)",
   },
@@ -6462,8 +6477,11 @@ const inventoryMasterMetaSx = {
 const inventoryMasterRightSx = {
   display: "flex",
   alignItems: "center",
+  justifyContent: "flex-end",
   gap: "12px",
-  flexWrap: "wrap",
+  flexWrap: "nowrap",
+  flexShrink: 0,
+  minWidth: 360,
 };
 
 const inventoryProgressBlockSx = {
@@ -6513,18 +6531,44 @@ const inventoryMasterCountSx = {
 
 const inventoryPacketTableSx = {
   background: "rgba(2,6,23,.18)",
-  overflowX: "auto",
+  maxHeight: "min(360px, 42vh)",
+  overflow: "auto",
+  borderTop: "1px solid rgba(255,255,255,.06)",
+
+  scrollbarWidth: "thin",
+  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+
+  "&::-webkit-scrollbar": {
+    width: 10,
+    height: 10,
+  },
+
+  "&::-webkit-scrollbar-track": {
+    background: "rgba(15,23,42,.85)",
+    borderRadius: 999,
+  },
+
+  "&::-webkit-scrollbar-thumb": {
+    background: "linear-gradient(180deg,#2563eb,#60a5fa)",
+    borderRadius: 999,
+    border: "2px solid rgba(15,23,42,.95)",
+  },
 };
 
 const inventoryPacketHeadSx = {
+  position: "sticky",
+  top: 0,
+  zIndex: 4,
+
   display: "grid",
   gridTemplateColumns:
     "90px minmax(220px,1.2fr) minmax(260px,1.3fr) 140px minmax(180px,1fr) minmax(320px,1.4fr)",
-  color: "rgba(255,255,255,.54)",
+
+  color: "rgba(255,255,255,.62)",
   fontSize: 10,
-  fontWeight: 900,
+  fontWeight: 950,
   borderBottom: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(2,6,23,.34)",
+  background: "#0f172a",
   textTransform: "uppercase",
   letterSpacing: ".06em",
   minWidth: 1210,
@@ -6598,13 +6642,19 @@ const inventoryMiniBtnSx = (accent) => ({
 });
 
 const inventoryPacketFooterSx = {
-  minHeight: 42,
+  position: "sticky",
+  bottom: 0,
+  zIndex: 3,
+
+  minHeight: 46,
   display: "flex",
   alignItems: "center",
   gap: "8px",
   px: "14px",
-  background: "rgba(2,6,23,.30)",
-  borderTop: "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "linear-gradient(180deg, rgba(15,23,42,.96), rgba(2,6,23,.98))",
+  borderTop: "1px solid rgba(255,255,255,.08)",
 };
 
 const inventoryEmptyWorkbenchSx = {
@@ -6753,6 +6803,21 @@ const paginationSelectSx = {
 
   "& .MuiSvgIcon-root": {
     color: "#94a3b8",
+  },
+};
+
+const inventoryCollapseSx = {
+  flexShrink: 0,
+
+  "& .MuiCollapse-wrapper": {
+    display: "block",
+    width: "100%",
+  },
+
+  "& .MuiCollapse-wrapperInner": {
+    display: "block",
+    width: "100%",
+    minHeight: 0,
   },
 };
 
