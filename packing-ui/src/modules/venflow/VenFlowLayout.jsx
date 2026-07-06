@@ -12,6 +12,10 @@ import {
 	Typography,
 } from "@mui/material";
 
+import {
+	premiumScrollbarSx,
+} from "./venflowTheme";
+
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import FormatListBulletedOutlinedIcon from "@mui/icons-material/FormatListBulletedOutlined";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
@@ -155,7 +159,7 @@ export default function VenFlowLayout() {
 }
 
 const pageSx = {
-	minHeight: "100vh",
+	height: "100vh",
 	position: "relative",
 	overflowX: "hidden",
 	overflowY: "auto",
@@ -166,6 +170,7 @@ const pageSx = {
 		linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%)
 	`,
 	backgroundAttachment: "fixed",
+	...premiumScrollbarSx,
 };
 
 const backgroundText = {

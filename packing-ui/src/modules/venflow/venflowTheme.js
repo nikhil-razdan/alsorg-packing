@@ -188,6 +188,10 @@ export const errorAlertSx = {
 export const tableCardSx = {
 	...panelSx,
 	overflow: "hidden",
+	borderRadius: "24px",
+	border: "1px solid rgba(96,165,250,.16)",
+	boxShadow:
+		"0 22px 55px rgba(2,6,23,.42), inset 0 1px 0 rgba(255,255,255,.04)",
 };
 
 export const tableHeadCellSx = {
@@ -211,5 +215,110 @@ export const tableCellSx = {
 export const tableRowSx = {
 	"&:hover": {
 		background: "rgba(59,130,246,.08)",
+	},
+};
+
+export const premiumScrollbarSx = {
+	scrollbarWidth: "thin",
+	scrollbarColor:
+		"rgba(96,165,250,.72) rgba(15,23,42,.72)",
+
+	"&::-webkit-scrollbar": {
+		width: 11,
+		height: 11,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background:
+			"linear-gradient(180deg, rgba(15,23,42,.82), rgba(2,6,23,.84))",
+		borderRadius: 999,
+		border: "1px solid rgba(255,255,255,.06)",
+		boxShadow: "inset 0 0 8px rgba(2,6,23,.65)",
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		borderRadius: 999,
+		background:
+			"linear-gradient(135deg, rgba(96,165,250,.92), rgba(37,99,235,.88))",
+		border: "2px solid rgba(15,23,42,.92)",
+		boxShadow:
+			"0 0 14px rgba(59,130,246,.32), inset 0 1px 0 rgba(255,255,255,.22)",
+	},
+
+	"&::-webkit-scrollbar-thumb:hover": {
+		background:
+			"linear-gradient(135deg, rgba(147,197,253,1), rgba(59,130,246,.98))",
+		boxShadow:
+			"0 0 18px rgba(96,165,250,.48), inset 0 1px 0 rgba(255,255,255,.30)",
+	},
+
+	"&::-webkit-scrollbar-corner": {
+		background: "transparent",
+	},
+
+	"& *": {
+		scrollbarWidth: "thin",
+		scrollbarColor:
+			"rgba(96,165,250,.72) rgba(15,23,42,.72)",
+	},
+
+	"& *::-webkit-scrollbar": {
+		width: 11,
+		height: 11,
+	},
+
+	"& *::-webkit-scrollbar-track": {
+		background:
+			"linear-gradient(180deg, rgba(15,23,42,.82), rgba(2,6,23,.84))",
+		borderRadius: 999,
+		border: "1px solid rgba(255,255,255,.06)",
+		boxShadow: "inset 0 0 8px rgba(2,6,23,.65)",
+	},
+
+	"& *::-webkit-scrollbar-thumb": {
+		borderRadius: 999,
+		background:
+			"linear-gradient(135deg, rgba(96,165,250,.92), rgba(37,99,235,.88))",
+		border: "2px solid rgba(15,23,42,.92)",
+		boxShadow:
+			"0 0 14px rgba(59,130,246,.32), inset 0 1px 0 rgba(255,255,255,.22)",
+	},
+
+	"& *::-webkit-scrollbar-thumb:hover": {
+		background:
+			"linear-gradient(135deg, rgba(147,197,253,1), rgba(59,130,246,.98))",
+		boxShadow:
+			"0 0 18px rgba(96,165,250,.48), inset 0 1px 0 rgba(255,255,255,.30)",
+	},
+
+	"& *::-webkit-scrollbar-corner": {
+		background: "transparent",
+	},
+};
+
+export const tableContainerSx = {
+	width: "100%",
+	maxWidth: "100%",
+	overflow: "auto",
+	background:
+		"linear-gradient(180deg, rgba(15,23,42,.34), rgba(2,6,23,.22))",
+	borderRadius: "0 0 22px 22px",
+	...premiumScrollbarSx,
+
+	"&::-webkit-scrollbar-track": {
+		marginInline: "14px",
+		background:
+			"linear-gradient(90deg, rgba(15,23,42,.82), rgba(30,41,59,.74), rgba(15,23,42,.82))",
+		borderRadius: 999,
+		border: "1px solid rgba(255,255,255,.08)",
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		borderRadius: 999,
+		background:
+			"linear-gradient(90deg, rgba(56,189,248,.95), rgba(59,130,246,.96), rgba(37,99,235,.96))",
+		border: "2px solid rgba(15,23,42,.96)",
+		boxShadow:
+			"0 0 16px rgba(59,130,246,.38), inset 0 1px 0 rgba(255,255,255,.24)",
 	},
 };

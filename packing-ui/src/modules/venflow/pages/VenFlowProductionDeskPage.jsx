@@ -34,6 +34,7 @@ import {
 	tableCellSx,
 	tableHeadCellSx,
 	tableRowSx,
+	tableContainerSx
 } from "../venflowTheme";
 
 const VIEW_OPTIONS = [
@@ -175,7 +176,7 @@ export default function VenFlowProductionDeskPage() {
 					</Box>
 				) : (
 					<>
-						<TableContainer sx={{ overflowX: "auto" }}>
+						<TableContainer sx={{ tableContainerSx }}>
 							<Table size="small" sx={{ minWidth: 1200 }}>
 								<TableHead>
 									<TableRow>
