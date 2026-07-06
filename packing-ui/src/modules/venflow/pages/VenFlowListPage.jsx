@@ -98,27 +98,81 @@ export default function VenFlowListPage() {
     };
 
     useEffect(() => {
-        const currentUser = readCurrentUser();
-        const role = String(currentUser.role || localStorage.getItem("role") || "").toUpperCase();
+        const loadPlants = async () => {
+            const currentUser = readCurrentUser();
 
-        const assignedPlants =
-            Array.isArray(currentUser.plantCodes) && currentUser.plantCodes.length > 0
-                ? currentUser.plantCodes
-                : readLocalPlantCodes();
+            const role = String(
+                currentUser.role ||
+                localStorage.getItem("role") ||
+                ""
+            ).toUpperCase();
 
-        if (assignedPlants.length > 0) {
-            setPlantOptions(assignedPlants);
-            return;
-        }
+            const assignedPlants =
+                Array.isArray(currentUser.plantCodes) &&
+                    currentUser.plantCodes.length > 0
+                    ? currentUser.plantCodes
+                    : readLocalPlantCodes();
 
-        if (role === "ADMIN" || role === "VENFLOW_MANAGER") {
-            API.get("/plants")
-                .then((res) => {
-                    const rows = Array.isArray(res.data) ? res.data : [];
-                    setPlantOptions(rows.map((p) => p.plantCode).filter(Boolean));
-                })
-                .catch(() => setPlantOptions([]));
-        }
+            /*
+             * ADMIN always sees all plants.
+             */
+            if (role === "ADMIN") {
+                try {
+                    const res = await API.get("/plants");
+
+                    const rows = Array.isArray(res.data)
+                        ? res.data
+                        : Array.isArray(res.data?.content)
+                            ? res.data.content
+                            : [];
+
+                    setPlantOptions(
+                        rows
+                            .map((p) => p.plantCode || p.code || p.name)
+                            .filter(Boolean)
+                            .map((p) => String(p).trim().toUpperCase())
+                    );
+                } catch {
+                    setPlantOptions([]);
+                }
+
+                return;
+            }
+
+            /*
+             * VenFlow Manager can see all only if no plant restriction.
+             */
+            if (role === "VENFLOW_MANAGER" && assignedPlants.length === 0) {
+                try {
+                    const res = await API.get("/plants");
+
+                    const rows = Array.isArray(res.data)
+                        ? res.data
+                        : Array.isArray(res.data?.content)
+                            ? res.data.content
+                            : [];
+
+                    setPlantOptions(
+                        rows
+                            .map((p) => p.plantCode || p.code || p.name)
+                            .filter(Boolean)
+                            .map((p) => String(p).trim().toUpperCase())
+                    );
+                } catch {
+                    setPlantOptions([]);
+                }
+
+                return;
+            }
+
+            setPlantOptions(
+                assignedPlants
+                    .map((p) => String(p).trim().toUpperCase())
+                    .filter(Boolean)
+            );
+        };
+
+        loadPlants();
     }, []);
 
     useEffect(() => {

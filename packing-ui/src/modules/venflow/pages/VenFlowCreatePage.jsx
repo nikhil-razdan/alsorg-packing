@@ -129,23 +129,11 @@ export default function VenFlowCreatePage() {
             setError("");
 
             try {
-                if (assignedPlants.length > 0) {
-                    setPlantOptions(assignedPlants);
-
-                    setForm((prev) => ({
-                        ...prev,
-                        plantCode: prev.plantCode || assignedPlants[0],
-                    }));
-
-                    return;
-                }
-
                 /*
-                 * Admin / VenFlow Manager can load all plants if no explicit plant access.
+                 * ADMIN always gets all plants.
                  */
-                if (cleanRole === "ADMIN" || cleanRole === "VENFLOW_MANAGER") {
+                if (cleanRole === "ADMIN") {
                     const res = await API.get("/plants");
-
                     const apiPlants = extractPlantOptionsFromResponse(res.data);
 
                     setPlantOptions(apiPlants);
@@ -153,6 +141,47 @@ export default function VenFlowCreatePage() {
                     setForm((prev) => ({
                         ...prev,
                         plantCode: prev.plantCode || apiPlants[0] || "",
+                    }));
+
+                    return;
+                }
+
+                /*
+                 * VenFlow Manager:
+                 * assigned plants = limited access
+                 * no assigned plants = all plants
+                 */
+                if (cleanRole === "VENFLOW_MANAGER") {
+                    if (assignedPlants.length > 0) {
+                        setPlantOptions(assignedPlants);
+
+                        setForm((prev) => ({
+                            ...prev,
+                            plantCode: prev.plantCode || assignedPlants[0],
+                        }));
+
+                        return;
+                    }
+
+                    const res = await API.get("/plants");
+                    const apiPlants = extractPlantOptionsFromResponse(res.data);
+
+                    setPlantOptions(apiPlants);
+
+                    setForm((prev) => ({
+                        ...prev,
+                        plantCode: prev.plantCode || apiPlants[0] || "",
+                    }));
+
+                    return;
+                }
+
+                if (assignedPlants.length > 0) {
+                    setPlantOptions(assignedPlants);
+
+                    setForm((prev) => ({
+                        ...prev,
+                        plantCode: prev.plantCode || assignedPlants[0],
                     }));
 
                     return;

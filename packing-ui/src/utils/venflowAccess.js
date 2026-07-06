@@ -116,6 +116,10 @@ export const canOpenProcessingDesk = (role) => {
 	return isVenFlowProcessing(role);
 };
 
+export const canOpenProductionDesk = (role) => {
+	return canOpenProcessingDesk(role);
+};
+
 export const canOpenSupervisorDesk = (role) => {
 	return isVenFlowSupervisor(role);
 };
@@ -128,13 +132,21 @@ export const canApproveVenFlowPo = (role) => {
 	return isVenFlowAdminOrManager(role);
 };
 
-export const canAccessVenFlowScreen = (
-	screen,
-	role
-) => {
+export const canActAsAnyVenFlowUser = (role) => {
+	return isVenFlowAdmin(role);
+};
+
+export const canAccessVenFlowScreen = (screen, role) => {
 	const cleanRole = getVenFlowRole(role);
 
-	if (isVenFlowAdminOrManager(cleanRole)) {
+	/*
+	 * ADMIN can open every VenFlow screen.
+	 */
+	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+		return true;
+	}
+
+	if (cleanRole === VENFLOW_ROLES.MANAGER) {
 		return true;
 	}
 
@@ -170,17 +182,12 @@ export const canAccessVenFlowScreen = (
 		return canOpenProcessingDesk(cleanRole);
 	}
 
-	if (screen === "supervisor") {
-		return canOpenSupervisorDesk(cleanRole);
-	}
-
-	/*
-	 * Legacy route support.
-	 * If your old route still uses /venflow/production,
-	 * keep this until you rename it to /venflow/processing.
-	 */
 	if (screen === "production") {
 		return canOpenProcessingDesk(cleanRole);
+	}
+
+	if (screen === "supervisor") {
+		return canOpenSupervisorDesk(cleanRole);
 	}
 
 	if (screen === "entries") {
@@ -193,7 +200,11 @@ export const canAccessVenFlowScreen = (
 export const defaultVenFlowPathForRole = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
-	if (isVenFlowAdminOrManager(cleanRole)) {
+	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+		return "/venflow/dashboard";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.MANAGER) {
 		return "/venflow/dashboard";
 	}
 
@@ -224,7 +235,7 @@ export const venFlowRoleLabel = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
-		return "Admin Control";
+		return "Admin Super Access";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.MANAGER) {

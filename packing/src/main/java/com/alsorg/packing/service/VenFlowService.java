@@ -1285,10 +1285,17 @@ public class VenFlowService {
         private Specification<VenFlowEntry> visibleSpec() {
                 Set<String> plants = access.allowedPlantCodes();
 
-                boolean allPlants = access.isAdminOrManager()
-                                && plants.isEmpty();
+                /*
+                 * ADMIN always sees all VenFlow entries.
+                 * VenFlow Manager sees all only when no plant restriction is assigned.
+                 */
+                boolean allPlants = access.isAdmin()
+                                || (access.isVenFlowManager()
+                                                && plants.isEmpty());
 
-                return VenFlowSpecifications.visiblePlants(plants, allPlants);
+                return VenFlowSpecifications.visiblePlants(
+                                plants,
+                                allPlants);
         }
 
         private VenFlowEntry getVisibleOrThrow(UUID id) {

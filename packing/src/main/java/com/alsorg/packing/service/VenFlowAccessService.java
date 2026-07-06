@@ -23,39 +23,30 @@ public class VenFlowAccessService {
     }
 
     public User currentUser() {
-        Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
-        if (
-                auth == null
-                        || !auth.isAuthenticated()
-                        || auth instanceof AnonymousAuthenticationToken
-                        || auth.getName() == null
-                        || auth.getName().isBlank()
-                        || "anonymousUser".equalsIgnoreCase(auth.getName())
-        ) {
+        if (auth == null
+                || !auth.isAuthenticated()
+                || auth instanceof AnonymousAuthenticationToken
+                || auth.getName() == null
+                || auth.getName().isBlank()
+                || "anonymousUser".equalsIgnoreCase(auth.getName())) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "User not authenticated"
-            );
+                    "User not authenticated");
         }
 
         String username = auth.getName().trim();
 
-        User user =
-                userRepository.findByUsernameIgnoreCase(username)
-                        .orElseThrow(() ->
-                                new ResponseStatusException(
-                                        HttpStatus.UNAUTHORIZED,
-                                        "User not found: " + username
-                                )
-                        );
+        User user = userRepository.findByUsernameIgnoreCase(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "User not found: " + username));
 
         if (!user.isEnabled()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "User is disabled"
-            );
+                    "User is disabled");
         }
 
         return user;
@@ -139,16 +130,23 @@ public class VenFlowAccessService {
         if (cleanPlant.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Plant code is required"
-            );
+                    "Plant code is required");
         }
 
-        if (isAdminOrManager()) {
+        /*
+         * ADMIN can access every plant.
+         */
+        if (isAdmin()) {
+            return;
+        }
+
+        /*
+         * VenFlow Manager can access all plants only if no plant restriction is
+         * assigned.
+         */
+        if (isVenFlowManager()) {
             Set<String> allowed = allowedPlantCodes();
 
-            /*
-             * ADMIN / VENFLOW_MANAGER with no plant assignment means all plants.
-             */
             if (allowed.isEmpty()) {
                 return;
             }
@@ -159,8 +157,7 @@ public class VenFlowAccessService {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant
-            );
+                    "No access for plant: " + cleanPlant);
         }
 
         Set<String> allowed = allowedPlantCodes();
@@ -168,8 +165,7 @@ public class VenFlowAccessService {
         if (allowed.isEmpty() || !allowed.contains(cleanPlant)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "No access for plant: " + cleanPlant
-            );
+                    "No access for plant: " + cleanPlant);
         }
     }
 
@@ -177,8 +173,7 @@ public class VenFlowAccessService {
         if (!isEngineering()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Engineering access required"
-            );
+                    "Engineering access required");
         }
     }
 
@@ -186,8 +181,7 @@ public class VenFlowAccessService {
         if (!isStore()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Store access required"
-            );
+                    "Store access required");
         }
     }
 
@@ -195,8 +189,7 @@ public class VenFlowAccessService {
         if (!isPurchase()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Purchase access required"
-            );
+                    "Purchase access required");
         }
     }
 
@@ -204,8 +197,7 @@ public class VenFlowAccessService {
         if (!isProcessing()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Processing/Production access required"
-            );
+                    "Processing/Production access required");
         }
     }
 
@@ -217,8 +209,7 @@ public class VenFlowAccessService {
         if (!isSupervisor()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Supervisor access required"
-            );
+                    "Supervisor access required");
         }
     }
 
@@ -226,8 +217,7 @@ public class VenFlowAccessService {
         if (!isProcessing() && !isSupervisor()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Processing/Supervisor access required"
-            );
+                    "Processing/Supervisor access required");
         }
     }
 
@@ -235,8 +225,15 @@ public class VenFlowAccessService {
         if (!isAdminOrManager()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Manager/Admin approval required"
-            );
+                    "Manager/Admin approval required");
         }
+    }
+
+    public boolean isAdmin() {
+        return "ADMIN".equals(currentRole());
+    }
+
+    public boolean isVenFlowManager() {
+        return "VENFLOW_MANAGER".equals(currentRole());
     }
 }
