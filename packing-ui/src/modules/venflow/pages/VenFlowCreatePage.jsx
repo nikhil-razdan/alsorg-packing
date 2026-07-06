@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Box,
@@ -26,34 +26,109 @@ import {
     secondaryBtnSx,
 } from "../venflowTheme";
 
-const readCurrentUser = () => {
+const safeJson = (key, fallback) => {
     try {
-        return JSON.parse(localStorage.getItem("currentUser") || "{}");
+        return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
     } catch {
-        return {};
+        return fallback;
     }
 };
 
-const readLocalPlantCodes = () => {
-    try {
-        return JSON.parse(localStorage.getItem("plantCodes") || "[]");
-    } catch {
-        return [];
+const readCurrentUser = () => {
+    return safeJson("currentUser", {});
+};
+
+const normalizePlantCode = (value) => {
+    if (!value) return "";
+
+    if (typeof value === "string") {
+        return value.trim().toUpperCase();
     }
+
+    return String(
+        value.plantCode ||
+        value.code ||
+        value.name ||
+        value.plant ||
+        value.value ||
+        ""
+    )
+        .trim()
+        .toUpperCase();
+};
+
+const uniquePlants = (items = []) => {
+    return Array.from(
+        new Set(
+            items
+                .map(normalizePlantCode)
+                .filter(Boolean)
+        )
+    );
+};
+
+const extractPlantOptionsFromResponse = (data) => {
+    if (Array.isArray(data)) {
+        return uniquePlants(data);
+    }
+
+    if (Array.isArray(data?.content)) {
+        return uniquePlants(data.content);
+    }
+
+    if (Array.isArray(data?.data)) {
+        return uniquePlants(data.data);
+    }
+
+    if (Array.isArray(data?.plants)) {
+        return uniquePlants(data.plants);
+    }
+
+    return [];
+};
+
+const readStoredPlantCodes = () => {
+    const currentUser = readCurrentUser();
+
+    const possibleSources = [
+        currentUser.plantCodes,
+        currentUser.effectivePlantCodes,
+        currentUser.allowedPlantCodes,
+        currentUser.plants,
+        safeJson("plantCodes", []),
+        safeJson("effectivePlantCodes", []),
+        safeJson("allowedPlantCodes", []),
+        safeJson("plants", []),
+    ];
+
+    for (const source of possibleSources) {
+        if (Array.isArray(source) && source.length > 0) {
+            const plants = uniquePlants(source);
+
+            if (plants.length > 0) {
+                return plants;
+            }
+        }
+    }
+
+    return [];
 };
 
 export default function VenFlowCreatePage() {
     const navigate = useNavigate();
 
-    const currentUser = readCurrentUser();
+    const currentUser = useMemo(() => readCurrentUser(), []);
 
     const role = String(
         currentUser.role ||
         localStorage.getItem("role") ||
         ""
-    ).toUpperCase();
+    )
+        .trim()
+        .toUpperCase();
 
     const [plantOptions, setPlantOptions] = useState([]);
+    const [plantLoading, setPlantLoading] = useState(true);
 
     const [form, setForm] = useState({
         plantCode: "",
@@ -61,7 +136,6 @@ export default function VenFlowCreatePage() {
         pdNo: "",
         clientName: "",
         bomReference: "",
-        bomAttachmentUrl: "",
     });
 
     const [saving, setSaving] = useState(false);
@@ -69,59 +143,50 @@ export default function VenFlowCreatePage() {
 
     useEffect(() => {
         const loadPlants = async () => {
-            const assignedPlants =
-                Array.isArray(currentUser.plantCodes) &&
-                    currentUser.plantCodes.length > 0
-                    ? currentUser.plantCodes
-                    : readLocalPlantCodes();
+            setPlantLoading(true);
 
-            if (assignedPlants.length > 0) {
-                setPlantOptions(assignedPlants);
+            try {
+                const storedPlants = readStoredPlantCodes();
 
-                setForm((prev) => ({
-                    ...prev,
-                    plantCode:
-                        prev.plantCode ||
-                        assignedPlants[0],
-                }));
-
-                return;
-            }
-
-            /*
-             * Admin / Manager may have empty plantCodes meaning all plants.
-             * In that case, load all plant options.
-             */
-            if (role === "ADMIN" || role === "VENFLOW_MANAGER") {
-                try {
-                    const res = await API.get("/plants");
-
-                    const rows = Array.isArray(res.data)
-                        ? res.data
-                        : [];
-
-                    const plantCodes = rows
-                        .map((p) => p.plantCode)
-                        .filter(Boolean);
-
-                    setPlantOptions(plantCodes);
+                if (storedPlants.length > 0) {
+                    setPlantOptions(storedPlants);
 
                     setForm((prev) => ({
                         ...prev,
-                        plantCode:
-                            prev.plantCode ||
-                            plantCodes[0] ||
-                            "",
+                        plantCode: prev.plantCode || storedPlants[0],
                     }));
-                } catch (err) {
-                    console.error("Failed to load plants", err);
-                    setPlantOptions([]);
+
+                    return;
                 }
+
+                /*
+                 * Fallback: load plant master.
+                 * This is needed when localStorage/currentUser does not contain plantCodes.
+                 */
+                const res = await API.get("/plants");
+
+                const apiPlants = extractPlantOptionsFromResponse(res.data);
+
+                setPlantOptions(apiPlants);
+
+                setForm((prev) => ({
+                    ...prev,
+                    plantCode: prev.plantCode || apiPlants[0] || "",
+                }));
+            } catch (err) {
+                console.error("Failed to load VenFlow plants", err);
+
+                setPlantOptions([]);
+
+                setError(
+                    "No plant access found for this user. Please assign plant access from User Management or check /plants API response."
+                );
+            } finally {
+                setPlantLoading(false);
             }
         };
 
         loadPlants();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const update = (key, value) => {
@@ -163,7 +228,6 @@ export default function VenFlowCreatePage() {
                 pdNo: form.pdNo.trim(),
                 clientName: form.clientName.trim(),
                 bomReference: form.bomReference.trim(),
-                bomAttachmentUrl: form.bomAttachmentUrl.trim(),
             });
 
             const id = res.data?.id;
@@ -192,9 +256,9 @@ export default function VenFlowCreatePage() {
             </Typography>
 
             <Typography sx={pageSubSx}>
-                Start the veneer tracking flow. The entry will move department-wise:
-                Production Raised → Store Reviewed → Sent to Purchase → PO Raised →
-                PO Approved → Material Received → Production Informed → Production Started → Job Done.
+                Create a new veneer indent/BOM requirement. The entry will move
+                department-wise from Engineering to Store, Purchase, Processing and
+                final next-stage readiness.
             </Typography>
 
             <Card sx={{ ...cardSx, mt: 2.5 }}>
@@ -214,19 +278,28 @@ export default function VenFlowCreatePage() {
                                 update("plantCode", e.target.value)
                             }
                             required
+                            disabled={plantLoading || plantOptions.length === 0}
                             sx={fieldSx}
                             SelectProps={{
                                 MenuProps: darkMenuProps,
                             }}
                         >
-                            {plantOptions.map((plant) => (
-                                <MenuItem
-                                    key={plant}
-                                    value={plant}
-                                >
-                                    {plant}
+                            {plantOptions.length === 0 ? (
+                                <MenuItem value="">
+                                    {plantLoading
+                                        ? "Loading plants..."
+                                        : "No plant assigned"}
                                 </MenuItem>
-                            ))}
+                            ) : (
+                                plantOptions.map((plant) => (
+                                    <MenuItem
+                                        key={plant}
+                                        value={plant}
+                                    >
+                                        {plant}
+                                    </MenuItem>
+                                ))
+                            )}
                         </TextField>
 
                         <TextField
@@ -269,15 +342,6 @@ export default function VenFlowCreatePage() {
                             }
                             sx={fieldSx}
                         />
-
-                        <TextField
-                            label="BOM Attachment URL"
-                            value={form.bomAttachmentUrl}
-                            onChange={(e) =>
-                                update("bomAttachmentUrl", e.target.value)
-                            }
-                            sx={fieldSx}
-                        />
                     </Box>
 
                     <Box sx={noteSx}>
@@ -286,9 +350,10 @@ export default function VenFlowCreatePage() {
                         </Typography>
 
                         <Typography sx={noteTextSx}>
-                            This requirement will be visible only to users having access to
-                            the selected plant. Store, Purchase and Production actions will
-                            open step-by-step based on role and workflow stage.
+                            This requirement will be visible only to users having access
+                            to the selected plant. Store, Purchase, Processing and
+                            Supervisor actions will open step-by-step based on role and
+                            workflow stage.
                         </Typography>
                     </Box>
 
@@ -303,7 +368,11 @@ export default function VenFlowCreatePage() {
                         <Button
                             variant="contained"
                             onClick={submit}
-                            disabled={saving}
+                            disabled={
+                                saving ||
+                                plantLoading ||
+                                plantOptions.length === 0
+                            }
                             sx={primaryBtnSx}
                         >
                             {saving ? "Creating..." : "Create & Continue"}
