@@ -21,41 +21,65 @@ export const darkMenuProps = {
 
 export const fieldSx = {
 	"& .MuiInputLabel-root": {
-		color: "rgba(255,255,255,.56)",
+		color: "rgba(255,255,255,.58)",
+		fontSize: "12px",
 		fontWeight: 750,
 	},
+
 	"& .MuiInputLabel-root.Mui-focused": {
 		color: "#60a5fa",
 	},
+
 	"& .MuiOutlinedInput-root": {
-		borderRadius: "16px",
-		background: "rgba(15,23,42,.72)",
+		minHeight: "48px",
 		color: "#fff",
-		fontWeight: 750,
+		background: "rgba(255,255,255,.04)",
+		borderRadius: "9px",
+		fontSize: "13px",
+		fontWeight: 700,
+		transition: "all .22s ease",
+
 		"& fieldset": {
 			borderColor: "rgba(255,255,255,.08)",
 		},
+
 		"&:hover fieldset": {
 			borderColor: "rgba(59,130,246,.35)",
 		},
+
 		"&.Mui-focused fieldset": {
-			borderColor: "rgba(59,130,246,.72)",
-			boxShadow: "0 0 0 3px rgba(37,99,235,.12)",
+			borderColor: "#3b82f6",
+			boxShadow: "0 0 0 3px rgba(59,130,246,.12)",
 		},
+
 		"&.Mui-disabled": {
 			color: "rgba(255,255,255,.38)",
 			background: "rgba(255,255,255,.035)",
 		},
+
 		"&.Mui-disabled fieldset": {
 			borderColor: "rgba(255,255,255,.06)",
 		},
 	},
+
+	"& .MuiInputBase-input": {
+		color: "#fff",
+		fontWeight: 650,
+	},
+
 	"& .MuiInputBase-input.Mui-disabled": {
 		WebkitTextFillColor: "rgba(255,255,255,.42)",
 	},
+
+	"& .MuiInputBase-input::placeholder": {
+		color: "rgba(255,255,255,.34)",
+		opacity: 1,
+	},
+
 	"& .MuiSvgIcon-root": {
 		color: "#94a3b8",
 	},
+
 	"& input[type='date']::-webkit-calendar-picker-indicator": {
 		filter: "invert(1)",
 		opacity: 0.75,
@@ -64,77 +88,97 @@ export const fieldSx = {
 
 export const pageHeaderSx = {
 	display: "flex",
+	alignItems: "flex-start",
 	justifyContent: "space-between",
-	alignItems: { xs: "flex-start", md: "center" },
-	gap: 2,
-	mb: 2.5,
-	flexDirection: { xs: "column", md: "row" },
+	gap: "16px",
+	flexWrap: "wrap",
+	mb: "14px",
 };
 
 export const pageTitleSx = {
-	fontSize: { xs: 26, md: 32 },
-	fontWeight: 950,
 	color: "#fff",
+	fontSize: {
+		xs: "24px",
+		md: "32px",
+	},
+	fontWeight: 950,
+	lineHeight: 1.05,
 	letterSpacing: "-0.04em",
 };
 
 export const pageSubSx = {
-	mt: 0.7,
-	color: "rgba(255,255,255,.62)",
+	mt: "8px",
+	color: "rgba(255,255,255,.68)",
+	fontSize: "13px",
 	fontWeight: 650,
-	lineHeight: 1.7,
-	maxWidth: 900,
+	lineHeight: 1.5,
+	maxWidth: "820px",
 };
 
 export const primaryBtnSx = {
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
+	px: "14px",
 	textTransform: "none",
-	fontWeight: 900,
+	fontWeight: 850,
 	color: "#fff",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 14px 30px rgba(37,99,235,.28)",
+	boxShadow: "0 10px 22px rgba(37,99,235,.30)",
+
 	"&:hover": {
 		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
 	},
+
 	"&:disabled": {
-		color: "rgba(255,255,255,.45)",
+		color: "rgba(255,255,255,.42)",
 		background: "rgba(255,255,255,.08)",
 		boxShadow: "none",
 	},
 };
 
 export const secondaryBtnSx = {
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
+	px: "14px",
 	textTransform: "none",
-	fontWeight: 900,
-	color: "#cbd5e1",
-	background: "rgba(255,255,255,.045)",
+	fontWeight: 850,
+	color: "#fff",
+	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.08)",
+
 	"&:hover": {
 		background: "rgba(59,130,246,.14)",
-		borderColor: "rgba(59,130,246,.32)",
+		borderColor: "rgba(59,130,246,.30)",
 	},
 };
 
 export const outlineBtnSx = {
-	borderRadius: "14px",
+	height: "38px",
+	borderRadius: "9px",
+	px: "14px",
 	textTransform: "none",
-	fontWeight: 900,
+	fontWeight: 850,
 	color: "#93c5fd",
 	borderColor: "rgba(59,130,246,.32)",
 	background: "rgba(59,130,246,.08)",
+
 	"&:hover": {
 		borderColor: "rgba(59,130,246,.55)",
 		background: "rgba(59,130,246,.16)",
 	},
+
+	"&:disabled": {
+		color: "rgba(255,255,255,.35)",
+		borderColor: "rgba(255,255,255,.08)",
+		background: "rgba(255,255,255,.04)",
+	},
 };
 
 export const panelSx = {
-	borderRadius: 4,
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.72))",
+	borderRadius: "10px",
+	background: "rgba(15,23,42,.78)",
 	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 18px 45px rgba(2,6,23,.32)",
+	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
 	backdropFilter: "blur(18px)",
 	color: "#fff",
 };
@@ -145,22 +189,24 @@ export const cardSx = {
 };
 
 export const sectionTitleSx = {
-	fontSize: 17,
-	fontWeight: 950,
 	color: "#fff",
+	fontSize: "17px",
+	fontWeight: 950,
+	letterSpacing: "-0.02em",
 };
 
 export const infoLabelSx = {
-	fontSize: 12,
-	color: "rgba(255,255,255,.52)",
-	fontWeight: 850,
+	color: "rgba(255,255,255,.54)",
+	fontSize: "10px",
+	fontWeight: 900,
 	textTransform: "uppercase",
-	letterSpacing: ".04em",
+	letterSpacing: ".07em",
 };
 
 export const infoValueSx = {
-	fontSize: 15,
+	mt: "3px",
 	color: "#fff",
+	fontSize: "13px",
 	fontWeight: 850,
 };
 
@@ -172,14 +218,19 @@ export const loadingBoxSx = {
 	p: 5,
 	textAlign: "center",
 	color: "#93c5fd",
+
+	"& .MuiCircularProgress-root": {
+		color: "#60a5fa",
+	},
 };
 
 export const errorAlertSx = {
 	mb: 2,
-	borderRadius: "16px",
+	borderRadius: "10px",
 	background: "rgba(239,68,68,.12)",
 	color: "#fecaca",
 	border: "1px solid rgba(239,68,68,.22)",
+
 	"& .MuiAlert-icon": {
 		color: "#f87171",
 	},
@@ -188,31 +239,35 @@ export const errorAlertSx = {
 export const tableCardSx = {
 	...panelSx,
 	overflow: "hidden",
-	borderRadius: "24px",
-	border: "1px solid rgba(96,165,250,.16)",
-	boxShadow:
-		"0 22px 55px rgba(2,6,23,.42), inset 0 1px 0 rgba(255,255,255,.04)",
+	borderRadius: "10px",
+	border: "1px solid rgba(255,255,255,.07)",
+	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
 };
 
 export const tableHeadCellSx = {
-	color: "#93c5fd",
-	fontWeight: 950,
-	fontSize: 12,
+	color: "rgba(255,255,255,.54)",
+	fontWeight: 900,
+	fontSize: "10px",
 	textTransform: "uppercase",
-	letterSpacing: ".05em",
+	letterSpacing: ".06em",
 	borderBottom: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(15,23,42,.78)",
+	background: "rgba(2,6,23,.34)",
 	whiteSpace: "nowrap",
+	py: "10px",
 };
 
 export const tableCellSx = {
-	color: "rgba(255,255,255,.78)",
+	color: "rgba(255,255,255,.72)",
 	borderBottom: "1px solid rgba(255,255,255,.06)",
 	fontWeight: 650,
+	fontSize: "12px",
 	whiteSpace: "nowrap",
+	py: "8px",
 };
 
 export const tableRowSx = {
+	background: "rgba(255,255,255,.025)",
+
 	"&:hover": {
 		background: "rgba(59,130,246,.08)",
 	},
@@ -255,45 +310,6 @@ export const premiumScrollbarSx = {
 	"&::-webkit-scrollbar-corner": {
 		background: "transparent",
 	},
-
-	"& *": {
-		scrollbarWidth: "thin",
-		scrollbarColor:
-			"rgba(96,165,250,.72) rgba(15,23,42,.72)",
-	},
-
-	"& *::-webkit-scrollbar": {
-		width: 11,
-		height: 11,
-	},
-
-	"& *::-webkit-scrollbar-track": {
-		background:
-			"linear-gradient(180deg, rgba(15,23,42,.82), rgba(2,6,23,.84))",
-		borderRadius: 999,
-		border: "1px solid rgba(255,255,255,.06)",
-		boxShadow: "inset 0 0 8px rgba(2,6,23,.65)",
-	},
-
-	"& *::-webkit-scrollbar-thumb": {
-		borderRadius: 999,
-		background:
-			"linear-gradient(135deg, rgba(96,165,250,.92), rgba(37,99,235,.88))",
-		border: "2px solid rgba(15,23,42,.92)",
-		boxShadow:
-			"0 0 14px rgba(59,130,246,.32), inset 0 1px 0 rgba(255,255,255,.22)",
-	},
-
-	"& *::-webkit-scrollbar-thumb:hover": {
-		background:
-			"linear-gradient(135deg, rgba(147,197,253,1), rgba(59,130,246,.98))",
-		boxShadow:
-			"0 0 18px rgba(96,165,250,.48), inset 0 1px 0 rgba(255,255,255,.30)",
-	},
-
-	"& *::-webkit-scrollbar-corner": {
-		background: "transparent",
-	},
 };
 
 export const tableContainerSx = {
@@ -302,7 +318,7 @@ export const tableContainerSx = {
 	overflow: "auto",
 	background:
 		"linear-gradient(180deg, rgba(15,23,42,.34), rgba(2,6,23,.22))",
-	borderRadius: "0 0 22px 22px",
+	borderRadius: "0 0 10px 10px",
 	...premiumScrollbarSx,
 
 	"&::-webkit-scrollbar-track": {
