@@ -3573,17 +3573,7 @@ function DispatchedItemsPage() {
 			return;
 		}
 
-		const statusLabel =
-			getStatusExportFileLabel(dispatchExportStatus);
-
-		const dateStamp =
-			new Date().toISOString().slice(0, 10);
-
-		const cleanStatus =
-			normalizeExportFileName(statusLabel);
-
-		const baseFileName =
-			`DISPATCH_ITEMS_${cleanStatus}_${dateStamp}`;
+		const baseFileName = "Dispatch Register";
 
 		const headers =
 			dispatchExportColumns.map((column) => column.header);
