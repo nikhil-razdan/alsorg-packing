@@ -77,7 +77,7 @@ function WarehousePage() {
 	const [bulkGatePassNumber, setBulkGatePassNumber] = useState("");
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(20);
-	const isAdmin = role === "ADMIN";
+	
 
 	const [plants, setPlants] = useState([]);
 	const [assignmentDrafts, setAssignmentDrafts] = useState({});
