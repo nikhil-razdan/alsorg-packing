@@ -1719,10 +1719,213 @@ const challanHistoryStatValueSx = {
 	lineHeight: 1,
 };
 
+const premiumScrollbarSx = (accent = "#60a5fa") => ({
+	scrollbarWidth: "thin",
+	scrollbarColor: `${accent} rgba(15,23,42,.78)`,
+
+	"&::-webkit-scrollbar": {
+		width: 10,
+		height: 10,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background:
+			"linear-gradient(180deg,rgba(15,23,42,.95),rgba(2,6,23,.88))",
+		borderRadius: 999,
+		border: "1px solid rgba(255,255,255,.05)",
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			`linear-gradient(180deg,${accent},rgba(147,197,253,.88))`,
+		borderRadius: 999,
+		border: "2px solid rgba(15,23,42,.95)",
+		boxShadow: `0 0 18px ${accent}55`,
+	},
+
+	"&::-webkit-scrollbar-thumb:hover": {
+		background:
+			`linear-gradient(180deg,${accent},#bfdbfe)`,
+	},
+});
+
 const challanHistoryScrollSx = {
-	maxHeight: "58vh",
+	flex: 1,
+	minHeight: 0,
 	overflowY: "auto",
-	pr: 0.8,
+	overflowX: "hidden",
+
+	pr: 1,
+	mr: -0.4,
+
+	scrollBehavior: "smooth",
+	overscrollBehavior: "contain",
+	scrollbarGutter: "stable",
+
+	...premiumScrollbarSx("#60a5fa"),
+};
+
+const challanHistorySectionHeaderSx = {
+	position: "sticky",
+	top: 0,
+	zIndex: 5,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.5,
+	flexWrap: "wrap",
+
+	py: 1,
+	px: 1.1,
+	mb: 1.1,
+	mt: 1,
+
+	borderRadius: "16px",
+
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(15,23,42,.80))",
+
+	border:
+		"1px solid rgba(255,255,255,.075)",
+
+	backdropFilter: "blur(18px)",
+	WebkitBackdropFilter: "blur(18px)",
+
+	boxShadow:
+		"0 12px 28px rgba(2,6,23,.28)",
+};
+
+const challanHistoryPagerSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.2,
+	flexWrap: "wrap",
+
+	p: 1,
+	borderRadius: "16px",
+
+	background:
+		"linear-gradient(135deg,rgba(255,255,255,.045),rgba(255,255,255,.025))",
+
+	border:
+		"1px solid rgba(255,255,255,.075)",
+};
+
+const challanHistoryPagerLeftSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const challanHistoryPagerRightSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.8,
+	flexWrap: "wrap",
+};
+
+const challanHistoryRangeSx = {
+	color: "rgba(255,255,255,.58)",
+	fontSize: 11,
+	fontWeight: 850,
+	whiteSpace: "nowrap",
+};
+
+const challanHistoryPagePillSx = {
+	height: 32,
+	px: 1.4,
+
+	display: "flex",
+	alignItems: "center",
+
+	borderRadius: "999px",
+
+	color: "#fff",
+	fontSize: 11,
+	fontWeight: 950,
+
+	background:
+		"linear-gradient(135deg,rgba(96,165,250,.18),rgba(255,255,255,.04))",
+
+	border:
+		"1px solid rgba(96,165,250,.25)",
+};
+
+const challanHistoryPageButtonSx = {
+	minWidth: 34,
+	height: 32,
+	px: 1.15,
+
+	borderRadius: "11px",
+
+	textTransform: "none",
+
+	color: "#dbeafe",
+	fontSize: 11,
+	fontWeight: 950,
+
+	background:
+		"linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.92))",
+
+	border:
+		"1px solid rgba(255,255,255,.08)",
+
+	boxShadow:
+		"0 8px 18px rgba(2,6,23,.22)",
+
+	"&:hover": {
+		color: "#fff",
+		background:
+			"linear-gradient(180deg,rgba(37,99,235,.90),rgba(29,78,216,.90))",
+		borderColor:
+			"rgba(96,165,250,.32)",
+	},
+
+	"&.Mui-disabled": {
+		opacity: 0.38,
+		color: "rgba(203,213,225,.55)",
+		background:
+			"rgba(255,255,255,.035)",
+	},
+};
+
+const challanHistoryPageSizeFieldSx = {
+	width: 86,
+
+	"& .MuiOutlinedInput-root": {
+		height: 32,
+		borderRadius: "11px",
+		background: "rgba(255,255,255,.04)",
+		color: "#fff",
+		fontSize: 11,
+		fontWeight: 900,
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.08)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(96,165,250,.35)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#60a5fa",
+			boxShadow: "0 0 0 3px rgba(96,165,250,.13)",
+		},
+	},
+
+	"& .MuiSelect-select": {
+		color: "#fff",
+		fontWeight: 950,
+		fontSize: 11,
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
 };
 
 const challanHistorySectionTitleSx = {
@@ -2233,6 +2436,12 @@ function DispatchedItemsPage() {
 	const [challanHistoryLoading, setChallanHistoryLoading] = useState(false);
 	const [challanHistoryRows, setChallanHistoryRows] = useState([]);
 	const [challanHistorySearch, setChallanHistorySearch] = useState("");
+
+	const [challanHistoryPageNo, setChallanHistoryPageNo] = useState(1);
+	const [challanHistoryPageSize, setChallanHistoryPageSize] = useState(6);
+
+	const [customChallanHistoryPageNo, setCustomChallanHistoryPageNo] = useState(1);
+	const [customChallanHistoryPageSize, setCustomChallanHistoryPageSize] = useState(8);
 	const [bulkMoveFgOpen, setBulkMoveFgOpen] = useState(false);
 	const [bulkSelectedFgZone, setBulkSelectedFgZone] = useState("");
 	const [bulkMoveFgLoading, setBulkMoveFgLoading] = useState(false);
@@ -4993,6 +5202,8 @@ function DispatchedItemsPage() {
 			setChallanHistoryOpen(true);
 			setChallanHistoryLoading(true);
 			setChallanHistorySearch("");
+			setChallanHistoryPageNo(1);
+			setCustomChallanHistoryPageNo(1);
 
 			const [normalRows] =
 				await Promise.all([
@@ -5243,6 +5454,52 @@ function DispatchedItemsPage() {
 			});
 	}, [customChallans, challanHistorySearch]);
 
+	const challanHistoryTotalPages = useMemo(() => {
+		return Math.max(
+			1,
+			Math.ceil(
+				challanHistoryMasterGroups.length / challanHistoryPageSize
+			)
+		);
+	}, [challanHistoryMasterGroups.length, challanHistoryPageSize]);
+
+	const paginatedChallanHistoryMasterGroups = useMemo(() => {
+		const start =
+			(challanHistoryPageNo - 1) * challanHistoryPageSize;
+
+		return challanHistoryMasterGroups.slice(
+			start,
+			start + challanHistoryPageSize
+		);
+	}, [
+		challanHistoryMasterGroups,
+		challanHistoryPageNo,
+		challanHistoryPageSize,
+	]);
+
+	const customChallanHistoryTotalPages = useMemo(() => {
+		return Math.max(
+			1,
+			Math.ceil(
+				customChallanHistoryRows.length / customChallanHistoryPageSize
+			)
+		);
+	}, [customChallanHistoryRows.length, customChallanHistoryPageSize]);
+
+	const paginatedCustomChallanHistoryRows = useMemo(() => {
+		const start =
+			(customChallanHistoryPageNo - 1) * customChallanHistoryPageSize;
+
+		return customChallanHistoryRows.slice(
+			start,
+			start + customChallanHistoryPageSize
+		);
+	}, [
+		customChallanHistoryRows,
+		customChallanHistoryPageNo,
+		customChallanHistoryPageSize,
+	]);
+
 	const closeChalaanPreview = () => {
 		if (chalaanPreview?.url) {
 			URL.revokeObjectURL(chalaanPreview.url);
@@ -5250,6 +5507,31 @@ function DispatchedItemsPage() {
 
 		setChalaanPreview(null);
 	};
+
+	useEffect(() => {
+		setChallanHistoryPageNo(1);
+		setCustomChallanHistoryPageNo(1);
+	}, [challanHistorySearch]);
+
+	useEffect(() => {
+		setChallanHistoryPageNo(1);
+	}, [challanHistoryPageSize]);
+
+	useEffect(() => {
+		setCustomChallanHistoryPageNo(1);
+	}, [customChallanHistoryPageSize]);
+
+	useEffect(() => {
+		if (challanHistoryPageNo > challanHistoryTotalPages) {
+			setChallanHistoryPageNo(challanHistoryTotalPages);
+		}
+	}, [challanHistoryPageNo, challanHistoryTotalPages]);
+
+	useEffect(() => {
+		if (customChallanHistoryPageNo > customChallanHistoryTotalPages) {
+			setCustomChallanHistoryPageNo(customChallanHistoryTotalPages);
+		}
+	}, [customChallanHistoryPageNo, customChallanHistoryTotalPages]);
 
 	return (
 		<div style={page}>
@@ -7148,7 +7430,15 @@ function DispatchedItemsPage() {
 								</IconButton>
 							</Box>
 
-							<Box sx={modalContentSx}>
+							<Box
+								sx={{
+									...modalContentSx,
+									flex: 1,
+									minHeight: 0,
+									display: "flex",
+									flexDirection: "column",
+								}}
+							>
 								{historyLoading && (
 									<Box sx={modalEmptyStateSx}>
 										Loading sticker history…
@@ -8675,8 +8965,10 @@ function DispatchedItemsPage() {
 						<Box
 							sx={{
 								...enhancedModalSx,
-								width: 1120,
-								maxHeight: "90vh",
+								width: "min(1180px,94vw)",
+								height: "min(90vh,860px)",
+								display: "flex",
+								flexDirection: "column",
 							}}
 							onClick={(e) => e.stopPropagation()}
 						>
@@ -8764,8 +9056,21 @@ function DispatchedItemsPage() {
 
 								{!challanHistoryLoading && (
 									<Box sx={challanHistoryScrollSx}>
-										<Box sx={challanHistorySectionTitleSx}>
-											Master Item Wise Dispatch Challans
+										<Box sx={challanHistorySectionHeaderSx}>
+											<Box sx={challanHistorySectionTitleSx}>
+												Master Item Wise Dispatch Challans
+											</Box>
+
+											<ChallanHistoryPager
+												pageNo={challanHistoryPageNo}
+												totalPages={challanHistoryTotalPages}
+												pageSize={challanHistoryPageSize}
+												totalRows={challanHistoryMasterGroups.length}
+												label="groups"
+												pageSizeOptions={[4, 6, 10, 15]}
+												onPageChange={setChallanHistoryPageNo}
+												onPageSizeChange={setChallanHistoryPageSize}
+											/>
 										</Box>
 
 										{challanHistoryMasterGroups.length === 0 && (
@@ -8774,7 +9079,7 @@ function DispatchedItemsPage() {
 											</Box>
 										)}
 
-										{challanHistoryMasterGroups.map((group) => (
+										{paginatedChallanHistoryMasterGroups.map((group) => (
 											<Box
 												key={group.key}
 												sx={masterChallanCardSx}
@@ -8866,8 +9171,32 @@ function DispatchedItemsPage() {
 											</Box>
 										))}
 
-										<Box sx={challanHistorySectionTitleSx}>
-											Custom Challans
+										<Box
+											sx={{
+												...challanHistorySectionHeaderSx,
+												top: 0,
+												mt: 2.2,
+											}}
+										>
+											<Box
+												sx={{
+													...challanHistorySectionTitleSx,
+													color: "#c4b5fd",
+												}}
+											>
+												Custom Challans
+											</Box>
+
+											<ChallanHistoryPager
+												pageNo={customChallanHistoryPageNo}
+												totalPages={customChallanHistoryTotalPages}
+												pageSize={customChallanHistoryPageSize}
+												totalRows={customChallanHistoryRows.length}
+												label="challans"
+												pageSizeOptions={[5, 8, 12, 20]}
+												onPageChange={setCustomChallanHistoryPageNo}
+												onPageSizeChange={setCustomChallanHistoryPageSize}
+											/>
 										</Box>
 
 										{customChallansLoading && (
@@ -8884,7 +9213,7 @@ function DispatchedItemsPage() {
 											)}
 
 										{!customChallansLoading &&
-											customChallanHistoryRows.map((challan) => (
+											paginatedCustomChallanHistoryRows.map((challan) => (
 												<Box
 													key={challan.challanNumber}
 													sx={customChallanHistoryCardSx}
@@ -9317,6 +9646,119 @@ function HistoryMiniStat({
 
 			<Box sx={historyMiniValueSx}>
 				{value}
+			</Box>
+		</Box>
+	);
+}
+
+function ChallanHistoryPager({
+	pageNo,
+	totalPages,
+	pageSize,
+	totalRows,
+	label = "records",
+	pageSizeOptions = [5, 10, 15],
+	onPageChange,
+	onPageSizeChange,
+}) {
+	const safeTotalPages =
+		Math.max(1, Number(totalPages || 1));
+
+	const safePageNo =
+		Math.min(
+			Math.max(1, Number(pageNo || 1)),
+			safeTotalPages
+		);
+
+	const start =
+		totalRows > 0
+			? (safePageNo - 1) * pageSize + 1
+			: 0;
+
+	const end =
+		Math.min(
+			safePageNo * pageSize,
+			totalRows
+		);
+
+	const goToPage = (nextPage) => {
+		const cleanPage =
+			Math.min(
+				Math.max(1, nextPage),
+				safeTotalPages
+			);
+
+		onPageChange(cleanPage);
+	};
+
+	return (
+		<Box sx={challanHistoryPagerSx}>
+			<Box sx={challanHistoryPagerLeftSx}>
+				<Box sx={challanHistoryRangeSx}>
+					{start}-{end} of {totalRows} {label}
+				</Box>
+
+				<TextField
+					select
+					size="small"
+					value={pageSize}
+					onChange={(e) =>
+						onPageSizeChange(Number(e.target.value))
+					}
+					slotProps={{
+						select: {
+							MenuProps: modalSelectMenuProps,
+						},
+					}}
+					sx={challanHistoryPageSizeFieldSx}
+				>
+					{pageSizeOptions.map((size) => (
+						<MenuItem
+							key={size}
+							value={size}
+						>
+							{size}
+						</MenuItem>
+					))}
+				</TextField>
+			</Box>
+
+			<Box sx={challanHistoryPagerRightSx}>
+				<Button
+					disabled={safePageNo === 1}
+					onClick={() => goToPage(1)}
+					sx={challanHistoryPageButtonSx}
+				>
+					First
+				</Button>
+
+				<Button
+					disabled={safePageNo === 1}
+					onClick={() => goToPage(safePageNo - 1)}
+					sx={challanHistoryPageButtonSx}
+				>
+					‹
+				</Button>
+
+				<Box sx={challanHistoryPagePillSx}>
+					Page {safePageNo} / {safeTotalPages}
+				</Box>
+
+				<Button
+					disabled={safePageNo === safeTotalPages}
+					onClick={() => goToPage(safePageNo + 1)}
+					sx={challanHistoryPageButtonSx}
+				>
+					›
+				</Button>
+
+				<Button
+					disabled={safePageNo === safeTotalPages}
+					onClick={() => goToPage(safeTotalPages)}
+					sx={challanHistoryPageButtonSx}
+				>
+					Last
+				</Button>
 			</Box>
 		</Box>
 	);
