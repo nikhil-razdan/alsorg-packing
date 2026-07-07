@@ -237,6 +237,59 @@ function VenFlowSidebar() {
 function VenFlowHeader() {
 	const navigate = useNavigate();
 
+	const location = useLocation();
+
+	const headerMeta = useMemo(() => {
+		const path = location.pathname;
+
+		if (path.includes("/venflow/dashboard")) {
+			return {
+				title: "Veneer Dashboard",
+				sub: "Workflow Overview",
+			};
+		}
+
+		if (path.includes("/venflow/store")) {
+			return {
+				title: "Store Desk",
+				sub: "Material Review & Store Actions",
+			};
+		}
+
+		if (path.includes("/venflow/purchase")) {
+			return {
+				title: "Purchase Desk",
+				sub: "PO & Purchase Control",
+			};
+		}
+
+		if (path.includes("/venflow/production")) {
+			return {
+				title: "Production Desk",
+				sub: "Processing & Closure Control",
+			};
+		}
+
+		if (path.includes("/venflow/create")) {
+			return {
+				title: "New Veneer Requirement",
+				sub: "Controlled Indent Creation",
+			};
+		}
+
+		if (path.includes("/venflow/entries/")) {
+			return {
+				title: "Full Tracker",
+				sub: "Focused Tracker",
+			};
+		}
+
+		return {
+			title: "Full Tracker",
+			sub: "Focused Tracker",
+		};
+	}, [location.pathname]);
+
 	const {
 		user,
 		role,
@@ -310,8 +363,8 @@ function VenFlowHeader() {
 					</IconButton>
 
 					<div>
-						<div style={headerTitle}>Full Tracker</div>
-						<div style={headerSub}>Concept 3 – Detail Focused Tracker</div>
+						<div style={headerTitle}>{headerMeta.title}</div>
+						<div style={headerSub}>{headerMeta.sub}</div>
 					</div>
 				</div>
 
