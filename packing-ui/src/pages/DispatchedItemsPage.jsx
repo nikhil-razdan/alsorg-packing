@@ -3300,6 +3300,13 @@ function DispatchedItemsPage() {
 		};
 	};
 
+	const getDispatchChallanNo = (row) =>
+		row?.challanNumber ||
+		row?.chalaanNumber ||
+		row?.dispatchChallanNumber ||
+		row?.chalaanNo ||
+		"";
+
 	const dispatchExportColumns = [
 		{
 			header: "Item Name",
@@ -3405,6 +3412,7 @@ function DispatchedItemsPage() {
 		rows,
 		search,
 		dispatchExportStatus,
+		dispatchExportFormat,
 	]);
 
 	const csvEscape = (value) => {
@@ -5565,13 +5573,6 @@ function DispatchedItemsPage() {
 			await loadCustomChallans();
 		}
 	};
-
-	const getDispatchChallanNo = (row) =>
-		row?.challanNumber ||
-		row?.chalaanNumber ||
-		row?.dispatchChallanNumber ||
-		row?.chalaanNo ||
-		"";
 
 	const getRowGeneratedTime = (row) =>
 		row?.dispatchedAt ||
