@@ -8,6 +8,8 @@ import {
 	MenuItem,
 	Tooltip,
 	Collapse,
+	Checkbox,
+	ListItemText,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -2594,6 +2596,104 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 	},
 ];
 
+function normalizeStatusSelection(value, previousValue = ["ALL"]) {
+	const rawValues = Array.isArray(value)
+		? value
+		: typeof value === "string"
+			? value.split(",")
+			: [];
+
+	const nextValues = rawValues
+		.map((item) => String(item || "").trim().toUpperCase())
+		.filter(Boolean);
+
+	if (nextValues.length === 0) {
+		return ["ALL"];
+	}
+
+	const previousValues = Array.isArray(previousValue)
+		? previousValue
+		: [previousValue];
+
+	const previousHadAll =
+		previousValues.includes("ALL");
+
+	const nextHasAll =
+		nextValues.includes("ALL");
+
+	/*
+	 * If user selected All after selecting specific statuses,
+	 * reset everything to All.
+	 */
+	if (nextHasAll && !previousHadAll) {
+		return ["ALL"];
+	}
+
+	const withoutAll =
+		nextValues.filter((status) => status !== "ALL");
+
+	return withoutAll.length > 0
+		? Array.from(new Set(withoutAll))
+		: ["ALL"];
+}
+
+function statusSelectionHasAll(value) {
+	return normalizeStatusSelection(value).includes("ALL");
+}
+
+function statusMatchesSelection(rowStatus, selectedStatuses) {
+	const cleanRowStatus =
+		String(rowStatus || "")
+			.trim()
+			.toUpperCase();
+
+	const statuses =
+		normalizeStatusSelection(selectedStatuses);
+
+	if (statuses.includes("ALL")) {
+		return true;
+	}
+
+	return statuses.includes(cleanRowStatus);
+}
+
+function getStatusOptionLabel(value) {
+	const option =
+		DISPATCH_EXPORT_STATUS_OPTIONS.find(
+			(item) => item.value === value
+		);
+
+	return option?.label || value || "Status";
+}
+
+function renderStatusSelectionLabel(value) {
+	const statuses =
+		normalizeStatusSelection(value);
+
+	if (statuses.includes("ALL")) {
+		return "All Status";
+	}
+
+	if (statuses.length === 1) {
+		return getStatusOptionLabel(statuses[0]);
+	}
+
+	return `${statuses.length} Status Selected`;
+}
+
+function getStatusExportFileLabel(value) {
+	const statuses =
+		normalizeStatusSelection(value);
+
+	if (statuses.includes("ALL")) {
+		return "ALL_STATUS";
+	}
+
+	return statuses
+		.map((status) => getStatusOptionLabel(status))
+		.join("_");
+}
+
 const smartRowMatches = (row, search) => {
 	const tokens =
 		tokenizeSmartSearch(search);
@@ -2638,7 +2738,7 @@ function DispatchedItemsPage() {
 	const [loading, setLoading] = useState(false);
 	/* ===== SEARCH + FILTER ===== */
 	const [search, setSearch] = useState("");
-	const [statusFilter, setStatusFilter] = useState("ALL");
+	const [statusFilter, setStatusFilter] = useState(["ALL"]);
 	const [groupBy, setGroupBy] = useState("NONE");
 	const [fromLocation, setFromLocation] = useState("");
 	const {
@@ -2769,7 +2869,7 @@ function DispatchedItemsPage() {
 	});
 
 	const [dispatchExportOpen, setDispatchExportOpen] = useState(false);
-	const [dispatchExportStatus, setDispatchExportStatus] = useState("ALL");
+	const [dispatchExportStatus, setDispatchExportStatus] = useState(["ALL"]);
 	const [dispatchExportFormat, setDispatchExportFormat] = useState("CSV");
 
 	const filteredRows = useMemo(() => {
@@ -2782,9 +2882,7 @@ function DispatchedItemsPage() {
 				return false;
 			}
 
-			const rowStatus = String(row.status || "").trim().toUpperCase();
-
-			if (statusFilter !== "ALL" && rowStatus !== statusFilter) {
+			if (!statusMatchesSelection(row.status, statusFilter)) {
 				return false;
 			}
 
@@ -3367,26 +3465,24 @@ function DispatchedItemsPage() {
 	];
 
 	const openDispatchExportModal = () => {
-		setDispatchExportStatus(statusFilter || "ALL");
+		setDispatchExportStatus(
+			normalizeStatusSelection(statusFilter)
+		);
+
 		setDispatchExportFormat("CSV");
 		setDispatchExportOpen(true);
 	};
 
 	const getDispatchExportSourceRows = (statusValue) => {
-		const selectedStatus =
-			String(statusValue || "ALL")
-				.trim()
-				.toUpperCase();
+		const selectedStatuses =
+			normalizeStatusSelection(statusValue);
 
 		return (rows || []).filter((row) => {
 			if (!smartRowMatches(row, search)) {
 				return false;
 			}
 
-			if (
-				selectedStatus !== "ALL" &&
-				String(row.status || "").trim().toUpperCase() !== selectedStatus
-			) {
+			if (!statusMatchesSelection(row.status, selectedStatuses)) {
 				return false;
 			}
 
@@ -3478,9 +3574,7 @@ function DispatchedItemsPage() {
 		}
 
 		const statusLabel =
-			DISPATCH_EXPORT_STATUS_OPTIONS.find(
-				(option) => option.value === dispatchExportStatus
-			)?.label || dispatchExportStatus;
+			getStatusExportFileLabel(dispatchExportStatus);
 
 		const dateStamp =
 			new Date().toISOString().slice(0, 10);
@@ -6314,73 +6408,66 @@ function DispatchedItemsPage() {
 						select
 						size="small"
 						value={statusFilter}
-						onChange={(e) => setStatusFilter(e.target.value)}
+						onChange={(e) => {
+							setStatusFilter((prev) =>
+								normalizeStatusSelection(e.target.value, prev)
+							);
+						}}
 						slotProps={{
 							select: {
+								multiple: true,
+								renderValue: (selected) =>
+									renderStatusSelectionLabel(selected),
 								MenuProps: {
 									PaperProps: {
 										sx: {
 											mt: 1,
-
 											borderRadius: "18px",
-
 											background:
 												"linear-gradient(180deg,#0f172a,#111827)",
-
 											color: "#fff",
-
 											border:
 												"1px solid rgba(255,255,255,.06)",
-
 											backdropFilter: "blur(20px)",
 
 											"& .MuiMenuItem-root": {
 												fontSize: 14,
-												fontWeight: 500,
+												fontWeight: 700,
 												color: "#fff",
 											},
 
 											"& .MuiMenuItem-root:hover": {
-												background:
-													"rgba(59,130,246,.08)",
+												background: "rgba(59,130,246,.08)",
 											},
 
 											"& .Mui-selected": {
 												background:
 													"rgba(59,130,246,.16) !important",
-
 												color: "#60a5fa",
-
-												fontWeight: 700,
+												fontWeight: 900,
 											},
 										},
 									},
 								},
-							}
+							},
 						}}
 						sx={{
-							minWidth: 180,
+							minWidth: 230,
 
 							...formFieldSx,
 
 							"& .MuiOutlinedInput-root": {
 								height: 44,
-
 								borderRadius: "14px",
-
-								background:
-									"rgba(255,255,255,.04)",
-
+								background: "rgba(255,255,255,.04)",
 								color: "#fff",
 
 								"& fieldset": {
-									borderColor:
-										"rgba(255,255,255,.08)",
+									borderColor: "rgba(255,255,255,.08)",
 								},
 
 								"&:hover fieldset": {
-									borderColor:
-										"rgba(59,130,246,.45)",
+									borderColor: "rgba(59,130,246,.45)",
 								},
 
 								"&.Mui-focused fieldset": {
@@ -6390,7 +6477,7 @@ function DispatchedItemsPage() {
 
 							"& .MuiSelect-select": {
 								color: "#fff",
-								fontWeight: 500,
+								fontWeight: 800,
 							},
 
 							"& .MuiSvgIcon-root": {
@@ -6398,15 +6485,59 @@ function DispatchedItemsPage() {
 							},
 						}}
 					>
-						<MenuItem value="ALL">All Status</MenuItem>
-						<MenuItem value="READY">🟡 Packed</MenuItem>
-						<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
-						<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
-						<MenuItem value="LOADED">🟠 Queued</MenuItem>
-						<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
-						<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
-						<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
-						<MenuItem value="WAREHOUSE_RETURN_REQUESTED">↩️ Warehouse Return Requested</MenuItem>
+						{DISPATCH_EXPORT_STATUS_OPTIONS.map((option) => {
+							const allSelected =
+								statusSelectionHasAll(statusFilter);
+
+							const checked =
+								option.value === "ALL"
+									? allSelected
+									: !allSelected && statusFilter.includes(option.value);
+
+							return (
+								<MenuItem
+									key={option.value}
+									value={option.value}
+								>
+									<Checkbox
+										size="small"
+										checked={checked}
+										sx={{
+											color: "rgba(255,255,255,.45)",
+											"&.Mui-checked": {
+												color: "#60a5fa",
+											},
+										}}
+									/>
+
+									<ListItemText
+										primary={
+											option.value === "READY"
+												? "🟡 Packed"
+												: option.value === "READY_TO_STORE"
+													? "📦 Ready To Store"
+													: option.value === "WAREHOUSE_REQUESTED"
+														? "🏭 Warehouse Requested"
+														: option.value === "LOADED"
+															? "🟠 Queued"
+															: option.value === "IN_WAREHOUSE"
+																? "🏢 In Warehouse"
+																: option.value === "READY_TO_DISPATCH"
+																	? "🚚 Ready To Dispatch"
+																	: option.value === "DISPATCHED"
+																		? "✅ Dispatched"
+																		: option.value === "WAREHOUSE_RETURN_REQUESTED"
+																			? "↩️ Warehouse Return Requested"
+																			: "All Status"
+										}
+										primaryTypographyProps={{
+											fontSize: 13,
+											fontWeight: 800,
+										}}
+									/>
+								</MenuItem>
+							);
+						})}
 					</TextField>
 
 					<TextField
@@ -7261,23 +7392,94 @@ function DispatchedItemsPage() {
 											Export Status
 										</Box>
 
-										<Box
-											component="select"
+										<TextField
+											select
+											fullWidth
 											value={dispatchExportStatus}
-											onChange={(e) =>
-												setDispatchExportStatus(e.target.value)
-											}
-											sx={dispatchTripNativeSelectSx}
+											onChange={(e) => {
+												setDispatchExportStatus((prev) =>
+													normalizeStatusSelection(e.target.value, prev)
+												);
+											}}
+											slotProps={{
+												select: {
+													multiple: true,
+													renderValue: (selected) =>
+														renderStatusSelectionLabel(selected),
+													MenuProps: modalSelectMenuProps,
+												},
+											}}
+											sx={{
+												...formFieldSx,
+
+												"& .MuiOutlinedInput-root": {
+													height: 46,
+													borderRadius: "14px",
+													background: "rgba(255,255,255,.04)",
+													color: "#fff",
+
+													"& fieldset": {
+														borderColor: "rgba(255,255,255,.10)",
+													},
+
+													"&:hover fieldset": {
+														borderColor: "rgba(16,185,129,.40)",
+													},
+
+													"&.Mui-focused fieldset": {
+														borderColor: "#10b981",
+														boxShadow: "0 0 0 3px rgba(16,185,129,.14)",
+													},
+												},
+
+												"& .MuiSelect-select": {
+													color: "#fff",
+													fontWeight: 900,
+													fontSize: 13,
+												},
+
+												"& .MuiSvgIcon-root": {
+													color: "#94a3b8",
+												},
+											}}
 										>
-											{DISPATCH_EXPORT_STATUS_OPTIONS.map((option) => (
-												<option
-													key={option.value}
-													value={option.value}
-												>
-													{option.label}
-												</option>
-											))}
-										</Box>
+											{DISPATCH_EXPORT_STATUS_OPTIONS.map((option) => {
+												const allSelected =
+													statusSelectionHasAll(dispatchExportStatus);
+
+												const checked =
+													option.value === "ALL"
+														? allSelected
+														: !allSelected &&
+														dispatchExportStatus.includes(option.value);
+
+												return (
+													<MenuItem
+														key={option.value}
+														value={option.value}
+													>
+														<Checkbox
+															size="small"
+															checked={checked}
+															sx={{
+																color: "rgba(255,255,255,.45)",
+																"&.Mui-checked": {
+																	color: "#10b981",
+																},
+															}}
+														/>
+
+														<ListItemText
+															primary={option.label}
+															primaryTypographyProps={{
+																fontSize: 13,
+																fontWeight: 800,
+															}}
+														/>
+													</MenuItem>
+												);
+											})}
+										</TextField>
 									</Box>
 
 									<Box>
@@ -7328,8 +7530,8 @@ function DispatchedItemsPage() {
 									/>
 
 									<HistoryMiniStat
-										label="Format"
-										value={dispatchExportFormat}
+										label="Status"
+										value={renderStatusSelectionLabel(dispatchExportStatus)}
 										accent="#a78bfa"
 									/>
 
