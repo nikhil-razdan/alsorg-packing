@@ -775,23 +775,43 @@ const customChallanListSx = {
 	display: "flex",
 	flexDirection: "column",
 	gap: 1,
-	maxHeight: 310,
-	overflowY: "auto",
-	pr: 0.8,
 
-	"&::-webkit-scrollbar": {
-		width: 8,
-	},
+	maxHeight: 360,
+	minHeight: 0,
 
-	"&::-webkit-scrollbar-track": {
-		background: "rgba(255,255,255,.03)",
-		borderRadius: 999,
-	},
+	overflowY: "scroll",
+	overflowX: "hidden",
 
-	"&::-webkit-scrollbar-thumb": {
-		background: "linear-gradient(180deg,#7c3aed,#a78bfa)",
-		borderRadius: 999,
-	},
+	pr: 1,
+	mr: -0.35,
+
+	scrollBehavior: "smooth",
+	overscrollBehavior: "contain",
+	scrollbarGutter: "stable both-edges",
+
+	...premiumScrollbarSx("#a78bfa"),
+};
+
+const customChallanPagerWrapSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.2,
+	flexWrap: "wrap",
+
+	mb: 1.2,
+	p: 1,
+
+	borderRadius: "16px",
+
+	background:
+		"linear-gradient(135deg,rgba(139,92,246,.10),rgba(255,255,255,.025))",
+
+	border:
+		"1px solid rgba(139,92,246,.20)",
+
+	boxShadow:
+		"0 12px 28px rgba(2,6,23,.20)",
 };
 
 const customChallanRowSx = {
@@ -2527,6 +2547,9 @@ function DispatchedItemsPage() {
 	const [customChallanSectionOpen, setCustomChallanSectionOpen] = useState(false);
 	const [customChallans, setCustomChallans] = useState([]);
 	const [customChallansLoading, setCustomChallansLoading] = useState(false);
+
+	const [customChallanPageNo, setCustomChallanPageNo] = useState(1);
+	const [customChallanPageSize, setCustomChallanPageSize] = useState(5);
 
 	const [customChallanOpen, setCustomChallanOpen] = useState(false);
 	const [customChallanLoading, setCustomChallanLoading] = useState(false);
@@ -5000,6 +5023,10 @@ function DispatchedItemsPage() {
 
 		setCustomChallanSectionOpen(nextOpen);
 
+		if (nextOpen) {
+			setCustomChallanPageNo(1);
+		}
+
 		if (nextOpen && customChallans.length === 0) {
 			await loadCustomChallans();
 		}
@@ -5547,6 +5574,41 @@ function DispatchedItemsPage() {
 		setChalaanPreview(null);
 	};
 
+	const customChallanTotalPages = useMemo(() => {
+		return Math.max(
+			1,
+			Math.ceil(customChallans.length / customChallanPageSize)
+		);
+	}, [customChallans.length, customChallanPageSize]);
+
+	const paginatedCustomChallans = useMemo(() => {
+		const start =
+			(customChallanPageNo - 1) * customChallanPageSize;
+
+		return customChallans.slice(
+			start,
+			start + customChallanPageSize
+		);
+	}, [
+		customChallans,
+		customChallanPageNo,
+		customChallanPageSize,
+	]);
+
+	useEffect(() => {
+		setCustomChallanPageNo(1);
+	}, [customChallanPageSize]);
+
+	useEffect(() => {
+		if (customChallanPageNo > customChallanTotalPages) {
+			setCustomChallanPageNo(customChallanTotalPages);
+		}
+	}, [customChallanPageNo, customChallanTotalPages]);
+
+	useEffect(() => {
+		setCustomChallanPageNo(1);
+	}, [customChallans.length]);
+
 	useEffect(() => {
 		setChallanHistoryPageNo(1);
 		setCustomChallanHistoryPageNo(1);
@@ -5973,127 +6035,154 @@ function DispatchedItemsPage() {
 								)}
 
 								{!customChallansLoading && customChallans.length > 0 && (
-									<Box sx={customChallanListSx}>
-										{customChallans.map((challan) => (
+									<>
+										<Box sx={customChallanPagerWrapSx}>
 											<Box
-												key={challan.challanNumber}
-												sx={customChallanRowSx}
+												sx={{
+													color: "#c4b5fd",
+													fontSize: 11,
+													fontWeight: 950,
+													letterSpacing: ".12em",
+													textTransform: "uppercase",
+												}}
 											>
-												<Box sx={{ minWidth: 0 }}>
-													<Box
-														sx={{
-															color: "#fff",
-															fontWeight: 900,
-															fontSize: 13,
-															whiteSpace: "nowrap",
-															overflow: "hidden",
-															textOverflow: "ellipsis",
-														}}
-														title={challan.challanNumber}
-													>
-														{challan.challanNumber}
-													</Box>
-
-													<Box
-														sx={{
-															color: "#94a3b8",
-															fontSize: 11,
-															fontWeight: 700,
-															mt: 0.4,
-														}}
-													>
-														{formatLocalDateTimeDisplay(challan.generatedAt)}
-													</Box>
-												</Box>
-
-												<Chip
-													size="small"
-													label={challan.challanTypeLabel || challan.challanType}
-													sx={{
-														width: "fit-content",
-														color: "#c4b5fd",
-														fontWeight: 900,
-														background: "rgba(139,92,246,.14)",
-														border: "1px solid rgba(139,92,246,.24)",
-													}}
-												/>
-
-												<Box sx={{ minWidth: 0 }}>
-													<Box
-														sx={{
-															color: "#fff",
-															fontSize: 13,
-															fontWeight: 800,
-															whiteSpace: "nowrap",
-															overflow: "hidden",
-															textOverflow: "ellipsis",
-														}}
-														title={`${challan.fromLocation || "—"} → ${challan.toLocation || "—"}`}
-													>
-														{challan.fromLocation || "—"} → {challan.toLocation || "—"}
-													</Box>
-
-													<Box
-														sx={{
-															color: "rgba(255,255,255,.55)",
-															fontSize: 11,
-															fontWeight: 700,
-															mt: 0.4,
-															whiteSpace: "nowrap",
-															overflow: "hidden",
-															textOverflow: "ellipsis",
-														}}
-													>
-														{challan.clientName || "No client"} •{" "}
-														{challan.projectName || "No project"}
-													</Box>
-												</Box>
-
-												<Box
-													sx={{
-														color: "#cbd5e1",
-														fontSize: 12,
-														fontWeight: 800,
-													}}
-												>
-													{challan.totalItems || 0} item
-													{Number(challan.totalItems || 0) === 1 ? "" : "s"}
-												</Box>
-
-												<Button
-													size="small"
-													onClick={async () => {
-														try {
-															const result =
-																await downloadCustomChallan(
-																	challan.challanNumber
-																);
-
-															const url =
-																URL.createObjectURL(result.blob);
-
-															setChalaanPreview({
-																url,
-																id:
-																	result.challanNo ||
-																	challan.challanNumber,
-															});
-														} catch (err) {
-															console.error(err);
-															alert(err.message || "Download failed");
-														}
-													}}
-													sx={{
-														...modalSecondaryButtonSx,
-														height: 34,
-														color: "#fff",
-													}}
-												>
-													View PDF
-												</Button>
+												Custom Challan Records
 											</Box>
-										))}
-									</Box>
+
+											<ChallanHistoryPager
+												pageNo={customChallanPageNo}
+												totalPages={customChallanTotalPages}
+												pageSize={customChallanPageSize}
+												totalRows={customChallans.length}
+												label="challans"
+												pageSizeOptions={[5, 8, 12, 20]}
+												onPageChange={setCustomChallanPageNo}
+												onPageSizeChange={setCustomChallanPageSize}
+											/>
+										</Box>
+
+										<Box sx={customChallanListSx}>
+											{paginatedCustomChallans.map((challan) => (
+												<Box
+													key={challan.challanNumber}
+													sx={customChallanRowSx}
+												>
+													<Box sx={{ minWidth: 0 }}>
+														<Box
+															sx={{
+																color: "#fff",
+																fontWeight: 900,
+																fontSize: 13,
+																whiteSpace: "nowrap",
+																overflow: "hidden",
+																textOverflow: "ellipsis",
+															}}
+															title={challan.challanNumber}
+														>
+															{challan.challanNumber}
+														</Box>
+
+														<Box
+															sx={{
+																color: "#94a3b8",
+																fontSize: 11,
+																fontWeight: 700,
+																mt: 0.4,
+															}}
+														>
+															{formatLocalDateTimeDisplay(challan.generatedAt)}
+														</Box>
+													</Box>
+
+													<Chip
+														size="small"
+														label={challan.challanTypeLabel || challan.challanType}
+														sx={{
+															width: "fit-content",
+															color: "#c4b5fd",
+															fontWeight: 900,
+															background: "rgba(139,92,246,.14)",
+															border: "1px solid rgba(139,92,246,.24)",
+														}}
+													/>
+
+													<Box sx={{ minWidth: 0 }}>
+														<Box
+															sx={{
+																color: "#fff",
+																fontSize: 13,
+																fontWeight: 800,
+																whiteSpace: "nowrap",
+																overflow: "hidden",
+																textOverflow: "ellipsis",
+															}}
+															title={`${challan.fromLocation || "—"} → ${challan.toLocation || "—"}`}
+														>
+															{challan.fromLocation || "—"} → {challan.toLocation || "—"}
+														</Box>
+
+														<Box
+															sx={{
+																color: "rgba(255,255,255,.55)",
+																fontSize: 11,
+																fontWeight: 700,
+																mt: 0.4,
+																whiteSpace: "nowrap",
+																overflow: "hidden",
+																textOverflow: "ellipsis",
+															}}
+														>
+															{challan.clientName || "No client"} •{" "}
+															{challan.projectName || "No project"}
+														</Box>
+													</Box>
+
+													<Box
+														sx={{
+															color: "#cbd5e1",
+															fontSize: 12,
+															fontWeight: 800,
+														}}
+													>
+														{challan.totalItems || 0} item
+														{Number(challan.totalItems || 0) === 1 ? "" : "s"}
+													</Box>
+
+													<Button
+														size="small"
+														onClick={async () => {
+															try {
+																const result =
+																	await downloadCustomChallan(
+																		challan.challanNumber
+																	);
+
+																const url =
+																	URL.createObjectURL(result.blob);
+
+																setChalaanPreview({
+																	url,
+																	id:
+																		result.challanNo ||
+																		challan.challanNumber,
+																});
+															} catch (err) {
+																console.error(err);
+																alert(err.message || "Download failed");
+															}
+														}}
+														sx={{
+															...modalSecondaryButtonSx,
+															height: 34,
+															color: "#fff",
+														}}
+													>
+														View PDF
+													</Button>
+												</Box>
+											))}
+										</Box>
+									</>
 								)}
 							</Box>
 						</Collapse>
