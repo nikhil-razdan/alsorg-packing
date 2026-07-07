@@ -1752,15 +1752,16 @@ const premiumScrollbarSx = (accent = "#60a5fa") => ({
 const challanHistoryScrollSx = {
 	flex: 1,
 	minHeight: 0,
-	overflowY: "auto",
+
+	overflowY: "scroll",
 	overflowX: "hidden",
 
-	pr: 1,
+	pr: 1.2,
 	mr: -0.4,
 
 	scrollBehavior: "smooth",
 	overscrollBehavior: "contain",
-	scrollbarGutter: "stable",
+	scrollbarGutter: "stable both-edges",
 
 	...premiumScrollbarSx("#60a5fa"),
 };
@@ -1800,11 +1801,13 @@ const challanHistoryPagerSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 1.2,
+	gap: 1,
 	flexWrap: "wrap",
 
-	p: 1,
-	borderRadius: "16px",
+	p: 0.8,
+	borderRadius: "15px",
+
+	maxWidth: "100%",
 
 	background:
 		"linear-gradient(135deg,rgba(255,255,255,.045),rgba(255,255,255,.025))",
@@ -1823,7 +1826,7 @@ const challanHistoryPagerLeftSx = {
 const challanHistoryPagerRightSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 0.8,
+	gap: 0.6,
 	flexWrap: "wrap",
 };
 
@@ -1852,6 +1855,42 @@ const challanHistoryPagePillSx = {
 
 	border:
 		"1px solid rgba(96,165,250,.25)",
+};
+
+const challanHistoryNativePageSizeSelectSx = {
+	width: 78,
+	height: 32,
+
+	px: 1,
+	borderRadius: "11px",
+
+	outline: "none",
+
+	color: "#fff",
+	fontSize: 11,
+	fontWeight: 950,
+
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(30,41,59,.88))",
+
+	border:
+		"1px solid rgba(96,165,250,.25)",
+
+	boxShadow:
+		"0 8px 18px rgba(2,6,23,.18)",
+
+	cursor: "pointer",
+
+	"&:focus": {
+		borderColor: "#60a5fa",
+		boxShadow: "0 0 0 3px rgba(96,165,250,.16)",
+	},
+
+	"& option": {
+		color: "#111827",
+		background: "#fff",
+		fontWeight: 800,
+	},
 };
 
 const challanHistoryPageButtonSx = {
@@ -8972,7 +9011,12 @@ function DispatchedItemsPage() {
 							}}
 							onClick={(e) => e.stopPropagation()}
 						>
-							<Box sx={modalHeaderSx}>
+							<Box
+								sx={{
+									...modalHeaderSx,
+									flexShrink: 0,
+								}}
+							>
 								<Box sx={modalTitleWrapSx}>
 									<Box sx={modalIconBubble("#60a5fa")}>
 										📄
@@ -8997,7 +9041,19 @@ function DispatchedItemsPage() {
 								</IconButton>
 							</Box>
 
-							<Box sx={modalContentSx}>
+							<Box
+								sx={{
+									...modalContentSx,
+
+									flex: 1,
+									minHeight: 0,
+
+									display: "flex",
+									flexDirection: "column",
+
+									overflow: "hidden",
+								}}
+							>
 								<TextField
 									fullWidth
 									value={challanHistorySearch}
@@ -9321,7 +9377,12 @@ function DispatchedItemsPage() {
 								)}
 							</Box>
 
-							<Box sx={modalFooterSx}>
+							<Box
+								sx={{
+									...modalFooterSx,
+									flexShrink: 0,
+								}}
+							>
 								<Button
 									onClick={() => setChallanHistoryOpen(false)}
 									sx={modalSecondaryButtonSx}
@@ -9698,29 +9759,23 @@ function ChallanHistoryPager({
 					{start}-{end} of {totalRows} {label}
 				</Box>
 
-				<TextField
-					select
-					size="small"
+				<Box
+					component="select"
 					value={pageSize}
 					onChange={(e) =>
 						onPageSizeChange(Number(e.target.value))
 					}
-					slotProps={{
-						select: {
-							MenuProps: modalSelectMenuProps,
-						},
-					}}
-					sx={challanHistoryPageSizeFieldSx}
+					sx={challanHistoryNativePageSizeSelectSx}
 				>
 					{pageSizeOptions.map((size) => (
-						<MenuItem
+						<option
 							key={size}
 							value={size}
 						>
 							{size}
-						</MenuItem>
+						</option>
 					))}
-				</TextField>
+				</Box>
 			</Box>
 
 			<Box sx={challanHistoryPagerRightSx}>
