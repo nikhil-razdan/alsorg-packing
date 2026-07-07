@@ -509,7 +509,7 @@ export default function VenFlowDetailPage() {
                 </Button>
             </Box>
 
-            <VenFlowTracker stage={entry.stage} />
+            <VenFlowTracker stage={entry.stage} entry={entry} />
 
             <Box sx={rolePanelSx}>
                 <Typography sx={rolePanelTitleSx}>
