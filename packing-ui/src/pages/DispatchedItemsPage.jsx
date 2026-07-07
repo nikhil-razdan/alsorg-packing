@@ -1392,6 +1392,86 @@ const pendingChip = {
   `,
 };
 
+const dispatchExportButtonSx = {
+	height: 40,
+	px: 2,
+	borderRadius: "14px",
+	textTransform: "none",
+	fontWeight: 900,
+	fontSize: 13,
+	color: "#fff",
+	background:
+		"linear-gradient(135deg,rgba(16,185,129,.26),rgba(5,150,105,.20))",
+	border: "1px solid rgba(16,185,129,.30)",
+	boxShadow: "0 12px 26px rgba(16,185,129,.16)",
+
+	"&:hover": {
+		background:
+			"linear-gradient(135deg,rgba(16,185,129,.34),rgba(5,150,105,.28))",
+	},
+};
+
+const exportFormatButtonSx = (active, accent = "#60a5fa") => ({
+	flex: 1,
+	height: 42,
+	borderRadius: "13px",
+	textTransform: "none",
+	fontWeight: 950,
+	color: active ? "#fff" : "#cbd5e1",
+	background: active
+		? `linear-gradient(135deg,${accent},rgba(37,99,235,.86))`
+		: "rgba(255,255,255,.04)",
+	border: active
+		? `1px solid ${accent}66`
+		: "1px solid rgba(255,255,255,.08)",
+	boxShadow: active
+		? `0 12px 26px ${accent}22`
+		: "none",
+
+	"&:hover": {
+		background: active
+			? `linear-gradient(135deg,${accent},rgba(37,99,235,.92))`
+			: "rgba(255,255,255,.075)",
+	},
+});
+
+const dispatchExportPreviewTableSx = {
+	width: "100%",
+	borderCollapse: "collapse",
+
+	"& th": {
+		position: "sticky",
+		top: 0,
+		zIndex: 2,
+		textAlign: "left",
+		padding: "10px 12px",
+		color: "#93c5fd",
+		fontSize: 11,
+		fontWeight: 950,
+		textTransform: "uppercase",
+		letterSpacing: ".08em",
+		background: "rgba(15,23,42,.96)",
+		borderBottom: "1px solid rgba(255,255,255,.08)",
+		whiteSpace: "nowrap",
+	},
+
+	"& td": {
+		padding: "10px 12px",
+		color: "#e5e7eb",
+		fontSize: 12,
+		fontWeight: 750,
+		borderBottom: "1px solid rgba(255,255,255,.06)",
+		whiteSpace: "nowrap",
+		maxWidth: 260,
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+	},
+
+	"& tr:hover td": {
+		background: "rgba(255,255,255,.035)",
+	},
+};
+
 const bulkBar = {
 	position: "fixed",
 
@@ -2475,6 +2555,45 @@ const FROM_LOCATION_OPTIONS = [
 	"AL-P4-PKD-4",
 ];
 
+const DISPATCH_EXPORT_STATUS_OPTIONS = [
+	{
+		value: "ALL",
+		label: "All Status",
+	},
+	{
+		value: "READY",
+		label: "Packed",
+	},
+	{
+		value: "READY_TO_STORE",
+		label: "Ready To Store",
+	},
+	{
+		value: "WAREHOUSE_REQUESTED",
+		label: "Warehouse Requested",
+	},
+	{
+		value: "IN_WAREHOUSE",
+		label: "In Warehouse",
+	},
+	{
+		value: "READY_TO_DISPATCH",
+		label: "Ready To Dispatch",
+	},
+	{
+		value: "LOADED",
+		label: "Queued",
+	},
+	{
+		value: "DISPATCHED",
+		label: "Dispatched",
+	},
+	{
+		value: "WAREHOUSE_RETURN_REQUESTED",
+		label: "Warehouse Return Requested",
+	},
+];
+
 const smartRowMatches = (row, search) => {
 	const tokens =
 		tokenizeSmartSearch(search);
@@ -2648,6 +2767,10 @@ function DispatchedItemsPage() {
 		remarks: "",
 		location: "",
 	});
+
+	const [dispatchExportOpen, setDispatchExportOpen] = useState(false);
+	const [dispatchExportStatus, setDispatchExportStatus] = useState("ALL");
+	const [dispatchExportFormat, setDispatchExportFormat] = useState("CSV");
 
 	const filteredRows = useMemo(() => {
 		if (!Array.isArray(rows)) {
@@ -3175,6 +3298,285 @@ function DispatchedItemsPage() {
 			label: row.status || "—",
 			sx: pendingStatusChip,
 		};
+	};
+
+	const dispatchExportColumns = [
+		{
+			header: "Item Name",
+			getValue: (row) => row.name || row.itemName || "",
+		},
+		{
+			header: "SKU",
+			getValue: (row) => row.sku || "",
+		},
+		{
+			header: "PD No",
+			getValue: (row) => row.pdNo || "",
+		},
+		{
+			header: "DWG No",
+			getValue: (row) => row.drawingNo || "",
+		},
+		{
+			header: "Description",
+			getValue: (row) => row.description || "",
+		},
+		{
+			header: "Stock",
+			getValue: (row) => row.stock ?? 0,
+		},
+		{
+			header: "Client",
+			getValue: (row) => row.clientName || "",
+		},
+		{
+			header: "Plant",
+			getValue: (row) => row.plantCode || "",
+		},
+		{
+			header: "Location",
+			getValue: (row) => getCurrentLocation(row) || "",
+		},
+		{
+			header: "Status",
+			getValue: (row) => getDisplayStatus(row).label || "",
+		},
+		{
+			header: "Driver",
+			getValue: (row) => row.driverName || "",
+		},
+		{
+			header: "Vehicle",
+			getValue: (row) => row.vehicleNumber || "",
+		},
+		{
+			header: "Challan No",
+			getValue: (row) => getDispatchChallanNo(row) || "",
+		},
+		{
+			header: "Gate Pass No",
+			getValue: (row) => row.gatePassNumber || "",
+		},
+	];
+
+	const openDispatchExportModal = () => {
+		setDispatchExportStatus(statusFilter || "ALL");
+		setDispatchExportFormat("CSV");
+		setDispatchExportOpen(true);
+	};
+
+	const getDispatchExportSourceRows = (statusValue) => {
+		const selectedStatus =
+			String(statusValue || "ALL")
+				.trim()
+				.toUpperCase();
+
+		return (rows || []).filter((row) => {
+			if (!smartRowMatches(row, search)) {
+				return false;
+			}
+
+			if (
+				selectedStatus !== "ALL" &&
+				String(row.status || "").trim().toUpperCase() !== selectedStatus
+			) {
+				return false;
+			}
+
+			return true;
+		});
+	};
+
+	const buildDispatchExportRows = (statusValue) => {
+		return getDispatchExportSourceRows(statusValue).map((row) => {
+			const exportRow = {};
+
+			dispatchExportColumns.forEach((column) => {
+				exportRow[column.header] = column.getValue(row);
+			});
+
+			return exportRow;
+		});
+	};
+
+	const dispatchExportPreviewRows = useMemo(() => {
+		return buildDispatchExportRows(dispatchExportStatus);
+	}, [
+		rows,
+		search,
+		dispatchExportStatus,
+	]);
+
+	const csvEscape = (value) => {
+		const text =
+			String(value ?? "")
+				.replace(/\r?\n|\r/g, " ")
+				.trim();
+
+		return `"${text.replace(/"/g, '""')}"`;
+	};
+
+	const escapeHtml = (value) => {
+		return String(value ?? "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#039;");
+	};
+
+	const normalizeExportFileName = (value) => {
+		return String(value || "DISPATCH_EXPORT")
+			.trim()
+			.replace(/[^\w.-]+/g, "_")
+			.replace(/^_+|_+$/g, "") || "DISPATCH_EXPORT";
+	};
+
+	const downloadTextFile = ({
+		content,
+		fileName,
+		mimeType,
+	}) => {
+		const blob =
+			new Blob([content], {
+				type: mimeType,
+			});
+
+		const url =
+			URL.createObjectURL(blob);
+
+		const a =
+			document.createElement("a");
+
+		a.href = url;
+		a.download = fileName;
+
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+
+		setTimeout(() => {
+			URL.revokeObjectURL(url);
+		}, 10000);
+	};
+
+	const exportDispatchData = () => {
+		const exportRows =
+			buildDispatchExportRows(dispatchExportStatus);
+
+		if (exportRows.length === 0) {
+			alert("No rows found for selected export status");
+			return;
+		}
+
+		const statusLabel =
+			DISPATCH_EXPORT_STATUS_OPTIONS.find(
+				(option) => option.value === dispatchExportStatus
+			)?.label || dispatchExportStatus;
+
+		const dateStamp =
+			new Date().toISOString().slice(0, 10);
+
+		const cleanStatus =
+			normalizeExportFileName(statusLabel);
+
+		const baseFileName =
+			`DISPATCH_ITEMS_${cleanStatus}_${dateStamp}`;
+
+		const headers =
+			dispatchExportColumns.map((column) => column.header);
+
+		if (dispatchExportFormat === "CSV") {
+			const csv =
+				"\uFEFF" +
+				[
+					headers.map(csvEscape).join(","),
+					...exportRows.map((row) =>
+						headers
+							.map((header) => csvEscape(row[header]))
+							.join(",")
+					),
+				].join("\n");
+
+			downloadTextFile({
+				content: csv,
+				fileName: `${baseFileName}.csv`,
+				mimeType: "text/csv;charset=utf-8;",
+			});
+
+			setDispatchExportOpen(false);
+			return;
+		}
+
+		const tableHead =
+			headers
+				.map((header) => `<th>${escapeHtml(header)}</th>`)
+				.join("");
+
+		const tableBody =
+			exportRows
+				.map((row) => {
+					const cells =
+						headers
+							.map((header) => `<td>${escapeHtml(row[header])}</td>`)
+							.join("");
+
+					return `<tr>${cells}</tr>`;
+				})
+				.join("");
+
+		const excelHtml = `
+		<html>
+			<head>
+				<meta charset="UTF-8" />
+				<style>
+					body {
+						font-family: Arial, sans-serif;
+					}
+
+					table {
+						border-collapse: collapse;
+						width: 100%;
+					}
+
+					th {
+						background: #111827;
+						color: #ffffff;
+						font-weight: 700;
+						border: 1px solid #d1d5db;
+						padding: 8px;
+						text-align: left;
+					}
+
+					td {
+						border: 1px solid #d1d5db;
+						padding: 8px;
+						mso-number-format: "\\@";
+					}
+				</style>
+			</head>
+
+			<body>
+				<table>
+					<thead>
+						<tr>${tableHead}</tr>
+					</thead>
+
+					<tbody>
+						${tableBody}
+					</tbody>
+				</table>
+			</body>
+		</html>
+	`;
+
+		downloadTextFile({
+			content: excelHtml,
+			fileName: `${baseFileName}.xls`,
+			mimeType: "application/vnd.ms-excel;charset=utf-8;",
+		});
+
+		setDispatchExportOpen(false);
 	};
 
 	const formatLocalDateTimeDisplay = (value) => {
@@ -5820,6 +6222,13 @@ function DispatchedItemsPage() {
 						</Box>
 
 						<Button
+							onClick={openDispatchExportModal}
+							sx={dispatchExportButtonSx}
+						>
+							⬇ Export
+						</Button>
+
+						<Button
 							onClick={openChallanHistory}
 							sx={challanHistoryButtonSx}
 						>
@@ -6799,6 +7208,239 @@ function DispatchedItemsPage() {
 							</Button>
 						</div>
 					)}
+				{dispatchExportOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 5500 }}
+						onClick={() => setDispatchExportOpen(false)}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 820,
+								maxHeight: "88vh",
+							}}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#10b981")}>
+										⬇
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Export Dispatch Data
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Export dispatch table columns by selected status
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									sx={modalCloseButtonSx}
+									onClick={() => setDispatchExportOpen(false)}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<Box
+									sx={{
+										display: "grid",
+										gridTemplateColumns: "1fr 1fr",
+										gap: 2,
+										mb: 2,
+									}}
+								>
+									<Box>
+										<Box sx={dispatchTripFieldLabelSx}>
+											Export Status
+										</Box>
+
+										<Box
+											component="select"
+											value={dispatchExportStatus}
+											onChange={(e) =>
+												setDispatchExportStatus(e.target.value)
+											}
+											sx={dispatchTripNativeSelectSx}
+										>
+											{DISPATCH_EXPORT_STATUS_OPTIONS.map((option) => (
+												<option
+													key={option.value}
+													value={option.value}
+												>
+													{option.label}
+												</option>
+											))}
+										</Box>
+									</Box>
+
+									<Box>
+										<Box sx={dispatchTripFieldLabelSx}>
+											Export Format
+										</Box>
+
+										<Box
+											sx={{
+												display: "flex",
+												gap: 1,
+											}}
+										>
+											<Button
+												onClick={() => setDispatchExportFormat("CSV")}
+												sx={exportFormatButtonSx(
+													dispatchExportFormat === "CSV",
+													"#60a5fa"
+												)}
+											>
+												CSV
+											</Button>
+
+											<Button
+												onClick={() => setDispatchExportFormat("EXCEL")}
+												sx={exportFormatButtonSx(
+													dispatchExportFormat === "EXCEL",
+													"#10b981"
+												)}
+											>
+												Excel
+											</Button>
+										</Box>
+									</Box>
+								</Box>
+
+								<Box sx={historyStatsGridSx}>
+									<HistoryMiniStat
+										label="Rows to Export"
+										value={dispatchExportPreviewRows.length}
+										accent="#10b981"
+									/>
+
+									<HistoryMiniStat
+										label="Columns"
+										value={dispatchExportColumns.length}
+										accent="#60a5fa"
+									/>
+
+									<HistoryMiniStat
+										label="Format"
+										value={dispatchExportFormat}
+										accent="#a78bfa"
+									/>
+
+									<HistoryMiniStat
+										label="Search"
+										value={search ? "Applied" : "None"}
+										accent="#f59e0b"
+									/>
+								</Box>
+
+								<Box
+									sx={{
+										mb: 1,
+										color: "rgba(255,255,255,.55)",
+										fontSize: 12,
+										fontWeight: 750,
+									}}
+								>
+									Export preview uses the same dispatch table column order.
+									Search filter is also applied. Pagination is ignored.
+								</Box>
+
+								<Box
+									sx={{
+										maxHeight: 280,
+										overflow: "auto",
+										borderRadius: "16px",
+										border: "1px solid rgba(255,255,255,.08)",
+										background: "rgba(2,6,23,.25)",
+										...premiumScrollbarSx("#10b981"),
+									}}
+								>
+									<Box
+										component="table"
+										sx={{
+											...dispatchExportPreviewTableSx,
+											minWidth: 1200,
+										}}
+									>
+										<thead>
+											<tr>
+												{dispatchExportColumns.map((column) => (
+													<th key={column.header}>
+														{column.header}
+													</th>
+												))}
+											</tr>
+										</thead>
+
+										<tbody>
+											{dispatchExportPreviewRows.slice(0, 20).map((row, index) => (
+												<tr key={index}>
+													{dispatchExportColumns.map((column) => (
+														<td
+															key={column.header}
+															title={row[column.header]}
+														>
+															{row[column.header] || "—"}
+														</td>
+													))}
+												</tr>
+											))}
+										</tbody>
+									</Box>
+
+									{dispatchExportPreviewRows.length === 0 && (
+										<Box sx={modalEmptyStateSx}>
+											No rows found for selected status.
+										</Box>
+									)}
+								</Box>
+
+								{dispatchExportPreviewRows.length > 20 && (
+									<Box
+										sx={{
+											mt: 1,
+											color: "rgba(255,255,255,.48)",
+											fontSize: 11,
+											fontWeight: 750,
+										}}
+									>
+										Showing first 20 rows in preview. Full export will include{" "}
+										{dispatchExportPreviewRows.length} rows.
+									</Box>
+								)}
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									onClick={() => setDispatchExportOpen(false)}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={dispatchExportPreviewRows.length === 0}
+									onClick={exportDispatchData}
+									sx={{
+										...premiumButton,
+										background:
+											dispatchExportFormat === "EXCEL"
+												? "linear-gradient(135deg,#059669,#10b981)"
+												: "linear-gradient(135deg,#2563eb,#3b82f6)",
+									}}
+								>
+									Export {dispatchExportFormat}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
 				{customChallanOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 5700 }}
