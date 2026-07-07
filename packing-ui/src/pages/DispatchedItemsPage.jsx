@@ -771,6 +771,37 @@ const customChallanBodySx = {
 	p: 1.4,
 };
 
+
+const premiumScrollbarSx = (accent = "#60a5fa") => ({
+	scrollbarWidth: "thin",
+	scrollbarColor: `${accent} rgba(15,23,42,.78)`,
+
+	"&::-webkit-scrollbar": {
+		width: 10,
+		height: 10,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background:
+			"linear-gradient(180deg,rgba(15,23,42,.95),rgba(2,6,23,.88))",
+		borderRadius: 999,
+		border: "1px solid rgba(255,255,255,.05)",
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			`linear-gradient(180deg,${accent},rgba(147,197,253,.88))`,
+		borderRadius: 999,
+		border: "2px solid rgba(15,23,42,.95)",
+		boxShadow: `0 0 18px ${accent}55`,
+	},
+
+	"&::-webkit-scrollbar-thumb:hover": {
+		background:
+			`linear-gradient(180deg,${accent},#bfdbfe)`,
+	},
+});
+
 const customChallanListSx = {
 	display: "flex",
 	flexDirection: "column",
@@ -1738,36 +1769,6 @@ const challanHistoryStatValueSx = {
 	fontWeight: 950,
 	lineHeight: 1,
 };
-
-const premiumScrollbarSx = (accent = "#60a5fa") => ({
-	scrollbarWidth: "thin",
-	scrollbarColor: `${accent} rgba(15,23,42,.78)`,
-
-	"&::-webkit-scrollbar": {
-		width: 10,
-		height: 10,
-	},
-
-	"&::-webkit-scrollbar-track": {
-		background:
-			"linear-gradient(180deg,rgba(15,23,42,.95),rgba(2,6,23,.88))",
-		borderRadius: 999,
-		border: "1px solid rgba(255,255,255,.05)",
-	},
-
-	"&::-webkit-scrollbar-thumb": {
-		background:
-			`linear-gradient(180deg,${accent},rgba(147,197,253,.88))`,
-		borderRadius: 999,
-		border: "2px solid rgba(15,23,42,.95)",
-		boxShadow: `0 0 18px ${accent}55`,
-	},
-
-	"&::-webkit-scrollbar-thumb:hover": {
-		background:
-			`linear-gradient(180deg,${accent},#bfdbfe)`,
-	},
-});
 
 const challanHistoryScrollSx = {
 	flex: 1,
