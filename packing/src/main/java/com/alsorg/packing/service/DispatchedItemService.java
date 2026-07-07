@@ -449,35 +449,72 @@ public class DispatchedItemService {
             String fromLocation,
             String username,
             java.util.Set<String> allowedPlants) {
+
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
 
         assertDispatchItemPlantAccess(item, allowedPlants);
 
-        if (item.getPlantCode() != null
+        if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
+            throw new IllegalStateException(
+                    "Only READY_TO_STORE items can be moved to warehouse");
+        }
+
+        String cleanWarehouse = cleanLocationCode(warehouseCode);
+
+        if (cleanWarehouse == null || cleanWarehouse.isBlank()) {
+            throw new RuntimeException("Warehouse code required");
+        }
+
+        assertAllowedWarehouseCode(cleanWarehouse);
+
+        String cleanFromLocation = firstNonBlank(
+                fromLocation,
+                item.getCurrentLocationCode(),
+                item.getLocation(),
+                item.getPackedAreaCode());
+
+        if (cleanFromLocation == null || cleanFromLocation.isBlank()) {
+            throw new RuntimeException("From location required");
+        }
+
+        assertAllowedFromLocation(cleanFromLocation);
+
+        /*
+         * Keep plant access safety.
+         * But allow your fixed warehouse list globally.
+         */
+        if (!FIXED_WAREHOUSE_CODES.contains(cleanWarehouse)
+                && item.getPlantCode() != null
                 && !item.getPlantCode().isBlank()
-                && !plantLocationService.isWarehouseAllowed(item.getPlantCode(), warehouseCode)) {
+                && !plantLocationService.isWarehouseAllowed(
+                        item.getPlantCode(),
+                        cleanWarehouse)) {
 
             throw new RuntimeException(
-                    "Warehouse " + warehouseCode + " is not allowed for plant " + item.getPlantCode());
+                    "Warehouse " + cleanWarehouse
+                            + " is not allowed for plant "
+                            + item.getPlantCode());
         }
 
-        if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
-            throw new IllegalStateException("Only READY_TO_STORE items can be moved to warehouse");
-        }
-
-        String gatePass = generateGatePassNumber(warehouseCode);
+        String gatePass = generateGatePassNumber(cleanWarehouse);
 
         item.setStatus(ItemDispatchStatus.WAREHOUSE_REQUESTED);
-        item.setFromLocation(fromLocation);
+        item.setFromLocation(cleanFromLocation);
+        item.setWarehouseCode(cleanWarehouse);
+        item.setGatePassNumber(gatePass);
+        item.setStoredAt(null);
+
         item.setCreatedBy(
                 username != null && !username.isBlank()
                         ? username
                         : "SYSTEM");
-        item.setWarehouseCode(warehouseCode);
-        item.setGatePassNumber(gatePass);
-        item.setStoredAt(null);
 
+        /*
+         * Important:
+         * Do NOT set currentLocationCode to warehouse here.
+         * Item is only requested. It enters warehouse only after approval.
+         */
         dispatchedRepo.save(item);
 
         auditLogService.log(
@@ -517,11 +554,26 @@ public class DispatchedItemService {
             String fromLocation,
             String username,
             java.util.Set<String> allowedPlants) {
-        if (warehouseCode == null || warehouseCode.isBlank()) {
+
+        if (itemIds == null || itemIds.isEmpty()) {
+            throw new RuntimeException("No items selected");
+        }
+
+        String cleanWarehouse = cleanLocationCode(warehouseCode);
+
+        if (cleanWarehouse == null || cleanWarehouse.isBlank()) {
             throw new RuntimeException("Warehouse code required");
         }
 
-        String gatePass = generateGatePassNumber(warehouseCode);
+        assertAllowedWarehouseCode(cleanWarehouse);
+
+        String cleanFromLocation = cleanLocationCode(fromLocation);
+
+        if (cleanFromLocation == null || cleanFromLocation.isBlank()) {
+            throw new RuntimeException("From location required");
+        }
+
+        assertAllowedFromLocation(cleanFromLocation);
 
         List<DispatchedItem> items = dispatchedRepo.findAllById(itemIds);
 
@@ -532,29 +584,38 @@ public class DispatchedItemService {
         for (DispatchedItem item : items) {
             assertDispatchItemPlantAccess(item, allowedPlants);
 
-            if (item.getPlantCode() != null
-                    && !item.getPlantCode().isBlank()
-                    && !plantLocationService.isWarehouseAllowed(item.getPlantCode(), warehouseCode)) {
-
+            if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
                 throw new RuntimeException(
-                        "Warehouse " + warehouseCode + " is not allowed for plant " + item.getPlantCode());
+                        "Invalid item state: " + item.getZohoItemId());
             }
 
-            if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
-                throw new RuntimeException("Invalid item state: " + item.getZohoItemId());
+            if (!FIXED_WAREHOUSE_CODES.contains(cleanWarehouse)
+                    && item.getPlantCode() != null
+                    && !item.getPlantCode().isBlank()
+                    && !plantLocationService.isWarehouseAllowed(
+                            item.getPlantCode(),
+                            cleanWarehouse)) {
+
+                throw new RuntimeException(
+                        "Warehouse " + cleanWarehouse
+                                + " is not allowed for plant "
+                                + item.getPlantCode());
             }
         }
 
+        String gatePass = generateGatePassNumber(cleanWarehouse);
+
         for (DispatchedItem item : items) {
             item.setStatus(ItemDispatchStatus.WAREHOUSE_REQUESTED);
-            item.setWarehouseCode(warehouseCode);
+            item.setWarehouseCode(cleanWarehouse);
             item.setGatePassNumber(gatePass);
-            item.setFromLocation(fromLocation);
+            item.setFromLocation(cleanFromLocation);
+            item.setStoredAt(null);
+
             item.setCreatedBy(
                     username != null && !username.isBlank()
                             ? username
                             : "SYSTEM");
-            item.setStoredAt(null);
         }
 
         dispatchedRepo.saveAll(items);
@@ -579,71 +640,153 @@ public class DispatchedItemService {
         return gatePass;
     }
 
-    public void approveWarehouseMove(String zohoItemId, String enteredGatePass, String username) {
+    public void approveWarehouseMove(
+            String zohoItemId,
+            String enteredGatePass,
+            String username) {
+
+        approveWarehouseMove(
+                zohoItemId,
+                enteredGatePass,
+                username,
+                null,
+                "WAREHOUSE");
+    }
+
+    public void approveWarehouseMove(
+            String zohoItemId,
+            String enteredGatePass,
+            String username,
+            java.util.Set<String> allowedPlants,
+            String role) {
 
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
+
+        assertDispatchItemPlantAccess(item, allowedPlants);
+
+        if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_REQUESTED) {
+            throw new IllegalStateException("Item not pending warehouse approval");
+        }
 
         if (enteredGatePass == null || enteredGatePass.isBlank()) {
             throw new IllegalStateException("Gate pass required");
         }
 
-        if (!enteredGatePass.equals(item.getGatePassNumber())) {
+        String savedGatePass = normalizeGatePass(item.getGatePassNumber());
+
+        String userGatePass = normalizeGatePass(enteredGatePass);
+
+        if (savedGatePass.isBlank() || !savedGatePass.equals(userGatePass)) {
             throw new IllegalStateException("Invalid Gate Pass");
         }
 
-        if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_REQUESTED) {
-            throw new IllegalStateException("Item not pending warehouse approval");
-        }
+        String warehouseLocation = firstNonBlank(
+                item.getWarehouseCode(),
+                item.getCurrentLocationCode(),
+                item.getLocation(),
+                "WH");
+
+        warehouseLocation = cleanLocationCode(warehouseLocation);
 
         item.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
-        item.setStoredAt(LocalDateTime.now());
+        item.setStoredAt(LocalDateTime.now(APP_ZONE));
+        item.setWarehouseCode(warehouseLocation);
+        item.setCurrentLocationCode(warehouseLocation);
+        item.setLocation(warehouseLocation);
 
         dispatchedRepo.save(item);
 
+        syncPacketItemLocation(
+                item,
+                warehouseLocation,
+                null);
+
+        String safeRole = role != null && !role.isBlank()
+                ? role
+                : "WAREHOUSE";
+
         auditLogService.log(
                 zohoItemId,
-                "Warehouse approved | GP: " + enteredGatePass,
+                "Warehouse approved | GP: " + item.getGatePassNumber(),
                 username,
-                "DISPATCH");
+                safeRole);
 
         activityLogService.log(
                 zohoItemId,
                 "WAREHOUSE APPROVED",
                 username,
-                "DISPATCH",
+                safeRole,
                 "WAREHOUSE_REQUESTED",
                 "IN_WAREHOUSE",
-                enteredGatePass);
+                item.getGatePassNumber());
     }
 
-    public void rejectWarehouseMove(String zohoItemId, String username) {
+    public void rejectWarehouseMove(
+            String zohoItemId,
+            String username) {
+
+        rejectWarehouseMove(
+                zohoItemId,
+                username,
+                null,
+                "WAREHOUSE");
+    }
+
+    public void rejectWarehouseMove(
+            String zohoItemId,
+            String username,
+            java.util.Set<String> allowedPlants,
+            String role) {
 
         DispatchedItem item = dispatchedRepo.findById(zohoItemId)
                 .orElseThrow(() -> new IllegalStateException("Item not found"));
+
+        assertDispatchItemPlantAccess(item, allowedPlants);
 
         if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_REQUESTED) {
             throw new IllegalStateException("Item not pending warehouse approval");
         }
 
+        String returnLocation = firstNonBlank(
+                item.getFromLocation(),
+                item.getCurrentLocationCode(),
+                item.getLocation(),
+                item.getPackedAreaCode());
+
         item.setStatus(ItemDispatchStatus.READY_TO_STORE);
         item.setWarehouseCode(null);
         item.setGatePassNumber(null);
         item.setStoredAt(null);
+        item.setFromLocation(null);
+
+        if (returnLocation != null && !returnLocation.isBlank()) {
+            item.setCurrentLocationCode(returnLocation);
+            item.setLocation(returnLocation);
+        }
 
         dispatchedRepo.save(item);
+
+        syncPacketItemLocation(
+                item,
+                returnLocation,
+                item.getFgZoneCode());
+
+        String safeRole = role != null && !role.isBlank()
+                ? role
+                : "WAREHOUSE";
 
         auditLogService.log(
                 zohoItemId,
                 "Warehouse move rejected",
                 username,
-                "DISPATCH");
+                safeRole);
 
         activityLogService.log(
                 zohoItemId,
                 "WAREHOUSE REJECTED",
                 username,
-                "DISPATCH",
+                safeRole,
                 "WAREHOUSE_REQUESTED",
                 "READY_TO_STORE",
                 null);
@@ -918,29 +1061,28 @@ public class DispatchedItemService {
         return generateGatePassNumber(warehouseCode);
     }
 
-    private String generateGatePassNumber(
-            String warehouseCode) {
-        String cleanWarehouse = warehouseCode == null || warehouseCode.trim().isBlank()
-                ? "WH"
-                : warehouseCode
-                        .trim()
-                        .toUpperCase()
-                        .replaceAll("[^A-Z0-9]", "");
+    private String generateGatePassNumber(String warehouseCode) {
+        String warehouse = warehouseShortCode(warehouseCode);
 
-        if (cleanWarehouse.isBlank()) {
-            cleanWarehouse = "WH";
+        String date = java.time.LocalDate.now(APP_ZONE)
+                .format(
+                        java.time.format.DateTimeFormatter.ofPattern("MMdd"));
+
+        for (int i = 0; i < 30; i++) {
+            String suffix = UUID.randomUUID()
+                    .toString()
+                    .replace("-", "")
+                    .substring(0, 5)
+                    .toUpperCase();
+
+            String gatePass = "GP-" + warehouse + "-" + date + "-" + suffix;
+
+            if (dispatchedRepo.findByGatePassNumber(gatePass).isEmpty()) {
+                return gatePass;
+            }
         }
 
-        String date = java.time.LocalDate.now(
-                java.time.ZoneId.of("Asia/Kolkata")).format(
-                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
-
-        String suffix = UUID.randomUUID()
-                .toString()
-                .substring(0, 6)
-                .toUpperCase();
-
-        return "GP-" + cleanWarehouse + "-" + date + "-" + suffix;
+        throw new RuntimeException("Could not generate unique gate pass number");
     }
 
     public void bulkUpdateStatus(
@@ -1072,5 +1214,133 @@ public class DispatchedItemService {
 
         return item;
     }
+
+    private String cleanLocationCode(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String text = value.trim()
+                .toUpperCase()
+                .replaceAll("\\s+", "");
+
+        if (text.isBlank()
+                || "NULL".equals(text)
+                || "UNDEFINED".equals(text)
+                || "-".equals(text)) {
+            return null;
+        }
+
+        return text;
+    }
+
+    private void assertAllowedWarehouseCode(String warehouseCode) {
+        if (!FIXED_WAREHOUSE_CODES.contains(warehouseCode)) {
+            throw new RuntimeException(
+                    "Invalid warehouse code: " + warehouseCode);
+        }
+    }
+
+    private void assertAllowedFromLocation(String fromLocation) {
+        if (!FIXED_FROM_LOCATION_CODES.contains(fromLocation)) {
+            throw new RuntimeException(
+                    "Invalid from location: " + fromLocation);
+        }
+    }
+
+    private String warehouseShortCode(String warehouseCode) {
+        String clean = cleanLocationCode(warehouseCode);
+
+        if (clean == null || clean.isBlank()) {
+            return "WH";
+        }
+
+        return switch (clean) {
+            case "BLS-WH-1" -> "BLS1";
+            case "RTP-WH-2" -> "RTP2";
+            case "AL-P1" -> "ALP1";
+            case "AL-P2" -> "ALP2";
+            case "AL-P3" -> "ALP3";
+            case "AL-P4" -> "ALP4";
+            default -> clean.replaceAll("[^A-Z0-9]", "");
+        };
+    }
+
+    private String normalizeGatePass(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .trim()
+                .toUpperCase()
+                .replace("–", "-")
+                .replace("—", "-")
+                .replaceAll("\\s+", "")
+                .replaceAll("[^A-Z0-9-]", "");
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+
+        for (String value : values) {
+            if (value != null && !value.trim().isBlank()) {
+                return value.trim();
+            }
+        }
+
+        return "";
+    }
+
+    private void syncPacketItemLocation(
+            DispatchedItem item,
+            String location,
+            String fgZoneCode) {
+
+        if (item == null || item.getPacketItemId() == null) {
+            return;
+        }
+
+        packetItemRepo.findById(item.getPacketItemId())
+                .ifPresent(packetItem -> {
+                    if (location != null && !location.isBlank()) {
+                        packetItem.setCurrentLocationCode(location);
+                        packetItem.setLocation(location);
+                    }
+
+                    packetItem.setWarehouseCode(item.getWarehouseCode());
+                    packetItem.setFgZoneCode(fgZoneCode);
+
+                    packetItemRepo.save(packetItem);
+                });
+    }
+
+    private static final java.time.ZoneId APP_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+
+    private static final java.util.Set<String> FIXED_WAREHOUSE_CODES = java.util.Set.of(
+            "BLS-WH-1",
+            "RTP-WH-2",
+            "AL-P1",
+            "AL-P2",
+            "AL-P3",
+            "AL-P4");
+
+    private static final java.util.Set<String> FIXED_FROM_LOCATION_CODES = java.util.Set.of(
+            "AL-P1-FG-1-A",
+            "AL-P1-FG-1-B",
+            "AL-P1-FG-1-C",
+            "AL-P2-FG-2",
+            "AL-P3-FG-3",
+            "AL-P4-FG-4",
+            "AL-P1",
+            "AL-P2",
+            "AL-P3",
+            "AL-P4",
+            "AL-P1-PKD-1",
+            "AL-P2-PKD-2",
+            "AL-P3-PKD-3",
+            "AL-P4-PKD-4");
 
 }

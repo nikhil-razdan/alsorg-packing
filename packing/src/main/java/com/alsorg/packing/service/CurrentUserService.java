@@ -19,8 +19,7 @@ public class CurrentUserService {
 
     public CurrentUserService(
             UserRepository userRepository,
-            PlantLocationService plantLocationService
-    ) {
+            PlantLocationService plantLocationService) {
         this.userRepository = userRepository;
         this.plantLocationService = plantLocationService;
     }
@@ -30,18 +29,14 @@ public class CurrentUserService {
      * Uses Spring SecurityContext populated by JwtAuthenticationFilter.
      */
     public User requireCurrentUser() {
-        String username =
-                usernameFromSecurityContext();
+        String username = usernameFromSecurityContext();
 
         if (username == null || username.isBlank()) {
             throw new AccessDeniedException("Authentication required");
         }
 
-        User user =
-                userRepository.findByUsernameIgnoreCase(username)
-                        .orElseThrow(() ->
-                                new AccessDeniedException("User not found")
-                        );
+        User user = userRepository.findByUsernameIgnoreCase(username)
+                .orElseThrow(() -> new AccessDeniedException("User not found"));
 
         if (!user.isEnabled()) {
             throw new AccessDeniedException("User is disabled");
@@ -58,52 +53,47 @@ public class CurrentUserService {
      * If Authorization header is missing because frontend now uses HttpOnly cookie,
      * fallback to SecurityContext.
      */
-    public User getCurrentUserFromAuth(
-        String auth
-) {
-    String username = null;
+    public User getCurrentUserFromAuth(String auth) {
+        String username = null;
 
-    if (auth != null && auth.startsWith("Bearer ")) {
-        username = JwtUtil.getUsername(auth);
+        if (auth != null && auth.startsWith("Bearer ")) {
+            String token = auth.substring(7).trim();
+
+            if (!token.isBlank()) {
+                username = JwtUtil.getUsername(token);
+            }
+        }
+
+        if (username == null || username.isBlank()) {
+            username = usernameFromSecurityContext();
+        }
+
+        if (username == null || username.isBlank()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+
+        final String finalUsername = username;
+
+        User user = userRepository.findByUsernameIgnoreCase(finalUsername)
+                .orElseThrow(() -> new AccessDeniedException(
+                        "User not found: " + finalUsername));
+
+        if (!user.isEnabled()) {
+            throw new AccessDeniedException("User is disabled");
+        }
+
+        return user;
     }
-
-    if (username == null || username.isBlank()) {
-        username = usernameFromSecurityContext();
-    }
-
-    if (username == null || username.isBlank()) {
-        throw new AccessDeniedException("Authentication required");
-    }
-
-    final String finalUsername = username;
-
-    User user =
-            userRepository.findByUsernameIgnoreCase(finalUsername)
-                    .orElseThrow(() ->
-                            new AccessDeniedException(
-                                    "User not found: " + finalUsername
-                            )
-                    );
-
-    if (!user.isEnabled()) {
-        throw new AccessDeniedException("User is disabled");
-    }
-
-    return user;
-}
 
     private String usernameFromSecurityContext() {
-        Authentication authentication =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
+        Authentication authentication = SecurityContextHolder
+                .getContext()
+                .getAuthentication();
 
-        if (
-                authentication == null
-                        || !authentication.isAuthenticated()
-                        || authentication.getName() == null
-                        || authentication.getName().isBlank()
-        ) {
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
             return null;
         }
 
@@ -136,8 +126,7 @@ public class CurrentUserService {
 
     public boolean hasRole(
             User user,
-            String role
-    ) {
+            String role) {
         return user != null
                 && user.getRole() != null
                 && user.getRole()
@@ -147,8 +136,7 @@ public class CurrentUserService {
 
     public boolean hasModule(
             User user,
-            String module
-    ) {
+            String module) {
         return user != null
                 && user.getEffectiveModules() != null
                 && user.getEffectiveModules()
@@ -171,13 +159,11 @@ public class CurrentUserService {
             return plantLocationService.getAllPlantCodes();
         }
 
-        Set<String> plants =
-                user.getEffectivePlantCodes();
+        Set<String> plants = user.getEffectivePlantCodes();
 
         if (plants == null || plants.isEmpty()) {
             throw new AccessDeniedException(
-                    "No plant access assigned"
-            );
+                    "No plant access assigned");
         }
 
         return plants;
@@ -191,8 +177,7 @@ public class CurrentUserService {
 
     public boolean canAccessPlant(
             User user,
-            String plantCode
-    ) {
+            String plantCode) {
         if (plantCode == null || plantCode.isBlank()) {
             return false;
         }
@@ -203,22 +188,16 @@ public class CurrentUserService {
 
     public String resolvePlantForWrite(
             User user,
-            String requestedPlantCode
-    ) {
-        Set<String> allowed =
-                allowedPlants(user);
+            String requestedPlantCode) {
+        Set<String> allowed = allowedPlants(user);
 
-        if (
-                requestedPlantCode != null
-                        && !requestedPlantCode.isBlank()
-        ) {
-            String clean =
-                    requestedPlantCode.trim();
+        if (requestedPlantCode != null
+                && !requestedPlantCode.isBlank()) {
+            String clean = requestedPlantCode.trim();
 
             if (!allowed.contains(clean)) {
                 throw new AccessDeniedException(
-                        "User does not have access to plant: " + clean
-                );
+                        "User does not have access to plant: " + clean);
             }
 
             return clean;
@@ -229,8 +208,7 @@ public class CurrentUserService {
         }
 
         throw new AccessDeniedException(
-                "Plant selection required"
-        );
+                "Plant selection required");
     }
 
     public boolean canAccessWarehouse(User user) {
@@ -243,5 +221,16 @@ public class CurrentUserService {
     public boolean canViewAllWarehouseData(User user) {
         return isAdmin(user)
                 || isDispatch(user);
+    }
+
+    public boolean canGenerateWarehouseGatePass(User user) {
+        return isAdmin(user) || isDispatch(user);
+    }
+
+    public boolean canApproveWarehouseMove(User user) {
+        return user != null
+                && (isAdmin(user)
+                        || isWarehouse(user)
+                        || user.isWarehouseAccess());
     }
 }

@@ -18,9 +18,9 @@ import org.springframework.web.multipart.MultipartFile;
 import com.alsorg.packing.service.WarehouseService;
 import com.alsorg.packing.domain.imports.ImportPreviewRow;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
-import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
@@ -64,52 +64,93 @@ public class WarehouseController {
         }
 
         @PostMapping("/{zohoItemId}/store")
-        public ResponseEntity<Map<String, String>> moveToWarehouse(
+        public ResponseEntity<?> moveToWarehouse(
                         @PathVariable String zohoItemId,
                         @RequestParam String warehouseCode,
                         @RequestParam String fromLocation,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                String token = auth.replace("Bearer ", "");
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
+                }
 
                 String gatePass = dservice.moveToWarehouse(
                                 zohoItemId,
                                 warehouseCode,
                                 fromLocation,
-                                JwtUtil.getUsername(token));
+                                user.getUsername(),
+                                currentUserService.allowedPlants(user));
 
-                return ResponseEntity.ok(Map.of("gatePass", gatePass));
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "gatePass", gatePass,
+                                                "status", "WAREHOUSE_REQUESTED"));
         }
 
+        @SuppressWarnings("unchecked")
         @PostMapping("/bulk-move")
-        public ResponseEntity<Map<String, String>> bulkMoveToWarehouse(
+        public ResponseEntity<?> bulkMoveToWarehouse(
                         @RequestBody Map<String, Object> body,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                String token = auth.replace("Bearer ", "");
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
+                }
 
                 List<String> itemIds = (List<String>) body.get("itemIds");
+
                 String warehouseCode = (String) body.get("warehouseCode");
+
                 String fromLocation = (String) body.get("fromLocation");
 
                 String gatePass = dservice.bulkMoveToWarehouse(
                                 itemIds,
                                 warehouseCode,
                                 fromLocation,
-                                JwtUtil.getUsername(token));
+                                user.getUsername(),
+                                currentUserService.allowedPlants(user));
 
-                return ResponseEntity.ok(Map.of("gatePass", gatePass));
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "gatePass", gatePass,
+                                                "status", "WAREHOUSE_REQUESTED"));
         }
 
         @PostMapping("/{zohoItemId}/approve")
-        public void approveWarehouse(
+        public ResponseEntity<?> approveWarehouse(
                         @PathVariable String zohoItemId,
                         @RequestParam String gatePass,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                String token = auth.replace("Bearer ", "");
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                assertWarehouseAccess(user);
+
+                if (!currentUserService.canApproveWarehouseMove(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only WAREHOUSE / ADMIN / warehouse-access user can approve warehouse gate pass");
+                }
 
                 dservice.approveWarehouseMove(
                                 zohoItemId,
                                 gatePass,
-                                JwtUtil.getUsername(token));
+                                user.getUsername(),
+                                currentUserService.allowedPlants(user),
+                                user.getRole());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message", "Warehouse approved successfully",
+                                                "status", "IN_WAREHOUSE"));
         }
 
         @PostMapping("/import")
@@ -136,14 +177,30 @@ public class WarehouseController {
         }
 
         @PostMapping("/{zohoItemId}/reject")
-        public void rejectWarehouse(
+        public ResponseEntity<?> rejectWarehouse(
                         @PathVariable String zohoItemId,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                String token = auth.replace("Bearer ", "");
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                assertWarehouseAccess(user);
+
+                if (!currentUserService.canApproveWarehouseMove(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only WAREHOUSE / ADMIN / warehouse-access user can reject warehouse gate pass");
+                }
 
                 dservice.rejectWarehouseMove(
                                 zohoItemId,
-                                JwtUtil.getUsername(token));
+                                user.getUsername(),
+                                currentUserService.allowedPlants(user),
+                                user.getRole());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message", "Warehouse request rejected",
+                                                "status", "READY_TO_STORE"));
         }
 
         @PostMapping("/import/preview")

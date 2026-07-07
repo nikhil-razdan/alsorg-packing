@@ -183,8 +183,10 @@ public class DispatchedItemsController {
                         @RequestParam(required = false) String fromLocation) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
+                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
                 }
 
                 if (warehouseCode == null || warehouseCode.isBlank()) {
@@ -199,7 +201,10 @@ public class DispatchedItemsController {
                                 currentUserService.allowedPlants(user));
 
                 return ResponseEntity.ok(
-                                java.util.Map.of("gatePass", gatePass));
+                                java.util.Map.of(
+                                                "gatePass", gatePass,
+                                                "status", "WAREHOUSE_REQUESTED",
+                                                "message", "Gate pass generated. Awaiting warehouse approval."));
         }
 
         @PostMapping("/bulk/store")
@@ -210,8 +215,10 @@ public class DispatchedItemsController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
+                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
                 }
 
                 String gatePass = dispatchedItemService.bulkMoveToWarehouse(
@@ -222,7 +229,10 @@ public class DispatchedItemsController {
                                 currentUserService.allowedPlants(user));
 
                 return ResponseEntity.ok(
-                                java.util.Map.of("gatePass", gatePass));
+                                java.util.Map.of(
+                                                "gatePass", gatePass,
+                                                "status", "WAREHOUSE_REQUESTED",
+                                                "message", "Bulk gate pass generated. Awaiting warehouse approval."));
         }
 
         @PostMapping("/bulk/status")

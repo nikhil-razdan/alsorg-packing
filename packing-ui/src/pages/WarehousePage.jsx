@@ -1,8 +1,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { Button, TextField, Box, Chip, MenuItem } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import { API_BASE_URL } from "../config";
-import { canOpenWarehousePage } from "../utils/permissions";
+import { API_BASE_URL } from "../config"; import {
+	canOpenWarehousePage,
+	normalizeRole,
+} from "../utils/permissions";
 import { useAuth } from "../auth/AuthContext";
 
 function WarehousePage() {
@@ -18,9 +20,49 @@ function WarehousePage() {
 
 	const canOpenWarehouse = canOpenWarehousePage(user);
 
-	const isDispatch = role === "DISPATCH";
-	const isPacking = role === "PACKING";
-	const DEFAULT_WAREHOUSE_OPTIONS = ["BLS-WH-1", "RTP-WH-2"];
+	const cleanRole = normalizeRole(role);
+
+	const isAdmin = cleanRole === "ADMIN";
+	const isDispatch = cleanRole === "DISPATCH";
+	const isPacking = cleanRole === "PACKING";
+	const isWarehouse = cleanRole === "WAREHOUSE";
+
+	const hasWarehouseAccess =
+		Boolean(
+			user?.warehouseAccess ||
+			user?.warehousePageAccess ||
+			user?.hasWarehouseAccess ||
+			user?.canOpenWarehousePage
+		);
+
+	const canApproveWarehouse =
+		isAdmin || isWarehouse || hasWarehouseAccess;
+
+	const WAREHOUSE_OPTIONS = [
+		"BLS-WH-1",
+		"RTP-WH-2",
+		"AL-P1",
+		"AL-P2",
+		"AL-P3",
+		"AL-P4",
+	];
+
+	const FROM_LOCATION_OPTIONS = [
+		"AL-P1-FG-1-A",
+		"AL-P1-FG-1-B",
+		"AL-P1-FG-1-C",
+		"AL-P2-FG-2",
+		"AL-P3-FG-3",
+		"AL-P4-FG-4",
+		"AL-P1",
+		"AL-P2",
+		"AL-P3",
+		"AL-P4",
+		"AL-P1-PKD-1",
+		"AL-P2-PKD-2",
+		"AL-P3-PKD-3",
+		"AL-P4-PKD-4",
+	];
 	const [importMode, setImportMode] = useState("");
 	const [previewRows, setPreviewRows] = useState([]);
 	const [previewOpen, setPreviewOpen] = useState(false);
@@ -227,9 +269,16 @@ function WarehousePage() {
 		);
 
 		if (!res.ok) {
-			alert("Invalid Gate Pass");
+			const text = await res.text();
+			alert(text || "Gate pass approval failed");
 			return;
 		}
+
+		setApproveGatePass((prev) => {
+			const copy = { ...prev };
+			delete copy[id];
+			return copy;
+		});
 
 		fetchItems();
 	};
@@ -349,68 +398,28 @@ function WarehousePage() {
 		return plants.find((p) => p.plantCode === plantCode) || null;
 	};
 
-	const getLocationOptions = (plantCode) => {
-		const plant = getPlantConfig(plantCode);
-
+	const getLocationOptions = (plantCode, currentValue = "") => {
 		const options = [
-			"FLOOR",
-			"PKD-1",
-			"PKD-2",
-			"PKD-3",
-			"PKD-4",
-			"FG-1",
-			"FG-1-A",
-			"FG-1-B",
-			"FG-1-C",
-			"FG-2",
-			"FG-3",
-			"FG-4",
-			...DEFAULT_WAREHOUSE_OPTIONS,
+			...FROM_LOCATION_OPTIONS,
 		];
 
-		if (plant) {
-			if (plant.packedAreaCode) {
-				options.push(plant.packedAreaCode);
-			}
-
-			if (plant.fgAreaCode) {
-				options.push(plant.fgAreaCode);
-			}
-
-			if (Array.isArray(plant.fgZones)) {
-				plant.fgZones.forEach((zone) => {
-					if (plant.fgAreaCode && zone) {
-						options.push(`${plant.fgAreaCode}-${zone}`);
-					}
-				});
-			}
-
-			if (Array.isArray(plant.warehouseCodes)) {
-				plant.warehouseCodes.forEach((warehouse) => {
-					if (warehouse) {
-						options.push(warehouse);
-					}
-				});
-			}
+		if (currentValue && currentValue !== "-") {
+			options.unshift(currentValue);
 		}
 
 		return Array.from(new Set(options)).filter(Boolean);
 	};
 
-	const getWarehouseOptions = (plantCode) => {
-		const plant = getPlantConfig(plantCode);
+	const getWarehouseOptions = (plantCode, currentValue = "") => {
+		const options = [
+			...WAREHOUSE_OPTIONS,
+		];
 
-		const plantWarehouses =
-			plant && Array.isArray(plant.warehouseCodes)
-				? plant.warehouseCodes
-				: [];
+		if (currentValue && currentValue !== "-") {
+			options.unshift(currentValue);
+		}
 
-		return Array.from(
-			new Set([
-				...plantWarehouses,
-				...DEFAULT_WAREHOUSE_OPTIONS,
-			])
-		).filter(Boolean);
+		return Array.from(new Set(options)).filter(Boolean);
 	};
 
 	const getAssignmentDraft = (row) => {
@@ -950,7 +959,10 @@ function WarehousePage() {
 				const row = params.row;
 				const draft = getAssignmentDraft(row);
 				const plantCode = draft?.plantCode || row.plantCode;
-				const locationOptions = getLocationOptions(plantCode);
+				const locationOptions = getLocationOptions(
+					plantCode,
+					row.currentLocationCode || row.location
+				);
 
 				if (isAdmin && draft) {
 					return (
@@ -1015,7 +1027,7 @@ function WarehousePage() {
 					String(row.gatePassNumber).trim();
 
 				const canView =
-					(isPacking || isAdmin || isDispatch) &&
+					(isPacking || isAdmin || isDispatch || canApproveWarehouse) &&
 					hasGatePass &&
 					row.status !== "ON_FLOOR";
 
@@ -1170,7 +1182,10 @@ function WarehousePage() {
 				const row = params.row;
 				const draft = getAssignmentDraft(row);
 				const plantCode = draft?.plantCode || row.plantCode;
-				const warehouseOptions = getWarehouseOptions(plantCode);
+				const warehouseOptions = getWarehouseOptions(
+					plantCode,
+					row.warehouseCode
+				);
 
 				if (isAdmin && draft) {
 					return (
@@ -1264,19 +1279,17 @@ function WarehousePage() {
 				}
 				// WAREHOUSE REQUESTED
 				if (row.status === "WAREHOUSE_REQUESTED") {
-					// PACKING VIEW
 					if (isPacking) {
 						return (
 							<Chip
-								label="Awaiting Dispatch"
+								label="Awaiting Warehouse"
 								size="small"
 								sx={pendingChip}
 							/>
 						);
 					}
 
-					// DISPATCH VIEW
-					if (isDispatch) {
+					if (canApproveWarehouse) {
 						return (
 							<Box
 								sx={{
@@ -1289,23 +1302,23 @@ function WarehousePage() {
 								<TextField
 									size="small"
 									placeholder="Gate Pass"
-									value={approveGatePass[row.id] || ""}
+									value={approveGatePass[rowId] || ""}
 									onChange={(e) =>
 										setApproveGatePass((prev) => ({
 											...prev,
-											[row.id]: e.target.value,
+											[rowId]: e.target.value,
 										}))
 									}
 									sx={{
-										width: 155,
+										width: 165,
 										...compactActionFieldSx,
 									}}
 								/>
 
 								<Button
 									size="small"
-									disabled={!approveGatePass[row.id]}
-									onClick={() => approveWarehouse(row.id)}
+									disabled={!approveGatePass[rowId]}
+									onClick={() => approveWarehouse(rowId)}
 									sx={actionSuccess}
 								>
 									Approve
@@ -1313,15 +1326,32 @@ function WarehousePage() {
 
 								<Button
 									size="small"
-									onClick={() => rejectWarehouse(row.id)}
+									onClick={() => rejectWarehouse(rowId)}
 									sx={actionDanger}
 								>
 									Reject
 								</Button>
 							</Box>
-
 						);
 					}
+
+					if (isDispatch) {
+						return (
+							<Chip
+								label="Awaiting Warehouse Approval"
+								size="small"
+								sx={pendingChip}
+							/>
+						);
+					}
+
+					return (
+						<Chip
+							label="Warehouse Requested"
+							size="small"
+							sx={pendingChip}
+						/>
+					);
 				}
 
 				// ===============================
@@ -1804,7 +1834,7 @@ function WarehousePage() {
 				<div style={wrap}>
 					{Array.isArray(selectionModel) &&
 						selectionModel.length > 0 &&
-						isDispatch && (
+						canApproveWarehouse && (
 
 							<div style={bulkBar}>
 								<Box

@@ -807,10 +807,11 @@ const customChallanListSx = {
 	flexDirection: "column",
 	gap: 1,
 
+	height: 360,
 	maxHeight: 360,
-	minHeight: 0,
+	minHeight: 220,
 
-	overflowY: "scroll",
+	overflowY: "auto",
 	overflowX: "hidden",
 
 	pr: 1,
@@ -843,6 +844,42 @@ const customChallanPagerWrapSx = {
 
 	boxShadow:
 		"0 12px 28px rgba(2,6,23,.20)",
+};
+
+const dispatchPageSizeNativeSelectSx = {
+	width: 86,
+	height: 36,
+
+	px: 1,
+	borderRadius: "12px",
+
+	outline: "none",
+
+	color: "#fff",
+	fontSize: 12,
+	fontWeight: 900,
+
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(30,41,59,.88))",
+
+	border:
+		"1px solid rgba(96,165,250,.25)",
+
+	boxShadow:
+		"0 8px 18px rgba(2,6,23,.18)",
+
+	cursor: "pointer",
+
+	"&:focus": {
+		borderColor: "#60a5fa",
+		boxShadow: "0 0 0 3px rgba(96,165,250,.16)",
+	},
+
+	"& option": {
+		color: "#111827",
+		background: "#fff",
+		fontWeight: 800,
+	},
 };
 
 const customChallanRowSx = {
@@ -1596,7 +1633,7 @@ const wrap = {
 const pdfPreviewOverlaySx = {
 	position: "fixed",
 	inset: 0,
-	zIndex: 9000,
+	zIndex: 2147483000,
 
 	background: `
 		radial-gradient(circle at 20% 10%, rgba(59,130,246,.16), transparent 30%),
@@ -2412,6 +2449,32 @@ const rowSmartHaystack = (row) => {
 	};
 };
 
+const WAREHOUSE_OPTIONS = [
+	"BLS-WH-1",
+	"RTP-WH-2",
+	"AL-P1",
+	"AL-P2",
+	"AL-P3",
+	"AL-P4",
+];
+
+const FROM_LOCATION_OPTIONS = [
+	"AL-P1-FG-1-A",
+	"AL-P1-FG-1-B",
+	"AL-P1-FG-1-C",
+	"AL-P2-FG-2",
+	"AL-P3-FG-3",
+	"AL-P4-FG-4",
+	"AL-P1",
+	"AL-P2",
+	"AL-P3",
+	"AL-P4",
+	"AL-P1-PKD-1",
+	"AL-P2-PKD-2",
+	"AL-P3-PKD-3",
+	"AL-P4-PKD-4",
+];
+
 const smartRowMatches = (row, search) => {
 	const tokens =
 		tokenizeSmartSearch(search);
@@ -2485,6 +2548,7 @@ function DispatchedItemsPage() {
 	const [gatePassModal, setGatePassModal] = useState(null);
 	const [warehouseCode, setWarehouseCode] = useState("");
 	const [gatePassPreview, setGatePassPreview] = useState(null);
+	const [gatePassGenerating, setGatePassGenerating] = useState(false);
 	const [moveFgModal, setMoveFgModal] = useState(null);
 	const [selectedFgZone, setSelectedFgZone] = useState("");
 	const [moveFgLoading, setMoveFgLoading] = useState(false);
@@ -2509,6 +2573,7 @@ function DispatchedItemsPage() {
 	const [chalaanPreview, setChalaanPreview] = useState(null);
 	const [bulkGatePassOpen, setBulkGatePassOpen] = useState(false);
 	const [bulkGatePassPreview, setBulkGatePassPreview] = useState(null);
+	const [bulkGatePassGenerating, setBulkGatePassGenerating] = useState(false);
 	const [bulkStatusModal, setBulkStatusModal] = useState(false);
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(25);
@@ -2584,177 +2649,6 @@ function DispatchedItemsPage() {
 		location: "",
 	});
 
-	const STATUS_SEARCH_LABELS = {
-		READY: "packed pkd ready",
-		READY_TO_STORE: "ready to store warehouse gate pass",
-		WAREHOUSE_REQUESTED: "warehouse requested gate pass pending",
-		IN_WAREHOUSE: "in warehouse stored",
-		READY_TO_DISPATCH: "ready to dispatch challan chalaan",
-		LOADED: "loaded queued",
-		DISPATCHED: "dispatched",
-		OUT_FOR_DELIVERY: "out for delivery",
-		DELIVERED: "delivered completed",
-		AVAILABLE: "available",
-		WAREHOUSE_RETURN_REQUESTED: "warehouse return requested",
-	};
-
-	const SMART_SEARCH_FIELD_ALIASES = {
-		item: ["name", "itemName", "description"],
-		name: ["name", "itemName"],
-		client: ["clientName", "clientAddress"],
-		sku: ["sku"],
-		pd: ["pdNo"],
-		pdno: ["pdNo"],
-		dwg: ["drawingNo"],
-		drawing: ["drawingNo"],
-		description: ["description"],
-		desc: ["description"],
-		status: ["status"],
-		plant: ["plantCode"],
-		location: [
-			"currentLocationCode",
-			"location",
-			"warehouseCode",
-			"fgZoneCode",
-		],
-		loc: [
-			"currentLocationCode",
-			"location",
-			"warehouseCode",
-			"fgZoneCode",
-		],
-		warehouse: ["warehouseCode"],
-		wh: ["warehouseCode"],
-		gatepass: ["gatePassNumber"],
-		gp: ["gatePassNumber"],
-		sticker: ["stickerNumber"],
-		sno: ["stickerNumber"],
-		driver: ["driverName"],
-		vehicle: ["vehicleNumber"],
-		challan: ["challanNumber"],
-		chalaan: ["challanNumber"],
-	};
-
-	const SMART_SEARCH_ALL_FIELDS = Array.from(
-		new Set(
-			Object.values(SMART_SEARCH_FIELD_ALIASES).flat()
-		)
-	);
-
-	const normalizeSmartSearchText = (value) => {
-		return String(value ?? "")
-			.toLowerCase()
-			.replace(/[_/\\.-]+/g, " ")
-			.replace(/\s+/g, " ")
-			.trim();
-	};
-
-	const getSmartSearchFieldValue = (row, field) => {
-		if (!row) return "";
-
-		if (field === "name" || field === "itemName") {
-			return row.name || row.itemName || "";
-		}
-
-		if (field === "status") {
-			const status = String(row.status || "")
-				.trim()
-				.toUpperCase();
-
-			return `${status} ${STATUS_SEARCH_LABELS[status] || ""}`;
-		}
-
-		if (field === "currentLocationCode") {
-			return row.currentLocationCode || row.location || "";
-		}
-
-		if (field === "location") {
-			return row.location || row.currentLocationCode || "";
-		}
-
-		return row[field] ?? "";
-	};
-
-	const tokenizeSmartSearch = (value) => {
-		const text = String(value || "").trim();
-
-		if (!text) return [];
-
-		const tokens = [];
-		const regex =
-			/([a-zA-Z]+):"([^"]+)"|([a-zA-Z]+):'([^']+)'|"([^"]+)"|'([^']+)'|[^\s,]+/g;
-
-		let match;
-
-		while ((match = regex.exec(text)) !== null) {
-			let field = "";
-			let rawValue = "";
-
-			if (match[1] && match[2]) {
-				field = match[1];
-				rawValue = match[2];
-			} else if (match[3] && match[4]) {
-				field = match[3];
-				rawValue = match[4];
-			} else {
-				rawValue =
-					match[5] ||
-					match[6] ||
-					match[0] ||
-					"";
-
-				const colonIndex = rawValue.indexOf(":");
-
-				if (colonIndex > 0) {
-					field = rawValue.slice(0, colonIndex);
-					rawValue = rawValue.slice(colonIndex + 1);
-				}
-			}
-
-			const normalizedValue =
-				normalizeSmartSearchText(rawValue);
-
-			if (!normalizedValue) continue;
-
-			tokens.push({
-				field: normalizeSmartSearchText(field),
-				value: normalizedValue,
-			});
-		}
-
-		return tokens;
-	};
-
-	const rowMatchesSmartSearch = (row, searchValue) => {
-		const tokens = tokenizeSmartSearch(searchValue);
-
-		if (tokens.length === 0) return true;
-
-		const fullRowSearchText =
-			SMART_SEARCH_ALL_FIELDS
-				.map((field) =>
-					getSmartSearchFieldValue(row, field)
-				)
-				.map(normalizeSmartSearchText)
-				.join(" ");
-
-		return tokens.every((token) => {
-			if (token.field) {
-				const fields =
-					SMART_SEARCH_FIELD_ALIASES[token.field] ||
-					[token.field];
-
-				return fields.some((field) =>
-					normalizeSmartSearchText(
-						getSmartSearchFieldValue(row, field)
-					).includes(token.value)
-				);
-			}
-
-			return fullRowSearchText.includes(token.value);
-		});
-	};
-
 	const filteredRows = useMemo(() => {
 		if (!Array.isArray(rows)) {
 			return [];
@@ -2765,10 +2659,9 @@ function DispatchedItemsPage() {
 				return false;
 			}
 
-			if (
-				statusFilter !== "ALL" &&
-				String(row.status || "").trim() !== statusFilter
-			) {
+			const rowStatus = String(row.status || "").trim().toUpperCase();
+
+			if (statusFilter !== "ALL" && rowStatus !== statusFilter) {
 				return false;
 			}
 
@@ -2851,31 +2744,308 @@ function DispatchedItemsPage() {
 		}, 150);
 	}, [qrDispatchOpen, scanMode, scanCart.length]);
 
-	const getAuthHeaders = () => ({});
+	const getStoredToken = () => {
+		return (
+			localStorage.getItem("token") ||
+			localStorage.getItem("jwt") ||
+			localStorage.getItem("accessToken") ||
+			""
+		);
+	};
 
-	const authFetch = (
-		url,
-		options = {}
-	) => {
-		const cleanHeaders = {
-			...(options.headers || {}),
+	const getAuthHeaders = (extraHeaders = {}) => {
+		const headers = {
+			...(extraHeaders || {}),
 		};
 
-		delete cleanHeaders.Authorization;
-		delete cleanHeaders["X-Username"];
+		const token = getStoredToken();
 
-		const finalOptions = {
-			...options,
-			credentials: "include",
-		};
-
-		if (Object.keys(cleanHeaders).length > 0) {
-			finalOptions.headers = cleanHeaders;
-		} else {
-			delete finalOptions.headers;
+		if (token && !headers.Authorization) {
+			headers.Authorization = token.startsWith("Bearer ")
+				? token
+				: `Bearer ${token}`;
 		}
 
-		return fetch(url, finalOptions);
+		const username = localStorage.getItem("username");
+
+		if (username && !headers["X-Username"]) {
+			headers["X-Username"] = username;
+		}
+
+		return headers;
+	};
+
+	const authFetch = (url, options = {}) => {
+		return fetch(url, {
+			...options,
+			credentials: "include",
+			headers: getAuthHeaders(options.headers || {}),
+		});
+	};
+
+	const normalizeGatePassDropdownLocation = (row) => {
+		const rawLocation =
+			row?.currentLocationCode ||
+			row?.location ||
+			"";
+
+		const plantCode =
+			row?.plantCode ||
+			"";
+
+		if (FROM_LOCATION_OPTIONS.includes(rawLocation)) {
+			return rawLocation;
+		}
+
+		if (plantCode && rawLocation && !rawLocation.startsWith("AL-")) {
+			const combined = `${plantCode}-${rawLocation}`;
+
+			if (FROM_LOCATION_OPTIONS.includes(combined)) {
+				return combined;
+			}
+		}
+
+		return "";
+	};
+
+	const clearSingleGatePassPreview = () => {
+		if (gatePassPreview?.url) {
+			URL.revokeObjectURL(gatePassPreview.url);
+		}
+
+		setGatePassPreview(null);
+	};
+
+	const clearBulkGatePassPreview = () => {
+		if (bulkGatePassPreview?.url) {
+			URL.revokeObjectURL(bulkGatePassPreview.url);
+		}
+
+		setBulkGatePassPreview(null);
+	};
+
+	const openSingleGatePassModal = (row) => {
+		clearSingleGatePassPreview();
+
+		setGatePassModal(row);
+
+		setWarehouseCode(
+			WAREHOUSE_OPTIONS.includes(row?.warehouseCode)
+				? row.warehouseCode
+				: ""
+		);
+
+		setFromLocation(normalizeGatePassDropdownLocation(row));
+	};
+
+	const openBulkGatePassModal = () => {
+		clearBulkGatePassPreview();
+
+		setWarehouseCode("");
+		setFromLocation("");
+		setBulkGatePassOpen(true);
+	};
+
+	const closeSingleGatePassModal = () => {
+		clearSingleGatePassPreview();
+
+		setGatePassModal(null);
+		setWarehouseCode("");
+		setFromLocation("");
+	};
+
+	const closeBulkGatePassModal = () => {
+		clearBulkGatePassPreview();
+
+		setBulkGatePassOpen(false);
+		setWarehouseCode("");
+		setFromLocation("");
+	};
+
+	const fetchGatePassPdfByNumber = async (gatePassNumber) => {
+		const pdfRes = await authFetch(
+			`${API_BASE_URL}/api/gatepass/bulk/${encodeURIComponent(gatePassNumber)}/pdf`,
+			{
+				method: "GET",
+				headers: {
+					Accept: "application/pdf",
+				},
+			}
+		);
+
+		if (!pdfRes.ok) {
+			const text = await pdfRes.text();
+			throw new Error(text || "Gate pass PDF failed");
+		}
+
+		const blob = await pdfRes.blob();
+
+		if (!blob || blob.size === 0) {
+			throw new Error("Empty gate pass PDF received");
+		}
+
+		return URL.createObjectURL(blob);
+	};
+
+	const generateSingleGatePass = async () => {
+		if (!gatePassModal?.zohoItemId) {
+			alert("Item ID missing");
+			return;
+		}
+
+		const cleanWarehouseCode = String(warehouseCode || "").trim();
+		const cleanFromLocation = String(fromLocation || "").trim();
+
+		if (!cleanWarehouseCode) {
+			alert("Please select warehouse");
+			return;
+		}
+
+		if (!cleanFromLocation) {
+			alert("Please select from location");
+			return;
+		}
+
+		if (!WAREHOUSE_OPTIONS.includes(cleanWarehouseCode)) {
+			alert("Invalid warehouse selected");
+			return;
+		}
+
+		if (!FROM_LOCATION_OPTIONS.includes(cleanFromLocation)) {
+			alert("Invalid from location selected");
+			return;
+		}
+
+		try {
+			setGatePassGenerating(true);
+			clearSingleGatePassPreview();
+
+			const res = await authFetch(
+				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+					gatePassModal.zohoItemId
+				)}/store?warehouseCode=${encodeURIComponent(
+					cleanWarehouseCode
+				)}&fromLocation=${encodeURIComponent(cleanFromLocation)}`,
+				{
+					method: "POST",
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Gate pass generation failed");
+			}
+
+			const data = await res.json();
+			const gatePassNumber = data?.gatePass;
+
+			if (!gatePassNumber) {
+				throw new Error("Gate pass number missing from backend");
+			}
+
+			const url = await fetchGatePassPdfByNumber(gatePassNumber);
+
+			setGatePassPreview({
+				url,
+				gatePass: gatePassNumber,
+			});
+
+			await fetchData();
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Gate pass generation failed");
+		} finally {
+			setGatePassGenerating(false);
+		}
+	};
+
+	const generateBulkGatePass = async () => {
+		const selectedReadyToStoreItems = selectedItems.filter(
+			(item) => getDispatchRowAction(item) === "GATE_PASS"
+		);
+
+		const itemIds = selectedReadyToStoreItems
+			.map((item) => item.zohoItemId)
+			.filter(Boolean);
+
+		if (itemIds.length === 0) {
+			alert("Select READY_TO_STORE items only");
+			return;
+		}
+
+		if (itemIds.length !== selectionModel.length) {
+			alert("Only READY_TO_STORE items can be used for bulk gate pass");
+			return;
+		}
+
+		const cleanWarehouseCode = String(warehouseCode || "").trim();
+		const cleanFromLocation = String(fromLocation || "").trim();
+
+		if (!cleanWarehouseCode) {
+			alert("Please select warehouse");
+			return;
+		}
+
+		if (!cleanFromLocation) {
+			alert("Please select from location");
+			return;
+		}
+
+		if (!WAREHOUSE_OPTIONS.includes(cleanWarehouseCode)) {
+			alert("Invalid warehouse selected");
+			return;
+		}
+
+		if (!FROM_LOCATION_OPTIONS.includes(cleanFromLocation)) {
+			alert("Invalid from location selected");
+			return;
+		}
+
+		try {
+			setBulkGatePassGenerating(true);
+			clearBulkGatePassPreview();
+
+			const res = await authFetch(
+				`${API_BASE_URL}/api/dispatched/bulk/store?warehouseCode=${encodeURIComponent(
+					cleanWarehouseCode
+				)}&fromLocation=${encodeURIComponent(cleanFromLocation)}`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(itemIds),
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Bulk gate pass generation failed");
+			}
+
+			const data = await res.json();
+			const gatePassNumber = data?.gatePass;
+
+			if (!gatePassNumber) {
+				throw new Error("Gate pass number missing from backend");
+			}
+
+			const url = await fetchGatePassPdfByNumber(gatePassNumber);
+
+			setBulkGatePassPreview({
+				url,
+				gatePass: gatePassNumber,
+			});
+
+			setSelectionModel([]);
+
+			await fetchData();
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Bulk gate pass generation failed");
+		} finally {
+			setBulkGatePassGenerating(false);
+		}
 	};
 
 	const getCurrentLocation = (row) => {
@@ -3058,7 +3228,7 @@ function DispatchedItemsPage() {
 				.map((d) => ({
 					...d,
 					stock: d.stock ?? 0,
-					status: (d.status || "").trim(),
+					status: String(d.status || "").trim().toUpperCase(),
 				}));
 
 			setRows(cleaned);
@@ -4126,63 +4296,21 @@ function DispatchedItemsPage() {
 
 			renderCell: (params) => {
 				const row = params.row;
-
-				const inFg = isInFgLocation(row);
-
-				let label = row.status || "—";
-				let sx = pendingStatusChip;
-
-				if (row.status === "QUEUED") {
-					label = "QUEUED";
-					sx = queuedStatusChip;
-				}
-
-				if (row.status === "READY") {
-					if (inFg) {
-						label = "PACKED - FG";
-						sx = dispatchedStatusChip;
-					} else {
-						label = "PACKED - PKD";
-						sx = pendingStatusChip;
-					}
-				}
-
-				if (row.status === "READY_TO_STORE") {
-					label = "READY TO STORE";
-					sx = readyStatusChip;
-				}
-
-				if (row.status === "WAREHOUSE_REQUESTED") {
-					label = "WAREHOUSE REQUESTED";
-					sx = pendingStatusChip;
-				}
-
-				if (row.status === "IN_WAREHOUSE") {
-					label = "IN WAREHOUSE";
-					sx = dispatchedStatusChip;
-				}
-
-				if (row.status === "READY_TO_DISPATCH") {
-					label = "READY TO DISPATCH";
-					sx = readyStatusChip;
-				}
-
-				if (row.status === "DISPATCHED") {
-					label = "DISPATCHED";
-					sx = dispatchedStatusChip;
-				}
-
-				if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
-					label = "RETURN REQUESTED";
-					sx = pendingStatusChip;
-				}
+				const display = getDisplayStatus(row);
 
 				return (
-					<Box sx={{ display: "flex", flexDirection: "column", gap: 0.6 }}>
+					<Box
+						sx={{
+							display: "flex",
+							flexDirection: "column",
+							gap: 0.6,
+							minWidth: 0,
+						}}
+					>
 						<Chip
 							size="small"
-							label={label}
-							sx={sx}
+							label={display.label}
+							sx={display.sx}
 						/>
 
 						{(row.driverName || row.vehicleNumber) && (
@@ -4304,11 +4432,7 @@ function DispatchedItemsPage() {
 						{showGenerateGatePass && (
 							<Button
 								size="small"
-								onClick={() => {
-									setGatePassModal(row);      // 🔥 open modal
-									setWarehouseCode("");       // reset input
-									setGatePassPreview(null);   // reset preview
-								}}
+								onClick={() => openSingleGatePassModal(row)}
 								sx={{
 									...premiumButton,
 									background:
@@ -4417,6 +4541,19 @@ function DispatchedItemsPage() {
 			loadCustomChallans();
 		}
 	}, []);
+
+	const showChalaanPreview = (url, id = "DOCUMENT") => {
+		setChalaanPreview((prev) => {
+			if (prev?.url) {
+				URL.revokeObjectURL(prev.url);
+			}
+
+			return {
+				url,
+				id,
+			};
+		});
+	};
 
 	const getActionStyle = (action = "") => {
 		const a = action.toLowerCase();
@@ -4791,14 +4928,10 @@ function DispatchedItemsPage() {
 
 			const url = URL.createObjectURL(blob);
 
-			setChalaanPreview({
+			showChalaanPreview(
 				url,
-				id:
-					result.challanNo ||
-					finalItemIds[0] ||
-					"CHALAAN",
-			});
-
+				result.challanNo || finalItemIds[0] || "CHALAAN"
+			);
 			setDispatchTripOpen(false);
 
 			setDispatchTripContext({
@@ -4980,12 +5113,10 @@ function DispatchedItemsPage() {
 			const url =
 				URL.createObjectURL(blob);
 
-			setChalaanPreview({
+			showChalaanPreview(
 				url,
-				id:
-					result.challanNo ||
-					"CUSTOM_CHALLAN",
-			});
+				result.challanNo || "CUSTOM_CHALLAN"
+			);
 
 			setCustomChallanOpen(false);
 			resetCustomChallanForm();
@@ -5078,10 +5209,7 @@ function DispatchedItemsPage() {
 			const url =
 				URL.createObjectURL(blob);
 
-			setChalaanPreview({
-				url,
-				id,
-			});
+			showChalaanPreview(url, id);
 		} catch (err) {
 			console.error(err);
 			alert(err.message || "PDF preview failed");
@@ -5323,10 +5451,7 @@ function DispatchedItemsPage() {
 			const url =
 				URL.createObjectURL(blob);
 
-			setChalaanPreview({
-				url,
-				id: challanNumber,
-			});
+			showChalaanPreview(url, challanNumber);
 		} catch (err) {
 			console.error(err);
 			alert(err.message || "Challan preview failed");
@@ -5867,6 +5992,7 @@ function DispatchedItemsPage() {
 						<MenuItem value="READY">🟡 Packed</MenuItem>
 						<MenuItem value="READY_TO_STORE">📦 Ready To Store</MenuItem>
 						<MenuItem value="WAREHOUSE_REQUESTED">🏭 Warehouse Requested</MenuItem>
+						<MenuItem value="LOADED">🟠 Queued</MenuItem>
 						<MenuItem value="IN_WAREHOUSE">🏢 In Warehouse</MenuItem>
 						<MenuItem value="READY_TO_DISPATCH">🚚 Ready To Dispatch</MenuItem>
 						<MenuItem value="DISPATCHED">✅ Dispatched</MenuItem>
@@ -6161,12 +6287,10 @@ function DispatchedItemsPage() {
 																const url =
 																	URL.createObjectURL(result.blob);
 
-																setChalaanPreview({
+																showChalaanPreview(
 																	url,
-																	id:
-																		result.challanNo ||
-																		challan.challanNumber,
-																});
+																	result.challanNo || challan.challanNumber
+																);
 															} catch (err) {
 																console.error(err);
 																alert(err.message || "Download failed");
@@ -6315,49 +6439,18 @@ function DispatchedItemsPage() {
 									gap: 1.5,
 								}}
 							>
-								<TextField
-									select
-									size="small"
+								<Box
+									component="select"
 									value={pageSize}
-									onChange={(e) =>
-										setPageSize(Number(e.target.value))
-									}
-									sx={{
-										width: 110,
-
-										"& .MuiOutlinedInput-root": {
-											height: 36,
-											borderRadius: "12px",
-
-											background:
-												"rgba(255,255,255,.04)",
-
-											color: "#fff",
-
-											"& fieldset": {
-												borderColor:
-													"rgba(255,255,255,.08)",
-											},
-
-											"&:hover fieldset": {
-												borderColor:
-													"rgba(59,130,246,.35)",
-											},
-										},
-
-										"& .MuiSvgIcon-root": {
-											color: "#94a3b8",
-										},
+									onChange={(e) => {
+										setPageSize(Number(e.target.value));
+										setPageNo(1);
 									}}
+									sx={dispatchPageSizeNativeSelectSx}
 								>
-									<MenuItem value={25}>
-										25
-									</MenuItem>
-
-									<MenuItem value={50}>
-										50
-									</MenuItem>
-								</TextField>
+									<option value={25}>25</option>
+									<option value={50}>50</option>
+								</Box>
 							</Box>
 
 							<Box
@@ -6531,12 +6624,7 @@ function DispatchedItemsPage() {
 								<Button
 									size="small"
 									onClick={() => {
-										/*
-										  Use your existing bulk Move to FG modal opener here.
-										  If you followed my previous fix, this should be:
-										  setBulkMoveToFgOpen(true)
-										*/
-										setBulkMoveFgOpen(true);
+										openBulkMoveToFgModal();
 									}}
 									sx={{
 										px: 2.4,
@@ -6639,7 +6727,7 @@ function DispatchedItemsPage() {
 							{canBulkGenerateGatePass && (
 								<Button
 									size="small"
-									onClick={() => setBulkGatePassOpen(true)}
+									onClick={openBulkGatePassModal}
 									sx={{
 										px: 2.4,
 										height: 38,
@@ -8048,113 +8136,140 @@ function DispatchedItemsPage() {
 					</div>
 				)}
 				{bulkGatePassOpen && (
-					<div style={popupOverlay} onClick={() => setBulkGatePassOpen(false)}>
+					<div
+						style={popupOverlay}
+						onClick={() => {
+							if (!bulkGatePassGenerating) {
+								closeBulkGatePassModal();
+							}
+						}}
+					>
 						<div style={popupBox} onClick={(e) => e.stopPropagation()}>
-							<h2>Bulk Gate Pass</h2>
+							<h2 style={{ marginBottom: 16 }}>Bulk Gate Pass</h2>
 
-							{/* Warehouse Code */}
-							<TextField
-								fullWidth
-								placeholder="Warehouse Code (WH-01)"
-								value={warehouseCode}
-								onChange={(e) => setWarehouseCode(e.target.value)}
-								sx={{
-									...formFieldSx,
-									mb: 2,
-								}}
-							/>
+							<Box sx={{ mb: 2 }}>
+								<Box sx={dispatchTripFieldLabelSx}>
+									Select Warehouse
+								</Box>
 
-							{/* From Location */}
-							<TextField
-								fullWidth
-								placeholder="From Location"
-								value={fromLocation}
-								onChange={(e) => setFromLocation(e.target.value)}
-								sx={{
-									...formFieldSx,
-									mb: 2,
-								}}
-							/>
+								<Box
+									component="select"
+									value={warehouseCode}
+									onChange={(e) => setWarehouseCode(e.target.value)}
+									sx={dispatchTripNativeSelectSx}
+								>
+									<option value="">
+										Select Warehouse
+									</option>
 
-							{/* PDF PREVIEW */}
-							{bulkGatePassPreview && (
+									{WAREHOUSE_OPTIONS.map((warehouse) => (
+										<option key={warehouse} value={warehouse}>
+											{warehouse}
+										</option>
+									))}
+								</Box>
+							</Box>
+
+							<Box sx={{ mb: 2 }}>
+								<Box sx={dispatchTripFieldLabelSx}>
+									Select From Location
+								</Box>
+
+								<Box
+									component="select"
+									value={fromLocation}
+									onChange={(e) => setFromLocation(e.target.value)}
+									sx={dispatchTripNativeSelectSx}
+								>
+									<option value="">
+										Select From Location
+									</option>
+
+									{FROM_LOCATION_OPTIONS.map((location) => (
+										<option key={location} value={location}>
+											{location}
+										</option>
+									))}
+								</Box>
+							</Box>
+
+							{bulkGatePassPreview?.gatePass && (
+								<Box
+									sx={{
+										mb: 2,
+										p: 1.4,
+										borderRadius: "12px",
+										background: "rgba(16,185,129,.12)",
+										border: "1px solid rgba(16,185,129,.24)",
+										color: "#6ee7b7",
+										fontWeight: 900,
+									}}
+								>
+									Gate Pass Created: {bulkGatePassPreview.gatePass}
+								</Box>
+							)}
+
+							{bulkGatePassPreview?.url && (
 								<iframe
-									src={bulkGatePassPreview}
+									src={bulkGatePassPreview.url}
 									style={{
 										width: "100%",
 										height: 400,
 										border: "none",
 										borderRadius: 8,
-										marginBottom: 12
+										marginBottom: 12,
+										background: "#fff",
 									}}
 								/>
 							)}
 
-							<Box sx={{ display: "flex", gap: 2 }}>
-
-								{/* GENERATE BUTTON */}
+							<Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
 								<Button
 									variant="contained"
-									disabled={!warehouseCode}
-									onClick={async () => {
-										try {
-
-											// 🔥 STEP 1: CALL BULK STORE API
-											const res = await authFetch(
-												`${API_BASE_URL}/api/dispatched/bulk/store?warehouseCode=${encodeURIComponent(warehouseCode)}&fromLocation=${encodeURIComponent(fromLocation)}`,
-												{
-													method: "POST",
-													headers: {
-														"Content-Type": "application/json",
-													},
-													body: JSON.stringify(selectionModel),
-												}
-											);
-
-											if (!res.ok) {
-												const text = await res.text();
-												alert(text || "Bulk gate pass failed");
-												return;
-											}
-
-											const data = await res.json();
-											const gatePass = data.gatePass;
-
-											// 🔥 STEP 2: FETCH BULK PDF
-											const pdfRes = await authFetch(
-												`${API_BASE_URL}/api/gatepass/bulk/${gatePass}/pdf`,
-												{
-													method: "GET",
-												}
-											);
-
-											const blob = await pdfRes.blob();
-											const url = URL.createObjectURL(blob);
-
-											setBulkGatePassPreview(url);
-
-											// 🔥 STEP 3: REFRESH DATA
-											await fetchData();
-
-										} catch (err) {
-											console.error(err);
-											alert("Bulk Gate Pass failed");
-										}
+									disabled={
+										bulkGatePassGenerating ||
+										!warehouseCode ||
+										!fromLocation ||
+										Boolean(bulkGatePassPreview?.gatePass)
+									}
+									onClick={generateBulkGatePass}
+									sx={{
+										...premiumButton,
+										background: bulkGatePassPreview?.gatePass
+											? "rgba(255,255,255,.08)"
+											: "linear-gradient(135deg,#059669,#10b981)",
 									}}
 								>
-									Generate
+									{bulkGatePassGenerating
+										? "Generating..."
+										: bulkGatePassPreview?.gatePass
+											? "Generated"
+											: "Generate & Preview"}
 								</Button>
 
-								{/* CLOSE */}
+								{bulkGatePassPreview?.url && (
+									<Button
+										onClick={() => {
+											const a = document.createElement("a");
+											a.href = bulkGatePassPreview.url;
+											a.download = `GATE_PASS_${bulkGatePassPreview.gatePass}.pdf`;
+											document.body.appendChild(a);
+											a.click();
+											a.remove();
+										}}
+										sx={modalSecondaryButtonSx}
+									>
+										Download
+									</Button>
+								)}
+
 								<Button
-									onClick={() => {
-										if (bulkGatePassPreview) URL.revokeObjectURL(bulkGatePassPreview);
-										setBulkGatePassOpen(false);
-									}}
+									disabled={bulkGatePassGenerating}
+									onClick={closeBulkGatePassModal}
+									sx={modalSecondaryButtonSx}
 								>
 									Close
 								</Button>
-
 							</Box>
 						</div>
 					</div>
@@ -8163,106 +8278,182 @@ function DispatchedItemsPage() {
 					<div
 						style={popupOverlay}
 						onClick={() => {
-							if (gatePassPreview) URL.revokeObjectURL(gatePassPreview);
-							setGatePassModal(null);
+							if (!gatePassGenerating) {
+								closeSingleGatePassModal();
+							}
 						}}
 					>
 						<div
 							style={popupBox}
-
 							onClick={(e) => e.stopPropagation()}
 						>
-							<h2 style={{ marginBottom: 10 }}>Generate Gate Pass</h2>
+							<h2 style={{ marginBottom: 10 }}>
+								Generate Gate Pass
+							</h2>
 
-							{/* INPUT */}
-							<TextField
-								fullWidth
-								placeholder="Enter Warehouse Code (WH-01)"
-								value={warehouseCode}
-								onChange={(e) => setWarehouseCode(e.target.value)}
-								sx={formFieldSx}
-							/>
+							<Box
+								sx={{
+									mb: 2,
+									p: 1.4,
+									borderRadius: "12px",
+									background: "rgba(255,255,255,.035)",
+									border: "1px solid rgba(255,255,255,.07)",
+								}}
+							>
+								<Box
+									sx={{
+										color: "#fff",
+										fontWeight: 900,
+										fontSize: 14,
+										whiteSpace: "nowrap",
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+									}}
+									title={gatePassModal.name || gatePassModal.itemName}
+								>
+									{gatePassModal.name || gatePassModal.itemName || "—"}
+								</Box>
 
-							{/* PREVIEW */}
-							{gatePassPreview && (
+								<Box
+									sx={{
+										color: "#94a3b8",
+										fontSize: 12,
+										fontWeight: 700,
+										mt: 0.5,
+									}}
+								>
+									Status: {gatePassModal.status || "—"} • Location:{" "}
+									{gatePassModal.currentLocationCode || gatePassModal.location || "—"}
+								</Box>
+							</Box>
+
+							<Box sx={{ mb: 2 }}>
+								<Box sx={dispatchTripFieldLabelSx}>
+									Select Warehouse
+								</Box>
+
+								<Box
+									component="select"
+									value={warehouseCode}
+									onChange={(e) => setWarehouseCode(e.target.value)}
+									sx={dispatchTripNativeSelectSx}
+								>
+									<option value="">
+										Select Warehouse
+									</option>
+
+									{WAREHOUSE_OPTIONS.map((warehouse) => (
+										<option key={warehouse} value={warehouse}>
+											{warehouse}
+										</option>
+									))}
+								</Box>
+							</Box>
+
+							<Box sx={{ mb: 2 }}>
+								<Box sx={dispatchTripFieldLabelSx}>
+									Select From Location
+								</Box>
+
+								<Box
+									component="select"
+									value={fromLocation}
+									onChange={(e) => setFromLocation(e.target.value)}
+									sx={dispatchTripNativeSelectSx}
+								>
+									<option value="">
+										Select From Location
+									</option>
+
+									{FROM_LOCATION_OPTIONS.map((location) => (
+										<option key={location} value={location}>
+											{location}
+										</option>
+									))}
+								</Box>
+							</Box>
+
+							{gatePassPreview?.gatePass && (
+								<Box
+									sx={{
+										mb: 2,
+										p: 1.4,
+										borderRadius: "12px",
+										background: "rgba(16,185,129,.12)",
+										border: "1px solid rgba(16,185,129,.24)",
+										color: "#6ee7b7",
+										fontWeight: 900,
+									}}
+								>
+									Gate Pass Created: {gatePassPreview.gatePass}
+								</Box>
+							)}
+
+							{gatePassPreview?.url && (
 								<iframe
-									src={gatePassPreview}
+									src={gatePassPreview.url}
 									style={{
 										width: "100%",
 										height: "420px",
 										border: "none",
 										borderRadius: 8,
 										marginBottom: 12,
+										background: "#fff",
 									}}
 								/>
 							)}
 
-							{/* ACTIONS */}
-							<Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
-								<TextField
-									fullWidth
-									placeholder="From Location (Floor / Packing)"
-									value={fromLocation}
-									onChange={(e) => setFromLocation(e.target.value)}
-									sx={formFieldSx}
-								/>
+							<Box
+								sx={{
+									display: "flex",
+									gap: 2,
+									justifyContent: "flex-end",
+									flexWrap: "wrap",
+								}}
+							>
 								<Button
-
 									variant="contained"
-									disabled={!warehouseCode}
-									onClick={async () => {
-										try {
-											// 🔥 STEP 1: GENERATE
-											const res = await authFetch(
-												`${API_BASE_URL}/api/dispatched/${gatePassModal.zohoItemId}/store?warehouseCode=${encodeURIComponent(warehouseCode)}&fromLocation=${encodeURIComponent(fromLocation)}`,
-												{
-													method: "POST",
-												}
-											);
-
-											if (!res.ok) {
-												const text = await res.text();
-												alert(text || "Gate pass failed");
-												return;
-											}
-
-											const data = await res.json();
-
-											// 🔥 STEP 2: FETCH PDF
-											const resPdf = await authFetch(
-												`${API_BASE_URL}/api/gatepass/${gatePassModal.zohoItemId}/pdf`,
-												{
-													method: "GET",
-												}
-											);
-
-											const blob = await resPdf.blob();
-
-											console.log("📄 PDF SIZE:", blob.size); // 🔥 ADD THIS
-
-
-											const url = URL.createObjectURL(blob);
-
-											setGatePassPreview(url);
-											console.log("📄 Preview URL:", url);
-
-											// 🔥 STEP 3: REFRESH DATA
-											await fetchData();
-
-										} catch (err) {
-											console.error(err);
-											alert("Failed to generate gate pass");
-										}
+									disabled={
+										gatePassGenerating ||
+										!warehouseCode ||
+										!fromLocation ||
+										Boolean(gatePassPreview?.gatePass)
+									}
+									onClick={generateSingleGatePass}
+									sx={{
+										...premiumButton,
+										background: gatePassPreview?.gatePass
+											? "rgba(255,255,255,.08)"
+											: "linear-gradient(135deg,#059669,#10b981)",
 									}}
 								>
-									Generate
+									{gatePassGenerating
+										? "Generating..."
+										: gatePassPreview?.gatePass
+											? "Generated"
+											: "Generate & Preview"}
 								</Button>
 
+								{gatePassPreview?.url && (
+									<Button
+										onClick={() => {
+											const a = document.createElement("a");
+											a.href = gatePassPreview.url;
+											a.download = `GATE_PASS_${gatePassPreview.gatePass}.pdf`;
+											document.body.appendChild(a);
+											a.click();
+											a.remove();
+										}}
+										sx={modalSecondaryButtonSx}
+									>
+										Download
+									</Button>
+								)}
+
 								<Button
-									onClick={() => {
-										if (gatePassPreview) URL.revokeObjectURL(gatePassPreview);
-										setGatePassModal(null);
-									}}
+									disabled={gatePassGenerating}
+									onClick={closeSingleGatePassModal}
+									sx={modalSecondaryButtonSx}
 								>
 									Close
 								</Button>
@@ -9404,12 +9595,10 @@ function DispatchedItemsPage() {
 																	const url =
 																		URL.createObjectURL(result.blob);
 
-																	setChalaanPreview({
+																	showChalaanPreview(
 																		url,
-																		id:
-																			result.challanNo ||
-																			challan.challanNumber,
-																	});
+																		result.challanNo || challan.challanNumber
+																	);
 																} catch (err) {
 																	console.error(err);
 																	alert(
