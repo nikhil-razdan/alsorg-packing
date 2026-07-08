@@ -91,13 +91,30 @@ const navItems = [
 	},
 ];
 
+const VENFLOW_SIDEBAR_COLLAPSED_KEY = "venflowSidebarCollapsed";
+
 export default function VenFlowLayout() {
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+		return localStorage.getItem(VENFLOW_SIDEBAR_COLLAPSED_KEY) === "true";
+	});
+
+	const toggleSidebar = () => {
+		setSidebarCollapsed((prev) => {
+			const next = !prev;
+			localStorage.setItem(VENFLOW_SIDEBAR_COLLAPSED_KEY, String(next));
+			return next;
+		});
+	};
+
 	return (
 		<div style={shell}>
-			<VenFlowSidebar />
+			<VenFlowSidebar collapsed={sidebarCollapsed} />
 
 			<div style={main}>
-				<VenFlowHeader />
+				<VenFlowHeader
+					sidebarCollapsed={sidebarCollapsed}
+					onToggleSidebar={toggleSidebar}
+				/>
 
 				<div style={contentShell}>
 					<div style={contentInner}>
@@ -109,7 +126,7 @@ export default function VenFlowLayout() {
 	);
 }
 
-function VenFlowSidebar() {
+function VenFlowSidebar({ collapsed }) {
 	const location = useLocation();
 	const navigate = useNavigate();
 
@@ -129,8 +146,9 @@ function VenFlowSidebar() {
 	const linkStyle = (active) => ({
 		display: "flex",
 		alignItems: "center",
-		gap: 13,
-		padding: "11px 14px",
+		justifyContent: collapsed ? "center" : "flex-start",
+		gap: collapsed ? 0 : 13,
+		padding: collapsed ? "11px 0" : "11px 14px",
 		marginBottom: 6,
 		borderRadius: 12,
 		textDecoration: "none",
@@ -147,22 +165,34 @@ function VenFlowSidebar() {
 			? "0 8px 24px rgba(37,99,235,.22)"
 			: "none",
 		transition: "all .22s ease",
+		whiteSpace: "nowrap",
+		overflow: "hidden",
 	});
 
+	const openQuickAction = (path) => {
+		navigate(path);
+	};
+
 	return (
-		<div style={sidebar}>
+		<div style={sidebarStyle(collapsed)}>
 			<div style={sidebarGlow} />
 
-			<div style={logoSection}>
+			<div style={logoSectionStyle(collapsed)}>
 				<div style={logoIcon}>V</div>
 
-				<div>
-					<div style={logoTitle}>VenFlow</div>
-					<div style={logoSub}>Veneer Workflow</div>
-				</div>
+				{!collapsed && (
+					<div>
+						<div style={logoTitle}>VenFlow</div>
+						<div style={logoSub}>Veneer Workflow</div>
+					</div>
+				)}
 			</div>
 
-			<div style={menuTitle}>Tracker Menu</div>
+			{!collapsed && (
+				<div style={menuTitle}>
+					Tracker Menu
+				</div>
+			)}
 
 			{filteredNavItems.map((item) => {
 				const active =
@@ -170,71 +200,116 @@ function VenFlowSidebar() {
 					location.pathname.startsWith(`${item.path}/`);
 
 				return (
-					<Link
+					<Tooltip
 						key={item.path}
-						to={item.path}
-						style={linkStyle(active)}
+						title={collapsed ? item.label : ""}
+						placement="right"
+						arrow
 					>
-						<span style={navIcon}>{item.icon}</span>
-						{item.label}
-					</Link>
+						<Link
+							to={item.path}
+							style={linkStyle(active)}
+						>
+							<span style={navIcon}>{item.icon}</span>
+
+							{!collapsed && item.label}
+						</Link>
+					</Tooltip>
 				);
 			})}
 
 			<div style={sidebarDivider} />
 
-			<div style={quickActionBox}>
-				<div style={quickActionHeader}>
-					Quick Actions
-				</div>
+			<div style={quickActionBoxStyle(collapsed)}>
+				{!collapsed && (
+					<div style={quickActionHeader}>
+						Quick Actions
+					</div>
+				)}
 
-				<button
-					type="button"
-					style={quickActionBtn}
-					onClick={() => navigate("/venflow/create")}
+				<Tooltip
+					title={collapsed ? "New Request" : ""}
+					placement="right"
+					arrow
 				>
-					<AddIcon fontSize="small" />
-					New Request
-				</button>
+					<button
+						type="button"
+						style={quickActionBtnStyle(collapsed)}
+						onClick={() => openQuickAction("/venflow/create")}
+					>
+						<AddIcon fontSize="small" />
 
-				<button
-					type="button"
-					style={quickActionBtn}
-					onClick={() => navigate("/venflow/purchase")}
-				>
-					<AddIcon fontSize="small" />
-					Raise PO
-				</button>
+						{!collapsed && "New Request"}
+					</button>
+				</Tooltip>
 
-				<button
-					type="button"
-					style={quickActionBtn}
-					onClick={() => navigate("/venflow/reports")}
+				<Tooltip
+					title={collapsed ? "Raise PO" : ""}
+					placement="right"
+					arrow
 				>
-					<AddIcon fontSize="small" />
-					Reports
-				</button>
+					<button
+						type="button"
+						style={quickActionBtnStyle(collapsed)}
+						onClick={() => openQuickAction("/venflow/purchase")}
+					>
+						<AddIcon fontSize="small" />
+
+						{!collapsed && "Raise PO"}
+					</button>
+				</Tooltip>
+
+				<Tooltip
+					title={collapsed ? "Reports" : ""}
+					placement="right"
+					arrow
+				>
+					<button
+						type="button"
+						style={quickActionBtnStyle(collapsed)}
+						onClick={() => openQuickAction("/venflow/reports")}
+					>
+						<AddIcon fontSize="small" />
+
+						{!collapsed && "Reports"}
+					</button>
+				</Tooltip>
 			</div>
 
 			<div style={{ flex: 1 }} />
 
-			<div style={sidebarUserCard}>
-				<div style={sidebarAvatar}>
-					{username.charAt(0).toUpperCase()}
-				</div>
-
-				<div style={{ minWidth: 0 }}>
-					<div style={sidebarUserName}>{username}</div>
-					<div style={sidebarUserRole}>
-						{venFlowRoleLabel(venFlowRole)}
+			<Tooltip
+				title={
+					collapsed
+						? `${username} • ${venFlowRoleLabel(venFlowRole)}`
+						: ""
+				}
+				placement="right"
+				arrow
+			>
+				<div style={sidebarUserCardStyle(collapsed)}>
+					<div style={sidebarAvatar}>
+						{username.charAt(0).toUpperCase()}
 					</div>
+
+					{!collapsed && (
+						<div style={{ minWidth: 0 }}>
+							<div style={sidebarUserName}>{username}</div>
+							<div style={sidebarUserRole}>
+								{venFlowRoleLabel(venFlowRole)}
+							</div>
+						</div>
+					)}
 				</div>
-			</div>
+			</Tooltip>
 		</div>
 	);
 }
 
-function VenFlowHeader() {
+function VenFlowHeader({
+	sidebarCollapsed,
+	onToggleSidebar,
+}) {
 	const navigate = useNavigate();
 
 	const location = useLocation();
@@ -358,9 +433,17 @@ function VenFlowHeader() {
 		<>
 			<div style={header}>
 				<div style={headerLeft}>
-					<IconButton sx={menuBtnSx}>
-						<MenuIcon />
-					</IconButton>
+					<Tooltip
+						title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+						arrow
+					>
+						<IconButton
+							sx={menuBtnSx}
+							onClick={onToggleSidebar}
+						>
+							<MenuIcon />
+						</IconButton>
+					</Tooltip>
 
 					<div>
 						<div style={headerTitle}>{headerMeta.title}</div>
@@ -664,10 +747,10 @@ const contentInner = {
 
 /* ===================== SIDEBAR ===================== */
 
-const sidebar = {
-	width: 230,
+const sidebarStyle = (collapsed) => ({
+	width: collapsed ? 78 : 230,
 	height: "100vh",
-	padding: "18px 12px",
+	padding: collapsed ? "18px 8px" : "18px 12px",
 	boxSizing: "border-box",
 	display: "flex",
 	flexDirection: "column",
@@ -676,7 +759,9 @@ const sidebar = {
 	borderRight: "1px solid rgba(255,255,255,.06)",
 	boxShadow: "8px 0 30px rgba(2,6,23,.45)",
 	overflow: "hidden",
-};
+	transition: "width .25s ease, padding .25s ease",
+	flexShrink: 0,
+});
 
 const sidebarGlow = {
 	position: "absolute",
@@ -688,15 +773,17 @@ const sidebarGlow = {
 	pointerEvents: "none",
 };
 
-const logoSection = {
+const logoSectionStyle = (collapsed) => ({
 	position: "relative",
 	zIndex: 1,
 	display: "flex",
 	alignItems: "center",
-	gap: 12,
+	justifyContent: collapsed ? "center" : "flex-start",
+	gap: collapsed ? 0 : 12,
 	marginBottom: 20,
-	paddingLeft: 4,
-};
+	paddingLeft: collapsed ? 0 : 4,
+	transition: "all .25s ease",
+});
 
 const logoIcon = {
 	width: 36,
@@ -749,13 +836,6 @@ const sidebarDivider = {
 	margin: "14px 0",
 };
 
-const quickActionBox = {
-	padding: "12px 10px",
-	borderRadius: 16,
-	background: "rgba(255,255,255,.035)",
-	border: "1px solid rgba(255,255,255,.06)",
-};
-
 const quickActionHeader = {
 	color: "#fff",
 	fontSize: 13,
@@ -763,31 +843,50 @@ const quickActionHeader = {
 	marginBottom: 10,
 };
 
-const quickActionBtn = {
+const quickActionBoxStyle = (collapsed) => ({
+	padding: collapsed ? "10px 6px" : "12px 10px",
+	borderRadius: 16,
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.06)",
+	transition: "all .25s ease",
+});
+
+const quickActionBtnStyle = (collapsed) => ({
 	width: "100%",
 	height: 34,
 	border: "none",
+	borderRadius: 10,
 	background: "transparent",
 	color: "rgba(255,255,255,.70)",
 	display: "flex",
 	alignItems: "center",
-	gap: 8,
+	justifyContent: collapsed ? "center" : "flex-start",
+	gap: collapsed ? 0 : 8,
 	cursor: "pointer",
 	fontWeight: 750,
 	fontSize: 12,
 	fontFamily: "inherit",
-};
+	padding: collapsed ? 0 : "0 4px",
+	marginBottom: collapsed ? 6 : 0,
+	transition: "all .2s ease",
 
-const sidebarUserCard = {
+	"&:hover": {
+		background: "rgba(59,130,246,.12)",
+	},
+});
+
+const sidebarUserCardStyle = (collapsed) => ({
 	minHeight: 56,
 	borderRadius: 16,
 	background: "rgba(255,255,255,.045)",
 	border: "1px solid rgba(255,255,255,.08)",
 	display: "flex",
 	alignItems: "center",
-	gap: 10,
-	padding: "9px 10px",
-};
+	justifyContent: collapsed ? "center" : "flex-start",
+	gap: collapsed ? 0 : 10,
+	padding: collapsed ? "9px 6px" : "9px 10px",
+	transition: "all .25s ease",
+});
 
 const sidebarAvatar = {
 	width: 36,
