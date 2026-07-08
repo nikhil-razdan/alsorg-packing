@@ -1,4 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+
 import {
 	Link,
 	Outlet,
@@ -6,10 +13,11 @@ import {
 	useNavigate,
 } from "react-router-dom";
 
+import "./VenFlowLayout.css";
+
 import {
 	Badge,
 	Box,
-	Button,
 	Divider,
 	Drawer,
 	IconButton,
@@ -27,7 +35,6 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import PersonIcon from "@mui/icons-material/Person";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import LogoutIcon from "@mui/icons-material/Logout";
 import CloseIcon from "@mui/icons-material/Close";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import AddIcon from "@mui/icons-material/Add";
@@ -94,29 +101,50 @@ const navItems = [
 const VENFLOW_SIDEBAR_COLLAPSED_KEY = "venflowSidebarCollapsed";
 
 export default function VenFlowLayout() {
-	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-		return localStorage.getItem(VENFLOW_SIDEBAR_COLLAPSED_KEY) === "true";
-	});
+	const shellRef = useRef(null);
 
-	const toggleSidebar = () => {
-		setSidebarCollapsed((prev) => {
-			const next = !prev;
-			localStorage.setItem(VENFLOW_SIDEBAR_COLLAPSED_KEY, String(next));
-			return next;
-		});
-	};
+	const toggleSidebar = useCallback(() => {
+		const shellEl = shellRef.current;
+		if (!shellEl) return;
+
+		const current =
+			shellEl.getAttribute("data-sidebar-collapsed") === "true";
+
+		const next = !current;
+
+		shellEl.setAttribute(
+			"data-sidebar-collapsed",
+			next ? "true" : "false"
+		);
+
+		localStorage.setItem(
+			VENFLOW_SIDEBAR_COLLAPSED_KEY,
+			String(next)
+		);
+
+		window.dispatchEvent(
+			new CustomEvent("venflow-sidebar-collapsed-change", {
+				detail: next,
+			})
+		);
+	}, []);
+
+	const initialCollapsed =
+		localStorage.getItem(VENFLOW_SIDEBAR_COLLAPSED_KEY) === "true";
 
 	return (
-		<div style={shell}>
-			<VenFlowSidebar collapsed={sidebarCollapsed} />
+		<div
+			ref={shellRef}
+			className="venflow-shell"
+			data-sidebar-collapsed={initialCollapsed ? "true" : "false"}
+			style={shell}
+		>
+			<VenFlowSidebar />
 
 			<div style={main}>
-				<VenFlowHeader
-					sidebarCollapsed={sidebarCollapsed}
-					onToggleSidebar={toggleSidebar}
-				/>
+				<VenFlowHeader onToggleSidebar={toggleSidebar} />
 
-				<div style={contentShell}>
+				<div className="vf-content-shell" style={contentShell}>
 					<div style={contentInner}>
 						<Outlet />
 					</div>
@@ -126,7 +154,7 @@ export default function VenFlowLayout() {
 	);
 }
 
-function VenFlowSidebar({ collapsed }) {
+function VenFlowSidebar() {
 	const location = useLocation();
 	const navigate = useNavigate();
 
@@ -146,9 +174,9 @@ function VenFlowSidebar({ collapsed }) {
 	const linkStyle = (active) => ({
 		display: "flex",
 		alignItems: "center",
-		justifyContent: collapsed ? "center" : "flex-start",
-		gap: collapsed ? 0 : 13,
-		padding: collapsed ? "11px 0" : "11px 14px",
+		justifyContent: "flex-start",
+		gap: 13,
+		padding: "11px 14px",
 		marginBottom: 6,
 		borderRadius: 12,
 		textDecoration: "none",
@@ -164,35 +192,28 @@ function VenFlowSidebar({ collapsed }) {
 		boxShadow: active
 			? "0 8px 24px rgba(37,99,235,.22)"
 			: "none",
-		transition: "all .22s ease",
+		transition:
+			"background .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease",
 		whiteSpace: "nowrap",
 		overflow: "hidden",
 	});
 
-	const openQuickAction = (path) => {
-		navigate(path);
-	};
-
 	return (
-		<div style={sidebarStyle(collapsed)}>
+		<div className="vf-sidebar" style={sidebar}>
 			<div style={sidebarGlow} />
 
-			<div style={logoSectionStyle(collapsed)}>
+			<div className="vf-sidebar-logo" style={logoSection}>
 				<div style={logoIcon}>V</div>
 
-				{!collapsed && (
-					<div>
-						<div style={logoTitle}>VenFlow</div>
-						<div style={logoSub}>Veneer Workflow</div>
-					</div>
-				)}
+				<div className="vf-sidebar-copy">
+					<div style={logoTitle}>VenFlow</div>
+					<div style={logoSub}>Veneer Workflow</div>
+				</div>
 			</div>
 
-			{!collapsed && (
-				<div style={menuTitle}>
-					Tracker Menu
-				</div>
-			)}
+			<div className="vf-menu-title" style={menuTitle}>
+				Tracker Menu
+			</div>
 
 			{filteredNavItems.map((item) => {
 				const active =
@@ -202,17 +223,17 @@ function VenFlowSidebar({ collapsed }) {
 				return (
 					<Tooltip
 						key={item.path}
-						title={collapsed ? item.label : ""}
+						title={item.label}
 						placement="right"
 						arrow
 					>
 						<Link
 							to={item.path}
+							className="vf-nav-link"
 							style={linkStyle(active)}
 						>
 							<span style={navIcon}>{item.icon}</span>
-
-							{!collapsed && item.label}
+							<span className="vf-nav-label">{item.label}</span>
 						</Link>
 					</Tooltip>
 				);
@@ -220,58 +241,50 @@ function VenFlowSidebar({ collapsed }) {
 
 			<div style={sidebarDivider} />
 
-			<div style={quickActionBoxStyle(collapsed)}>
-				{!collapsed && (
-					<div style={quickActionHeader}>
-						Quick Actions
-					</div>
-				)}
+			<div className="vf-quick-actions" style={quickActionBox}>
+				<div className="vf-quick-action-title" style={quickActionHeader}>
+					Quick Actions
+				</div>
 
-				<Tooltip
-					title={collapsed ? "New Request" : ""}
-					placement="right"
-					arrow
-				>
+				<Tooltip title="New Request" placement="right" arrow>
 					<button
 						type="button"
-						style={quickActionBtnStyle(collapsed)}
-						onClick={() => openQuickAction("/venflow/create")}
+						className="vf-quick-action-btn"
+						style={quickActionBtn}
+						onClick={() => navigate("/venflow/create")}
 					>
 						<AddIcon fontSize="small" />
-
-						{!collapsed && "New Request"}
+						<span className="vf-quick-action-label">
+							New Request
+						</span>
 					</button>
 				</Tooltip>
 
-				<Tooltip
-					title={collapsed ? "Raise PO" : ""}
-					placement="right"
-					arrow
-				>
+				<Tooltip title="Raise PO" placement="right" arrow>
 					<button
 						type="button"
-						style={quickActionBtnStyle(collapsed)}
-						onClick={() => openQuickAction("/venflow/purchase")}
+						className="vf-quick-action-btn"
+						style={quickActionBtn}
+						onClick={() => navigate("/venflow/purchase")}
 					>
 						<AddIcon fontSize="small" />
-
-						{!collapsed && "Raise PO"}
+						<span className="vf-quick-action-label">
+							Raise PO
+						</span>
 					</button>
 				</Tooltip>
 
-				<Tooltip
-					title={collapsed ? "Reports" : ""}
-					placement="right"
-					arrow
-				>
+				<Tooltip title="Reports" placement="right" arrow>
 					<button
 						type="button"
-						style={quickActionBtnStyle(collapsed)}
-						onClick={() => openQuickAction("/venflow/reports")}
+						className="vf-quick-action-btn"
+						style={quickActionBtn}
+						onClick={() => navigate("/venflow/reports")}
 					>
 						<AddIcon fontSize="small" />
-
-						{!collapsed && "Reports"}
+						<span className="vf-quick-action-label">
+							Reports
+						</span>
 					</button>
 				</Tooltip>
 			</div>
@@ -279,40 +292,53 @@ function VenFlowSidebar({ collapsed }) {
 			<div style={{ flex: 1 }} />
 
 			<Tooltip
-				title={
-					collapsed
-						? `${username} • ${venFlowRoleLabel(venFlowRole)}`
-						: ""
-				}
+				title={`${username} • ${venFlowRoleLabel(venFlowRole)}`}
 				placement="right"
 				arrow
 			>
-				<div style={sidebarUserCardStyle(collapsed)}>
+				<div className="vf-sidebar-user-card" style={sidebarUserCard}>
 					<div style={sidebarAvatar}>
 						{username.charAt(0).toUpperCase()}
 					</div>
 
-					{!collapsed && (
-						<div style={{ minWidth: 0 }}>
-							<div style={sidebarUserName}>{username}</div>
-							<div style={sidebarUserRole}>
-								{venFlowRoleLabel(venFlowRole)}
-							</div>
+					<div className="vf-sidebar-user-copy" style={{ minWidth: 0 }}>
+						<div style={sidebarUserName}>{username}</div>
+						<div style={sidebarUserRole}>
+							{venFlowRoleLabel(venFlowRole)}
 						</div>
-					)}
+					</div>
 				</div>
 			</Tooltip>
 		</div>
 	);
 }
 
-function VenFlowHeader({
-	sidebarCollapsed,
-	onToggleSidebar,
-}) {
+function VenFlowHeader({ onToggleSidebar }) {
 	const navigate = useNavigate();
 
 	const location = useLocation();
+
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+		return localStorage.getItem(VENFLOW_SIDEBAR_COLLAPSED_KEY) === "true";
+	});
+
+	useEffect(() => {
+		const handleChange = (event) => {
+			setSidebarCollapsed(Boolean(event.detail));
+		};
+
+		window.addEventListener(
+			"venflow-sidebar-collapsed-change",
+			handleChange
+		);
+
+		return () => {
+			window.removeEventListener(
+				"venflow-sidebar-collapsed-change",
+				handleChange
+			);
+		};
+	}, []);
 
 	const headerMeta = useMemo(() => {
 		const path = location.pathname;
@@ -747,10 +773,10 @@ const contentInner = {
 
 /* ===================== SIDEBAR ===================== */
 
-const sidebarStyle = (collapsed) => ({
-	width: collapsed ? 78 : 230,
+/* ===================== SIDEBAR ===================== */
+
+const sidebar = {
 	height: "100vh",
-	padding: collapsed ? "18px 8px" : "18px 12px",
 	boxSizing: "border-box",
 	display: "flex",
 	flexDirection: "column",
@@ -759,9 +785,8 @@ const sidebarStyle = (collapsed) => ({
 	borderRight: "1px solid rgba(255,255,255,.06)",
 	boxShadow: "8px 0 30px rgba(2,6,23,.45)",
 	overflow: "hidden",
-	transition: "width .25s ease, padding .25s ease",
 	flexShrink: 0,
-});
+};
 
 const sidebarGlow = {
 	position: "absolute",
@@ -773,17 +798,16 @@ const sidebarGlow = {
 	pointerEvents: "none",
 };
 
-const logoSectionStyle = (collapsed) => ({
+const logoSection = {
 	position: "relative",
 	zIndex: 1,
 	display: "flex",
 	alignItems: "center",
-	justifyContent: collapsed ? "center" : "flex-start",
-	gap: collapsed ? 0 : 12,
+	justifyContent: "flex-start",
+	gap: 12,
 	marginBottom: 20,
-	paddingLeft: collapsed ? 0 : 4,
-	transition: "all .25s ease",
-});
+	paddingLeft: 4,
+};
 
 const logoIcon = {
 	width: 36,
@@ -796,6 +820,7 @@ const logoIcon = {
 	fontWeight: 950,
 	fontSize: 16,
 	boxShadow: "0 12px 28px rgba(37,99,235,.35)",
+	flexShrink: 0,
 };
 
 const logoTitle = {
@@ -834,6 +859,15 @@ const sidebarDivider = {
 	height: 1,
 	background: "linear-gradient(90deg, rgba(255,255,255,.12), transparent)",
 	margin: "14px 0",
+	flexShrink: 0,
+};
+
+const quickActionBox = {
+	padding: "12px 10px",
+	borderRadius: 16,
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.06)",
+	transition: "padding 150ms ease",
 };
 
 const quickActionHeader = {
@@ -843,15 +877,7 @@ const quickActionHeader = {
 	marginBottom: 10,
 };
 
-const quickActionBoxStyle = (collapsed) => ({
-	padding: collapsed ? "10px 6px" : "12px 10px",
-	borderRadius: 16,
-	background: "rgba(255,255,255,.035)",
-	border: "1px solid rgba(255,255,255,.06)",
-	transition: "all .25s ease",
-});
-
-const quickActionBtnStyle = (collapsed) => ({
+const quickActionBtn = {
 	width: "100%",
 	height: 34,
 	border: "none",
@@ -860,33 +886,30 @@ const quickActionBtnStyle = (collapsed) => ({
 	color: "rgba(255,255,255,.70)",
 	display: "flex",
 	alignItems: "center",
-	justifyContent: collapsed ? "center" : "flex-start",
-	gap: collapsed ? 0 : 8,
+	justifyContent: "flex-start",
+	gap: 8,
 	cursor: "pointer",
 	fontWeight: 750,
 	fontSize: 12,
 	fontFamily: "inherit",
-	padding: collapsed ? 0 : "0 4px",
-	marginBottom: collapsed ? 6 : 0,
-	transition: "all .2s ease",
+	padding: "0 4px",
+	transition:
+		"background 150ms ease, color 150ms ease, gap 150ms ease, padding 150ms ease",
+};
 
-	"&:hover": {
-		background: "rgba(59,130,246,.12)",
-	},
-});
-
-const sidebarUserCardStyle = (collapsed) => ({
+const sidebarUserCard = {
 	minHeight: 56,
 	borderRadius: 16,
 	background: "rgba(255,255,255,.045)",
 	border: "1px solid rgba(255,255,255,.08)",
 	display: "flex",
 	alignItems: "center",
-	justifyContent: collapsed ? "center" : "flex-start",
-	gap: collapsed ? 0 : 10,
-	padding: collapsed ? "9px 6px" : "9px 10px",
-	transition: "all .25s ease",
-});
+	justifyContent: "flex-start",
+	gap: 10,
+	padding: "9px 10px",
+	transition:
+		"gap 150ms ease, padding 150ms ease, justify-content 150ms ease",
+};
 
 const sidebarAvatar = {
 	width: 36,
@@ -897,6 +920,7 @@ const sidebarAvatar = {
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
 	fontWeight: 950,
+	flexShrink: 0,
 };
 
 const sidebarUserName = {
@@ -932,12 +956,14 @@ const header = {
 	position: "sticky",
 	top: 0,
 	zIndex: 50,
+	flexShrink: 0,
 };
 
 const headerLeft = {
 	display: "flex",
 	alignItems: "center",
 	gap: 14,
+	minWidth: 0,
 };
 
 const menuBtnSx = {
@@ -947,6 +973,11 @@ const menuBtnSx = {
 	color: "#cbd5e1",
 	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.06)",
+
+	"&:hover": {
+		background: "rgba(59,130,246,.16)",
+		borderColor: "rgba(59,130,246,.35)",
+	},
 };
 
 const headerTitle = {
@@ -954,6 +985,7 @@ const headerTitle = {
 	fontSize: 18,
 	fontWeight: 950,
 	lineHeight: 1,
+	whiteSpace: "nowrap",
 };
 
 const headerSub = {
@@ -961,12 +993,15 @@ const headerSub = {
 	fontSize: 11,
 	fontWeight: 850,
 	marginTop: 5,
+	whiteSpace: "nowrap",
 };
 
 const headerRight = {
 	display: "flex",
 	alignItems: "center",
+	justifyContent: "flex-end",
 	gap: 10,
+	minWidth: 0,
 };
 
 const searchBox = {
@@ -979,6 +1014,7 @@ const searchBox = {
 	alignItems: "center",
 	gap: 8,
 	padding: "0 10px",
+	flexShrink: 1,
 };
 
 const searchPlaceholder = {
@@ -986,6 +1022,9 @@ const searchPlaceholder = {
 	fontSize: 12,
 	fontWeight: 650,
 	flex: 1,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
 };
 
 const searchHint = {
@@ -996,6 +1035,7 @@ const searchHint = {
 	fontSize: 10,
 	fontWeight: 850,
 	padding: "2px 6px",
+	flexShrink: 0,
 };
 
 const healthBadge = {
@@ -1009,6 +1049,8 @@ const healthBadge = {
 	fontSize: 11,
 	cursor: "pointer",
 	fontFamily: "inherit",
+	whiteSpace: "nowrap",
+	flexShrink: 0,
 };
 
 const iconBtnSx = {
@@ -1018,6 +1060,7 @@ const iconBtnSx = {
 	color: "rgba(255,255,255,.82)",
 	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.06)",
+	flexShrink: 0,
 
 	"&:hover": {
 		background: "rgba(59,130,246,.16)",
@@ -1034,6 +1077,7 @@ const headerUserCard = {
 	borderRadius: 14,
 	background: "rgba(255,255,255,.045)",
 	border: "1px solid rgba(255,255,255,.08)",
+	flexShrink: 0,
 };
 
 const headerAvatar = {
@@ -1046,6 +1090,7 @@ const headerAvatar = {
 	color: "#fff",
 	fontWeight: 950,
 	fontSize: 12,
+	flexShrink: 0,
 };
 
 const headerUserName = {
@@ -1053,6 +1098,7 @@ const headerUserName = {
 	fontWeight: 900,
 	fontSize: 12,
 	lineHeight: 1,
+	whiteSpace: "nowrap",
 };
 
 const headerUserRole = {
@@ -1060,6 +1106,7 @@ const headerUserRole = {
 	fontWeight: 650,
 	fontSize: 10,
 	marginTop: 4,
+	whiteSpace: "nowrap",
 };
 
 /* ===================== POPOVERS ===================== */
@@ -1195,6 +1242,11 @@ const drawerCloseBtn = {
 	color: "#fff",
 	background: "rgba(255,255,255,.04)",
 	border: "1px solid rgba(255,255,255,.08)",
+
+	"&:hover": {
+		background: "rgba(239,68,68,.16)",
+		borderColor: "rgba(239,68,68,.32)",
+	},
 };
 
 const profileCard = {
@@ -1215,6 +1267,7 @@ const profileAvatar = {
 	placeItems: "center",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	fontWeight: 950,
+	flexShrink: 0,
 };
 
 const profileName = {

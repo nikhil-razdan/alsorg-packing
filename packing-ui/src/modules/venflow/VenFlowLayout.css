@@ -1,0 +1,111 @@
+.venflow-shell {
+	--vf-sidebar-width: 230px;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] {
+	--vf-sidebar-width: 78px;
+}
+
+.vf-sidebar {
+	width: var(--vf-sidebar-width);
+	padding: 18px 12px;
+	contain: layout paint style;
+	will-change: width;
+	transform: translateZ(0);
+	transition:
+		width 150ms cubic-bezier(.4, 0, .2, 1),
+		padding 150ms cubic-bezier(.4, 0, .2, 1);
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-sidebar {
+	padding: 18px 8px;
+}
+
+.vf-sidebar-logo {
+	transition:
+		justify-content 150ms ease,
+		gap 150ms ease,
+		padding-left 150ms ease;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-sidebar-logo {
+	justify-content: center !important;
+	gap: 0 !important;
+	padding-left: 0 !important;
+}
+
+.vf-sidebar-copy,
+.vf-menu-title,
+.vf-nav-label,
+.vf-quick-action-title,
+.vf-quick-action-label,
+.vf-sidebar-user-copy {
+	max-width: 170px;
+	opacity: 1;
+	overflow: hidden;
+	white-space: nowrap;
+	transition:
+		opacity 90ms ease,
+		max-width 120ms ease;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-sidebar-copy,
+.venflow-shell[data-sidebar-collapsed="true"] .vf-menu-title,
+.venflow-shell[data-sidebar-collapsed="true"] .vf-nav-label,
+.venflow-shell[data-sidebar-collapsed="true"] .vf-quick-action-title,
+.venflow-shell[data-sidebar-collapsed="true"] .vf-quick-action-label,
+.venflow-shell[data-sidebar-collapsed="true"] .vf-sidebar-user-copy {
+	max-width: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-nav-link {
+	justify-content: center !important;
+	gap: 0 !important;
+	padding: 11px 0 !important;
+}
+
+.vf-nav-link:hover {
+	background: rgba(59, 130, 246, .12) !important;
+	border-color: rgba(59, 130, 246, .24) !important;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-quick-actions {
+	padding: 10px 6px !important;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-quick-action-btn {
+	justify-content: center !important;
+	gap: 0 !important;
+	padding: 0 !important;
+	margin-bottom: 6px;
+}
+
+.vf-quick-action-btn:hover {
+	background: rgba(59, 130, 246, .12) !important;
+}
+
+.venflow-shell[data-sidebar-collapsed="true"] .vf-sidebar-user-card {
+	justify-content: center !important;
+	gap: 0 !important;
+	padding: 9px 6px !important;
+}
+
+.vf-content-shell {
+	transform: translateZ(0);
+	contain: paint;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vf-sidebar,
+	.vf-sidebar-logo,
+	.vf-sidebar-copy,
+	.vf-menu-title,
+	.vf-nav-label,
+	.vf-quick-action-title,
+	.vf-quick-action-label,
+	.vf-sidebar-user-copy {
+		transition: none !important;
+	}
+}
