@@ -281,6 +281,16 @@ const calculateBalance = (entry) => {
 	return Math.max(required - issued, 0);
 };
 
+// Used only for the header snapshot cards and the Overview "Quick Balance"
+// tiles, which reflect stock position (Required - Available) rather than
+// production movement. The Remarks tab keeps calculateBalance() above.
+const calculateStoreBalance = (entry) => {
+	const required = safeNumber(entry?.requiredQty);
+	const available = safeNumber(entry?.availableQty);
+
+	return Math.max(required - available, 0);
+};
+
 const getBackPathForRole = (role) => {
 	const cleanRole = String(role || "").trim().toUpperCase();
 
@@ -939,7 +949,7 @@ export default function VenFlowDetailPage() {
 		},
 		{
 			label: "Balance Qty",
-			value: calculateBalance(entry),
+			value: calculateStoreBalance(entry),
 			unit: entry.unit || "",
 			accent: "#facc15",
 		},
@@ -1014,7 +1024,7 @@ export default function VenFlowDetailPage() {
 						<BalanceTile label="Received" value={entry.receivedQty} unit={entry.unit} />
 						<BalanceTile label="Reserved" value={entry.reservedQty} unit={entry.unit} />
 						<BalanceTile label="Issued" value={entry.issuedQty} unit={entry.unit} />
-						<BalanceTile label="Balance" value={calculateBalance(entry)} unit={entry.unit} accent="#facc15" />
+						<BalanceTile label="Balance" value={calculateStoreBalance(entry)} unit={entry.unit} accent="#facc15" />
 					</Box>
 				</CardContent>
 			</Card>
@@ -1153,12 +1163,40 @@ export default function VenFlowDetailPage() {
 								select
 								label="Stock Decision"
 								value={storeReviewForm.stockDecision}
-								onChange={(e) =>
-									setStoreReviewForm((p) => ({
-										...p,
-										stockDecision: e.target.value,
-									}))
-								}
+								onChange={(e) => {
+									const nextDecision = e.target.value;
+
+									setStoreReviewForm((p) => {
+										let nextAvailable = p.availableQty;
+
+										if (nextDecision === "AVAILABLE") {
+											nextAvailable = entry.requiredQty ?? "";
+										} else if (nextDecision === "NOT_AVAILABLE") {
+											nextAvailable = 0;
+										}
+
+										return {
+											...p,
+											stockDecision: nextDecision,
+											availableQty: nextAvailable,
+										};
+									});
+
+									if (
+										nextDecision === "AVAILABLE" ||
+										nextDecision === "NOT_AVAILABLE"
+									) {
+										const nextAvailable =
+											nextDecision === "AVAILABLE"
+												? safeNumber(entry.requiredQty)
+												: 0;
+
+										setReserveForm((p) => ({
+											...p,
+											reservedQty: Math.max(nextAvailable, 0),
+										}));
+									}
+								}}
 								disabled={!canStoreAction}
 								sx={fieldSx}
 								SelectProps={{ MenuProps: darkMenuProps }}
@@ -1174,12 +1212,23 @@ export default function VenFlowDetailPage() {
 								label="Available Qty"
 								type="number"
 								value={storeReviewForm.availableQty}
-								onChange={(e) =>
+								onChange={(e) => {
+									const nextAvailableRaw = e.target.value;
+
 									setStoreReviewForm((p) => ({
 										...p,
-										availableQty: e.target.value,
-									}))
-								}
+										availableQty: nextAvailableRaw,
+									}));
+
+									const available = toNumberOrNull(nextAvailableRaw);
+
+									if (available !== null) {
+										setReserveForm((p) => ({
+											...p,
+											reservedQty: Math.max(available, 0),
+										}));
+									}
+								}}
 								disabled={!canStoreAction}
 								sx={fieldSx}
 							/>
