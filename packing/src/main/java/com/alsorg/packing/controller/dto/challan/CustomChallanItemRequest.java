@@ -3,7 +3,8 @@ package com.alsorg.packing.controller.dto.challan;
 public record CustomChallanItemRequest(
         String description,
         String drawingNo,
-        Integer quantity,
+        Double quantity,
+        String uom,
         Boolean returnable,
         String remarks
 ) {

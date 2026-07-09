@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -876,13 +875,14 @@ public class ChalaanPdfService {
                 float rowHeight = 24;
                 int rowsPerPage = 16;
 
-                float x0 = LEFT;
-                float x1 = 75;
-                float x2 = 315;
-                float x3 = 375;
-                float x4 = 415;
-                float x5 = 490;
-                float x6 = RIGHT;
+                float x0 = LEFT; // 40
+                float x1 = 75; // S.No
+                float x2 = 285; // Description
+                float x3 = 340; // Dwg No
+                float x4 = 385; // Qty
+                float x5 = 435; // UOM
+                float x6 = 500; // Returnable / Non Returnable
+                float x7 = RIGHT; // Remarks
 
                 float tableBottomY = tableTopY - headerHeight - (rowsPerPage * rowHeight);
 
@@ -890,7 +890,7 @@ public class ChalaanPdfService {
                                 cs,
                                 x0,
                                 tableBottomY,
-                                x6 - x0,
+                                x7 - x0,
                                 tableTopY - tableBottomY);
 
                 drawLine(cs, x1, tableBottomY, x1, tableTopY);
@@ -898,28 +898,34 @@ public class ChalaanPdfService {
                 drawLine(cs, x3, tableBottomY, x3, tableTopY);
                 drawLine(cs, x4, tableBottomY, x4, tableTopY);
                 drawLine(cs, x5, tableBottomY, x5, tableTopY);
+                drawLine(cs, x6, tableBottomY, x6, tableTopY);
 
                 drawLine(
                                 cs,
                                 x0,
                                 tableTopY - headerHeight,
-                                x6,
+                                x7,
                                 tableTopY - headerHeight);
 
                 for (int i = 0; i <= rowsPerPage; i++) {
                         float y = tableTopY - headerHeight - (i * rowHeight);
 
-                        drawLine(cs, x0, y, x6, y);
+                        drawLine(cs, x0, y, x7, y);
                 }
 
                 drawCenteredTextInBox(cs, bold, 9, x0, x1, tableTopY - 22, "S.No.");
                 drawCenteredTextInBox(cs, bold, 10, x1, x2, tableTopY - 22, "Description");
+
                 drawCenteredTextInBox(cs, bold, 9, x2, x3, tableTopY - 15, "Dwg.");
                 drawCenteredTextInBox(cs, bold, 9, x2, x3, tableTopY - 28, "No.");
+
                 drawCenteredTextInBox(cs, bold, 9, x3, x4, tableTopY - 22, "Qty");
-                drawCenteredTextInBox(cs, bold, 7, x4, x5, tableTopY - 15, "Returnable /");
-                drawCenteredTextInBox(cs, bold, 7, x4, x5, tableTopY - 28, "Non Returnable");
-                drawCenteredTextInBox(cs, bold, 9, x5, x6, tableTopY - 22, "Remarks");
+                drawCenteredTextInBox(cs, bold, 9, x4, x5, tableTopY - 22, "UOM");
+
+                drawCenteredTextInBox(cs, bold, 7, x5, x6, tableTopY - 15, "Returnable /");
+                drawCenteredTextInBox(cs, bold, 7, x5, x6, tableTopY - 28, "Non Returnable");
+
+                drawCenteredTextInBox(cs, bold, 9, x6, x7, tableTopY - 22, "Remarks");
 
                 for (int i = 0; i < pageItems.size(); i++) {
                         CustomChallanItemRequest item = pageItems.get(i);
@@ -958,23 +964,31 @@ public class ChalaanPdfService {
                                         2,
                                         9);
 
-                        drawText(
+                        drawCenteredTextInBox(
                                         cs,
                                         regular,
-                                        9,
-                                        x3 + 12,
+                                        8,
+                                        x3,
+                                        x4,
                                         textY,
-                                        item.quantity() == null
-                                                        ? "1"
-                                                        : String.valueOf(item.quantity()));
+                                        formatCustomQty(item.quantity()));
+
+                        drawCenteredTextInBox(
+                                        cs,
+                                        regular,
+                                        8,
+                                        x4,
+                                        x5,
+                                        textY,
+                                        formatCustomUom(item.uom()));
 
                         drawCustomWrappedText(
                                         cs,
                                         regular,
                                         7,
-                                        x4 + 4,
+                                        x5 + 4,
                                         rowTop - 10,
-                                        x5 - x4 - 8,
+                                        x6 - x5 - 8,
                                         Boolean.TRUE.equals(item.returnable())
                                                         ? "Returnable"
                                                         : "Non Returnable",
@@ -985,9 +999,9 @@ public class ChalaanPdfService {
                                         cs,
                                         regular,
                                         8,
-                                        x5 + 5,
+                                        x6 + 5,
                                         rowTop - 10,
-                                        x6 - x5 - 10,
+                                        x7 - x6 - 10,
                                         safe(item.remarks()),
                                         2,
                                         9);
@@ -1165,5 +1179,44 @@ public class ChalaanPdfService {
 
                 return finalValue.format(
                                 DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
+        }
+
+        private String formatCustomQty(
+                        Double quantity) {
+                double qty = quantity == null || quantity <= 0
+                                ? 1D
+                                : quantity;
+
+                if (qty == Math.floor(qty)) {
+                        return String.valueOf((long) qty);
+                }
+
+                return String.format(
+                                java.util.Locale.US,
+                                "%.2f",
+                                qty)
+                                .replaceAll("0+$", "")
+                                .replaceAll("\\.$", "");
+        }
+
+        private String formatCustomUom(
+                        String uom) {
+                String clean = uom == null
+                                ? ""
+                                : uom.trim().toUpperCase();
+
+                return switch (clean) {
+                        case "KG" -> "Kg";
+                        case "LTR" -> "Ltr";
+                        case "ML" -> "ML";
+                        case "SQFT" -> "sqft";
+                        case "FT" -> "ft";
+                        case "PIECES" -> "pieces";
+                        case "PCS" -> "pieces";
+                        case "PC" -> "pieces";
+                        case "MTR" -> "mtr";
+                        case "SQMTR" -> "sqmtr";
+                        default -> "pieces";
+                };
         }
 }

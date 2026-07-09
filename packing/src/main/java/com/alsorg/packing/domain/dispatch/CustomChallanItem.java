@@ -30,7 +30,10 @@ public class CustomChallanItem {
     private String drawingNo;
 
     @Column(name = "quantity")
-    private Integer quantity;
+    private Double quantity;
+
+    @Column(name = "uom", length = 30)
+    private String uom;
 
     @Column(name = "returnable")
     private Boolean returnable;
@@ -70,11 +73,19 @@ public class CustomChallanItem {
         this.drawingNo = drawingNo;
     }
 
-    public Integer getQuantity() {
+    public Double getQuantity() {
         return quantity;
     }
 
-    public void setQuantity(Integer quantity) {
+    public String getUom() {
+        return uom;
+    }
+
+    public void setUom(String uom) {
+        this.uom = uom;
+    }
+
+    public void setQuantity(Double quantity) {
         this.quantity = quantity;
     }
 

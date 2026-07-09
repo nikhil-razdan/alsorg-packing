@@ -78,10 +78,14 @@ public class CustomChallanService {
             item.setChallan(challan);
             item.setDescription(clean(itemRequest.description()));
             item.setDrawingNo(clean(itemRequest.drawingNo()));
+
             item.setQuantity(
                     itemRequest.quantity() == null || itemRequest.quantity() <= 0
-                            ? 1
+                            ? 1D
                             : itemRequest.quantity());
+
+            item.setUom(normalizeUom(itemRequest.uom()));
+
             item.setReturnable(Boolean.TRUE.equals(itemRequest.returnable()));
             item.setRemarks(clean(itemRequest.remarks()));
 
@@ -143,6 +147,7 @@ public class CustomChallanService {
                             item.getDescription(),
                             item.getDrawingNo(),
                             item.getQuantity(),
+                            item.getUom(),
                             item.getReturnable(),
                             item.getRemarks()));
         }
@@ -350,5 +355,26 @@ public class CustomChallanService {
         }
 
         return value.trim().toLowerCase();
+    }
+
+    private String normalizeUom(
+            String value) {
+        String clean = value == null
+                ? ""
+                : value.trim().toUpperCase();
+
+        return switch (clean) {
+            case "KG" -> "KG";
+            case "LTR" -> "LTR";
+            case "ML" -> "ML";
+            case "SQFT" -> "SQFT";
+            case "FT" -> "FT";
+            case "PIECES" -> "PIECES";
+            case "PCS" -> "PIECES";
+            case "PC" -> "PIECES";
+            case "MTR" -> "MTR";
+            case "SQMTR" -> "SQMTR";
+            default -> "PIECES";
+        };
     }
 }

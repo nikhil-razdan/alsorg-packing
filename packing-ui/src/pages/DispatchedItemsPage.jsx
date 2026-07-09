@@ -2596,6 +2596,8 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 	},
 ];
 
+
+
 function normalizeStatusSelection(value, previousValue = ["ALL"]) {
 	const rawValues = Array.isArray(value)
 		? value
@@ -2725,10 +2727,46 @@ const smartRowMatches = (row, search) => {
 	});
 };
 
+const CUSTOM_CHALLAN_UOM_OPTIONS = [
+	{
+		value: "KG",
+		label: "Kg",
+	},
+	{
+		value: "LTR",
+		label: "Ltr",
+	},
+	{
+		value: "ML",
+		label: "ML",
+	},
+	{
+		value: "SQFT",
+		label: "sqft",
+	},
+	{
+		value: "FT",
+		label: "ft",
+	},
+	{
+		value: "PIECES",
+		label: "pieces",
+	},
+	{
+		value: "MTR",
+		label: "mtr",
+	},
+	{
+		value: "SQMTR",
+		label: "sqmtr",
+	},
+];
+
 const createEmptyCustomChallanLine = () => ({
 	description: "",
 	drawingNo: "",
 	quantity: 1,
+	uom: "PIECES",
 	returnable: false,
 	remarks: "",
 });
@@ -5571,6 +5609,14 @@ function DispatchedItemsPage() {
 					const quantity =
 						Number(item.quantity || 1);
 
+					const uom =
+						String(item.uom || "PIECES")
+							.trim()
+							.toUpperCase();
+
+					const allowedUomValues =
+						CUSTOM_CHALLAN_UOM_OPTIONS.map((option) => option.value);
+
 					return {
 						description: String(item.description || "").trim(),
 						drawingNo: String(item.drawingNo || "").trim(),
@@ -5578,6 +5624,9 @@ function DispatchedItemsPage() {
 							Number.isFinite(quantity) && quantity > 0
 								? quantity
 								: 1,
+						uom: allowedUomValues.includes(uom)
+							? uom
+							: "PIECES",
 						returnable: Boolean(item.returnable),
 						remarks: String(item.remarks || "").trim(),
 					};
@@ -7959,7 +8008,7 @@ function DispatchedItemsPage() {
 											<Box
 												sx={{
 													display: "grid",
-													gridTemplateColumns: "2fr 1fr 90px 170px",
+													gridTemplateColumns: "2fr 1fr 90px 120px 170px",
 													gap: 1.4,
 													mb: 1.4,
 												}}
@@ -8003,6 +8052,37 @@ function DispatchedItemsPage() {
 													}
 													sx={formFieldSx}
 												/>
+
+												<Box>
+													<Box sx={dispatchTripFieldLabelSx}>
+														UOM
+													</Box>
+
+													<Box
+														component="select"
+														value={item.uom || "PIECES"}
+														onChange={(e) =>
+															updateCustomChallanItem(
+																index,
+																"uom",
+																e.target.value
+															)
+														}
+														sx={{
+															...dispatchTripNativeSelectSx,
+															height: 56,
+														}}
+													>
+														{CUSTOM_CHALLAN_UOM_OPTIONS.map((option) => (
+															<option
+																key={option.value}
+																value={option.value}
+															>
+																{option.label}
+															</option>
+														))}
+													</Box>
+												</Box>
 
 												<Box>
 													<Box sx={dispatchTripFieldLabelSx}>
