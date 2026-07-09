@@ -1,5 +1,41 @@
 import { API_BASE_URL } from "../../config";
 
+const getStoredToken = () => {
+  const possibleKeys = [
+    "token",
+    "authToken",
+    "jwt",
+    "accessToken",
+  ];
+
+  for (const key of possibleKeys) {
+    const value = localStorage.getItem(key);
+
+    if (value && value.trim()) {
+      const token = value.trim();
+
+      return token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+    }
+  }
+
+  return "";
+};
+
+const buildAuthHeaders = (extra = {}) => {
+  const headers = {
+    ...extra,
+  };
+
+  const token = getStoredToken();
+
+  if (token && !headers.Authorization) {
+    headers.Authorization = token;
+  }
+
+  return headers;
+};
 
 const requestJson = async (
   path,
@@ -25,7 +61,7 @@ const requestJson = async (
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    headers: finalHeaders,
+    headers: buildAuthHeaders(finalHeaders),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
 
@@ -65,7 +101,7 @@ const requestBlob = async (
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    headers: finalHeaders,
+    headers: buildAuthHeaders(finalHeaders),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
 

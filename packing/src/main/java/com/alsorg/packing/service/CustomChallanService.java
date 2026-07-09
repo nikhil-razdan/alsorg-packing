@@ -56,7 +56,8 @@ public class CustomChallanService {
         challan.setFromLocation(clean(request.fromLocation()));
         challan.setToLocation(clean(request.toLocation()));
         challan.setPdNo(clean(request.pdNo()));
-        challan.setProjectName(clean(request.projectName()));
+        challan.setDriverName(clean(request.driverName()));
+        challan.setVehicleNumber(clean(request.vehicleNumber()));
         challan.setClientName(clean(request.clientName()));
         challan.setClientAddress(clean(request.clientAddress()));
         challan.setPurpose(clean(request.purpose()));
@@ -151,11 +152,12 @@ public class CustomChallanService {
                 challan.getFromLocation(),
                 challan.getToLocation(),
                 challan.getPdNo(),
-                challan.getProjectName(),
                 challan.getClientName(),
                 challan.getClientAddress(),
                 challan.getPurpose(),
                 challan.getMovementMode(),
+                challan.getDriverName(),
+                challan.getVehicleNumber(),
                 challan.getGeneratedAt(),
                 itemRequests);
     }
@@ -169,10 +171,11 @@ public class CustomChallanService {
                 challan.getFromLocation(),
                 challan.getToLocation(),
                 challan.getPdNo(),
-                challan.getProjectName(),
                 challan.getClientName(),
                 challan.getPurpose(),
                 challan.getMovementMode(),
+                challan.getDriverName(),
+                challan.getVehicleNumber(),
                 challan.getGeneratedBy(),
                 challan.getGeneratedAt(),
                 challan.getItems() == null
@@ -192,6 +195,14 @@ public class CustomChallanService {
 
         if (isBlank(request.toLocation())) {
             throw new RuntimeException("To location / site is required");
+        }
+
+        if (isBlank(request.driverName())) {
+            throw new RuntimeException("Driver name is required");
+        }
+
+        if (isBlank(request.vehicleNumber())) {
+            throw new RuntimeException("Vehicle number is required");
         }
 
         if (request.items() == null || request.items().isEmpty()) {

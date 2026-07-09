@@ -31,9 +31,6 @@ public class CustomChallan {
     @Column(name = "pd_no", length = 120)
     private String pdNo;
 
-    @Column(name = "project_name", length = 255)
-    private String projectName;
-
     @Column(name = "client_name", length = 255)
     private String clientName;
 
@@ -46,17 +43,19 @@ public class CustomChallan {
     @Column(name = "movement_mode", length = 80)
     private String movementMode;
 
+    @Column(name = "driver_name", length = 255)
+    private String driverName;
+
+    @Column(name = "vehicle_number", length = 120)
+    private String vehicleNumber;
+
     @Column(name = "generated_by", length = 120)
     private String generatedBy;
 
     @Column(name = "generated_at")
     private LocalDateTime generatedAt;
 
-    @OneToMany(
-            mappedBy = "challan",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "challan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CustomChallanItem> items = new ArrayList<>();
 
     public String getChallanNumber() {
@@ -97,14 +96,6 @@ public class CustomChallan {
 
     public void setPdNo(String pdNo) {
         this.pdNo = pdNo;
-    }
-
-    public String getProjectName() {
-        return projectName;
-    }
-
-    public void setProjectName(String projectName) {
-        this.projectName = projectName;
     }
 
     public String getClientName() {
@@ -161,5 +152,21 @@ public class CustomChallan {
 
     public void setItems(List<CustomChallanItem> items) {
         this.items = items;
+    }
+
+    public String getDriverName() {
+        return driverName;
+    }
+
+    public void setDriverName(String driverName) {
+        this.driverName = driverName;
+    }
+
+    public String getVehicleNumber() {
+        return vehicleNumber;
+    }
+
+    public void setVehicleNumber(String vehicleNumber) {
+        this.vehicleNumber = vehicleNumber;
     }
 }

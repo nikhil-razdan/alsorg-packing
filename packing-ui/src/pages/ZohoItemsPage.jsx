@@ -1256,6 +1256,7 @@ function ZohoItemsPage() {
         /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/
       );
 
+      
     if (!match) {
       const fallback =
         new Date(raw);
@@ -4384,7 +4385,8 @@ function ZohoItemsPage() {
 
                     await fetchItems();
                   } catch (e) {
-                    alert("Failed to create custom packet");
+                    console.error(e);
+                    showUiAlert("error", "Failed to create custom packet");
                   }
                 }}
               >
@@ -4539,7 +4541,8 @@ function ZohoItemsPage() {
 
                     await fetchItems();
                   } catch (e) {
-                    alert("Failed to add packets");
+                    console.error(e);
+                    showUiAlert("error", "Failed to add packets");
                   }
                 }}
               >
@@ -4719,7 +4722,8 @@ function ZohoItemsPage() {
 
                     await fetchItems();
                   } catch (e) {
-                    alert("Failed to add custom packet");
+                    console.error(e);
+                    showUiAlert("error", "Failed to add custom packet");
                   }
                 }}
               >

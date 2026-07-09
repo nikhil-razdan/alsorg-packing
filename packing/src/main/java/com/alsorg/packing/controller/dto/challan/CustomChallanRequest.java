@@ -8,11 +8,12 @@ public record CustomChallanRequest(
         String fromLocation,
         String toLocation,
         String pdNo,
-        String projectName,
         String clientName,
         String clientAddress,
         String purpose,
         String movementMode,
+        String driverName,
+        String vehicleNumber,
         LocalDateTime dispatchTime,
         List<CustomChallanItemRequest> items
 ) {

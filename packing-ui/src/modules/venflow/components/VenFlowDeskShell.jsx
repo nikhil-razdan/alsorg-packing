@@ -370,7 +370,6 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 		});
 		setPage(0);
 		setSelectedId("");
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [desk]);
 
 	const selectedRow = useMemo(() => {
@@ -448,12 +447,10 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 
 	useEffect(() => {
 		loadDashboard();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	useEffect(() => {
 		load(page);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [page, size, desk]);
 
 	const applyFilters = () => {

@@ -2844,7 +2844,8 @@ function DispatchedItemsPage() {
 		fromLocation: "",
 		toLocation: "",
 		pdNo: "",
-		projectName: "",
+		driverName: "",
+		vehicleNumber: "",
 		clientName: "",
 		clientAddress: "",
 		purpose: "",
@@ -5456,7 +5457,8 @@ function DispatchedItemsPage() {
 			fromLocation: "",
 			toLocation: "",
 			pdNo: "",
-			projectName: "",
+			driverName: "",
+			vehicleNumber: "",
 			clientName: "",
 			clientAddress: "",
 			purpose: "",
@@ -5537,6 +5539,22 @@ function DispatchedItemsPage() {
 		const toLocation =
 			String(customChallanForm.toLocation || "").trim();
 
+		const driverName =
+			String(customChallanForm.driverName || "").trim();
+
+		const vehicleNumber =
+			String(customChallanForm.vehicleNumber || "").trim();
+
+		if (!driverName) {
+			alert("Driver name is required");
+			return;
+		}
+
+		if (!vehicleNumber) {
+			alert("Vehicle number is required");
+			return;
+		}
+
 		if (!fromLocation) {
 			alert("From location is required");
 			return;
@@ -5581,7 +5599,8 @@ function DispatchedItemsPage() {
 				toLocation,
 
 				pdNo: String(customChallanForm.pdNo || "").trim(),
-				projectName: String(customChallanForm.projectName || "").trim(),
+				driverName,
+				vehicleNumber,
 				clientName: String(customChallanForm.clientName || "").trim(),
 				clientAddress: String(customChallanForm.clientAddress || "").trim(),
 				purpose: String(customChallanForm.purpose || "").trim(),
@@ -6123,7 +6142,8 @@ function DispatchedItemsPage() {
 							challan.fromLocation,
 							challan.toLocation,
 							challan.clientName,
-							challan.projectName,
+							challan.driverName,
+							challan.vehicleNumber,
 							challan.pdNo,
 							challan.generatedBy,
 						].join(" ")
@@ -6791,7 +6811,8 @@ function DispatchedItemsPage() {
 															}}
 														>
 															{challan.clientName || "No client"} •{" "}
-															{challan.projectName || "No project"}
+															Driver: {challan.driverName || "—"} • Vehicle:{" "}
+															{challan.vehicleNumber || "—"}
 														</Box>
 													</Box>
 
@@ -7768,14 +7789,61 @@ function DispatchedItemsPage() {
 											sx={formFieldSx}
 										/>
 
-										<TextField
-											label="Project Name"
-											value={customChallanForm.projectName}
-											onChange={(e) =>
-												updateCustomChallanField("projectName", e.target.value)
-											}
-											sx={formFieldSx}
-										/>
+										<Box>
+											<Box sx={dispatchTripFieldLabelSx}>
+												Driver Name
+											</Box>
+
+											<Box
+												component="select"
+												value={customChallanForm.driverName}
+												onChange={(e) =>
+													updateCustomChallanField("driverName", e.target.value)
+												}
+												sx={dispatchTripNativeSelectSx}
+											>
+												<option value="">
+													Select Driver
+												</option>
+
+												{logisticsDrivers.map((driver) => (
+													<option
+														key={driver.id || driver.name}
+														value={driver.name}
+													>
+														{driver.name}
+													</option>
+												))}
+											</Box>
+										</Box>
+
+										<Box>
+											<Box sx={dispatchTripFieldLabelSx}>
+												Vehicle Number
+											</Box>
+
+											<Box
+												component="select"
+												value={customChallanForm.vehicleNumber}
+												onChange={(e) =>
+													updateCustomChallanField("vehicleNumber", e.target.value)
+												}
+												sx={dispatchTripNativeSelectSx}
+											>
+												<option value="">
+													Select Vehicle
+												</option>
+
+												{logisticsVehicles.map((vehicle) => (
+													<option
+														key={vehicle.id || vehicle.vehicleNumber}
+														value={vehicle.vehicleNumber}
+													>
+														{vehicle.vehicleNumber}
+													</option>
+												))}
+											</Box>
+										</Box>
 
 										<TextField
 											label="Client Name"
@@ -10411,8 +10479,12 @@ function DispatchedItemsPage() {
 														</Box>
 
 														<Box sx={challanHistoryMetaSx}>
-															Client: {challan.clientName || "—"} • By:{" "}
-															{challan.generatedBy || "—"} •{" "}
+															Client: {challan.clientName || "—"} • Driver:{" "}
+															{challan.driverName || "—"} • Vehicle:{" "}
+															{challan.vehicleNumber || "—"}
+														</Box>
+														<Box sx={challanHistoryMetaSx}>
+															By: {challan.generatedBy || "—"} •{" "}
 															{formatLocalDateTimeDisplay(challan.generatedAt)}
 														</Box>
 													</Box>
