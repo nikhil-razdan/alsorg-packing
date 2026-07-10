@@ -6,6 +6,7 @@ public record AdminDeletePreviewResponse(
         String targetType,
         String targetId,
         String displayName,
+        String description,
         String pdNo,
         String drawingNo,
         String packetNumber,

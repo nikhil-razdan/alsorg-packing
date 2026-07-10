@@ -17,34 +17,46 @@ import org.springframework.data.repository.query.Param;
 public interface MasterItemRepository
         extends JpaRepository<MasterItem, UUID> {
 
-    
+    /*
+     * =====================================================
+     * ADMIN DELETE PREVIEW
+     * =====================================================
+     */
+
+    @Query("""
+                SELECT m
+                FROM MasterItem m
+                WHERE m.id = :masterItemId
+            """)
+    Optional<MasterItem> findByIdForAdminDeletionPreview(
+            @Param("masterItemId") UUID masterItemId);
+            
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        SELECT m
-        FROM MasterItem m
-        WHERE m.id = :masterItemId
-    """)
+                SELECT m
+                FROM MasterItem m
+                WHERE m.id = :masterItemId
+            """)
     Optional<MasterItem> findByIdForAdminDeletion(
-            @Param("masterItemId") UUID masterItemId
-    );
+            @Param("masterItemId") UUID masterItemId);
 
-   
     @Query("""
-        SELECT m
-        FROM MasterItem m
-        WHERE LOWER(COALESCE(m.itemName, ''))
-                  LIKE LOWER(CONCAT('%', :query, '%'))
-           OR LOWER(COALESCE(m.pdNo, ''))
-                  LIKE LOWER(CONCAT('%', :query, '%'))
-           OR LOWER(COALESCE(m.drawingName, ''))
-                  LIKE LOWER(CONCAT('%', :query, '%'))
-           OR LOWER(COALESCE(m.clientName, ''))
-                  LIKE LOWER(CONCAT('%', :query, '%'))
-           OR LOWER(COALESCE(m.address, ''))
-                  LIKE LOWER(CONCAT('%', :query, '%'))
-    """)
+                SELECT m
+                FROM MasterItem m
+                WHERE LOWER(COALESCE(m.itemName, ''))
+                          LIKE LOWER(CONCAT('%', :query, '%'))
+                   OR LOWER(COALESCE(m.pdNo, ''))
+                          LIKE LOWER(CONCAT('%', :query, '%'))
+                   OR LOWER(COALESCE(m.drawingName, ''))
+                          LIKE LOWER(CONCAT('%', :query, '%'))
+                   OR LOWER(COALESCE(m.clientName, ''))
+                          LIKE LOWER(CONCAT('%', :query, '%'))
+                   OR LOWER(COALESCE(m.address, ''))
+                          LIKE LOWER(CONCAT('%', :query, '%'))
+            """)
     Page<MasterItem> searchForAdminDeletion(
             @Param("query") String query,
-            Pageable pageable
-    );
+            Pageable pageable);
+
 }

@@ -238,7 +238,7 @@ public class AdminDeletionService {
 
         PacketItem item =
                 packetItemRepository
-                        .findByIdForAdminDeletion(itemId)
+                        .findByIdForAdminDeletionPreview(itemId)
                         .orElseThrow(() ->
                                 new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
@@ -276,6 +276,7 @@ public class AdminDeletionService {
                 "PACKET_ITEM",
                 itemId.toString(),
                 buildPacketDisplayName(item),
+                safe(item.getDescription()),
                 safe(item.getPdNo()),
                 safe(item.getDrawingNo()),
                 safe(item.getPacketNumber()),
@@ -309,7 +310,7 @@ public class AdminDeletionService {
 
         MasterItem master =
                 masterItemRepository
-                        .findByIdForAdminDeletion(
+                        .findByIdForAdminDeletionPreview(
                                 masterItemId
                         )
                         .orElseThrow(() ->
@@ -368,6 +369,7 @@ public class AdminDeletionService {
                 "MASTER_ITEM",
                 masterItemId.toString(),
                 buildMasterDisplayName(master),
+                "",
                 safe(master.getPdNo()),
                 safe(master.getDrawingName()),
                 "-",
@@ -1641,6 +1643,7 @@ public class AdminDeletionService {
                         : master.getId().toString(),
 
                 item.getItemName(),
+                item.getDescription(),
                 item.getPdNo(),
                 item.getDrawingNo(),
                 item.getPacketNumber(),
@@ -1670,6 +1673,7 @@ public class AdminDeletionService {
                 master.getId().toString(),
                 master.getId().toString(),
                 master.getItemName(),
+                "",
                 master.getPdNo(),
                 master.getDrawingName(),
                 null,

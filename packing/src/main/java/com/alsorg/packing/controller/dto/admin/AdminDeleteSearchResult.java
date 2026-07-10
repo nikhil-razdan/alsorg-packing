@@ -5,6 +5,7 @@ public record AdminDeleteSearchResult(
         String id,
         String masterItemId,
         String itemName,
+        String description,
         String pdNo,
         String drawingNo,
         String packetNumber,

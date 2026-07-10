@@ -275,6 +275,11 @@ function SearchResultCard({
     const isMaster =
         target.type === "MASTER_ITEM";
 
+    const description =
+        target.description ||
+        target.itemDescription ||
+        "";
+
     return (
         <button
             type="button"
@@ -286,12 +291,14 @@ function SearchResultCard({
             )}
         >
             <div style={searchResultTop}>
-                <div>
-                    <div style={resultTypeBadge(
-                        isMaster
-                            ? "#a78bfa"
-                            : "#38bdf8"
-                    )}>
+                <div style={resultIdentity}>
+                    <div
+                        style={resultTypeBadge(
+                            isMaster
+                                ? "#a78bfa"
+                                : "#38bdf8"
+                        )}
+                    >
                         {isMaster
                             ? "Master Item"
                             : "Packet Item"}
@@ -300,11 +307,26 @@ function SearchResultCard({
                     <div style={resultTitle}>
                         {getTargetLabel(target)}
                     </div>
+
+                    {!isMaster && (
+                        <div style={resultDescription}>
+                            <div style={resultDescriptionLabel}>
+                                Description
+                            </div>
+
+                            <div style={resultDescriptionText}>
+                                {description ||
+                                    "No description available"}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                <div style={selectIndicator(
-                    selected
-                )}>
+                <div
+                    style={selectIndicator(
+                        selected
+                    )}
+                >
                     {selected ? "✓" : "→"}
                 </div>
             </div>
@@ -320,8 +342,7 @@ function SearchResultCard({
                 <div>
                     <span>Drawing</span>
                     <strong>
-                        {target.drawingNo ||
-                            "-"}
+                        {target.drawingNo || "-"}
                     </strong>
                 </div>
 
@@ -335,11 +356,9 @@ function SearchResultCard({
                     <strong>
                         {isMaster
                             ? Number(
-                                target.totalPackets ||
-                                0
+                                target.totalPackets || 0
                             )
-                            : target.packetNumber ||
-                            "-"}
+                            : target.packetNumber || "-"}
                     </strong>
                 </div>
 
@@ -362,8 +381,7 @@ function SearchResultCard({
                         <div>
                             <span>Sticker</span>
                             <strong>
-                                {target.stickerNumber ||
-                                    "-"}
+                                {target.stickerNumber || "-"}
                             </strong>
                         </div>
                     </>
@@ -1348,6 +1366,19 @@ function AdminDeleteCenter({
                                                         {preview.displayName ||
                                                             preview.targetId}
                                                     </div>
+                                                    {preview.targetType === "PACKET_ITEM" && (
+                                                        <div style={previewDescription}>
+                                                            <div style={previewDescriptionLabel}>
+                                                                Packet Description
+                                                            </div>
+
+                                                            <div style={previewDescriptionText}>
+                                                                {preview.description ||
+                                                                    preview.itemDescription ||
+                                                                    "No description available for this packet."}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div
@@ -1929,6 +1960,35 @@ const searchResultTop = {
     gap: 12,
 };
 
+const resultDescriptionLabel = {
+    marginBottom: 5,
+
+    color: "rgba(255,255,255,.42)",
+
+    fontSize: 9,
+    fontWeight: 900,
+
+    textTransform: "uppercase",
+    letterSpacing: ".06em",
+};
+
+const resultDescriptionText = {
+    color: "rgba(255,255,255,.72)",
+
+    fontSize: 11.5,
+    fontWeight: 650,
+
+    lineHeight: 1.5,
+
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+};
+
 const resultTypeBadge = (accent) => ({
     display: "inline-flex",
     minHeight: 22,
@@ -2247,6 +2307,59 @@ const validationError = {
     color: "#fca5a5",
     fontSize: 10.5,
     fontWeight: 700,
+};
+
+const resultIdentity = {
+    minWidth: 0,
+    flex: 1,
+};
+
+const resultDescription = {
+    marginTop: 9,
+    padding: "9px 10px",
+
+    borderRadius: 11,
+
+    background:
+        "rgba(255,255,255,.035)",
+
+    border:
+        "1px solid rgba(255,255,255,.055)",
+};
+
+const previewDescription = {
+    padding: "13px 14px",
+
+    borderRadius: 15,
+
+    background:
+        "linear-gradient(135deg, rgba(56,189,248,.08), rgba(255,255,255,.025))",
+
+    border:
+        "1px solid rgba(56,189,248,.17)",
+};
+
+const previewDescriptionLabel = {
+    marginBottom: 7,
+
+    color: "#7dd3fc",
+
+    fontSize: 10,
+    fontWeight: 950,
+
+    textTransform: "uppercase",
+    letterSpacing: ".07em",
+};
+
+const previewDescriptionText = {
+    color: "rgba(255,255,255,.80)",
+
+    fontSize: 12.5,
+    fontWeight: 650,
+
+    lineHeight: 1.6,
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
 };
 
 const deleteButton = (disabled) => ({
