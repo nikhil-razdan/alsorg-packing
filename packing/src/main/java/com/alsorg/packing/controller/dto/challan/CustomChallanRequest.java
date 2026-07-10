@@ -14,6 +14,7 @@ public record CustomChallanRequest(
         String movementMode,
         String driverName,
         String vehicleNumber,
+        String handedOverTo,
         LocalDateTime dispatchTime,
         List<CustomChallanItemRequest> items
 ) {

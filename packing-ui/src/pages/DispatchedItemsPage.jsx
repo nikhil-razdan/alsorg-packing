@@ -2727,6 +2727,51 @@ const smartRowMatches = (row, search) => {
 	});
 };
 
+const CUSTOM_CHALLAN_TYPE_OPTIONS = [
+	{
+		value: "CUSTOMER_CARE",
+		label: "Customer Care",
+	},
+	{
+		value: "HARDWARE_SITE_REQUIREMENT",
+		label: "Hardware / Site Requirement",
+	},
+	{
+		value: "ASSEMBLY_SITE_REQUIREMENT",
+		label: "Assembly / Site Requirement",
+	},
+	{
+		value: "JOB_WORK",
+		label: "Job Work",
+	},
+	{
+		value: "SITE_RETURN",
+		label: "Site Return",
+	},
+	{
+		value: "OTHER",
+		label: "Other Movement",
+	},
+];
+
+const isSiteReturnChallanType = (value) => {
+	return String(value || "")
+		.trim()
+		.toUpperCase() === "SITE_RETURN";
+};
+
+const getCustomChallanTypeLabel = (value) => {
+	const clean = String(value || "")
+		.trim()
+		.toUpperCase();
+
+	return (
+		CUSTOM_CHALLAN_TYPE_OPTIONS.find(
+			(option) => option.value === clean
+		)?.label || "Other Movement"
+	);
+};
+
 const CUSTOM_CHALLAN_UOM_OPTIONS = [
 	{
 		value: "KG",
@@ -2884,6 +2929,7 @@ function DispatchedItemsPage() {
 		pdNo: "",
 		driverName: "",
 		vehicleNumber: "",
+		handedOverTo: "",
 		clientName: "",
 		clientAddress: "",
 		purpose: "",
@@ -5497,6 +5543,7 @@ function DispatchedItemsPage() {
 			pdNo: "",
 			driverName: "",
 			vehicleNumber: "",
+			handedOverTo: "",
 			clientName: "",
 			clientAddress: "",
 			purpose: "",
@@ -5583,6 +5630,14 @@ function DispatchedItemsPage() {
 		const vehicleNumber =
 			String(customChallanForm.vehicleNumber || "").trim();
 
+		const challanType =
+			String(customChallanForm.challanType || "OTHER")
+				.trim()
+				.toUpperCase();
+
+		const handedOverTo =
+			String(customChallanForm.handedOverTo || "").trim();
+
 		if (!driverName) {
 			alert("Driver name is required");
 			return;
@@ -5590,6 +5645,11 @@ function DispatchedItemsPage() {
 
 		if (!vehicleNumber) {
 			alert("Vehicle number is required");
+			return;
+		}
+
+		if (isSiteReturnChallanType(challanType) && !handedOverTo) {
+			alert("Handed Over To is required for Site Return challan");
 			return;
 		}
 
@@ -5644,23 +5704,25 @@ function DispatchedItemsPage() {
 			const result = await createCustomChallan({
 				...customChallanForm,
 
+				challanType,
+
 				fromLocation,
 				toLocation,
 
 				pdNo: String(customChallanForm.pdNo || "").trim(),
 				driverName,
 				vehicleNumber,
+
+				handedOverTo: isSiteReturnChallanType(challanType)
+					? handedOverTo
+					: "",
+
 				clientName: String(customChallanForm.clientName || "").trim(),
 				clientAddress: String(customChallanForm.clientAddress || "").trim(),
 				purpose: String(customChallanForm.purpose || "").trim(),
 
 				movementMode: "DIRECT_DISPATCH",
 
-				/*
-				 * Important:
-				 * Do not fallback to current time here.
-				 * User-selected challan date/time should be the only source.
-				 */
 				dispatchTime: selectedDispatchTime,
 
 				items: cleanedItems,
@@ -6188,11 +6250,13 @@ function DispatchedItemsPage() {
 							challan.challanNumber,
 							challan.challanType,
 							challan.challanTypeLabel,
+							getCustomChallanTypeLabel(challan.challanType),
 							challan.fromLocation,
 							challan.toLocation,
 							challan.clientName,
 							challan.driverName,
 							challan.vehicleNumber,
+							challan.handedOverTo,
 							challan.pdNo,
 							challan.generatedBy,
 						].join(" ")
@@ -6687,7 +6751,7 @@ function DispatchedItemsPage() {
 									</Box>
 
 									<Box sx={customChallanSubSx}>
-										Customer care, hardware and site assembly challans generated manually
+										Customer care, hardware/site, assembly, job work and site return challans generated manually
 									</Box>
 								</Box>
 							</Box>
@@ -6823,7 +6887,10 @@ function DispatchedItemsPage() {
 
 													<Chip
 														size="small"
-														label={challan.challanTypeLabel || challan.challanType}
+														label={
+															challan.challanTypeLabel ||
+															getCustomChallanTypeLabel(challan.challanType)
+														}
 														sx={{
 															width: "fit-content",
 															color: "#c4b5fd",
@@ -6862,6 +6929,11 @@ function DispatchedItemsPage() {
 															{challan.clientName || "No client"} •{" "}
 															Driver: {challan.driverName || "—"} • Vehicle:{" "}
 															{challan.vehicleNumber || "—"}
+															{isSiteReturnChallanType(challan.challanType) && (
+																<>
+																	{" "}• Handed Over To: {challan.handedOverTo || "—"}
+																</>
+															)}
 														</Box>
 													</Box>
 
@@ -7733,7 +7805,7 @@ function DispatchedItemsPage() {
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Customer Care / Site / Assembly / Other Movement
+											Customer Care / Site Requirement / Job Work / Site Return / Other Movement
 										</Box>
 									</Box>
 								</Box>
@@ -7765,26 +7837,27 @@ function DispatchedItemsPage() {
 											<Box
 												component="select"
 												value={customChallanForm.challanType}
-												onChange={(e) =>
-													updateCustomChallanField("challanType", e.target.value)
-												}
+												onChange={(e) => {
+													const nextType = e.target.value;
+
+													setCustomChallanForm((prev) => ({
+														...prev,
+														challanType: nextType,
+														handedOverTo: isSiteReturnChallanType(nextType)
+															? prev.handedOverTo
+															: "",
+													}));
+												}}
 												sx={dispatchTripNativeSelectSx}
 											>
-												<option value="CUSTOMER_CARE">
-													Customer Care
-												</option>
-
-												<option value="HARDWARE_SITE_REQUIREMENT">
-													Hardware / Site Requirement
-												</option>
-
-												<option value="ASSEMBLY_SITE_REQUIREMENT">
-													Assembly / Site Requirement
-												</option>
-
-												<option value="OTHER">
-													Other Movement
-												</option>
+												{CUSTOM_CHALLAN_TYPE_OPTIONS.map((option) => (
+													<option
+														key={option.value}
+														value={option.value}
+													>
+														{option.label}
+													</option>
+												))}
 											</Box>
 										</Box>
 
@@ -7893,7 +7966,18 @@ function DispatchedItemsPage() {
 												))}
 											</Box>
 										</Box>
-
+										{isSiteReturnChallanType(customChallanForm.challanType) && (
+											<TextField
+												label="Handed Over To"
+												placeholder="Person name / site representative"
+												value={customChallanForm.handedOverTo}
+												onChange={(e) =>
+													updateCustomChallanField("handedOverTo", e.target.value)
+												}
+												required
+												sx={formFieldSx}
+											/>
+										)}
 										<TextField
 											label="Client Name"
 											value={customChallanForm.clientName}
@@ -10545,8 +10629,7 @@ function DispatchedItemsPage() {
 
 														<Box sx={challanHistoryMetaSx}>
 															{challan.challanTypeLabel ||
-																challan.challanType ||
-																"Custom Challan"}{" "}
+																getCustomChallanTypeLabel(challan.challanType)}{" "}
 															• {challan.totalItems || 0} item
 															{Number(challan.totalItems || 0) === 1
 																? ""
@@ -10563,6 +10646,11 @@ function DispatchedItemsPage() {
 															{challan.driverName || "—"} • Vehicle:{" "}
 															{challan.vehicleNumber || "—"}
 														</Box>
+														{isSiteReturnChallanType(challan.challanType) && (
+															<Box sx={challanHistoryMetaSx}>
+																Handed Over To: {challan.handedOverTo || "—"}
+															</Box>
+														)}
 														<Box sx={challanHistoryMetaSx}>
 															By: {challan.generatedBy || "—"} •{" "}
 															{formatLocalDateTimeDisplay(challan.generatedAt)}

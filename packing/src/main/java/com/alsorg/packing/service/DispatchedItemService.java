@@ -510,11 +510,7 @@ public class DispatchedItemService {
                         ? username
                         : "SYSTEM");
 
-        /*
-         * Important:
-         * Do NOT set currentLocationCode to warehouse here.
-         * Item is only requested. It enters warehouse only after approval.
-         */
+
         dispatchedRepo.save(item);
 
         auditLogService.log(

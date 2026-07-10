@@ -58,6 +58,7 @@ public class CustomChallanService {
         challan.setPdNo(clean(request.pdNo()));
         challan.setDriverName(clean(request.driverName()));
         challan.setVehicleNumber(clean(request.vehicleNumber()));
+        challan.setHandedOverTo(clean(request.handedOverTo()));
         challan.setClientName(clean(request.clientName()));
         challan.setClientAddress(clean(request.clientAddress()));
         challan.setPurpose(clean(request.purpose()));
@@ -163,6 +164,7 @@ public class CustomChallanService {
                 challan.getMovementMode(),
                 challan.getDriverName(),
                 challan.getVehicleNumber(),
+                challan.getHandedOverTo(),
                 challan.getGeneratedAt(),
                 itemRequests);
     }
@@ -181,6 +183,7 @@ public class CustomChallanService {
                 challan.getMovementMode(),
                 challan.getDriverName(),
                 challan.getVehicleNumber(),
+                challan.getHandedOverTo(),
                 challan.getGeneratedBy(),
                 challan.getGeneratedAt(),
                 challan.getItems() == null
@@ -208,6 +211,10 @@ public class CustomChallanService {
 
         if (isBlank(request.vehicleNumber())) {
             throw new RuntimeException("Vehicle number is required");
+        }
+        if (isType(request.challanType(), "SITE_RETURN")
+                && isBlank(request.handedOverTo())) {
+            throw new RuntimeException("Handed over to is required for Site Return challan");
         }
 
         if (request.items() == null || request.items().isEmpty()) {
@@ -239,6 +246,10 @@ public class CustomChallanService {
             prefix = "HW-CH";
         } else if ("ASSEMBLY_SITE_REQUIREMENT".equals(cleanType)) {
             prefix = "ASM-CH";
+        } else if ("JOB_WORK".equals(cleanType)) {
+            prefix = "JW-CH";
+        } else if ("SITE_RETURN".equals(cleanType)) {
+            prefix = "SR-CH";
         } else {
             prefix = "CUS-CH";
         }
@@ -272,6 +283,14 @@ public class CustomChallanService {
 
         if ("ASSEMBLY_SITE_REQUIREMENT".equals(clean)) {
             return "Assembly / Site Requirement";
+        }
+
+        if ("JOB_WORK".equals(clean)) {
+            return "Job Work";
+        }
+
+        if ("SITE_RETURN".equals(clean)) {
+            return "Site Return";
         }
 
         return "Other Movement";
@@ -376,5 +395,16 @@ public class CustomChallanService {
             case "SQMTR" -> "SQMTR";
             default -> "PIECES";
         };
+    }
+
+    private boolean isType(
+            String value,
+            String expected) {
+        if (value == null || expected == null) {
+            return false;
+        }
+
+        return value.trim()
+                .equalsIgnoreCase(expected.trim());
     }
 }

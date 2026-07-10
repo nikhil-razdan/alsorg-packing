@@ -14,6 +14,7 @@ public record CustomChallanSummaryResponse(
         String movementMode,
         String driverName,
         String vehicleNumber,
+        String handedOverTo,
         String generatedBy,
         LocalDateTime generatedAt,
         int totalItems

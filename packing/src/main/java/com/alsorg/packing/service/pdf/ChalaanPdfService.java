@@ -732,9 +732,15 @@ public class ChalaanPdfService {
                 float x3 = 410;
                 float x4 = RIGHT;
 
+                boolean siteReturn = isCustomType(
+                                request == null ? null : request.challanType(),
+                                "SITE_RETURN");
+
                 float topY = 690;
-                float rowHeight = 22;
-                float bottomY = topY - (rowHeight * 5);
+                float rowHeight = siteReturn ? 18 : 22;
+                int rowCount = siteReturn ? 6 : 5;
+
+                float bottomY = topY - (rowHeight * rowCount);
 
                 drawRect(
                                 cs,
@@ -747,7 +753,7 @@ public class ChalaanPdfService {
                 drawLine(cs, x2, bottomY, x2, topY);
                 drawLine(cs, x3, bottomY, x3, topY);
 
-                for (int i = 1; i < 5; i++) {
+                for (int i = 1; i < rowCount; i++) {
                         float y = topY - (rowHeight * i);
                         drawLine(cs, x0, y, x4, y);
                 }
@@ -851,16 +857,51 @@ public class ChalaanPdfService {
                                 "Purpose",
                                 request == null ? "-" : safe(request.purpose()));
 
-                drawCustomCell(
-                                cs,
-                                bold,
-                                regular,
-                                x2,
-                                x3,
-                                topY - (rowHeight * 4),
-                                rowHeight,
-                                "By",
-                                safe(createdBy));
+                if (siteReturn) {
+                        drawCustomCell(
+                                        cs,
+                                        bold,
+                                        regular,
+                                        x2,
+                                        x3,
+                                        topY - (rowHeight * 4),
+                                        rowHeight,
+                                        "Mode",
+                                        request == null ? "-" : safe(request.movementMode()));
+
+                        drawCustomCell(
+                                        cs,
+                                        bold,
+                                        regular,
+                                        x0,
+                                        x1,
+                                        topY - (rowHeight * 5),
+                                        rowHeight,
+                                        "Handed Over To",
+                                        request == null ? "-" : safe(request.handedOverTo()));
+
+                        drawCustomCell(
+                                        cs,
+                                        bold,
+                                        regular,
+                                        x2,
+                                        x3,
+                                        topY - (rowHeight * 5),
+                                        rowHeight,
+                                        "By",
+                                        safe(createdBy));
+                } else {
+                        drawCustomCell(
+                                        cs,
+                                        bold,
+                                        regular,
+                                        x2,
+                                        x3,
+                                        topY - (rowHeight * 4),
+                                        rowHeight,
+                                        "By",
+                                        safe(createdBy));
+                }
         }
 
         private void drawCustomChallanTable(
@@ -1168,6 +1209,14 @@ public class ChalaanPdfService {
                         return "ASSEMBLY / SITE REQUIREMENT";
                 }
 
+                if ("JOB_WORK".equals(clean)) {
+                        return "JOB WORK";
+                }
+
+                if ("SITE_RETURN".equals(clean)) {
+                        return "SITE RETURN";
+                }
+
                 return "SPECIAL MOVEMENT";
         }
 
@@ -1218,5 +1267,16 @@ public class ChalaanPdfService {
                         case "SQMTR" -> "sqmtr";
                         default -> "pieces";
                 };
+        }
+
+        private boolean isCustomType(
+                        String value,
+                        String expected) {
+                if (value == null || expected == null) {
+                        return false;
+                }
+
+                return value.trim()
+                                .equalsIgnoreCase(expected.trim());
         }
 }

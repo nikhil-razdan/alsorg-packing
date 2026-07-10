@@ -49,6 +49,9 @@ public class CustomChallan {
     @Column(name = "vehicle_number", length = 120)
     private String vehicleNumber;
 
+    @Column(name = "handed_over_to", length = 255)
+    private String handedOverTo;
+
     @Column(name = "generated_by", length = 120)
     private String generatedBy;
 
@@ -168,5 +171,13 @@ public class CustomChallan {
 
     public void setVehicleNumber(String vehicleNumber) {
         this.vehicleNumber = vehicleNumber;
+    }
+
+    public String getHandedOverTo() {
+        return handedOverTo;
+    }
+
+    public void setHandedOverTo(String handedOverTo) {
+        this.handedOverTo = handedOverTo;
     }
 }

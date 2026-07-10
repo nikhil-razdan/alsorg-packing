@@ -325,11 +325,11 @@ public class DispatchChallanService {
     }
 
     private ChalaanPdfData buildPdfData(
-        String challanNo,
-        Driver driver,
-        Vehicle vehicle,
-        List<DispatchedItem> items,
-        LocalDateTime dispatchTimeIst) { 
+            String challanNo,
+            Driver driver,
+            Vehicle vehicle,
+            List<DispatchedItem> items,
+            LocalDateTime dispatchTimeIst) {
         ChalaanPdfData data = new ChalaanPdfData();
 
         data.setVoucherNo(challanNo);
@@ -586,6 +586,10 @@ public class DispatchChallanService {
             prefix = "HW-CH";
         } else if ("ASSEMBLY_SITE_REQUIREMENT".equals(cleanType)) {
             prefix = "ASM-CH";
+        } else if ("JOB_WORK".equals(cleanType)) {
+            prefix = "JW-CH";
+        } else if ("SITE_RETURN".equals(cleanType)) {
+            prefix = "SR-CH";
         } else {
             prefix = "CUS-CH";
         }
