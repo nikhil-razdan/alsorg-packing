@@ -19,7 +19,7 @@ import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import MasterItemsModal from "../dashboard/components/inventory/MasterItemsModal";
 import usePackFlowDataRefresh
-	from "../hooks/usePackFlowDataRefresh";
+	from "../dashboard/hooks/usePackFlowDataRefresh";
 import {
 	fetchDrivers,
 	fetchVehicles,

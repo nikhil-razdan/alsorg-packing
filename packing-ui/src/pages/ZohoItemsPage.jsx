@@ -19,7 +19,7 @@ import API from "../services/api";
 import ExcelJS from "exceljs";
 
 import usePackFlowDataRefresh
-  from "../hooks/usePackFlowDataRefresh";
+  from "../dashboard/hooks/usePackFlowDataRefresh";
 
 function InventoryModal({
   open,

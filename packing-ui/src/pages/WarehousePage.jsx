@@ -7,7 +7,7 @@ import { API_BASE_URL } from "../config"; import {
 } from "../utils/permissions";
 import { useAuth } from "../auth/AuthContext";
 import usePackFlowDataRefresh
-	from "../hooks/usePackFlowDataRefresh";
+	from "../dashboard/hooks/usePackFlowDataRefresh";
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
