@@ -18,6 +18,9 @@ import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
 import ExcelJS from "exceljs";
 
+import usePackFlowDataRefresh
+  from "../hooks/usePackFlowDataRefresh";
+
 function InventoryModal({
   open,
   onClose,
@@ -1214,6 +1217,13 @@ function ZohoItemsPage() {
     }
   };
 
+  usePackFlowDataRefresh(
+    "inventory",
+    async () => {
+      await fetchItems();
+    }
+  );
+
   const IST_OFFSET_MINUTES = 330;
 
   const parseAppDateTime = (value) => {
@@ -1256,7 +1266,7 @@ function ZohoItemsPage() {
         /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/
       );
 
-      
+
     if (!match) {
       const fallback =
         new Date(raw);
@@ -1552,6 +1562,19 @@ function ZohoItemsPage() {
       start + pageSize
     );
   }, [filteredRows, safePageNo, pageSize]);
+
+
+  useEffect(() => {
+    setPageNo((currentPage) =>
+      Math.min(
+        Math.max(
+          1,
+          currentPage
+        ),
+        totalPages
+      )
+    );
+  }, [totalPages]);
 
   const normalizeHistorySearch = (value) => {
     return String(value ?? "")
@@ -3362,7 +3385,14 @@ function ZohoItemsPage() {
 
                   return (
                     <div
-                      key={row.itemId} style={tableRow}>
+                      key={
+                        getPacketItemIdForSticker(
+                          row
+                        ) ||
+                        row.sku
+                      }
+                      style={tableRow}
+                    >
                       <div style={tableCellWrap}>
                         <Button
                           size="small"

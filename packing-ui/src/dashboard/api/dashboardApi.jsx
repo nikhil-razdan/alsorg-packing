@@ -743,3 +743,65 @@ export async function fetchAdminDeletionHistory({
 		"Failed to load deletion history"
 	);
 }
+
+export async function previewAdminPacketRollback(
+	packetItemId
+) {
+	if (!packetItemId) {
+		throw new Error(
+			"Packet item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/center/packet-items/${encodeURIComponent(
+			packetItemId
+		)}/rollback-preview`,
+		"Failed to preview previous packet state"
+	);
+}
+
+export async function executeAdminPacketRollback(
+	packetItemId,
+	{
+		confirmationText,
+		reason,
+	}
+) {
+	if (!packetItemId) {
+		throw new Error(
+			"Packet item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/center/packet-items/${encodeURIComponent(
+			packetItemId
+		)}/rollback`,
+		"Failed to move packet to its previous state",
+		{
+			method: "POST",
+
+			body: {
+				confirmationText,
+				reason,
+			},
+		}
+	);
+}
+
+export async function fetchAdminPacketRollbackHistory({
+	page = 0,
+	size = 20,
+} = {}) {
+	const params =
+		new URLSearchParams();
+
+	params.set("page", String(page));
+	params.set("size", String(size));
+
+	return requestJson(
+		`/api/admin/center/rollback-history?${params.toString()}`,
+		"Failed to load packet state-change history"
+	);
+}

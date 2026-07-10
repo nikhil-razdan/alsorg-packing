@@ -413,70 +413,200 @@ public class PacketService {
                         boolean showCompanyHeader,
                         String generatedBy,
                         Set<String> allowedPlants) {
-
-                PacketItem item = packetItemRepository.findById(itemId)
-                                .orElseThrow(() -> new RuntimeException("Item not found"));
+                /*
+                 * Lock this PacketItem for the complete sticker-generation
+                 * transaction.
+                 *
+                 * This prevents:
+                 * - duplicate simultaneous prints;
+                 * - Admin Center rollback during print;
+                 * - print during permanent deletion.
+                 */
+                PacketItem item = packetItemRepository
+                                .findByIdForStickerGeneration(itemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Item not found"));
 
                 String plantCode = item.getPlantCode();
 
-                assertPlantAccess(plantCode, allowedPlants);
+                assertPlantAccess(
+                                plantCode,
+                                allowedPlants);
 
-                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                                plantCode);
 
-                String actor = generatedBy != null && !generatedBy.isBlank()
-                                ? generatedBy.trim()
-                                : "SYSTEM";
+                String actor = generatedBy != null &&
+                                !generatedBy.isBlank()
+                                                ? generatedBy.trim()
+                                                : "SYSTEM";
 
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(
+                                java.time.ZoneId.of(
+                                                "Asia/Kolkata"));
 
-                String previousStatus = item.getStatus() != null && !item.getStatus().isBlank()
-                                ? item.getStatus()
-                                : "CREATED";
+                String previousStatus = item.getStatus() != null &&
+                                !item.getStatus().isBlank()
+                                                ? item.getStatus()
+                                                : "CREATED";
 
-                // ✅ BLOCK DUPLICATE PRINT
-                long iteration = item.getPrintIteration() == null ? 1 : item.getPrintIteration();
+                /*
+                 * Correct print iteration calculation.
+                 *
+                 * We must check both:
+                 * - current PacketItem.printIteration;
+                 * - maximum historical StickerHistory iteration.
+                 *
+                 * This is required after an Admin Center rollback clears the
+                 * active sticker but preserves sticker history.
+                 */
+                Long maximumHistoryIteration = stickerHistoryRepository
+                                .findMaximumPrintIteration(
+                                                itemId);
 
-                // 🔥 IMPORTANT: only increment on reprint (same item)
-                if (item.getStickerNumber() != null) {
-                        iteration += 1;
-                }
+                long historyIteration = maximumHistoryIteration == null
+                                ? 0L
+                                : Math.max(
+                                                maximumHistoryIteration,
+                                                0L);
 
-                // ✅ ALWAYS generate new sticker number
-                String stickerNumber = stickerSequenceService.generateNextStickerNumber();
+                long currentItemIteration = item.getPrintIteration() == null
+                                ? 0L
+                                : Math.max(
+                                                item.getPrintIteration(),
+                                                0L);
 
-                item.setStickerNumber(stickerNumber);
-                item.setPrintIteration(iteration); // 🔥 IMPORTANT
+                long iteration = Math.max(
+                                historyIteration,
+                                currentItemIteration) + 1L;
 
-                item.setStatus("READY"); // internal status
-                item.setLocation(plant.packedAreaCode());
-                item.setPackedAreaCode(plant.packedAreaCode());
-                item.setCurrentLocationCode(plant.packedAreaCode());
-                item.setFgAreaCode(plant.fgAreaCode());
+                /*
+                 * Generate a new unique sticker number for every print.
+                 */
+                String stickerNumber = stickerSequenceService
+                                .generateNextStickerNumber();
+
+                item.setStickerNumber(
+                                stickerNumber);
+
+                item.setPrintIteration(
+                                iteration);
+
+                item.setStatus("READY");
+
+                item.setLocation(
+                                plant.packedAreaCode());
+
+                item.setPackedAreaCode(
+                                plant.packedAreaCode());
+
+                item.setCurrentLocationCode(
+                                plant.packedAreaCode());
+
+                item.setFgAreaCode(
+                                plant.fgAreaCode());
+
+                item.setFgZoneCode(null);
+
+                item.setWarehouseCode(null);
+
                 item.setPackedAt(now);
                 item.setCreatedBy(actor);
 
                 packetItemRepository.save(item);
 
-                // create dispatch entry DIRECTLY in correct state
-                dispatchedItemService.createFromPacketItem(item);
+                /*
+                 * Synchronize the parent Packet flag.
+                 */
+                if (item.getPacket() != null) {
+                        Packet parentPacket = item.getPacket();
 
-                DispatchedItem d = dispatchedRepo.findById(item.getId().toString())
-                                .orElseThrow();
+                        parentPacket.setStickerGenerated(
+                                        true);
 
-                d.setStatus(ItemDispatchStatus.READY);
-                d.setPlantCode(plantCode);
-                d.setPackedAreaCode(plant.packedAreaCode());
-                d.setCurrentLocationCode(plant.packedAreaCode());
-                d.setFgAreaCode(plant.fgAreaCode());
-                d.setFgZoneCode(null);
-                d.setLocation(plant.packedAreaCode());
-                d.setFloor(item.getFloor());
-                d.setPackedAt(now);
-                d.setCreatedAt(now);
-                d.setPackedBy(actor);
-                d.setCreatedBy(actor);
+                        packetRepository.save(
+                                        parentPacket);
+                }
 
-                dispatchedRepo.save(d);
+                /*
+                 * Create the DispatchedItem only when one does not already exist.
+                 */
+                dispatchedItemService
+                                .createFromPacketItem(item);
+
+                /*
+                 * Prefer packetItemId linkage.
+                 *
+                 * Fall back to your existing primary-key convention:
+                 * zohoItemId = PacketItem.id.toString().
+                 */
+                DispatchedItem dispatchedItem = dispatchedRepo
+                                .findByPacketItemId(
+                                                item.getId())
+                                .or(() -> dispatchedRepo.findById(
+                                                item.getId().toString()))
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Dispatch record was not created for packet item: "
+                                                                + item.getId()));
+
+                dispatchedItem.setPacketItemId(
+                                item.getId());
+
+                if (item.getPacket() != null) {
+                        dispatchedItem.setPacketId(
+                                        item.getPacket().getId());
+                }
+
+                dispatchedItem.setStatus(
+                                ItemDispatchStatus.READY);
+
+                dispatchedItem.setStock(1);
+
+                dispatchedItem.setStickerNumber(
+                                stickerNumber);
+
+                dispatchedItem.setPlantCode(
+                                plantCode);
+
+                dispatchedItem.setPackedAreaCode(
+                                plant.packedAreaCode());
+
+                dispatchedItem.setCurrentLocationCode(
+                                plant.packedAreaCode());
+
+                dispatchedItem.setFgAreaCode(
+                                plant.fgAreaCode());
+
+                dispatchedItem.setFgZoneCode(null);
+
+                dispatchedItem.setWarehouseCode(null);
+                dispatchedItem.setGatePassNumber(null);
+                dispatchedItem.setFromLocation(null);
+                dispatchedItem.setStoredAt(null);
+
+                dispatchedItem.setLocation(
+                                plant.packedAreaCode());
+
+                dispatchedItem.setFloor(
+                                item.getFloor());
+
+                dispatchedItem.setPackedAt(now);
+                dispatchedItem.setPackedBy(actor);
+
+                /*
+                 * Do not rewrite the original creation time on every reprint.
+                 */
+                if (dispatchedItem.getCreatedAt() == null) {
+                        dispatchedItem.setCreatedAt(now);
+                }
+
+                if (dispatchedItem.getCreatedBy() == null ||
+                                dispatchedItem.getCreatedBy().isBlank()) {
+                        dispatchedItem.setCreatedBy(actor);
+                }
+
+                dispatchedRepo.save(
+                                dispatchedItem);
 
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
@@ -491,12 +621,18 @@ public class PacketService {
                 StickerHistory history = new StickerHistory();
 
                 history.setPacketItem(item);
-                history.setStickerNumber(stickerNumber);
-                history.setPdfData(pdfBytes);
 
-                history.setPrintIteration(iteration);
+                history.setStickerNumber(
+                                stickerNumber);
 
-                history.setGeneratedBy(actor);
+                history.setPdfData(
+                                pdfBytes);
+
+                history.setPrintIteration(
+                                iteration);
+
+                history.setGeneratedBy(
+                                actor);
 
                 history.setReason(
                                 iteration > 1
@@ -505,11 +641,16 @@ public class PacketService {
 
                 history.setGeneratedAt(now);
 
-                stickerHistoryRepository.save(history);
+                stickerHistoryRepository.save(
+                                history);
 
                 activityLogService.log(
                                 item.getId().toString(),
-                                iteration > 1 ? "STICKER REPRINTED" : "ITEM PACKED",
+
+                                iteration > 1
+                                                ? "STICKER REPRINTED"
+                                                : "ITEM PACKED",
+
                                 actor,
                                 "PACKING",
                                 previousStatus,
@@ -1521,52 +1662,67 @@ public class PacketService {
         public byte[] getLatestStickerPdfForPacketItem(
                         UUID itemId,
                         Set<String> allowedPlants) {
-
                 PacketItem item = packetItemRepository.findById(itemId)
-                                .orElseThrow(() -> new RuntimeException("Packet item not found"));
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Packet item not found"));
 
-                /*
-                 * Use legacy-safe access because old records may not have plantCode.
-                 */
                 assertLegacyPlantAccess(
                                 item.getPlantCode(),
                                 allowedPlants);
 
-                List<StickerHistory> historyList = stickerHistoryRepository.findByPacketItem_IdOrderByGeneratedAtDesc(
-                                itemId);
+                String activeStickerNumber = item.getStickerNumber();
 
+                /*
+                 * A CREATED item after Admin Center rollback has historical
+                 * stickers, but it does not have an active sticker.
+                 */
+                if (activeStickerNumber == null ||
+                                activeStickerNumber.isBlank()) {
+
+                        throw new RuntimeException(
+                                        "This packet item has no active sticker");
+                }
+
+                List<StickerHistory> historyList = stickerHistoryRepository
+                                .findByPacketItem_IdOrderByGeneratedAtDesc(
+                                                itemId);
+
+                /*
+                 * Only return history belonging to the currently active sticker.
+                 *
+                 * Never return an older/deactivated sticker through the
+                 * 'latest active sticker' endpoint.
+                 */
                 for (StickerHistory history : historyList) {
-                        if (history.getPdfData() != null &&
-                                        history.getPdfData().length > 0) {
+                        boolean sameSticker = activeStickerNumber.equals(
+                                        history.getStickerNumber());
+
+                        boolean hasPdf = history.getPdfData() != null &&
+                                        history.getPdfData().length > 0;
+
+                        if (sameSticker && hasPdf) {
                                 return history.getPdfData();
                         }
                 }
 
                 /*
-                 * Safe fallback:
-                 * If sticker number exists but old PDF BLOB is missing,
-                 * rebuild PDF from current packet_items data without changing sticker number.
+                 * Legacy fallback:
+                 * Active sticker number exists, but the stored BLOB is missing.
                  */
-                if (item.getStickerNumber() != null &&
-                                !item.getStickerNumber().isBlank()) {
+                long iteration = item.getPrintIteration() == null ||
+                                item.getPrintIteration() <= 0
+                                                ? 1L
+                                                : item.getPrintIteration();
 
-                        long iteration = item.getPrintIteration() == null ||
-                                        item.getPrintIteration() <= 0
-                                                        ? 1
-                                                        : item.getPrintIteration();
+                StickerPdfData pdf = buildStickerPdfData(
+                                item,
+                                activeStickerNumber,
+                                item.getFloor(),
+                                true,
+                                iteration,
+                                false);
 
-                        StickerPdfData pdf = buildStickerPdfData(
-                                        item,
-                                        item.getStickerNumber(),
-                                        item.getFloor(),
-                                        true,
-                                        iteration,
-                                        false);
-
-                        return pdfService.generateSticker(pdf);
-                }
-
-                throw new RuntimeException("Sticker PDF not available for this packet item");
+                return pdfService.generateSticker(pdf);
         }
 
         @Transactional(readOnly = true)

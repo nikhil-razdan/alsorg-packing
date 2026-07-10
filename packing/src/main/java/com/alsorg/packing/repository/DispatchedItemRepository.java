@@ -4,6 +4,8 @@ import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 
+import jakarta.persistence.LockModeType;
+
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -11,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,139 +21,218 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface DispatchedItemRepository
-                extends JpaRepository<DispatchedItem, String> {
+        extends JpaRepository<DispatchedItem, String> {
 
-        /*
-         * =====================================================
-         * STATUS
-         * =====================================================
-         */
+    /*
+     * =====================================================
+     * STATUS
+     * =====================================================
+     */
 
-        List<DispatchedItem> findByStatus(
-                        ItemDispatchStatus status);
+    List<DispatchedItem> findByStatus(
+            ItemDispatchStatus status
+    );
 
-        List<DispatchedItem> findByStatusIn(
-                        List<ItemDispatchStatus> statuses);
+    List<DispatchedItem> findByStatusIn(
+            List<ItemDispatchStatus> statuses
+    );
 
-        long countByStatus(
-                        ItemDispatchStatus status);
+    long countByStatus(
+            ItemDispatchStatus status
+    );
 
-        long countByStatusIn(
-                        List<ItemDispatchStatus> statuses);
+    long countByStatusIn(
+            List<ItemDispatchStatus> statuses
+    );
 
-        long countByStatusIn(
-                        Collection<ItemDispatchStatus> statuses);
+    long countByStatusIn(
+            Collection<ItemDispatchStatus> statuses
+    );
 
-        Optional<DispatchedItem> findBySku(String sku);
+    Optional<DispatchedItem> findBySku(
+            String sku
+    );
 
-        Optional<DispatchedItem> findByName(String name);
+    Optional<DispatchedItem> findByName(
+            String name
+    );
 
-        Optional<DispatchedItem> findByPacketItemId(
-                        UUID packetItemId);
+    Optional<DispatchedItem> findByPacketItemId(
+            UUID packetItemId
+    );
 
-        Optional<DispatchedItem> findByStickerNumber(
-                        String stickerNumber);
+    Optional<DispatchedItem> findByStickerNumber(
+            String stickerNumber
+    );
 
-        /*
-         * =====================================================
-         * APPROVAL / GATE PASS
-         * =====================================================
-         */
+    /*
+     * =====================================================
+     * APPROVAL / GATE PASS
+     * =====================================================
+     */
 
-        List<DispatchedItem> findByApprovalStatus(
-                        ApprovalStatus status);
+    List<DispatchedItem> findByApprovalStatus(
+            ApprovalStatus status
+    );
 
-        List<DispatchedItem> findByGatePassNumber(
-                        String gatePassNumber);
+    List<DispatchedItem> findByGatePassNumber(
+            String gatePassNumber
+    );
 
-        List<DispatchedItem> findByStatusAndApprovalStatus(
-                        ItemDispatchStatus status,
-                        ApprovalStatus approvalStatus);
+    List<DispatchedItem> findByStatusAndApprovalStatus(
+            ItemDispatchStatus status,
+            ApprovalStatus approvalStatus
+    );
 
-        long countByStatusAndDispatchedAtBetween(
-                        ItemDispatchStatus status,
-                        LocalDateTime start,
-                        LocalDateTime end);
+    long countByStatusAndDispatchedAtBetween(
+            ItemDispatchStatus status,
+            LocalDateTime start,
+            LocalDateTime end
+    );
 
-        boolean existsByZohoItemId(
-                        String zohoItemId);
+    boolean existsByZohoItemId(
+            String zohoItemId
+    );
 
-        /*
-         * =====================================================
-         * PLANT FILTERS
-         * =====================================================
-         */
+    /*
+     * =====================================================
+     * PLANT FILTERS
+     * =====================================================
+     */
 
-        List<DispatchedItem> findByStatusInAndPlantCodeIn(
-                        List<ItemDispatchStatus> statuses,
-                        Collection<String> plantCodes);
+    List<DispatchedItem> findByStatusInAndPlantCodeIn(
+            List<ItemDispatchStatus> statuses,
+            Collection<String> plantCodes
+    );
 
-        List<DispatchedItem> findByStatusAndPlantCodeIn(
-                        ItemDispatchStatus status,
-                        Collection<String> plantCodes);
+    List<DispatchedItem> findByStatusAndPlantCodeIn(
+            ItemDispatchStatus status,
+            Collection<String> plantCodes
+    );
 
-        @Query("""
-                            SELECT d
-                            FROM DispatchedItem d
-                            WHERE d.status IN :statuses
-                              AND (
-                                    d.plantCode IN :plantCodes
-                                    OR d.plantCode IS NULL
-                                    OR d.plantCode = ''
-                                  )
-                        """)
-        List<DispatchedItem> findVisibleByStatusesAndPlantsIncludingLegacy(
-                        @Param("statuses") List<ItemDispatchStatus> statuses,
+    @Query("""
+        SELECT d
+        FROM DispatchedItem d
+        WHERE d.status IN :statuses
+          AND (
+                d.plantCode IN :plantCodes
+                OR d.plantCode IS NULL
+                OR d.plantCode = ''
+              )
+    """)
+    List<DispatchedItem>
+    findVisibleByStatusesAndPlantsIncludingLegacy(
+            @Param("statuses")
+            List<ItemDispatchStatus> statuses,
 
-                        @Param("plantCodes") Collection<String> plantCodes);
+            @Param("plantCodes")
+            Collection<String> plantCodes
+    );
 
-        /*
-         * =====================================================
-         * LOGISTICS
-         * =====================================================
-         */
+    /*
+     * =====================================================
+     * LOGISTICS
+     * =====================================================
+     */
 
-        List<DispatchedItem> findByLogisticsTripId(
-                        UUID logisticsTripId);
+    List<DispatchedItem> findByLogisticsTripId(
+            UUID logisticsTripId
+    );
 
-        long countByLogisticsTripId(
-                        UUID logisticsTripId);
+    long countByLogisticsTripId(
+            UUID logisticsTripId
+    );
 
-        /*
-         * =====================================================
-         * ADMIN DELETE
-         * =====================================================
-         */
+    /*
+     * =====================================================
+     * ADMIN LIFECYCLE ROLLBACK LOCKS
+     * =====================================================
+     *
+     * These methods must only be called from a normal writable
+     * @Transactional service method.
+     * =====================================================
+     */
 
-        /*
-         * Supports both:
-         *
-         * New records:
-         * packetItemId = PacketItem.id
-         *
-         * Legacy records:
-         * zohoItemId = PacketItem.id.toString()
-         * or PacketItem.zohoItemId
-         */
-        @Query("""
-                            SELECT DISTINCT d
-                            FROM DispatchedItem d
-                            WHERE d.packetItemId IN :packetItemIds
-                               OR d.zohoItemId IN :lookupIds
-                        """)
-        List<DispatchedItem> findForAdminDeletion(
-                        @Param("packetItemIds") Collection<UUID> packetItemIds,
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT d
+        FROM DispatchedItem d
+        WHERE d.packetItemId = :packetItemId
+    """)
+    Optional<DispatchedItem>
+    findByPacketItemIdForAdminRollback(
+            @Param("packetItemId")
+            UUID packetItemId
+    );
 
-                        @Param("lookupIds") Collection<String> lookupIds);
+    /*
+     * DispatchedItem primary key is zohoItemId.
+     *
+     * A custom JPQL query is required here because normal findById()
+     * does not apply a pessimistic lock.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT d
+        FROM DispatchedItem d
+        WHERE d.zohoItemId = :zohoItemId
+    """)
+    Optional<DispatchedItem>
+    findByIdForAdminRollback(
+            @Param("zohoItemId")
+            String zohoItemId
+    );
 
-        @Modifying(flushAutomatically = true, clearAutomatically = false)
-        @Query("""
-                            DELETE FROM DispatchedItem d
-                            WHERE d.packetItemId IN :packetItemIds
-                               OR d.zohoItemId IN :lookupIds
-                        """)
-        int deleteForAdminDeletion(
-                        @Param("packetItemIds") Collection<UUID> packetItemIds,
+    /*
+     * Final fallback for legacy records where packetItemId was not
+     * populated but the active sticker still matches.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT d
+        FROM DispatchedItem d
+        WHERE d.stickerNumber = :stickerNumber
+    """)
+    Optional<DispatchedItem>
+    findByStickerNumberForAdminRollback(
+            @Param("stickerNumber")
+            String stickerNumber
+    );
 
-                        @Param("lookupIds") Collection<String> lookupIds);
+    /*
+     * =====================================================
+     * ADMIN DELETE
+     * =====================================================
+     */
+
+    @Query("""
+        SELECT DISTINCT d
+        FROM DispatchedItem d
+        WHERE d.packetItemId IN :packetItemIds
+           OR d.zohoItemId IN :lookupIds
+    """)
+    List<DispatchedItem> findForAdminDeletion(
+            @Param("packetItemIds")
+            Collection<UUID> packetItemIds,
+
+            @Param("lookupIds")
+            Collection<String> lookupIds
+    );
+
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = false
+    )
+    @Query("""
+        DELETE FROM DispatchedItem d
+        WHERE d.packetItemId IN :packetItemIds
+           OR d.zohoItemId IN :lookupIds
+    """)
+    int deleteForAdminDeletion(
+            @Param("packetItemIds")
+            Collection<UUID> packetItemIds,
+
+            @Param("lookupIds")
+            Collection<String> lookupIds
+    );
 }

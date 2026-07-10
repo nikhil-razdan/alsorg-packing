@@ -18,7 +18,8 @@ import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import MasterItemsModal from "../dashboard/components/inventory/MasterItemsModal";
-
+import usePackFlowDataRefresh
+	from "../hooks/usePackFlowDataRefresh";
 import {
 	fetchDrivers,
 	fetchVehicles,
@@ -3003,19 +3004,39 @@ function DispatchedItemsPage() {
 		}
 	};
 
-	const paginatedRows = useMemo(() => {
-		const start = (pageNo - 1) * pageSize;
-
-		return filteredRows.slice(
-			start,
-			start + pageSize
+	const totalPages =
+		Math.max(
+			1,
+			Math.ceil(
+				filteredRows.length /
+				pageSize
+			)
 		);
-	}, [filteredRows, pageNo, pageSize]);
 
-	const totalPages = Math.max(
-		1,
-		Math.ceil(filteredRows.length / pageSize)
-	);
+	const safePageNo =
+		Math.min(
+			Math.max(
+				1,
+				pageNo
+			),
+			totalPages
+		);
+
+	const paginatedRows =
+		useMemo(() => {
+			const start =
+				(safePageNo - 1) *
+				pageSize;
+
+			return filteredRows.slice(
+				start,
+				start + pageSize
+			);
+		}, [
+			filteredRows,
+			safePageNo,
+			pageSize,
+		]);
 
 	useEffect(() => {
 		console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
@@ -3031,16 +3052,16 @@ function DispatchedItemsPage() {
 	}, [search, statusFilter, groupBy]);
 
 	useEffect(() => {
-		const maxPage =
-			Math.max(
-				1,
-				Math.ceil(filteredRows.length / pageSize)
-			);
-
-		if (pageNo > maxPage) {
-			setPageNo(maxPage);
-		}
-	}, [filteredRows.length, pageSize, pageNo]);
+		setPageNo((currentPage) =>
+			Math.min(
+				Math.max(
+					1,
+					currentPage
+				),
+				totalPages
+			)
+		);
+	}, [totalPages]);
 
 	useEffect(() => {
 		if (!qrDispatchOpen) return;
@@ -3822,6 +3843,41 @@ function DispatchedItemsPage() {
 		}
 	};
 
+	usePackFlowDataRefresh(
+		"dispatch",
+		async () => {
+			await fetchData();
+
+			/*
+			 * Refresh the currently open challan history too,
+			 * because rollback can remove logistics-trip and
+			 * challan relationships.
+			 */
+			if (challanHistoryOpen) {
+				try {
+					const normalRows =
+						await fetchChallanHistoryRows();
+
+					setChallanHistoryRows(
+						normalRows
+					);
+
+					if (
+						isDispatch ||
+						isAdmin
+					) {
+						await loadCustomChallans();
+					}
+				} catch (error) {
+					console.error(
+						"Challan history refresh failed:",
+						error
+					);
+				}
+			}
+		}
+	);
+
 	const PLANT_LOCATION_MAP = {
 		"AL-P1": {
 			label: "AL-P1 (AKG)",
@@ -4390,6 +4446,23 @@ function DispatchedItemsPage() {
 			alert("Failed to request restore");
 		}
 	};
+
+	useEffect(() => {
+		const validIds =
+			new Set(
+				rows
+					.map((row) =>
+						row?.zohoItemId
+					)
+					.filter(Boolean)
+			);
+
+		setSelectionModel((current) =>
+			current.filter((id) =>
+				validIds.has(id)
+			)
+		);
+	}, [rows]);
 
 	const updateStatus = async (zohoItemId, status) => {
 		try {
@@ -6486,7 +6559,12 @@ function DispatchedItemsPage() {
 						variant="standard"
 						placeholder="Search by client, item, SKU, PD, DWG, location, status..."
 						value={search}
-						onChange={(e) => setSearch(e.target.value)}
+						onChange={(e) => {
+							setSearch(
+								e.target.value
+							);
+							setPageNo(1);
+						}}
 						InputProps={{ disableUnderline: true }}
 						sx={{
 							flex: 1,
@@ -6533,8 +6611,13 @@ function DispatchedItemsPage() {
 						value={statusFilter}
 						onChange={(e) => {
 							setStatusFilter((prev) =>
-								normalizeStatusSelection(e.target.value, prev)
+								normalizeStatusSelection(
+									e.target.value,
+									prev
+								)
 							);
+
+							setPageNo(1);
 						}}
 						slotProps={{
 							select: {
@@ -6667,7 +6750,13 @@ function DispatchedItemsPage() {
 						select
 						size="small"
 						value={groupBy}
-						onChange={(e) => setGroupBy(e.target.value)}
+						onChange={(e) => {
+							setGroupBy(
+								e.target.value
+							);
+
+							setPageNo(1);
+						}}
 						sx={{
 							minWidth: 180,
 
@@ -7145,8 +7234,15 @@ function DispatchedItemsPage() {
 							}}
 						>
 							<Button
-								disabled={pageNo === 1}
-								onClick={() => setPageNo(p => p - 1)}
+								disabled={safePageNo === 1}
+								onClick={() =>
+									setPageNo((currentPage) =>
+										Math.max(
+											1,
+											currentPage - 1
+										)
+									)
+								}
 								sx={{
 									minWidth: 100,
 									height: 30,
@@ -7200,15 +7296,25 @@ function DispatchedItemsPage() {
 										color: "#60a5fa",
 									}}
 								>
-									{pageNo}
+									{safePageNo}
 								</Box>
 
 								of {totalPages}
 							</Box>
 
 							<Button
-								disabled={pageNo === totalPages}
-								onClick={() => setPageNo(p => p + 1)}
+								disabled={
+									safePageNo ===
+									totalPages
+								}
+								onClick={() =>
+									setPageNo((currentPage) =>
+										Math.min(
+											totalPages,
+											currentPage + 1
+										)
+									)
+								}
 								sx={{
 									minWidth: 100,
 									height: 30,

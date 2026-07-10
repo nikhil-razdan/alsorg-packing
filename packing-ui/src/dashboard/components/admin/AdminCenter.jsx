@@ -1,15 +1,23 @@
 import {
+    useCallback,
     useEffect,
     useMemo,
     useState,
 } from "react";
 
 import {
+    publishPackFlowDataChanged,
+} from "../../../utils/packFlowDataEvents";
+
+import {
     executeAdminMasterDeletion,
     executeAdminPacketDeletion,
+    executeAdminPacketRollback,
     fetchAdminDeletionHistory,
+    fetchAdminPacketRollbackHistory,
     previewAdminMasterDeletion,
     previewAdminPacketDeletion,
+    previewAdminPacketRollback,
     searchAdminMasterItems,
     searchAdminPacketItems,
 } from "../../api/dashboardApi";
@@ -90,6 +98,71 @@ const normalizePageResponse = (
     };
 };
 
+const resolveTargetType = (
+    target,
+    fallbackType = "PACKET_ITEM"
+) =>
+    String(
+        target?.targetType ||
+        target?.type ||
+        fallbackType
+    )
+        .trim()
+        .toUpperCase();
+
+const normalizeTargetPage = (
+    data,
+    fallbackType,
+    fallbackPage = 0,
+    fallbackSize = 20
+) => {
+    const normalizedPage =
+        normalizePageResponse(
+            data,
+            fallbackPage,
+            fallbackSize
+        );
+
+    return {
+        ...normalizedPage,
+
+        content:
+            normalizedPage.content.map(
+                (row) => {
+                    const resolvedType =
+                        resolveTargetType(
+                            row,
+                            fallbackType
+                        );
+
+                    return {
+                        ...row,
+
+                        type:
+                            resolvedType,
+
+                        targetType:
+                            resolvedType,
+
+                        description:
+                            row?.description ??
+                            row?.itemDescription ??
+                            "",
+
+                        drawingNo:
+                            row?.drawingNo ??
+                            row?.drawingName ??
+                            "",
+
+                        id:
+                            row?.id ??
+                            row?.targetId,
+                    };
+                }
+            ),
+    };
+};
+
 const formatLabel = (value) =>
     String(value || "")
         .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -143,11 +216,16 @@ const parseJsonObject = (value) => {
 const getTargetLabel = (target) => {
     if (!target) return "";
 
-    if (target.type === "MASTER_ITEM") {
+    const type =
+        resolveTargetType(target);
+
+    if (type === "MASTER_ITEM") {
         return (
             target.itemName ||
             target.pdNo ||
-            target.id
+            target.displayName ||
+            target.id ||
+            target.targetId
         );
     }
 
@@ -155,7 +233,9 @@ const getTargetLabel = (target) => {
         target.itemName ||
         target.packetNumber ||
         target.sku ||
-        target.id
+        target.displayName ||
+        target.id ||
+        target.targetId
     );
 };
 
@@ -273,7 +353,8 @@ function SearchResultCard({
     disabled,
 }) {
     const isMaster =
-        target.type === "MASTER_ITEM";
+        resolveTargetType(target) ===
+        "MASTER_ITEM";
 
     const description =
         target.description ||
@@ -566,13 +647,872 @@ function DeletionHistory({
     );
 }
 
-function AdminDeleteCenter({
+function AdminPacketRollbackPanel({
+    onChanged,
+}) {
+    const [query, setQuery] =
+        useState("");
+
+    const [page, setPage] =
+        useState(EMPTY_PAGE);
+
+    const [searching, setSearching] =
+        useState(false);
+
+    const [selected, setSelected] =
+        useState(null);
+
+    const [preview, setPreview] =
+        useState(null);
+
+    const [previewing, setPreviewing] =
+        useState(false);
+
+    const [reason, setReason] =
+        useState("");
+
+    const [confirmation, setConfirmation] =
+        useState("");
+
+    const [executing, setExecuting] =
+        useState(false);
+
+    const [error, setError] =
+        useState("");
+
+    const [result, setResult] =
+        useState(null);
+
+    const requiredConfirmation =
+        preview?.requiredConfirmation || "";
+
+    const reasonValid =
+        reason.trim().length >= 5 &&
+        reason.trim().length <= 1000;
+
+    const confirmationValid =
+        Boolean(requiredConfirmation) &&
+        confirmation.trim() ===
+        requiredConfirmation;
+
+    const canExecute =
+        Boolean(preview?.rollbackAllowed) &&
+        reasonValid &&
+        confirmationValid &&
+        !executing;
+
+    const performSearch = async (
+        requestedPage = 0
+    ) => {
+        const cleanQuery =
+            query.trim();
+
+        if (!cleanQuery) {
+            setError(
+                "Enter an item, packet, SKU, sticker, PD number or UUID."
+            );
+
+            return;
+        }
+
+        setSearching(true);
+        setError("");
+        setSelected(null);
+        setPreview(null);
+        setResult(null);
+
+        try {
+            const data =
+                await searchAdminPacketItems({
+                    query: cleanQuery,
+                    page: requestedPage,
+                    size: 20,
+                });
+
+            setPage(
+                normalizeTargetPage(
+                    data,
+                    "PACKET_ITEM",
+                    requestedPage,
+                    20
+                )
+            );
+        } catch (searchError) {
+            console.error(searchError);
+
+            setError(
+                searchError?.message ||
+                "Unable to search packet items."
+            );
+
+            setPage(EMPTY_PAGE);
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    const loadRollbackPreview = async (
+        target
+    ) => {
+        if (!target?.id) return;
+
+        setSelected(target);
+        setPreview(null);
+        setResult(null);
+        setReason("");
+        setConfirmation("");
+        setError("");
+        setPreviewing(true);
+
+        try {
+            const data =
+                await previewAdminPacketRollback(
+                    target.id
+                );
+
+            setPreview(data);
+        } catch (previewError) {
+            console.error(previewError);
+
+            setError(
+                previewError?.message ||
+                "Unable to calculate previous packet state."
+            );
+        } finally {
+            setPreviewing(false);
+        }
+    };
+
+    const executeRollback = async () => {
+        if (
+            !canExecute ||
+            !selected?.id
+        ) {
+            return;
+        }
+
+        setExecuting(true);
+        setError("");
+
+        try {
+            const data =
+                await executeAdminPacketRollback(
+                    selected.id,
+                    {
+                        reason:
+                            reason.trim(),
+
+                        confirmationText:
+                            confirmation.trim(),
+                    }
+                );
+
+            setResult(data);
+            setPreview(null);
+            setSelected(null);
+            setReason("");
+            setConfirmation("");
+
+            setPage((current) => ({
+                ...current,
+
+                content:
+                    current.content.map(
+                        (item) => {
+                            const sameItem =
+                                String(item.id) ===
+                                String(
+                                    data.packetItemId
+                                );
+
+                            if (!sameItem) {
+                                return item;
+                            }
+
+                            return {
+                                ...item,
+
+                                status:
+                                    data.currentStatus ??
+                                    item.status,
+
+                                location:
+                                    data.currentLocation ??
+                                    item.location,
+
+                                currentLocation:
+                                    data.currentLocation ??
+                                    item.currentLocation,
+
+                                currentLocationCode:
+                                    data.currentLocation ??
+                                    item.currentLocationCode,
+
+                                gatePassNumber:
+                                    Object.prototype.hasOwnProperty.call(
+                                        data,
+                                        "gatePassNumber"
+                                    )
+                                        ? data.gatePassNumber
+                                        : item.gatePassNumber,
+
+                                challanNumber:
+                                    Object.prototype.hasOwnProperty.call(
+                                        data,
+                                        "challanNumber"
+                                    )
+                                        ? data.challanNumber
+                                        : item.challanNumber,
+
+                                stickerNumber:
+                                    Object.prototype.hasOwnProperty.call(
+                                        data,
+                                        "stickerNumber"
+                                    )
+                                        ? data.stickerNumber
+                                        : item.stickerNumber,
+                            };
+                        }
+                    ),
+            }));
+
+            await Promise.resolve(
+                onChanged?.({
+                    action:
+                        "PACKET_STATE_ROLLBACK",
+
+                    ...data,
+                })
+            );
+        } catch (executeError) {
+            console.error(executeError);
+
+            setError(
+                executeError?.message ||
+                "Unable to move packet to previous state."
+            );
+        } finally {
+            setExecuting(false);
+        }
+    };
+
+    return (
+        <div style={deleteLayout}>
+            <div style={searchColumn}>
+                <div style={rollbackIntro}>
+                    <div style={rollbackIntroTitle}>
+                        Move Packet to Previous State
+                    </div>
+
+                    <div style={rollbackIntroText}>
+                        This reverses exactly one lifecycle
+                        step and clears the operational
+                        data created by that step.
+                    </div>
+                </div>
+
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        performSearch(0);
+                    }}
+                    style={searchForm}
+                >
+                    <input
+                        value={query}
+                        onChange={(event) =>
+                            setQuery(
+                                event.target.value
+                            )
+                        }
+                        disabled={
+                            searching ||
+                            executing
+                        }
+                        placeholder="Search item, description, packet no., SKU, sticker, PD no. or UUID"
+                        style={searchInput}
+                    />
+
+                    <button
+                        type="submit"
+                        disabled={
+                            searching ||
+                            executing ||
+                            !query.trim()
+                        }
+                        style={searchButton(
+                            searching ||
+                            executing ||
+                            !query.trim()
+                        )}
+                    >
+                        {searching
+                            ? "Searching..."
+                            : "Search"}
+                    </button>
+                </form>
+
+                <div style={searchSummary}>
+                    <span>Packet Results</span>
+
+                    <strong>
+                        {Number(
+                            page.totalElements || 0
+                        )}
+                    </strong>
+                </div>
+
+                {searching && (
+                    <div style={emptyState}>
+                        Searching packet items...
+                    </div>
+                )}
+
+                {!searching &&
+                    page.content.length === 0 && (
+                        <div style={emptyState}>
+                            Search for a packet to begin.
+                        </div>
+                    )}
+
+                {!searching &&
+                    page.content.length > 0 && (
+                        <div style={searchResults}>
+                            {page.content.map(
+                                (target) => (
+                                    <SearchResultCard
+                                        key={target.id}
+                                        target={target}
+                                        selected={
+                                            selected?.id ===
+                                            target.id
+                                        }
+                                        disabled={
+                                            executing
+                                        }
+                                        onSelect={
+                                            loadRollbackPreview
+                                        }
+                                    />
+                                )
+                            )}
+                        </div>
+                    )}
+
+                <ResultPagination
+                    page={page}
+                    disabled={
+                        searching ||
+                        executing
+                    }
+                    onPageChange={
+                        performSearch
+                    }
+                />
+            </div>
+
+            <div style={previewColumn}>
+                {result && (
+                    <div style={successBox}>
+                        <div style={successTitle}>
+                            ✓ Packet moved back
+                        </div>
+
+                        <div style={successMessage}>
+                            {result.message}
+                        </div>
+
+                        <div style={stateTransitionRow}>
+                            <div style={stateBox}>
+                                <span>From</span>
+                                <strong>
+                                    {result.previousStateLabel}
+                                </strong>
+                            </div>
+
+                            <div style={stateArrow}>
+                                →
+                            </div>
+
+                            <div style={stateBox}>
+                                <span>Now</span>
+                                <strong>
+                                    {result.currentStateLabel}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div style={successMeta}>
+                            <div>
+                                <span>Changed By</span>
+                                <strong>
+                                    {result.changedBy}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Audit ID</span>
+                                <strong>
+                                    {result.auditId}
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {!selected &&
+                    !result && (
+                        <div style={previewPlaceholder}>
+                            <div
+                                style={
+                                    previewPlaceholderIcon
+                                }
+                            >
+                                ↶
+                            </div>
+
+                            <div
+                                style={
+                                    previewPlaceholderTitle
+                                }
+                            >
+                                Select a packet
+                            </div>
+
+                            <div
+                                style={
+                                    previewPlaceholderText
+                                }
+                            >
+                                The backend will calculate
+                                the current and previous
+                                lifecycle states and show
+                                every field that will change.
+                            </div>
+                        </div>
+                    )}
+
+                {previewing && (
+                    <div style={emptyState}>
+                        Calculating previous state...
+                    </div>
+                )}
+
+                {error && (
+                    <div style={errorBox}>
+                        {error}
+                    </div>
+                )}
+
+                {preview && (
+                    <div style={previewContent}>
+                        <div style={previewHeader}>
+                            <div>
+                                <div
+                                    style={resultTypeBadge(
+                                        "#38bdf8"
+                                    )}
+                                >
+                                    Packet Lifecycle
+                                </div>
+
+                                <div style={previewTitle}>
+                                    {preview.itemName ||
+                                        preview.packetNumber}
+                                </div>
+                            </div>
+
+                            <div style={permanentBadge}>
+                                Admin Only
+                            </div>
+                        </div>
+
+                        <div style={previewDescription}>
+                            <div
+                                style={
+                                    previewDescriptionLabel
+                                }
+                            >
+                                Packet Description
+                            </div>
+
+                            <div
+                                style={
+                                    previewDescriptionText
+                                }
+                            >
+                                {preview.description ||
+                                    "No description available"}
+                            </div>
+                        </div>
+
+                        <div style={stateTransitionRow}>
+                            <div style={stateBox}>
+                                <span>Current State</span>
+                                <strong>
+                                    {preview.currentLifecycleLabel}
+                                </strong>
+                            </div>
+
+                            <div style={stateArrow}>
+                                ←
+                            </div>
+
+                            <div style={stateBox}>
+                                <span>Previous State</span>
+                                <strong>
+                                    {preview.previousLifecycleLabel ||
+                                        "No earlier state"}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div style={previewMetaGrid}>
+                            <div>
+                                <span>Packet</span>
+                                <strong>
+                                    {preview.packetNumber ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>PD No.</span>
+                                <strong>
+                                    {preview.pdNo ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Status</span>
+                                <strong>
+                                    {preview.persistedDispatchStatus ||
+                                        preview.persistedPacketStatus}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Current Location</span>
+                                <strong>
+                                    {preview.currentLocation ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Previous Location</span>
+                                <strong>
+                                    {preview.previousLocation ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Sticker</span>
+                                <strong>
+                                    {preview.stickerNumber ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Gate Pass</span>
+                                <strong>
+                                    {preview.gatePassNumber ||
+                                        "-"}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Challan</span>
+                                <strong>
+                                    {preview.challanNumber ||
+                                        "-"}
+                                </strong>
+                            </div>
+                        </div>
+
+                        {preview.warning && (
+                            <div style={impactWarning}>
+                                {preview.warning}
+                            </div>
+                        )}
+
+                        <div>
+                            <div style={sectionHeading}>
+                                Changes to be applied
+                            </div>
+
+                            <div style={changeList}>
+                                {preview.changes?.map(
+                                    (change, index) => (
+                                        <div
+                                            key={`${change}-${index}`}
+                                            style={changeItem}
+                                        >
+                                            <span>✓</span>
+                                            {change}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        </div>
+
+                        <ImpactGrid
+                            rows={
+                                preview.affectedRecords
+                            }
+                        />
+
+                        <div style={confirmationSection}>
+                            <label style={fieldLabel}>
+                                Administrative Reason
+                            </label>
+
+                            <textarea
+                                value={reason}
+                                onChange={(event) =>
+                                    setReason(
+                                        event.target.value
+                                    )
+                                }
+                                maxLength={1000}
+                                disabled={executing}
+                                placeholder="Explain why this packet must be moved to its previous state..."
+                                style={reasonInput}
+                            />
+
+                            <div style={fieldHelper}>
+                                Minimum 5 characters •{" "}
+                                {reason.length}/1000
+                            </div>
+
+                            <label style={fieldLabel}>
+                                Type the exact confirmation
+                            </label>
+
+                            <div
+                                style={
+                                    requiredConfirmationBox
+                                }
+                            >
+                                {requiredConfirmation}
+                            </div>
+
+                            <input
+                                value={confirmation}
+                                onChange={(event) =>
+                                    setConfirmation(
+                                        event.target.value
+                                    )
+                                }
+                                disabled={executing}
+                                autoComplete="off"
+                                spellCheck={false}
+                                placeholder="Type the confirmation shown above"
+                                style={confirmationInput(
+                                    confirmation.length >
+                                    0 &&
+                                    !confirmationValid
+                                )}
+                            />
+
+                            <button
+                                type="button"
+                                disabled={!canExecute}
+                                onClick={executeRollback}
+                                style={rollbackButton(
+                                    !canExecute
+                                )}
+                            >
+                                {executing
+                                    ? "Moving packet back..."
+                                    : `Move Back to ${preview.previousLifecycleLabel ||
+                                    "Previous State"
+                                    }`}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function AdminRollbackHistory({
+    page,
+    loading,
+    error,
+    onPageChange,
+}) {
+    return (
+        <div>
+            <div style={historyHeader}>
+                <div>
+                    <div style={sectionHeading}>
+                        Packet State-Change History
+                    </div>
+
+                    <div style={sectionDescription}>
+                        Permanent record of every packet
+                        moved to a previous lifecycle state.
+                    </div>
+                </div>
+
+                <div style={historyTotal}>
+                    {Number(
+                        page.totalElements || 0
+                    )}{" "}
+                    records
+                </div>
+            </div>
+
+            {loading && (
+                <div style={emptyState}>
+                    Loading state-change history...
+                </div>
+            )}
+
+            {!loading && error && (
+                <div style={errorBox}>
+                    {error}
+                </div>
+            )}
+
+            {!loading &&
+                !error &&
+                page.content.length === 0 && (
+                    <div style={emptyState}>
+                        No packet state corrections
+                        have been recorded.
+                    </div>
+                )}
+
+            {!loading &&
+                !error &&
+                page.content.length > 0 && (
+                    <div style={historyList}>
+                        {page.content.map(
+                            (row) => (
+                                <div
+                                    key={row.id}
+                                    style={historyCard}
+                                >
+                                    <div
+                                        style={
+                                            historyCardHeader
+                                        }
+                                    >
+                                        <div>
+                                            <div
+                                                style={resultTypeBadge(
+                                                    "#60a5fa"
+                                                )}
+                                            >
+                                                State Correction
+                                            </div>
+
+                                            <div
+                                                style={
+                                                    historyTitle
+                                                }
+                                            >
+                                                {row.displayName ||
+                                                    row.packetItemId}
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            style={
+                                                historyDeletedCount
+                                            }
+                                        >
+                                            {formatLabel(
+                                                row.fromState
+                                            )}
+                                            {" → "}
+                                            {formatLabel(
+                                                row.toState
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style={
+                                            historyDetails
+                                        }
+                                    >
+                                        <div>
+                                            <span>
+                                                Changed By
+                                            </span>
+
+                                            <strong>
+                                                {row.changedBy ||
+                                                    "-"}
+                                            </strong>
+                                        </div>
+
+                                        <div>
+                                            <span>
+                                                Changed At
+                                            </span>
+
+                                            <strong>
+                                                {formatDateTime(
+                                                    row.changedAt
+                                                )}
+                                            </strong>
+                                        </div>
+
+                                        <div>
+                                            <span>
+                                                Reason
+                                            </span>
+
+                                            <strong>
+                                                {row.reason ||
+                                                    "-"}
+                                            </strong>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style={
+                                            historyTargetId
+                                        }
+                                    >
+                                        Packet Item ID:{" "}
+                                        {row.packetItemId}
+                                    </div>
+                                </div>
+                            )
+                        )}
+                    </div>
+                )}
+
+            <ResultPagination
+                page={page}
+                onPageChange={onPageChange}
+                disabled={loading}
+            />
+        </div>
+    );
+}
+
+function AdminCenter({
     open,
     onClose,
+    onChanged,
     onDeleted,
 }) {
+
+    const notifyChanged =
+        onChanged || onDeleted;
+
     const [workspaceTab, setWorkspaceTab] =
-        useState("delete");
+        useState("rollback");
 
     const [targetType, setTargetType] =
         useState("PACKET_ITEM");
@@ -625,6 +1565,15 @@ function AdminDeleteCenter({
     const [historyError, setHistoryError] =
         useState("");
 
+    const [rollbackHistoryPage, setRollbackHistoryPage] =
+        useState(EMPTY_PAGE);
+
+    const [rollbackHistoryLoading, setRollbackHistoryLoading] =
+        useState(false);
+
+    const [rollbackHistoryError, setRollbackHistoryError] =
+        useState("");
+
     const pageSize = 20;
 
     const requiredConfirmation =
@@ -668,6 +1617,38 @@ function AdminDeleteCenter({
             );
         }, [preview]);
 
+    const notifyAdminDataChanged = async (
+        payload
+    ) => {
+        const detail = {
+            ...payload,
+
+            scopes: [
+                "inventory",
+                "warehouse",
+                "dispatch",
+                "dashboard",
+            ],
+        };
+
+        publishPackFlowDataChanged(
+            detail
+        );
+
+        /*
+         * onDeleted remains supported for old parent code.
+         * onChanged is the preferred callback because rollback
+         * is not a deletion.
+         */
+        const callback =
+            onChanged ||
+            onDeleted;
+
+        await Promise.resolve(
+            callback?.(detail)
+        );
+    };
+
     const resetSelection = () => {
         setSelectedTarget(null);
         setPreview(null);
@@ -684,13 +1665,20 @@ function AdminDeleteCenter({
         resetSelection();
     };
 
-    const closeModal = () => {
-        if (deleting) return;
-        onClose?.();
-    };
+    const closeModal =
+        useCallback(() => {
+            if (deleting) return;
+
+            onClose?.();
+        }, [
+            deleting,
+            onClose,
+        ]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open) {
+            return undefined;
+        }
 
         const handleKeyDown = (event) => {
             if (event.key === "Escape") {
@@ -718,58 +1706,159 @@ function AdminDeleteCenter({
                 handleKeyDown
             );
         };
-    }, [open, deleting]);
+    }, [
+        open,
+        closeModal,
+    ]);
 
     useEffect(() => {
-        if (!open) {
-            setWorkspaceTab("delete");
-            setTargetType("PACKET_ITEM");
-            setQuery("");
-            setSearchPage(EMPTY_PAGE);
-            resetSelection();
+        if (open) {
+            return;
         }
+
+        setWorkspaceTab("rollback");
+        setTargetType("PACKET_ITEM");
+        setQuery("");
+
+        setSearchPage(EMPTY_PAGE);
+        setSearchError("");
+        setSearchLoading(false);
+
+        setSelectedTarget(null);
+        setPreview(null);
+        setPreviewError("");
+        setPreviewLoading(false);
+
+        setReason("");
+        setConfirmation("");
+
+        setDeleteError("");
+        setDeleteResult(null);
+
+        setHistoryPage(EMPTY_PAGE);
+        setHistoryError("");
+        setHistoryLoading(false);
+
+        setRollbackHistoryPage(
+            EMPTY_PAGE
+        );
+
+        setRollbackHistoryError("");
+        setRollbackHistoryLoading(
+            false
+        );
     }, [open]);
 
-    const loadHistory = async (
-        page = 0
-    ) => {
-        setHistoryLoading(true);
-        setHistoryError("");
+    const loadRollbackHistory =
+        useCallback(
+            async (requestedPage = 0) => {
+                setRollbackHistoryLoading(true);
+                setRollbackHistoryError("");
 
-        try {
-            const data =
-                await fetchAdminDeletionHistory({
-                    page,
-                    size: pageSize,
-                });
+                try {
+                    const data =
+                        await fetchAdminPacketRollbackHistory({
+                            page:
+                                requestedPage,
 
-            setHistoryPage(
-                normalizePageResponse(
-                    data,
-                    page,
-                    pageSize
-                )
-            );
-        } catch (error) {
-            console.error(error);
+                            size:
+                                pageSize,
+                        });
 
-            setHistoryError(
-                error?.message ||
-                "Unable to load deletion history."
-            );
-        } finally {
-            setHistoryLoading(false);
-        }
-    };
+                    setRollbackHistoryPage(
+                        normalizePageResponse(
+                            data,
+                            requestedPage,
+                            pageSize
+                        )
+                    );
+                } catch (error) {
+                    console.error(error);
+
+                    setRollbackHistoryPage(
+                        EMPTY_PAGE
+                    );
+
+                    setRollbackHistoryError(
+                        error?.message ||
+                        "Unable to load packet state-change history."
+                    );
+                } finally {
+                    setRollbackHistoryLoading(
+                        false
+                    );
+                }
+            },
+            [pageSize]
+        );
+
+    const loadHistory =
+        useCallback(
+            async (requestedPage = 0) => {
+                setHistoryLoading(true);
+                setHistoryError("");
+
+                try {
+                    const data =
+                        await fetchAdminDeletionHistory({
+                            page:
+                                requestedPage,
+
+                            size:
+                                pageSize,
+                        });
+
+                    setHistoryPage(
+                        normalizePageResponse(
+                            data,
+                            requestedPage,
+                            pageSize
+                        )
+                    );
+                } catch (error) {
+                    console.error(error);
+
+                    setHistoryPage(
+                        EMPTY_PAGE
+                    );
+
+                    setHistoryError(
+                        error?.message ||
+                        "Unable to load deletion history."
+                    );
+                } finally {
+                    setHistoryLoading(false);
+                }
+            },
+            [pageSize]
+        );
 
     useEffect(() => {
         if (
             open &&
-            workspaceTab === "history"
+            workspaceTab ===
+            "rollbackHistory"
+        ) {
+            loadRollbackHistory(0);
+        }
+    }, [
+        open,
+        workspaceTab,
+        loadRollbackHistory,
+    ]);
+
+    useEffect(() => {
+        if (
+            open &&
+            workspaceTab ===
+            "deletionHistory"
         ) {
             loadHistory(0);
         }
-    }, [open, workspaceTab]);
+    }, [
+        open,
+        workspaceTab,
+    ]);
 
     const handleTargetTypeChange = (
         nextType
@@ -819,8 +1908,9 @@ function AdminDeleteCenter({
                     });
 
             setSearchPage(
-                normalizePageResponse(
+                normalizeTargetPage(
                     data,
+                    targetType,
                     requestedPage,
                     pageSize
                 )
@@ -844,7 +1934,26 @@ function AdminDeleteCenter({
     ) => {
         if (!target?.id) return;
 
-        setSelectedTarget(target);
+        const resolvedType =
+            resolveTargetType(
+                target,
+                targetType
+            );
+
+        const normalizedTarget = {
+            ...target,
+
+            type:
+                resolvedType,
+
+            targetType:
+                resolvedType,
+        };
+
+        setSelectedTarget(
+            normalizedTarget
+        );
+
         setPreview(null);
         setPreviewError("");
         setDeleteError("");
@@ -855,15 +1964,35 @@ function AdminDeleteCenter({
 
         try {
             const data =
-                target.type === "MASTER_ITEM"
+                resolvedType === "MASTER_ITEM"
                     ? await previewAdminMasterDeletion(
-                        target.id
+                        normalizedTarget.id
                     )
                     : await previewAdminPacketDeletion(
-                        target.id
+                        normalizedTarget.id
                     );
 
-            setPreview(data);
+            setPreview({
+                ...data,
+
+                targetType:
+                    resolveTargetType(
+                        data,
+                        resolvedType
+                    ),
+
+                description:
+                    data?.description ??
+                    data?.itemDescription ??
+                    normalizedTarget.description ??
+                    "",
+
+                drawingNo:
+                    data?.drawingNo ??
+                    data?.drawingName ??
+                    normalizedTarget.drawingNo ??
+                    "",
+            });
         } catch (error) {
             console.error(error);
 
@@ -898,7 +2027,10 @@ function AdminDeleteCenter({
             };
 
             const deletingMaster =
-                preview?.targetType === "MASTER_ITEM";
+                resolveTargetType(
+                    preview,
+                    targetType
+                ) === "MASTER_ITEM";
 
             const result =
                 deletingMaster
@@ -938,9 +2070,22 @@ function AdminDeleteCenter({
             setReason("");
             setConfirmation("");
 
-            await Promise.resolve(
-                onDeleted?.(result)
-            );
+            await notifyAdminDataChanged({
+                    action:
+                        deletingMaster
+                            ? "MASTER_ITEM_DELETION"
+                            : "PERMANENT_DELETION",
+
+                    targetType:
+                        deletingMaster
+                            ? "MASTER_ITEM"
+                            : "PACKET_ITEM",
+
+                    targetId:
+                        selectedTargetId,
+
+                    ...result,
+                });
         } catch (error) {
             console.error(error);
 
@@ -983,13 +2128,11 @@ function AdminDeleteCenter({
 
                         <div>
                             <div style={modalTitle}>
-                                Admin Delete Center
+                                Admin Center
                             </div>
 
                             <div style={modalSubtitle}>
-                                Permanently remove packets,
-                                masters and their linked
-                                operational records.
+                                Manage packet lifecycle corrections and permanent administrative deletion
                             </div>
                         </div>
                     </div>
@@ -1006,27 +2149,37 @@ function AdminDeleteCenter({
                     </button>
                 </div>
 
-                <div style={permanentWarning}>
-                    <strong>
-                        Permanent action:
-                    </strong>{" "}
-                    this is different from the normal
-                    Inventory delete option. Records
-                    removed here cannot be restored from
-                    the application.
-                </div>
-
+                {workspaceTab === "delete" && (
+                    <div style={permanentWarning}>
+                        <strong>
+                            Permanent action:
+                        </strong>{" "}
+                        this is different from the normal
+                        Inventory delete option. Records
+                        removed here cannot be restored from
+                        the application.
+                    </div>
+                )}
                 <div style={workspaceTabs}>
                     <button
                         type="button"
                         onClick={() =>
-                            setWorkspaceTab(
-                                "delete"
-                            )
+                            setWorkspaceTab("rollback")
                         }
                         style={workspaceTabButton(
-                            workspaceTab ===
-                            "delete"
+                            workspaceTab === "rollback"
+                        )}
+                    >
+                        Move Packet Back
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setWorkspaceTab("delete")
+                        }
+                        style={workspaceTabButton(
+                            workspaceTab === "delete"
                         )}
                     >
                         Delete Records
@@ -1035,13 +2188,22 @@ function AdminDeleteCenter({
                     <button
                         type="button"
                         onClick={() =>
-                            setWorkspaceTab(
-                                "history"
-                            )
+                            setWorkspaceTab("rollbackHistory")
                         }
                         style={workspaceTabButton(
-                            workspaceTab ===
-                            "history"
+                            workspaceTab === "rollbackHistory"
+                        )}
+                    >
+                        State History
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setWorkspaceTab("deletionHistory")
+                        }
+                        style={workspaceTabButton(
+                            workspaceTab === "deletionHistory"
                         )}
                     >
                         Deletion History
@@ -1050,7 +2212,7 @@ function AdminDeleteCenter({
 
                 <div style={modalBody}>
                     {workspaceTab ===
-                        "history" && (
+                        "deletionHistory" && (
                             <DeletionHistory
                                 page={historyPage}
                                 loading={
@@ -1062,6 +2224,21 @@ function AdminDeleteCenter({
                                 }
                             />
                         )}
+
+                    {workspaceTab === "rollback" && (
+                        <AdminPacketRollbackPanel
+                            onChanged={notifyAdminDataChanged}
+                        />
+                    )}
+
+                    {workspaceTab === "rollbackHistory" && (
+                        <AdminRollbackHistory
+                            page={rollbackHistoryPage}
+                            loading={rollbackHistoryLoading}
+                            error={rollbackHistoryError}
+                            onPageChange={loadRollbackHistory}
+                        />
+                    )}
 
                     {workspaceTab ===
                         "delete" && (
@@ -1199,7 +2376,7 @@ function AdminDeleteCenter({
                                                 {searchPage.content.map(
                                                     (target) => (
                                                         <SearchResultCard
-                                                            key={`${target.type}-${target.id}`}
+                                                            key={`${resolveTargetType(target)}-${target.id}`}
                                                             target={
                                                                 target
                                                             }
@@ -1347,14 +2524,19 @@ function AdminDeleteCenter({
                                                 <div>
                                                     <div
                                                         style={resultTypeBadge(
-                                                            preview.targetType ===
-                                                                "MASTER_ITEM"
+                                                            resolveTargetType(
+                                                                preview,
+                                                                targetType
+                                                            ) === "MASTER_ITEM"
                                                                 ? "#a78bfa"
                                                                 : "#38bdf8"
                                                         )}
                                                     >
                                                         {formatLabel(
-                                                            preview.targetType
+                                                            resolveTargetType(
+                                                                preview,
+                                                                targetType
+                                                            )
                                                         )}
                                                     </div>
 
@@ -1366,19 +2548,22 @@ function AdminDeleteCenter({
                                                         {preview.displayName ||
                                                             preview.targetId}
                                                     </div>
-                                                    {preview.targetType === "PACKET_ITEM" && (
-                                                        <div style={previewDescription}>
-                                                            <div style={previewDescriptionLabel}>
-                                                                Packet Description
-                                                            </div>
+                                                    {resolveTargetType(
+                                                        preview,
+                                                        targetType
+                                                    ) === "PACKET_ITEM" && (
+                                                            <div style={previewDescription}>
+                                                                <div style={previewDescriptionLabel}>
+                                                                    Packet Description
+                                                                </div>
 
-                                                            <div style={previewDescriptionText}>
-                                                                {preview.description ||
-                                                                    preview.itemDescription ||
-                                                                    "No description available for this packet."}
+                                                                <div style={previewDescriptionText}>
+                                                                    {preview.description ||
+                                                                        preview.itemDescription ||
+                                                                        "No description available for this packet."}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
+                                                        )}
                                                 </div>
 
                                                 <div
@@ -1593,8 +2778,10 @@ function AdminDeleteCenter({
                                                 >
                                                     {deleting
                                                         ? "Deleting permanently..."
-                                                        : preview.targetType ===
-                                                            "MASTER_ITEM"
+                                                        : resolveTargetType(
+                                                            preview,
+                                                            targetType
+                                                        ) === "MASTER_ITEM"
                                                             ? "Delete Master and All Packets"
                                                             : "Delete Packet Permanently"}
                                                 </button>
@@ -2278,6 +3465,138 @@ const requiredConfirmationBox = {
     userSelect: "all",
 };
 
+const rollbackIntro = {
+    padding: 14,
+    marginBottom: 14,
+    borderRadius: 16,
+
+    background:
+        "linear-gradient(135deg, rgba(59,130,246,.12), rgba(255,255,255,.025))",
+
+    border:
+        "1px solid rgba(96,165,250,.20)",
+};
+
+const rollbackIntroTitle = {
+    color: "#bfdbfe",
+    fontSize: 14,
+    fontWeight: 950,
+};
+
+const rollbackIntroText = {
+    marginTop: 6,
+    color: "rgba(255,255,255,.56)",
+    fontSize: 11.5,
+    lineHeight: 1.55,
+};
+
+const stateTransitionRow = {
+    display: "grid",
+    gridTemplateColumns:
+        "minmax(0,1fr) auto minmax(0,1fr)",
+    alignItems: "center",
+    gap: 10,
+};
+
+const metadataCellStyles = {
+    minWidth: 0,
+};
+
+const metadataLabelStyles = {
+    display: "block",
+    marginBottom: 5,
+    color: "rgba(255,255,255,.40)",
+    fontSize: 9,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+};
+
+const metadataValueStyles = {
+    display: "block",
+    color: "rgba(255,255,255,.82)",
+    fontSize: 11,
+    fontWeight: 800,
+    lineHeight: 1.45,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+};
+
+const stateBox = {
+    padding: 13,
+    borderRadius: 14,
+
+    background:
+        "rgba(255,255,255,.04)",
+
+    border:
+        "1px solid rgba(255,255,255,.07)",
+
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+};
+
+const stateArrow = {
+    color: "#93c5fd",
+    fontSize: 22,
+    fontWeight: 950,
+};
+
+const changeList = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+};
+
+const changeItem = {
+    padding: "9px 11px",
+    borderRadius: 12,
+
+    background:
+        "rgba(59,130,246,.07)",
+
+    border:
+        "1px solid rgba(96,165,250,.13)",
+
+    color: "rgba(255,255,255,.72)",
+    fontSize: 11.5,
+    fontWeight: 650,
+
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+};
+
+const rollbackButton = (disabled) => ({
+    width: "100%",
+    minHeight: 46,
+    marginTop: 15,
+
+    borderRadius: 14,
+    border: "none",
+
+    background: disabled
+        ? "rgba(148,163,184,.14)"
+        : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+
+    color: disabled
+        ? "rgba(255,255,255,.36)"
+        : "#fff",
+
+    fontFamily: "inherit",
+    fontSize: 12.5,
+    fontWeight: 950,
+
+    cursor: disabled
+        ? "not-allowed"
+        : "pointer",
+
+    boxShadow: disabled
+        ? "none"
+        : "0 16px 34px rgba(37,99,235,.28)",
+});
+
 const confirmationInput = (invalid) => ({
     width: "100%",
     height: 43,
@@ -2581,4 +3900,4 @@ const historyTargetId = {
     wordBreak: "break-all",
 };
 
-export default AdminDeleteCenter;
+export default AdminCenter;

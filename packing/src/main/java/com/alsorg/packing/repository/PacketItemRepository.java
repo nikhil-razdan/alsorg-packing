@@ -19,198 +19,293 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PacketItemRepository
-		extends JpaRepository<PacketItem, UUID> {
+        extends JpaRepository<PacketItem, UUID> {
 
-	/*
-	 * =====================================================
-	 * EXISTING METHODS
-	 * Keep these because PacketService already uses them.
-	 * =====================================================
-	 */
+    /*
+     * =====================================================
+     * EXISTING METHODS
+     * =====================================================
+     */
 
-	List<PacketItem> findByPacketId(UUID packetId);
+    List<PacketItem> findByPacketId(
+            UUID packetId
+    );
 
-	Optional<PacketItem> findBySku(String sku);
+    Optional<PacketItem> findBySku(
+            String sku
+    );
 
-	Optional<PacketItem> findByZohoItemId(String zohoItemId);
+    Optional<PacketItem> findByZohoItemId(
+            String zohoItemId
+    );
 
-	Optional<PacketItem> findByStickerNumber(String stickerNumber);
+    Optional<PacketItem> findByStickerNumber(
+            String stickerNumber
+    );
 
-	List<PacketItem> findByPlantCodeIn(
-			Collection<String> plantCodes);
+    List<PacketItem> findByPlantCodeIn(
+            Collection<String> plantCodes
+    );
 
-	List<PacketItem> findByPlantCodeIsNull();
+    List<PacketItem> findByPlantCodeIsNull();
 
-	boolean existsByMasterItemIdAndPacketNumber(
-			UUID masterItemId,
-			String packetNumber);
+    boolean existsByMasterItemIdAndPacketNumber(
+            UUID masterItemId,
+            String packetNumber
+    );
 
-	long countByMasterItemId(UUID masterItemId);
+    long countByMasterItemId(
+            UUID masterItemId
+    );
 
-	/*
-	 * Required when deciding whether the internal Packet
-	 * record has become orphaned.
-	 */
-	long countByPacketId(UUID packetId);
+    long countByPacketId(
+            UUID packetId
+    );
 
-	/*
-	 * =====================================================
-	 * SKU VALIDATION
-	 * =====================================================
-	 */
+    /*
+     * =====================================================
+     * SKU VALIDATION
+     * =====================================================
+     */
 
-	@Query("""
-			    SELECT COUNT(p) > 0
-			    FROM PacketItem p
-			    WHERE p.sku IS NOT NULL
-			      AND LOWER(TRIM(p.sku)) = LOWER(TRIM(:sku))
-			""")
-	boolean existsSkuAlready(
-			@Param("sku") String sku);
+    @Query("""
+        SELECT COUNT(p) > 0
+        FROM PacketItem p
+        WHERE p.sku IS NOT NULL
+          AND LOWER(TRIM(p.sku)) = LOWER(TRIM(:sku))
+    """)
+    boolean existsSkuAlready(
+            @Param("sku") String sku
+    );
 
-	@Query("""
-			    SELECT COUNT(p) > 0
-			    FROM PacketItem p
-			    WHERE p.sku IS NOT NULL
-			      AND LOWER(TRIM(p.sku)) = LOWER(TRIM(:sku))
-			      AND p.id <> :itemId
-			""")
-	boolean existsSkuAlreadyForOtherItem(
-			@Param("sku") String sku,
-			@Param("itemId") UUID itemId);
+    @Query("""
+        SELECT COUNT(p) > 0
+        FROM PacketItem p
+        WHERE p.sku IS NOT NULL
+          AND LOWER(TRIM(p.sku)) = LOWER(TRIM(:sku))
+          AND p.id <> :itemId
+    """)
+    boolean existsSkuAlreadyForOtherItem(
+            @Param("sku") String sku,
+            @Param("itemId") UUID itemId
+    );
 
-	/*
-	 * =====================================================
-	 * PLANT VISIBILITY
-	 * =====================================================
-	 */
+    /*
+     * =====================================================
+     * PLANT VISIBILITY
+     * =====================================================
+     */
 
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    WHERE p.plantCode IN :plantCodes
-			       OR p.plantCode IS NULL
-			       OR p.plantCode = ''
-			""")
-	List<PacketItem> findVisibleByPlantsIncludingLegacy(
-			@Param("plantCodes") Collection<String> plantCodes);
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.plantCode IN :plantCodes
+           OR p.plantCode IS NULL
+           OR p.plantCode = ''
+    """)
+    List<PacketItem> findVisibleByPlantsIncludingLegacy(
+            @Param("plantCodes")
+            Collection<String> plantCodes
+    );
 
-	/*
-	 * =====================================================
-	 * ADMIN DELETE: LOCKED FETCHES
-	 * =====================================================
-	 */
+    /*
+     * =====================================================
+     * STICKER GENERATION LOCK
+     * =====================================================
+     *
+     * Prevents:
+     * - Two users generating a sticker simultaneously
+     * - Sticker generation while Admin Center rollback runs
+     * - Rollback while sticker generation is modifying the item
+     *
+     * This method must only be called inside a normal writable
+     * @Transactional method.
+     * =====================================================
+     */
 
-	/*
-	 * PESSIMISTIC_WRITE blocks another transaction from editing,
-	 * dispatching or printing this packet while deletion runs.
-	 *
-	 * EntityGraph loads parent Packet and MasterItem inside
-	 * the same query.
-	 */
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = {
-			"packet",
-			"masterItem"
-	})
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    WHERE p.id = :itemId
-			""")
-	Optional<PacketItem> findByIdForAdminDeletion(
-			@Param("itemId") UUID itemId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.id = :itemId
+    """)
+    Optional<PacketItem> findByIdForStickerGeneration(
+            @Param("itemId") UUID itemId
+    );
 
-	/*
-	 * Locks every child packet belonging to a master item.
-	 */
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = {
-			"packet",
-			"masterItem"
-	})
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    WHERE p.masterItem.id = :masterItemId
-			    ORDER BY p.packetNumber ASC
-			""")
-	List<PacketItem> findAllByMasterItemIdForAdminDeletion(
-			@Param("masterItemId") UUID masterItemId);
+    /*
+     * =====================================================
+     * ADMIN LIFECYCLE ROLLBACK
+     * =====================================================
+     */
 
-	/*
-	 * Explicit bulk deletion. This is only used by
-	 * AdminDeletionService.
-	 */
-	@Modifying(flushAutomatically = true, clearAutomatically = false)
-	@Query("""
-			    DELETE FROM PacketItem p
-			    WHERE p.id IN :itemIds
-			""")
-	int deleteByIdsForAdminDeletion(
-			@Param("itemIds") Collection<UUID> itemIds);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.id = :itemId
+    """)
+    Optional<PacketItem> findByIdForAdminRollback(
+            @Param("itemId") UUID itemId
+    );
 
-	/*
-	 * =====================================================
-	 * ADMIN DELETE CENTER SEARCH
-	 * =====================================================
-	 */
+    /*
+     * Used after READY_PKD -> CREATED rollback.
+     *
+     * A parent Packet may contain multiple PacketItem rows.
+     * Its stickerGenerated flag should be false only when none
+     * of its children have an active sticker.
+     */
+    @Query("""
+        SELECT COUNT(p)
+        FROM PacketItem p
+        WHERE p.packet.id = :packetId
+          AND p.stickerNumber IS NOT NULL
+          AND TRIM(p.stickerNumber) <> ''
+    """)
+    long countActiveStickersByPacketId(
+            @Param("packetId") UUID packetId
+    );
 
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    LEFT JOIN p.masterItem m
-			    WHERE LOWER(COALESCE(p.itemName, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.pdNo, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.drawingNo, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.sku, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.stickerNumber, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.packetNumber, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(p.clientName, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(m.itemName, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			       OR LOWER(COALESCE(m.pdNo, ''))
-			              LIKE LOWER(CONCAT('%', :query, '%'))
-			""")
-	Page<PacketItem> searchForAdminDeletion(
-			@Param("query") String query,
-			Pageable pageable);
+    /*
+     * =====================================================
+     * ADMIN DELETE: LOCKED FETCHES
+     * =====================================================
+     */
 
-	/*
-	 * =====================================================
-	 * ADMIN DELETE PREVIEW - NO DATABASE LOCK
-	 * =====================================================
-	 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.id = :itemId
+    """)
+    Optional<PacketItem> findByIdForAdminDeletion(
+            @Param("itemId") UUID itemId
+    );
 
-	@EntityGraph(attributePaths = {
-			"packet",
-			"masterItem"
-	})
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    WHERE p.id = :itemId
-			""")
-	Optional<PacketItem> findByIdForAdminDeletionPreview(
-			@Param("itemId") UUID itemId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.masterItem.id = :masterItemId
+        ORDER BY p.packetNumber ASC
+    """)
+    List<PacketItem> findAllByMasterItemIdForAdminDeletion(
+            @Param("masterItemId") UUID masterItemId
+    );
 
-	@EntityGraph(attributePaths = {
-			"packet",
-			"masterItem"
-	})
-	@Query("""
-			    SELECT p
-			    FROM PacketItem p
-			    WHERE p.masterItem.id = :masterItemId
-			    ORDER BY p.packetNumber ASC
-			""")
-	List<PacketItem> findAllByMasterItemIdForAdminDeletionPreview(
-			@Param("masterItemId") UUID masterItemId);
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = false
+    )
+    @Query("""
+        DELETE FROM PacketItem p
+        WHERE p.id IN :itemIds
+    """)
+    int deleteByIdsForAdminDeletion(
+            @Param("itemIds")
+            Collection<UUID> itemIds
+    );
+
+    /*
+     * =====================================================
+     * ADMIN CENTER SEARCH
+     * =====================================================
+     *
+     * Description is deliberately included so packets can be
+     * found by, and displayed with, their description.
+     * =====================================================
+     */
+
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        LEFT JOIN p.masterItem m
+        WHERE LOWER(COALESCE(p.itemName, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.description, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.pdNo, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.drawingNo, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.sku, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.stickerNumber, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.packetNumber, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(p.clientName, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(m.itemName, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+
+           OR LOWER(COALESCE(m.pdNo, ''))
+                  LIKE LOWER(CONCAT('%', :query, '%'))
+    """)
+    Page<PacketItem> searchForAdminDeletion(
+            @Param("query") String query,
+            Pageable pageable
+    );
+
+    /*
+     * =====================================================
+     * ADMIN DELETE PREVIEW - NO DATABASE LOCK
+     * =====================================================
+     *
+     * These methods are safe for @Transactional(readOnly = true).
+     * Do not add @Lock to them.
+     * =====================================================
+     */
+
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.id = :itemId
+    """)
+    Optional<PacketItem> findByIdForAdminDeletionPreview(
+            @Param("itemId") UUID itemId
+    );
+
+    @EntityGraph(attributePaths = {
+            "packet",
+            "masterItem"
+    })
+    @Query("""
+        SELECT p
+        FROM PacketItem p
+        WHERE p.masterItem.id = :masterItemId
+        ORDER BY p.packetNumber ASC
+    """)
+    List<PacketItem> findAllByMasterItemIdForAdminDeletionPreview(
+            @Param("masterItemId") UUID masterItemId
+    );
 }

@@ -6,6 +6,8 @@ import { API_BASE_URL } from "../config"; import {
 	normalizeRole,
 } from "../utils/permissions";
 import { useAuth } from "../auth/AuthContext";
+import usePackFlowDataRefresh
+	from "../hooks/usePackFlowDataRefresh";
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
@@ -77,7 +79,7 @@ function WarehousePage() {
 	const [bulkGatePassNumber, setBulkGatePassNumber] = useState("");
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(20);
-	
+
 
 	const [plants, setPlants] = useState([]);
 	const [assignmentDrafts, setAssignmentDrafts] = useState({});
@@ -171,6 +173,18 @@ function WarehousePage() {
 			setLoading(false);
 		}
 	};
+
+	usePackFlowDataRefresh(
+		"warehouse",
+		async () => {
+			if (!canOpenWarehouse) {
+				setRows([]);
+				return;
+			}
+
+			await fetchItems();
+		}
+	);
 
 	useEffect(() => {
 		if (!canOpenWarehouse) {
@@ -672,15 +686,39 @@ function WarehousePage() {
 		allSelectedWarehouseRequested &&
 		selectedWarehouseItems.length > 0;
 
-	const paginatedRows = useMemo(() => {
-		const start = (pageNo - 1) * pageSize;
-		return filteredRows.slice(start, start + pageSize);
-	}, [filteredRows, pageNo, pageSize]);
+	const totalPages =
+		Math.max(
+			1,
+			Math.ceil(
+				filteredRows.length /
+				pageSize
+			)
+		);
 
-	const totalPages = Math.max(
-		1,
-		Math.ceil(filteredRows.length / pageSize)
-	);
+	const safePageNo =
+		Math.min(
+			Math.max(
+				1,
+				pageNo
+			),
+			totalPages
+		);
+
+	const paginatedRows =
+		useMemo(() => {
+			const start =
+				(safePageNo - 1) *
+				pageSize;
+
+			return filteredRows.slice(
+				start,
+				start + pageSize
+			);
+		}, [
+			filteredRows,
+			safePageNo,
+			pageSize,
+		]);
 
 	useEffect(() => {
 		setPageNo(1);
@@ -692,6 +730,24 @@ function WarehousePage() {
 		}
 	}, [pageNo, totalPages]);
 
+	useEffect(() => {
+		const validIds =
+			new Set(
+				rows
+					.map((row) =>
+						getWarehouseRowId(
+							row
+						)
+					)
+					.filter(Boolean)
+			);
+
+		setSelectionModel((current) =>
+			current.filter((id) =>
+				validIds.has(id)
+			)
+		);
+	}, [rows]);
 	const bulkApproveWarehouseThroughGatePass = async () => {
 		if (selectionModel.length === 0) {
 			alert("Select items first");
@@ -883,7 +939,7 @@ function WarehousePage() {
 			headerName: "Description",
 			width: 220,
 
-			renderHeader: () => <span>DWG No.</span>,
+			renderHeader: () => <span>Descriptiom</span>,
 
 			renderCell: (params) => (
 				<span style={simpleMonoText} title={params.value}>
@@ -896,7 +952,7 @@ function WarehousePage() {
 			headerName: "Client",
 			minWidth: 180,
 
-			renderHeader: () => <span>Description</span>,
+			renderHeader: () => <span>Client</span>,
 
 			renderCell: (params) => (
 				<span style={simpleMutedText} title={params.value}>
@@ -1392,7 +1448,7 @@ function WarehousePage() {
 				// ===============================
 				if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 
-					if (role === "ADMIN") {
+					if (isAdmin) {
 						return (
 							<Box sx={actionCell}>
 								<Button
@@ -1602,7 +1658,13 @@ function WarehousePage() {
 						variant="standard"
 						placeholder="Search by Item, SKU, PD No, Status or Client..."
 						value={search}
-						onChange={(e) => setSearch(e.target.value)}
+						onChange={(e) => {
+							setSearch(
+								e.target.value
+							);
+
+							setPageNo(1);
+						}}
 						InputProps={{ disableUnderline: true }}
 						sx={{
 							flex: 1,
@@ -1623,7 +1685,13 @@ function WarehousePage() {
 						select
 						size="small"
 						value={statusFilter}
-						onChange={(e) => setStatusFilter(e.target.value)}
+						onChange={(e) => {
+							setSearch(
+								e.target.value
+							);
+
+							setPageNo(1);
+						}}
 						sx={{
 							minWidth: 210,
 							...formFieldSx,
@@ -2122,7 +2190,12 @@ function WarehousePage() {
 								select
 								size="small"
 								value={pageSize}
-								onChange={(e) => setPageSize(Number(e.target.value))}
+								onChange={(e) => {
+									setPageSize(
+										Number(e.target.value)
+									);
+									setPageNo(1);
+								}}
 								sx={{
 									width: 110,
 
@@ -2169,8 +2242,17 @@ function WarehousePage() {
 							}}
 						>
 							<Button
-								disabled={pageNo === 1}
-								onClick={() => setPageNo((p) => p - 1)}
+								disabled={
+									safePageNo === 1
+								}
+								onClick={() =>
+									setPageNo((currentPage) =>
+										Math.max(
+											1,
+											currentPage - 1
+										)
+									)
+								}
 								sx={{
 									minWidth: 100,
 									height: 30,
@@ -2212,14 +2294,24 @@ function WarehousePage() {
 										color: "#60a5fa",
 									}}
 								>
-									{pageNo}
+									{safePageNo}
 								</Box>
 								of {totalPages}
 							</Box>
 
 							<Button
-								disabled={pageNo === totalPages}
-								onClick={() => setPageNo((p) => p + 1)}
+								disabled={
+									safePageNo ===
+									totalPages
+								}
+								onClick={() =>
+									setPageNo((currentPage) =>
+										Math.min(
+											totalPages,
+											currentPage + 1
+										)
+									)
+								}
 								sx={{
 									minWidth: 100,
 									height: 30,

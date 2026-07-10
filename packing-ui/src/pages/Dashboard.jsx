@@ -21,8 +21,8 @@ import InventoryCommandCenter from
 import MasterItemsModal from
   "../dashboard/components/inventory/MasterItemsModal";
 import StatusCorporateChart from "../dashboard/components/StatusCorporateChart";
-import AdminDeleteCenter from
-  "../dashboard/components/admin/AdminDeleteCenter";
+import AdminCenter from
+  "../dashboard/components/admin/AdminCenter";
 
 function StatCard({
   title,
@@ -453,8 +453,8 @@ function DashboardPage() {
   ] = useState(0);
 
   const [
-    adminDeleteCenterOpen,
-    setAdminDeleteCenterOpen,
+    adminCenterOpen,
+    setAdminCenterOpen,
   ] = useState(false);
 
   const [masterItemsModalOpen, setMasterItemsModalOpen] =
@@ -617,7 +617,7 @@ function DashboardPage() {
       }
     }, []);
 
-  const handleAdminDeletionCompleted =
+  const handleAdminCenterChanged =
     useCallback(
       async (result) => {
         await refreshInventoryDashboard();
@@ -628,11 +628,11 @@ function DashboardPage() {
 
         window.dispatchEvent(
           new CustomEvent(
-            "packflow:record-deleted",
+            "packflow:admin-record-changed",
             {
               detail: {
                 source:
-                  "ADMIN_DELETE_CENTER",
+                  "ADMIN_CENTER",
 
                 targetType:
                   result?.targetType,
@@ -735,30 +735,16 @@ function DashboardPage() {
       onClick: () => toggleStatCard("inventoryItems"),
     },
     isAdmin && {
-      key: "adminDeleteCenter",
-
-      icon: "🗑️",
-
+      key: "adminCenter",
+      icon: "🛡️",
       accent: "#ef4444",
-
-      title: "Admin Delete Center",
-
+      title: "Admin Center",
       value: "ADMIN",
-
-      subtle:
-        "Permanent packet and master deletion",
-
-      trend:
-        "Restricted",
-
-      trendLabel:
-        "Search, preview impact and delete",
-
-      active:
-        adminDeleteCenterOpen,
-
-      onClick: () =>
-        setAdminDeleteCenterOpen(true),
+      subtle: "Lifecycle correction and permanent deletion",
+      trend: "Restricted",
+      trendLabel: "Move back, review impact or delete",
+      active: adminCenterOpen,
+      onClick: () => setAdminCenterOpen(true),
     },
     {
       key: "masterItems",
@@ -1628,14 +1614,10 @@ function DashboardPage() {
         }
       />
 
-      <AdminDeleteCenter
-        open={adminDeleteCenterOpen}
-        onClose={() =>
-          setAdminDeleteCenterOpen(false)
-        }
-        onDeleted={
-          handleAdminDeletionCompleted
-        }
+      <AdminCenter
+        open={adminCenterOpen}
+        onClose={() => setAdminCenterOpen(false)}
+        onChanged={handleAdminCenterChanged}
       />
     </div>
   );

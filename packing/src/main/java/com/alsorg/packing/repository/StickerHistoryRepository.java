@@ -18,9 +18,11 @@ import org.springframework.data.repository.query.Param;
 public interface StickerHistoryRepository
         extends JpaRepository<StickerHistory, UUID> {
 
-    /* =====================================================
-       ITEM-WISE HISTORY
-       ===================================================== */
+    /*
+     * =====================================================
+     * ITEM-WISE HISTORY
+     * =====================================================
+     */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
@@ -38,9 +40,11 @@ public interface StickerHistoryRepository
             @Param("itemId") UUID itemId
     );
 
-    /* =====================================================
-       GENERATED HISTORY - ALL
-       ===================================================== */
+    /*
+     * =====================================================
+     * GENERATED HISTORY - ALL
+     * =====================================================
+     */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
@@ -70,9 +74,11 @@ public interface StickerHistoryRepository
     List<GeneratedPacketHistoryResponse>
     findGeneratedPacketHistoryAll();
 
-    /* =====================================================
-       GENERATED HISTORY - USER
-       ===================================================== */
+    /*
+     * =====================================================
+     * GENERATED HISTORY - USER
+     * =====================================================
+     */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
@@ -102,12 +108,15 @@ public interface StickerHistoryRepository
     """)
     List<GeneratedPacketHistoryResponse>
     findGeneratedPacketHistoryByUser(
-            @Param("generatedBy") String generatedBy
+            @Param("generatedBy")
+            String generatedBy
     );
 
-    /* =====================================================
-       USER DROPDOWN
-       ===================================================== */
+    /*
+     * =====================================================
+     * USER DROPDOWN
+     * =====================================================
+     */
 
     @Query("""
         SELECT DISTINCT h.generatedBy
@@ -118,9 +127,11 @@ public interface StickerHistoryRepository
     """)
     List<String> findDistinctGeneratedByUsers();
 
-    /* =====================================================
-       EXISTING SUPPORT
-       ===================================================== */
+    /*
+     * =====================================================
+     * EXISTING SUPPORT
+     * =====================================================
+     */
 
     long countByGeneratedAtBetween(
             LocalDateTime start,
@@ -141,9 +152,37 @@ public interface StickerHistoryRepository
             UUID packetItemId
     );
 
-    /* =====================================================
-       ADMIN DELETE
-       ===================================================== */
+    /*
+     * Required by Admin Center rollback preview.
+     */
+    long countByPacketItem_Id(
+            UUID packetItemId
+    );
+
+    /*
+     * Required to generate the correct next print iteration after:
+     *
+     * Sticker iteration 1
+     * Admin rollback to CREATED
+     * Sticker generated again
+     *
+     * The new sticker must become iteration 2, not iteration 1.
+     */
+    @Query("""
+        SELECT COALESCE(MAX(h.printIteration), 0)
+        FROM StickerHistory h
+        WHERE h.packetItem.id = :packetItemId
+    """)
+    Long findMaximumPrintIteration(
+            @Param("packetItemId")
+            UUID packetItemId
+    );
+
+    /*
+     * =====================================================
+     * ADMIN DELETE
+     * =====================================================
+     */
 
     long countByPacketItem_IdIn(
             Collection<UUID> packetItemIds
