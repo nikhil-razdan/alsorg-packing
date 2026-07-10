@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import StatusDonutChart from "../dashboard/components/StatusDonutChart";
 import StatusBarChart from "../dashboard/components/StatusBarChart";
 import ActivityFeed from "../dashboard/components/ActivityFeed";
@@ -21,6 +21,8 @@ import InventoryCommandCenter from
 import MasterItemsModal from
   "../dashboard/components/inventory/MasterItemsModal";
 import StatusCorporateChart from "../dashboard/components/StatusCorporateChart";
+import AdminDeleteCenter from
+  "../dashboard/components/admin/AdminDeleteCenter";
 
 function StatCard({
   title,
@@ -149,17 +151,6 @@ const DonutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
     <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
-  </svg>
-);
-
-const LineIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-    <polyline
-      points="3,17 9,11 13,15 21,7"
-      stroke="currentColor"
-      strokeWidth="2"
-      fill="none"
-    />
   </svg>
 );
 
@@ -456,17 +447,38 @@ function DashboardPage() {
     error: "",
   });
 
+  const [
+    masterItemsRefreshKey,
+    setMasterItemsRefreshKey,
+  ] = useState(0);
+
+  const [
+    adminDeleteCenterOpen,
+    setAdminDeleteCenterOpen,
+  ] = useState(false);
+
   const [masterItemsModalOpen, setMasterItemsModalOpen] =
     useState(false);
 
-  const { role } = useAuth();
+  const {
+    role,
+    currentUser,
+    user,
+  } = useAuth();
 
-  const cleanRole = String(role || "")
-    .replace("ROLE_", "")
+  const rawRole =
+    role ??
+    currentUser?.role ??
+    user?.role ??
+    "";
+
+  const cleanRole = String(rawRole)
     .trim()
-    .toUpperCase();
+    .toUpperCase()
+    .replace(/^ROLE_/, "");
 
-  const isAdmin = cleanRole === "ADMIN";
+  const isAdmin =
+    cleanRole === "ADMIN";
 
   const clampPercent = (value) => {
     if (!Number.isFinite(value)) return 0;
@@ -547,9 +559,8 @@ function DashboardPage() {
 
   const chartIndex = {
     donut: 0,
-    line: 1,
-    bar: 2,
-    corporate: 3,
+    bar: 1,
+    corporate: 2,
   }[chartType] || 0;
 
   useEffect(() => {
@@ -560,28 +571,94 @@ function DashboardPage() {
       .catch(console.error);
   }, []);
 
+  const refreshInventoryDashboard =
+    useCallback(async () => {
+      const [
+        statsResult,
+        activityResult,
+      ] = await Promise.allSettled([
+        fetchDashboardStats(),
+        fetchDashboardActivity(12),
+      ]);
+
+      if (
+        statsResult.status === "fulfilled" &&
+        statsResult.value
+      ) {
+        setStats(
+          normalizeStats(
+            statsResult.value
+          )
+        );
+      } else if (
+        statsResult.status === "rejected"
+      ) {
+        console.error(
+          statsResult.reason
+        );
+      }
+
+      if (
+        activityResult.status === "fulfilled"
+      ) {
+        setActivityLogs(
+          Array.isArray(
+            activityResult.value
+          )
+            ? activityResult.value
+            : []
+        );
+      } else {
+        console.error(
+          activityResult.reason
+        );
+
+        setActivityLogs([]);
+      }
+    }, []);
+
+  const handleAdminDeletionCompleted =
+    useCallback(
+      async (result) => {
+        await refreshInventoryDashboard();
+
+        setMasterItemsRefreshKey(
+          (current) => current + 1
+        );
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "packflow:record-deleted",
+            {
+              detail: {
+                source:
+                  "ADMIN_DELETE_CENTER",
+
+                targetType:
+                  result?.targetType,
+
+                targetId:
+                  result?.targetId,
+
+                displayName:
+                  result?.displayName,
+
+                deletionAuditId:
+                  result?.deletionAuditId,
+
+                deletedRows:
+                  result?.deletedRows,
+              },
+            }
+          )
+        );
+      },
+      [refreshInventoryDashboard]
+    );
+
   useEffect(() => {
-    let active = true;
-
-    fetchDashboardStats()
-      .then((data) => {
-        if (!active || !data) return;
-        setStats(normalizeStats(data));
-      })
-      .catch(console.error);
-
-    fetchDashboardActivity(12)
-      .then((logs) => {
-        if (!active) return;
-        setActivityLogs(logs || []);
-      })
-      .catch(() => setActivityLogs([]));
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
+    refreshInventoryDashboard();
+  }, [refreshInventoryDashboard]);
 
   const toggleStatCard = (key) => {
     setActiveStatCard((current) =>
@@ -657,7 +734,32 @@ function DashboardPage() {
       active: activeStatCard === "inventoryItems",
       onClick: () => toggleStatCard("inventoryItems"),
     },
+    isAdmin && {
+      key: "adminDeleteCenter",
 
+      icon: "🗑️",
+
+      accent: "#ef4444",
+
+      title: "Admin Delete Center",
+
+      value: "ADMIN",
+
+      subtle:
+        "Permanent packet and master deletion",
+
+      trend:
+        "Restricted",
+
+      trendLabel:
+        "Search, preview impact and delete",
+
+      active:
+        adminDeleteCenterOpen,
+
+      onClick: () =>
+        setAdminDeleteCenterOpen(true),
+    },
     {
       key: "masterItems",
       icon: "🧩",
@@ -790,7 +892,7 @@ function DashboardPage() {
       subtle: "Dispatched / packet items",
       trend: "live",
     },
-  ];
+  ].filter(Boolean);
 
   return (
     <div style={page}>
@@ -1519,8 +1621,21 @@ function DashboardPage() {
         onClose={closeThroughputUserModal}
       />
       <MasterItemsModal
+        key={masterItemsRefreshKey}
         open={masterItemsModalOpen}
-        onClose={() => setMasterItemsModalOpen(false)}
+        onClose={() =>
+          setMasterItemsModalOpen(false)
+        }
+      />
+
+      <AdminDeleteCenter
+        open={adminDeleteCenterOpen}
+        onClose={() =>
+          setAdminDeleteCenterOpen(false)
+        }
+        onDeleted={
+          handleAdminDeletionCompleted
+        }
       />
     </div>
   );

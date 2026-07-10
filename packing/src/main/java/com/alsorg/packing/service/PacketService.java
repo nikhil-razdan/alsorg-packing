@@ -572,22 +572,88 @@ public class PacketService {
         }
 
         @Transactional
-        public void deleteItem(UUID itemId) {
+        public void deleteItem(
+                        UUID itemId) {
+                PacketItem item = packetItemRepository
+                                .findById(itemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Item not found"));
 
-                PacketItem item = packetItemRepository.findById(itemId)
-                                .orElseThrow(() -> new RuntimeException("Item not found"));
-
-                // 🔥 RULE 1: Only newly created
-                if (!"CREATED".equals(item.getStatus())) {
-                        throw new RuntimeException("Only newly created items can be deleted");
+                /*
+                 * Normal user delete rule:
+                 * only newly created packet.
+                 */
+                if (!"CREATED".equalsIgnoreCase(
+                                item.getStatus())) {
+                        throw new RuntimeException(
+                                        "Only newly created items can be deleted");
                 }
 
-                // 🔥 RULE 2: No sticker generated
-                if (item.getStickerNumber() != null) {
-                        throw new RuntimeException("Cannot delete printed item");
+                /*
+                 * Normal user cannot delete a printed item.
+                 */
+                if (item.getStickerNumber() != null &&
+                                !item.getStickerNumber().isBlank()) {
+                        throw new RuntimeException(
+                                        "Cannot delete printed item");
                 }
+
+                UUID masterItemId = item.getMasterItem() == null
+                                ? null
+                                : item.getMasterItem().getId();
+
+                UUID packetId = item.getPacket() == null
+                                ? null
+                                : item.getPacket().getId();
 
                 packetItemRepository.delete(item);
+
+                /*
+                 * Make sure count queries below see the deletion.
+                 */
+                packetItemRepository.flush();
+
+                /*
+                 * Recalculate master total.
+                 */
+                if (masterItemId != null) {
+                        long remaining = packetItemRepository
+                                        .countByMasterItemId(
+                                                        masterItemId);
+
+                        masterItemRepository
+                                        .findById(masterItemId)
+                                        .ifPresent(master -> {
+                                                if (remaining == 0) {
+                                                        masterItemRepository.delete(
+                                                                        master);
+
+                                                        return;
+                                                }
+
+                                                master.setTotalPackets(
+                                                                Math.toIntExact(remaining));
+
+                                                masterItemRepository.save(
+                                                                master);
+                                        });
+                }
+
+                /*
+                 * Delete internal Packet only when no PacketItem
+                 * references it.
+                 */
+                if (packetId != null) {
+                        long remainingInPacket = packetItemRepository
+                                        .countByPacketId(packetId);
+
+                        if (remainingInPacket == 0) {
+                                packetRepository
+                                                .findById(packetId)
+                                                .ifPresent(
+                                                                packetRepository::delete);
+                        }
+                }
         }
 
         @Transactional

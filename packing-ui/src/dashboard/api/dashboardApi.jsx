@@ -42,37 +42,133 @@ const buildAuthHeaders = (
 	return headers;
 };
 
+const readResponsePayload = async (res) => {
+	const contentType =
+		(
+			res.headers.get(
+				"content-type"
+			) || ""
+		).toLowerCase();
+
+	if (res.status === 204) {
+		return null;
+	}
+
+	if (contentType.includes("json")) {
+		try {
+			return await res.json();
+		} catch {
+			return null;
+		}
+	}
+
+	try {
+		return await res.text();
+	} catch {
+		return null;
+	}
+};
+
+const getApiErrorMessage = (
+	payload,
+	fallbackMessage
+) => {
+	if (typeof payload === "string" && payload.trim()) {
+		return payload.trim();
+	}
+
+	return (
+		payload?.message ||
+		payload?.error ||
+		payload?.detail ||
+		fallbackMessage
+	);
+};
+
 const requestJson = async (
 	path,
-	errorMessage
+	errorMessage,
+	options = {}
 ) => {
+	const {
+		method = "GET",
+		body,
+		headers: extraHeaders = {},
+	} = options;
+
+	const hasBody =
+		body !== undefined &&
+		body !== null;
+
 	const res =
 		await fetch(`${API_BASE_URL}${path}`, {
-			method: "GET",
+			method,
 			credentials: "include",
 			cache: "no-store",
+
 			headers: buildAuthHeaders({
 				Accept: "application/json",
+
+				...(hasBody
+					? {
+						"Content-Type":
+							"application/json",
+					}
+					: {}),
+
+				...extraHeaders,
 			}),
+
+			body: hasBody
+				? JSON.stringify(body)
+				: undefined,
 		});
 
+	const payload =
+		await readResponsePayload(res);
+
 	if (!res.ok) {
-		const text =
-			await res.text();
+		const message =
+			getApiErrorMessage(
+				payload,
+				errorMessage
+			);
 
 		if (res.status === 401) {
 			throw new Error(
-				text ||
-				"Unauthorized. Please login again or refresh your session."
+				message ||
+				"Unauthorized. Please login again."
+			);
+		}
+
+		if (res.status === 403) {
+			throw new Error(
+				message ||
+				"Only ADMIN can perform this action."
+			);
+		}
+
+		if (res.status === 404) {
+			throw new Error(
+				message ||
+				"The selected record no longer exists."
+			);
+		}
+
+		if (res.status === 409) {
+			throw new Error(
+				message ||
+				"Deletion was blocked by another linked record."
 			);
 		}
 
 		throw new Error(
-			text || errorMessage
+			message ||
+			errorMessage
 		);
 	}
 
-	return res.json();
+	return payload;
 };
 
 export async function fetchDashboardStats() {
@@ -480,4 +576,170 @@ export function latestStickerPdfPath(
 	return `/api/inventory/stickers/packet-items/${encodeURIComponent(
 		packetItemId
 	)}/latest?download=${download ? "true" : "false"}`;
+}
+
+/* =========================================================
+   ADMIN DELETE CENTER
+   ========================================================= */
+
+export async function searchAdminPacketItems({
+	query,
+	page = 0,
+	size = 20,
+} = {}) {
+	const cleanQuery =
+		String(query || "").trim();
+
+	if (!cleanQuery) {
+		throw new Error(
+			"Enter a packet, item, PD number, SKU, sticker number or UUID."
+		);
+	}
+
+	const params =
+		new URLSearchParams();
+
+	params.set("query", cleanQuery);
+	params.set("page", String(page));
+	params.set("size", String(size));
+
+	return requestJson(
+		`/api/admin/deletions/packet-items/search?${params.toString()}`,
+		"Failed to search packet items"
+	);
+}
+
+export async function searchAdminMasterItems({
+	query,
+	page = 0,
+	size = 20,
+} = {}) {
+	const cleanQuery =
+		String(query || "").trim();
+
+	if (!cleanQuery) {
+		throw new Error(
+			"Enter a master item, PD number, drawing, client or UUID."
+		);
+	}
+
+	const params =
+		new URLSearchParams();
+
+	params.set("query", cleanQuery);
+	params.set("page", String(page));
+	params.set("size", String(size));
+
+	return requestJson(
+		`/api/admin/deletions/master-items/search?${params.toString()}`,
+		"Failed to search master items"
+	);
+}
+
+export async function previewAdminPacketDeletion(
+	packetItemId
+) {
+	if (!packetItemId) {
+		throw new Error(
+			"Packet item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/deletions/packet-items/${encodeURIComponent(
+			packetItemId
+		)}/preview`,
+		"Failed to preview packet deletion"
+	);
+}
+
+export async function previewAdminMasterDeletion(
+	masterItemId
+) {
+	if (!masterItemId) {
+		throw new Error(
+			"Master item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/deletions/master-items/${encodeURIComponent(
+			masterItemId
+		)}/preview`,
+		"Failed to preview master deletion"
+	);
+}
+
+export async function executeAdminPacketDeletion(
+	packetItemId,
+	{
+		confirmationText = "",
+		reason = "",
+	} = {}
+) {
+	if (!packetItemId) {
+		throw new Error(
+			"Packet item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/deletions/packet-items/${encodeURIComponent(
+			packetItemId
+		)}/execute`,
+		"Failed to permanently delete packet",
+		{
+			method: "POST",
+
+			body: {
+				confirmationText,
+				reason,
+			},
+		}
+	);
+}
+
+export async function executeAdminMasterDeletion(
+	masterItemId,
+	{
+		confirmationText = "",
+		reason = "",
+	} = {}
+) {
+	if (!masterItemId) {
+		throw new Error(
+			"Master item ID is missing."
+		);
+	}
+
+	return requestJson(
+		`/api/admin/deletions/master-items/${encodeURIComponent(
+			masterItemId
+		)}/execute`,
+		"Failed to permanently delete master item",
+		{
+			method: "POST",
+
+			body: {
+				confirmationText,
+				reason,
+			},
+		}
+	);
+}
+
+export async function fetchAdminDeletionHistory({
+	page = 0,
+	size = 20,
+} = {}) {
+	const params =
+		new URLSearchParams();
+
+	params.set("page", String(page));
+	params.set("size", String(size));
+
+	return requestJson(
+		`/api/admin/deletions/history?${params.toString()}`,
+		"Failed to load deletion history"
+	);
 }

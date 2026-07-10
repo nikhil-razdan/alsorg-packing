@@ -1,22 +1,26 @@
 package com.alsorg.packing.repository;
 
+import com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse;
+import com.alsorg.packing.controller.dto.StickerHistoryResponse;
+import com.alsorg.packing.domain.sticker.StickerHistory;
+
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse;
-import com.alsorg.packing.controller.dto.StickerHistoryResponse;
-import com.alsorg.packing.domain.sticker.StickerHistory;
 
 public interface StickerHistoryRepository
         extends JpaRepository<StickerHistory, UUID> {
 
-    /* ================= ITEM-WISE STICKER HISTORY ================= */
+    /* =====================================================
+       ITEM-WISE HISTORY
+       ===================================================== */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
@@ -34,7 +38,9 @@ public interface StickerHistoryRepository
             @Param("itemId") UUID itemId
     );
 
-    /* ================= GENERATED HISTORY - ALL USERS ================= */
+    /* =====================================================
+       GENERATED HISTORY - ALL
+       ===================================================== */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
@@ -61,9 +67,12 @@ public interface StickerHistoryRepository
         WHERE h.packetItem IS NOT NULL
         ORDER BY h.generatedAt DESC
     """)
-    List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryAll();
+    List<GeneratedPacketHistoryResponse>
+    findGeneratedPacketHistoryAll();
 
-    /* ================= GENERATED HISTORY - SPECIFIC USER ================= */
+    /* =====================================================
+       GENERATED HISTORY - USER
+       ===================================================== */
 
     @Query("""
         SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
@@ -91,11 +100,14 @@ public interface StickerHistoryRepository
           AND LOWER(h.generatedBy) = LOWER(:generatedBy)
         ORDER BY h.generatedAt DESC
     """)
-    List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryByUser(
+    List<GeneratedPacketHistoryResponse>
+    findGeneratedPacketHistoryByUser(
             @Param("generatedBy") String generatedBy
     );
 
-    /* ================= USER DROPDOWN ================= */
+    /* =====================================================
+       USER DROPDOWN
+       ===================================================== */
 
     @Query("""
         SELECT DISTINCT h.generatedBy
@@ -106,23 +118,47 @@ public interface StickerHistoryRepository
     """)
     List<String> findDistinctGeneratedByUsers();
 
-    /* ================= EXISTING COUNTERS / SCANNER SUPPORT ================= */
+    /* =====================================================
+       EXISTING SUPPORT
+       ===================================================== */
 
     long countByGeneratedAtBetween(
             LocalDateTime start,
             LocalDateTime end
     );
 
-    Optional<StickerHistory> findTopByStickerNumberOrderByGeneratedAtDesc(
+    Optional<StickerHistory>
+    findTopByStickerNumberOrderByGeneratedAtDesc(
             String stickerNumber
     );
 
-    /*
-     * Optional but useful if your delete logic deletes sticker history.
-     */
-    void deleteByPacketItem_Id(UUID packetItemId);
+    void deleteByPacketItem_Id(
+            UUID packetItemId
+    );
 
-    List<StickerHistory> findByPacketItem_IdOrderByGeneratedAtDesc(
-        UUID packetItemId
-);
+    List<StickerHistory>
+    findByPacketItem_IdOrderByGeneratedAtDesc(
+            UUID packetItemId
+    );
+
+    /* =====================================================
+       ADMIN DELETE
+       ===================================================== */
+
+    long countByPacketItem_IdIn(
+            Collection<UUID> packetItemIds
+    );
+
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = false
+    )
+    @Query("""
+        DELETE FROM StickerHistory h
+        WHERE h.packetItem.id IN :packetItemIds
+    """)
+    int deleteByPacketItemIdsForAdminDeletion(
+            @Param("packetItemIds")
+            Collection<UUID> packetItemIds
+    );
 }

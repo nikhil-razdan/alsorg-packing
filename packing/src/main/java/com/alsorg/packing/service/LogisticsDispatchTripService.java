@@ -176,16 +176,6 @@ public class LogisticsDispatchTripService {
                 trip.setVehicle(vehicle);
                 trip.setChallanNumber(challanNo);
 
-                /*
-                 * New simplified flow:
-                 * Dispatch user scans item, selects driver/vehicle,
-                 * and challan is generated immediately.
-                 *
-                 * No queue.
-                 * No driver start.
-                 * No live location.
-                 * No POD/delivery completion.
-                 */
                 trip.setQueuedAt(dispatchTime);
                 trip.setTripStart(dispatchTime);
                 trip.setTripEnd(null);
@@ -699,12 +689,7 @@ public class LogisticsDispatchTripService {
                         }
                 }
 
-                /*
-                 * Fallback source:
-                 * dispatched_items table by logisticsTripId.
-                 * This protects older/current trips where logistics_trip_items
-                 * lookup does not return rows for any reason.
-                 */
+                
                 if (chalaanItems.isEmpty()) {
                         List<DispatchedItem> dispatchedItems = dispatchedItemRepository.findByLogisticsTripId(tripId);
 

@@ -100,6 +100,18 @@ public class CurrentUserService {
         return authentication.getName();
     }
 
+    public User requireAdminUser(
+            String auth) {
+        User user = getCurrentUserFromAuth(auth);
+
+        if (!isAdmin(user)) {
+            throw new AccessDeniedException(
+                    "Only ADMIN can perform this action");
+        }
+
+        return user;
+    }
+
     public boolean isAdmin(User user) {
         return hasRole(user, "ADMIN");
     }
