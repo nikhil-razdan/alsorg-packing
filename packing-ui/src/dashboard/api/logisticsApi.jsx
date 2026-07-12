@@ -313,45 +313,60 @@ export async function createDispatchChallan({
   preview = true,
 }) {
   const finalDispatchTime =
-    normalizeLocalDateTime(dispatchTime || tripStart);
+    normalizeLocalDateTime(
+      dispatchTime || tripStart
+    );
 
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    throw new Error("No items selected for challan");
-  }
-
-  if (!driverId) {
-    throw new Error("Driver is required");
-  }
-
-  if (!vehicleId) {
-    throw new Error("Vehicle is required");
+  if (
+    !Array.isArray(itemIds) ||
+    itemIds.length === 0
+  ) {
+    throw new Error(
+      "No items selected for challan"
+    );
   }
 
   if (!finalDispatchTime) {
-    throw new Error("Challan date and time is required");
+    throw new Error(
+      "Challan date and time is required"
+    );
   }
 
+  const cleanDriverId =
+    String(driverId || "").trim() ||
+    null;
+
+  const cleanVehicleId =
+    String(vehicleId || "").trim() ||
+    null;
+
   const res = await requestBlob(
-    `/api/chalaan/dispatch?preview=${preview ? "true" : "false"}`,
+    `/api/chalaan/dispatch?preview=${preview ? "true" : "false"
+    }`,
     {
       method: "POST",
+
       body: {
         itemIds,
-        driverId,
-        vehicleId,
 
         /*
-         * New backend field.
+         * Both fields are intentionally nullable.
          */
-        dispatchTime: finalDispatchTime,
+        driverId: cleanDriverId,
+        vehicleId: cleanVehicleId,
+
+        dispatchTime:
+          finalDispatchTime,
 
         /*
-         * Backward compatibility for older backend/mobile logic.
-         * Safe to send both.
+         * Backward compatibility.
          */
-        tripStart: finalDispatchTime,
+        tripStart:
+          finalDispatchTime,
       },
-      errorMessage: "Challan generation failed",
+
+      errorMessage:
+        "Challan generation failed",
     }
   );
 
@@ -359,12 +374,14 @@ export async function createDispatchChallan({
 
   return {
     blob,
+
     challanNo:
       getHeaderValue(
         res,
         "X-Challan-No",
         "CHALAAN"
       ),
+
     filename:
       getPdfFilename(
         res,
@@ -485,21 +502,43 @@ export async function createCustomChallan(
   payload
 ) {
   const finalDispatchTime =
-    normalizeLocalDateTime(payload?.dispatchTime);
+    normalizeLocalDateTime(
+      payload?.dispatchTime
+    );
 
   if (!finalDispatchTime) {
-    throw new Error("Custom challan date and time is required");
+    throw new Error(
+      "Custom challan date and time is required"
+    );
   }
+
+  const driverName =
+    String(
+      payload?.driverName || ""
+    ).trim() || null;
+
+  const vehicleNumber =
+    String(
+      payload?.vehicleNumber || ""
+    ).trim() || null;
 
   const res = await requestBlob(
     "/api/chalaan/custom?preview=true",
     {
       method: "POST",
+
       body: {
         ...payload,
-        dispatchTime: finalDispatchTime,
+
+        driverName,
+        vehicleNumber,
+
+        dispatchTime:
+          finalDispatchTime,
       },
-      errorMessage: "Custom challan generation failed",
+
+      errorMessage:
+        "Custom challan generation failed",
     }
   );
 
@@ -507,12 +546,14 @@ export async function createCustomChallan(
 
   return {
     blob,
+
     challanNo:
       getHeaderValue(
         res,
         "X-Challan-No",
         "CUSTOM_CHALLAN"
       ),
+
     filename:
       getPdfFilename(
         res,

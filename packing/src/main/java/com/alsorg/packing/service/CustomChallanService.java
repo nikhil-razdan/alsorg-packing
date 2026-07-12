@@ -56,9 +56,17 @@ public class CustomChallanService {
         challan.setFromLocation(clean(request.fromLocation()));
         challan.setToLocation(clean(request.toLocation()));
         challan.setPdNo(clean(request.pdNo()));
-        challan.setDriverName(clean(request.driverName()));
-        challan.setVehicleNumber(clean(request.vehicleNumber()));
-        challan.setHandedOverTo(clean(request.handedOverTo()));
+        challan.setDriverName(
+                cleanNullable(
+                        request.driverName()));
+
+        challan.setVehicleNumber(
+                cleanNullable(
+                        request.vehicleNumber()));
+
+        challan.setHandedOverTo(
+                cleanNullable(
+                        request.handedOverTo()));
         challan.setClientName(clean(request.clientName()));
         challan.setClientAddress(clean(request.clientAddress()));
         challan.setPurpose(clean(request.purpose()));
@@ -205,13 +213,6 @@ public class CustomChallanService {
             throw new RuntimeException("To location / site is required");
         }
 
-        if (isBlank(request.driverName())) {
-            throw new RuntimeException("Driver name is required");
-        }
-
-        if (isBlank(request.vehicleNumber())) {
-            throw new RuntimeException("Vehicle number is required");
-        }
         if (isType(request.challanType(), "SITE_RETURN")
                 && isBlank(request.handedOverTo())) {
             throw new RuntimeException("Handed over to is required for Site Return challan");
@@ -347,6 +348,19 @@ public class CustomChallanService {
                 null,
                 challan.getChallanNumber(),
                 pdf);
+    }
+
+    private String cleanNullable(
+            String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String cleaned = value.trim();
+
+        return cleaned.isBlank()
+                ? null
+                : cleaned;
     }
 
     private String clean(

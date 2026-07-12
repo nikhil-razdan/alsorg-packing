@@ -102,8 +102,8 @@ public class ChalaanPdfController {
         @GetMapping(value = "/{zohoItemId}/download", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> generateSingle(
                         @PathVariable String zohoItemId,
-                        @RequestParam UUID driverId,
-                        @RequestParam UUID vehicleId,
+                        @RequestParam(required = false) UUID driverId,
+                        @RequestParam(required = false) UUID vehicleId,
                         @RequestParam(defaultValue = "false") boolean preview,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
@@ -127,8 +127,8 @@ public class ChalaanPdfController {
         @PostMapping(value = "/bulk", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> generateBulk(
                         @RequestBody List<String> ids,
-                        @RequestParam UUID driverId,
-                        @RequestParam UUID vehicleId,
+                        @RequestParam(required = false) UUID driverId,
+                        @RequestParam(required = false) UUID vehicleId,
                         @RequestParam(defaultValue = "false") boolean preview,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);

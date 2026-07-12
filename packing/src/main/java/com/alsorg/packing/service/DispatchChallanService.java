@@ -85,21 +85,25 @@ public class DispatchChallanService {
             throw new RuntimeException("No items selected for challan");
         }
 
-        if (driverId == null) {
-            throw new RuntimeException("Driver is required");
+        Driver driver = null;
+
+        if (driverId != null) {
+            driver = driverRepository
+                    .findById(driverId)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Driver not found: " +
+                                    driverId));
         }
 
-        if (vehicleId == null) {
-            throw new RuntimeException("Vehicle is required");
+        Vehicle vehicle = null;
+
+        if (vehicleId != null) {
+            vehicle = vehicleRepository
+                    .findById(vehicleId)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Vehicle not found: " +
+                                    vehicleId));
         }
-
-        Driver driver = driverRepository
-                .findById(driverId)
-                .orElseThrow(() -> new RuntimeException("Driver not found"));
-
-        Vehicle vehicle = vehicleRepository
-                .findById(vehicleId)
-                .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
         List<String> itemIds = cleanUniqueItemIds(rawItemIds);
 
@@ -336,8 +340,17 @@ public class DispatchChallanService {
         data.setDispatchTime(dispatchTimeIst);
         data.setDesignerName("-");
         data.setOt("-");
-        data.setDriverName(safe(driver.getName()));
-        data.setVehicleNumber(safe(vehicle.getVehicleNumber()));
+        data.setDriverName(
+                driver == null
+                        ? null
+                        : cleanNullable(
+                                driver.getName()));
+
+        data.setVehicleNumber(
+                vehicle == null
+                        ? null
+                        : cleanNullable(
+                                vehicle.getVehicleNumber()));
 
         List<ChalaanItem> challanItems = new ArrayList<>();
 
@@ -377,11 +390,27 @@ public class DispatchChallanService {
             String actor) {
         item.setChalaanNumber(challanNo);
 
-        item.setDriverId(driver.getId());
-        item.setDriverName(safe(driver.getName()));
+        item.setDriverId(
+                driver == null
+                        ? null
+                        : driver.getId());
 
-        item.setVehicleId(vehicle.getId());
-        item.setVehicleNumber(safe(vehicle.getVehicleNumber()));
+        item.setDriverName(
+                driver == null
+                        ? null
+                        : cleanNullable(
+                                driver.getName()));
+
+        item.setVehicleId(
+                vehicle == null
+                        ? null
+                        : vehicle.getId());
+
+        item.setVehicleNumber(
+                vehicle == null
+                        ? null
+                        : cleanNullable(
+                                vehicle.getVehicleNumber()));
 
         /*
          * Main rule:
@@ -557,6 +586,21 @@ public class DispatchChallanService {
         return username != null && !username.isBlank()
                 ? username.trim()
                 : "SYSTEM";
+    }
+
+    private String cleanNullable(
+            Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        String text = value
+                .toString()
+                .trim();
+
+        return text.isBlank()
+                ? null
+                : text;
     }
 
     private String safe(

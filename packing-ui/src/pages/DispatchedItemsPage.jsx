@@ -23,6 +23,8 @@ import usePackFlowDataRefresh
 import {
 	fetchDrivers,
 	fetchVehicles,
+	createDriver,
+	createVehicle,
 	createDispatchChallan,
 	createCustomChallan,
 	fetchCustomChallans,
@@ -2817,6 +2819,17 @@ const createEmptyCustomChallanLine = () => ({
 	remarks: "",
 });
 
+const CREATE_NEW_DRIVER_OPTION =
+	"__CREATE_NEW_DRIVER__";
+
+const CREATE_NEW_VEHICLE_OPTION =
+	"__CREATE_NEW_VEHICLE__";
+
+const MASTER_CREATE_TARGET = {
+	DISPATCH_CHALLAN: "DISPATCH_CHALLAN",
+	CUSTOM_CHALLAN: "CUSTOM_CHALLAN",
+};
+
 function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [loading, setLoading] = useState(false);
@@ -2895,6 +2908,35 @@ function DispatchedItemsPage() {
 	const [plantConfigs, setPlantConfigs] = useState([]);
 	const [logisticsDrivers, setLogisticsDrivers] = useState([]);
 	const [logisticsVehicles, setLogisticsVehicles] = useState([]);
+	const [createDriverOpen, setCreateDriverOpen] =
+		useState(false);
+
+	const [createDriverLoading, setCreateDriverLoading] =
+		useState(false);
+
+	const [createDriverTarget, setCreateDriverTarget] =
+		useState("");
+
+	const [newDriverForm, setNewDriverForm] =
+		useState({
+			name: "",
+		});
+
+	const [createVehicleOpen, setCreateVehicleOpen] =
+		useState(false);
+
+	const [createVehicleLoading, setCreateVehicleLoading] =
+		useState(false);
+
+	const [createVehicleTarget, setCreateVehicleTarget] =
+		useState("");
+
+	const [newVehicleForm, setNewVehicleForm] =
+		useState({
+			vehicleNumber: "",
+			vehicleName: "",
+			vehicleType: "Other",
+		});
 
 	const [dispatchTripOpen, setDispatchTripOpen] = useState(false);
 	const [dispatchTripLoading, setDispatchTripLoading] = useState(false);
@@ -4078,18 +4120,386 @@ function DispatchedItemsPage() {
 		}
 	};
 
+	const normalizeDriversList = (value) => {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+
+		const unique = new Map();
+
+		value.forEach((driver) => {
+			if (!driver) {
+				return;
+			}
+
+			const id =
+				String(driver.id || "").trim();
+
+			const name =
+				String(driver.name || "").trim();
+
+			if (!id || !name) {
+				return;
+			}
+
+			unique.set(id, {
+				...driver,
+				id,
+				name,
+			});
+		});
+
+		return Array.from(unique.values())
+			.sort((a, b) =>
+				a.name.localeCompare(
+					b.name,
+					undefined,
+					{
+						sensitivity: "base",
+					}
+				)
+			);
+	};
+
+	const normalizeVehiclesList = (value) => {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+
+		const unique = new Map();
+
+		value.forEach((vehicle) => {
+			if (!vehicle) {
+				return;
+			}
+
+			const id =
+				String(vehicle.id || "").trim();
+
+			const vehicleNumber =
+				String(
+					vehicle.vehicleNumber || ""
+				).trim();
+
+			if (!id || !vehicleNumber) {
+				return;
+			}
+
+			unique.set(id, {
+				...vehicle,
+				id,
+				vehicleNumber,
+			});
+		});
+
+		return Array.from(unique.values())
+			.sort((a, b) =>
+				a.vehicleNumber.localeCompare(
+					b.vehicleNumber,
+					undefined,
+					{
+						sensitivity: "base",
+					}
+				)
+			);
+	};
+
 	const fetchLogisticsMasters = async () => {
 		try {
-			const [drivers, vehicles] = await Promise.all([
-				fetchDrivers(),
-				fetchVehicles(),
-			]);
+			const [drivers, vehicles] =
+				await Promise.all([
+					fetchDrivers(),
+					fetchVehicles(),
+				]);
 
-			setLogisticsDrivers(Array.isArray(drivers) ? drivers : []);
-			setLogisticsVehicles(Array.isArray(vehicles) ? vehicles : []);
-		} catch (e) {
-			console.error("Failed to load logistics masters", e);
-			alert("Failed to load drivers/vehicles");
+			const cleanDrivers =
+				normalizeDriversList(drivers);
+
+			const cleanVehicles =
+				normalizeVehiclesList(vehicles);
+
+			setLogisticsDrivers(cleanDrivers);
+			setLogisticsVehicles(cleanVehicles);
+
+			return {
+				drivers: cleanDrivers,
+				vehicles: cleanVehicles,
+			};
+		} catch (error) {
+			console.error(
+				"Failed to load logistics masters",
+				error
+			);
+
+			setLogisticsDrivers([]);
+			setLogisticsVehicles([]);
+
+			return {
+				drivers: [],
+				vehicles: [],
+			};
+		}
+	};
+
+	const openCreateDriverModal = (target) => {
+		setCreateDriverTarget(target);
+
+		setNewDriverForm({
+			name: "",
+		});
+
+		setCreateDriverOpen(true);
+	};
+
+	const closeCreateDriverModal = () => {
+		if (createDriverLoading) {
+			return;
+		}
+
+		setCreateDriverOpen(false);
+		setCreateDriverTarget("");
+
+		setNewDriverForm({
+			name: "",
+		});
+	};
+
+	const openCreateVehicleModal = (target) => {
+		setCreateVehicleTarget(target);
+
+		setNewVehicleForm({
+			vehicleNumber: "",
+			vehicleName: "",
+			vehicleType: "Other",
+		});
+
+		setCreateVehicleOpen(true);
+	};
+
+	const closeCreateVehicleModal = () => {
+		if (createVehicleLoading) {
+			return;
+		}
+
+		setCreateVehicleOpen(false);
+		setCreateVehicleTarget("");
+
+		setNewVehicleForm({
+			vehicleNumber: "",
+			vehicleName: "",
+			vehicleType: "Other",
+		});
+	};
+
+	const submitCreateDriver = async () => {
+		const cleanName =
+			String(newDriverForm.name || "")
+				.trim()
+				.replace(/\s+/g, " ");
+
+		if (!cleanName) {
+			alert("Driver name is required");
+			return;
+		}
+
+		try {
+			setCreateDriverLoading(true);
+
+			const createdDriver =
+				await createDriver({
+					name: cleanName,
+				});
+
+			/*
+			 * Refresh from the backend so the dropdown contains
+			 * the authoritative saved record.
+			 */
+			const refreshedDrivers =
+				await fetchDrivers();
+
+			const cleanDrivers =
+				normalizeDriversList(
+					refreshedDrivers
+				);
+
+			setLogisticsDrivers(cleanDrivers);
+
+			const selectedDriver =
+				cleanDrivers.find(
+					(driver) =>
+						String(driver.id) ===
+						String(createdDriver?.id)
+				) ||
+				cleanDrivers.find(
+					(driver) =>
+						driver.name.toLowerCase() ===
+						cleanName.toLowerCase()
+				);
+
+			if (!selectedDriver) {
+				throw new Error(
+					"Driver was created but could not be selected"
+				);
+			}
+
+			if (
+				createDriverTarget ===
+				MASTER_CREATE_TARGET.DISPATCH_CHALLAN
+			) {
+				setDispatchTripForm((previous) => ({
+					...previous,
+					driverId: selectedDriver.id,
+				}));
+			}
+
+			if (
+				createDriverTarget ===
+				MASTER_CREATE_TARGET.CUSTOM_CHALLAN
+			) {
+				setCustomChallanForm((previous) => ({
+					...previous,
+					driverName: selectedDriver.name,
+				}));
+			}
+
+			setCreateDriverOpen(false);
+			setCreateDriverTarget("");
+
+			setNewDriverForm({
+				name: "",
+			});
+		} catch (error) {
+			console.error(
+				"Driver creation failed",
+				error
+			);
+
+			alert(
+				error.message ||
+				"Driver creation failed"
+			);
+		} finally {
+			setCreateDriverLoading(false);
+		}
+	};
+
+	const submitCreateVehicle = async () => {
+		const cleanVehicleNumber =
+			String(
+				newVehicleForm.vehicleNumber || ""
+			)
+				.trim()
+				.toUpperCase()
+				.replace(/\s+/g, "");
+
+		const cleanVehicleName =
+			String(
+				newVehicleForm.vehicleName || ""
+			)
+				.trim()
+				.replace(/\s+/g, " ");
+
+		const cleanVehicleType =
+			String(
+				newVehicleForm.vehicleType ||
+				"Other"
+			)
+				.trim()
+				.replace(/\s+/g, " ");
+
+		if (!cleanVehicleNumber) {
+			alert("Vehicle number is required");
+			return;
+		}
+
+		if (!cleanVehicleType) {
+			alert("Vehicle type is required");
+			return;
+		}
+
+		try {
+			setCreateVehicleLoading(true);
+
+			const createdVehicle =
+				await createVehicle({
+					vehicleNumber: cleanVehicleNumber,
+					vehicleName:
+						cleanVehicleName || null,
+					vehicleType: cleanVehicleType,
+					status: "Active",
+					active: true,
+				});
+
+			const refreshedVehicles =
+				await fetchVehicles();
+
+			const cleanVehicles =
+				normalizeVehiclesList(
+					refreshedVehicles
+				);
+
+			setLogisticsVehicles(cleanVehicles);
+
+			const selectedVehicle =
+				cleanVehicles.find(
+					(vehicle) =>
+						String(vehicle.id) ===
+						String(createdVehicle?.id)
+				) ||
+				cleanVehicles.find(
+					(vehicle) =>
+						vehicle.vehicleNumber
+							.toUpperCase() ===
+						cleanVehicleNumber
+				);
+
+			if (!selectedVehicle) {
+				throw new Error(
+					"Vehicle was created but could not be selected"
+				);
+			}
+
+			if (
+				createVehicleTarget ===
+				MASTER_CREATE_TARGET.DISPATCH_CHALLAN
+			) {
+				setDispatchTripForm((previous) => ({
+					...previous,
+					vehicleId: selectedVehicle.id,
+				}));
+			}
+
+			if (
+				createVehicleTarget ===
+				MASTER_CREATE_TARGET.CUSTOM_CHALLAN
+			) {
+				setCustomChallanForm((previous) => ({
+					...previous,
+					vehicleNumber:
+						selectedVehicle.vehicleNumber,
+				}));
+			}
+
+			setCreateVehicleOpen(false);
+			setCreateVehicleTarget("");
+
+			setNewVehicleForm({
+				vehicleNumber: "",
+				vehicleName: "",
+				vehicleType: "Other",
+			});
+		} catch (error) {
+			console.error(
+				"Vehicle creation failed",
+				error
+			);
+
+			alert(
+				error.message ||
+				"Vehicle creation failed"
+			);
+		} finally {
+			setCreateVehicleLoading(false);
 		}
 	};
 
@@ -4259,7 +4669,7 @@ function DispatchedItemsPage() {
 		}
 
 		setScannerText("");
-		setScanMessage("Select driver and vehicle to generate challan");
+		setScanMessage("Select or create a driver and a vehicle to generate challan");
 
 		openDispatchTripModal({
 			mode: "QR_SINGLE",
@@ -5525,16 +5935,6 @@ function DispatchedItemsPage() {
 			return;
 		}
 
-		if (!dispatchTripForm.driverId) {
-			alert("Please select driver");
-			return;
-		}
-
-		if (!dispatchTripForm.vehicleId) {
-			alert("Please select vehicle");
-			return;
-		}
-
 		try {
 			setDispatchTripLoading(true);
 
@@ -5564,13 +5964,25 @@ function DispatchedItemsPage() {
 				throw new Error("No items selected for challan");
 			}
 
-			const result = await createDispatchChallan({
-				itemIds: finalItemIds,
-				driverId: dispatchTripForm.driverId,
-				vehicleId: dispatchTripForm.vehicleId,
-				dispatchTime: dispatchTripForm.dispatchTime,
-				preview: true,
-			});
+			const result =
+				await createDispatchChallan({
+					itemIds: finalItemIds,
+
+					driverId:
+						String(
+							dispatchTripForm.driverId || ""
+						).trim() || null,
+
+					vehicleId:
+						String(
+							dispatchTripForm.vehicleId || ""
+						).trim() || null,
+
+					dispatchTime:
+						dispatchTripForm.dispatchTime,
+
+					preview: true,
+				});
 
 			const blob = result.blob;
 
@@ -5678,6 +6090,7 @@ function DispatchedItemsPage() {
 	};
 
 	const submitCustomChallan = async () => {
+
 		if (!isDispatch) {
 			alert("Only dispatch user can create custom challan");
 			return;
@@ -5710,16 +6123,6 @@ function DispatchedItemsPage() {
 
 		const handedOverTo =
 			String(customChallanForm.handedOverTo || "").trim();
-
-		if (!driverName) {
-			alert("Driver name is required");
-			return;
-		}
-
-		if (!vehicleNumber) {
-			alert("Vehicle number is required");
-			return;
-		}
 
 		if (isSiteReturnChallanType(challanType) && !handedOverTo) {
 			alert("Handed Over To is required for Site Return challan");
@@ -7882,6 +8285,284 @@ function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				{createDriverOpen && (
+					<Box
+						sx={{
+							...enhancedOverlaySx,
+							zIndex: 6300,
+						}}
+						onClick={closeCreateDriverModal}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 500,
+							}}
+							onClick={(event) =>
+								event.stopPropagation()
+							}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box
+										sx={modalIconBubble(
+											"#3b82f6"
+										)}
+									>
+										👤
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Create Driver
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											The new driver will be
+											automatically selected
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									disabled={createDriverLoading}
+									sx={modalCloseButtonSx}
+									onClick={
+										closeCreateDriverModal
+									}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<TextField
+									autoFocus
+									fullWidth
+									label="Driver Name"
+									placeholder="Enter driver name"
+									value={newDriverForm.name}
+									onChange={(event) =>
+										setNewDriverForm(
+											(previous) => ({
+												...previous,
+												name:
+													event.target
+														.value,
+											})
+										)
+									}
+									onKeyDown={(event) => {
+										if (
+											event.key ===
+											"Enter"
+										) {
+											event.preventDefault();
+
+											submitCreateDriver();
+										}
+									}}
+									disabled={
+										createDriverLoading
+									}
+									sx={formFieldSx}
+								/>
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									disabled={createDriverLoading}
+									onClick={
+										closeCreateDriverModal
+									}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={createDriverLoading}
+									onClick={submitCreateDriver}
+									sx={premiumButton}
+								>
+									{createDriverLoading
+										? "Creating..."
+										: "Create & Select"}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+				{createVehicleOpen && (
+					<Box
+						sx={{
+							...enhancedOverlaySx,
+							zIndex: 6300,
+						}}
+						onClick={closeCreateVehicleModal}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 580,
+							}}
+							onClick={(event) =>
+								event.stopPropagation()
+							}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box
+										sx={modalIconBubble(
+											"#10b981"
+										)}
+									>
+										🚚
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Create Vehicle
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											The new vehicle will be
+											automatically selected
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									disabled={
+										createVehicleLoading
+									}
+									sx={modalCloseButtonSx}
+									onClick={
+										closeCreateVehicleModal
+									}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<Box
+									sx={{
+										display: "grid",
+										gridTemplateColumns:
+											"1fr 1fr",
+										gap: 2,
+									}}
+								>
+									<TextField
+										autoFocus
+										fullWidth
+										label="Vehicle Number"
+										placeholder="HR26EW0956"
+										value={
+											newVehicleForm
+												.vehicleNumber
+										}
+										onChange={(event) =>
+											setNewVehicleForm(
+												(previous) => ({
+													...previous,
+													vehicleNumber:
+														event
+															.target
+															.value,
+												})
+											)
+										}
+										disabled={
+											createVehicleLoading
+										}
+										sx={formFieldSx}
+									/>
+
+									<TextField
+										fullWidth
+										label="Vehicle Type"
+										placeholder="Canter / Eeco / Pickup"
+										value={
+											newVehicleForm
+												.vehicleType
+										}
+										onChange={(event) =>
+											setNewVehicleForm(
+												(previous) => ({
+													...previous,
+													vehicleType:
+														event
+															.target
+															.value,
+												})
+											)
+										}
+										disabled={
+											createVehicleLoading
+										}
+										sx={formFieldSx}
+									/>
+
+									<TextField
+										fullWidth
+										label="Vehicle Name"
+										placeholder="Optional"
+										value={
+											newVehicleForm
+												.vehicleName
+										}
+										onChange={(event) =>
+											setNewVehicleForm(
+												(previous) => ({
+													...previous,
+													vehicleName:
+														event
+															.target
+															.value,
+												})
+											)
+										}
+										disabled={
+											createVehicleLoading
+										}
+										sx={{
+											...formFieldSx,
+											gridColumn: "1 / -1",
+										}}
+									/>
+								</Box>
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									disabled={createVehicleLoading}
+									onClick={
+										closeCreateVehicleModal
+									}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={createVehicleLoading}
+									onClick={submitCreateVehicle}
+									sx={{
+										...premiumButton,
+										background:
+											"linear-gradient(135deg,#059669,#10b981)",
+									}}
+								>
+									{createVehicleLoading
+										? "Creating..."
+										: "Create & Select"}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
 				{customChallanOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 5700 }}
@@ -8020,56 +8701,220 @@ function DispatchedItemsPage() {
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Driver Name
+
+												<Box
+													component="span"
+													sx={{
+														ml: 0.7,
+														color: "#64748b",
+														fontSize: 11,
+														fontWeight: 750,
+													}}
+												>
+													(Optional)
+												</Box>
 											</Box>
 
 											<Box
 												component="select"
-												value={customChallanForm.driverName}
-												onChange={(e) =>
-													updateCustomChallanField("driverName", e.target.value)
+												value={
+													customChallanForm.driverName ||
+													""
 												}
+												onChange={(event) => {
+													const selectedValue =
+														String(
+															event.target.value || ""
+														);
+
+													if (
+														selectedValue ===
+														CREATE_NEW_DRIVER_OPTION
+													) {
+														openCreateDriverModal(
+															MASTER_CREATE_TARGET
+																.CUSTOM_CHALLAN
+														);
+
+														return;
+													}
+
+													/*
+													 * Custom challan stores driverName,
+													 * not the Driver UUID.
+													 */
+													updateCustomChallanField(
+														"driverName",
+														selectedValue
+													);
+												}}
 												sx={dispatchTripNativeSelectSx}
 											>
 												<option value="">
-													Select Driver
+													No Driver / Leave Blank
 												</option>
 
-												{logisticsDrivers.map((driver) => (
-													<option
-														key={driver.id || driver.name}
-														value={driver.name}
-													>
-														{driver.name}
-													</option>
-												))}
+												<option
+													value={CREATE_NEW_DRIVER_OPTION}
+												>
+													＋ Create New Driver
+												</option>
+
+												{logisticsDrivers.map(
+													(driver) => {
+														const driverId =
+															String(
+																driver?.id || ""
+															).trim();
+
+														const driverName =
+															String(
+																driver?.name || ""
+															).trim();
+
+														if (!driverName) {
+															return null;
+														}
+
+														return (
+															<option
+																key={
+																	driverId ||
+																	driverName
+																}
+																value={driverName}
+															>
+																{driverName}
+															</option>
+														);
+													}
+												)}
+											</Box>
+
+											<Box
+												sx={{
+													mt: 0.7,
+													color: "rgba(255,255,255,.42)",
+													fontSize: 11,
+													fontWeight: 650,
+												}}
+											>
+												Optional for custom movements.
 											</Box>
 										</Box>
 
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Vehicle Number
+
+												<Box
+													component="span"
+													sx={{
+														ml: 0.7,
+														color: "#64748b",
+														fontSize: 11,
+														fontWeight: 750,
+													}}
+												>
+													(Optional)
+												</Box>
 											</Box>
 
 											<Box
 												component="select"
-												value={customChallanForm.vehicleNumber}
-												onChange={(e) =>
-													updateCustomChallanField("vehicleNumber", e.target.value)
+												value={
+													customChallanForm.vehicleNumber ||
+													""
 												}
+												onChange={(event) => {
+													const selectedValue =
+														String(
+															event.target.value || ""
+														);
+
+													if (
+														selectedValue ===
+														CREATE_NEW_VEHICLE_OPTION
+													) {
+														openCreateVehicleModal(
+															MASTER_CREATE_TARGET
+																.CUSTOM_CHALLAN
+														);
+
+														return;
+													}
+
+													/*
+													 * Custom challan stores vehicleNumber,
+													 * not the Vehicle UUID.
+													 */
+													updateCustomChallanField(
+														"vehicleNumber",
+														selectedValue
+													);
+												}}
 												sx={dispatchTripNativeSelectSx}
 											>
 												<option value="">
-													Select Vehicle
+													No Vehicle / Leave Blank
 												</option>
 
-												{logisticsVehicles.map((vehicle) => (
-													<option
-														key={vehicle.id || vehicle.vehicleNumber}
-														value={vehicle.vehicleNumber}
-													>
-														{vehicle.vehicleNumber}
-													</option>
-												))}
+												<option
+													value={CREATE_NEW_VEHICLE_OPTION}
+												>
+													＋ Create New Vehicle
+												</option>
+
+												{logisticsVehicles.map(
+													(vehicle) => {
+														const vehicleId =
+															String(
+																vehicle?.id || ""
+															).trim();
+
+														const vehicleNumber =
+															String(
+																vehicle?.vehicleNumber ||
+																""
+															).trim();
+
+														const vehicleName =
+															String(
+																vehicle?.vehicleName ||
+																""
+															).trim();
+
+														if (!vehicleNumber) {
+															return null;
+														}
+
+														return (
+															<option
+																key={
+																	vehicleId ||
+																	vehicleNumber
+																}
+																value={vehicleNumber}
+															>
+																{vehicleNumber}
+																{vehicleName
+																	? ` - ${vehicleName}`
+																	: ""}
+															</option>
+														);
+													}
+												)}
+											</Box>
+
+											<Box
+												sx={{
+													mt: 0.7,
+													color: "rgba(255,255,255,.42)",
+													fontSize: 11,
+													fontWeight: 650,
+												}}
+											>
+												Optional for custom movements.
 											</Box>
 										</Box>
 										{isSiteReturnChallanType(customChallanForm.challanType) && (
@@ -10368,62 +11213,230 @@ function DispatchedItemsPage() {
 								<Box sx={{ mb: 2 }}>
 									<Box sx={dispatchTripFieldLabelSx}>
 										Driver
+
+										<Box
+											component="span"
+											sx={{
+												ml: 0.7,
+												color: "#64748b",
+												fontSize: 11,
+												fontWeight: 750,
+											}}
+										>
+											(Optional)
+										</Box>
 									</Box>
 
 									<Box
 										component="select"
-										value={dispatchTripForm.driverId}
-										onChange={(e) =>
-											setDispatchTripForm((prev) => ({
-												...prev,
-												driverId: e.target.value,
-											}))
+										value={
+											dispatchTripForm.driverId || ""
 										}
+										onChange={(event) => {
+											const selectedValue =
+												String(
+													event.target.value || ""
+												);
+
+											/*
+											 * This special option opens the create-driver modal.
+											 * It must never be saved in dispatchTripForm.
+											 */
+											if (
+												selectedValue ===
+												CREATE_NEW_DRIVER_OPTION
+											) {
+												openCreateDriverModal(
+													MASTER_CREATE_TARGET
+														.DISPATCH_CHALLAN
+												);
+
+												return;
+											}
+
+											/*
+											 * Blank value means no driver.
+											 * A normal value is the Driver UUID.
+											 */
+											setDispatchTripForm(
+												(previous) => ({
+													...previous,
+													driverId: selectedValue,
+												})
+											);
+										}}
 										sx={dispatchTripNativeSelectSx}
 									>
 										<option value="">
-											Select Driver
+											No Driver / Leave Blank
 										</option>
 
-										{logisticsDrivers.map((d) => (
-											<option
-												key={d.id}
-												value={d.id}
-											>
-												{d.name}
-											</option>
-										))}
+										<option
+											value={CREATE_NEW_DRIVER_OPTION}
+										>
+											＋ Create New Driver
+										</option>
+
+										{logisticsDrivers.map(
+											(driver) => {
+												const driverId =
+													String(
+														driver?.id || ""
+													).trim();
+
+												const driverName =
+													String(
+														driver?.name || ""
+													).trim();
+
+												if (
+													!driverId ||
+													!driverName
+												) {
+													return null;
+												}
+
+												return (
+													<option
+														key={driverId}
+														value={driverId}
+													>
+														{driverName}
+													</option>
+												);
+											}
+										)}
+									</Box>
+
+									<Box
+										sx={{
+											mt: 0.7,
+											color: "rgba(255,255,255,.42)",
+											fontSize: 11,
+											fontWeight: 650,
+										}}
+									>
+										Leave blank when no driver is assigned.
 									</Box>
 								</Box>
 
 								<Box sx={{ mb: 2 }}>
 									<Box sx={dispatchTripFieldLabelSx}>
 										Vehicle
+
+										<Box
+											component="span"
+											sx={{
+												ml: 0.7,
+												color: "#64748b",
+												fontSize: 11,
+												fontWeight: 750,
+											}}
+										>
+											(Optional)
+										</Box>
 									</Box>
 
 									<Box
 										component="select"
-										value={dispatchTripForm.vehicleId}
-										onChange={(e) =>
-											setDispatchTripForm((prev) => ({
-												...prev,
-												vehicleId: e.target.value,
-											}))
+										value={
+											dispatchTripForm.vehicleId || ""
 										}
+										onChange={(event) => {
+											const selectedValue =
+												String(
+													event.target.value || ""
+												);
+
+											/*
+											 * Open vehicle creation without putting the
+											 * special option into vehicleId.
+											 */
+											if (
+												selectedValue ===
+												CREATE_NEW_VEHICLE_OPTION
+											) {
+												openCreateVehicleModal(
+													MASTER_CREATE_TARGET
+														.DISPATCH_CHALLAN
+												);
+
+												return;
+											}
+
+											/*
+											 * Blank = no vehicle.
+											 * Otherwise this is the Vehicle UUID.
+											 */
+											setDispatchTripForm(
+												(previous) => ({
+													...previous,
+													vehicleId: selectedValue,
+												})
+											);
+										}}
 										sx={dispatchTripNativeSelectSx}
 									>
 										<option value="">
-											Select Vehicle
+											No Vehicle / Leave Blank
 										</option>
 
-										{logisticsVehicles.map((v) => (
-											<option
-												key={v.id}
-												value={v.id}
-											>
-												{v.vehicleNumber}
-											</option>
-										))}
+										<option
+											value={CREATE_NEW_VEHICLE_OPTION}
+										>
+											＋ Create New Vehicle
+										</option>
+
+										{logisticsVehicles.map(
+											(vehicle) => {
+												const vehicleId =
+													String(
+														vehicle?.id || ""
+													).trim();
+
+												const vehicleNumber =
+													String(
+														vehicle?.vehicleNumber ||
+														""
+													).trim();
+
+												const vehicleName =
+													String(
+														vehicle?.vehicleName ||
+														""
+													).trim();
+
+												if (
+													!vehicleId ||
+													!vehicleNumber
+												) {
+													return null;
+												}
+
+												return (
+													<option
+														key={vehicleId}
+														value={vehicleId}
+													>
+														{vehicleNumber}
+														{vehicleName
+															? ` - ${vehicleName}`
+															: ""}
+													</option>
+												);
+											}
+										)}
+									</Box>
+
+									<Box
+										sx={{
+											mt: 0.7,
+											color: "rgba(255,255,255,.42)",
+											fontSize: 11,
+											fontWeight: 650,
+										}}
+									>
+										Leave blank when no vehicle is assigned.
 									</Box>
 								</Box>
 							</Box>

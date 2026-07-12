@@ -43,13 +43,13 @@ public class CustomChallan {
     @Column(name = "movement_mode", length = 80)
     private String movementMode;
 
-    @Column(name = "driver_name", length = 255)
+    @Column(name = "driver_name")
     private String driverName;
 
-    @Column(name = "vehicle_number", length = 120)
+    @Column(name = "vehicle_number")
     private String vehicleNumber;
 
-    @Column(name = "handed_over_to", length = 255)
+    @Column(name = "handed_over_to")
     private String handedOverTo;
 
     @Column(name = "generated_by", length = 120)

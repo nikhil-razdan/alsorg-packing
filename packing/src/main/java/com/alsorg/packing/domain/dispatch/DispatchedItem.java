@@ -49,7 +49,7 @@ public class DispatchedItem {
 
     
     @Column(nullable = false)
-    private Integer stock = 0; // 🔥 default to avoid null violations
+    private Integer stock = 0;
 
     /* ===================== RESTORE / APPROVAL ===================== */
 
