@@ -1380,17 +1380,6 @@ const moduleCard = {
 	fontFamily: "inherit",
 };
 
-const notificationItemSx = {
-	display: "grid",
-	gridTemplateColumns: "18px 1fr",
-	gap: 1,
-	p: 1.4,
-	borderRadius: "14px",
-	border: "1px solid rgba(255,255,255,.06)",
-	background: "rgba(255,255,255,.035)",
-	mb: 1,
-};
-
 const notificationListSx = {
 	width: 390,
 	maxHeight: 520,
@@ -1537,31 +1526,6 @@ const notificationActionRequiredSx = {
 	fontWeight: 950,
 	textTransform: "uppercase",
 	whiteSpace: "nowrap",
-};
-
-const notificationTitleSx = {
-	fontSize: 13,
-	fontWeight: 900,
-	color: "#fff",
-};
-
-const notificationMsgSx = {
-	fontSize: 12,
-	color: "#94a3b8",
-	mt: 0.5,
-	lineHeight: 1.45,
-};
-
-const notificationTypeSx = {
-	display: "inline-flex",
-	mt: 1,
-	px: 1,
-	py: 0.3,
-	borderRadius: "999px",
-	fontSize: 10,
-	fontWeight: 900,
-	color: "#60a5fa",
-	background: "rgba(59,130,246,.12)",
 };
 
 const healthRowSx = {
