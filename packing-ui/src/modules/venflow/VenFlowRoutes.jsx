@@ -16,6 +16,10 @@ import VenFlowReportsPage from "./pages/VenFlowReportsPage";
 import VenFlowPurchaseDeskPage from "./pages/VenFlowPurchaseDeskPage";
 import VenFlowProductionDeskPage from "./pages/VenFlowProductionDeskPage";
 import VenFlowStoreDeskPage from "./pages/VenFlowStoreDeskPage";
+import VenFlowSupervisorDeskPage
+	from "./pages/VenFlowSupervisorDeskPage";
+import VenFlowDirectorDeskPage
+	from "./pages/VenFlowDirectorDeskPage";
 
 import {
 	defaultVenFlowPathForRole,
@@ -57,10 +61,28 @@ export default function VenFlowRoutes() {
 				/>
 
 				<Route
+					path="director"
+					element={
+						<VenFlowRoleGuard screen="director">
+							<VenFlowDirectorDeskPage />
+						</VenFlowRoleGuard>
+					}
+				/>
+
+				<Route
 					path="production"
 					element={
 						<VenFlowRoleGuard screen="production">
 							<VenFlowProductionDeskPage />
+						</VenFlowRoleGuard>
+					}
+				/>
+
+				<Route
+					path="supervisor"
+					element={
+						<VenFlowRoleGuard screen="supervisor">
+							<VenFlowSupervisorDeskPage />
 						</VenFlowRoleGuard>
 					}
 				/>

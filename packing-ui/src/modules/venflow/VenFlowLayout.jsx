@@ -6,6 +6,9 @@ import React, {
 	useState,
 } from "react";
 
+import SupervisorAccountOutlinedIcon
+	from "@mui/icons-material/SupervisorAccountOutlined";
+
 import {
 	Link,
 	Outlet,
@@ -24,6 +27,9 @@ import {
 	Popover,
 	Tooltip,
 } from "@mui/material";
+
+import GavelOutlinedIcon
+	from "@mui/icons-material/GavelOutlined";
 
 import AppsIcon from "@mui/icons-material/Apps";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
@@ -53,12 +59,41 @@ import {
 	venFlowRoleLabel,
 } from "../../utils/venflowAccess";
 
+const formatNotificationDate = (value) => {
+	if (!value) return "";
+
+	const parsed = new Date(value);
+
+	if (Number.isNaN(parsed.getTime())) {
+		return String(value)
+			.replace("T", " ")
+			.slice(0, 16);
+	}
+
+	return parsed.toLocaleString("en-IN", {
+		day: "2-digit",
+		month: "short",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+};
+
 const navItems = [
 	{
 		label: "Dashboard",
 		path: "/venflow/dashboard",
 		screen: "dashboard",
 		icon: <DashboardOutlinedIcon fontSize="small" />,
+	},
+	{
+		label: "Director Desk",
+		path: "/venflow/director",
+		screen: "director",
+		icon: (
+			<GavelOutlinedIcon
+				fontSize="small"
+			/>
+		),
 	},
 	{
 		label: "Full Tracker",
@@ -83,6 +118,16 @@ const navItems = [
 		path: "/venflow/purchase",
 		screen: "purchase",
 		icon: <ShoppingCartOutlinedIcon fontSize="small" />,
+	},
+	{
+		label: "Supervisor Desk",
+		path: "/venflow/supervisor",
+		screen: "supervisor",
+		icon: (
+			<SupervisorAccountOutlinedIcon
+				fontSize="small"
+			/>
+		),
 	},
 	{
 		label: "New Requirement",
@@ -315,12 +360,138 @@ function VenFlowSidebar() {
 
 function VenFlowHeader({ onToggleSidebar }) {
 	const navigate = useNavigate();
-
 	const location = useLocation();
 
-	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-		return localStorage.getItem(VENFLOW_SIDEBAR_COLLAPSED_KEY) === "true";
-	});
+	const [sidebarCollapsed, setSidebarCollapsed] =
+		useState(() => {
+			return (
+				localStorage.getItem(
+					VENFLOW_SIDEBAR_COLLAPSED_KEY
+				) === "true"
+			);
+		});
+
+	const [appsAnchor, setAppsAnchor] =
+		useState(null);
+
+	const [notifAnchor, setNotifAnchor] =
+		useState(null);
+
+	const [healthAnchor, setHealthAnchor] =
+		useState(null);
+
+	const [settingsOpen, setSettingsOpen] =
+		useState(false);
+
+	const [notifications, setNotifications] =
+		useState([]);
+
+	const [unreadCount, setUnreadCount] =
+		useState(0);
+
+	const [notificationLoading, setNotificationLoading] =
+		useState(false);
+
+	const loadNotifications =
+		useCallback(async () => {
+			try {
+				setNotificationLoading(true);
+
+				const [listRes, countRes] =
+					await Promise.all([
+						venflowApi.getNotifications({
+							unreadOnly: true,
+							page: 0,
+							size: 10,
+						}),
+
+						venflowApi
+							.getUnreadNotificationCount(),
+					]);
+
+				setNotifications(
+					Array.isArray(
+						listRes.data?.content
+					)
+						? listRes.data.content
+						: []
+				);
+
+				setUnreadCount(
+					Number(countRes.data || 0)
+				);
+			} catch (err) {
+				console.error(
+					"Unable to load VenFlow notifications:",
+					err
+				);
+
+				setNotifications([]);
+				setUnreadCount(0);
+			} finally {
+				setNotificationLoading(false);
+			}
+		}, []);
+
+	useEffect(() => {
+		loadNotifications();
+
+		const timer = window.setInterval(
+			loadNotifications,
+			60000
+		);
+
+		return () => {
+			window.clearInterval(timer);
+		};
+	}, [loadNotifications]);
+
+	const handleOpenNotifications = async (
+		event
+	) => {
+		setNotifAnchor(event.currentTarget);
+		await loadNotifications();
+	};
+
+	const handleNotificationClick = async (
+		notification
+	) => {
+		if (!notification) return;
+
+		try {
+			if (!notification.read) {
+				await venflowApi
+					.markNotificationRead(
+						notification.id
+					);
+			}
+
+			setNotifications((current) =>
+				current.filter(
+					(item) =>
+						item.id !==
+						notification.id
+				)
+			);
+
+			setUnreadCount((current) =>
+				Math.max(current - 1, 0)
+			);
+		} catch (err) {
+			console.error(
+				"Unable to mark notification as read:",
+				err
+			);
+		} finally {
+			setNotifAnchor(null);
+
+			if (notification.actionUrl) {
+				navigate(
+					notification.actionUrl
+				);
+			}
+		}
+	};
 
 	useEffect(() => {
 		const handleChange = (event) => {
@@ -347,6 +518,13 @@ function VenFlowHeader({ onToggleSidebar }) {
 			return {
 				title: "Veneer Dashboard",
 				sub: "Workflow Overview",
+			};
+		}
+
+		if (path.includes("/venflow/director")) {
+			return {
+				title: "Director's Desk",
+				sub: "PO Approval & Veneer Control Tower",
 			};
 		}
 
@@ -422,29 +600,6 @@ function VenFlowHeader({ onToggleSidebar }) {
 		venFlowRole === "ADMIN" ||
 		String(venFlowRole).startsWith("VENFLOW_");
 
-	const [appsAnchor, setAppsAnchor] = useState(null);
-	const [notifAnchor, setNotifAnchor] = useState(null);
-	const [healthAnchor, setHealthAnchor] = useState(null);
-	const [settingsOpen, setSettingsOpen] = useState(false);
-
-	const notifications = useMemo(
-		() => [
-			{
-				id: 1,
-				title: "Store review pending",
-				message: "Some veneer indents are waiting for Store action.",
-				type: "STORE",
-			},
-			{
-				id: 2,
-				title: "PO approval pending",
-				message: "Raised PO entries may need manager approval.",
-				type: "PURCHASE",
-			},
-		],
-		[]
-	);
-
 	const openModule = (path) => {
 		navigate(path);
 		setAppsAnchor(null);
@@ -505,9 +660,13 @@ function VenFlowHeader({ onToggleSidebar }) {
 					<Tooltip title="Notifications">
 						<IconButton
 							sx={iconBtnSx}
-							onClick={(e) => setNotifAnchor(e.currentTarget)}
+							onClick={handleOpenNotifications}
 						>
-							<Badge badgeContent={notifications.length} color="error">
+							<Badge
+								badgeContent={unreadCount}
+								color="error"
+								max={99}
+							>
 								<NotificationsNoneIcon />
 							</Badge>
 						</IconButton>
@@ -622,15 +781,80 @@ function VenFlowHeader({ onToggleSidebar }) {
 				<Box sx={popoverTitle}>Notifications</Box>
 				<Divider sx={dividerSx} />
 
-				<Box sx={{ width: 360 }}>
-					{notifications.map((n) => (
-						<Box key={n.id} sx={notificationItemSx}>
-							<Box sx={notificationDotSx}>●</Box>
+				<Box sx={notificationListSx}>
+					{notificationLoading &&
+						notifications.length === 0 && (
+							<Box sx={notificationEmptySx}>
+								Loading notifications...
+							</Box>
+						)}
 
-							<Box>
-								<Box sx={notificationTitleSx}>{n.title}</Box>
-								<Box sx={notificationMsgSx}>{n.message}</Box>
-								<Box sx={notificationTypeSx}>{n.type}</Box>
+					{!notificationLoading &&
+						notifications.length === 0 && (
+							<Box sx={notificationEmptySx}>
+								No unread notifications.
+							</Box>
+						)}
+
+					{notifications.map((notification) => (
+						<Box
+							key={notification.id}
+							sx={notificationItemSx}
+							onClick={() =>
+								handleNotificationClick(
+									notification
+								)
+							}
+						>
+							<Box
+								sx={notificationDotBySeveritySx(
+									notification.severity
+								)}
+							/>
+
+							<Box sx={{ minWidth: 0 }}>
+								<Box sx={notificationTopRowSx}>
+									<Box
+										sx={notificationTitleSx}
+									>
+										{notification.title ||
+											"VenFlow Notification"}
+									</Box>
+
+									{notification.actionRequired && (
+										<Box
+											sx={
+												notificationActionRequiredSx
+											}
+										>
+											Action Required
+										</Box>
+									)}
+								</Box>
+
+								<Box sx={notificationMsgSx}>
+									{notification.message ||
+										"Workflow update available."}
+								</Box>
+
+								<Box sx={notificationMetaRowSx}>
+									<Box
+										sx={notificationTypeSx}
+									>
+										{String(
+											notification.type ||
+											"ACTIVITY"
+										).replaceAll("_", " ")}
+									</Box>
+
+									<Box
+										sx={notificationDateSx}
+									>
+										{formatNotificationDate(
+											notification.createdAt
+										)}
+									</Box>
+								</Box>
 							</Box>
 						</Box>
 					))}
@@ -1167,10 +1391,152 @@ const notificationItemSx = {
 	mb: 1,
 };
 
-const notificationDotSx = {
-	color: "#60a5fa",
+const notificationListSx = {
+	width: 390,
+	maxHeight: 520,
+	overflowY: "auto",
+	pr: 0.4,
+
+	"&::-webkit-scrollbar": {
+		width: 7,
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			"rgba(148,163,184,.25)",
+		borderRadius: 999,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background: "transparent",
+	},
+};
+
+const notificationEmptySx = {
+	minHeight: 110,
+	display: "grid",
+	placeItems: "center",
+	color: "#94a3b8",
 	fontSize: 12,
-	pt: 0.3,
+	fontWeight: 750,
+	textAlign: "center",
+};
+
+const notificationItemSx = {
+	display: "grid",
+	gridTemplateColumns: "12px minmax(0,1fr)",
+	gap: 1.2,
+	p: 1.4,
+	borderRadius: "14px",
+	border:
+		"1px solid rgba(255,255,255,.06)",
+	background: "rgba(255,255,255,.035)",
+	mb: 1,
+	cursor: "pointer",
+	transition:
+		"background .15s ease, border-color .15s ease, transform .15s ease",
+
+	"&:hover": {
+		background: "rgba(59,130,246,.10)",
+		borderColor:
+			"rgba(59,130,246,.26)",
+		transform: "translateY(-1px)",
+	},
+};
+
+const notificationDotBySeveritySx = (
+	severity
+) => {
+	const normalized = String(
+		severity || "INFO"
+	).toUpperCase();
+
+	const color =
+		normalized === "CRITICAL"
+			? "#ef4444"
+			: normalized ===
+				"ACTION_REQUIRED"
+				? "#f59e0b"
+				: normalized === "WARNING"
+					? "#f59e0b"
+					: normalized ===
+						"SUCCESS"
+						? "#22c55e"
+						: "#60a5fa";
+
+	return {
+		width: 10,
+		height: 10,
+		borderRadius: "50%",
+		background: color,
+		mt: 0.6,
+		boxShadow: `0 0 12px ${color}88`,
+	};
+};
+
+const notificationTopRowSx = {
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 1,
+};
+
+const notificationTitleSx = {
+	fontSize: 13,
+	fontWeight: 900,
+	color: "#fff",
+	lineHeight: 1.35,
+};
+
+const notificationMsgSx = {
+	fontSize: 11.5,
+	color: "#94a3b8",
+	mt: 0.55,
+	lineHeight: 1.5,
+	whiteSpace: "normal",
+	wordBreak: "break-word",
+};
+
+const notificationMetaRowSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	mt: 1,
+	flexWrap: "wrap",
+};
+
+const notificationTypeSx = {
+	display: "inline-flex",
+	px: 1,
+	py: 0.3,
+	borderRadius: "999px",
+	fontSize: 9.5,
+	fontWeight: 900,
+	color: "#60a5fa",
+	background: "rgba(59,130,246,.12)",
+	textTransform: "capitalize",
+};
+
+const notificationDateSx = {
+	color: "rgba(255,255,255,.40)",
+	fontSize: 9.5,
+	fontWeight: 750,
+};
+
+const notificationActionRequiredSx = {
+	display: "inline-flex",
+	px: 0.8,
+	py: 0.25,
+	borderRadius: "999px",
+	background: "rgba(245,158,11,.14)",
+	color: "#fbbf24",
+	border:
+		"1px solid rgba(245,158,11,.24)",
+	fontSize: 8.5,
+	fontWeight: 950,
+	textTransform: "uppercase",
+	whiteSpace: "nowrap",
 };
 
 const notificationTitleSx = {

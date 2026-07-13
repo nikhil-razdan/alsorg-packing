@@ -18,6 +18,17 @@ import {
 	Typography,
 } from "@mui/material";
 
+import {
+	VF_STAGE as STAGE,
+	VF_TRACKER_STEPS,
+	getCurrentActionText,
+	getStageGroupIndex,
+	getStageLabel,
+} from "../venflowWorkflow";
+
+import GavelOutlinedIcon
+	from "@mui/icons-material/GavelOutlined";
+
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DashboardCustomizeOutlinedIcon from "@mui/icons-material/DashboardCustomizeOutlined";
@@ -52,7 +63,7 @@ import {
 	isVenFlowPurchase,
 	isVenFlowProcessing,
 	isVenFlowSupervisor,
-	canApproveVenFlowPo,
+	isVenFlowDirector,
 } from "../../../utils/venflowAccess";
 
 import {
@@ -69,110 +80,6 @@ import {
 	primaryBtnSx,
 	secondaryBtnSx,
 } from "../venflowTheme";
-
-const STAGE = {
-	INDENT_CREATED: "INDENT_CREATED",
-	SENT_TO_STORE: "SENT_TO_STORE",
-	STORE_REVIEWED: "STORE_REVIEWED",
-	STOCK_AVAILABLE: "STOCK_AVAILABLE",
-	MATERIAL_RESERVED: "MATERIAL_RESERVED",
-	PURCHASE_REQUEST_RAISED: "PURCHASE_REQUEST_RAISED",
-	PO_RAISED: "PO_RAISED",
-	MATERIAL_RECEIVED_AT_STORE: "MATERIAL_RECEIVED_AT_STORE",
-	GRN_DONE: "GRN_DONE",
-	QC_PENDING: "QC_PENDING",
-	QC_OK: "QC_OK",
-	MATERIAL_ACCEPTED_IN_STORE: "MATERIAL_ACCEPTED_IN_STORE",
-	MATERIAL_REJECTED_HOLD_RETURN: "MATERIAL_REJECTED_HOLD_RETURN",
-	PRODUCTION_INFORMED: "PRODUCTION_INFORMED",
-	PRODUCTION_DETAILS_ADDED: "PRODUCTION_DETAILS_ADDED",
-	MATERIAL_ISSUED_TO_PRODUCTION: "MATERIAL_ISSUED_TO_PRODUCTION",
-	PROCESSING_STARTED: "PROCESSING_STARTED",
-	PROCESS_COMPLETED: "PROCESS_COMPLETED",
-	SUPERVISOR_INFORMED: "SUPERVISOR_INFORMED",
-	READY_FOR_NEXT_STAGE: "READY_FOR_NEXT_STAGE",
-};
-
-const WORKFLOW_STEPS = [
-	{
-		value: STAGE.INDENT_CREATED,
-		label: "Indent Created",
-		shortLabel: "Indent",
-	},
-	{
-		value: STAGE.SENT_TO_STORE,
-		label: "Sent to AKG Store",
-		shortLabel: "Store",
-	},
-	{
-		value: STAGE.PURCHASE_REQUEST_RAISED,
-		label: "Purchase Request",
-		shortLabel: "PR",
-	},
-	{
-		value: STAGE.PO_RAISED,
-		label: "PO Raised",
-		shortLabel: "PO",
-	},
-	{
-		value: STAGE.MATERIAL_RECEIVED_AT_STORE,
-		label: "Material Received",
-		shortLabel: "Received",
-	},
-	{
-		value: STAGE.QC_OK,
-		label: "QC / Inventory",
-		shortLabel: "QC",
-	},
-	{
-		value: STAGE.PRODUCTION_INFORMED,
-		label: "Production Informed",
-		shortLabel: "Production",
-	},
-	{
-		value: STAGE.MATERIAL_ISSUED_TO_PRODUCTION,
-		label: "Issued to Production",
-		shortLabel: "Issued",
-	},
-	{
-		value: STAGE.PROCESSING_STARTED,
-		label: "Processing Started",
-		shortLabel: "Processing",
-	},
-	{
-		value: STAGE.SUPERVISOR_INFORMED,
-		label: "Supervisor Informed",
-		shortLabel: "Supervisor",
-	},
-	{
-		value: STAGE.READY_FOR_NEXT_STAGE,
-		label: "Completed",
-		shortLabel: "Done",
-	},
-];
-
-const STAGE_LABELS = {
-	INDENT_CREATED: "Indent Created",
-	SENT_TO_STORE: "Sent to AKG Store",
-	STORE_REVIEWED: "Store Reviewed",
-	STOCK_AVAILABLE: "Stock Available",
-	MATERIAL_RESERVED: "Material Reserved",
-	PURCHASE_REQUEST_RAISED: "Purchase Request Raised",
-	PO_RAISED: "PO Raised",
-	MATERIAL_RECEIVED_AT_STORE: "Material Received",
-	GRN_DONE: "GRN Done",
-	QC_PENDING: "QC Pending",
-	QC_OK: "QC OK",
-	MATERIAL_ACCEPTED_IN_STORE: "Accepted in Store",
-	MATERIAL_REJECTED_HOLD_RETURN: "Hold / Rejected",
-	PRODUCTION_INFORMED: "Production Informed",
-	PRODUCTION_DETAILS_ADDED: "Production Details Added",
-	MATERIAL_ISSUED_TO_PRODUCTION: "Issued to Production",
-	PROCESSING_STARTED: "Processing Started",
-	PROCESS_COMPLETED: "Process Completed",
-	SUPERVISOR_INFORMED: "Supervisor Informed",
-	READY_FOR_NEXT_STAGE: "Ready / Completed",
-};
 
 const STOCK_DECISION_OPTIONS = [
 	{
@@ -262,8 +169,73 @@ const formatDateTime = (value) => {
 		.slice(0, 16);
 };
 
-const getStageLabel = (stage) => {
-	return STAGE_LABELS[stage] || stage || "-";
+const formatCurrency = (value) => {
+	if (
+		value === null ||
+		value === undefined ||
+		value === ""
+	) {
+		return "-";
+	}
+
+	const numberValue = Number(value);
+
+	if (!Number.isFinite(numberValue)) {
+		return String(value);
+	}
+
+	return `₹${numberValue.toLocaleString(
+		"en-IN",
+		{
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 2,
+		}
+	)}`;
+};
+
+const getDirectorDecisionText = (
+	entry
+) => {
+	const status = String(
+		entry?.poStatus || ""
+	).toUpperCase();
+
+	switch (status) {
+		case "PENDING_DIRECTOR_APPROVAL":
+			return "Pending Director Approval";
+
+		case "DIRECTOR_APPROVED":
+			return "Approved by Director";
+
+		case "DIRECTOR_REJECTED":
+			return "Returned to Purchase";
+
+		case "ORDER_PLACED":
+			return "Approved — Vendor Order Placed";
+
+		default:
+			return "Not Required Yet";
+	}
+};
+
+const getDirectorDecisionActor = (
+	entry
+) => {
+	return (
+		entry?.directorApprovedBy ||
+		entry?.directorRejectedBy ||
+		"-"
+	);
+};
+
+const getDirectorDecisionDate = (
+	entry
+) => {
+	return (
+		entry?.directorApprovedAt ||
+		entry?.directorRejectedAt ||
+		null
+	);
 };
 
 const calculateBalance = (entry) => {
@@ -292,106 +264,54 @@ const calculateStoreBalance = (entry) => {
 };
 
 const getBackPathForRole = (role) => {
-	const cleanRole = String(role || "").trim().toUpperCase();
+	const cleanRole =
+		String(role || "")
+			.trim()
+			.toUpperCase();
 
 	if (
 		cleanRole === "ADMIN" ||
-		cleanRole === "VENFLOW_MANAGER"
+		cleanRole ===
+		"VENFLOW_MANAGER"
 	) {
 		return "/venflow/entries";
 	}
 
 	if (
-		cleanRole === "VENFLOW_ENGINEERING" ||
-		cleanRole === "VENFLOW_PROCESSING" ||
-		cleanRole === "VENFLOW_SUPERVISOR"
+		cleanRole ===
+		"VENFLOW_ENGINEERING"
+	) {
+		return "/venflow/dashboard";
+	}
+
+	if (
+		cleanRole ===
+		"VENFLOW_PRODUCTION"
 	) {
 		return "/venflow/production";
 	}
 
-	if (cleanRole === "VENFLOW_STORE") {
+	if (
+		cleanRole ===
+		"VENFLOW_SUPERVISOR"
+	) {
+		return "/venflow/supervisor";
+	}
+
+	if (
+		cleanRole === "VENFLOW_STORE"
+	) {
 		return "/venflow/store";
 	}
 
-	if (cleanRole === "VENFLOW_PURCHASE") {
+	if (
+		cleanRole ===
+		"VENFLOW_PURCHASE"
+	) {
 		return "/venflow/purchase";
 	}
 
 	return "/venflow/dashboard";
-};
-
-const getCurrentActionText = (entry) => {
-	const stage = entry?.stage;
-
-	if (stage === STAGE.INDENT_CREATED) {
-		return "Engineering must send this indent to AKG Store for stock review.";
-	}
-
-	if (stage === STAGE.SENT_TO_STORE) {
-		return "Store must review stock availability and update the stock decision.";
-	}
-
-	if (stage === STAGE.STORE_REVIEWED) {
-		return "Store must reserve available stock or raise a purchase request.";
-	}
-
-	if (stage === STAGE.STOCK_AVAILABLE) {
-		return "Store can reserve the available veneer quantity.";
-	}
-
-	if (stage === STAGE.MATERIAL_RESERVED) {
-		return "Store can inform Production or issue the reserved material.";
-	}
-
-	if (stage === STAGE.PURCHASE_REQUEST_RAISED) {
-		return "Purchase must raise the PO for this requirement.";
-	}
-
-	if (stage === STAGE.PO_RAISED) {
-		return "PO is raised. Approval or material receiving may be pending.";
-	}
-
-	if (stage === STAGE.MATERIAL_RECEIVED_AT_STORE) {
-		return "Store must complete GRN and QC process.";
-	}
-
-	if (stage === STAGE.GRN_DONE || stage === STAGE.QC_PENDING) {
-		return "QC must be completed before accepting material into inventory.";
-	}
-
-	if (stage === STAGE.QC_OK) {
-		return "Store can accept this material into inventory.";
-	}
-
-	if (stage === STAGE.MATERIAL_ACCEPTED_IN_STORE) {
-		return "Store can inform Production or issue the material.";
-	}
-
-	if (stage === STAGE.PRODUCTION_INFORMED) {
-		return "Production must add production details, then Store can issue material.";
-	}
-
-	if (stage === STAGE.MATERIAL_ISSUED_TO_PRODUCTION) {
-		return "Processing team can start production.";
-	}
-
-	if (stage === STAGE.PROCESSING_STARTED) {
-		return "Processing is in progress. Complete the process after work is done.";
-	}
-
-	if (stage === STAGE.PROCESS_COMPLETED) {
-		return "Processing team must inform Supervisor for final closure.";
-	}
-
-	if (stage === STAGE.SUPERVISOR_INFORMED) {
-		return "Supervisor can mark this requirement ready for the next stage.";
-	}
-
-	if (stage === STAGE.READY_FOR_NEXT_STAGE) {
-		return "This requirement is completed and ready for the next stage.";
-	}
-
-	return "Review this requirement and complete the enabled action.";
 };
 
 const firstValue = (entry, keys = []) => {
@@ -410,16 +330,19 @@ const firstValue = (entry, keys = []) => {
 	return "";
 };
 
-const findAuditForStage = (stage, auditRows = []) => {
-	const target = String(stage || "").toUpperCase();
+const findAuditForStage = (
+	stage,
+	auditRows = []
+) => {
+	const target =
+		String(stage || "")
+			.toUpperCase();
 
 	return auditRows.find((row) => {
 		const bucket = [
-			row.stage,
-			row.toStage,
-			row.newStage,
 			row.action,
-			row.message,
+			row.oldValue,
+			row.newValue,
 		]
 			.filter(Boolean)
 			.join(" ")
@@ -429,39 +352,32 @@ const findAuditForStage = (stage, auditRows = []) => {
 	});
 };
 
-const getStageIndex = (stage) => {
-	const value = String(stage || "").toUpperCase();
+const findAuditForWorkflowStep = (
+	step,
+	auditRows = []
+) => {
+	const stageKeys =
+		step?.stageKeys || [];
 
-	if (value === STAGE.STORE_REVIEWED) {
-		return 1;
-	}
+	return auditRows.find((row) => {
+		const bucket = [
+			row.action,
+			row.oldValue,
+			row.newValue,
+		]
+			.filter(Boolean)
+			.join(" ")
+			.toUpperCase();
 
-	if (
-		value === STAGE.STOCK_AVAILABLE ||
-		value === STAGE.MATERIAL_RESERVED
-	) {
-		return 2;
-	}
-
-	if (value === STAGE.GRN_DONE || value === STAGE.QC_PENDING) {
-		return 5;
-	}
-
-	if (value === STAGE.MATERIAL_ACCEPTED_IN_STORE) {
-		return 5;
-	}
-
-	if (value === STAGE.PRODUCTION_DETAILS_ADDED) {
-		return 6;
-	}
-
-	if (value === STAGE.PROCESS_COMPLETED) {
-		return 8;
-	}
-
-	const index = WORKFLOW_STEPS.findIndex((step) => step.value === value);
-
-	return index >= 0 ? index : 0;
+		return stageKeys.some(
+			(stageKey) =>
+				bucket.includes(
+					String(
+						stageKey
+					).toUpperCase()
+				)
+		);
+	});
 };
 
 export default function VenFlowDetailPage() {
@@ -473,20 +389,35 @@ export default function VenFlowDetailPage() {
 	const role = getVenFlowRole(authRole);
 
 	const isAdmin = isVenFlowAdmin(role);
-	const isAdminManager = isVenFlowAdminOrManager(role);
-	const isEngineering = isVenFlowEngineering(role);
-	const isStore = isVenFlowStore(role);
-	const isPurchase = isVenFlowPurchase(role);
-	const isProcessing = isVenFlowProcessing(role);
-	const isSupervisor = isVenFlowSupervisor(role);
-	const canApprovePo = canApproveVenFlowPo(role);
+	const isAdminManager =
+		isVenFlowAdminOrManager(role);
+
+	const isEngineering =
+		isVenFlowEngineering(role);
+
+	const isStore =
+		isVenFlowStore(role);
+
+	const isPurchase =
+		isVenFlowPurchase(role);
+
+	const isProcessing =
+		isVenFlowProcessing(role);
+
+	const isSupervisor =
+		isVenFlowSupervisor(role);
+
+	const isDirector =
+		isVenFlowDirector(role);
 
 	const canSeeEngineering = isAdminManager || isEngineering;
 	const canSeeStore = isAdminManager || isStore;
 	const canSeePurchase = isAdminManager || isPurchase;
 	const canSeeProcessing = isAdminManager || isProcessing;
 	const canSeeSupervisor = isAdminManager || isSupervisor;
+	const canSeeDirector = isDirector;
 
+	const canDirectorAction = isDirector;
 	const canEngineeringAction = isAdmin || isEngineering;
 	const canStoreAction = isAdmin || isStore;
 	const canPurchaseAction = isAdmin || isPurchase;
@@ -566,6 +497,19 @@ export default function VenFlowDetailPage() {
 		remarks: "",
 	});
 
+	const [vendorOrderForm, setVendorOrderForm] =
+		useState({
+			vendorOrderReference: "",
+			vendorAcknowledgementNo: "",
+			vendorExpectedDate: "",
+			remarks: "",
+		});
+
+	const [directorDecisionForm, setDirectorDecisionForm] =
+		useState({
+			remarks: "",
+		});
+
 	const [processingForm, setProcessingForm] = useState({
 		usedQty: "",
 		wastageQty: "",
@@ -605,6 +549,12 @@ export default function VenFlowDetailPage() {
 				show: canSeePurchase,
 			},
 			{
+				value: "director",
+				label: "Director Approval",
+				icon: <GavelOutlinedIcon />,
+				show: canSeeDirector,
+			},
+			{
 				value: "receiving",
 				label: "Receiving & QC",
 				icon: <FactCheckOutlinedIcon />,
@@ -639,6 +589,7 @@ export default function VenFlowDetailPage() {
 			canSeeEngineering,
 			canSeeStore,
 			canSeePurchase,
+			canSeeDirector,
 			canSeeProcessing,
 			canSeeSupervisor,
 		]
@@ -687,6 +638,21 @@ export default function VenFlowDetailPage() {
 					"PENDING",
 				availableQty: row.availableQty ?? "",
 				remarks: row.remarks || "",
+			});
+
+			setVendorOrderForm({
+				vendorOrderReference:
+					row.vendorOrderReference || "",
+				vendorAcknowledgementNo:
+					row.vendorAcknowledgementNo || "",
+				vendorExpectedDate:
+					row.vendorExpectedDate || "",
+				remarks:
+					row.vendorOrderRemarks || "",
+			});
+
+			setDirectorDecisionForm({
+				remarks: "",
 			});
 
 			setReserveForm({
@@ -846,28 +812,32 @@ export default function VenFlowDetailPage() {
 			STAGE.MATERIAL_ACCEPTED_IN_STORE,
 		].includes(stage);
 
-	const canRaisePurchaseRequest =
-		canStoreAction &&
-		[
-			STAGE.STORE_REVIEWED,
-			STAGE.STOCK_AVAILABLE,
-		].includes(stage) &&
-		[
-			"NOT_AVAILABLE",
-			"PARTIALLY_AVAILABLE",
-			"HOLD",
-		].includes(stockDecision);
-
 	const canRaisePo =
 		canPurchaseAction &&
 		[
 			STAGE.PURCHASE_REQUEST_RAISED,
-			STAGE.PO_RAISED,
+			STAGE.PO_REJECTED_BY_DIRECTOR,
 		].includes(stage);
+
+	const canPlaceVendorOrder =
+		canPurchaseAction &&
+		stage ===
+		STAGE.PO_APPROVED_BY_DIRECTOR &&
+		entry.poStatus ===
+		"DIRECTOR_APPROVED";
+
+	const canDirectorDecide =
+		canDirectorAction &&
+		stage ===
+		STAGE.PO_PENDING_DIRECTOR_APPROVAL &&
+		entry.poStatus ===
+		"PENDING_DIRECTOR_APPROVAL";
 
 	const canReceiveMaterial =
 		canStoreAction &&
-		stage === STAGE.PO_RAISED;
+		stage ===
+		STAGE.ORDER_PLACED_WITH_VENDOR &&
+		entry.poStatus === "ORDER_PLACED";
 
 	const canGrn =
 		canStoreAction &&
@@ -884,7 +854,20 @@ export default function VenFlowDetailPage() {
 		canStoreAction &&
 		stage === STAGE.QC_OK;
 
-	const canInformProduction =
+	const canRaisePurchaseRequest =
+		canStoreAction &&
+		[
+			STAGE.STORE_REVIEWED,
+			STAGE.STOCK_AVAILABLE,
+			STAGE.MATERIAL_RESERVED,
+		].includes(stage) &&
+		[
+			"NOT_AVAILABLE",
+			"PARTIALLY_AVAILABLE",
+			"HOLD",
+		].includes(stockDecision);
+
+	const canIssueMaterial =
 		canStoreAction &&
 		[
 			STAGE.MATERIAL_RESERVED,
@@ -894,21 +877,15 @@ export default function VenFlowDetailPage() {
 	const canAddProductionDetails =
 		canProcessingAction &&
 		[
-			STAGE.PRODUCTION_INFORMED,
-			STAGE.MATERIAL_RESERVED,
-		].includes(stage);
-
-	const canIssueMaterial =
-		canStoreAction &&
-		[
-			STAGE.PRODUCTION_INFORMED,
-			STAGE.PRODUCTION_DETAILS_ADDED,
-			STAGE.MATERIAL_RESERVED,
+			STAGE.MATERIAL_ISSUED_TO_PRODUCTION,
+			STAGE.PROCESSING_STARTED,
+			STAGE.PROCESS_COMPLETED,
 		].includes(stage);
 
 	const canStartProcessing =
 		canProcessingAction &&
-		stage === STAGE.MATERIAL_ISSUED_TO_PRODUCTION;
+		stage ===
+		STAGE.MATERIAL_ISSUED_TO_PRODUCTION;
 
 	const canCompleteProcessing =
 		canProcessingAction &&
@@ -921,6 +898,7 @@ export default function VenFlowDetailPage() {
 	const canReadyNextStage =
 		canSupervisorAction &&
 		stage === STAGE.SUPERVISOR_INFORMED;
+
 
 	const snapshotCards = [
 		{
@@ -1386,8 +1364,8 @@ export default function VenFlowDetailPage() {
 				<CardContent sx={{ p: 0 }}>
 					<SectionHeader
 						number="01"
-						title="Purchase / PO"
-						subtitle="Raise PO and complete manager approval"
+						title="Prepare Purchase Order"
+						subtitle="Prepare the PO and submit it for Director approval. This does not place the order with the vendor."
 					/>
 
 					<Box sx={formGridSx}>
@@ -1395,12 +1373,16 @@ export default function VenFlowDetailPage() {
 							label="Vendor Name"
 							value={poForm.vendorName}
 							onChange={(e) =>
-								setPoForm((p) => ({
-									...p,
-									vendorName: e.target.value,
+								setPoForm((current) => ({
+									...current,
+									vendorName:
+										e.target.value,
 								}))
 							}
-							disabled={!canPurchaseAction}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
 							sx={fieldSx}
 						/>
 
@@ -1408,27 +1390,37 @@ export default function VenFlowDetailPage() {
 							label="PO No."
 							value={poForm.poNo}
 							onChange={(e) =>
-								setPoForm((p) => ({
-									...p,
-									poNo: e.target.value,
+								setPoForm((current) => ({
+									...current,
+									poNo:
+										e.target.value,
 								}))
 							}
-							disabled={!canPurchaseAction}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
 							sx={fieldSx}
 						/>
 
 						<TextField
 							label="PO Date"
 							type="date"
-							InputLabelProps={{ shrink: true }}
+							InputLabelProps={{
+								shrink: true,
+							}}
 							value={poForm.poDate}
 							onChange={(e) =>
-								setPoForm((p) => ({
-									...p,
-									poDate: e.target.value,
+								setPoForm((current) => ({
+									...current,
+									poDate:
+										e.target.value,
 								}))
 							}
-							disabled={!canPurchaseAction}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
 							sx={fieldSx}
 						/>
 
@@ -1437,85 +1429,719 @@ export default function VenFlowDetailPage() {
 							type="number"
 							value={poForm.poAmount}
 							onChange={(e) =>
-								setPoForm((p) => ({
-									...p,
-									poAmount: e.target.value,
+								setPoForm((current) => ({
+									...current,
+									poAmount:
+										e.target.value,
 								}))
 							}
-							disabled={!canPurchaseAction}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
 							sx={fieldSx}
 						/>
 
 						<TextField
 							label="PO Document URL"
-							value={poForm.poDocumentUrl}
+							value={
+								poForm.poDocumentUrl
+							}
 							onChange={(e) =>
-								setPoForm((p) => ({
-									...p,
-									poDocumentUrl: e.target.value,
+								setPoForm((current) => ({
+									...current,
+									poDocumentUrl:
+										e.target.value,
 								}))
 							}
-							disabled={!canPurchaseAction}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Purchase Remarks"
+							value={poForm.remarks}
+							onChange={(e) =>
+								setPoForm((current) => ({
+									...current,
+									remarks:
+										e.target.value,
+								}))
+							}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
 							sx={fieldSx}
 						/>
 					</Box>
 
 					<Box sx={poStatusGridSx}>
-						<Info label="PO Status" value={entry.poStatus || "NOT_RAISED"} />
-						<Info label="Purchase Request No." value={entry.purchaseRequestNo} />
-						<Info label="PO Raised By" value={entry.poRaisedBy} />
-						<Info label="PO Raised At" value={formatDateTime(entry.poRaisedAt)} />
-						<Info label="PO Approved By" value={entry.poApprovedBy} />
-						<Info label="PO Approved At" value={formatDateTime(entry.poApprovedAt)} />
+						<Info
+							label="Purchase Request No."
+							value={
+								entry.purchaseRequestNo
+							}
+						/>
+
+						<Info
+							label="PO Status"
+							value={
+								entry.poStatus ||
+								"NOT_RAISED"
+							}
+						/>
+
+						<Info
+							label="Submitted By"
+							value={
+								entry.poApprovalRequestedBy ||
+								entry.poRaisedBy
+							}
+						/>
+
+						<Info
+							label="Submitted At"
+							value={formatDateTime(
+								entry.poApprovalRequestedAt ||
+								entry.poRaisedAt
+							)}
+						/>
 					</Box>
 
 					<Box sx={actionRowSx}>
 						<Button
 							variant="contained"
-							disabled={saving || !canRaisePo}
+							disabled={
+								saving ||
+								!canRaisePo
+							}
 							onClick={() =>
 								run(() => {
-									if (!poForm.vendorName.trim()) {
-										throw new Error("Vendor Name is required.");
+									if (
+										!poForm.vendorName.trim()
+									) {
+										throw new Error(
+											"Vendor Name is required."
+										);
 									}
 
-									if (!poForm.poNo.trim()) {
-										throw new Error("PO No. is required.");
+									if (
+										!poForm.poNo.trim()
+									) {
+										throw new Error(
+											"PO No. is required."
+										);
 									}
 
 									if (!poForm.poDate) {
-										throw new Error("PO Date is required.");
+										throw new Error(
+											"PO Date is required."
+										);
 									}
 
-									return venflowApi.raisePo(id, {
-										vendorName: poForm.vendorName.trim(),
-										poNo: poForm.poNo.trim(),
-										poDate: poForm.poDate,
-										poAmount: toNumberOrNull(poForm.poAmount),
-										poDocumentUrl: poForm.poDocumentUrl.trim(),
-										remarks: poForm.remarks.trim(),
-									});
+									const amount =
+										requirePositiveNumber(
+											poForm.poAmount,
+											"PO Amount must be greater than zero."
+										);
+
+									if (
+										!poForm
+											.poDocumentUrl
+											.trim()
+									) {
+										throw new Error(
+											"PO Document URL is required."
+										);
+									}
+
+									return venflowApi
+										.raisePo(id, {
+											vendorName:
+												poForm.vendorName.trim(),
+
+											poNo:
+												poForm.poNo.trim(),
+
+											poDate:
+												poForm.poDate,
+
+											poAmount:
+												amount,
+
+											poDocumentUrl:
+												poForm
+													.poDocumentUrl
+													.trim(),
+
+											remarks:
+												poForm.remarks.trim(),
+										});
 								})
 							}
 							sx={primaryBtnSx}
 						>
-							Raise PO
+							Submit PO for Director Approval
+						</Button>
+
+						{entry.poDocumentUrl && (
+							<Button
+								variant="outlined"
+								onClick={() =>
+									window.open(
+										entry.poDocumentUrl,
+										"_blank",
+										"noopener,noreferrer"
+									)
+								}
+								sx={outlineBtnSx}
+							>
+								Open PO Document
+							</Button>
+						)}
+					</Box>
+				</CardContent>
+			</Card>
+
+			<Card sx={sectionCardSx}>
+				<CardContent sx={{ p: 0 }}>
+					<SectionHeader
+						number="02"
+						title="Director Approval Gate"
+						subtitle="The vendor order remains blocked until the Director approves the PO."
+					/>
+
+					<DirectorDecisionPanel
+						entry={entry}
+					/>
+				</CardContent>
+			</Card>
+
+			<Card sx={sectionCardSx}>
+				<CardContent sx={{ p: 0 }}>
+					<SectionHeader
+						number="03"
+						title="Place Order with Vendor"
+						subtitle="Enabled only after Director approval. Record the actual vendor-order reference, acknowledgement and committed delivery date."
+					/>
+
+					<Box sx={formGridSx}>
+						<TextField
+							label="Vendor Order Reference"
+							value={
+								vendorOrderForm
+									.vendorOrderReference
+							}
+							onChange={(e) =>
+								setVendorOrderForm(
+									(current) => ({
+										...current,
+										vendorOrderReference:
+											e.target.value,
+									})
+								)
+							}
+							disabled={
+								!canPlaceVendorOrder
+							}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Vendor Acknowledgement No."
+							value={
+								vendorOrderForm
+									.vendorAcknowledgementNo
+							}
+							onChange={(e) =>
+								setVendorOrderForm(
+									(current) => ({
+										...current,
+										vendorAcknowledgementNo:
+											e.target.value,
+									})
+								)
+							}
+							disabled={
+								!canPlaceVendorOrder
+							}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							type="date"
+							label="Vendor Expected Date"
+							InputLabelProps={{
+								shrink: true,
+							}}
+							value={
+								vendorOrderForm
+									.vendorExpectedDate
+							}
+							onChange={(e) =>
+								setVendorOrderForm(
+									(current) => ({
+										...current,
+										vendorExpectedDate:
+											e.target.value,
+									})
+								)
+							}
+							disabled={
+								!canPlaceVendorOrder
+							}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Vendor Order Remarks"
+							value={
+								vendorOrderForm.remarks
+							}
+							onChange={(e) =>
+								setVendorOrderForm(
+									(current) => ({
+										...current,
+										remarks:
+											e.target.value,
+									})
+								)
+							}
+							disabled={
+								!canPlaceVendorOrder
+							}
+							sx={fieldSx}
+						/>
+					</Box>
+
+					<Box sx={poStatusGridSx}>
+						<Info
+							label="Vendor Order Status"
+							value={
+								entry.poStatus ||
+								"NOT_PLACED"
+							}
+						/>
+
+						<Info
+							label="Vendor Order Reference"
+							value={
+								entry.vendorOrderReference
+							}
+						/>
+
+						<Info
+							label="Vendor Acknowledgement"
+							value={
+								entry.vendorAcknowledgementNo
+							}
+						/>
+
+						<Info
+							label="Expected Delivery"
+							value={
+								entry.vendorExpectedDate
+							}
+						/>
+
+						<Info
+							label="Order Placed By"
+							value={
+								entry.vendorOrderPlacedBy
+							}
+						/>
+
+						<Info
+							label="Order Placed At"
+							value={formatDateTime(
+								entry.vendorOrderPlacedAt
+							)}
+						/>
+					</Box>
+
+					<Box sx={actionRowSx}>
+						<Button
+							variant="contained"
+							disabled={
+								saving ||
+								!canPlaceVendorOrder
+							}
+							onClick={() =>
+								run(() => {
+									if (
+										!vendorOrderForm
+											.vendorOrderReference
+											.trim()
+									) {
+										throw new Error(
+											"Vendor Order Reference is required."
+										);
+									}
+
+									if (
+										!vendorOrderForm
+											.vendorExpectedDate
+									) {
+										throw new Error(
+											"Vendor Expected Date is required."
+										);
+									}
+
+									return venflowApi
+										.placeVendorOrder(
+											id,
+											{
+												vendorOrderReference:
+													vendorOrderForm
+														.vendorOrderReference
+														.trim(),
+
+												vendorAcknowledgementNo:
+													vendorOrderForm
+														.vendorAcknowledgementNo
+														.trim(),
+
+												vendorExpectedDate:
+													vendorOrderForm
+														.vendorExpectedDate,
+
+												remarks:
+													vendorOrderForm
+														.remarks
+														.trim(),
+											}
+										);
+								})
+							}
+							sx={primaryBtnSx}
+						>
+							Place Order with Vendor
+						</Button>
+					</Box>
+
+					{!canPlaceVendorOrder &&
+						entry.poStatus !==
+						"ORDER_PLACED" && (
+							<Typography sx={hintSx}>
+								This action will become
+								available after the Director
+								approves the PO.
+							</Typography>
+						)}
+				</CardContent>
+			</Card>
+		</Box>
+	);
+
+	const renderDirectorTab = () => (
+		<Box sx={tabContentSx}>
+			<Card sx={sectionCardSx}>
+				<CardContent sx={{ p: 0 }}>
+					<SectionHeader
+						number="01"
+						title="Director PO Review"
+						subtitle="Review the complete commercial and material context before approving or returning the PO."
+					/>
+
+					<DirectorDecisionPanel
+						entry={entry}
+					/>
+
+					<Box
+						sx={{
+							...infoGridSx,
+							mt: 2,
+						}}
+					>
+						<Info
+							label="PD No."
+							value={entry.pdNo}
+						/>
+
+						<Info
+							label="Client"
+							value={
+								entry.clientName
+							}
+						/>
+
+						<Info
+							label="Plant"
+							value={
+								entry.plantCode
+							}
+						/>
+
+						<Info
+							label="Material"
+							value={
+								entry.materialName
+							}
+						/>
+
+						<Info
+							label="Veneer Type"
+							value={
+								entry.veneerType
+							}
+						/>
+
+						<Info
+							label="Required Qty"
+							value={`${entry.requiredQty ??
+								"-"
+								} ${entry.unit || ""
+								}`}
+						/>
+
+						<Info
+							label="Purchase Request"
+							value={
+								entry.purchaseRequestNo
+							}
+						/>
+
+						<Info
+							label="Vendor"
+							value={
+								entry.vendorName
+							}
+						/>
+
+						<Info
+							label="PO No."
+							value={entry.poNo}
+						/>
+
+						<Info
+							label="PO Date"
+							value={entry.poDate}
+						/>
+
+						<Info
+							label="PO Amount"
+							value={
+								entry.poAmount !==
+									null &&
+									entry.poAmount !==
+									undefined
+									? `₹${Number(
+										entry.poAmount
+									).toLocaleString(
+										"en-IN"
+									)}`
+									: "-"
+							}
+						/>
+
+						<Info
+							label="Submitted By"
+							value={
+								entry.poApprovalRequestedBy ||
+								entry.poRaisedBy
+							}
+						/>
+
+						<Info
+							label="Submitted At"
+							value={formatDateTime(
+								entry.poApprovalRequestedAt ||
+								entry.poRaisedAt
+							)}
+						/>
+
+						<Info
+							label="Current Department"
+							value={
+								entry.currentDepartment
+							}
+						/>
+
+						<Info
+							label="Current Stage Since"
+							value={formatDateTime(
+								entry.stageEnteredAt
+							)}
+						/>
+					</Box>
+
+					{entry.poDocumentUrl && (
+						<Box sx={actionRowSx}>
+							<Button
+								variant="outlined"
+								onClick={() =>
+									window.open(
+										entry.poDocumentUrl,
+										"_blank",
+										"noopener,noreferrer"
+									)
+								}
+								sx={outlineBtnSx}
+							>
+								Open PO Document
+							</Button>
+						</Box>
+					)}
+				</CardContent>
+			</Card>
+
+			<Card sx={sectionCardSx}>
+				<CardContent sx={{ p: 0 }}>
+					<SectionHeader
+						number="02"
+						title="Director Decision"
+						subtitle="Approval authorizes Purchase to place the order. Returning the PO requires a correction reason."
+					/>
+
+					<TextField
+						fullWidth
+						multiline
+						minRows={4}
+						label={
+							canDirectorDecide
+								? "Approval Remarks / Return Reason"
+								: "Decision Remarks"
+						}
+						value={
+							directorDecisionForm.remarks
+						}
+						onChange={(e) =>
+							setDirectorDecisionForm({
+								remarks:
+									e.target.value,
+							})
+						}
+						disabled={
+							!canDirectorDecide
+						}
+						sx={fieldSx}
+					/>
+
+					<Box sx={actionRowSx}>
+						<Button
+							variant="contained"
+							disabled={
+								saving ||
+								!canDirectorDecide
+							}
+							onClick={() =>
+								run(() =>
+									venflowApi
+										.directorApprovePo(
+											id,
+											{
+												remarks:
+													directorDecisionForm
+														.remarks
+														.trim(),
+											}
+										)
+								)
+							}
+							sx={primaryBtnSx}
+						>
+							Approve PO
 						</Button>
 
 						<Button
 							variant="outlined"
 							disabled={
 								saving ||
-								!canApprovePo ||
-								entry.poStatus !== "RAISED"
+								!canDirectorDecide
 							}
 							onClick={() =>
-								run(() => venflowApi.approvePo(id))
+								run(() => {
+									const reason =
+										directorDecisionForm
+											.remarks
+											.trim();
+
+									if (!reason) {
+										throw new Error(
+											"Return / rejection reason is required."
+										);
+									}
+
+									return venflowApi
+										.directorRejectPo(
+											id,
+											{
+												remarks:
+													reason,
+											}
+										);
+								})
 							}
-							sx={outlineBtnSx}
+							sx={directorRejectBtnSx}
 						>
-							Approve / Sign PO
+							Return to Purchase
 						</Button>
+					</Box>
+
+					{!canDirectorDecide && (
+						<Typography sx={hintSx}>
+							Director actions are enabled
+							only while the PO is pending
+							Director approval.
+						</Typography>
+					)}
+				</CardContent>
+			</Card>
+
+			<Card sx={sectionCardSx}>
+				<CardContent sx={{ p: 0 }}>
+					<SectionHeader
+						number="03"
+						title="Post-Approval Vendor Status"
+						subtitle="Track whether Purchase has actually placed the approved order with the vendor."
+					/>
+
+					<Box sx={infoGridSx}>
+						<Info
+							label="Vendor Order Status"
+							value={
+								entry.poStatus
+							}
+						/>
+
+						<Info
+							label="Vendor Order Reference"
+							value={
+								entry.vendorOrderReference
+							}
+						/>
+
+						<Info
+							label="Acknowledgement No."
+							value={
+								entry.vendorAcknowledgementNo
+							}
+						/>
+
+						<Info
+							label="Vendor Expected Date"
+							value={
+								entry.vendorExpectedDate
+							}
+						/>
+
+						<Info
+							label="Order Placed By"
+							value={
+								entry.vendorOrderPlacedBy
+							}
+						/>
+
+						<Info
+							label="Order Placed At"
+							value={formatDateTime(
+								entry.vendorOrderPlacedAt
+							)}
+						/>
 					</Box>
 				</CardContent>
 			</Card>
@@ -1713,17 +2339,6 @@ export default function VenFlowDetailPage() {
 						>
 							Accept Inventory
 						</Button>
-
-						<Button
-							variant="contained"
-							disabled={saving || !canInformProduction}
-							onClick={() =>
-								run(() => venflowApi.informProduction(id))
-							}
-							sx={primaryBtnSx}
-						>
-							Inform Production
-						</Button>
 					</Box>
 				</CardContent>
 			</Card>
@@ -1736,8 +2351,8 @@ export default function VenFlowDetailPage() {
 				<CardContent sx={{ p: 0 }}>
 					<SectionHeader
 						number="01"
-						title="Issue Material to Production"
-						subtitle="Issue reserved or accepted veneer material to production team"
+						title="Issue to Production"
+						subtitle="Issue reserved or QC OK Store Inventory material to Harender / process team"
 					/>
 
 					<Box sx={formGridSx}>
@@ -1803,13 +2418,13 @@ export default function VenFlowDetailPage() {
 				<CardContent sx={{ p: 0 }}>
 					<SectionHeader
 						number="01"
-						title="Processing / Production"
-						subtitle="Add production details, start process and close production work"
+						title="Veneer Processing"
+						subtitle="Save processing responsibility, start processing, then record used qty, wastage, balance and output image"
 					/>
 
 					<Box sx={formGridSx}>
 						<TextField
-							label="Production Details"
+							label="Processing Details"
 							value={productionDetailsForm.productionDetails}
 							onChange={(e) =>
 								setProductionDetailsForm((p) => ({
@@ -1912,7 +2527,7 @@ export default function VenFlowDetailPage() {
 							}
 							sx={primaryBtnSx}
 						>
-							Save Production Details
+							Save Processing Details
 						</Button>
 
 						<Button
@@ -1930,15 +2545,73 @@ export default function VenFlowDetailPage() {
 							variant="contained"
 							disabled={saving || !canCompleteProcessing}
 							onClick={() =>
-								run(() =>
-									venflowApi.completeProcess(id, {
-										usedQty: toNumberOrNull(processingForm.usedQty),
-										wastageQty: toNumberOrNull(processingForm.wastageQty),
-										balanceQty: toNumberOrNull(processingForm.balanceQty),
-										outputImageUrl: processingForm.outputImageUrl.trim(),
-										remarks: processingForm.remarks.trim(),
-									})
-								)
+								run(() => {
+									const issued =
+										safeNumber(entry.issuedQty);
+
+									const used =
+										toNumberOrNull(
+											processingForm.usedQty
+										);
+
+									const wastage =
+										toNumberOrNull(
+											processingForm.wastageQty
+										);
+
+									if (
+										used === null ||
+										used < 0
+									) {
+										throw new Error(
+											"Used Qty is required and cannot be negative."
+										);
+									}
+
+									if (
+										wastage === null ||
+										wastage < 0
+									) {
+										throw new Error(
+											"Wastage Qty is required and cannot be negative."
+										);
+									}
+
+									const calculatedBalance =
+										issued - used - wastage;
+
+									if (calculatedBalance < 0) {
+										throw new Error(
+											"Used Qty plus Wastage Qty cannot exceed Issued Qty."
+										);
+									}
+
+									if (
+										!processingForm.outputImageUrl.trim()
+									) {
+										throw new Error(
+											"Output Image URL is required."
+										);
+									}
+
+									return venflowApi.completeProcess(
+										id,
+										{
+											usedQty: used,
+											wastageQty: wastage,
+											balanceQty:
+												calculatedBalance,
+											outputImageUrl:
+												processingForm
+													.outputImageUrl
+													.trim(),
+											remarks:
+												processingForm
+													.remarks
+													.trim(),
+										}
+									);
+								})
 							}
 							sx={primaryBtnSx}
 						>
@@ -2047,6 +2720,7 @@ export default function VenFlowDetailPage() {
 		if (activeTab === "engineering") return renderEngineeringTab();
 		if (activeTab === "store") return renderStoreTab();
 		if (activeTab === "purchase") return renderPurchaseTab();
+		if (activeTab === "director") return renderDirectorTab();
 		if (activeTab === "receiving") return renderReceivingTab();
 		if (activeTab === "issue") return renderIssueTab();
 		if (activeTab === "processing") return renderProcessingTab();
@@ -2109,6 +2783,31 @@ export default function VenFlowDetailPage() {
 									size="small"
 									sx={neutralChipSx}
 								/>
+								{[
+									"PENDING_DIRECTOR_APPROVAL",
+									"DIRECTOR_APPROVED",
+									"DIRECTOR_REJECTED",
+									"ORDER_PLACED",
+								].includes(entry.poStatus) && (
+										<Chip
+											label={getDirectorDecisionText(
+												entry
+											)}
+											size="small"
+											sx={
+												entry.poStatus ===
+													"DIRECTOR_APPROVED"
+													? directorApprovedChipSx
+													: entry.poStatus ===
+														"DIRECTOR_REJECTED"
+														? directorRejectedChipSx
+														: entry.poStatus ===
+															"ORDER_PLACED"
+															? directorOrderPlacedChipSx
+															: directorPendingChipSx
+											}
+										/>
+									)}
 							</Box>
 						</Box>
 
@@ -2174,12 +2873,155 @@ export default function VenFlowDetailPage() {
 							</Typography>
 
 							<Box sx={sideInfoGridSx}>
-								<Info label="Client" value={entry.clientName} />
-								<Info label="Material" value={entry.materialName} />
-								<Info label="Veneer" value={entry.veneerType} />
-								<Info label="Size" value={entry.size} />
-								<Info label="Vendor" value={entry.vendorName} />
-								<Info label="PO No." value={entry.poNo} />
+								<Info
+									label="Client"
+									value={entry.clientName}
+								/>
+
+								<Info
+									label="Material"
+									value={entry.materialName}
+								/>
+
+								<Info
+									label="Veneer"
+									value={entry.veneerType}
+								/>
+
+								<Info
+									label="Size"
+									value={entry.size}
+								/>
+
+								<Info
+									label="Plant"
+									value={entry.plantCode}
+								/>
+
+								<Info
+									label="Required Qty"
+									value={
+										entry.requiredQty !== null &&
+											entry.requiredQty !== undefined
+											? `${entry.requiredQty} ${entry.unit || ""}`
+											: "-"
+									}
+								/>
+
+								<Info
+									label="Vendor"
+									value={entry.vendorName}
+								/>
+
+								<Info
+									label="PO No."
+									value={entry.poNo}
+								/>
+
+								<Info
+									label="PO Amount"
+									value={formatCurrency(
+										entry.poAmount
+									)}
+								/>
+
+								<Info
+									label="PO Status"
+									value={
+										entry.poStatus
+											? String(
+												entry.poStatus
+											).replaceAll("_", " ")
+											: "-"
+									}
+								/>
+
+								<Info
+									label="Director Decision"
+									value={getDirectorDecisionText(
+										entry
+									)}
+								/>
+
+								<Info
+									label="Decision By"
+									value={getDirectorDecisionActor(
+										entry
+									)}
+								/>
+
+								<Info
+									label="Decision At"
+									value={formatDateTime(
+										getDirectorDecisionDate(
+											entry
+										)
+									)}
+								/>
+
+								<Info
+									label="Director Remarks"
+									value={
+										entry.directorApprovalRemarks
+									}
+								/>
+
+								<Info
+									label="Current Department"
+									value={
+										entry.currentDepartment ||
+										"VENFLOW"
+									}
+								/>
+
+								<Info
+									label="Current Stage"
+									value={getStageLabel(
+										entry.stage
+									)}
+								/>
+
+								<Info
+									label="Stage Since"
+									value={formatDateTime(
+										entry.stageEnteredAt
+									)}
+								/>
+
+								<Info
+									label="Last Movement"
+									value={formatDateTime(
+										entry.lastMovementAt
+									)}
+								/>
+
+								<Info
+									label="Vendor Order Ref."
+									value={
+										entry.vendorOrderReference
+									}
+								/>
+
+								<Info
+									label="Vendor Acknowledgement"
+									value={
+										entry.vendorAcknowledgementNo
+									}
+								/>
+
+								<Info
+									label="Vendor Expected Date"
+									value={
+										entry.vendorExpectedDate
+									}
+								/>
+
+								<Info
+									label="Order Placed By"
+									value={
+										entry.vendorOrderPlacedBy
+									}
+								/>
 							</Box>
 						</Card>
 
@@ -2229,6 +3071,13 @@ function Info({
 	label,
 	value,
 }) {
+	const displayValue =
+		value === null ||
+			value === undefined ||
+			String(value).trim() === ""
+			? "-"
+			: value;
+
 	return (
 		<Box sx={infoItemSx}>
 			<Typography sx={infoLabelSx}>
@@ -2236,8 +3085,128 @@ function Info({
 			</Typography>
 
 			<Typography sx={infoValueSx}>
-				{value || "-"}
+				{displayValue}
 			</Typography>
+		</Box>
+	);
+}
+
+function DirectorDecisionPanel({
+	entry,
+}) {
+	const status =
+		entry?.poStatus ||
+		"NOT_RAISED";
+
+	const normalized =
+		String(status).toUpperCase();
+
+	const tone =
+		normalized ===
+			"DIRECTOR_APPROVED"
+			? "SUCCESS"
+			: normalized ===
+				"DIRECTOR_REJECTED"
+				? "ERROR"
+				: normalized ===
+					"PENDING_DIRECTOR_APPROVAL"
+					? "WARNING"
+					: "NEUTRAL";
+
+	const title =
+		normalized ===
+			"DIRECTOR_APPROVED"
+			? "PO Approved by Director"
+			: normalized ===
+				"DIRECTOR_REJECTED"
+				? "PO Returned to Purchase"
+				: normalized ===
+					"PENDING_DIRECTOR_APPROVAL"
+					? "Awaiting Director Approval"
+					: normalized ===
+						"ORDER_PLACED"
+						? "Approved Order Placed with Vendor"
+						: "Director Decision Not Required Yet";
+
+	return (
+		<Box
+			sx={directorDecisionPanelSx(
+				tone
+			)}
+		>
+			<Box
+				sx={directorDecisionIconSx(
+					tone
+				)}
+			>
+				<GavelOutlinedIcon />
+			</Box>
+
+			<Box sx={{ minWidth: 0 }}>
+				<Typography
+					sx={
+						directorDecisionTitleSx
+					}
+				>
+					{title}
+				</Typography>
+
+				<Typography
+					sx={
+						directorDecisionStatusSx
+					}
+				>
+					Status:{" "}
+					{normalized.replaceAll(
+						"_",
+						" "
+					)}
+				</Typography>
+
+				{entry?.directorApprovalRemarks && (
+					<Typography
+						sx={
+							directorDecisionRemarksSx
+						}
+					>
+						{
+							entry.directorApprovalRemarks
+						}
+					</Typography>
+				)}
+
+				<Box
+					sx={
+						directorDecisionMetaSx
+					}
+				>
+					<span>
+						Approved by:{" "}
+						{entry?.directorApprovedBy ||
+							"-"}
+					</span>
+
+					<span>
+						Approved at:{" "}
+						{formatDateTime(
+							entry?.directorApprovedAt
+						)}
+					</span>
+
+					<span>
+						Rejected by:{" "}
+						{entry?.directorRejectedBy ||
+							"-"}
+					</span>
+
+					<span>
+						Rejected at:{" "}
+						{formatDateTime(
+							entry?.directorRejectedAt
+						)}
+					</span>
+				</Box>
+			</Box>
 		</Box>
 	);
 }
@@ -2310,7 +3279,10 @@ function TimelinePanel({
 	entry,
 	auditRows,
 }) {
-	const currentIndex = getStageIndex(entry?.stage);
+	const currentIndex =
+		getStageGroupIndex(
+			entry?.stage
+		);
 
 	return (
 		<Card sx={sideCardSx}>
@@ -2319,53 +3291,125 @@ function TimelinePanel({
 			</Typography>
 
 			<Box sx={timelineListSx}>
-				{WORKFLOW_STEPS.map((step, index) => {
-					const status =
-						index < currentIndex
-							? "done"
-							: index === currentIndex
-								? "active"
-								: "pending";
+				{VF_TRACKER_STEPS.map(
+					(step, index) => {
+						const status =
+							index <
+								currentIndex
+								? "done"
+								: index ===
+									currentIndex
+									? "active"
+									: "pending";
 
-					const audit = findAuditForStage(step.value, auditRows);
+						const audit =
+							findAuditForWorkflowStep(
+								step,
+								auditRows
+							);
 
-					const date = getDateForTimelineStep(entry, step.value, audit);
-					const actor = getActorForTimelineStep(entry, step.value, audit);
+						const date =
+							firstValue(
+								entry,
+								step.dateKeys ||
+								[]
+							) ||
+							audit?.changedAt ||
+							audit?.timestamp ||
+							"";
 
-					return (
-						<Box key={step.value} sx={timelineItemSx}>
-							<Box sx={timelineRailSx}>
-								<Box sx={timelineDotSx(status)}>
-									{status === "done" && (
-										<CheckCircleRoundedIcon sx={{ fontSize: 13 }} />
-									)}
+						const actor =
+							firstValue(
+								entry,
+								step.actorKeys ||
+								[]
+							) ||
+							audit?.changedBy ||
+							audit?.actor ||
+							audit?.createdBy ||
+							"";
 
-									{status === "active" && (
-										<RadioButtonCheckedRoundedIcon sx={{ fontSize: 13 }} />
-									)}
+						return (
+							<Box
+								key={step.key}
+								sx={
+									timelineItemSx
+								}
+							>
+								<Box
+									sx={
+										timelineRailSx
+									}
+								>
+									<Box
+										sx={timelineDotSx(
+											status
+										)}
+									>
+										{status ===
+											"done" && (
+												<CheckCircleRoundedIcon
+													sx={{
+														fontSize: 13,
+													}}
+												/>
+											)}
 
-									{status === "pending" && (
-										<RadioButtonUncheckedRoundedIcon sx={{ fontSize: 13 }} />
-									)}
+										{status ===
+											"active" && (
+												<RadioButtonCheckedRoundedIcon
+													sx={{
+														fontSize: 13,
+													}}
+												/>
+											)}
+
+										{status ===
+											"pending" && (
+												<RadioButtonUncheckedRoundedIcon
+													sx={{
+														fontSize: 13,
+													}}
+												/>
+											)}
+									</Box>
+								</Box>
+
+								<Box
+									sx={{
+										minWidth: 0,
+									}}
+								>
+									<Typography
+										sx={timelineDateSx(
+											status
+										)}
+									>
+										{formatDateTime(
+											date
+										)}
+									</Typography>
+
+									<Typography
+										sx={timelineTitleSx(
+											status
+										)}
+									>
+										{step.label}
+									</Typography>
+
+									<Typography
+										sx={
+											timelineActorSx
+										}
+									>
+										{actor || "-"}
+									</Typography>
 								</Box>
 							</Box>
-
-							<Box sx={{ minWidth: 0 }}>
-								<Typography sx={timelineDateSx(status)}>
-									{formatDateTime(date)}
-								</Typography>
-
-								<Typography sx={timelineTitleSx(status)}>
-									{step.label}
-								</Typography>
-
-								<Typography sx={timelineActorSx}>
-									{actor || "-"}
-								</Typography>
-							</Box>
-						</Box>
-					);
-				})}
+						);
+					}
+				)}
 			</Box>
 		</Card>
 	);
@@ -2387,65 +3431,26 @@ function RecentActivity({
 			{auditRows.slice(0, 5).map((row, index) => (
 				<Box key={index} sx={recentItemSx}>
 					<Typography sx={recentDateSx}>
-						{formatDateTime(row.createdAt || row.timestamp)}
+						{formatDateTime(
+							row.changedAt
+						)}
 					</Typography>
 
 					<Typography sx={recentTitleSx}>
-						{row.action || row.stage || "Activity"}
+						{row.action || "Activity"}
 					</Typography>
 
 					<Typography sx={recentTextSx}>
-						{row.message || row.remarks || row.actor || "Workflow updated"}
+						{row.newValue ||
+							row.oldValue ||
+							"Workflow updated"}
+					</Typography>
+					<Typography sx={recentTextSx}>
+						{row.changedBy || "-"}
 					</Typography>
 				</Box>
 			))}
 		</Box>
-	);
-}
-
-function getDateForTimelineStep(entry, stage, audit) {
-	const map = {
-		INDENT_CREATED: ["raisedAt", "createdAt"],
-		SENT_TO_STORE: ["sentToStoreAt"],
-		PURCHASE_REQUEST_RAISED: ["purchaseRequestRaisedAt", "sentToPurchaseAt"],
-		PO_RAISED: ["poRaisedAt"],
-		MATERIAL_RECEIVED_AT_STORE: ["materialReceivedAt", "actualInHouseDate"],
-		QC_OK: ["qcAt", "qcDoneAt"],
-		PRODUCTION_INFORMED: ["materialInformedAt", "productionInformedAt"],
-		MATERIAL_ISSUED_TO_PRODUCTION: ["issuedAt", "materialIssuedAt"],
-		PROCESSING_STARTED: ["processingStartedAt", "productionStartedAt"],
-		SUPERVISOR_INFORMED: ["supervisorInformedAt"],
-		READY_FOR_NEXT_STAGE: ["readyAt", "completedAt", "updatedAt"],
-	};
-
-	return (
-		firstValue(entry, map[stage] || []) ||
-		audit?.createdAt ||
-		audit?.timestamp ||
-		""
-	);
-}
-
-function getActorForTimelineStep(entry, stage, audit) {
-	const map = {
-		INDENT_CREATED: ["raisedBy", "createdBy"],
-		SENT_TO_STORE: ["sentToStoreBy"],
-		PURCHASE_REQUEST_RAISED: ["purchaseRequestRaisedBy", "sentToPurchaseBy"],
-		PO_RAISED: ["poRaisedBy"],
-		MATERIAL_RECEIVED_AT_STORE: ["materialReceivedBy"],
-		QC_OK: ["qcBy"],
-		PRODUCTION_INFORMED: ["materialInformedBy", "productionInformedBy"],
-		MATERIAL_ISSUED_TO_PRODUCTION: ["issuedBy"],
-		PROCESSING_STARTED: ["processingStartedBy", "productionStartedBy"],
-		SUPERVISOR_INFORMED: ["supervisorInformedBy"],
-		READY_FOR_NEXT_STAGE: ["readyBy", "completedBy"],
-	};
-
-	return (
-		firstValue(entry, map[stage] || []) ||
-		audit?.actor ||
-		audit?.createdBy ||
-		""
 	);
 }
 
@@ -2531,6 +3536,89 @@ const metaPillSx = {
 	minWidth: 0,
 };
 
+const directorDecisionPanelSx = (
+	tone
+) => {
+	const color =
+		tone === "SUCCESS"
+			? "#22c55e"
+			: tone === "ERROR"
+				? "#ef4444"
+				: tone === "WARNING"
+					? "#f59e0b"
+					: "#64748b";
+
+	return {
+		display: "grid",
+		gridTemplateColumns:
+			"48px minmax(0,1fr)",
+		gap: 1.5,
+		p: 1.8,
+		borderRadius: "14px",
+		background: `${color}10`,
+		border: `1px solid ${color}32`,
+		boxShadow:
+			`0 14px 34px ${color}12`,
+	};
+};
+
+const directorDecisionIconSx = (
+	tone
+) => {
+	const color =
+		tone === "SUCCESS"
+			? "#22c55e"
+			: tone === "ERROR"
+				? "#ef4444"
+				: tone === "WARNING"
+					? "#f59e0b"
+					: "#64748b";
+
+	return {
+		width: 44,
+		height: 44,
+		borderRadius: "14px",
+		display: "grid",
+		placeItems: "center",
+		background: `${color}18`,
+		color,
+		border: `1px solid ${color}30`,
+	};
+};
+
+const directorDecisionTitleSx = {
+	color: "#fff",
+	fontSize: 15,
+	fontWeight: 950,
+};
+
+const directorDecisionStatusSx = {
+	mt: 0.45,
+	color: "rgba(255,255,255,.62)",
+	fontSize: 11,
+	fontWeight: 850,
+	textTransform: "capitalize",
+};
+
+const directorDecisionRemarksSx = {
+	mt: 1,
+	color: "rgba(255,255,255,.76)",
+	fontSize: 12,
+	fontWeight: 700,
+	lineHeight: 1.55,
+};
+
+const directorDecisionMetaSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.5,
+	flexWrap: "wrap",
+	mt: 1.2,
+	color: "rgba(255,255,255,.46)",
+	fontSize: 10.5,
+	fontWeight: 700,
+};
+
 const metaLabelSx = {
 	color: "rgba(255,255,255,.50)",
 	fontSize: 10,
@@ -2558,6 +3646,20 @@ const snapshotGridSx = {
 	},
 	gap: "10px",
 	p: "12px 16px",
+};
+
+const directorRejectBtnSx = {
+	...outlineBtnSx,
+	color: "#fca5a5",
+	background: "rgba(239,68,68,.10)",
+	border:
+		"1px solid rgba(239,68,68,.28)",
+
+	"&:hover": {
+		background: "rgba(239,68,68,.18)",
+		borderColor:
+			"rgba(239,68,68,.42)",
+	},
 };
 
 const snapshotCardSx = (accent) => ({
@@ -2766,6 +3868,54 @@ const activeActionTextSx = {
 	fontSize: 13,
 	fontWeight: 700,
 	lineHeight: 1.6,
+};
+
+const directorPendingChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background:
+		"rgba(245,158,11,.14)",
+	color: "#fbbf24",
+	border:
+		"1px solid rgba(245,158,11,.28)",
+	fontWeight: 850,
+	fontSize: 11,
+};
+
+const directorApprovedChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background:
+		"rgba(34,197,94,.14)",
+	color: "#86efac",
+	border:
+		"1px solid rgba(34,197,94,.28)",
+	fontWeight: 850,
+	fontSize: 11,
+};
+
+const directorRejectedChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background:
+		"rgba(239,68,68,.14)",
+	color: "#fca5a5",
+	border:
+		"1px solid rgba(239,68,68,.28)",
+	fontWeight: 850,
+	fontSize: 11,
+};
+
+const directorOrderPlacedChipSx = {
+	height: 24,
+	borderRadius: "999px",
+	background:
+		"rgba(6,182,212,.14)",
+	color: "#67e8f9",
+	border:
+		"1px solid rgba(6,182,212,.28)",
+	fontWeight: 850,
+	fontSize: 11,
 };
 
 const activeActionMetaSx = {

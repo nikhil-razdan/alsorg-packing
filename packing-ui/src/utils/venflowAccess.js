@@ -22,7 +22,9 @@ export const VENFLOW_ROLES = {
 	ENGINEERING: "VENFLOW_ENGINEERING",
 	STORE: "VENFLOW_STORE",
 	PURCHASE: "VENFLOW_PURCHASE",
+	DIRECTOR: "VENFLOW_DIRECTOR",
 	PRODUCTION: "VENFLOW_PRODUCTION",
+	DIRECTOR: "VENFLOW_DIRECTOR",
 	SUPERVISOR: "VENFLOW_SUPERVISOR",
 };
 
@@ -72,6 +74,19 @@ export const isVenFlowPurchase = (role) => {
 		isVenFlowAdminOrManager(cleanRole) ||
 		cleanRole === VENFLOW_ROLES.PURCHASE
 	);
+};
+
+export const canApproveVenFlowPo = (role) =>
+	isVenFlowDirector(role);
+
+
+
+export const canOpenDirectorDesk = (role) =>
+	isVenFlowDirector(role);
+
+export const isVenFlowDirector = (role) => {
+	const cleanRole = getVenFlowRole(role);
+	return cleanRole === VENFLOW_ROLES.ADMIN;
 };
 
 export const isVenFlowProduction = (role) => {
@@ -178,12 +193,20 @@ export const canAccessVenFlowScreen = (screen, role) => {
 		return canOpenPurchaseDesk(cleanRole);
 	}
 
+	if (screen === "director") {
+		return canOpenDirectorDesk(cleanRole);
+	}
+
 	if (screen === "processing") {
 		return canOpenProcessingDesk(cleanRole);
 	}
 
 	if (screen === "production") {
 		return canOpenProcessingDesk(cleanRole);
+	}
+
+	if (screen === "director") {
+		return canOpenDirectorDesk(cleanRole);
 	}
 
 	if (screen === "supervisor") {
@@ -200,7 +223,10 @@ export const canAccessVenFlowScreen = (screen, role) => {
 export const defaultVenFlowPathForRole = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
-	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+	if (
+		cleanRole === VENFLOW_ROLES.ADMIN ||
+		cleanRole === VENFLOW_ROLES.MANAGER
+	) {
 		return "/venflow/dashboard";
 	}
 
@@ -208,7 +234,13 @@ export const defaultVenFlowPathForRole = (role) => {
 		return "/venflow/dashboard";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.ENGINEERING) {
+	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+		return "/venflow/director";
+	}
+
+	if (
+		cleanRole === VENFLOW_ROLES.ENGINEERING
+	) {
 		return "/venflow/create";
 	}
 
@@ -216,16 +248,26 @@ export const defaultVenFlowPathForRole = (role) => {
 		return "/venflow/store";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PURCHASE) {
+	if (
+		cleanRole === VENFLOW_ROLES.PURCHASE
+	) {
 		return "/venflow/purchase";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
+	if (
+		cleanRole === VENFLOW_ROLES.PRODUCTION
+	) {
 		return "/venflow/production";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.SUPERVISOR) {
-		return "/venflow/production";
+	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+		return "/venflow/director";
+	}
+
+	if (
+		cleanRole === VENFLOW_ROLES.SUPERVISOR
+	) {
+		return "/venflow/supervisor";
 	}
 
 	return "/modules";

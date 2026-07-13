@@ -169,6 +169,26 @@ public class VenFlowAccessService {
         }
     }
 
+    public boolean isDirector() {
+        /*
+         * Temporary implementation:
+         * ADMIN currently performs Director actions.
+         *
+         * Later replace with:
+         * return isAdmin()
+         * || "VENFLOW_DIRECTOR".equals(currentRole());
+         */
+        return isAdmin();
+    }
+
+    public void requireDirector() {
+        if (!isDirector()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Director approval access required");
+        }
+    }
+
     public void requireEngineering() {
         if (!isEngineering()) {
             throw new ResponseStatusException(

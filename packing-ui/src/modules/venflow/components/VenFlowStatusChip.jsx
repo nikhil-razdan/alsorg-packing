@@ -1,63 +1,57 @@
 import React from "react";
+
 import { Chip } from "@mui/material";
 
 const STATUS_CONFIG = {
 	AVAILABLE_IN_STORE: {
 		label: "Available in Store",
-		bg: "#dcfce7",
-		color: "#166534",
+		color: "#22c55e",
+	},
+	AVAILABLE: {
+		label: "Available",
+		color: "#22c55e",
 	},
 	NOT_AVAILABLE: {
 		label: "Not Available",
-		bg: "#fee2e2",
-		color: "#991b1b",
+		color: "#ef4444",
 	},
 	PARTIALLY_AVAILABLE: {
 		label: "Partially Available",
-		bg: "#fef3c7",
-		color: "#92400e",
+		color: "#f59e0b",
 	},
 	PENDING: {
 		label: "Pending",
-		bg: "#ffedd5",
-		color: "#9a3412",
+		color: "#94a3b8",
 	},
 	HOLD: {
-		label: "Hold",
-		bg: "#e5e7eb",
-		color: "#374151",
+		label: "Hold / Return",
+		color: "#ef4444",
 	},
 };
 
-export default function VenFlowStatusChip({ status }) {
-	if (!status) {
-		return (
-			<Chip
-				label="Not Updated"
-				size="small"
-				sx={{
-					background: "#f1f5f9",
-					color: "#64748b",
-					fontWeight: 800,
-				}}
-			/>
-		);
-	}
-
-	const config = STATUS_CONFIG[status] || {
-		label: status,
-		bg: "#f1f5f9",
-		color: "#334155",
-	};
+export default function VenFlowStatusChip({
+	status,
+}) {
+	const config =
+		STATUS_CONFIG[status] || {
+			label: status || "Not Updated",
+			color: "#94a3b8",
+		};
 
 	return (
 		<Chip
 			label={config.label}
 			size="small"
 			sx={{
-				background: config.bg,
+				height: 24,
+				borderRadius: 999,
+				background:
+					`${config.color}20`,
 				color: config.color,
+				border:
+					`1px solid ${config.color}38`,
 				fontWeight: 900,
+				fontSize: 10.5,
 			}}
 		/>
 	);

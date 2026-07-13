@@ -43,11 +43,11 @@ const normalizePlantCode = (value) => {
 
 	return String(
 		value.plantCode ||
-			value.code ||
-			value.name ||
-			value.plant ||
-			value.value ||
-			""
+		value.code ||
+		value.name ||
+		value.plant ||
+		value.value ||
+		""
 	)
 		.trim()
 		.toUpperCase();
@@ -113,6 +113,7 @@ export default function VenFlowCreatePage() {
 		requiredQty: "",
 		unit: "SHEET",
 		bomReference: "",
+		sampleImageUrl: "",
 		remarks: "",
 	});
 
@@ -185,8 +186,8 @@ export default function VenFlowCreatePage() {
 				setPlantOptions([]);
 				setError(
 					err?.response?.data?.message ||
-						err?.response?.data?.error ||
-						"Failed to load plant list."
+					err?.response?.data?.error ||
+					"Failed to load plant list."
 				);
 			} finally {
 				setPlantLoading(false);
@@ -247,6 +248,11 @@ export default function VenFlowCreatePage() {
 				return;
 			}
 
+			if (!form.sampleImageUrl.trim()) {
+				setError("Sample Image is required.");
+				return;
+			}
+
 			setSaving(true);
 
 			const res = await venflowApi.createEntry({
@@ -259,6 +265,7 @@ export default function VenFlowCreatePage() {
 				veneerType: form.veneerType.trim(),
 				thickness: form.thickness.trim(),
 				size: form.size.trim(),
+				sampleImageUrl: form.sampleImageUrl.trim(),
 				requiredQty: form.requiredQty,
 				unit: form.unit,
 				bomReference: form.bomReference.trim(),
@@ -275,9 +282,9 @@ export default function VenFlowCreatePage() {
 		} catch (err) {
 			setError(
 				err?.response?.data?.message ||
-					err?.response?.data?.error ||
-					err?.response?.data ||
-					"Failed to create VenFlow entry."
+				err?.response?.data?.error ||
+				err?.response?.data ||
+				"Failed to create VenFlow entry."
 			);
 		} finally {
 			setSaving(false);
@@ -301,11 +308,36 @@ export default function VenFlowCreatePage() {
 			</Box>
 
 			<Box sx={stepperSx}>
-				<Step active number="1" title="Requirement Details" sub="Enter basic requirement info" />
-				<Step number="2" title="Store & Stock Review" sub="Check availability" />
-				<Step number="3" title="Engineering / BOM" sub="Link product details" />
-				<Step number="4" title="Store Decision" sub="Reserve or raise request" />
-				<Step number="5" title="Review & Submit" sub="Confirm & create" />
+				<Step
+					active
+					number="1"
+					title="Engineering BOM / Indent"
+					sub="PD, drawing, client, qty and image"
+				/>
+
+				<Step
+					number="2"
+					title="AKG Store Review"
+					sub="Check project stock"
+				/>
+
+				<Step
+					number="3"
+					title="Stock / Purchase"
+					sub="Reserve or raise PR"
+				/>
+
+				<Step
+					number="4"
+					title="Issue / Processing"
+					sub="Harender / process team"
+				/>
+
+				<Step
+					number="5"
+					title="Closure"
+					sub="Supervisor and next stage"
+				/>
 			</Box>
 
 			<Box sx={mainGridSx}>
@@ -418,6 +450,15 @@ export default function VenFlowCreatePage() {
 							label="Size"
 							value={form.size}
 							onChange={(e) => update("size", e.target.value)}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Sample Image URL"
+							value={form.sampleImageUrl}
+							onChange={(e) => update("sampleImageUrl", e.target.value)}
+							required
+							helperText="Mandatory traceability image from Engineering / sample approval."
 							sx={fieldSx}
 						/>
 

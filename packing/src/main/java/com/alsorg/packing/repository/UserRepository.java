@@ -1,6 +1,7 @@
 package com.alsorg.packing.repository;
 
 import java.util.Optional;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -15,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsername(String username);
 
     boolean existsByUsernameIgnoreCase(String username);
+
+    List<User> findAllByRoleIgnoreCase(String role);
 
     boolean existsByUsernameAndIdNot(
             String username,

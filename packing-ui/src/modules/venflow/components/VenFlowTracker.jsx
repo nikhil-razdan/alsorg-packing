@@ -1,58 +1,32 @@
 import React from "react";
+
 import {
 	Box,
 	Typography,
 } from "@mui/material";
 
-import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import CheckRoundedIcon
+	from "@mui/icons-material/CheckRounded";
 
-const MILESTONES = [
-	{
-		key: "REQUEST_CREATED",
-		label: "Request Created",
-	},
-	{
-		key: "STORE_CHECK",
-		label: "Store Check",
-	},
-	{
-		key: "PO_RAISED",
-		label: "PO Raised",
-	},
-	{
-		key: "PRODUCTION_STARTED",
-		label: "Production Started",
-	},
-	{
-		key: "COMPLETED",
-		label: "Completed",
-	},
-];
+import {
+	VF_TRACKER_STEPS,
+	getStageGroupIndex,
+} from "../venflowWorkflow";
 
-const STAGE_TO_INDEX = {
-	INDENT_CREATED: 0,
+const firstValue = (entry, keys) => {
+	for (const key of keys) {
+		const value = entry?.[key];
 
-	SENT_TO_STORE: 1,
-	STORE_REVIEWED: 1,
-	STOCK_AVAILABLE: 1,
-	MATERIAL_RESERVED: 1,
-	PURCHASE_REQUEST_RAISED: 1,
+		if (
+			value !== null &&
+			value !== undefined &&
+			String(value).trim() !== ""
+		) {
+			return value;
+		}
+	}
 
-	PO_RAISED: 2,
-	MATERIAL_RECEIVED_AT_STORE: 2,
-	GRN_DONE: 2,
-	QC_PENDING: 2,
-	QC_OK: 2,
-	MATERIAL_ACCEPTED_IN_STORE: 2,
-	PRODUCTION_INFORMED: 2,
-	PRODUCTION_DETAILS_ADDED: 2,
-	MATERIAL_ISSUED_TO_PRODUCTION: 2,
-
-	PROCESSING_STARTED: 3,
-
-	PROCESS_COMPLETED: 4,
-	SUPERVISOR_INFORMED: 4,
-	READY_FOR_NEXT_STAGE: 4,
+	return "";
 };
 
 const formatDateTime = (value) => {
@@ -63,79 +37,83 @@ const formatDateTime = (value) => {
 		.slice(0, 16);
 };
 
-const getStageDate = (entry, index) => {
-	if (!entry) return "—";
-
-	if (index === 0) {
-		return formatDateTime(entry.raisedAt || entry.createdAt);
-	}
-
-	if (index === 1) {
-		return formatDateTime(
-			entry.storeReviewedAt ||
-			entry.sentToStoreAt ||
-			entry.updatedAt
-		);
-	}
-
-	if (index === 2) {
-		return formatDateTime(
-			entry.poRaisedAt ||
-			entry.poDate ||
-			entry.updatedAt
-		);
-	}
-
-	if (index === 3) {
-		return formatDateTime(
-			entry.processingStartedAt ||
-			entry.productionStartedAt
-		);
-	}
-
-	return formatDateTime(
-		entry.processCompletedAt ||
-		entry.jobDoneAt ||
-		entry.updatedAt
-	);
-};
-
 export default function VenFlowTracker({
 	stage,
 	entry,
 }) {
 	const activeIndex =
-		STAGE_TO_INDEX[stage] ?? 0;
+		getStageGroupIndex(stage);
 
 	return (
 		<Box sx={trackerSx}>
-			{MILESTONES.map((step, index) => {
-				const completed = index < activeIndex;
-				const active = index === activeIndex;
-				const pending = index > activeIndex;
+			{VF_TRACKER_STEPS.map(
+				(step, index) => {
+					const completed =
+						index < activeIndex;
 
-				return (
-					<Box key={step.key} sx={stepWrapSx}>
-						<Box sx={lineSx(completed, active, index)} />
+					const active =
+						index === activeIndex;
 
-						<Box sx={circleSx(completed, active, pending)}>
-							{completed ? (
-								<CheckRoundedIcon sx={{ fontSize: 18 }} />
-							) : (
-								index + 1
-							)}
+					const pending =
+						index > activeIndex;
+
+					const date =
+						firstValue(
+							entry,
+							step.dateKeys
+						);
+
+					return (
+						<Box
+							key={step.key}
+							sx={stepWrapSx}
+						>
+							<Box
+								sx={lineSx(
+									completed,
+									active,
+									index
+								)}
+							/>
+
+							<Box
+								sx={circleSx(
+									completed,
+									active,
+									pending
+								)}
+							>
+								{completed ? (
+									<CheckRoundedIcon
+										sx={{
+											fontSize: 18,
+										}}
+									/>
+								) : (
+									index + 1
+								)}
+							</Box>
+
+							<Typography
+								sx={labelSx(
+									completed,
+									active
+								)}
+							>
+								{step.label}
+							</Typography>
+
+							<Typography
+								sx={dateSx}
+							>
+								{formatDateTime(
+									date
+								)}
+							</Typography>
 						</Box>
-
-						<Typography sx={labelSx(completed, active)}>
-							{step.label}
-						</Typography>
-
-						<Typography sx={dateSx}>
-							{getStageDate(entry, index)}
-						</Typography>
-					</Box>
-				);
-			})}
+					);
+				}
+			)}
 		</Box>
 	);
 }
@@ -143,17 +121,24 @@ export default function VenFlowTracker({
 const trackerSx = {
 	width: "100%",
 	display: "grid",
+
 	gridTemplateColumns: {
 		xs: "1fr",
-		md: "repeat(5, minmax(0,1fr))",
+		sm: "repeat(2,minmax(0,1fr))",
+		md: "repeat(5,minmax(0,1fr))",
+		xl: "repeat(10,minmax(0,1fr))",
 	},
+
 	alignItems: "start",
 	position: "relative",
 	py: 2,
+
 	px: {
 		xs: 1,
 		md: 2,
 	},
+
+	rowGap: 2,
 };
 
 const stepWrapSx = {
@@ -162,13 +147,20 @@ const stepWrapSx = {
 	flexDirection: "column",
 	alignItems: "center",
 	textAlign: "center",
-	minHeight: 82,
+	minHeight: 92,
 };
 
-const lineSx = (completed, active, index) => ({
+const lineSx = (
+	completed,
+	active,
+	index
+) => ({
 	display: {
 		xs: "none",
-		md: index === 0 ? "none" : "block",
+		xl:
+			index === 0
+				? "none"
+				: "block",
 	},
 	position: "absolute",
 	top: 15,
@@ -183,7 +175,11 @@ const lineSx = (completed, active, index) => ({
 	zIndex: 0,
 });
 
-const circleSx = (completed, active, pending) => ({
+const circleSx = (
+	completed,
+	active,
+	pending
+) => ({
 	width: 34,
 	height: 34,
 	borderRadius: "50%",
@@ -210,21 +206,27 @@ const circleSx = (completed, active, pending) => ({
 	opacity: pending ? 0.72 : 1,
 });
 
-const labelSx = (completed, active) => ({
+const labelSx = (
+	completed,
+	active
+) => ({
 	mt: 1.1,
 	color:
 		completed || active
 			? "#fff"
 			: "rgba(255,255,255,.58)",
-	fontSize: 12,
-	fontWeight: completed || active ? 900 : 750,
+	fontSize: 11.5,
+	fontWeight:
+		completed || active
+			? 900
+			: 750,
 	lineHeight: 1.25,
 });
 
 const dateSx = {
 	mt: 0.4,
 	color: "rgba(255,255,255,.48)",
-	fontSize: 10.5,
+	fontSize: 10,
 	fontWeight: 650,
 	lineHeight: 1.25,
 };

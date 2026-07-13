@@ -1,108 +1,371 @@
 import API from "../../../services/api";
 
 export const venflowApi = {
+	/*
+	 * =========================================================
+	 * DASHBOARD / LISTS
+	 * =========================================================
+	 */
+
 	getDashboard: () =>
 		API.get("/venflow/dashboard"),
 
 	getEntries: (params) =>
-		API.get("/venflow/entries", { params }),
+		API.get(
+			"/venflow/entries",
+			{ params }
+		),
 
 	getPurchaseDesk: (params) =>
-		API.get("/venflow/purchase-desk", { params }),
+		API.get(
+			"/venflow/purchase-desk",
+			{ params }
+		),
+
+	getSupervisorDesk: (params) =>
+		API.get(
+			"/venflow/supervisor-desk",
+			{ params }
+		),
 
 	getEntry: (id) =>
-		API.get(`/venflow/entries/${id}`),
+		API.get(
+			`/venflow/entries/${id}`
+		),
 
 	createEntry: (payload) =>
-		API.post("/venflow/entries", payload),
+		API.post(
+			"/venflow/entries",
+			payload
+		),
 
-	updateProductDetails: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/product-details`, payload),
+	/*
+	 * =========================================================
+	 * DIRECTOR DESK
+	 * =========================================================
+	 */
 
-	updateStoreStatus: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/store-status`, payload),
+	getDirectorDashboard: (params) =>
+		API.get(
+			"/venflow/director/dashboard",
+			{ params }
+		),
 
-	sendToPurchase: (id) =>
-		API.patch(`/venflow/entries/${id}/send-to-purchase`),
+	getDirectorPoQueue: (params) =>
+		API.get(
+			"/venflow/director/po-queue",
+			{ params }
+		),
 
-	updateRequisition: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/requisition`, payload),
+	directorApprovePo: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/director-approve-po`,
+			payload
+		),
 
-	updateOrderedQty: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/ordered-qty`, payload),
+	directorRejectPo: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/director-reject-po`,
+			payload
+		),
 
-	raisePo: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/po-raise`, payload),
+	placeVendorOrder: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/place-vendor-order`,
+			payload
+		),
 
-	approvePo: (id) =>
-		API.patch(`/venflow/entries/${id}/po-approve`),
+	/*
+	 * =========================================================
+	 * ENGINEERING
+	 * =========================================================
+	 */
 
-	updateExpectedDate: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/expected-date`, payload),
+	updateProductDetails: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/product-details`,
+			payload
+		),
 
-	updateReceivedQty: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/received-qty`, payload),
-
-	materialReceived: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/material-received`, payload),
-
-	informProduction: (id) =>
-		API.patch(`/venflow/entries/${id}/inform-production`),
-
-	startProduction: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/production-start`, payload),
-
-	jobDone: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/job-done`, payload),
-
-	updateRemarks: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/remarks`, payload),
-
-	completeEntry: (id) =>
-		API.patch(`/venflow/entries/${id}/complete`),
-
-	getReportSummary: () =>
-		API.get("/venflow/reports/summary"),
-
-	getAudit: (id) =>
-		API.get(`/venflow/audit/${id}`),
+	updateExpectedDate: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/expected-date`,
+			payload
+		),
 
 	sendToStore: (id) =>
-		API.patch(`/venflow/entries/${id}/send-to-store`),
+		API.patch(
+			`/venflow/entries/${id}/send-to-store`
+		),
 
-	storeReview: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/store-review`, payload),
+	/*
+	 * =========================================================
+	 * STORE
+	 * =========================================================
+	 */
 
-	reserveMaterial: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/reserve-material`, payload),
+	storeReview: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/store-review`,
+			payload
+		),
 
-	raisePurchaseRequest: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/purchase-request`, payload),
+	reserveMaterial: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/reserve-material`,
+			payload
+		),
 
-	grnEntry: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/grn`, payload),
+	raisePurchaseRequest: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/purchase-request`,
+			payload
+		),
 
-	qualityCheck: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/qc`, payload),
+	materialReceived: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/material-received`,
+			payload
+		),
+
+	grnEntry: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/grn`,
+			payload
+		),
+
+	qualityCheck: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/qc`,
+			payload
+		),
 
 	acceptInventory: (id) =>
-		API.patch(`/venflow/entries/${id}/accept-inventory`),
+		API.patch(
+			`/venflow/entries/${id}/accept-inventory`
+		),
 
-	productionDetails: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/production-details`, payload),
+	issueMaterial: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/issue-material`,
+			payload
+		),
 
-	issueMaterial: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/issue-material`, payload),
+	/*
+	 * =========================================================
+	 * PURCHASE
+	 * =========================================================
+	 */
+
+	raisePo: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/po-raise`,
+			payload
+		),
+
+	/*
+	 * =========================================================
+	 * PROCESSING
+	 * =========================================================
+	 */
+
+	productionDetails: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/production-details`,
+			payload
+		),
 
 	startProcessing: (id) =>
-		API.patch(`/venflow/entries/${id}/processing-start`),
+		API.patch(
+			`/venflow/entries/${id}/processing-start`
+		),
 
-	completeProcess: (id, payload) =>
-		API.patch(`/venflow/entries/${id}/process-complete`, payload),
+	completeProcess: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/process-complete`,
+			payload
+		),
 
 	supervisorInformed: (id) =>
-		API.patch(`/venflow/entries/${id}/supervisor-informed`),
+		API.patch(
+			`/venflow/entries/${id}/supervisor-informed`
+		),
 
 	readyForNextStage: (id) =>
-		API.patch(`/venflow/entries/${id}/ready-next-stage`),
+		API.patch(
+			`/venflow/entries/${id}/ready-next-stage`
+		),
+
+	/*
+	 * =========================================================
+	 * AUDIT / STAGE HISTORY / NOTIFICATIONS
+	 * =========================================================
+	 */
+
+	getAudit: (id) =>
+		API.get(
+			`/venflow/audit/${id}`
+		),
+
+	getStageHistory: (id) =>
+		API.get(
+			`/venflow/entries/${id}/stage-history`
+		),
+
+	getNotifications: (params) =>
+		API.get(
+			"/venflow/notifications",
+			{ params }
+		),
+
+	getUnreadNotificationCount: () =>
+		API.get(
+			"/venflow/notifications/unread-count"
+		),
+
+	markNotificationRead: (id) =>
+		API.patch(
+			`/venflow/notifications/${id}/read`
+		),
+
+	/*
+	 * =========================================================
+	 * REPORTS
+	 * =========================================================
+	 */
+
+	getReportSummary: (params) =>
+		API.get(
+			"/venflow/reports/summary",
+			{ params }
+		),
+
+	/*
+	 * =========================================================
+	 * LEGACY COMPATIBILITY
+	 * =========================================================
+	 */
+
+	updateStoreStatus: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/store-status`,
+			payload
+		),
+
+	sendToPurchase: (id) =>
+		API.patch(
+			`/venflow/entries/${id}/send-to-purchase`
+		),
+
+	updateRequisition: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/requisition`,
+			payload
+		),
+
+	updateOrderedQty: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/ordered-qty`,
+			payload
+		),
+
+	updateReceivedQty: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/received-qty`,
+			payload
+		),
+
+	informProduction: (id) =>
+		API.patch(
+			`/venflow/entries/${id}/inform-production`
+		),
+
+	startProduction: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/production-start`,
+			payload
+		),
+
+	jobDone: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/job-done`,
+			payload
+		),
+
+	updateRemarks: (
+		id,
+		payload
+	) =>
+		API.patch(
+			`/venflow/entries/${id}/remarks`,
+			payload
+		),
+
+	completeEntry: (id) =>
+		API.patch(
+			`/venflow/entries/${id}/complete`
+		),
 };

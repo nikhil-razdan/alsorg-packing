@@ -334,20 +334,42 @@ export default function VenFlowListPage() {
         setPlantOptions(uniquePlants(assignedPlants));
     };
 
-    const load = async (targetPage = page) => {
+    const load = async (
+        targetPage = page,
+        activeFilters = filters
+    ) => {
         try {
             setLoading(true);
 
-            const res = await venflowApi.getEntries({
-                page: targetPage,
-                size,
-                search: filters.search || undefined,
-                plantCode: filters.plantCode || undefined,
-                stage: filters.stage || undefined,
-                storeStatus: filters.storeStatus || undefined,
-                poStatus: filters.poStatus || undefined,
-                productionStatus: filters.productionStatus || undefined,
-            });
+            const res =
+                await venflowApi.getEntries({
+                    page: targetPage,
+                    size,
+
+                    search:
+                        activeFilters.search ||
+                        undefined,
+
+                    plantCode:
+                        activeFilters.plantCode ||
+                        undefined,
+
+                    stage:
+                        activeFilters.stage ||
+                        undefined,
+
+                    storeStatus:
+                        activeFilters.storeStatus ||
+                        undefined,
+
+                    poStatus:
+                        activeFilters.poStatus ||
+                        undefined,
+
+                    productionStatus:
+                        activeFilters.productionStatus ||
+                        undefined,
+                });
 
             const data = res.data || {};
             const nextRows = data.content || [];
@@ -426,20 +448,22 @@ export default function VenFlowListPage() {
     };
 
     const clearFilters = () => {
-        setFilters({
+        const cleared = {
             search: "",
             plantCode: "",
             stage: "",
             storeStatus: "",
             poStatus: "",
             productionStatus: "",
-        });
+        };
 
+        setFilters(cleared);
         setPage(0);
+        setSelectedId("");
+        setSelectedEntry(null);
+        setAuditRows([]);
 
-        setTimeout(() => {
-            load(0);
-        }, 0);
+        load(0, cleared);
     };
 
     const updateFilter = (key, value) => {
@@ -482,15 +506,23 @@ export default function VenFlowListPage() {
         },
         {
             title: "Avg. Cycle Time",
-            value: "8.6",
-            valueSuffix: "days",
+            value:
+                dashboard.averageCycleDays ??
+                "—",
+            valueSuffix:
+                dashboard.averageCycleDays != null
+                    ? "days"
+                    : "",
             trend: "Operational average",
             icon: <AccessTimeOutlinedIcon />,
             accent: "#38bdf8",
         },
         {
             title: "OTD Performance",
-            value: "92%",
+            value:
+                dashboard.onTimeDeliveryPercent != null
+                    ? `${dashboard.onTimeDeliveryPercent}%`
+                    : "—",
             trend: "On-time delivery",
             icon: <TrackChangesOutlinedIcon />,
             accent: "#8b5cf6",

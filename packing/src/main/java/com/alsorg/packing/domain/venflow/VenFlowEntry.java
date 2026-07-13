@@ -77,6 +77,18 @@ public class VenFlowEntry {
     @Column(name = "raised_at")
     public LocalDateTime raisedAt;
 
+    @Column(name = "sent_to_store_by")
+    public String sentToStoreBy;
+
+    @Column(name = "sent_to_store_at")
+    public LocalDateTime sentToStoreAt;
+
+    @Column(name = "store_reviewed_by")
+    public String storeReviewedBy;
+
+    @Column(name = "store_reviewed_at")
+    public LocalDateTime storeReviewedAt;
+
     @Column(name = "sent_to_purchase_by")
     public String sentToPurchaseBy;
 
@@ -144,7 +156,22 @@ public class VenFlowEntry {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    public VenFlowStage stage = VenFlowStage.HEADER_CREATED;
+    public VenFlowStage stage = VenFlowStage.INDENT_CREATED;
+
+    @Column(name = "current_department")
+    public String currentDepartment;
+
+    @Column(name = "stage_entered_at")
+    public LocalDateTime stageEnteredAt;
+
+    @Column(name = "stage_changed_by")
+    public String stageChangedBy;
+
+    @Column(name = "last_movement_at")
+    public LocalDateTime lastMovementAt;
+
+    @Column(name = "priority")
+    public String priority = "NORMAL";
 
     @Column(length = 2000)
     public String remarks;
@@ -200,6 +227,45 @@ public class VenFlowEntry {
     @Column(name = "purchase_request_at")
     public LocalDateTime purchaseRequestAt;
 
+    @Column(name = "po_approval_requested_by")
+    public String poApprovalRequestedBy;
+
+    @Column(name = "po_approval_requested_at")
+    public LocalDateTime poApprovalRequestedAt;
+
+    @Column(name = "director_approval_remarks", length = 2000)
+    public String directorApprovalRemarks;
+
+    @Column(name = "director_approved_by")
+    public String directorApprovedBy;
+
+    @Column(name = "director_approved_at")
+    public LocalDateTime directorApprovedAt;
+
+    @Column(name = "director_rejected_by")
+    public String directorRejectedBy;
+
+    @Column(name = "director_rejected_at")
+    public LocalDateTime directorRejectedAt;
+
+    @Column(name = "vendor_order_reference")
+    public String vendorOrderReference;
+
+    @Column(name = "vendor_acknowledgement_no")
+    public String vendorAcknowledgementNo;
+
+    @Column(name = "vendor_order_placed_by")
+    public String vendorOrderPlacedBy;
+
+    @Column(name = "vendor_order_placed_at")
+    public LocalDateTime vendorOrderPlacedAt;
+
+    @Column(name = "vendor_expected_date")
+    public LocalDate vendorExpectedDate;
+
+    @Column(name = "vendor_order_remarks", length = 2000)
+    public String vendorOrderRemarks;
+
     @Column(name = "grn_no")
     public String grnNo;
 
@@ -224,6 +290,12 @@ public class VenFlowEntry {
 
     @Column(name = "qc_remarks", length = 2000)
     public String qcRemarks;
+
+    @Column(name = "inventory_accepted_by")
+    public String inventoryAcceptedBy;
+
+    @Column(name = "inventory_accepted_at")
+    public LocalDateTime inventoryAcceptedAt;
 
     @Column(name = "rejection_reason", length = 2000)
     public String rejectionReason;
@@ -295,23 +367,35 @@ public class VenFlowEntry {
         updatedAt = now;
 
         if (stage == null) {
-            stage = VenFlowStage.PRODUCTION_RAISED;
-        }
-
-        if (poStatus == null) {
-            poStatus = VenFlowPoStatus.NOT_RAISED;
-        }
-
-        if (productionStatus == null) {
-            productionStatus = VenFlowProductionStatus.NOT_STARTED;
-        }
-
-        if (stage == null) {
             stage = VenFlowStage.INDENT_CREATED;
+        }
+
+        if (stageEnteredAt == null) {
+            stageEnteredAt = now;
+        }
+
+        if (lastMovementAt == null) {
+            lastMovementAt = now;
+        }
+
+        if (currentDepartment == null || currentDepartment.isBlank()) {
+            currentDepartment = "ENGINEERING";
+        }
+
+        if (priority == null || priority.isBlank()) {
+            priority = "NORMAL";
         }
 
         if (stockDecision == null) {
             stockDecision = VenFlowStockDecision.PENDING;
+        }
+
+        if (storeStatus == null) {
+            storeStatus = VenFlowStoreStatus.PENDING;
+        }
+
+        if (poStatus == null) {
+            poStatus = VenFlowPoStatus.NOT_RAISED;
         }
 
         if (qcStatus == null) {
@@ -324,6 +408,10 @@ public class VenFlowEntry {
 
         if (processingStatus == null) {
             processingStatus = VenFlowProcessingStatus.NOT_STARTED;
+        }
+
+        if (productionStatus == null) {
+            productionStatus = VenFlowProductionStatus.NOT_STARTED;
         }
     }
 

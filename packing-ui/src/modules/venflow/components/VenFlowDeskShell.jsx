@@ -16,6 +16,18 @@ import {
 	Typography,
 } from "@mui/material";
 
+import SupervisorAccountOutlinedIcon
+	from "@mui/icons-material/SupervisorAccountOutlined";
+
+import {
+	PRODUCTION_VIEW_OPTIONS,
+	STORE_VIEW_OPTIONS,
+	SUPERVISOR_VIEW_OPTIONS,
+	VF_STAGE,
+	getStageLabel,
+	isVenFlowClosed,
+} from "../venflowWorkflow";
+
 import { useNavigate } from "react-router-dom";
 
 import { venflowApi } from "../api/venflowApi";
@@ -43,29 +55,6 @@ import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-
-const STORE_VIEW_OPTIONS = [
-	["SENT_TO_STORE", "Pending Store Review"],
-	["STORE_REVIEWED", "Store Reviewed / PR Pending"],
-	["STOCK_AVAILABLE", "Stock Available / Reserve Pending"],
-	["MATERIAL_RESERVED", "Material Reserved"],
-	["PO_RAISED", "PO Raised / Receiving Pending"],
-	["MATERIAL_RECEIVED_AT_STORE", "Material Received / GRN Pending"],
-	["GRN_DONE", "GRN Done / QC Pending"],
-	["QC_OK", "QC OK / Accept Pending"],
-	["MATERIAL_ACCEPTED_IN_STORE", "Accepted / Inform Production"],
-	["PRODUCTION_INFORMED", "Production Informed"],
-];
-
-const PRODUCTION_VIEW_OPTIONS = [
-	["PRODUCTION_INFORMED", "Production Informed / Details Pending"],
-	["PRODUCTION_DETAILS_ADDED", "Production Details Added"],
-	["MATERIAL_ISSUED_TO_PRODUCTION", "Material Issued / Start Pending"],
-	["PROCESSING_STARTED", "Processing Started"],
-	["PROCESS_COMPLETED", "Process Completed / Supervisor Pending"],
-	["SUPERVISOR_INFORMED", "Supervisor Informed"],
-	["READY_FOR_NEXT_STAGE", "Ready for Next Stage"],
-];
 
 const PO_STATUS_OPTIONS = [
 	["", "All"],
@@ -114,12 +103,26 @@ const DESK_META = {
 		subtitle:
 			"Track production informed items, add production details, start processing and close work.",
 		activeTab: "production",
-		defaultStage: "PRODUCTION_INFORMED",
+		defaultStage:
+			VF_STAGE.MATERIAL_ISSUED_TO_PRODUCTION,
 		searchLabel: "Search PD / Client / Veneer / Material",
 		viewLabel: "Production View",
 		viewOptions: PRODUCTION_VIEW_OPTIONS,
 		primaryColor: "#22c55e",
 		icon: <EngineeringOutlinedIcon />,
+	},
+	supervisor: {
+		title: "Supervisor Desk",
+		subtitle:
+			"Review completed veneer / flitch processing, confirm closure and mark the requirement Ready for Next Stage.",
+		activeTab: "supervisor",
+		defaultStage: VF_STAGE.SUPERVISOR_INFORMED,
+		searchLabel:
+			"Search PD / Client / Material / Responsible Person",
+		viewLabel: "Supervisor View",
+		viewOptions: SUPERVISOR_VIEW_OPTIONS,
+		primaryColor: "#38bdf8",
+		icon: <SupervisorAccountOutlinedIcon />,
 	},
 };
 
@@ -149,11 +152,7 @@ const isDelayed = (row) => {
 };
 
 const isCompleted = (row) =>
-	[
-		"READY_FOR_NEXT_STAGE",
-		"SUPERVISOR_INFORMED",
-		"PROCESS_COMPLETED",
-	].includes(row?.stage);
+	isVenFlowClosed(row?.stage);
 
 const getPriority = (row) => {
 	if (isCompleted(row)) return "Low";
@@ -181,32 +180,6 @@ const getPriority = (row) => {
 	}
 
 	return "Low";
-};
-
-const getStageLabel = (stage) => {
-	const map = {
-		INDENT_CREATED: "Request Created",
-		SENT_TO_STORE: "Sent to Store",
-		STORE_REVIEWED: "Store Reviewed",
-		STOCK_AVAILABLE: "Stock Available",
-		MATERIAL_RESERVED: "Material Reserved",
-		PURCHASE_REQUEST_RAISED: "Purchase Request Raised",
-		PO_RAISED: "PO Raised",
-		MATERIAL_RECEIVED_AT_STORE: "Material Received",
-		GRN_DONE: "GRN Done",
-		QC_PENDING: "QC Pending",
-		QC_OK: "QC OK",
-		MATERIAL_ACCEPTED_IN_STORE: "Accepted in Store",
-		PRODUCTION_INFORMED: "Production Informed",
-		PRODUCTION_DETAILS_ADDED: "Production Details Added",
-		MATERIAL_ISSUED_TO_PRODUCTION: "Issued to Production",
-		PROCESSING_STARTED: "Processing Started",
-		PROCESS_COMPLETED: "Process Completed",
-		SUPERVISOR_INFORMED: "Supervisor Informed",
-		READY_FOR_NEXT_STAGE: "Ready for Next Stage",
-	};
-
-	return map[stage] || stage || "Request Created";
 };
 
 const buildDeskKpis = (desk, dashboard, rows, total) => {
@@ -397,33 +370,51 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 		}
 	};
 
-	const load = async (targetPage = page) => {
+	const load = async (
+		targetPage = page,
+		activeFilters = filters
+	) => {
 		try {
 			setLoading(true);
 
 			const params =
 				desk === "purchase"
 					? {
-							page: targetPage,
-							size,
-							search: filters.search || undefined,
-							poStatus: filters.poStatus || undefined,
-					  }
+						page: targetPage,
+						size,
+						search: activeFilters.search || undefined,
+						poStatus: activeFilters.poStatus || undefined,
+					}
 					: {
-							page: targetPage,
-							size,
-							search: filters.search || undefined,
-							stage: filters.stage || undefined,
-							storeStatus:
-								desk === "store"
-									? filters.storeStatus || undefined
-									: undefined,
-					  };
+						page: targetPage,
+						size,
+						search: activeFilters.search || undefined,
+						stage: activeFilters.stage || undefined,
+						storeStatus:
+							desk === "store"
+								? activeFilters.storeStatus || undefined
+								: undefined,
+					};
 
-			const res =
-				desk === "purchase"
-					? await venflowApi.getPurchaseDesk(params)
-					: await venflowApi.getEntries(params);
+			let res;
+
+			if (desk === "purchase") {
+				res = await venflowApi.getPurchaseDesk(
+					params
+				);
+			} else if (desk === "supervisor") {
+				res = await venflowApi.getSupervisorDesk({
+					page: targetPage,
+					size,
+					search:
+						activeFilters.search ||
+						undefined,
+				});
+			} else {
+				res = await venflowApi.getEntries(
+					params
+				);
+			}
 
 			const data = res.data || {};
 			const nextRows = data.content || [];
@@ -468,8 +459,9 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 
 		setFilters(cleared);
 		setPage(0);
+		setSelectedId("");
 
-		setTimeout(() => load(0), 0);
+		load(0, cleared);
 	};
 
 	return (
@@ -505,6 +497,11 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 					active={desk === "production"}
 					label="Production Desk"
 					onClick={() => navigate("/venflow/production")}
+				/>
+				<DeskTab
+					active={desk === "supervisor"}
+					label="Supervisor Desk"
+					onClick={() => navigate("/venflow/supervisor")}
 				/>
 			</Box>
 
@@ -693,8 +690,8 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 													row.poStatus === "APPROVED"
 														? "#22c55e"
 														: row.poStatus === "RAISED"
-														? "#3b82f6"
-														: "#64748b"
+															? "#3b82f6"
+															: "#64748b"
 												)}
 											/>
 
@@ -914,8 +911,8 @@ function PreviewPanel({
 					{desk === "store"
 						? "Review stock availability, reserve material or raise purchase request."
 						: desk === "purchase"
-						? "Update purchase details, raise PO or wait for approval."
-						: "Update production details, start processing or close completed work."}
+							? "Update purchase details, raise PO or wait for approval."
+							: "Update production details, start processing or close completed work."}
 				</Typography>
 			</Box>
 
@@ -1275,8 +1272,8 @@ const priorityChipSx = (priority) => {
 		priority === "High"
 			? "#ef4444"
 			: priority === "Medium"
-			? "#f59e0b"
-			: "#22c55e";
+				? "#f59e0b"
+				: "#22c55e";
 
 	return statusChipSx(color);
 };

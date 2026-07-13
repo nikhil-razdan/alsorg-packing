@@ -114,7 +114,20 @@ export default function VenFlowReportsPage() {
 
 			setError("");
 
-			const res = await venflowApi.getReportSummary();
+			const res =
+				await venflowApi.getReportSummary({
+					plantCode:
+						filters.plantCode ||
+						undefined,
+
+					fromDate:
+						filters.fromDate ||
+						undefined,
+
+					toDate:
+						filters.toDate ||
+						undefined,
+				});
 			setSummary(res.data || {});
 		} catch (err) {
 			setSummary({});
@@ -133,7 +146,20 @@ export default function VenFlowReportsPage() {
 				setLoading(true);
 				setError("");
 
-				const res = await venflowApi.getReportSummary();
+				const res =
+					await venflowApi.getReportSummary({
+						plantCode:
+							filters.plantCode ||
+							undefined,
+
+						fromDate:
+							filters.fromDate ||
+							undefined,
+
+						toDate:
+							filters.toDate ||
+							undefined,
+					});
 
 				if (!active) return;
 

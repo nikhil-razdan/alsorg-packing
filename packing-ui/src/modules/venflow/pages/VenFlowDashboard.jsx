@@ -78,8 +78,7 @@ export default function VenFlowDashboard() {
 
 	const canCreate =
 		isAdminManager ||
-		role === "VENFLOW_ENGINEERING" ||
-		role === "VENFLOW_PRODUCTION";
+		role === "VENFLOW_ENGINEERING";
 
 	const load = async () => {
 		try {
@@ -289,14 +288,22 @@ export default function VenFlowDashboard() {
 						<MiniMetric
 							icon={<AccessTimeOutlinedIcon />}
 							label="Average Cycle"
-							value="3 days"
+							value={
+								data.averageCycleDays != null
+									? `${data.averageCycleDays} days`
+									: "—"
+							}
 							accent="#3b82f6"
 						/>
 
 						<MiniMetric
 							icon={<CheckCircleOutlineOutlinedIcon />}
 							label="On-Time Delivery"
-							value="67%"
+							value={
+								data.onTimeDeliveryPercent != null
+									? `${data.onTimeDeliveryPercent}%`
+									: "—"
+							}
 							accent="#22c55e"
 						/>
 
@@ -310,7 +317,11 @@ export default function VenFlowDashboard() {
 						<MiniMetric
 							icon={<VerifiedUserOutlinedIcon />}
 							label="Data Completeness"
-							value="92%"
+							value={
+								data.dataCompletenessPercent != null
+									? `${data.dataCompletenessPercent}%`
+									: "—"
+							}
 							accent="#8b5cf6"
 						/>
 					</Box>
@@ -868,8 +879,8 @@ const activityDotSx = (index) => ({
 		index % 3 === 0
 			? "rgba(34,197,94,.15)"
 			: index % 3 === 1
-			? "rgba(59,130,246,.15)"
-			: "rgba(245,158,11,.15)",
+				? "rgba(59,130,246,.15)"
+				: "rgba(245,158,11,.15)",
 	border: "1px solid rgba(255,255,255,.08)",
 
 	"&:after": {
@@ -881,8 +892,8 @@ const activityDotSx = (index) => ({
 			index % 3 === 0
 				? "#22c55e"
 				: index % 3 === 1
-				? "#3b82f6"
-				: "#f59e0b",
+					? "#3b82f6"
+					: "#f59e0b",
 	},
 });
 

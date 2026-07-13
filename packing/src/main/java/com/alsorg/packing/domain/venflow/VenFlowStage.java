@@ -2,6 +2,9 @@ package com.alsorg.packing.domain.venflow;
 
 public enum VenFlowStage {
 
+    /*
+     * Active process stages.
+     */
     INDENT_CREATED,
     SENT_TO_STORE,
     STORE_REVIEWED,
@@ -10,6 +13,10 @@ public enum VenFlowStage {
     MATERIAL_RESERVED,
 
     PURCHASE_REQUEST_RAISED,
+    PO_PENDING_DIRECTOR_APPROVAL,
+    PO_APPROVED_BY_DIRECTOR,
+    PO_REJECTED_BY_DIRECTOR,
+    ORDER_PLACED_WITH_VENDOR,
     PO_RAISED,
     MATERIAL_RECEIVED_AT_STORE,
     GRN_DONE,
@@ -21,8 +28,6 @@ public enum VenFlowStage {
     MATERIAL_ACCEPTED_IN_STORE,
     MATERIAL_REJECTED_HOLD_RETURN,
 
-    PRODUCTION_INFORMED,
-    PRODUCTION_DETAILS_ADDED,
     MATERIAL_ISSUED_TO_PRODUCTION,
 
     PROCESSING_STARTED,
@@ -31,7 +36,8 @@ public enum VenFlowStage {
     READY_FOR_NEXT_STAGE,
 
     /*
-     * Legacy values kept temporarily for old rows.
+     * Legacy compatibility only.
+     * Do not create new records using these values.
      */
     HEADER_CREATED,
     PRODUCT_DETAILS_FILLED,
@@ -48,6 +54,8 @@ public enum VenFlowStage {
     PO_APPROVED,
     MATERIAL_RECEIVED,
     MATERIAL_INFORMED,
+    PRODUCTION_INFORMED,
+    PRODUCTION_DETAILS_ADDED,
     PRODUCTION_STARTED,
     JOB_DONE
 }
