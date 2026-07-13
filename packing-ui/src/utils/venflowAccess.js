@@ -16,28 +16,45 @@ const readStoredRole = () => {
 	}
 };
 
-export const VENFLOW_ROLES = {
+export const VENFLOW_ROLES = Object.freeze({
 	ADMIN: "ADMIN",
 	MANAGER: "VENFLOW_MANAGER",
 	ENGINEERING: "VENFLOW_ENGINEERING",
 	STORE: "VENFLOW_STORE",
 	PURCHASE: "VENFLOW_PURCHASE",
+
+	/*
+	 * Reserved for the future dedicated Director role.
+	 * Currently ADMIN performs Director actions.
+	 */
 	DIRECTOR: "VENFLOW_DIRECTOR",
+
 	PRODUCTION: "VENFLOW_PRODUCTION",
-	DIRECTOR: "VENFLOW_DIRECTOR",
 	SUPERVISOR: "VENFLOW_SUPERVISOR",
-};
+});
 
 export const getVenFlowRole = (role) => {
-	return normalizeRole(role || readStoredRole());
+	return normalizeRole(
+		role || readStoredRole()
+	);
 };
 
+/* =========================================================
+ * BASE ROLE CHECKS
+ * ========================================================= */
+
 export const isVenFlowAdmin = (role) => {
-	return getVenFlowRole(role) === VENFLOW_ROLES.ADMIN;
+	return (
+		getVenFlowRole(role) ===
+		VENFLOW_ROLES.ADMIN
+	);
 };
 
 export const isVenFlowManager = (role) => {
-	return getVenFlowRole(role) === VENFLOW_ROLES.MANAGER;
+	return (
+		getVenFlowRole(role) ===
+		VENFLOW_ROLES.MANAGER
+	);
 };
 
 export const isVenFlowAdminOrManager = (role) => {
@@ -48,6 +65,27 @@ export const isVenFlowAdminOrManager = (role) => {
 		cleanRole === VENFLOW_ROLES.MANAGER
 	);
 };
+
+/*
+ * Current implementation:
+ * ADMIN acts as Director.
+ *
+ * Later, when VENFLOW_DIRECTOR is enabled, change this to:
+ *
+ * return (
+ *     cleanRole === VENFLOW_ROLES.ADMIN ||
+ *     cleanRole === VENFLOW_ROLES.DIRECTOR
+ * );
+ */
+export const isVenFlowDirector = (role) => {
+	const cleanRole = getVenFlowRole(role);
+
+	return cleanRole === VENFLOW_ROLES.ADMIN;
+};
+
+/* =========================================================
+ * DEPARTMENT ROLE CHECKS
+ * ========================================================= */
 
 export const isVenFlowEngineering = (role) => {
 	const cleanRole = getVenFlowRole(role);
@@ -76,19 +114,6 @@ export const isVenFlowPurchase = (role) => {
 	);
 };
 
-export const canApproveVenFlowPo = (role) =>
-	isVenFlowDirector(role);
-
-
-
-export const canOpenDirectorDesk = (role) =>
-	isVenFlowDirector(role);
-
-export const isVenFlowDirector = (role) => {
-	const cleanRole = getVenFlowRole(role);
-	return cleanRole === VENFLOW_ROLES.ADMIN;
-};
-
 export const isVenFlowProduction = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
@@ -111,9 +136,25 @@ export const isVenFlowSupervisor = (role) => {
 	);
 };
 
+/* =========================================================
+ * ACTION PERMISSIONS
+ * ========================================================= */
+
+export const canApproveVenFlowPo = (role) => {
+	return isVenFlowDirector(role);
+};
+
 export const canCreateVenFlowRequirement = (role) => {
 	return isVenFlowEngineering(role);
 };
+
+export const canActAsAnyVenFlowUser = (role) => {
+	return isVenFlowAdmin(role);
+};
+
+/* =========================================================
+ * SCREEN PERMISSIONS
+ * ========================================================= */
 
 export const canOpenEngineeringDesk = (role) => {
 	return isVenFlowEngineering(role);
@@ -125,6 +166,10 @@ export const canOpenStoreDesk = (role) => {
 
 export const canOpenPurchaseDesk = (role) => {
 	return isVenFlowPurchase(role);
+};
+
+export const canOpenDirectorDesk = (role) => {
+	return isVenFlowDirector(role);
 };
 
 export const canOpenProcessingDesk = (role) => {
@@ -143,27 +188,31 @@ export const canOpenFullTracker = (role) => {
 	return isVenFlowAdminOrManager(role);
 };
 
-export const canApproveVenFlowPo = (role) => {
-	return isVenFlowAdminOrManager(role);
-};
+/* =========================================================
+ * CENTRAL SCREEN ACCESS
+ * ========================================================= */
 
-export const canActAsAnyVenFlowUser = (role) => {
-	return isVenFlowAdmin(role);
-};
-
-export const canAccessVenFlowScreen = (screen, role) => {
+export const canAccessVenFlowScreen = (
+	screen,
+	role
+) => {
 	const cleanRole = getVenFlowRole(role);
 
 	/*
-	 * ADMIN can open every VenFlow screen.
+	 * ADMIN has access to every VenFlow screen,
+	 * including Director Desk.
 	 */
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
 		return true;
 	}
 
-	if (cleanRole === VENFLOW_ROLES.MANAGER) {
-		return true;
-	}
+	/*
+	 * Do not return true globally for MANAGER here.
+	 *
+	 * A global manager return previously allowed Manager to open
+	 * Director Desk and approve POs. Screen access must therefore
+	 * remain explicit below.
+	 */
 
 	if (screen === "dashboard") {
 		return true;
@@ -178,68 +227,82 @@ export const canAccessVenFlowScreen = (screen, role) => {
 	}
 
 	if (screen === "create") {
-		return canCreateVenFlowRequirement(cleanRole);
+		return canCreateVenFlowRequirement(
+			cleanRole
+		);
 	}
 
 	if (screen === "engineering") {
-		return canOpenEngineeringDesk(cleanRole);
+		return canOpenEngineeringDesk(
+			cleanRole
+		);
 	}
 
 	if (screen === "store") {
-		return canOpenStoreDesk(cleanRole);
+		return canOpenStoreDesk(
+			cleanRole
+		);
 	}
 
 	if (screen === "purchase") {
-		return canOpenPurchaseDesk(cleanRole);
+		return canOpenPurchaseDesk(
+			cleanRole
+		);
 	}
 
 	if (screen === "director") {
-		return canOpenDirectorDesk(cleanRole);
+		return canOpenDirectorDesk(
+			cleanRole
+		);
 	}
 
-	if (screen === "processing") {
-		return canOpenProcessingDesk(cleanRole);
-	}
-
-	if (screen === "production") {
-		return canOpenProcessingDesk(cleanRole);
-	}
-
-	if (screen === "director") {
-		return canOpenDirectorDesk(cleanRole);
+	if (
+		screen === "processing" ||
+		screen === "production"
+	) {
+		return canOpenProcessingDesk(
+			cleanRole
+		);
 	}
 
 	if (screen === "supervisor") {
-		return canOpenSupervisorDesk(cleanRole);
+		return canOpenSupervisorDesk(
+			cleanRole
+		);
 	}
 
 	if (screen === "entries") {
-		return canOpenFullTracker(cleanRole);
+		return canOpenFullTracker(
+			cleanRole
+		);
 	}
 
 	return false;
 };
 
-export const defaultVenFlowPathForRole = (role) => {
+/* =========================================================
+ * DEFAULT LANDING ROUTE
+ * ========================================================= */
+
+export const defaultVenFlowPathForRole = (
+	role
+) => {
 	const cleanRole = getVenFlowRole(role);
 
-	if (
-		cleanRole === VENFLOW_ROLES.ADMIN ||
-		cleanRole === VENFLOW_ROLES.MANAGER
-	) {
-		return "/venflow/dashboard";
+	/*
+	 * ADMIN currently acts as Director.
+	 */
+	if (cleanRole === VENFLOW_ROLES.ADMIN) {
+		return "/venflow/director";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.MANAGER) {
 		return "/venflow/dashboard";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.ADMIN) {
-		return "/venflow/director";
-	}
-
 	if (
-		cleanRole === VENFLOW_ROLES.ENGINEERING
+		cleanRole ===
+		VENFLOW_ROLES.ENGINEERING
 	) {
 		return "/venflow/create";
 	}
@@ -249,42 +312,60 @@ export const defaultVenFlowPathForRole = (role) => {
 	}
 
 	if (
-		cleanRole === VENFLOW_ROLES.PURCHASE
+		cleanRole ===
+		VENFLOW_ROLES.PURCHASE
 	) {
 		return "/venflow/purchase";
 	}
 
 	if (
-		cleanRole === VENFLOW_ROLES.PRODUCTION
+		cleanRole ===
+		VENFLOW_ROLES.PRODUCTION
 	) {
 		return "/venflow/production";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.ADMIN) {
-		return "/venflow/director";
-	}
-
 	if (
-		cleanRole === VENFLOW_ROLES.SUPERVISOR
+		cleanRole ===
+		VENFLOW_ROLES.SUPERVISOR
 	) {
 		return "/venflow/supervisor";
+	}
+
+	/*
+	 * Future dedicated Director role.
+	 * This route remains ready even though Director access currently
+	 * operates through ADMIN.
+	 */
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.DIRECTOR
+	) {
+		return "/venflow/director";
 	}
 
 	return "/modules";
 };
 
+/* =========================================================
+ * DISPLAY LABELS
+ * ========================================================= */
+
 export const venFlowRoleLabel = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
-		return "Admin Super Access";
+		return "Admin / Director Access";
 	}
 
 	if (cleanRole === VENFLOW_ROLES.MANAGER) {
 		return "VenFlow Manager";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.ENGINEERING) {
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.ENGINEERING
+	) {
 		return "Engineering User";
 	}
 
@@ -292,15 +373,31 @@ export const venFlowRoleLabel = (role) => {
 		return "AKG Store User";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PURCHASE) {
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.PURCHASE
+	) {
 		return "Purchase User";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.PRODUCTION) {
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.DIRECTOR
+	) {
+		return "VenFlow Director";
+	}
+
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.PRODUCTION
+	) {
 		return "Processing User";
 	}
 
-	if (cleanRole === VENFLOW_ROLES.SUPERVISOR) {
+	if (
+		cleanRole ===
+		VENFLOW_ROLES.SUPERVISOR
+	) {
 		return "Supervisor User";
 	}
 

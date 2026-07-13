@@ -570,13 +570,13 @@ public class VenFlowService {
                         UUID id) {
                 return directorApprovePo(
                                 id,
-                                new RemarksRequest(
+                                new DirectorDecisionRequest(
                                                 "Approved through legacy PO approval endpoint."));
         }
 
         public VenFlowEntry directorApprovePo(
                         UUID id,
-                        RemarksRequest req) {
+                        DirectorDecisionRequest req) {
                 access.requireDirector();
 
                 VenFlowEntry entry = getVisibleOrThrow(id);
@@ -600,6 +600,7 @@ public class VenFlowService {
                 entry.directorApprovedAt = LocalDateTime.now();
 
                 entry.directorRejectedBy = null;
+
                 entry.directorRejectedAt = null;
 
                 VenFlowEntry saved = transition(
@@ -608,7 +609,11 @@ public class VenFlowService {
                                 "PO_APPROVED_BY_DIRECTOR",
                                 "Director approved PO "
                                                 + entry.poNo
-                                                + ".");
+                                                + (hasText(
+                                                                entry.directorApprovalRemarks)
+                                                                                ? ". Remarks: "
+                                                                                                + entry.directorApprovalRemarks
+                                                                                : "."));
 
                 notificationService
                                 .publishPoApproved(saved);
@@ -618,7 +623,7 @@ public class VenFlowService {
 
         public VenFlowEntry directorRejectPo(
                         UUID id,
-                        RemarksRequest req) {
+                        DirectorDecisionRequest req) {
                 access.requireDirector();
 
                 require(
@@ -648,6 +653,7 @@ public class VenFlowService {
                 entry.directorRejectedAt = LocalDateTime.now();
 
                 entry.directorApprovedBy = null;
+
                 entry.directorApprovedAt = null;
 
                 VenFlowEntry saved = transition(

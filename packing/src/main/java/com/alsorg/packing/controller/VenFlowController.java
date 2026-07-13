@@ -19,9 +19,9 @@ import java.util.UUID;
 public class VenFlowController {
 
     private final VenFlowService service;
-     private final VenFlowNotificationService notificationService;
+    private final VenFlowNotificationService notificationService;
 
-    public VenFlowController(VenFlowService service,  VenFlowNotificationService notificationService) {
+    public VenFlowController(VenFlowService service, VenFlowNotificationService notificationService) {
         this.service = service;
         this.notificationService = notificationService;
     }
@@ -299,14 +299,18 @@ public class VenFlowController {
     public VenFlowEntry directorApprovePo(
             @PathVariable UUID id,
             @RequestBody(required = false) DirectorDecisionRequest req) {
-        return service.directorApprovePo(id, req);
+        return service.directorApprovePo(
+                id,
+                req);
     }
 
     @PatchMapping("/entries/{id}/director-reject-po")
     public VenFlowEntry directorRejectPo(
             @PathVariable UUID id,
             @RequestBody DirectorDecisionRequest req) {
-        return service.directorRejectPo(id, req);
+        return service.directorRejectPo(
+                id,
+                req);
     }
 
     @GetMapping("/entries/{id}/stage-history")
