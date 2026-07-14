@@ -1648,9 +1648,12 @@ public class ChalaanPdfService {
                 return switch (clean) {
                         case "KG" -> "Kg";
                         case "LTR" -> "Ltr";
+                        case "GRAM", "GM", "GMS" -> "Gram";
                         case "ML" -> "ML";
                         case "SQFT" -> "sqft";
                         case "FT" -> "ft";
+                        case "MM" -> "MM";
+                        case "SET", "SETS" -> "Set";
                         case "PIECES" -> "pieces";
                         case "PCS" -> "pieces";
                         case "PC" -> "pieces";

@@ -399,6 +399,9 @@ public class CustomChallanService {
         return switch (clean) {
             case "KG" -> "KG";
             case "LTR" -> "LTR";
+            case "GRAM", "GM", "GMS" -> "GRAM";
+            case "MM" -> "MM";
+            case "SET", "SETS" -> "SET";
             case "ML" -> "ML";
             case "SQFT" -> "SQFT";
             case "FT" -> "FT";

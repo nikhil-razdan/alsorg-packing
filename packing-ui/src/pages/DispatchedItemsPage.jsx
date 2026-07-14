@@ -2475,7 +2475,7 @@ const tokenizeSmartSearch = (value) => {
 				.trim()
 		)
 		.map((token) => {
-			
+
 			if (token.includes(":")) {
 				return token.split(":").slice(1).join(":").trim();
 			}
@@ -2768,8 +2768,20 @@ const getCustomChallanTypeLabel = (value) => {
 
 const CUSTOM_CHALLAN_UOM_OPTIONS = [
 	{
+		value: "PIECES",
+		label: "Pieces",
+	},
+	{
+		value: "SET",
+		label: "Set",
+	},
+	{
 		value: "KG",
 		label: "Kg",
+	},
+	{
+		value: "GRAM",
+		label: "Gram",
 	},
 	{
 		value: "LTR",
@@ -2788,8 +2800,8 @@ const CUSTOM_CHALLAN_UOM_OPTIONS = [
 		label: "ft",
 	},
 	{
-		value: "PIECES",
-		label: "pieces",
+		value: "MM",
+		label: "MM",
 	},
 	{
 		value: "MTR",

@@ -20,6 +20,50 @@ export async function fetchVehicles() {
   return res.data;
 }
 
+export async function createDriver(payload = {}) {
+  const name =
+    String(payload.name || "").trim();
+
+  if (!name) {
+    throw new Error(
+      "Driver name is required."
+    );
+  }
+
+  const res =
+    await api.post(
+      "/api/logistics/drivers",
+      {
+        name,
+      }
+    );
+
+  return res.data;
+}
+
+export async function createVehicle(payload = {}) {
+  const vehicleNumber =
+    String(
+      payload.vehicleNumber || ""
+    ).trim();
+
+  if (!vehicleNumber) {
+    throw new Error(
+      "Vehicle number is required."
+    );
+  }
+
+  const res =
+    await api.post(
+      "/api/logistics/vehicles",
+      {
+        vehicleNumber,
+      }
+    );
+
+  return res.data;
+}
+
 export async function fetchDispatchedChallans() {
   const res =
     await api.get(

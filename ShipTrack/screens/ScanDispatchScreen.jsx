@@ -8,6 +8,9 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+import DriverVehicleFields from
+  "../components/DriverVehicleFields";
+
 import {
   View,
   Text,
@@ -409,6 +412,33 @@ export default function ScanDispatchScreen({
     }));
   };
 
+  const addCreatedMaster = (
+    type,
+    created
+  ) => {
+    if (type === "driver") {
+      setDrivers((prev) => [
+        created,
+        ...prev.filter(
+          (item) =>
+            String(item.id) !==
+            String(created.id)
+        ),
+      ]);
+
+      return;
+    }
+
+    setVehicles((prev) => [
+      created,
+      ...prev.filter(
+        (item) =>
+          String(item.id) !==
+          String(created.id)
+      ),
+    ]);
+  };
+
   const handleBarcodeScanned =
     async ({
       data,
@@ -585,24 +615,6 @@ export default function ScanDispatchScreen({
       return;
     }
 
-    if (!form.driverId) {
-      showNotice(
-        "warning",
-        "Driver required",
-        "Please select driver."
-      );
-      return;
-    }
-
-    if (!form.vehicleId) {
-      showNotice(
-        "warning",
-        "Vehicle required",
-        "Please select vehicle."
-      );
-      return;
-    }
-
     const selectedDispatchTime =
       toBackendDateTime(form.tripStart);
 
@@ -622,18 +634,21 @@ export default function ScanDispatchScreen({
         await dispatchSingleScan({
           scanText,
           rawScan: scanText,
-          driverId: form.driverId,
-          vehicleId: form.vehicleId,
 
-          /*
-           * Send both fields.
-           * dispatchTime fixes PDF/challan date.
-           * tripStart keeps old scanner trip logic safe.
-           */
-          dispatchTime: selectedDispatchTime,
-          tripStart: selectedDispatchTime,
+          driverId:
+            form.driverId || null,
 
-          remarks: form.remarks || "",
+          vehicleId:
+            form.vehicleId || null,
+
+          dispatchTime:
+            selectedDispatchTime,
+
+          tripStart:
+            selectedDispatchTime,
+
+          remarks:
+            form.remarks || "",
         });
 
       Alert.alert(
@@ -995,98 +1010,25 @@ export default function ScanDispatchScreen({
               </Text>
 
               <Text style={styles.panelSub}>
-                Select driver, vehicle and challan date/time to dispatch this item.
+                Select an existing driver and vehicle,
+                create a new record, or leave either
+                field empty. Challan date and time
+                remain mandatory.
               </Text>
 
-              <Field label="Driver">
-                <View style={styles.selectBox}>
-                  {drivers.map((d) => (
-                    <TouchableOpacity
-                      key={d.id}
-                      style={[
-                        styles.optionChip,
-                        form.driverId === d.id
-                          ? styles.optionChipActive
-                          : null,
-                      ]}
-                      onPress={() =>
-                        update(
-                          "driverId",
-                          d.id
-                        )
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          form.driverId === d.id
-                            ? styles.optionTextActive
-                            : null,
-                        ]}
-                      >
-                        {d.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {selectedDriver ? (
-                  <Text style={styles.selectionHint}>
-                    Selected: {selectedDriver.name}
-                  </Text>
-                ) : null}
-              </Field>
-
-              <Field label="Vehicle">
-                <View style={styles.selectBox}>
-                  {vehicles.map((v) => {
-                    const vehicleLabel =
-                      v.vehicleNumber ||
-                      v.registrationNumber ||
-                      v.name ||
-                      "Vehicle";
-
-                    return (
-                      <TouchableOpacity
-                        key={v.id}
-                        style={[
-                          styles.optionChip,
-                          form.vehicleId === v.id
-                            ? styles.optionChipActive
-                            : null,
-                        ]}
-                        onPress={() =>
-                          update(
-                            "vehicleId",
-                            v.id
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.optionText,
-                            form.vehicleId === v.id
-                              ? styles.optionTextActive
-                              : null,
-                          ]}
-                        >
-                          {vehicleLabel}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {selectedVehicle ? (
-                  <Text style={styles.selectionHint}>
-                    Selected:{" "}
-                    {selectedVehicle.vehicleNumber ||
-                      selectedVehicle.registrationNumber ||
-                      selectedVehicle.name ||
-                      "Vehicle"}
-                  </Text>
-                ) : null}
-              </Field>
+              <DriverVehicleFields
+                drivers={drivers}
+                vehicles={vehicles}
+                driverId={form.driverId}
+                vehicleId={form.vehicleId}
+                onDriverChange={(value) =>
+                  update("driverId", value)
+                }
+                onVehicleChange={(value) =>
+                  update("vehicleId", value)
+                }
+                onCreated={addCreatedMaster}
+              />
 
               <TripStartPicker
                 value={form.tripStart}
