@@ -7,13 +7,6 @@ function normalizeLocalDateTime(value) {
     return null;
   }
 
-  /*
-   * IMPORTANT:
-   * Do not use new Date(value).toISOString().
-   * Mobile selected time is business local time.
-   * Backend LocalDateTime expects:
-   * 2026-07-03T14:30:00
-   */
   const text =
     String(value)
       .trim()

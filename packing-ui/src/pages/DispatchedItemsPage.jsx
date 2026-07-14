@@ -2465,11 +2465,6 @@ const tokenizeSmartSearch = (value) => {
 		return [];
 	}
 
-	/*
-	 * Supports normal words and quoted phrases:
-	 * kapil sofa fg1
-	 * "kapil menon" sofa fg1
-	 */
 	const matches =
 		text.match(/"([^"]+)"|'([^']+)'|[^\s,]+/g) || [];
 
@@ -2480,11 +2475,7 @@ const tokenizeSmartSearch = (value) => {
 				.trim()
 		)
 		.map((token) => {
-			/*
-			 * Safety/convenience:
-			 * If someone still types client:kapil,
-			 * we simply convert it to kapil.
-			 */
+			
 			if (token.includes(":")) {
 				return token.split(":").slice(1).join(":").trim();
 			}
@@ -2833,7 +2824,6 @@ const MASTER_CREATE_TARGET = {
 function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [loading, setLoading] = useState(false);
-	/* ===== SEARCH + FILTER ===== */
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState(["ALL"]);
 	const [groupBy, setGroupBy] = useState("NONE");

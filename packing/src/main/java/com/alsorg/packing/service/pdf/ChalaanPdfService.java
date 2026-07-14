@@ -7,7 +7,7 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import java.time.LocalDateTime;
-
+import java.util.ArrayList;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -42,6 +42,7 @@ public class ChalaanPdfService {
 
         private static final float FOOTER_TOP = 118;
         private static final float FOOTER_BOTTOM = 40;
+        private static final int CUSTOM_ROWS_PER_PAGE = 16;
 
         public byte[] generateChalaan(
                         ChalaanPdfData data) {
@@ -242,7 +243,7 @@ public class ChalaanPdfService {
                         throw new RuntimeException("No valid custom challan items found");
                 }
 
-                final int rowsPerPage = 16;
+                final int rowsPerPage = CUSTOM_ROWS_PER_PAGE;
 
                 int totalPages = (int) Math.ceil(items.size() / (double) rowsPerPage);
 
@@ -914,18 +915,30 @@ public class ChalaanPdfService {
                 float tableTopY = 560;
                 float headerHeight = 36;
                 float rowHeight = 24;
-                int rowsPerPage = 16;
+                int rowsPerPage = CUSTOM_ROWS_PER_PAGE;
 
+                /*
+                 * Revised column widths:
+                 * S.No = 35
+                 * Description = 185
+                 * PD No. = 90
+                 * Qty = 40
+                 * UOM = 45
+                 * Returnable = 70
+                 * Remarks = 55
+                 */
                 float x0 = LEFT; // 40
-                float x1 = 75; // S.No
-                float x2 = 285; // Description
-                float x3 = 340; // Dwg No
-                float x4 = 385; // Qty
-                float x5 = 435; // UOM
-                float x6 = 500; // Returnable / Non Returnable
-                float x7 = RIGHT; // Remarks
+                float x1 = 75;
+                float x2 = 260;
+                float x3 = 350;
+                float x4 = 390;
+                float x5 = 435;
+                float x6 = 505;
+                float x7 = RIGHT; // 560
 
-                float tableBottomY = tableTopY - headerHeight - (rowsPerPage * rowHeight);
+                float tableBottomY = tableTopY
+                                - headerHeight
+                                - (rowsPerPage * rowHeight);
 
                 drawRect(
                                 cs,
@@ -949,103 +962,191 @@ public class ChalaanPdfService {
                                 tableTopY - headerHeight);
 
                 for (int i = 0; i <= rowsPerPage; i++) {
-                        float y = tableTopY - headerHeight - (i * rowHeight);
+                        float y = tableTopY
+                                        - headerHeight
+                                        - (i * rowHeight);
 
                         drawLine(cs, x0, y, x7, y);
                 }
 
-                drawCenteredTextInBox(cs, bold, 9, x0, x1, tableTopY - 22, "S.No.");
-                drawCenteredTextInBox(cs, bold, 10, x1, x2, tableTopY - 22, "Description");
+                /* Table headings */
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                9,
+                                x0,
+                                x1,
+                                tableTopY - 22,
+                                "S.No.");
 
-                drawCenteredTextInBox(cs, bold, 9, x2, x3, tableTopY - 15, "Dwg.");
-                drawCenteredTextInBox(cs, bold, 9, x2, x3, tableTopY - 28, "No.");
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                10,
+                                x1,
+                                x2,
+                                tableTopY - 22,
+                                "Description");
 
-                drawCenteredTextInBox(cs, bold, 9, x3, x4, tableTopY - 22, "Qty");
-                drawCenteredTextInBox(cs, bold, 9, x4, x5, tableTopY - 22, "UOM");
+                // Changed from Dwg. No. to PD No.
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                9,
+                                x2,
+                                x3,
+                                tableTopY - 22,
+                                "PD No.");
 
-                drawCenteredTextInBox(cs, bold, 7, x5, x6, tableTopY - 15, "Returnable /");
-                drawCenteredTextInBox(cs, bold, 7, x5, x6, tableTopY - 28, "Non Returnable");
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                9,
+                                x3,
+                                x4,
+                                tableTopY - 22,
+                                "Qty");
 
-                drawCenteredTextInBox(cs, bold, 9, x6, x7, tableTopY - 22, "Remarks");
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                9,
+                                x4,
+                                x5,
+                                tableTopY - 22,
+                                "UOM");
 
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                7,
+                                x5,
+                                x6,
+                                tableTopY - 15,
+                                "Returnable /");
+
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                7,
+                                x5,
+                                x6,
+                                tableTopY - 28,
+                                "Non Returnable");
+
+                drawCenteredTextInBox(
+                                cs,
+                                bold,
+                                9,
+                                x6,
+                                x7,
+                                tableTopY - 22,
+                                "Remarks");
+
+                /* Table values */
                 for (int i = 0; i < pageItems.size(); i++) {
                         CustomChallanItemRequest item = pageItems.get(i);
 
-                        float rowTop = tableTopY - headerHeight - (i * rowHeight);
+                        float rowTop = tableTopY
+                                        - headerHeight
+                                        - (i * rowHeight);
 
-                        float textY = rowTop - 15;
-
-                        drawText(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         9,
-                                        x0 + 8,
-                                        textY,
-                                        String.valueOf(rowOffset + i + 1));
+                                        7,
+                                        x0,
+                                        x1,
+                                        rowTop,
+                                        rowHeight,
+                                        String.valueOf(rowOffset + i + 1),
+                                        1,
+                                        true);
 
-                        drawCustomWrappedText(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         8,
-                                        x1 + 5,
-                                        rowTop - 10,
-                                        x2 - x1 - 10,
+                                        7,
+                                        x1,
+                                        x2,
+                                        rowTop,
+                                        rowHeight,
                                         safe(item.description()),
                                         2,
-                                        9);
+                                        false);
 
-                        drawCustomWrappedText(
+                        /*
+                         * The DTO property remains drawingNo for backward compatibility,
+                         * but it is displayed in the PDF as PD No.
+                         */
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         8,
-                                        x2 + 4,
-                                        rowTop - 10,
-                                        x3 - x2 - 8,
+                                        6,
+                                        x2,
+                                        x3,
+                                        rowTop,
+                                        rowHeight,
                                         safe(item.drawingNo()),
                                         2,
-                                        9);
+                                        false);
 
-                        drawCenteredTextInBox(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         8,
+                                        6,
                                         x3,
                                         x4,
-                                        textY,
-                                        formatCustomQty(item.quantity()));
+                                        rowTop,
+                                        rowHeight,
+                                        formatCustomQty(item.quantity()),
+                                        1,
+                                        true);
 
-                        drawCenteredTextInBox(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         8,
+                                        6,
                                         x4,
                                         x5,
-                                        textY,
-                                        formatCustomUom(item.uom()));
+                                        rowTop,
+                                        rowHeight,
+                                        formatCustomUom(item.uom()),
+                                        2,
+                                        true);
 
-                        drawCustomWrappedText(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         7,
-                                        x5 + 4,
-                                        rowTop - 10,
-                                        x6 - x5 - 8,
+                                        6,
+                                        x5,
+                                        x6,
+                                        rowTop,
+                                        rowHeight,
                                         Boolean.TRUE.equals(item.returnable())
                                                         ? "Returnable"
                                                         : "Non Returnable",
                                         2,
-                                        8);
+                                        true);
 
-                        drawCustomWrappedText(
+                        drawCustomTableCellText(
                                         cs,
                                         regular,
                                         8,
-                                        x6 + 5,
-                                        rowTop - 10,
-                                        x7 - x6 - 10,
+                                        6,
+                                        x6,
+                                        x7,
+                                        rowTop,
+                                        rowHeight,
                                         safe(item.remarks()),
                                         2,
-                                        9);
+                                        false);
                 }
         }
 
@@ -1083,6 +1184,99 @@ public class ChalaanPdfService {
                                 value,
                                 2,
                                 8);
+        }
+
+        private void drawCustomTableCellText(
+                        PDPageContentStream cs,
+                        PDFont font,
+                        int preferredFontSize,
+                        int minimumFontSize,
+                        float cellLeft,
+                        float cellRight,
+                        float rowTop,
+                        float rowHeight,
+                        String text,
+                        int maxLines,
+                        boolean centered) throws IOException {
+
+                float horizontalPadding = 4f;
+
+                float maxWidth = Math.max(
+                                1f,
+                                cellRight - cellLeft - (horizontalPadding * 2));
+
+                int actualFontSize = preferredFontSize;
+
+                List<String> lines = customWrapLines(
+                                font,
+                                actualFontSize,
+                                safe(text),
+                                maxWidth);
+
+                /*
+                 * Reduce font size only when wrapping alone cannot fit the
+                 * value in the available number of lines.
+                 */
+                while (lines.size() > maxLines
+                                && actualFontSize > minimumFontSize) {
+
+                        actualFontSize--;
+
+                        lines = customWrapLines(
+                                        font,
+                                        actualFontSize,
+                                        safe(text),
+                                        maxWidth);
+                }
+
+                int visibleLineCount = Math.min(
+                                lines.size(),
+                                Math.max(maxLines, 1));
+
+                float lineHeight = actualFontSize + 1f;
+
+                float textBlockHeight = actualFontSize
+                                + ((visibleLineCount - 1) * lineHeight);
+
+                /*
+                 * Vertically centers both one-line and two-line values.
+                 */
+                float firstBaseline = rowTop
+                                - ((rowHeight - textBlockHeight) / 2f)
+                                - actualFontSize
+                                + 1f;
+
+                for (int i = 0; i < visibleLineCount; i++) {
+                        String line = lines.get(i);
+
+                        if (i == visibleLineCount - 1
+                                        && lines.size() > maxLines) {
+
+                                line = fitCustomTextWithEllipsis(
+                                                font,
+                                                actualFontSize,
+                                                line,
+                                                maxWidth);
+                        }
+
+                        float textWidth = pdfTextWidth(
+                                        font,
+                                        actualFontSize,
+                                        line);
+
+                        float drawX = centered
+                                        ? cellLeft
+                                                        + ((cellRight - cellLeft - textWidth) / 2f)
+                                        : cellLeft + horizontalPadding;
+
+                        drawText(
+                                        cs,
+                                        font,
+                                        actualFontSize,
+                                        drawX,
+                                        firstBaseline - (i * lineHeight),
+                                        line);
+                }
         }
 
         private void drawCustomWrappedText(
@@ -1129,34 +1323,66 @@ public class ChalaanPdfService {
                         int fontSize,
                         String text,
                         float maxWidth) throws IOException {
-                java.util.List<String> lines = new java.util.ArrayList<>();
+
+                List<String> lines = new ArrayList<>();
 
                 String clean = cleanPdfText(safe(text));
 
                 String[] words = clean.split("\\s+");
 
-                StringBuilder current = new StringBuilder();
+                StringBuilder currentLine = new StringBuilder();
 
                 for (String word : words) {
-                        String candidate = current.length() == 0
-                                        ? word
-                                        : current + " " + word;
+                        /*
+                         * Splits long values even when they contain no spaces,
+                         * for example: F-233,234,235,236.
+                         */
+                        List<String> pieces = splitCustomTokenToWidth(
+                                        font,
+                                        fontSize,
+                                        word,
+                                        maxWidth);
 
-                        float width = font.getStringWidth(candidate) / 1000f * fontSize;
+                        for (int pieceIndex = 0; pieceIndex < pieces.size(); pieceIndex++) {
 
-                        if (width <= maxWidth) {
-                                current = new StringBuilder(candidate);
-                        } else {
-                                if (current.length() > 0) {
-                                        lines.add(current.toString());
+                                String piece = pieces.get(pieceIndex);
+
+                                String candidate = currentLine.length() == 0
+                                                ? piece
+                                                : currentLine + " " + piece;
+
+                                if (pdfTextWidth(
+                                                font,
+                                                fontSize,
+                                                candidate) <= maxWidth) {
+
+                                        currentLine.setLength(0);
+                                        currentLine.append(candidate);
+
+                                } else {
+                                        if (currentLine.length() > 0) {
+                                                lines.add(currentLine.toString());
+                                                currentLine.setLength(0);
+                                        }
+
+                                        currentLine.append(piece);
                                 }
 
-                                current = new StringBuilder(word);
+                                /*
+                                 * An intermediate piece came from a force-split token,
+                                 * so finish that line before continuing.
+                                 */
+                                if (pieceIndex < pieces.size() - 1
+                                                && currentLine.length() > 0) {
+
+                                        lines.add(currentLine.toString());
+                                        currentLine.setLength(0);
+                                }
                         }
                 }
 
-                if (current.length() > 0) {
-                        lines.add(current.toString());
+                if (currentLine.length() > 0) {
+                        lines.add(currentLine.toString());
                 }
 
                 if (lines.isEmpty()) {
@@ -1164,6 +1390,171 @@ public class ChalaanPdfService {
                 }
 
                 return lines;
+        }
+
+        private List<String> splitCustomTokenToWidth(
+                        PDFont font,
+                        int fontSize,
+                        String token,
+                        float maxWidth) throws IOException {
+
+                List<String> pieces = new ArrayList<>();
+
+                String remaining = token == null
+                                ? ""
+                                : token.trim();
+
+                while (!remaining.isEmpty()
+                                && pdfTextWidth(
+                                                font,
+                                                fontSize,
+                                                remaining) > maxWidth) {
+
+                        int cutPosition = findLargestFittingPrefix(
+                                        font,
+                                        fontSize,
+                                        remaining,
+                                        maxWidth);
+
+                        int preferredBreak = findPreferredCustomBreak(
+                                        remaining,
+                                        cutPosition);
+
+                        if (preferredBreak > 0) {
+                                cutPosition = preferredBreak;
+                        }
+
+                        cutPosition = Math.max(
+                                        1,
+                                        Math.min(cutPosition, remaining.length()));
+
+                        String piece = remaining
+                                        .substring(0, cutPosition)
+                                        .trim();
+
+                        if (!piece.isEmpty()) {
+                                pieces.add(piece);
+                        }
+
+                        remaining = remaining
+                                        .substring(cutPosition)
+                                        .trim();
+                }
+
+                if (!remaining.isEmpty()) {
+                        pieces.add(remaining);
+                }
+
+                if (pieces.isEmpty()) {
+                        pieces.add("-");
+                }
+
+                return pieces;
+        }
+
+        private int findLargestFittingPrefix(
+                        PDFont font,
+                        int fontSize,
+                        String value,
+                        float maxWidth) throws IOException {
+
+                int largestFittingPosition = 0;
+
+                for (int i = 1; i <= value.length(); i++) {
+                        String candidate = value.substring(0, i);
+
+                        if (pdfTextWidth(
+                                        font,
+                                        fontSize,
+                                        candidate) <= maxWidth) {
+
+                                largestFittingPosition = i;
+                        } else {
+                                break;
+                        }
+                }
+
+                /*
+                 * Guarantees progress even if the available width is extremely small.
+                 */
+                return Math.max(largestFittingPosition, 1);
+        }
+
+        private int findPreferredCustomBreak(
+                        String value,
+                        int maximumPosition) {
+
+                int startIndex = Math.min(
+                                maximumPosition,
+                                value.length()) - 1;
+
+                int minimumIndex = Math.max(
+                                1,
+                                maximumPosition / 3);
+
+                for (int i = startIndex; i >= minimumIndex; i--) {
+                        char character = value.charAt(i);
+
+                        if (character == ','
+                                        || character == '-'
+                                        || character == '/'
+                                        || character == '.'
+                                        || character == ';'
+                                        || character == ':'
+                                        || character == '_'
+                                        || character == '|') {
+
+                                // Retain the separator at the end of the current line.
+                                return i + 1;
+                        }
+                }
+
+                return -1;
+        }
+
+        private float pdfTextWidth(
+                        PDFont font,
+                        int fontSize,
+                        String text) throws IOException {
+
+                String value = text == null
+                                ? ""
+                                : text;
+
+                return font.getStringWidth(value)
+                                / 1000f
+                                * fontSize;
+        }
+
+        private String fitCustomTextWithEllipsis(
+                        PDFont font,
+                        int fontSize,
+                        String text,
+                        float maxWidth) throws IOException {
+
+                String clean = cleanPdfText(safe(text));
+                String ellipsis = "...";
+
+                while (!clean.isEmpty()
+                                && pdfTextWidth(
+                                                font,
+                                                fontSize,
+                                                clean + ellipsis) > maxWidth) {
+
+                        clean = clean
+                                        .substring(0, clean.length() - 1)
+                                        .trim();
+                }
+
+                if (clean.isEmpty()) {
+                        return trimCustomTextToWidth(
+                                        font,
+                                        fontSize,
+                                        ellipsis,
+                                        maxWidth);
+                }
+
+                return clean + ellipsis;
         }
 
         private String trimCustomTextToWidth(
