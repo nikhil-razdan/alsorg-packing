@@ -1191,13 +1191,6 @@ export default function VenFlowDetailPage() {
 		qcHoldQty === 0 &&
 		issueReadyQty > 0;
 
-	const canIssueMaterial =
-		canStoreAction &&
-		[
-			STAGE.MATERIAL_RESERVED,
-			STAGE.MATERIAL_ACCEPTED_IN_STORE,
-		].includes(stage);
-
 	const canAddProductionDetails =
 		canProcessingAction &&
 		[
