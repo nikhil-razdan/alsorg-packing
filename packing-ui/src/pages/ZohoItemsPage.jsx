@@ -733,7 +733,7 @@ function ZohoItemsPage() {
   const darkMode = true;
 
   const {
-    currentUser,
+    user: currentUser,
     role: authRole,
   } = useAuth();
 
@@ -4944,263 +4944,110 @@ function ZohoItemsPage() {
           )}
         </InventorySidePanel>
         {!isHardwarePacking && (
-        <InventorySidePanel
-          open={createOpen}
-          onClose={() => setCreateOpen(false)}
-          icon="➕"
-          title="Create Item"
-          subtitle="Create master item and packet details"
-        >
-          <Stepper
-            activeStep={activeStep}
-            sx={stepperSx}
+          <InventorySidePanel
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            icon="➕"
+            title="Create Item"
+            subtitle="Create master item and packet details"
           >
-            <Step><StepLabel>Item Info</StepLabel></Step>
-            <Step><StepLabel>Packet Details</StepLabel></Step>
-            <Step><StepLabel>Done</StepLabel></Step>
-          </Stepper>
+            <Stepper
+              activeStep={activeStep}
+              sx={stepperSx}
+            >
+              <Step><StepLabel>Item Info</StepLabel></Step>
+              <Step><StepLabel>Packet Details</StepLabel></Step>
+              <Step><StepLabel>Done</StepLabel></Step>
+            </Stepper>
 
-          <Box sx={formSectionHeaderSx}>
-            Basic Item Information
-          </Box>
+            <Box sx={formSectionHeaderSx}>
+              Basic Item Information
+            </Box>
 
-          {itemInfoFields.map((field) =>
-            renderFormTextField(field)
-          )}
+            {itemInfoFields.map((field) =>
+              renderFormTextField(field)
+            )}
 
-          <Box sx={formSectionHeaderSx}>
-            Plant Assignment
-          </Box>
+            <Box sx={formSectionHeaderSx}>
+              Plant Assignment
+            </Box>
 
-          {renderPlantSelect()}
+            {renderPlantSelect()}
 
-          <Box sx={formSectionHeaderSx}>
-            Packet Setup
-          </Box>
+            <Box sx={formSectionHeaderSx}>
+              Packet Setup
+            </Box>
 
-          <TextField
-            label="Number of Packets"
-            placeholder="Enter total packet count"
-            fullWidth
-            type="number"
-            value={form.numberOfPackets}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                numberOfPackets: Number(e.target.value),
-              }))
-            }
-            error={!!errors.numberOfPackets}
-            helperText={errors.numberOfPackets}
-            sx={formFieldSx(darkMode)}
-          />
+            <TextField
+              label="Number of Packets"
+              placeholder="Enter total packet count"
+              fullWidth
+              type="number"
+              value={form.numberOfPackets}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  numberOfPackets: Number(e.target.value),
+                }))
+              }
+              error={!!errors.numberOfPackets}
+              helperText={errors.numberOfPackets}
+              sx={formFieldSx(darkMode)}
+            />
 
-          <Button
-            onClick={() => {
-              if (!validateStep1()) return;
+            <Button
+              onClick={() => {
+                if (!validateStep1()) return;
 
-              preparePacketDetailRows(form.numberOfPackets);
+                preparePacketDetailRows(form.numberOfPackets);
 
-              setActiveStep(1);
-              setDetailsPopup(true);
-            }}
-            sx={{
-              ...premiumButton,
-              width: "100%",
-              height: 42,
-            }}
-          >
-            Continue →
-          </Button>
-        </InventorySidePanel>
+                setActiveStep(1);
+                setDetailsPopup(true);
+              }}
+              sx={{
+                ...premiumButton,
+                width: "100%",
+                height: 42,
+              }}
+            >
+              Continue →
+            </Button>
+          </InventorySidePanel>
         )}
         {!isHardwarePacking && (
-        <InventoryModal
-          open={detailsPopup}
-          onClose={() => setDetailsPopup(false)}
-          icon="📋"
-          title="Packet Details"
-          subtitle="Add packet-wise description, weight, dimensions and remarks"
-          width={720}
-          footer={
-            <>
-              <Button
-                onClick={() => setDetailsPopup(false)}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
+          <InventoryModal
+            open={detailsPopup}
+            onClose={() => setDetailsPopup(false)}
+            icon="📋"
+            title="Packet Details"
+            subtitle="Add packet-wise description, weight, dimensions and remarks"
+            width={720}
+            footer={
+              <>
+                <Button
+                  onClick={() => setDetailsPopup(false)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
 
-              <Button
-                sx={premiumButton}
-                onClick={async () => {
-                  if (!validatePackets()) return;
+                <Button
+                  sx={premiumButton}
+                  onClick={async () => {
+                    if (!validatePackets()) return;
 
-                  if (!form.plantCode) {
-                    showUiAlert("error", "Please select Plant Location");
-                    return;
-                  }
-
-                  const res = await authFetch(`${API_BASE_URL}/api/packets/create`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      ...form,
-                      descriptions,
-                      weights,
-                      dimensionsList: dimensionsList.map((d) =>
-                        d?.l && d?.b && d?.h
-                          ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                          : ""
-                      ),
-                      remarksList,
-                    }),
-                  });
-
-                  if (!res.ok) {
-                    await handleApiError(res, "Create packets failed");
-                    return;
-                  }
-
-                  setActiveStep(2);
-                  setDetailsPopup(false);
-
-                  showUiAlert("success", "Packets created successfully");
-
-                  await fetchItems();
-
-                  setTimeout(() => {
-                    setCreateOpen(false);
-                    setActiveStep(0);
-                  }, 800);
-                }}
-              >
-                Create Packets
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            {descriptions.map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <Box sx={packetCardSx}>
-                  <Box sx={packetTitleSx}>
-                    Packet {i + 1}
-                  </Box>
-
-                  <TextField
-                    label="Description"
-                    fullWidth
-                    value={descriptions[i]}
-                    onChange={(e) => {
-                      const copy = [...descriptions];
-                      copy[i] = e.target.value;
-                      setDescriptions(copy);
-                    }}
-                    sx={formFieldSx(darkMode)}
-                  />
-
-                  <TextField
-                    label="Weight"
-                    fullWidth
-                    value={weights[i]}
-                    onChange={(e) => {
-                      const copy = [...weights];
-                      copy[i] = e.target.value;
-                      setWeights(copy);
-                    }}
-                    error={!!errors[`weight-${i}`]}
-                    helperText={errors[`weight-${i}`]}
-                    sx={formFieldSx(darkMode)}
-                  />
-
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
-                    {["l", "b", "h"].map((key) => (
-                      <TextField
-                        key={key}
-                        label={key.toUpperCase()}
-                        type="number"
-                        value={dimensionsList[i]?.[key] || ""}
-                        onChange={(e) => {
-                          const copy = [...dimensionsList];
-                          copy[i] = { ...copy[i], [key]: e.target.value };
-                          setDimensionsList(copy);
-                        }}
-                        sx={{
-                          ...formFieldSx(darkMode),
-                          width: 90,
-                          mb: 0,
-                        }}
-                      />
-                    ))}
-
-                    <span style={{ color: "#94a3b8", fontWeight: 700 }}>
-                      inches
-                    </span>
-                  </Box>
-
-                  <TextField
-                    label="Remarks"
-                    fullWidth
-                    value={remarksList[i]}
-                    onChange={(e) => {
-                      const copy = [...remarksList];
-                      copy[i] = e.target.value;
-                      setRemarksList(copy);
-                    }}
-                    sx={formFieldSx(darkMode)}
-                  />
-                </Box>
-              </motion.div>
-            ))}
-          </Box>
-        </InventoryModal>
-        )}
-        {!isHardwarePacking && (
-        <InventoryModal
-          open={customCreateOpen}
-          onClose={() => setCustomCreateOpen(false)}
-          icon="📦"
-          title="Create Custom Packet"
-          subtitle="Create a single custom packet with selected packet number"
-          width={640}
-          footer={
-            <>
-              <Button
-                onClick={() => setCustomCreateOpen(false)}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                disabled={!customPacketNo || !form.plantCode}
-                sx={{
-                  ...premiumButton,
-                  opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
-                }}
-                onClick={async () => {
-                  try {
                     if (!form.plantCode) {
                       showUiAlert("error", "Please select Plant Location");
                       return;
                     }
 
-                    const res = await authFetch(`${API_BASE_URL}/api/packets/create-custom`, {
+                    const res = await authFetch(`${API_BASE_URL}/api/packets/create`, {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
                         ...form,
-                        customPacketNumber: Number(customPacketNo),
                         descriptions,
                         weights,
                         dimensionsList: dimensionsList.map((d) =>
@@ -5213,333 +5060,146 @@ function ZohoItemsPage() {
                     });
 
                     if (!res.ok) {
-                      await handleApiError(res, "Create custom packet failed");
+                      await handleApiError(res, "Create packets failed");
                       return;
                     }
 
-                    setCustomCreateOpen(false);
-                    setCustomPacketNo("");
+                    setActiveStep(2);
+                    setDetailsPopup(false);
 
-                    showUiAlert("success", "Custom packet created successfully");
+                    showUiAlert("success", "Packets created successfully");
 
                     await fetchItems();
-                  } catch (e) {
-                    console.error(e);
-                    showUiAlert("error", "Failed to create custom packet");
-                  }
-                }}
-              >
-                Create
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            <Box sx={sectionCardSx}>
-              <Box sx={sectionTitleSx}>
-                Basic Item Information
-              </Box>
 
-              {itemInfoFields.map((field) =>
-                renderFormTextField(field)
-              )}
+                    setTimeout(() => {
+                      setCreateOpen(false);
+                      setActiveStep(0);
+                    }, 800);
+                  }}
+                >
+                  Create Packets
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              {descriptions.map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <Box sx={packetCardSx}>
+                    <Box sx={packetTitleSx}>
+                      Packet {i + 1}
+                    </Box>
 
-              <Box sx={sectionTitleSx}>
-                Plant Assignment
-              </Box>
+                    <TextField
+                      label="Description"
+                      fullWidth
+                      value={descriptions[i]}
+                      onChange={(e) => {
+                        const copy = [...descriptions];
+                        copy[i] = e.target.value;
+                        setDescriptions(copy);
+                      }}
+                      sx={formFieldSx(darkMode)}
+                    />
 
-              {renderPlantSelect()}
+                    <TextField
+                      label="Weight"
+                      fullWidth
+                      value={weights[i]}
+                      onChange={(e) => {
+                        const copy = [...weights];
+                        copy[i] = e.target.value;
+                        setWeights(copy);
+                      }}
+                      error={!!errors[`weight-${i}`]}
+                      helperText={errors[`weight-${i}`]}
+                      sx={formFieldSx(darkMode)}
+                    />
+
+                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
+                      {["l", "b", "h"].map((key) => (
+                        <TextField
+                          key={key}
+                          label={key.toUpperCase()}
+                          type="number"
+                          value={dimensionsList[i]?.[key] || ""}
+                          onChange={(e) => {
+                            const copy = [...dimensionsList];
+                            copy[i] = { ...copy[i], [key]: e.target.value };
+                            setDimensionsList(copy);
+                          }}
+                          sx={{
+                            ...formFieldSx(darkMode),
+                            width: 90,
+                            mb: 0,
+                          }}
+                        />
+                      ))}
+
+                      <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+                        inches
+                      </span>
+                    </Box>
+
+                    <TextField
+                      label="Remarks"
+                      fullWidth
+                      value={remarksList[i]}
+                      onChange={(e) => {
+                        const copy = [...remarksList];
+                        copy[i] = e.target.value;
+                        setRemarksList(copy);
+                      }}
+                      sx={formFieldSx(darkMode)}
+                    />
+                  </Box>
+                </motion.div>
+              ))}
             </Box>
-
-            <Box sx={sectionCardSx}>
-              <Box sx={sectionTitleSx}>
-                Custom Packet Information
-              </Box>
-
-              <TextField
-                label="Packet Number"
-                placeholder="Enter custom packet number"
-                type="number"
-                fullWidth
-                value={customPacketNo}
-                onChange={(e) => setCustomPacketNo(e.target.value)}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label={packetDetailLabels.description}
-                placeholder="Enter packet-wise description"
-                fullWidth
-                value={descriptions[0] || ""}
-                onChange={(e) => setDescriptions([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label={packetDetailLabels.weight}
-                placeholder="Enter packet weight"
-                fullWidth
-                value={weights[0] || ""}
-                onChange={(e) => setWeights([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <Box sx={dimensionRowSx}>
-                {[
-                  ["l", packetDetailLabels.length],
-                  ["b", packetDetailLabels.breadth],
-                  ["h", packetDetailLabels.height],
-                ].map(([key, label]) => (
-                  <TextField
-                    key={key}
-                    label={label}
-                    type="number"
-                    value={dimensionsList[0]?.[key] || ""}
-                    onChange={(e) => {
-                      const copy = [...dimensionsList];
-                      copy[0] = { ...copy[0], [key]: e.target.value };
-                      setDimensionsList(copy);
-                    }}
-                    sx={{
-                      ...formFieldSx(darkMode),
-                      width: 90,
-                      mb: 0,
-                    }}
-                  />
-                ))}
-
-                <span style={dimensionUnitText}>
-                  inches
-                </span>
-              </Box>
-
-              <TextField
-                label={packetDetailLabels.remarks}
-                placeholder="Enter handling notes or remarks"
-                fullWidth
-                value={remarksList[0] || ""}
-                onChange={(e) => setRemarksList([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-            </Box>
-          </Box>
-        </InventoryModal>
+          </InventoryModal>
         )}
         {!isHardwarePacking && (
-        <InventoryModal
-          open={addMoreOpen}
-          onClose={() => setAddMoreOpen(false)}
-          icon="➕"
-          title="Add More Packets"
-          subtitle={selectedItem?.itemName ? `Add packets to ${selectedItem.itemName}` : "Add packets to selected item"}
-          width={720}
-          footer={
-            <>
-              <Button
-                onClick={() => setAddMoreOpen(false)}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
+          <InventoryModal
+            open={customCreateOpen}
+            onClose={() => setCustomCreateOpen(false)}
+            icon="📦"
+            title="Create Custom Packet"
+            subtitle="Create a single custom packet with selected packet number"
+            width={640}
+            footer={
+              <>
+                <Button
+                  onClick={() => setCustomCreateOpen(false)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
 
-              <Button
-                disabled={!addCount || addCount <= 0}
-                sx={{
-                  ...premiumButton,
-                  opacity: !addCount || addCount <= 0 ? 0.45 : 1,
-                }}
-                onClick={async () => {
-                  try {
-                    const res = await authFetch(
-                      `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
-                      {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                          numberOfPackets: addCount,
-                          descriptions,
-                          weights,
-                          dimensionsList: dimensionsList.map((d) =>
-                            d?.l && d?.b && d?.h
-                              ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                              : ""
-                          ),
-                          remarksList,
-                        }),
+                <Button
+                  disabled={!customPacketNo || !form.plantCode}
+                  sx={{
+                    ...premiumButton,
+                    opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
+                  }}
+                  onClick={async () => {
+                    try {
+                      if (!form.plantCode) {
+                        showUiAlert("error", "Please select Plant Location");
+                        return;
                       }
-                    );
 
-                    if (!res.ok) {
-                      await handleApiError(res, "Add packets failed");
-                      return;
-                    }
-
-                    setAddMoreOpen(false);
-
-                    showUiAlert("success", "Packets added successfully");
-
-                    await fetchItems();
-                  } catch (e) {
-                    console.error(e);
-                    showUiAlert("error", "Failed to add packets");
-                  }
-                }}
-              >
-                Add Packets
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            <Box sx={sectionCardSx}>
-              <Box sx={sectionTitleSx}>
-                Packet Count
-              </Box>
-              <Box
-                sx={{
-                  mb: 2,
-                  p: 1.4,
-                  borderRadius: "12px",
-                  background: "rgba(59,130,246,.10)",
-                  border: "1px solid rgba(59,130,246,.18)",
-                  color: "#93c5fd",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
-              >
-                Plant: {getPlantCodeOnly(selectedItem)}
-                <br />
-                Location: {getPackingLocationCode(selectedItem)}
-              </Box>
-              <TextField
-                label="Number of packets"
-                type="number"
-                value={addCount}
-                onChange={(e) => setAddCount(Number(e.target.value))}
-                fullWidth
-                sx={formFieldSx(darkMode)}
-              />
-            </Box>
-
-            {[...Array(addCount)].map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <Box sx={packetCardSx}>
-                  <Box sx={packetTitleSx}>
-                    Packet {i + 1}
-                  </Box>
-
-                  <TextField
-                    label={packetDetailLabels.description}
-                    fullWidth
-                    value={descriptions[i] || ""}
-                    onChange={(e) => {
-                      const copy = [...descriptions];
-                      copy[i] = e.target.value;
-                      setDescriptions(copy);
-                    }}
-                    sx={formFieldSx(darkMode)}
-                  />
-
-                  <TextField
-                    label={packetDetailLabels.weight}
-                    fullWidth
-                    value={weights[i] || ""}
-                    onChange={(e) => {
-                      const copy = [...weights];
-                      copy[i] = e.target.value;
-                      setWeights(copy);
-                    }}
-                    sx={formFieldSx(darkMode)}
-                  />
-
-                  <Box sx={dimensionRowSx}>
-                    {["l", "b", "h"].map((key) => (
-                      <TextField
-                        key={key}
-                        label={
-                          key === "l"
-                            ? "Length"
-                            : key === "b"
-                              ? "Breadth"
-                              : "Height"
-                        }
-                        type="number"
-                        value={dimensionsList[i]?.[key] || ""}
-                        onChange={(e) => {
-                          const copy = [...dimensionsList];
-                          copy[i] = { ...copy[i], [key]: e.target.value };
-                          setDimensionsList(copy);
-                        }}
-                        sx={{
-                          ...formFieldSx(darkMode),
-                          width: 90,
-                          mb: 0,
-                        }}
-                      />
-                    ))}
-
-                    <span style={dimensionUnitText}>
-                      inches
-                    </span>
-                  </Box>
-
-                  <TextField
-                    label={packetDetailLabels.remarks}
-                    fullWidth
-                    value={remarksList[i] || ""}
-                    onChange={(e) => {
-                      const copy = [...remarksList];
-                      copy[i] = e.target.value;
-                      setRemarksList(copy);
-                    }}
-                    sx={formFieldSx(darkMode)}
-                  />
-                </Box>
-              </motion.div>
-            ))}
-          </Box>
-        </InventoryModal>
-        )}
-        {!isHardwarePacking && (
-        <InventoryModal
-          open={customAddOpen}
-          onClose={() => setCustomAddOpen(false)}
-          icon="🧩"
-          title="Add Custom Packet"
-          subtitle={selectedItem?.itemName ? `Add custom packet to ${selectedItem.itemName}` : "Add one custom packet"}
-          width={640}
-          footer={
-            <>
-              <Button
-                onClick={() => setCustomAddOpen(false)}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                disabled={!customPacketNo}
-                sx={{
-                  ...premiumButton,
-                  opacity: !customPacketNo ? 0.45 : 1,
-                }}
-                onClick={async () => {
-                  try {
-                    const res = await authFetch(
-                      `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
-                      {
+                      const res = await authFetch(`${API_BASE_URL}/api/packets/create-custom`, {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
+                          ...form,
                           customPacketNumber: Number(customPacketNo),
                           descriptions,
                           weights,
@@ -5550,1241 +5210,1581 @@ function ZohoItemsPage() {
                           ),
                           remarksList,
                         }),
+                      });
+
+                      if (!res.ok) {
+                        await handleApiError(res, "Create custom packet failed");
+                        return;
                       }
-                    );
 
-                    if (!res.ok) {
-                      await handleApiError(res, "Add custom packet failed");
-                      return;
+                      setCustomCreateOpen(false);
+                      setCustomPacketNo("");
+
+                      showUiAlert("success", "Custom packet created successfully");
+
+                      await fetchItems();
+                    } catch (e) {
+                      console.error(e);
+                      showUiAlert("error", "Failed to create custom packet");
                     }
+                  }}
+                >
+                  Create
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              <Box sx={sectionCardSx}>
+                <Box sx={sectionTitleSx}>
+                  Basic Item Information
+                </Box>
 
-                    setCustomAddOpen(false);
-                    setCustomPacketNo("");
+                {itemInfoFields.map((field) =>
+                  renderFormTextField(field)
+                )}
 
-                    showUiAlert("success", "Custom packet added successfully");
+                <Box sx={sectionTitleSx}>
+                  Plant Assignment
+                </Box>
 
-                    await fetchItems();
-                  } catch (e) {
-                    console.error(e);
-                    showUiAlert("error", "Failed to add custom packet");
-                  }
-                }}
-              >
-                Add
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            <Box sx={sectionCardSx}>
-              <Box sx={sectionTitleSx}>
-                Custom Packet Details
+                {renderPlantSelect()}
+              </Box>
+
+              <Box sx={sectionCardSx}>
+                <Box sx={sectionTitleSx}>
+                  Custom Packet Information
+                </Box>
+
+                <TextField
+                  label="Packet Number"
+                  placeholder="Enter custom packet number"
+                  type="number"
+                  fullWidth
+                  value={customPacketNo}
+                  onChange={(e) => setCustomPacketNo(e.target.value)}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label={packetDetailLabels.description}
+                  placeholder="Enter packet-wise description"
+                  fullWidth
+                  value={descriptions[0] || ""}
+                  onChange={(e) => setDescriptions([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label={packetDetailLabels.weight}
+                  placeholder="Enter packet weight"
+                  fullWidth
+                  value={weights[0] || ""}
+                  onChange={(e) => setWeights([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <Box sx={dimensionRowSx}>
+                  {[
+                    ["l", packetDetailLabels.length],
+                    ["b", packetDetailLabels.breadth],
+                    ["h", packetDetailLabels.height],
+                  ].map(([key, label]) => (
+                    <TextField
+                      key={key}
+                      label={label}
+                      type="number"
+                      value={dimensionsList[0]?.[key] || ""}
+                      onChange={(e) => {
+                        const copy = [...dimensionsList];
+                        copy[0] = { ...copy[0], [key]: e.target.value };
+                        setDimensionsList(copy);
+                      }}
+                      sx={{
+                        ...formFieldSx(darkMode),
+                        width: 90,
+                        mb: 0,
+                      }}
+                    />
+                  ))}
+
+                  <span style={dimensionUnitText}>
+                    inches
+                  </span>
+                </Box>
+
+                <TextField
+                  label={packetDetailLabels.remarks}
+                  placeholder="Enter handling notes or remarks"
+                  fullWidth
+                  value={remarksList[0] || ""}
+                  onChange={(e) => setRemarksList([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+              </Box>
+            </Box>
+          </InventoryModal>
+        )}
+        {!isHardwarePacking && (
+          <InventoryModal
+            open={addMoreOpen}
+            onClose={() => setAddMoreOpen(false)}
+            icon="➕"
+            title="Add More Packets"
+            subtitle={selectedItem?.itemName ? `Add packets to ${selectedItem.itemName}` : "Add packets to selected item"}
+            width={720}
+            footer={
+              <>
+                <Button
+                  onClick={() => setAddMoreOpen(false)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  disabled={!addCount || addCount <= 0}
+                  sx={{
+                    ...premiumButton,
+                    opacity: !addCount || addCount <= 0 ? 0.45 : 1,
+                  }}
+                  onClick={async () => {
+                    try {
+                      const res = await authFetch(
+                        `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            numberOfPackets: addCount,
+                            descriptions,
+                            weights,
+                            dimensionsList: dimensionsList.map((d) =>
+                              d?.l && d?.b && d?.h
+                                ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                                : ""
+                            ),
+                            remarksList,
+                          }),
+                        }
+                      );
+
+                      if (!res.ok) {
+                        await handleApiError(res, "Add packets failed");
+                        return;
+                      }
+
+                      setAddMoreOpen(false);
+
+                      showUiAlert("success", "Packets added successfully");
+
+                      await fetchItems();
+                    } catch (e) {
+                      console.error(e);
+                      showUiAlert("error", "Failed to add packets");
+                    }
+                  }}
+                >
+                  Add Packets
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              <Box sx={sectionCardSx}>
+                <Box sx={sectionTitleSx}>
+                  Packet Count
+                </Box>
+                <Box
+                  sx={{
+                    mb: 2,
+                    p: 1.4,
+                    borderRadius: "12px",
+                    background: "rgba(59,130,246,.10)",
+                    border: "1px solid rgba(59,130,246,.18)",
+                    color: "#93c5fd",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  Plant: {getPlantCodeOnly(selectedItem)}
+                  <br />
+                  Location: {getPackingLocationCode(selectedItem)}
+                </Box>
+                <TextField
+                  label="Number of packets"
+                  type="number"
+                  value={addCount}
+                  onChange={(e) => setAddCount(Number(e.target.value))}
+                  fullWidth
+                  sx={formFieldSx(darkMode)}
+                />
+              </Box>
+
+              {[...Array(addCount)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <Box sx={packetCardSx}>
+                    <Box sx={packetTitleSx}>
+                      Packet {i + 1}
+                    </Box>
+
+                    <TextField
+                      label={packetDetailLabels.description}
+                      fullWidth
+                      value={descriptions[i] || ""}
+                      onChange={(e) => {
+                        const copy = [...descriptions];
+                        copy[i] = e.target.value;
+                        setDescriptions(copy);
+                      }}
+                      sx={formFieldSx(darkMode)}
+                    />
+
+                    <TextField
+                      label={packetDetailLabels.weight}
+                      fullWidth
+                      value={weights[i] || ""}
+                      onChange={(e) => {
+                        const copy = [...weights];
+                        copy[i] = e.target.value;
+                        setWeights(copy);
+                      }}
+                      sx={formFieldSx(darkMode)}
+                    />
+
+                    <Box sx={dimensionRowSx}>
+                      {["l", "b", "h"].map((key) => (
+                        <TextField
+                          key={key}
+                          label={
+                            key === "l"
+                              ? "Length"
+                              : key === "b"
+                                ? "Breadth"
+                                : "Height"
+                          }
+                          type="number"
+                          value={dimensionsList[i]?.[key] || ""}
+                          onChange={(e) => {
+                            const copy = [...dimensionsList];
+                            copy[i] = { ...copy[i], [key]: e.target.value };
+                            setDimensionsList(copy);
+                          }}
+                          sx={{
+                            ...formFieldSx(darkMode),
+                            width: 90,
+                            mb: 0,
+                          }}
+                        />
+                      ))}
+
+                      <span style={dimensionUnitText}>
+                        inches
+                      </span>
+                    </Box>
+
+                    <TextField
+                      label={packetDetailLabels.remarks}
+                      fullWidth
+                      value={remarksList[i] || ""}
+                      onChange={(e) => {
+                        const copy = [...remarksList];
+                        copy[i] = e.target.value;
+                        setRemarksList(copy);
+                      }}
+                      sx={formFieldSx(darkMode)}
+                    />
+                  </Box>
+                </motion.div>
+              ))}
+            </Box>
+          </InventoryModal>
+        )}
+        {!isHardwarePacking && (
+          <InventoryModal
+            open={customAddOpen}
+            onClose={() => setCustomAddOpen(false)}
+            icon="🧩"
+            title="Add Custom Packet"
+            subtitle={selectedItem?.itemName ? `Add custom packet to ${selectedItem.itemName}` : "Add one custom packet"}
+            width={640}
+            footer={
+              <>
+                <Button
+                  onClick={() => setCustomAddOpen(false)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  disabled={!customPacketNo}
+                  sx={{
+                    ...premiumButton,
+                    opacity: !customPacketNo ? 0.45 : 1,
+                  }}
+                  onClick={async () => {
+                    try {
+                      const res = await authFetch(
+                        `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            customPacketNumber: Number(customPacketNo),
+                            descriptions,
+                            weights,
+                            dimensionsList: dimensionsList.map((d) =>
+                              d?.l && d?.b && d?.h
+                                ? `${d.l} L x ${d.b} B x ${d.h} H inches`
+                                : ""
+                            ),
+                            remarksList,
+                          }),
+                        }
+                      );
+
+                      if (!res.ok) {
+                        await handleApiError(res, "Add custom packet failed");
+                        return;
+                      }
+
+                      setCustomAddOpen(false);
+                      setCustomPacketNo("");
+
+                      showUiAlert("success", "Custom packet added successfully");
+
+                      await fetchItems();
+                    } catch (e) {
+                      console.error(e);
+                      showUiAlert("error", "Failed to add custom packet");
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              <Box sx={sectionCardSx}>
+                <Box sx={sectionTitleSx}>
+                  Custom Packet Details
+                </Box>
+
+                <Box
+                  sx={{
+                    mb: 2,
+                    p: 1.4,
+                    borderRadius: "12px",
+                    background: "rgba(59,130,246,.10)",
+                    border: "1px solid rgba(59,130,246,.18)",
+                    color: "#93c5fd",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  Plant: {getPlantCodeOnly(selectedItem)}
+                  <br />
+                  Location: {getPackingLocationCode(selectedItem)}
+                </Box>
+
+                <TextField
+                  label="Custom Packet Number"
+                  type="number"
+                  fullWidth
+                  value={customPacketNo}
+                  onChange={(e) => setCustomPacketNo(e.target.value)}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Description"
+                  fullWidth
+                  value={descriptions[0] || ""}
+                  onChange={(e) => setDescriptions([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Weight"
+                  fullWidth
+                  value={weights[0] || ""}
+                  onChange={(e) => setWeights([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <Box sx={dimensionRowSx}>
+                  {["l", "b", "h"].map((key) => (
+                    <TextField
+                      key={key}
+                      label={key.toUpperCase()}
+                      type="number"
+                      value={dimensionsList[0]?.[key] || ""}
+                      onChange={(e) => {
+                        const copy = [...dimensionsList];
+                        copy[0] = { ...copy[0], [key]: e.target.value };
+                        setDimensionsList(copy);
+                      }}
+                      sx={{
+                        ...formFieldSx(darkMode),
+                        width: 90,
+                        mb: 0,
+                      }}
+                    />
+                  ))}
+
+                  <span style={dimensionUnitText}>
+                    inches
+                  </span>
+                </Box>
+
+                <TextField
+                  label="Remarks"
+                  fullWidth
+                  value={remarksList[0] || ""}
+                  onChange={(e) => setRemarksList([e.target.value])}
+                  sx={formFieldSx(darkMode)}
+                />
+              </Box>
+            </Box>
+          </InventoryModal>
+        )}
+        {!isHardwarePacking && (
+          <InventoryModal
+            open={editOpen}
+            onClose={() => setEditOpen(false)}
+            icon="✏️"
+            title="Edit Packet Item"
+            subtitle="Update editable packet information"
+            width={620}
+            height="92vh"
+            footer={
+              <>
+                <Button
+                  onClick={() => setEditOpen(false)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  sx={premiumButton}
+                  onClick={async () => {
+                    try {
+                      const editItemId = getPacketItemId(editItem);
+
+                      const editUrl =
+                        isAdmin
+                          ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
+                          : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
+
+                      const res = await authFetch(
+                        editUrl,
+                        {
+                          method: "PUT",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify(editForm),
+                        }
+                      );
+
+                      if (!res.ok) {
+                        await handleApiError(res, "Update failed");
+                        return;
+                      }
+
+                      setEditOpen(false);
+
+                      showUiAlert("success", "Packet item updated successfully");
+
+                      await fetchItems();
+                    } catch (e) {
+                      console.error(e);
+                      showUiAlert("error", "Update failed. Please try again.");
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              {[
+                "itemName",
+                "pdNo",
+                "drawingNo",
+                "clientName",
+                "clientAddress",
+                "floor",
+                "description",
+                "weight",
+                "dimensions",
+                "remarks",
+                "location",
+              ].map((field) => {
+                const locked =
+                  !isAdmin &&
+                  editForm.stickerNumber &&
+                  [
+                    "itemName",
+                    "pdNo",
+                    "drawingNo",
+                    "clientName",
+                  ].includes(field);
+
+                return (
+                  <TextField
+                    key={field}
+                    label={field}
+                    fullWidth
+                    disabled={locked}
+                    value={editForm[field] || ""}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        [field]: e.target.value,
+                      }))
+                    }
+                    sx={formFieldSx(darkMode)}
+                  />
+                );
+              })}
+            </Box>
+          </InventoryModal>
+        )}
+        {!isHardwarePacking && (
+          <InventoryModal
+            open={generatedHistoryOpen}
+            onClose={closeGeneratedHistoryModal}
+            icon="📜"
+            title="Generated Packet History"
+            subtitle="Search, filter, report and preview generated sticker records"
+            width={1520}
+            height="92vh"
+            footer={
+              <>
+                <Button
+                  onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Refresh
+                </Button>
+
+                <Button
+                  onClick={closeGeneratedHistoryModal}
+                  sx={premiumButton}
+                >
+                  Close
+                </Button>
+              </>
+            }
+          >
+            <Box sx={historyModalBodySx}>
+              <Box sx={historyTopBarSx}>
+                <Box sx={historySmartRowSx}>
+                  <TextField
+                    variant="standard"
+                    placeholder='Smart search: client:abc pd:PD-12 sku:PKT name:wardrobe dwg:04/15 or any text'
+                    value={generatedHistorySearch}
+                    onChange={(e) => setGeneratedHistorySearch(e.target.value)}
+                    InputProps={{ disableUnderline: true }}
+                    sx={historySearchInputSx}
+                  />
+
+                  <TextField
+                    select
+                    size="small"
+                    label="Generated By"
+                    value={generatedHistoryUserFilter}
+                    onChange={async (e) => {
+                      const value = e.target.value;
+                      setGeneratedHistoryUserFilter(value);
+                      await fetchGeneratedHistory(value);
+                    }}
+                    sx={historyMiniFilterFieldSx}
+                    slotProps={selectMenuSlotProps}
+                  >
+                    <MenuItem value="ALL">All Users</MenuItem>
+
+                    {generatedHistoryUsers.map((user) => (
+                      <MenuItem key={user} value={user}>
+                        {user}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    select
+                    size="small"
+                    label="Packing Report Type"
+                    value={generatedHistoryReportMode}
+                    onChange={(e) =>
+                      setGeneratedHistoryReportMode(e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                    slotProps={selectMenuSlotProps}
+                  >
+                    {generatedHistoryReportModes.map((mode) => (
+                      <MenuItem
+                        key={mode.value}
+                        value={mode.value}
+                      >
+                        {mode.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Box>
+
+                <Box sx={historyFilterGridSx}>
+                  <TextField
+                    size="small"
+                    label="Client"
+                    value={generatedHistoryFilters.client}
+                    onChange={(e) =>
+                      updateGeneratedHistoryFilter("client", e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="PD No"
+                    value={generatedHistoryFilters.pdNo}
+                    onChange={(e) =>
+                      updateGeneratedHistoryFilter("pdNo", e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="SKU"
+                    value={generatedHistoryFilters.sku}
+                    onChange={(e) =>
+                      updateGeneratedHistoryFilter("sku", e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="Item Name"
+                    value={generatedHistoryFilters.itemName}
+                    onChange={(e) =>
+                      updateGeneratedHistoryFilter("itemName", e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="DWG No"
+                    value={generatedHistoryFilters.drawingNo}
+                    onChange={(e) =>
+                      updateGeneratedHistoryFilter("drawingNo", e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="Sticker / Packet"
+                    value={
+                      generatedHistoryFilters.stickerNumber ||
+                      generatedHistoryFilters.packetNumber
+                    }
+                    onChange={(e) => {
+                      updateGeneratedHistoryFilter("stickerNumber", e.target.value);
+                      updateGeneratedHistoryFilter("packetNumber", e.target.value);
+                    }}
+                    sx={historyMiniFilterFieldSx}
+                  />
+                </Box>
+
+                <Box sx={historyDateReportRowSx}>
+                  <TextField
+                    size="small"
+                    label="Date From"
+                    type="date"
+                    value={generatedHistoryDateFrom}
+                    onChange={(e) =>
+                      setGeneratedHistoryDateFrom(e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="Date To"
+                    type="date"
+                    value={generatedHistoryDateTo}
+                    onChange={(e) =>
+                      setGeneratedHistoryDateTo(e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="Time From"
+                    type="time"
+                    value={generatedHistoryTimeFrom}
+                    onChange={(e) =>
+                      setGeneratedHistoryTimeFrom(e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    size="small"
+                    label="Time To"
+                    type="time"
+                    value={generatedHistoryTimeTo}
+                    onChange={(e) =>
+                      setGeneratedHistoryTimeTo(e.target.value)
+                    }
+                    sx={historyMiniFilterFieldSx}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <Button
+                    onClick={exportGeneratedHistoryReport}
+                    sx={modalSecondaryButtonSx}
+                  >
+                    Export Excel
+                  </Button>
+
+                  <Button
+                    onClick={resetGeneratedHistoryFilters}
+                    sx={modalSecondaryButtonSx}
+                  >
+                    Clear
+                  </Button>
+
+                  <Box sx={historyCountBadgeSx}>
+                    {generatedHistoryReportMode === "DETAILED"
+                      ? `${filteredGeneratedHistoryRows.length} Records`
+                      : `${generatedHistoryReportRows.length} Groups`}
+                  </Box>
+                </Box>
               </Box>
 
               <Box
-                sx={{
-                  mb: 2,
-                  p: 1.4,
-                  borderRadius: "12px",
-                  background: "rgba(59,130,246,.10)",
-                  border: "1px solid rgba(59,130,246,.18)",
-                  color: "#93c5fd",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
+                sx={
+                  historyPdfPreview?.url
+                    ? historyMainContentSplitSx
+                    : historyMainContentSx
+                }
               >
-                Plant: {getPlantCodeOnly(selectedItem)}
-                <br />
-                Location: {getPackingLocationCode(selectedItem)}
-              </Box>
-
-              <TextField
-                label="Custom Packet Number"
-                type="number"
-                fullWidth
-                value={customPacketNo}
-                onChange={(e) => setCustomPacketNo(e.target.value)}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Description"
-                fullWidth
-                value={descriptions[0] || ""}
-                onChange={(e) => setDescriptions([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Weight"
-                fullWidth
-                value={weights[0] || ""}
-                onChange={(e) => setWeights([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <Box sx={dimensionRowSx}>
-                {["l", "b", "h"].map((key) => (
-                  <TextField
-                    key={key}
-                    label={key.toUpperCase()}
-                    type="number"
-                    value={dimensionsList[0]?.[key] || ""}
-                    onChange={(e) => {
-                      const copy = [...dimensionsList];
-                      copy[0] = { ...copy[0], [key]: e.target.value };
-                      setDimensionsList(copy);
-                    }}
-                    sx={{
-                      ...formFieldSx(darkMode),
-                      width: 90,
-                      mb: 0,
-                    }}
-                  />
-                ))}
-
-                <span style={dimensionUnitText}>
-                  inches
-                </span>
-              </Box>
-
-              <TextField
-                label="Remarks"
-                fullWidth
-                value={remarksList[0] || ""}
-                onChange={(e) => setRemarksList([e.target.value])}
-                sx={formFieldSx(darkMode)}
-              />
-            </Box>
-          </Box>
-        </InventoryModal>
-        )}
-        {!isHardwarePacking && (
-        <InventoryModal
-          open={editOpen}
-          onClose={() => setEditOpen(false)}
-          icon="✏️"
-          title="Edit Packet Item"
-          subtitle="Update editable packet information"
-          width={620}
-          height="92vh"
-          footer={
-            <>
-              <Button
-                onClick={() => setEditOpen(false)}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                sx={premiumButton}
-                onClick={async () => {
-                  try {
-                    const editItemId = getPacketItemId(editItem);
-
-                    const editUrl =
-                      isAdmin
-                        ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
-                        : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
-
-                    const res = await authFetch(
-                      editUrl,
-                      {
-                        method: "PUT",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(editForm),
-                      }
-                    );
-
-                    if (!res.ok) {
-                      await handleApiError(res, "Update failed");
-                      return;
-                    }
-
-                    setEditOpen(false);
-
-                    showUiAlert("success", "Packet item updated successfully");
-
-                    await fetchItems();
-                  } catch (e) {
-                    console.error(e);
-                    showUiAlert("error", "Update failed. Please try again.");
-                  }
-                }}
-              >
-                Save
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            {[
-              "itemName",
-              "pdNo",
-              "drawingNo",
-              "clientName",
-              "clientAddress",
-              "floor",
-              "description",
-              "weight",
-              "dimensions",
-              "remarks",
-              "location",
-            ].map((field) => {
-              const locked =
-                !isAdmin &&
-                editForm.stickerNumber &&
-                [
-                  "itemName",
-                  "pdNo",
-                  "drawingNo",
-                  "clientName",
-                ].includes(field);
-
-              return (
-                <TextField
-                  key={field}
-                  label={field}
-                  fullWidth
-                  disabled={locked}
-                  value={editForm[field] || ""}
-                  onChange={(e) =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      [field]: e.target.value,
-                    }))
-                  }
-                  sx={formFieldSx(darkMode)}
-                />
-              );
-            })}
-          </Box>
-        </InventoryModal>
-        )}
-        {!isHardwarePacking && (
-        <InventoryModal
-          open={generatedHistoryOpen}
-          onClose={closeGeneratedHistoryModal}
-          icon="📜"
-          title="Generated Packet History"
-          subtitle="Search, filter, report and preview generated sticker records"
-          width={1520}
-          height="92vh"
-          footer={
-            <>
-              <Button
-                onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
-                sx={modalSecondaryButtonSx}
-              >
-                Refresh
-              </Button>
-
-              <Button
-                onClick={closeGeneratedHistoryModal}
-                sx={premiumButton}
-              >
-                Close
-              </Button>
-            </>
-          }
-        >
-          <Box sx={historyModalBodySx}>
-            <Box sx={historyTopBarSx}>
-              <Box sx={historySmartRowSx}>
-                <TextField
-                  variant="standard"
-                  placeholder='Smart search: client:abc pd:PD-12 sku:PKT name:wardrobe dwg:04/15 or any text'
-                  value={generatedHistorySearch}
-                  onChange={(e) => setGeneratedHistorySearch(e.target.value)}
-                  InputProps={{ disableUnderline: true }}
-                  sx={historySearchInputSx}
-                />
-
-                <TextField
-                  select
-                  size="small"
-                  label="Generated By"
-                  value={generatedHistoryUserFilter}
-                  onChange={async (e) => {
-                    const value = e.target.value;
-                    setGeneratedHistoryUserFilter(value);
-                    await fetchGeneratedHistory(value);
-                  }}
-                  sx={historyMiniFilterFieldSx}
-                  slotProps={selectMenuSlotProps}
-                >
-                  <MenuItem value="ALL">All Users</MenuItem>
-
-                  {generatedHistoryUsers.map((user) => (
-                    <MenuItem key={user} value={user}>
-                      {user}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                <TextField
-                  select
-                  size="small"
-                  label="Packing Report Type"
-                  value={generatedHistoryReportMode}
-                  onChange={(e) =>
-                    setGeneratedHistoryReportMode(e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                  slotProps={selectMenuSlotProps}
-                >
-                  {generatedHistoryReportModes.map((mode) => (
-                    <MenuItem
-                      key={mode.value}
-                      value={mode.value}
-                    >
-                      {mode.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-
-              <Box sx={historyFilterGridSx}>
-                <TextField
-                  size="small"
-                  label="Client"
-                  value={generatedHistoryFilters.client}
-                  onChange={(e) =>
-                    updateGeneratedHistoryFilter("client", e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                />
-
-                <TextField
-                  size="small"
-                  label="PD No"
-                  value={generatedHistoryFilters.pdNo}
-                  onChange={(e) =>
-                    updateGeneratedHistoryFilter("pdNo", e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                />
-
-                <TextField
-                  size="small"
-                  label="SKU"
-                  value={generatedHistoryFilters.sku}
-                  onChange={(e) =>
-                    updateGeneratedHistoryFilter("sku", e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                />
-
-                <TextField
-                  size="small"
-                  label="Item Name"
-                  value={generatedHistoryFilters.itemName}
-                  onChange={(e) =>
-                    updateGeneratedHistoryFilter("itemName", e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                />
-
-                <TextField
-                  size="small"
-                  label="DWG No"
-                  value={generatedHistoryFilters.drawingNo}
-                  onChange={(e) =>
-                    updateGeneratedHistoryFilter("drawingNo", e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                />
-
-                <TextField
-                  size="small"
-                  label="Sticker / Packet"
-                  value={
-                    generatedHistoryFilters.stickerNumber ||
-                    generatedHistoryFilters.packetNumber
-                  }
-                  onChange={(e) => {
-                    updateGeneratedHistoryFilter("stickerNumber", e.target.value);
-                    updateGeneratedHistoryFilter("packetNumber", e.target.value);
-                  }}
-                  sx={historyMiniFilterFieldSx}
-                />
-              </Box>
-
-              <Box sx={historyDateReportRowSx}>
-                <TextField
-                  size="small"
-                  label="Date From"
-                  type="date"
-                  value={generatedHistoryDateFrom}
-                  onChange={(e) =>
-                    setGeneratedHistoryDateFrom(e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
-
-                <TextField
-                  size="small"
-                  label="Date To"
-                  type="date"
-                  value={generatedHistoryDateTo}
-                  onChange={(e) =>
-                    setGeneratedHistoryDateTo(e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
-
-                <TextField
-                  size="small"
-                  label="Time From"
-                  type="time"
-                  value={generatedHistoryTimeFrom}
-                  onChange={(e) =>
-                    setGeneratedHistoryTimeFrom(e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
-
-                <TextField
-                  size="small"
-                  label="Time To"
-                  type="time"
-                  value={generatedHistoryTimeTo}
-                  onChange={(e) =>
-                    setGeneratedHistoryTimeTo(e.target.value)
-                  }
-                  sx={historyMiniFilterFieldSx}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
-
-                <Button
-                  onClick={exportGeneratedHistoryReport}
-                  sx={modalSecondaryButtonSx}
-                >
-                  Export Excel
-                </Button>
-
-                <Button
-                  onClick={resetGeneratedHistoryFilters}
-                  sx={modalSecondaryButtonSx}
-                >
-                  Clear
-                </Button>
-
-                <Box sx={historyCountBadgeSx}>
-                  {generatedHistoryReportMode === "DETAILED"
-                    ? `${filteredGeneratedHistoryRows.length} Records`
-                    : `${generatedHistoryReportRows.length} Groups`}
-                </Box>
-              </Box>
-            </Box>
-
-            <Box
-              sx={
-                historyPdfPreview?.url
-                  ? historyMainContentSplitSx
-                  : historyMainContentSx
-              }
-            >
-              <Box sx={historyTablePanelSx}>
-                {generatedHistoryReportMode !== "DETAILED" ? (
-                  <Box sx={historyTableViewportSx}>
-                    <Box sx={historyReportTitleSx}>
-                      {getHistoryReportLabel(generatedHistoryReportMode)} Packing Report
-                    </Box>
-
-                    <div style={historyReportHeader}>
-                      <div>Group</div>
-                      <div>Total</div>
-                      <div>Initial</div>
-                      <div>Reprint</div>
-                      <div>Client</div>
-                      <div>SKU</div>
-                      <div>PD / DWG</div>
-                      <div>First Generated</div>
-                      <div>Last Generated</div>
-                    </div>
-
-                    {generatedHistoryReportRows.length === 0 && (
-                      <Box sx={historyEmptySx}>
-                        No packing report data found.
+                <Box sx={historyTablePanelSx}>
+                  {generatedHistoryReportMode !== "DETAILED" ? (
+                    <Box sx={historyTableViewportSx}>
+                      <Box sx={historyReportTitleSx}>
+                        {getHistoryReportLabel(generatedHistoryReportMode)} Packing Report
                       </Box>
-                    )}
 
-                    {paginatedGeneratedHistoryRows.map((row) => (
-                      <div
-                        key={row.key}
-                        style={historyReportRow}
-                      >
-                        <div style={historyCellWrap}>
-                          <span
-                            style={historyMainText}
-                            title={row.key}
-                          >
-                            {row.key}
-                          </span>
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <Chip
-                            label={row.totalPackets}
-                            size="small"
-                            sx={historyInitialChipSx}
-                          />
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          {row.initialCount}
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          {row.reprintCount}
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <span
-                            style={historySubText}
-                            title={row.clientsText}
-                          >
-                            {row.clientsText}
-                          </span>
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <span
-                            style={historyMonoText}
-                            title={row.skusText}
-                          >
-                            {row.skusText}
-                          </span>
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <span
-                            style={historySubText}
-                            title={`${row.pdNosText} / ${row.dwgNosText}`}
-                          >
-                            {row.pdNosText} / {row.dwgNosText}
-                          </span>
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <span style={historyDateText}>
-                            {formatHistoryDateTime(row.firstGeneratedAt)}
-                          </span>
-                        </div>
-
-                        <div style={historyCellWrap}>
-                          <span style={historyDateText}>
-                            {formatHistoryDateTime(row.lastGeneratedAt)}
-                          </span>
-                        </div>
+                      <div style={historyReportHeader}>
+                        <div>Group</div>
+                        <div>Total</div>
+                        <div>Initial</div>
+                        <div>Reprint</div>
+                        <div>Client</div>
+                        <div>SKU</div>
+                        <div>PD / DWG</div>
+                        <div>First Generated</div>
+                        <div>Last Generated</div>
                       </div>
-                    ))}
-                  </Box>
-                ) : (
-                  <Box sx={historyTableViewportSx}>
-                    <div style={historyTableHeader}>
-                      <div>Date / Time</div>
-                      <div>Generated By</div>
-                      <div>Item</div>
-                      <div>Description</div>
-                      <div>SKU</div>
-                      <div>PD No</div>
-                      <div>Packet</div>
-                      <div>Sticker No</div>
-                      <div>Reason</div>
-                      <div>Action</div>
-                    </div>
 
-                    {generatedHistoryLoading && (
-                      <Box sx={historyEmptySx}>
-                        Loading generated history...
-                      </Box>
-                    )}
-
-                    {!generatedHistoryLoading &&
-                      filteredGeneratedHistoryRows.length === 0 && (
+                      {generatedHistoryReportRows.length === 0 && (
                         <Box sx={historyEmptySx}>
-                          No generated packet history found.
+                          No packing report data found.
                         </Box>
                       )}
 
-                    {!generatedHistoryLoading &&
-                      paginatedGeneratedHistoryRows.map((row) => (
+                      {paginatedGeneratedHistoryRows.map((row) => (
                         <div
-                          key={row.historyId}
-                          style={historyTableRow}
+                          key={row.key}
+                          style={historyReportRow}
                         >
                           <div style={historyCellWrap}>
-                            <span style={historyDateText}>
-                              {formatHistoryDateTime(row.generatedAt)}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span style={historyUserText}>
-                              {row.generatedBy || "—"}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
                             <span
                               style={historyMainText}
-                              title={row.itemName}
+                              title={row.key}
                             >
-                              {row.itemName || "—"}
-                            </span>
-
-                            <span
-                              style={historySubText}
-                              title={row.clientName}
-                            >
-                              {row.clientName || "—"}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span
-                              style={historyMainText}
-                              title={row.description}
-                            >
-                              {row.description || "—"}
-                            </span>
-
-                            {row.remarks && (
-                              <span
-                                style={historySubText}
-                                title={row.remarks}
-                              >
-                                Remarks: {row.remarks}
-                              </span>
-                            )}
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span
-                              style={historyMonoText}
-                              title={row.sku}
-                            >
-                              {row.sku || "—"}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span style={historyMainText}>
-                              {row.pdNo || "—"}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span style={historyMainText}>
-                              {row.packetNumber || "—"}
-                            </span>
-                          </div>
-
-                          <div style={historyCellWrap}>
-                            <span
-                              style={historyMonoText}
-                              title={row.stickerNumber}
-                            >
-                              {row.stickerNumber || "—"}
+                              {row.key}
                             </span>
                           </div>
 
                           <div style={historyCellWrap}>
                             <Chip
-                              label={
-                                row.reason === "REPRINT"
-                                  ? `Reprint #${row.printIteration || ""}`
-                                  : "Initial"
-                              }
+                              label={row.totalPackets}
                               size="small"
-                              sx={
-                                row.reason === "REPRINT"
-                                  ? historyReprintChipSx
-                                  : historyInitialChipSx
-                              }
+                              sx={historyInitialChipSx}
                             />
                           </div>
 
                           <div style={historyCellWrap}>
-                            <Button
-                              size="small"
-                              onClick={() => openHistoryPdf(row.historyId)}
-                              sx={historyViewButtonSx}
+                            {row.initialCount}
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            {row.reprintCount}
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historySubText}
+                              title={row.clientsText}
                             >
-                              View PDF
-                            </Button>
+                              {row.clientsText}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historyMonoText}
+                              title={row.skusText}
+                            >
+                              {row.skusText}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span
+                              style={historySubText}
+                              title={`${row.pdNosText} / ${row.dwgNosText}`}
+                            >
+                              {row.pdNosText} / {row.dwgNosText}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span style={historyDateText}>
+                              {formatHistoryDateTime(row.firstGeneratedAt)}
+                            </span>
+                          </div>
+
+                          <div style={historyCellWrap}>
+                            <span style={historyDateText}>
+                              {formatHistoryDateTime(row.lastGeneratedAt)}
+                            </span>
                           </div>
                         </div>
                       ))}
-                  </Box>
-                )}
-                {activeGeneratedHistoryRows.length > 0 && (
-                  <Box sx={historyPaginationBarSx}>
-                    <Box sx={historyPaginationTextSx}>
-                      Showing{" "}
-                      <b>{generatedHistoryShowingStart}</b>
-                      {" - "}
-                      <b>{generatedHistoryPageEnd}</b>
-                      {" of "}
-                      <b>{activeGeneratedHistoryRows.length}</b>
-                      {generatedHistoryReportMode === "DETAILED"
-                        ? " records"
-                        : " groups"}
                     </Box>
+                  ) : (
+                    <Box sx={historyTableViewportSx}>
+                      <div style={historyTableHeader}>
+                        <div>Date / Time</div>
+                        <div>Generated By</div>
+                        <div>Item</div>
+                        <div>Description</div>
+                        <div>SKU</div>
+                        <div>PD No</div>
+                        <div>Packet</div>
+                        <div>Sticker No</div>
+                        <div>Reason</div>
+                        <div>Action</div>
+                      </div>
 
-                    <Box sx={historyPaginationControlsSx}>
-                      <Button
-                        disabled={generatedHistorySafePageNo === 1}
-                        onClick={() =>
-                          setGeneratedHistoryPageNo((prev) =>
-                            Math.max(1, prev - 1)
-                          )
-                        }
-                        sx={historyPaginationButtonSx}
-                      >
-                        ◀ Previous
-                      </Button>
+                      {generatedHistoryLoading && (
+                        <Box sx={historyEmptySx}>
+                          Loading generated history...
+                        </Box>
+                      )}
 
-                      <Box sx={historyPageCountSx}>
-                        Page{" "}
-                        <span>{generatedHistorySafePageNo}</span>
+                      {!generatedHistoryLoading &&
+                        filteredGeneratedHistoryRows.length === 0 && (
+                          <Box sx={historyEmptySx}>
+                            No generated packet history found.
+                          </Box>
+                        )}
+
+                      {!generatedHistoryLoading &&
+                        paginatedGeneratedHistoryRows.map((row) => (
+                          <div
+                            key={row.historyId}
+                            style={historyTableRow}
+                          >
+                            <div style={historyCellWrap}>
+                              <span style={historyDateText}>
+                                {formatHistoryDateTime(row.generatedAt)}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span style={historyUserText}>
+                                {row.generatedBy || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span
+                                style={historyMainText}
+                                title={row.itemName}
+                              >
+                                {row.itemName || "—"}
+                              </span>
+
+                              <span
+                                style={historySubText}
+                                title={row.clientName}
+                              >
+                                {row.clientName || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span
+                                style={historyMainText}
+                                title={row.description}
+                              >
+                                {row.description || "—"}
+                              </span>
+
+                              {row.remarks && (
+                                <span
+                                  style={historySubText}
+                                  title={row.remarks}
+                                >
+                                  Remarks: {row.remarks}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span
+                                style={historyMonoText}
+                                title={row.sku}
+                              >
+                                {row.sku || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span style={historyMainText}>
+                                {row.pdNo || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span style={historyMainText}>
+                                {row.packetNumber || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <span
+                                style={historyMonoText}
+                                title={row.stickerNumber}
+                              >
+                                {row.stickerNumber || "—"}
+                              </span>
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <Chip
+                                label={
+                                  row.reason === "REPRINT"
+                                    ? `Reprint #${row.printIteration || ""}`
+                                    : "Initial"
+                                }
+                                size="small"
+                                sx={
+                                  row.reason === "REPRINT"
+                                    ? historyReprintChipSx
+                                    : historyInitialChipSx
+                                }
+                              />
+                            </div>
+
+                            <div style={historyCellWrap}>
+                              <Button
+                                size="small"
+                                onClick={() => openHistoryPdf(row.historyId)}
+                                sx={historyViewButtonSx}
+                              >
+                                View PDF
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                    </Box>
+                  )}
+                  {activeGeneratedHistoryRows.length > 0 && (
+                    <Box sx={historyPaginationBarSx}>
+                      <Box sx={historyPaginationTextSx}>
+                        Showing{" "}
+                        <b>{generatedHistoryShowingStart}</b>
+                        {" - "}
+                        <b>{generatedHistoryPageEnd}</b>
                         {" of "}
-                        {generatedHistoryTotalPages}
+                        <b>{activeGeneratedHistoryRows.length}</b>
+                        {generatedHistoryReportMode === "DETAILED"
+                          ? " records"
+                          : " groups"}
                       </Box>
 
-                      <Button
-                        disabled={
-                          generatedHistorySafePageNo ===
-                          generatedHistoryTotalPages
-                        }
-                        onClick={() =>
-                          setGeneratedHistoryPageNo((prev) =>
-                            Math.min(
-                              generatedHistoryTotalPages,
-                              prev + 1
+                      <Box sx={historyPaginationControlsSx}>
+                        <Button
+                          disabled={generatedHistorySafePageNo === 1}
+                          onClick={() =>
+                            setGeneratedHistoryPageNo((prev) =>
+                              Math.max(1, prev - 1)
                             )
-                          )
-                        }
-                        sx={{
-                          ...historyPaginationButtonSx,
-                          background:
-                            "linear-gradient(180deg,#2563eb,#1d4ed8)",
-                        }}
-                      >
-                        Next ▶
-                      </Button>
+                          }
+                          sx={historyPaginationButtonSx}
+                        >
+                          ◀ Previous
+                        </Button>
+
+                        <Box sx={historyPageCountSx}>
+                          Page{" "}
+                          <span>{generatedHistorySafePageNo}</span>
+                          {" of "}
+                          {generatedHistoryTotalPages}
+                        </Box>
+
+                        <Button
+                          disabled={
+                            generatedHistorySafePageNo ===
+                            generatedHistoryTotalPages
+                          }
+                          onClick={() =>
+                            setGeneratedHistoryPageNo((prev) =>
+                              Math.min(
+                                generatedHistoryTotalPages,
+                                prev + 1
+                              )
+                            )
+                          }
+                          sx={{
+                            ...historyPaginationButtonSx,
+                            background:
+                              "linear-gradient(180deg,#2563eb,#1d4ed8)",
+                          }}
+                        >
+                          Next ▶
+                        </Button>
+                      </Box>
+
+                      <Box sx={historyPageSizeWrapSx}>
+                        <span>Show</span>
+
+                        <select
+                          value={generatedHistoryPageSize}
+                          onChange={(e) => {
+                            setGeneratedHistoryPageSize(Number(e.target.value));
+                            setGeneratedHistoryPageNo(1);
+                          }}
+                          style={historyPageSizeSelectStyle}
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                          <option value={200}>200</option>
+                        </select>
+
+                        <span>per page</span>
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+                {historyPdfPreview?.url && (
+                  <Box sx={historyInlinePdfSx}>
+                    <Box sx={historyInlinePdfHeaderSx}>
+                      <Box>
+                        <Box sx={historyInlinePdfTitleSx}>
+                          Sticker PDF Preview
+                        </Box>
+
+                        <Box sx={historyInlinePdfSubSx}>
+                          Preview opens inside Generated History, not as a second modal.
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <Button
+                          onClick={() => {
+                            const a = document.createElement("a");
+                            a.href = historyPdfPreview.url;
+                            a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                          }}
+                          sx={modalSecondaryButtonSx}
+                        >
+                          Download
+                        </Button>
+
+                        <Button
+                          onClick={closeHistoryPdfPreview}
+                          sx={modalSecondaryButtonSx}
+                        >
+                          Close Preview
+                        </Button>
+                      </Box>
                     </Box>
 
-                    <Box sx={historyPageSizeWrapSx}>
-                      <span>Show</span>
-
-                      <select
-                        value={generatedHistoryPageSize}
-                        onChange={(e) => {
-                          setGeneratedHistoryPageSize(Number(e.target.value));
-                          setGeneratedHistoryPageNo(1);
+                    <Box sx={historyInlinePdfFrameWrapSx}>
+                      <iframe
+                        src={getPdfPreviewSrc(historyPdfPreview.url)}
+                        width="100%"
+                        height="100%"
+                        title="Generated Sticker PDF Preview"
+                        style={{
+                          border: "1px solid rgba(255,255,255,.08)",
+                          borderRadius: 12,
+                          background: "#fff",
                         }}
-                        style={historyPageSizeSelectStyle}
-                      >
-                        <option value={25}>25</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                        <option value={200}>200</option>
-                      </select>
-
-                      <span>per page</span>
+                      />
                     </Box>
                   </Box>
                 )}
               </Box>
-              {historyPdfPreview?.url && (
-                <Box sx={historyInlinePdfSx}>
-                  <Box sx={historyInlinePdfHeaderSx}>
-                    <Box>
-                      <Box sx={historyInlinePdfTitleSx}>
-                        Sticker PDF Preview
-                      </Box>
-
-                      <Box sx={historyInlinePdfSubSx}>
-                        Preview opens inside Generated History, not as a second modal.
-                      </Box>
-                    </Box>
-
-                    <Box sx={{ display: "flex", gap: 1 }}>
-                      <Button
-                        onClick={() => {
-                          const a = document.createElement("a");
-                          a.href = historyPdfPreview.url;
-                          a.download = `STICKER_${historyPdfPreview.historyId}.pdf`;
-                          document.body.appendChild(a);
-                          a.click();
-                          a.remove();
-                        }}
-                        sx={modalSecondaryButtonSx}
-                      >
-                        Download
-                      </Button>
-
-                      <Button
-                        onClick={closeHistoryPdfPreview}
-                        sx={modalSecondaryButtonSx}
-                      >
-                        Close Preview
-                      </Button>
-                    </Box>
-                  </Box>
-
-                  <Box sx={historyInlinePdfFrameWrapSx}>
-                    <iframe
-                      src={getPdfPreviewSrc(historyPdfPreview.url)}
-                      width="100%"
-                      height="100%"
-                      title="Generated Sticker PDF Preview"
-                      style={{
-                        border: "1px solid rgba(255,255,255,.08)",
-                        borderRadius: 12,
-                        background: "#fff",
-                      }}
-                    />
-                  </Box>
-                </Box>
-              )}
             </Box>
-          </Box>
-        </InventoryModal>
+          </InventoryModal>
         )}
         {isHardwarePacking && (
-        <InventoryModal
-          open={hardwarePacketOpen}
-          onClose={() => {
-            if (hardwareSaving) {
-              return;
+          <InventoryModal
+            open={hardwarePacketOpen}
+            onClose={() => {
+              if (hardwareSaving) {
+                return;
+              }
+
+              setHardwarePacketOpen(false);
+              setHardwareEditingItem(null);
+            }}
+            icon="🔩"
+            title={
+              hardwareEditingItem
+                ? "Edit Hardware Packet"
+                : "Create Hardware Packet"
             }
-
-            setHardwarePacketOpen(false);
-            setHardwareEditingItem(null);
-          }}
-          icon="🔩"
-          title={
-            hardwareEditingItem
-              ? "Edit Hardware Packet"
-              : "Create Hardware Packet"
-          }
-          subtitle="Enter packet details and add every hardware item with quantity and UOM"
-          width={820}
-          height="92vh"
-          footer={
-            <>
-              <Button
-                disabled={hardwareSaving}
-                onClick={() => {
-                  setHardwarePacketOpen(false);
-                  setHardwareEditingItem(null);
-                }}
-                sx={modalSecondaryButtonSx}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                disabled={hardwareSaving}
-                onClick={saveHardwarePacket}
-                sx={{
-                  ...premiumButton,
-                  opacity:
-                    hardwareSaving
-                      ? 0.55
-                      : 1,
-                }}
-              >
-                {hardwareSaving
-                  ? "Saving..."
-                  : hardwareEditingItem
-                    ? "Update Hardware Packet"
-                    : "Create Hardware Packet"}
-              </Button>
-            </>
-          }
-        >
-          <Box sx={modalScrollBodySx}>
-            <Box sx={sectionCardSx}>
-              <Box sx={sectionTitleSx}>
-                Packet Information
-              </Box>
-
-              <TextField
-                label="Packet / Item Name"
-                placeholder="Example: Kitchen Hardware Packet"
-                fullWidth
-                value={hardwareForm.itemName}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    itemName: e.target.value,
-                  }))
-                }
-                error={!!errors.hardwareItemName}
-                helperText={errors.hardwareItemName}
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="PD No."
-                fullWidth
-                value={hardwareForm.pdNo}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    pdNo: e.target.value,
-                  }))
-                }
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Drawing No."
-                fullWidth
-                value={hardwareForm.drawingNo}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    drawingNo: e.target.value,
-                  }))
-                }
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Client Name"
-                fullWidth
-                value={hardwareForm.clientName}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    clientName: e.target.value,
-                  }))
-                }
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Client Address"
-                fullWidth
-                multiline
-                minRows={2}
-                value={hardwareForm.clientAddress}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    clientAddress: e.target.value,
-                  }))
-                }
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                label="Floor / Area"
-                fullWidth
-                value={hardwareForm.floor}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    floor: e.target.value,
-                  }))
-                }
-                sx={formFieldSx(darkMode)}
-              />
-
-              <TextField
-                select
-                label="Plant"
-                fullWidth
-                value={hardwareForm.plantCode}
-                onChange={(e) =>
-                  setHardwareForm((previous) => ({
-                    ...previous,
-                    plantCode: e.target.value,
-                  }))
-                }
-                error={!!errors.hardwarePlantCode}
-                helperText={
-                  errors.hardwarePlantCode ||
-                  "Select an assigned plant"
-                }
-                sx={formFieldSx(darkMode)}
-                slotProps={selectMenuSlotProps}
-                SelectProps={{
-                  MenuProps:
-                    selectMenuSlotProps
-                      .select.MenuProps,
-                }}
-              >
-                {myPlants.map((plant) => (
-                  <MenuItem
-                    key={plant.plantCode}
-                    value={plant.plantCode}
-                  >
-                    {plant.plantCode}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Box>
-
-            <Box sx={sectionCardSx}>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent:
-                    "space-between",
-                  gap: 2,
-                  mb: 2,
-                }}
-              >
-                <Box>
-                  <Box sx={sectionTitleSx}>
-                    Hardware Contents
-                  </Box>
-
-                  <Box
-                    sx={{
-                      color: "#94a3b8",
-                      fontSize: 12,
-                      mt: -1,
-                    }}
-                  >
-                    Each row will be printed separately in the sticker description section.
-                  </Box>
-                </Box>
+            subtitle="Enter packet details and add every hardware item with quantity and UOM"
+            width={820}
+            height="92vh"
+            footer={
+              <>
+                <Button
+                  disabled={hardwareSaving}
+                  onClick={() => {
+                    setHardwarePacketOpen(false);
+                    setHardwareEditingItem(null);
+                  }}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Cancel
+                </Button>
 
                 <Button
-                  onClick={addHardwareLine}
-                  sx={actionSecondary}
-                >
-                  + Add Hardware
-                </Button>
-              </Box>
-
-              {errors.hardwareLines && (
-                <Box
+                  disabled={hardwareSaving}
+                  onClick={saveHardwarePacket}
                   sx={{
-                    color: "#fca5a5",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    mb: 1.5,
+                    ...premiumButton,
+                    opacity:
+                      hardwareSaving
+                        ? 0.55
+                        : 1,
                   }}
                 >
-                  {errors.hardwareLines}
+                  {hardwareSaving
+                    ? "Saving..."
+                    : hardwareEditingItem
+                      ? "Update Hardware Packet"
+                      : "Create Hardware Packet"}
+                </Button>
+              </>
+            }
+          >
+            <Box sx={modalScrollBodySx}>
+              <Box sx={sectionCardSx}>
+                <Box sx={sectionTitleSx}>
+                  Packet Information
                 </Box>
-              )}
 
-              {hardwareLines.map(
-                (line, index) => (
+                <TextField
+                  label="Packet / Item Name"
+                  placeholder="Example: Kitchen Hardware Packet"
+                  fullWidth
+                  value={hardwareForm.itemName}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      itemName: e.target.value,
+                    }))
+                  }
+                  error={!!errors.hardwareItemName}
+                  helperText={errors.hardwareItemName}
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="PD No."
+                  fullWidth
+                  value={hardwareForm.pdNo}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      pdNo: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Drawing No."
+                  fullWidth
+                  value={hardwareForm.drawingNo}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      drawingNo: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Client Name"
+                  fullWidth
+                  value={hardwareForm.clientName}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      clientName: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Client Address"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  value={hardwareForm.clientAddress}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      clientAddress: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  label="Floor / Area"
+                  fullWidth
+                  value={hardwareForm.floor}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      floor: e.target.value,
+                    }))
+                  }
+                  sx={formFieldSx(darkMode)}
+                />
+
+                <TextField
+                  select
+                  label="Plant"
+                  fullWidth
+                  value={hardwareForm.plantCode}
+                  onChange={(e) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      plantCode: e.target.value,
+                    }))
+                  }
+                  error={!!errors.hardwarePlantCode}
+                  helperText={
+                    errors.hardwarePlantCode ||
+                    "Select an assigned plant"
+                  }
+                  sx={formFieldSx(darkMode)}
+                  slotProps={selectMenuSlotProps}
+                  SelectProps={{
+                    MenuProps:
+                      selectMenuSlotProps
+                        .select.MenuProps,
+                  }}
+                >
+                  {myPlants.map((plant) => (
+                    <MenuItem
+                      key={plant.plantCode}
+                      value={plant.plantCode}
+                    >
+                      {plant.plantCode}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+
+              <Box sx={sectionCardSx}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent:
+                      "space-between",
+                    gap: 2,
+                    mb: 2,
+                  }}
+                >
+                  <Box>
+                    <Box sx={sectionTitleSx}>
+                      Hardware Contents
+                    </Box>
+
+                    <Box
+                      sx={{
+                        color: "#94a3b8",
+                        fontSize: 12,
+                        mt: -1,
+                      }}
+                    >
+                      Each row will be printed separately in the sticker description section.
+                    </Box>
+                  </Box>
+
+                  <Button
+                    onClick={addHardwareLine}
+                    sx={actionSecondary}
+                  >
+                    + Add Hardware
+                  </Button>
+                </Box>
+
+                {errors.hardwareLines && (
                   <Box
-                    key={
-                      line.id ||
-                      `hardware-line-${index}`
-                    }
                     sx={{
-                      ...packetCardSx,
+                      color: "#fca5a5",
+                      fontSize: 12,
+                      fontWeight: 700,
                       mb: 1.5,
                     }}
                   >
+                    {errors.hardwareLines}
+                  </Box>
+                )}
+
+                {hardwareLines.map(
+                  (line, index) => (
                     <Box
+                      key={
+                        line.id ||
+                        `hardware-line-${index}`
+                      }
                       sx={{
-                        display: "flex",
-                        justifyContent:
-                          "space-between",
-                        alignItems: "center",
+                        ...packetCardSx,
                         mb: 1.5,
                       }}
                     >
-                      <Box sx={packetTitleSx}>
-                        Serial No. {index + 1}
-                      </Box>
-
-                      <Button
-                        size="small"
-                        disabled={
-                          hardwareLines.length === 1
-                        }
-                        onClick={() =>
-                          removeHardwareLine(index)
-                        }
+                      <Box
                         sx={{
-                          ...actionDanger,
-                          minWidth: 74,
-                          opacity:
-                            hardwareLines.length === 1
-                              ? 0.4
-                              : 1,
+                          display: "flex",
+                          justifyContent:
+                            "space-between",
+                          alignItems: "center",
+                          mb: 1.5,
                         }}
                       >
-                        Remove
-                      </Button>
-                    </Box>
+                        <Box sx={packetTitleSx}>
+                          Serial No. {index + 1}
+                        </Box>
 
-                    <TextField
-                      label="Hardware Item"
-                      placeholder="Example: Soft Close Hinge"
-                      fullWidth
-                      value={line.itemName}
-                      onChange={(e) =>
-                        updateHardwareLine(
-                          index,
-                          "itemName",
-                          e.target.value
-                        )
-                      }
-                      error={
-                        !!errors[
-                        `hardware-line-name-${index}`
-                        ]
-                      }
-                      helperText={
-                        errors[
-                        `hardware-line-name-${index}`
-                        ]
-                      }
-                      sx={formFieldSx(darkMode)}
-                    />
+                        <Button
+                          size="small"
+                          disabled={
+                            hardwareLines.length === 1
+                          }
+                          onClick={() =>
+                            removeHardwareLine(index)
+                          }
+                          sx={{
+                            ...actionDanger,
+                            minWidth: 74,
+                            opacity:
+                              hardwareLines.length === 1
+                                ? 0.4
+                                : 1,
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </Box>
 
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "1fr 1fr",
-                        gap: 1.5,
-                      }}
-                    >
                       <TextField
-                        label="Quantity"
-                        type="number"
+                        label="Hardware Item"
+                        placeholder="Example: Soft Close Hinge"
                         fullWidth
-                        inputProps={{
-                          min: 0.001,
-                          step: "any",
-                        }}
-                        value={line.quantity}
+                        value={line.itemName}
                         onChange={(e) =>
                           updateHardwareLine(
                             index,
-                            "quantity",
+                            "itemName",
                             e.target.value
                           )
                         }
                         error={
                           !!errors[
-                          `hardware-line-qty-${index}`
+                          `hardware-line-name-${index}`
                           ]
                         }
                         helperText={
                           errors[
-                          `hardware-line-qty-${index}`
+                          `hardware-line-name-${index}`
                           ]
                         }
                         sx={formFieldSx(darkMode)}
                       />
 
-                      <TextField
-                        select
-                        label="UOM"
-                        fullWidth
-                        value={line.uom}
-                        onChange={(e) =>
-                          updateHardwareLine(
-                            index,
-                            "uom",
-                            e.target.value
-                          )
-                        }
-                        error={
-                          !!errors[
-                          `hardware-line-uom-${index}`
-                          ]
-                        }
-                        helperText={
-                          errors[
-                          `hardware-line-uom-${index}`
-                          ]
-                        }
-                        sx={formFieldSx(darkMode)}
-                        slotProps={
-                          selectMenuSlotProps
-                        }
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "1fr 1fr",
+                          gap: 1.5,
+                        }}
                       >
-                        {hardwareUomOptions.map(
-                          (uom) => (
-                            <MenuItem
-                              key={uom}
-                              value={uom}
-                            >
-                              {uom}
-                            </MenuItem>
-                          )
-                        )}
-                      </TextField>
+                        <TextField
+                          label="Quantity"
+                          type="number"
+                          fullWidth
+                          inputProps={{
+                            min: 0.001,
+                            step: "any",
+                          }}
+                          value={line.quantity}
+                          onChange={(e) =>
+                            updateHardwareLine(
+                              index,
+                              "quantity",
+                              e.target.value
+                            )
+                          }
+                          error={
+                            !!errors[
+                            `hardware-line-qty-${index}`
+                            ]
+                          }
+                          helperText={
+                            errors[
+                            `hardware-line-qty-${index}`
+                            ]
+                          }
+                          sx={formFieldSx(darkMode)}
+                        />
+
+                        <TextField
+                          select
+                          label="UOM"
+                          fullWidth
+                          value={line.uom}
+                          onChange={(e) =>
+                            updateHardwareLine(
+                              index,
+                              "uom",
+                              e.target.value
+                            )
+                          }
+                          error={
+                            !!errors[
+                            `hardware-line-uom-${index}`
+                            ]
+                          }
+                          helperText={
+                            errors[
+                            `hardware-line-uom-${index}`
+                            ]
+                          }
+                          sx={formFieldSx(darkMode)}
+                          slotProps={
+                            selectMenuSlotProps
+                          }
+                        >
+                          {hardwareUomOptions.map(
+                            (uom) => (
+                              <MenuItem
+                                key={uom}
+                                value={uom}
+                              >
+                                {uom}
+                              </MenuItem>
+                            )
+                          )}
+                        </TextField>
+                      </Box>
                     </Box>
-                  </Box>
-                )
-              )}
-            </Box>
-
-            <Box
-              sx={{
-                p: 1.6,
-                borderRadius: "12px",
-                background:
-                  "rgba(59,130,246,.08)",
-                border:
-                  "1px solid rgba(59,130,246,.18)",
-              }}
-            >
-              <Box
-                sx={{
-                  color: "#93c5fd",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  mb: 1,
-                }}
-              >
-                Sticker Description Preview
+                  )
+                )}
               </Box>
 
               <Box
-                component="pre"
                 sx={{
-                  m: 0,
-                  color: "#cbd5e1",
-                  whiteSpace: "pre-wrap",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  lineHeight: 1.6,
+                  p: 1.6,
+                  borderRadius: "12px",
+                  background:
+                    "rgba(59,130,246,.08)",
+                  border:
+                    "1px solid rgba(59,130,246,.18)",
                 }}
               >
-                {buildHardwareDescription(
-                  hardwareLines
-                ) || "Add hardware items to preview the description."}
+                <Box
+                  sx={{
+                    color: "#93c5fd",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    mb: 1,
+                  }}
+                >
+                  Sticker Description Preview
+                </Box>
+
+                <Box
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    color: "#cbd5e1",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {buildHardwareDescription(
+                    hardwareLines
+                  ) || "Add hardware items to preview the description."}
+                </Box>
               </Box>
             </Box>
-          </Box>
-        </InventoryModal>
+          </InventoryModal>
         )}
       </div>
       {

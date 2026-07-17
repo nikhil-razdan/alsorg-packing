@@ -19,11 +19,99 @@ function Sidebar() {
 		warehouseAccess,
 	} = useAuth();
 
+	const cleanRole = String(role || "")
+		.replace(/^ROLE_/i, "")
+		.trim()
+		.toUpperCase();
+
+	const hasWarehousePageAccess =
+		warehouseAccess === true ||
+		String(warehouseAccess || "")
+			.trim()
+			.toLowerCase() === "true";
+
 	const canOpenWarehouse =
-		role === "ADMIN" ||
-		role === "DISPATCH" ||
-		role === "WAREHOUSE" ||
-		warehouseAccess === true;
+		cleanRole === "ADMIN" ||
+		cleanRole === "DISPATCH" ||
+		cleanRole === "WAREHOUSE" ||
+		hasWarehousePageAccess; const links = [
+			{
+				path: "/packflow/dashboard",
+				label: "Dashboard",
+				roles: [
+					"ADMIN",
+					"DISPATCH",
+					"PACKING",
+					"WAREHOUSE",
+					"LOGISTICS",
+				],
+				icon: (
+					<DashboardOutlinedIcon
+						fontSize="small"
+					/>
+				),
+			},
+
+			{
+				path: "/packflow/zoho-items",
+				label:
+					cleanRole === "HARDWARE_PACKING"
+						? "Hardware Inventory"
+						: "Inventory Items",
+				roles: [
+					"ADMIN",
+					"PACKING",
+					"HARDWARE_PACKING",
+				],
+				icon: (
+					<Inventory2OutlinedIcon
+						fontSize="small"
+					/>
+				),
+			},
+
+			{
+				path: "/packflow/warehouse",
+				label: "Warehouse",
+				roles: [],
+				customAccess: canOpenWarehouse,
+				icon: (
+					<WarehouseOutlinedIcon
+						fontSize="small"
+					/>
+				),
+			},
+
+			{
+				path: "/packflow/dispatched-items",
+				label: "Dispatched Items",
+				roles: [
+					"ADMIN",
+					"DISPATCH",
+					"WAREHOUSE",
+					"PACKING",
+				],
+				icon: (
+					<LocalShippingOutlinedIcon
+						fontSize="small"
+					/>
+				),
+			},
+
+			{
+				path: "/packflow/logistics",
+				label: "Logistics",
+				roles: [
+					"ADMIN",
+					"LOGISTICS",
+				],
+				icon: (
+					<AltRouteOutlinedIcon
+						fontSize="small"
+					/>
+				),
+			},
+		];
 
 	const links = [
 		{
@@ -36,14 +124,29 @@ function Sidebar() {
 				"WAREHOUSE",
 				"LOGISTICS",
 			],
-			icon: <DashboardOutlinedIcon fontSize="small" />,
+			icon: (
+				<DashboardOutlinedIcon
+					fontSize="small"
+				/>
+			),
 		},
 
 		{
 			path: "/packflow/zoho-items",
-			label: "Inventory Items",
-			roles: ["ADMIN", "PACKING"],
-			icon: <Inventory2OutlinedIcon fontSize="small" />,
+			label:
+				cleanRole === "HARDWARE_PACKING"
+					? "Hardware Inventory"
+					: "Inventory Items",
+			roles: [
+				"ADMIN",
+				"PACKING",
+				"HARDWARE_PACKING",
+			],
+			icon: (
+				<Inventory2OutlinedIcon
+					fontSize="small"
+				/>
+			),
 		},
 
 		{
@@ -51,7 +154,11 @@ function Sidebar() {
 			label: "Warehouse",
 			roles: [],
 			customAccess: canOpenWarehouse,
-			icon: <WarehouseOutlinedIcon fontSize="small" />,
+			icon: (
+				<WarehouseOutlinedIcon
+					fontSize="small"
+				/>
+			),
 		},
 
 		{
@@ -63,7 +170,11 @@ function Sidebar() {
 				"WAREHOUSE",
 				"PACKING",
 			],
-			icon: <LocalShippingOutlinedIcon fontSize="small" />,
+			icon: (
+				<LocalShippingOutlinedIcon
+					fontSize="small"
+				/>
+			),
 		},
 
 		{
@@ -73,17 +184,27 @@ function Sidebar() {
 				"ADMIN",
 				"LOGISTICS",
 			],
-			icon: <AltRouteOutlinedIcon fontSize="small" />,
+			icon: (
+				<AltRouteOutlinedIcon
+					fontSize="small"
+				/>
+			),
 		},
 	];
 
-	const visibleLinks = links.filter((link) => {
-		if (typeof link.customAccess === "boolean") {
-			return link.customAccess;
-		}
+	const visibleLinks =
+		links.filter((link) => {
+			if (
+				typeof link.customAccess ===
+				"boolean"
+			) {
+				return link.customAccess;
+			}
 
-		return link.roles.includes(role);
-	});
+			return link.roles.includes(
+				cleanRole
+			);
+		});
 
 	const linkStyle = (active) => ({
 		display: "flex",

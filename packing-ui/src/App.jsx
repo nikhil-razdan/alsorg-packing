@@ -18,8 +18,59 @@ import { AuthProvider } from "./auth/AuthContext";
 
 import ModuleHub from "./shell/ModuleHub";
 import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
-
+import { useAuth } from "./auth/AuthContext";
 import useViewportHeight from "./useViewportHeight";
+
+function PackFlowDefaultRedirect() {
+	const {
+		role,
+		authLoading,
+	} = useAuth();
+
+	if (authLoading) {
+		return null;
+	}
+
+	if (role === "HARDWARE_PACKING") {
+		return (
+			<Navigate
+				to="/packflow/zoho-items"
+				replace
+			/>
+		);
+	}
+
+	return (
+		<Navigate
+			to="/packflow/dashboard"
+			replace
+		/>
+	);
+}
+
+function PackFlowDashboardAccess({
+	children,
+}) {
+	const {
+		role,
+		authLoading,
+	} = useAuth();
+
+	if (authLoading) {
+		return null;
+	}
+
+	if (role === "HARDWARE_PACKING") {
+		return (
+			<Navigate
+				to="/packflow/zoho-items"
+				replace
+			/>
+		);
+	}
+
+	return children;
+}
 
 function App() {
 	useViewportHeight();
@@ -60,13 +111,31 @@ function App() {
 							</RequireAuth>
 						}
 					>
-						<Route index element={<Navigate to="dashboard" replace />} />
-						<Route path="dashboard" element={<DashboardPage />} />
+						<Route
+							index
+							element={
+								<PackFlowDefaultRedirect />
+							}
+						/>
+						<Route
+							path="dashboard"
+							element={
+								<PackFlowDashboardAccess>
+									<DashboardPage />
+								</PackFlowDashboardAccess>
+							}
+						/>
 
 						<Route
 							path="zoho-items"
 							element={
-								<RequireRole allowed={["ADMIN", "PACKING"]}>
+								<RequireRole
+									allowed={[
+										"ADMIN",
+										"PACKING",
+										"HARDWARE_PACKING",
+									]}
+								>
 									<ZohoItemsPage />
 								</RequireRole>
 							}
@@ -112,7 +181,12 @@ function App() {
 						/>
 
 						<Route path="users" element={<Navigate to="/users" replace />} />
-						<Route path="*" element={<Navigate to="dashboard" replace />} />
+						<Route
+							path="*"
+							element={
+								<PackFlowDefaultRedirect />
+							}
+						/>
 					</Route>
 
 					<Route

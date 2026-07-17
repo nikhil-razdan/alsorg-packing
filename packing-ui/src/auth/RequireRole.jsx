@@ -20,7 +20,14 @@ function RequireRole({
 		normalizeRole(item)
 	);
 
-	if (!normalizedAllowed.includes(role)) {
+	const cleanRole =
+		normalizeRole(role);
+
+	if (
+		!normalizedAllowed.includes(
+			cleanRole
+		)
+	) {
 		return <Navigate to="/modules" replace />;
 	}
 

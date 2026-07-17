@@ -22,8 +22,33 @@ export default function RequireModule({ moduleKey, children }) {
 		return children;
 	}
 
-	if (!Array.isArray(modules) || !modules.includes(moduleKey)) {
-		return <Navigate to="/modules" replace />;
+	const normalizedModuleKey =
+		String(moduleKey || "")
+			.trim()
+			.toUpperCase();
+
+	const normalizedModules =
+		Array.isArray(modules)
+			? modules
+				.filter(Boolean)
+				.map((module) =>
+					String(module)
+						.trim()
+						.toUpperCase()
+				)
+			: [];
+
+	if (
+		!normalizedModules.includes(
+			normalizedModuleKey
+		)
+	) {
+		return (
+			<Navigate
+				to="/modules"
+				replace
+			/>
+		);
 	}
 
 	return children;
