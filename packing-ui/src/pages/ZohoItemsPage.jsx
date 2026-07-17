@@ -3379,29 +3379,30 @@ function ZohoItemsPage() {
       itemId
     );
 
-  const normalizedLines =
-    hardwareLines.map(
-      (line, index) => ({
-        id:
-          line?.id || null,
+  /*
+   * Must match HardwareLineRequest exactly:
+   * - itemName
+   * - quantity
+   * - uom
+   *
+   * lineNo and id are not required by the backend request DTO.
+   * The backend generates IDs and line numbers itself.
+   */
+  const normalizedItems =
+    hardwareLines.map((line) => ({
+      itemName:
+        String(
+          line?.itemName || ""
+        ).trim(),
 
-        lineNo:
-          index + 1,
+      quantity:
+        Number(line?.quantity),
 
-        itemName:
-          String(
-            line?.itemName || ""
-          ).trim(),
-
-        quantity:
-          Number(line?.quantity),
-
-        uom:
-          String(
-            line?.uom || "Nos"
-          ).trim(),
-      })
-    );
+      uom:
+        String(
+          line?.uom || "Nos"
+        ).trim(),
+    }));
 
   const commonDetails = {
     itemName:
@@ -3437,63 +3438,54 @@ function ZohoItemsPage() {
     plantCode:
       String(
         hardwareForm.plantCode || ""
-      ).trim(),
+      )
+        .trim()
+        .toUpperCase(),
   };
 
   /*
-   * IMPORTANT:
+   * POST DTO:
+   * HardwarePacketCreateRequest
+   *   -> packets()
+   *      -> HardwarePacketDraftRequest.items()
    *
-   * POST /hardware-packets expects an outer packets array.
-   * PUT /hardware-packets/{id} edits one existing packet and
-   * therefore continues to use the flat lines structure.
+   * PUT DTO:
+   * HardwarePacketUpdateRequest.items()
    */
-  const payload =
-    editing
-      ? {
-          ...commonDetails,
+  const payload = editing
+    ? {
+        ...commonDetails,
+        items: normalizedItems,
+      }
+    : {
+        ...commonDetails,
+        packets: [
+          {
+            items: normalizedItems,
+          },
+        ],
+      };
 
-          lines:
-            normalizedLines,
-        }
-      : {
-          ...commonDetails,
-
-          packets: [
-            {
-              /*
-               * Include the packet information inside the
-               * packets collection expected by createPackets().
-               */
-              itemName:
-                commonDetails.itemName,
-
-              packetName:
-                commonDetails.itemName,
-
-              description:
-                buildHardwareDescription(
-                  normalizedLines
-                ),
-
-              lines:
-                normalizedLines,
-            },
-          ],
-        };
-
-  const path =
-    editing
-      ? `/api/hardware-packets/${encodeURIComponent(
-          itemId
-        )}`
-      : "/api/hardware-packets";
+  const path = editing
+    ? `/api/hardware-packets/${encodeURIComponent(
+        itemId
+      )}`
+    : "/api/hardware-packets";
 
   try {
     setHardwareSaving(true);
 
+    /*
+     * Keep this temporarily during testing.
+     * Check the browser console before removing it.
+     */
     console.log(
-      "Hardware packet request:",
-      payload
+      "Hardware packet request payload:",
+      JSON.stringify(
+        payload,
+        null,
+        2
+      )
     );
 
     const res =
@@ -3511,9 +3503,7 @@ function ZohoItemsPage() {
           },
 
           body:
-            JSON.stringify(
-              payload
-            ),
+            JSON.stringify(payload),
         }
       );
 
