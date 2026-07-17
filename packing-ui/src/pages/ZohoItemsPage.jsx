@@ -3363,129 +3363,205 @@ function ZohoItemsPage() {
     setEditOpen(true);
   };
 
-  const saveHardwarePacket =
-    async () => {
-      if (!validateHardwarePacket()) {
-        return;
-      }
+  const saveHardwarePacket = async () => {
+  if (!validateHardwarePacket()) {
+    return;
+  }
 
-      const itemId =
-        getPacketItemIdForSticker(
-          hardwareEditingItem
-        );
+  const itemId =
+    getPacketItemIdForSticker(
+      hardwareEditingItem
+    );
 
-      const editing =
-        Boolean(
-          hardwareEditingItem &&
-          itemId
-        );
+  const editing =
+    Boolean(
+      hardwareEditingItem &&
+      itemId
+    );
 
-      const path =
-        editing
-          ? `/api/hardware-packets/${encodeURIComponent(
-            itemId
-          )}`
-          : "/api/hardware-packets";
+  const normalizedLines =
+    hardwareLines.map(
+      (line, index) => ({
+        id:
+          line?.id || null,
 
-      const payload = {
+        lineNo:
+          index + 1,
+
         itemName:
-          hardwareForm.itemName.trim(),
+          String(
+            line?.itemName || ""
+          ).trim(),
 
-        pdNo:
-          hardwareForm.pdNo?.trim() ||
-          null,
+        quantity:
+          Number(line?.quantity),
 
-        drawingNo:
-          hardwareForm.drawingNo?.trim() ||
-          null,
+        uom:
+          String(
+            line?.uom || "Nos"
+          ).trim(),
+      })
+    );
 
-        clientName:
-          hardwareForm.clientName?.trim() ||
-          null,
+  const commonDetails = {
+    itemName:
+      String(
+        hardwareForm.itemName || ""
+      ).trim(),
 
-        clientAddress:
-          hardwareForm.clientAddress?.trim() ||
-          null,
+    pdNo:
+      String(
+        hardwareForm.pdNo || ""
+      ).trim() || null,
 
-        floor:
-          hardwareForm.floor?.trim() ||
-          null,
+    drawingNo:
+      String(
+        hardwareForm.drawingNo || ""
+      ).trim() || null,
 
-        plantCode:
-          hardwareForm.plantCode,
+    clientName:
+      String(
+        hardwareForm.clientName || ""
+      ).trim() || null,
 
-        lines:
-          hardwareLines.map(
-            (line, index) => ({
-              id: line?.id || null,
-              lineNo: index + 1,
-              itemName:
-                line.itemName.trim(),
-              quantity:
-                Number(line.quantity),
-              uom:
-                line.uom,
-            })
-          ),
-      };
+    clientAddress:
+      String(
+        hardwareForm.clientAddress || ""
+      ).trim() || null,
 
-      try {
-        setHardwareSaving(true);
+    floor:
+      String(
+        hardwareForm.floor || ""
+      ).trim() || null,
 
-        const res =
-          await authFetch(
-            `${API_BASE_URL}${path}`,
-            {
-              method:
-                editing
-                  ? "PUT"
-                  : "POST",
+    plantCode:
+      String(
+        hardwareForm.plantCode || ""
+      ).trim(),
+  };
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+  /*
+   * IMPORTANT:
+   *
+   * POST /hardware-packets expects an outer packets array.
+   * PUT /hardware-packets/{id} edits one existing packet and
+   * therefore continues to use the flat lines structure.
+   */
+  const payload =
+    editing
+      ? {
+          ...commonDetails,
 
-              body:
-                JSON.stringify(payload),
-            }
-          );
-
-        if (!res.ok) {
-          await handleApiError(
-            res,
-            editing
-              ? "Update hardware packet failed"
-              : "Create hardware packet failed"
-          );
-
-          return;
+          lines:
+            normalizedLines,
         }
+      : {
+          ...commonDetails,
 
-        setHardwarePacketOpen(false);
-        setHardwareEditingItem(null);
+          packets: [
+            {
+              /*
+               * Include the packet information inside the
+               * packets collection expected by createPackets().
+               */
+              itemName:
+                commonDetails.itemName,
 
-        showUiAlert(
-          "success",
-          editing
-            ? "Hardware packet updated successfully"
-            : "Hardware packet created successfully"
-        );
+              packetName:
+                commonDetails.itemName,
 
-        await fetchItems();
-      } catch (error) {
-        console.error(error);
+              description:
+                buildHardwareDescription(
+                  normalizedLines
+                ),
 
-        showUiAlert(
-          "error",
+              lines:
+                normalizedLines,
+            },
+          ],
+        };
+
+  const path =
+    editing
+      ? `/api/hardware-packets/${encodeURIComponent(
+          itemId
+        )}`
+      : "/api/hardware-packets";
+
+  try {
+    setHardwareSaving(true);
+
+    console.log(
+      "Hardware packet request:",
+      payload
+    );
+
+    const res =
+      await authFetch(
+        `${API_BASE_URL}${path}`,
+        {
+          method:
+            editing
+              ? "PUT"
+              : "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify(
+              payload
+            ),
+        }
+      );
+
+    if (!res.ok) {
+      await handleApiError(
+        res,
+        editing
+          ? "Update hardware packet failed"
+          : "Create hardware packet failed"
+      );
+
+      return;
+    }
+
+    setHardwarePacketOpen(false);
+    setHardwareEditingItem(null);
+
+    resetHardwarePacketForm(
+      myPlants
+    );
+
+    showUiAlert(
+      "success",
+      editing
+        ? "Hardware packet updated successfully"
+        : "Hardware packet created successfully"
+    );
+
+    await fetchItems();
+  } catch (error) {
+    console.error(
+      "Hardware packet save failed:",
+      error
+    );
+
+    showUiAlert(
+      "error",
+      error?.message ||
+        (
           editing
             ? "Failed to update hardware packet"
             : "Failed to create hardware packet"
-        );
-      } finally {
-        setHardwareSaving(false);
-      }
-    };
+        )
+    );
+  } finally {
+    setHardwareSaving(false);
+  }
+};
 
   const openDeleteConfirm = (row) => {
     setDeleteTarget(row);
