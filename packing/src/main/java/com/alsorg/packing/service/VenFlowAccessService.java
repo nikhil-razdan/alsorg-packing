@@ -136,7 +136,7 @@ public class VenFlowAccessService {
         /*
          * ADMIN can access every plant.
          */
-        if (isAdmin()) {
+        if (isDirector()) {
             return;
         }
 
@@ -170,15 +170,37 @@ public class VenFlowAccessService {
     }
 
     public boolean isDirector() {
-        /*
-         * Temporary implementation:
-         * ADMIN currently performs Director actions.
-         *
-         * Later replace with:
-         * return isAdmin()
-         * || "VENFLOW_DIRECTOR".equals(currentRole());
-         */
-        return isAdmin();
+        String role = currentRole();
+
+        return "ADMIN".equals(role)
+                || "VENFLOW_DIRECTOR".equals(role);
+    }
+
+    public boolean hasVenFlowAccess() {
+        String role = currentRole();
+
+        return switch (role) {
+            case "ADMIN",
+                    "VENFLOW_MANAGER",
+                    "VENFLOW_ENGINEERING",
+                    "VENFLOW_STORE",
+                    "VENFLOW_PURCHASE",
+                    "VENFLOW_DIRECTOR",
+                    "VENFLOW_PRODUCTION",
+                    "VENFLOW_SUPERVISOR",
+                    "VENFLOW_QC" ->
+                true;
+
+            default -> false;
+        };
+    }
+
+    public void requireVenFlowAccess() {
+        if (!hasVenFlowAccess()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "VenFlow module access required");
+        }
     }
 
     public void requireDirector() {
@@ -210,6 +232,22 @@ public class VenFlowAccessService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Purchase access required");
+        }
+    }
+
+    public boolean isQc() {
+        String role = currentRole();
+
+        return isAdminOrManager()
+                || "VENFLOW_QC".equals(role)
+                || "VENFLOW_STORE".equals(role);
+    }
+
+    public void requireQc() {
+        if (!isQc()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "VenFlow QC access required");
         }
     }
 

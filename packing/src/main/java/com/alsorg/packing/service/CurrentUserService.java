@@ -149,10 +149,22 @@ public class CurrentUserService {
     public boolean hasModule(
             User user,
             String module) {
-        return user != null
-                && user.getEffectiveModules() != null
+
+        if (user == null
+                || module == null
+                || module.isBlank()) {
+            return false;
+        }
+
+        String normalizedModule = module.trim().toUpperCase();
+
+        return user.getEffectiveModules() != null
                 && user.getEffectiveModules()
-                        .contains(module);
+                        .stream()
+                        .anyMatch(value -> value != null
+                                && value.trim()
+                                        .equalsIgnoreCase(
+                                                normalizedModule));
     }
 
     public boolean canViewTrips(User user) {
@@ -190,26 +202,44 @@ public class CurrentUserService {
     public boolean canAccessPlant(
             User user,
             String plantCode) {
-        if (plantCode == null || plantCode.isBlank()) {
+
+        if (plantCode == null
+                || plantCode.isBlank()) {
             return false;
         }
 
+        String normalizedPlantCode = plantCode.trim().toUpperCase();
+
         return allowedPlants(user)
-                .contains(plantCode.trim());
+                .stream()
+                .anyMatch(value -> value != null
+                        && value.trim()
+                                .equalsIgnoreCase(
+                                        normalizedPlantCode));
     }
 
     public String resolvePlantForWrite(
             User user,
             String requestedPlantCode) {
+
         Set<String> allowed = allowedPlants(user);
 
         if (requestedPlantCode != null
                 && !requestedPlantCode.isBlank()) {
-            String clean = requestedPlantCode.trim();
 
-            if (!allowed.contains(clean)) {
+            String clean = requestedPlantCode
+                    .trim()
+                    .toUpperCase();
+
+            boolean permitted = allowed.stream()
+                    .anyMatch(value -> value != null
+                            && value.trim()
+                                    .equalsIgnoreCase(clean));
+
+            if (!permitted) {
                 throw new AccessDeniedException(
-                        "User does not have access to plant: " + clean);
+                        "User does not have access to plant: "
+                                + clean);
             }
 
             return clean;
@@ -224,10 +254,14 @@ public class CurrentUserService {
     }
 
     public boolean canAccessWarehouse(User user) {
+        if (user == null) {
+            return false;
+        }
+
         return isAdmin(user)
                 || isDispatch(user)
                 || isWarehouse(user)
-                || Boolean.TRUE.equals(user.isWarehouseAccess());
+                || user.isWarehouseAccess();
     }
 
     public boolean canViewAllWarehouseData(User user) {
@@ -242,7 +276,36 @@ public class CurrentUserService {
     public boolean canApproveWarehouseMove(User user) {
         return user != null
                 && (isAdmin(user)
-                        || isWarehouse(user)
-                        || user.isWarehouseAccess());
+                        || isWarehouse(user));
+    }
+
+    public boolean isHardwarePacking(
+            User user) {
+        return hasRole(
+                user,
+                "HARDWARE_PACKING");
+    }
+
+    public boolean isNormalPacking(
+            User user) {
+        return hasRole(
+                user,
+                "PACKING");
+    }
+
+    public void requireHardwarePackingOrAdmin(User user) {
+        if (isAdmin(user) || isHardwarePacking(user)) {
+            return;
+        }
+
+        throw new AccessDeniedException(
+                "Hardware packing access required");
+    }
+
+    public void rejectHardwareUserFromNormalInventory(User user) {
+        if (isHardwarePacking(user)) {
+            throw new AccessDeniedException(
+                    "Hardware packing users cannot access normal inventory");
+        }
     }
 }

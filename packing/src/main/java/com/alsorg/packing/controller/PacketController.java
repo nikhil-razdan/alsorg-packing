@@ -23,10 +23,13 @@ import com.alsorg.packing.service.PacketService;
 import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
 import com.alsorg.packing.domain.users.User;
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/packets")
+@PreAuthorize("isAuthenticated() and !hasAuthority('HARDWARE_PACKING')")
 public class PacketController {
 
         private final ZohoStickerService zohoStickerService;
@@ -173,6 +176,8 @@ public class PacketController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
+
                 String plantCode = currentUserService.resolvePlantForWrite(user, req.getPlantCode());
 
                 List<PacketItem> items = packetService.createItemWithPackets(
@@ -188,6 +193,8 @@ public class PacketController {
         public List<PacketItemResponse> getAllItems(
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
 
                 List<PacketItem> sourceItems;
 
@@ -206,8 +213,9 @@ public class PacketController {
 
                 return sourceItems
                                 .stream()
-                                .filter(item -> "CREATED".equals(item.getStatus()) &&
-                                                item.getStickerNumber() == null)
+                                .filter(item -> item.getItemType() != PacketItemType.HARDWARE)
+                                .filter(item -> "CREATED".equals(item.getStatus())
+                                                && item.getStickerNumber() == null)
                                 .map(this::toPacketItemResponse)
                                 .toList();
         }
@@ -222,6 +230,7 @@ public class PacketController {
                 }
 
                 User user = currentUserService.getCurrentUserFromAuth(auth);
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
 
                 return ResponseEntity.ok(
                                 packetService.addPackets(
@@ -239,11 +248,11 @@ public class PacketController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                byte[] pdf = packetService.generateStickerForPacketItem(
+                byte[] pdf = packetService.generateNormalSticker(
                                 itemId,
                                 factoryFloor,
                                 showCompanyHeader,
-                                user.getUsername(),
+                                user,
                                 currentUserService.allowedPlants(user));
 
                 return ResponseEntity.ok()
@@ -257,9 +266,17 @@ public class PacketController {
         @PutMapping("/items/{itemId}")
         public PacketItem updateItem(
                         @PathVariable UUID itemId,
-                        @RequestBody UpdatePacketItemRequest req) {
+                        @RequestBody UpdatePacketItemRequest req,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                return packetService.updatePacketItem(itemId, req);
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
+
+                return packetService.updateNormalPacketItem(
+                                itemId,
+                                req,
+                                user,
+                                currentUserService.allowedPlants(user));
         }
 
         @PostMapping("/create-custom")
@@ -267,6 +284,8 @@ public class PacketController {
                         @RequestBody CreateItemRequest req,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
 
                 String plantCode = currentUserService.resolvePlantForWrite(user, req.getPlantCode());
 
@@ -283,6 +302,7 @@ public class PacketController {
                         @RequestBody CreateItemRequest req,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
 
                 return ResponseEntity.ok(
                                 packetService.addCustomPacket(
@@ -293,9 +313,18 @@ public class PacketController {
         }
 
         @DeleteMapping("/items/{itemId}")
-        public ResponseEntity<?> deleteItem(@PathVariable UUID itemId) {
+        public ResponseEntity<?> deleteItem(
+                        @PathVariable UUID itemId,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                packetService.deleteItem(itemId);
+                currentUserService.rejectHardwareUserFromNormalInventory(user);
+
+                packetService.deleteNormalItem(
+                                itemId,
+                                user,
+                                currentUserService.allowedPlants(user));
+
                 return ResponseEntity.ok("Item deleted");
         }
 
@@ -326,19 +355,17 @@ public class PacketController {
                         return false;
                 }
 
+                if (item.getItemType() == com.alsorg.packing.domain.common.PacketItemType.HARDWARE) {
+                        return false;
+                }
+
                 String status = clean(item.getStatus());
 
-                // Normal newly created/restored inventory items
-                if ("CREATED".equals(status) || "RESTORED".equals(status)) {
+                if ("CREATED".equals(status)
+                                || "RESTORED".equals(status)) {
                         return true;
                 }
 
-                /*
-                 * New rule:
-                 * Sticker generated item is READY.
-                 * Keep it on Inventory page ONLY while it is still in PKD area.
-                 * Once dispatch moves it to FG, hide it from Inventory page.
-                 */
                 if ("READY".equals(status)) {
                         return isPackedPkdItem(item);
                 }
@@ -426,10 +453,11 @@ public class PacketController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                byte[] pdf = packetService.previewStickerForPacketItem(
+                byte[] pdf = packetService.previewNormalSticker(
                                 itemId,
                                 factoryFloor,
                                 showCompanyHeader,
+                                user,
                                 currentUserService.allowedPlants(user));
 
                 return ResponseEntity.ok()

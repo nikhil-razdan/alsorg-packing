@@ -72,6 +72,34 @@ const extractPlantOptionsFromResponse = (data) => {
 	return [];
 };
 
+const validateOptionalHttpUrl = (
+	value,
+	fieldName
+) => {
+	const cleaned = String(value || "").trim();
+
+	if (!cleaned) {
+		return null;
+	}
+
+	try {
+		const url = new URL(cleaned);
+
+		if (
+			url.protocol !== "http:" &&
+			url.protocol !== "https:"
+		) {
+			throw new Error();
+		}
+
+		return cleaned;
+	} catch {
+		throw new Error(
+			`${fieldName} must be a valid HTTP or HTTPS URL.`
+		);
+	}
+};
+
 export default function VenFlowCreatePage() {
 	const navigate = useNavigate();
 
@@ -113,6 +141,7 @@ export default function VenFlowCreatePage() {
 		requiredQty: "",
 		unit: "SHEET",
 		bomReference: "",
+		bomAttachmentUrl: "",
 		sampleImageUrl: "",
 		remarks: "",
 	});
@@ -209,87 +238,120 @@ export default function VenFlowCreatePage() {
 			setError("");
 
 			if (!form.plantCode) {
-				setError("Plant is required.");
-				return;
+				throw new Error("Plant is required.");
 			}
 
 			if (!form.orderDate) {
-				setError("Order Date is required.");
-				return;
+				throw new Error("Order Date is required.");
 			}
 
 			if (!form.pdNo.trim()) {
-				setError("PD No. is required.");
-				return;
+				throw new Error("PD No. is required.");
 			}
 
 			if (!form.drawingNo.trim()) {
-				setError("Drawing No. is required.");
-				return;
+				throw new Error("Drawing No. is required.");
 			}
 
 			if (!form.clientName.trim()) {
-				setError("Client Name is required.");
-				return;
+				throw new Error("Client Name is required.");
 			}
 
 			if (!form.materialName.trim()) {
-				setError("Material Name is required.");
-				return;
+				throw new Error("Material Name is required.");
 			}
 
-			if (!form.requiredQty || Number(form.requiredQty) <= 0) {
-				setError("Required Qty must be greater than zero.");
-				return;
+			const requiredQty =
+				Number(form.requiredQty);
+
+			if (
+				!Number.isFinite(requiredQty) ||
+				requiredQty <= 0
+			) {
+				throw new Error(
+					"Required Qty must be greater than zero."
+				);
 			}
 
-			if (!form.unit) {
-				setError("Unit is required.");
-				return;
-			}
+			const bomAttachmentUrl =
+				validateOptionalHttpUrl(
+					form.bomAttachmentUrl,
+					"BOM Document URL"
+				);
 
-			if (!form.sampleImageUrl.trim()) {
-				setError("Sample Image is required.");
-				return;
-			}
+			const sampleImageUrl =
+				validateOptionalHttpUrl(
+					form.sampleImageUrl,
+					"Sample Image URL"
+				);
 
 			setSaving(true);
 
-			const res = await venflowApi.createEntry({
-				plantCode: form.plantCode,
-				orderDate: form.orderDate,
-				pdNo: form.pdNo.trim(),
-				drawingNo: form.drawingNo.trim(),
-				clientName: form.clientName.trim(),
-				materialName: form.materialName.trim(),
-				veneerType: form.veneerType.trim(),
-				thickness: form.thickness.trim(),
-				size: form.size.trim(),
-				sampleImageUrl: form.sampleImageUrl.trim(),
-				requiredQty: form.requiredQty,
-				unit: form.unit,
-				bomReference: form.bomReference.trim(),
-				remarks: form.remarks.trim(),
-			});
+			const res =
+				await venflowApi.createEntry({
+					plantCode:
+						form.plantCode,
 
-			const id = res.data?.id;
+					orderDate:
+						form.orderDate,
 
-			if (id) {
-				navigate(`/venflow/entries/${id}`);
-			} else {
-				navigate("/venflow/entries");
-			}
+					pdNo:
+						form.pdNo.trim(),
+
+					drawingNo:
+						form.drawingNo.trim(),
+
+					clientName:
+						form.clientName.trim(),
+
+					materialName:
+						form.materialName.trim(),
+
+					veneerType:
+						form.veneerType.trim(),
+
+					thickness:
+						form.thickness.trim(),
+
+					size:
+						form.size.trim(),
+
+					requiredQty,
+
+					unit:
+						form.unit,
+
+					bomReference:
+						form.bomReference.trim(),
+
+					bomAttachmentUrl,
+					sampleImageUrl,
+
+					remarks:
+						form.remarks.trim(),
+				});
+
+			const entryId =
+				res.data?.id;
+
+			navigate(
+				entryId
+					? `/venflow/entries/${entryId}`
+					: "/venflow/entries"
+			);
 		} catch (err) {
 			setError(
 				err?.response?.data?.message ||
 				err?.response?.data?.error ||
 				err?.response?.data ||
+				err?.message ||
 				"Failed to create VenFlow entry."
 			);
 		} finally {
 			setSaving(false);
 		}
 	};
+
 
 	return (
 		<Box sx={pageSx}>
@@ -301,8 +363,8 @@ export default function VenFlowCreatePage() {
 
 					<Typography sx={subSx}>
 						Engineering creates the BOM / Indent and sends it to AKG Store.
-						Store will review stock, reserve material or raise purchase request
-						based on availability.
+						Store will submit one stock decision. Available quantity moves to QC,
+						while any shortage automatically creates a Purchase allocation.
 					</Typography>
 				</Box>
 			</Box>
@@ -312,31 +374,31 @@ export default function VenFlowCreatePage() {
 					active
 					number="1"
 					title="Engineering BOM / Indent"
-					sub="PD, drawing, client, qty and image"
+					sub="Requirement and sample"
 				/>
 
 				<Step
 					number="2"
-					title="AKG Store Review"
-					sub="Check project stock"
+					title="Store Decision"
+					sub="Available and shortage qty"
 				/>
 
 				<Step
 					number="3"
-					title="Stock / Purchase"
-					sub="Reserve or raise PR"
+					title="Allocation QC / Purchase"
+					sub="QC and PO workflow"
 				/>
 
 				<Step
 					number="4"
 					title="Issue / Processing"
-					sub="Harender / process team"
+					sub="Issue approved material"
 				/>
 
 				<Step
 					number="5"
-					title="Closure"
-					sub="Supervisor and next stage"
+					title="Supervisor Closure"
+					sub="Final review and next stage"
 				/>
 			</Box>
 
@@ -433,6 +495,32 @@ export default function VenFlowCreatePage() {
 						/>
 
 						<TextField
+							label="BOM Document URL"
+							value={form.bomAttachmentUrl}
+							onChange={(e) =>
+								update(
+									"bomAttachmentUrl",
+									e.target.value
+								)
+							}
+							placeholder="https://..."
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Sample Image URL"
+							value={form.sampleImageUrl}
+							onChange={(e) =>
+								update(
+									"sampleImageUrl",
+									e.target.value
+								)
+							}
+							placeholder="https://..."
+							sx={fieldSx}
+						/>
+
+						<TextField
 							label="Veneer Type"
 							value={form.veneerType}
 							onChange={(e) => update("veneerType", e.target.value)}
@@ -450,15 +538,6 @@ export default function VenFlowCreatePage() {
 							label="Size"
 							value={form.size}
 							onChange={(e) => update("size", e.target.value)}
-							sx={fieldSx}
-						/>
-
-						<TextField
-							label="Sample Image URL"
-							value={form.sampleImageUrl}
-							onChange={(e) => update("sampleImageUrl", e.target.value)}
-							required
-							helperText="Mandatory traceability image from Engineering / sample approval."
 							sx={fieldSx}
 						/>
 
@@ -577,9 +656,21 @@ export default function VenFlowCreatePage() {
 						</Typography>
 
 						<Box sx={nextStepsSx}>
-							<NextStep active title="Store Review" text="AKG Store will review stock and availability for this requirement." />
-							<NextStep title="Reserve / Raise" text="If stock is available, it will be reserved. If not, a purchase request will be raised." />
-							<NextStep title="Engineering Notification" text="You will be notified once the requirement is processed." />
+							<NextStep
+								active
+								title="Store Decision"
+								text="AKG Store will enter the physically available quantity and identify the shortage."
+							/>
+
+							<NextStep
+								title="QC / Purchase"
+								text="Available Store stock moves directly to QC. The shortage automatically creates a Purchase allocation."
+							/>
+
+							<NextStep
+								title="Issue / Processing"
+								text="QC-approved quantity becomes issue-ready and can be issued to the veneer processing team."
+							/>
 						</Box>
 					</Card>
 

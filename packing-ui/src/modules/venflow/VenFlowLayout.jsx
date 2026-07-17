@@ -18,6 +18,8 @@ import {
 
 import "./VenFlowLayout.css";
 
+import { venflowApi } from "./api/venflowApi";
+
 import {
 	Badge,
 	Box,
@@ -27,6 +29,8 @@ import {
 	Popover,
 	Tooltip,
 } from "@mui/material";
+
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 
 import GavelOutlinedIcon
 	from "@mui/icons-material/GavelOutlined";
@@ -112,6 +116,12 @@ const navItems = [
 		path: "/venflow/store",
 		screen: "store",
 		icon: <StorefrontOutlinedIcon fontSize="small" />,
+	},
+	{
+		label: "QC Desk",
+		path: "/venflow/qc",
+		screen: "qc",
+		icon: <FactCheckOutlinedIcon fontSize="small" />,
 	},
 	{
 		label: "Purchase Desk",
@@ -542,10 +552,31 @@ function VenFlowHeader({ onToggleSidebar }) {
 			};
 		}
 
+		if (path.includes("/venflow/qc")) {
+			return {
+				title: "QC Desk",
+				sub: "Allocation Quality Inspection",
+			};
+		}
+
 		if (path.includes("/venflow/production")) {
 			return {
 				title: "Production Desk",
 				sub: "Processing & Closure Control",
+			};
+		}
+
+		if (path.includes("/venflow/supervisor")) {
+			return {
+				title: "Supervisor Desk",
+				sub: "Final Review & Closure",
+			};
+		}
+
+		if (path.includes("/venflow/reports")) {
+			return {
+				title: "VenFlow Reports",
+				sub: "Operational Reporting",
 			};
 		}
 

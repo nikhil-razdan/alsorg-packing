@@ -18,6 +18,11 @@ import {
     Typography,
 } from "@mui/material";
 
+import {
+    getStageLabel,
+    getStageProgress,
+} from "../venflowWorkflow";
+
 import { useNavigate } from "react-router-dom";
 
 import API from "../../../services/api";
@@ -53,25 +58,61 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 
 const STAGE_OPTIONS = [
     ["", "All"],
-    ["INDENT_CREATED", "Request Created"],
+    ["INDENT_CREATED", "Engineering BOM / Indent"],
     ["SENT_TO_STORE", "Sent to Store"],
     ["STORE_REVIEWED", "Store Reviewed"],
     ["STOCK_AVAILABLE", "Stock Available"],
-    ["MATERIAL_RESERVED", "Material Reserved"],
-    ["PURCHASE_REQUEST_RAISED", "Purchase Request Raised"],
-    ["PO_RAISED", "PO Raised"],
-    ["MATERIAL_RECEIVED_AT_STORE", "Material Received"],
+    [
+        "PURCHASE_REQUEST_RAISED",
+        "Purchase Request Raised",
+    ],
+    [
+        "PO_PENDING_DIRECTOR_APPROVAL",
+        "Director Approval Pending",
+    ],
+    [
+        "PO_APPROVED_BY_DIRECTOR",
+        "Director Approved",
+    ],
+    [
+        "PO_REJECTED_BY_DIRECTOR",
+        "Returned by Director",
+    ],
+    [
+        "ORDER_PLACED_WITH_VENDOR",
+        "Order Placed with Vendor",
+    ],
+    [
+        "MATERIAL_RECEIVED_AT_STORE",
+        "Material Received",
+    ],
     ["GRN_DONE", "GRN Done"],
     ["QC_PENDING", "QC Pending"],
-    ["QC_OK", "QC OK"],
-    ["MATERIAL_ACCEPTED_IN_STORE", "Accepted in Store"],
-    ["PRODUCTION_INFORMED", "Production Informed"],
-    ["PRODUCTION_DETAILS_ADDED", "Production Details Added"],
-    ["MATERIAL_ISSUED_TO_PRODUCTION", "Issued to Production"],
-    ["PROCESSING_STARTED", "Processing Started"],
-    ["PROCESS_COMPLETED", "Process Completed"],
-    ["SUPERVISOR_INFORMED", "Supervisor Informed"],
-    ["READY_FOR_NEXT_STAGE", "Ready for Next Stage"],
+    ["QC_OK", "QC Accepted"],
+    [
+        "MATERIAL_REJECTED_HOLD_RETURN",
+        "QC Hold / Return",
+    ],
+    [
+        "MATERIAL_ISSUED_TO_PRODUCTION",
+        "Issued to Production",
+    ],
+    [
+        "PROCESSING_STARTED",
+        "Processing Started",
+    ],
+    [
+        "PROCESS_COMPLETED",
+        "Process Completed",
+    ],
+    [
+        "SUPERVISOR_INFORMED",
+        "Supervisor Informed",
+    ],
+    [
+        "READY_FOR_NEXT_STAGE",
+        "Ready for Next Stage",
+    ],
 ];
 
 const normalizePlantCode = (value) => {
@@ -137,7 +178,11 @@ const isCompletedStage = (stage) =>
 
 const isHoldStage = (row) =>
     row?.storeStatus === "HOLD" ||
-    row?.poStatus === "REJECTED";
+    row?.poStatus === "DIRECTOR_REJECTED" ||
+    row?.qcStatus === "HOLD" ||
+    row?.qcStatus === "NOT_OK" ||
+    row?.stage ===
+    "MATERIAL_REJECTED_HOLD_RETURN";
 
 const formatDateTime = (value) => {
     if (!value) return "-";
@@ -207,57 +252,11 @@ const getPriority = (row) => {
     return "Low";
 };
 
-const getStatusText = (row) => {
-    if (!row?.stage) return "Request Created";
+const getStatusText = (row) =>
+    getStageLabel(row?.stage);
 
-    if (row.stage === "INDENT_CREATED") return "Request Created";
-    if (row.stage === "SENT_TO_STORE") return "Store Check";
-    if (row.stage === "STORE_REVIEWED") return "Store Reviewed";
-    if (row.stage === "STOCK_AVAILABLE") return "Stock Available";
-    if (row.stage === "MATERIAL_RESERVED") return "Reserved";
-    if (row.stage === "PURCHASE_REQUEST_RAISED") return "Purchase Pending";
-    if (row.stage === "PO_RAISED") return "PO Raised";
-    if (row.stage === "MATERIAL_RECEIVED_AT_STORE") return "Material Received";
-    if (row.stage === "GRN_DONE") return "GRN Done";
-    if (row.stage === "QC_PENDING") return "QC Pending";
-    if (row.stage === "QC_OK") return "QC OK";
-    if (row.stage === "MATERIAL_ACCEPTED_IN_STORE") return "Accepted";
-    if (row.stage === "PRODUCTION_INFORMED") return "Production Informed";
-    if (row.stage === "PRODUCTION_DETAILS_ADDED") return "Production Details";
-    if (row.stage === "MATERIAL_ISSUED_TO_PRODUCTION") return "Issued";
-    if (row.stage === "PROCESSING_STARTED") return "Processing Started";
-    if (row.stage === "PROCESS_COMPLETED") return "Process Completed";
-    if (row.stage === "SUPERVISOR_INFORMED") return "Supervisor Informed";
-    if (row.stage === "READY_FOR_NEXT_STAGE") return "Completed";
-
-    return row.stage;
-};
-
-const getProgressPercent = (stage) => {
-    const map = {
-        INDENT_CREATED: 20,
-        SENT_TO_STORE: 35,
-        STORE_REVIEWED: 40,
-        STOCK_AVAILABLE: 45,
-        MATERIAL_RESERVED: 50,
-        PURCHASE_REQUEST_RAISED: 55,
-        PO_RAISED: 60,
-        MATERIAL_RECEIVED_AT_STORE: 66,
-        GRN_DONE: 70,
-        QC_PENDING: 72,
-        QC_OK: 76,
-        MATERIAL_ACCEPTED_IN_STORE: 80,
-        PRODUCTION_INFORMED: 82,
-        PRODUCTION_DETAILS_ADDED: 86,
-        MATERIAL_ISSUED_TO_PRODUCTION: 90,
-        PROCESSING_STARTED: 94,
-        PROCESS_COMPLETED: 98,
-        SUPERVISOR_INFORMED: 99,
-        READY_FOR_NEXT_STAGE: 100,
-    };
-
-    return map[stage] || 20;
-};
+const getProgressPercent = (stage) =>
+    getStageProgress(stage);
 
 export default function VenFlowListPage() {
     const navigate = useNavigate();
@@ -285,13 +284,25 @@ export default function VenFlowListPage() {
     const [detailLoading, setDetailLoading] = useState(false);
 
     const selectedRow = useMemo(() => {
+        if (
+            selectedEntry?.id === selectedId
+        ) {
+            return selectedEntry;
+        }
+
         return (
-            selectedEntry ||
-            rows.find((row) => row.id === selectedId) ||
+            rows.find(
+                (row) =>
+                    row.id === selectedId
+            ) ||
             rows[0] ||
             null
         );
-    }, [rows, selectedEntry, selectedId]);
+    }, [
+        rows,
+        selectedEntry,
+        selectedId,
+    ]);
 
     const loadDashboard = async () => {
         try {
@@ -619,9 +630,21 @@ export default function VenFlowListPage() {
                     >
                         <MenuItem value="">All</MenuItem>
                         <MenuItem value="NOT_RAISED">Not Raised</MenuItem>
-                        <MenuItem value="RAISED">Raised</MenuItem>
-                        <MenuItem value="APPROVED">Approved</MenuItem>
-                        <MenuItem value="REJECTED">Rejected</MenuItem>
+                        <MenuItem value="PENDING_DIRECTOR_APPROVAL">
+                            Pending Director Approval
+                        </MenuItem>
+
+                        <MenuItem value="DIRECTOR_APPROVED">
+                            Director Approved
+                        </MenuItem>
+
+                        <MenuItem value="DIRECTOR_REJECTED">
+                            Returned by Director
+                        </MenuItem>
+
+                        <MenuItem value="ORDER_PLACED">
+                            Order Placed
+                        </MenuItem>
                     </TextField>
 
                     <Box sx={filterButtonRowSx}>
@@ -682,7 +705,11 @@ export default function VenFlowListPage() {
                                         <Box
                                             key={row.id}
                                             sx={listRowSx(selected)}
-                                            onClick={() => setSelectedId(row.id)}
+                                            onClick={() => {
+                                                setSelectedId(row.id);
+                                                setSelectedEntry(null);
+                                                setAuditRows([]);
+                                            }}
                                         >
                                             <Box sx={checkboxSx(selected)}>
                                                 {selected ? "✓" : ""}
@@ -1004,7 +1031,7 @@ function DetailPanel({
 
                                 <Box>
                                     <Typography sx={timelineDateSx}>
-                                        {formatDateTime(item.createdAt || item.timestamp)}
+                                        {formatDateTime(item.changedAt)}
                                     </Typography>
 
                                     <Typography sx={timelineTitleSx}>
@@ -1012,10 +1039,11 @@ function DetailPanel({
                                     </Typography>
 
                                     <Typography sx={timelineMsgSx}>
-                                        {item.message ||
-                                            item.remarks ||
-                                            item.actor ||
+                                        {item.newValue ||
+                                            item.oldValue ||
                                             "Workflow updated"}
+                                        {" · "}
+                                        {item.changedBy || "-"}
                                     </Typography>
                                 </Box>
                             </Box>

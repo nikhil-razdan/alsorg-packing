@@ -4,7 +4,11 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.alsorg.packing.domain.common.PacketItemType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.alsorg.packing.domain.packet.Packet;
 
 @Entity
@@ -43,9 +47,9 @@ public class PacketItem {
 
     @Column(name = "client_address")
     private String clientAddress;
-    
-    private String packetNumber;   // P1, P2, etc
-    private String status;         // ON_FLOOR, WAREHOUSE_REQUESTED, IN_WAREHOUSE
+
+    private String packetNumber; // P1, P2, etc
+    private String status; // ON_FLOOR, WAREHOUSE_REQUESTED, IN_WAREHOUSE
 
     private String warehouseCode;
     private String gatePassNumber;
@@ -57,51 +61,77 @@ public class PacketItem {
     private String dimensions;
     private String weight;
     private String remarks;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "item_type", nullable = false, length = 30)
+    private PacketItemType itemType = PacketItemType.NORMAL;
+
+    @Column(name = "created_by_user_id")
+    private Long createdByUserId;
+
+    @Column(name = "packed_by", length = 150)
+    private String packedBy;
+
+    /*
+     * Reserved for Phase 2.
+     */
+    @Column(name = "linked_packet_item_id")
+    private UUID linkedPacketItemId;
+
+    /*
+     * Reserved for Phase 2.
+     */
+    @Column(name = "linked_master_item_id")
+    private UUID linkedMasterItemId;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "packetItem", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("lineNo ASC")
+    private List<HardwarePacketLine> hardwareLines = new ArrayList<>();
 
     @ManyToOne
     @JoinColumn(name = "master_item_id")
     private MasterItem masterItem;
-    
+
     public String getPlantCode() {
-		return plantCode;
-	}
+        return plantCode;
+    }
 
-	public void setPlantCode(String plantCode) {
-		this.plantCode = plantCode;
-	}
+    public void setPlantCode(String plantCode) {
+        this.plantCode = plantCode;
+    }
 
-	public String getPackedAreaCode() {
-		return packedAreaCode;
-	}
+    public String getPackedAreaCode() {
+        return packedAreaCode;
+    }
 
-	public void setPackedAreaCode(String packedAreaCode) {
-		this.packedAreaCode = packedAreaCode;
-	}
+    public void setPackedAreaCode(String packedAreaCode) {
+        this.packedAreaCode = packedAreaCode;
+    }
 
-	public String getFgAreaCode() {
-		return fgAreaCode;
-	}
+    public String getFgAreaCode() {
+        return fgAreaCode;
+    }
 
-	public void setFgAreaCode(String fgAreaCode) {
-		this.fgAreaCode = fgAreaCode;
-	}
+    public void setFgAreaCode(String fgAreaCode) {
+        this.fgAreaCode = fgAreaCode;
+    }
 
-	public String getAllowedWarehouseCodes() {
-		return allowedWarehouseCodes;
-	}
+    public String getAllowedWarehouseCodes() {
+        return allowedWarehouseCodes;
+    }
 
-	public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
-		this.allowedWarehouseCodes = allowedWarehouseCodes;
-	}
-    
+    public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
+        this.allowedWarehouseCodes = allowedWarehouseCodes;
+    }
+
     @ManyToOne
     @JoinColumn(name = "packet_id", nullable = false)
-    @JsonIgnore 
+    @JsonIgnore
     private Packet packet;
 
     @Column(name = "print_iteration")
     private Long printIteration;
-    
+
     public MasterItem getMasterItem() {
         return masterItem;
     }
@@ -223,54 +253,54 @@ public class PacketItem {
         this.clientAddress = clientAddress;
     }
 
-	public String getPacketNumber() {
-		return packetNumber;
-	}
+    public String getPacketNumber() {
+        return packetNumber;
+    }
 
-	public void setPacketNumber(String packetNumber) {
-		this.packetNumber = packetNumber;
-	}
+    public void setPacketNumber(String packetNumber) {
+        this.packetNumber = packetNumber;
+    }
 
-	public String getStatus() {
-		return status;
-	}
+    public String getStatus() {
+        return status;
+    }
 
-	public void setStatus(String status) {
-		this.status = status;
-	}
+    public void setStatus(String status) {
+        this.status = status;
+    }
 
-	public String getWarehouseCode() {
-		return warehouseCode;
-	}
+    public String getWarehouseCode() {
+        return warehouseCode;
+    }
 
-	public void setWarehouseCode(String warehouseCode) {
-		this.warehouseCode = warehouseCode;
-	}
+    public void setWarehouseCode(String warehouseCode) {
+        this.warehouseCode = warehouseCode;
+    }
 
-	public String getGatePassNumber() {
-		return gatePassNumber;
-	}
+    public String getGatePassNumber() {
+        return gatePassNumber;
+    }
 
-	public void setGatePassNumber(String gatePassNumber) {
-		this.gatePassNumber = gatePassNumber;
-	}
+    public void setGatePassNumber(String gatePassNumber) {
+        this.gatePassNumber = gatePassNumber;
+    }
 
-	public String getFromLocation() {
-		return fromLocation;
-	}
+    public String getFromLocation() {
+        return fromLocation;
+    }
 
-	public void setFromLocation(String fromLocation) {
-		this.fromLocation = fromLocation;
-	}
+    public void setFromLocation(String fromLocation) {
+        this.fromLocation = fromLocation;
+    }
 
-	public String getCreatedBy() {
-		return createdBy;
-	}
+    public String getCreatedBy() {
+        return createdBy;
+    }
 
-	public void setCreatedBy(String createdBy) {
-		this.createdBy = createdBy;
-	}
-	
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
     public String getStickerNumber() {
         return stickerNumber;
     }
@@ -279,51 +309,120 @@ public class PacketItem {
         this.stickerNumber = stickerNumber;
     }
 
-	public String getDimensions() {
-		return dimensions;
-	}
+    public String getDimensions() {
+        return dimensions;
+    }
 
-	public void setDimensions(String dimensions) {
-		this.dimensions = dimensions;
-	}
+    public void setDimensions(String dimensions) {
+        this.dimensions = dimensions;
+    }
 
-	public String getWeight() {
-		return weight;
-	}
+    public String getWeight() {
+        return weight;
+    }
 
-	public void setWeight(String weight) {
-		this.weight = weight;
-	}
+    public void setWeight(String weight) {
+        this.weight = weight;
+    }
 
-	public String getRemarks() {
-		return remarks;
-	}
+    public String getRemarks() {
+        return remarks;
+    }
 
-	public void setRemarks(String remarks) {
-		this.remarks = remarks;
-	}
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
+    }
 
-	public LocalDateTime getPackedAt() {
-		return packedAt;
-	}
+    public LocalDateTime getPackedAt() {
+        return packedAt;
+    }
 
-	public void setPackedAt(LocalDateTime packedAt) {
-		this.packedAt = packedAt;
-	}
+    public void setPackedAt(LocalDateTime packedAt) {
+        this.packedAt = packedAt;
+    }
 
-	public String getCurrentLocationCode() {
-		return currentLocationCode;
-	}
+    public String getCurrentLocationCode() {
+        return currentLocationCode;
+    }
 
-	public void setCurrentLocationCode(String currentLocationCode) {
-		this.currentLocationCode = currentLocationCode;
-	}
+    public void setCurrentLocationCode(String currentLocationCode) {
+        this.currentLocationCode = currentLocationCode;
+    }
 
-	public String getFgZoneCode() {
-		return fgZoneCode;
-	}
+    public String getFgZoneCode() {
+        return fgZoneCode;
+    }
 
-	public void setFgZoneCode(String fgZoneCode) {
-		this.fgZoneCode = fgZoneCode;
-	}
+    public void setFgZoneCode(String fgZoneCode) {
+        this.fgZoneCode = fgZoneCode;
+    }
+
+    public PacketItemType getItemType() {
+        return itemType;
+    }
+
+    public void setItemType(PacketItemType itemType) {
+        this.itemType = itemType;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
+    }
+
+    public String getPackedBy() {
+        return packedBy;
+    }
+
+    public void setPackedBy(String packedBy) {
+        this.packedBy = packedBy;
+    }
+
+    public UUID getLinkedPacketItemId() {
+        return linkedPacketItemId;
+    }
+
+    public void setLinkedPacketItemId(UUID linkedPacketItemId) {
+        this.linkedPacketItemId = linkedPacketItemId;
+    }
+
+    public UUID getLinkedMasterItemId() {
+        return linkedMasterItemId;
+    }
+
+    public void setLinkedMasterItemId(UUID linkedMasterItemId) {
+        this.linkedMasterItemId = linkedMasterItemId;
+    }
+
+    public List<HardwarePacketLine> getHardwareLines() {
+        return hardwareLines;
+    }
+
+    public void setHardwareLines(List<HardwarePacketLine> hardwareLines) {
+        this.hardwareLines = hardwareLines;
+    }
+
+    public void addHardwareLine(HardwarePacketLine line) {
+        if (line == null) {
+            return;
+        }
+
+        line.setPacketItem(this);
+        hardwareLines.add(line);
+    }
+
+    public void replaceHardwareLines(List<HardwarePacketLine> lines) {
+        hardwareLines.clear();
+
+        if (lines == null) {
+            return;
+        }
+
+        for (HardwarePacketLine line : lines) {
+            addHardwareLine(line);
+        }
+    }
 }

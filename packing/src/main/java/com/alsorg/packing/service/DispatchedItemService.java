@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.common.PacketStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.PacketItem;
@@ -510,7 +511,6 @@ public class DispatchedItemService {
                         ? username
                         : "SYSTEM");
 
-
         dispatchedRepo.save(item);
 
         auditLogService.log(
@@ -883,6 +883,17 @@ public class DispatchedItemService {
         if (item.getPacket() == null) {
             throw new IllegalStateException("PacketItem has no packet");
         }
+        d.setItemType(
+                item.getItemType() != null
+                        ? item.getItemType()
+                        : PacketItemType.NORMAL);
+
+        d.setLinkedPacketItemId(
+                item.getLinkedPacketItemId());
+
+        d.setLinkedMasterItemId(
+                item.getLinkedMasterItemId());
+                
         d.setZohoItemId(id); // primary key
         d.setName(item.getItemName());
         d.setPacketItemId(item.getId());
@@ -910,6 +921,16 @@ public class DispatchedItemService {
         d.setDrawingNo(item.getDrawingNo());
         d.setDescription(item.getDescription());
         d.setRemarks(item.getRemarks());
+        d.setItemType(
+                item.getItemType() != null
+                        ? item.getItemType()
+                        : PacketItemType.NORMAL);
+
+        d.setLinkedPacketItemId(
+                item.getLinkedPacketItemId());
+
+        d.setLinkedMasterItemId(
+                item.getLinkedMasterItemId());
 
         dispatchedRepo.save(d);
     }

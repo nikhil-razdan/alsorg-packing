@@ -231,7 +231,7 @@ export default function VenFlowReportsPage() {
 			subtle: "PO raised but not approved",
 			icon: <WarningAmberOutlinedIcon />,
 			accent: "#f97316",
-			trend: "Manager sign-off",
+			trend: "Director Apporval",
 		},
 		{
 			label: "Pending Material Receiving",
@@ -517,8 +517,10 @@ export default function VenFlowReportsPage() {
 									<Button
 										startIcon={<DownloadOutlinedIcon />}
 										sx={exportBtnSx}
+										disabled
+										title="Detailed export endpoint is not connected yet."
 									>
-										Export
+										Coming Soon
 									</Button>
 								</Box>
 							))}

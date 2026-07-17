@@ -14,6 +14,10 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
+import {
+	getStageLabel,
+} from "../venflowWorkflow";
+
 import { venflowApi } from "../api/venflowApi";
 
 import {
@@ -217,8 +221,8 @@ export default function VenFlowDashboard() {
 
 					<Typography sx={subSx}>
 						Live tracking of BOM / Indent creation, AKG Store review,
-						purchase request, PO, GRN, QC, inventory acceptance, issue
-						to production and process closure.
+						purchase allocation, PO approval, receiving, GRN, allocation-level
+						QC, issue to Production and process closure.
 					</Typography>
 				</Box>
 
@@ -259,7 +263,7 @@ export default function VenFlowDashboard() {
 						</Typography>
 
 						<Box sx={periodPillSx}>
-							Last 30 Days
+							Current Snapshot
 						</Box>
 					</Box>
 
@@ -348,7 +352,7 @@ export default function VenFlowDashboard() {
 
 								<Box sx={{ minWidth: 0, flex: 1 }}>
 									<Typography sx={activityTitleSx}>
-										{row.stage || "Request Updated"}
+										{getStageLabel(row.stage)}
 									</Typography>
 
 									<Typography sx={activityMsgSx}>
@@ -391,7 +395,7 @@ export default function VenFlowDashboard() {
 				<Card sx={panelSx}>
 					<Box sx={panelHeaderSx}>
 						<Typography sx={panelTitleSx}>
-							Top Delayed Items
+							Recent Delayed Items
 						</Typography>
 
 						<Button

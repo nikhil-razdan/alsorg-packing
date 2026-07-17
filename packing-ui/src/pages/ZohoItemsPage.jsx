@@ -732,14 +732,25 @@ function ZohoItemsPage() {
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
 
-  const { role } = useAuth();
+  const {
+    currentUser,
+    role: authRole,
+  } = useAuth();
 
-  const cleanRole = String(role || "")
-    .replace("ROLE_", "")
+  const cleanRole = String(
+    currentUser?.role ||
+    authRole ||
+    ""
+  )
+    .replace(/^ROLE_/i, "")
     .trim()
     .toUpperCase();
 
-  const isAdmin = cleanRole === "ADMIN";
+  const isAdmin =
+    cleanRole === "ADMIN";
+
+  const isHardwarePacking =
+    cleanRole === "HARDWARE_PACKING";
 
   const getAuthHeaders = () => ({});
 
@@ -857,7 +868,224 @@ function ZohoItemsPage() {
     location: "",
   });
 
-  /* ===================== COLUMNS ===================== */
+  const [hardwarePacketOpen, setHardwarePacketOpen] =
+    useState(false);
+
+  const [hardwareEditingItem, setHardwareEditingItem] =
+    useState(null);
+
+  const [hardwareSaving, setHardwareSaving] =
+    useState(false);
+
+  const [hardwareForm, setHardwareForm] =
+    useState({
+      itemName: "",
+      pdNo: "",
+      drawingNo: "",
+      clientName: "",
+      clientAddress: "",
+      floor: "",
+      plantCode: "",
+    });
+
+  const [hardwareLines, setHardwareLines] =
+    useState([
+      {
+        lineNo: 1,
+        itemName: "",
+        quantity: "",
+        uom: "Nos",
+      },
+    ]);
+
+  const hardwareUomOptions = [
+    "Nos",
+    "Set",
+    "Pair",
+    "Box",
+    "Packet",
+    "Meter",
+    "Kg",
+    "Gram",
+    "MM",
+  ];
+
+  const buildHardwareDescription = (
+    lines = []
+  ) => {
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return "";
+    }
+
+    return lines
+      .map((line, index) => {
+        const lineNo =
+          line?.lineNo ||
+          line?.serialNo ||
+          index + 1;
+
+        const itemName =
+          String(line?.itemName || "").trim();
+
+        const quantity =
+          line?.quantity ?? "";
+
+        const uom =
+          String(line?.uom || "Nos").trim();
+
+        return `${lineNo}. ${itemName || "Hardware Item"} - Qty: ${quantity || "0"} ${uom}`;
+      })
+      .join("\n");
+  };
+
+  const normalizeHardwarePacketRow = (
+    raw
+  ) => {
+    const lines =
+      Array.isArray(raw?.lines)
+        ? raw.lines
+        : Array.isArray(raw?.hardwareLines)
+          ? raw.hardwareLines
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : [];
+
+    return {
+      ...raw,
+
+      itemId:
+        raw?.itemId ||
+        raw?.packetItemId ||
+        raw?.id ||
+        "",
+
+      packetItemId:
+        raw?.packetItemId ||
+        raw?.itemId ||
+        raw?.id ||
+        "",
+
+      itemType: "HARDWARE",
+
+      itemName:
+        raw?.itemName ||
+        raw?.packetName ||
+        "Hardware Packet",
+
+      packetNumber:
+        raw?.packetNumber ||
+        raw?.packetNo ||
+        "",
+
+      description:
+        raw?.description ||
+        buildHardwareDescription(lines),
+
+      quantity:
+        raw?.quantity ??
+        1,
+
+      lines,
+      hardwareLines: lines,
+
+      weight: "",
+      dimensions: "",
+      remarks: "",
+    };
+  };
+
+  const hardwarePacketBasePath =
+    "/api/hardware-packets";
+
+  const getStickerPreviewPath = (
+    rowOrId
+  ) => {
+    const itemId =
+      getPacketItemIdForSticker(rowOrId);
+
+    if (!itemId) {
+      return "";
+    }
+
+    if (isHardwarePacking) {
+      return `${hardwarePacketBasePath}/${encodeURIComponent(
+        itemId
+      )}/preview-sticker`;
+    }
+
+    return `/api/packets/items/${encodeURIComponent(
+      itemId
+    )}/preview-sticker`;
+  };
+
+  const getStickerGeneratePath = (
+    rowOrId
+  ) => {
+    const itemId =
+      getPacketItemIdForSticker(rowOrId);
+
+    if (!itemId) {
+      return "";
+    }
+
+    if (isHardwarePacking) {
+      return `${hardwarePacketBasePath}/${encodeURIComponent(
+        itemId
+      )}/generate-sticker`;
+    }
+
+    return `/api/packets/items/${encodeURIComponent(
+      itemId
+    )}/generate-sticker`;
+  };
+
+  const getDeletePacketPath = (
+    rowOrId
+  ) => {
+    const itemId =
+      getPacketItemIdForSticker(rowOrId);
+
+    if (!itemId) {
+      return "";
+    }
+
+    if (isHardwarePacking) {
+      return `${hardwarePacketBasePath}/${encodeURIComponent(
+        itemId
+      )}`;
+    }
+
+    return `/api/packets/items/${encodeURIComponent(
+      itemId
+    )}`;
+  };
+
+  const getUpdatePacketPath = (
+    rowOrId
+  ) => {
+    const itemId =
+      getPacketItemIdForSticker(rowOrId);
+
+    if (!itemId) {
+      return "";
+    }
+
+    if (isHardwarePacking) {
+      return `${hardwarePacketBasePath}/${encodeURIComponent(
+        itemId
+      )}`;
+    }
+
+    if (isAdmin) {
+      return `/api/packets/items/${encodeURIComponent(
+        itemId
+      )}/admin-sticker-details`;
+    }
+
+    return `/api/packets/items/${encodeURIComponent(
+      itemId
+    )}`;
+  };
 
   const fetchMyPlants = async () => {
     try {
@@ -1192,26 +1420,69 @@ function ZohoItemsPage() {
     setLoading(true);
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/packets/items`, {
-        method: "GET",
-      });
+      const path =
+        isHardwarePacking
+          ? "/api/hardware-packets"
+          : "/api/packets/items";
+
+      const res =
+        await authFetch(
+          `${API_BASE_URL}${path}`,
+          {
+            method: "GET",
+          }
+        );
 
       if (!res.ok) {
-        const text = await res.text();
-        console.error("API ERROR:", text);
-        throw new Error("Failed to fetch items");
+        const text =
+          await res.text();
+
+        console.error(
+          "Inventory API ERROR:",
+          text
+        );
+
+        throw new Error(
+          text ||
+          "Failed to fetch inventory items"
+        );
       }
 
-      const data = await res.json();
+      const payload =
+        await res.json();
 
-      if (!Array.isArray(data)) {
-        console.error("Invalid API:", data);
-        setRows([]);
-        return;
-      }
+      const data =
+        Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.content)
+            ? payload.content
+            : Array.isArray(payload?.items)
+              ? payload.items
+              : Array.isArray(payload?.rows)
+                ? payload.rows
+                : [];
 
-      setRows(data);
-      setRowCount(data.length);
+      const finalRows =
+        isHardwarePacking
+          ? data.map(normalizeHardwarePacketRow)
+          : data;
+
+      setRows(finalRows);
+      setRowCount(finalRows.length);
+    } catch (error) {
+      console.error(
+        "Inventory fetch failed:",
+        error
+      );
+
+      setRows([]);
+      setRowCount(0);
+
+      showUiAlert(
+        "error",
+        error?.message ||
+        "Failed to load inventory"
+      );
     } finally {
       setLoading(false);
     }
@@ -2752,9 +3023,17 @@ function ZohoItemsPage() {
       return "";
     }
 
+    if (isHardwarePacking) {
+      return `/api/hardware-packets/${encodeURIComponent(
+        packetItemId
+      )}/latest-sticker?download=${download ? "true" : "false"
+        }`;
+    }
+
     return `/api/inventory/stickers/packet-items/${encodeURIComponent(
       packetItemId
-    )}/latest?download=${download ? "true" : "false"}`;
+    )}/latest?download=${download ? "true" : "false"
+      }`;
   };
 
   const buildProtectedFileUrl = (path) => {
@@ -2985,8 +3264,28 @@ function ZohoItemsPage() {
     setStickerReviewLoading(true);
 
     try {
+      const previewPath =
+        getStickerPreviewPath(itemId);
+
+      if (!previewPath) {
+        showUiAlert(
+          "error",
+          "Sticker preview endpoint missing"
+        );
+
+        return;
+      }
+
+      const query =
+        `factoryFloor=${encodeURIComponent(
+          row.floor || ""
+        )}` +
+        `&showCompanyHeader=${encodeURIComponent(
+          form.showCompanyHeader
+        )}`;
+
       const res = await authFetch(
-        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/preview-sticker?factoryFloor=${encodeURIComponent(row.floor || "")}&showCompanyHeader=${form.showCompanyHeader}`,
+        `${API_BASE_URL}${previewPath}?${query}`,
         {
           method: "POST",
         }
@@ -3039,6 +3338,11 @@ function ZohoItemsPage() {
   };
 
   const openEditModal = (row) => {
+    if (isHardwarePacking) {
+      openHardwareEditModal(row);
+      return;
+    }
+
     setEditItem(row);
 
     setEditForm({
@@ -3058,6 +3362,130 @@ function ZohoItemsPage() {
 
     setEditOpen(true);
   };
+
+  const saveHardwarePacket =
+    async () => {
+      if (!validateHardwarePacket()) {
+        return;
+      }
+
+      const itemId =
+        getPacketItemIdForSticker(
+          hardwareEditingItem
+        );
+
+      const editing =
+        Boolean(
+          hardwareEditingItem &&
+          itemId
+        );
+
+      const path =
+        editing
+          ? `/api/hardware-packets/${encodeURIComponent(
+            itemId
+          )}`
+          : "/api/hardware-packets";
+
+      const payload = {
+        itemName:
+          hardwareForm.itemName.trim(),
+
+        pdNo:
+          hardwareForm.pdNo?.trim() ||
+          null,
+
+        drawingNo:
+          hardwareForm.drawingNo?.trim() ||
+          null,
+
+        clientName:
+          hardwareForm.clientName?.trim() ||
+          null,
+
+        clientAddress:
+          hardwareForm.clientAddress?.trim() ||
+          null,
+
+        floor:
+          hardwareForm.floor?.trim() ||
+          null,
+
+        plantCode:
+          hardwareForm.plantCode,
+
+        lines:
+          hardwareLines.map(
+            (line, index) => ({
+              id: line?.id || null,
+              lineNo: index + 1,
+              itemName:
+                line.itemName.trim(),
+              quantity:
+                Number(line.quantity),
+              uom:
+                line.uom,
+            })
+          ),
+      };
+
+      try {
+        setHardwareSaving(true);
+
+        const res =
+          await authFetch(
+            `${API_BASE_URL}${path}`,
+            {
+              method:
+                editing
+                  ? "PUT"
+                  : "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body:
+                JSON.stringify(payload),
+            }
+          );
+
+        if (!res.ok) {
+          await handleApiError(
+            res,
+            editing
+              ? "Update hardware packet failed"
+              : "Create hardware packet failed"
+          );
+
+          return;
+        }
+
+        setHardwarePacketOpen(false);
+        setHardwareEditingItem(null);
+
+        showUiAlert(
+          "success",
+          editing
+            ? "Hardware packet updated successfully"
+            : "Hardware packet created successfully"
+        );
+
+        await fetchItems();
+      } catch (error) {
+        console.error(error);
+
+        showUiAlert(
+          "error",
+          editing
+            ? "Failed to update hardware packet"
+            : "Failed to create hardware packet"
+        );
+      } finally {
+        setHardwareSaving(false);
+      }
+    };
 
   const openDeleteConfirm = (row) => {
     setDeleteTarget(row);
@@ -3108,6 +3536,241 @@ function ZohoItemsPage() {
     );
   };
 
+  const getEmptyHardwareForm = (
+    plants = myPlants
+  ) => ({
+    itemName: "",
+    pdNo: "",
+    drawingNo: "",
+    clientName: "",
+    clientAddress: "",
+    floor: "",
+    plantCode:
+      plants.length === 1
+        ? plants[0].plantCode
+        : "",
+  });
+
+  const resetHardwarePacketForm = (
+    plants = myPlants
+  ) => {
+    setHardwareEditingItem(null);
+
+    setHardwareForm(
+      getEmptyHardwareForm(plants)
+    );
+
+    setHardwareLines([
+      {
+        lineNo: 1,
+        itemName: "",
+        quantity: "",
+        uom: "Nos",
+      },
+    ]);
+
+    setErrors({});
+  };
+
+  const renumberHardwareLines = (
+    lines
+  ) => {
+    return lines.map((line, index) => ({
+      ...line,
+      lineNo: index + 1,
+    }));
+  };
+
+  const addHardwareLine = () => {
+    setHardwareLines((previous) =>
+      renumberHardwareLines([
+        ...previous,
+        {
+          lineNo: previous.length + 1,
+          itemName: "",
+          quantity: "",
+          uom: "Nos",
+        },
+      ])
+    );
+  };
+
+  const removeHardwareLine = (
+    indexToRemove
+  ) => {
+    setHardwareLines((previous) => {
+      if (previous.length <= 1) {
+        return previous;
+      }
+
+      return renumberHardwareLines(
+        previous.filter(
+          (_, index) =>
+            index !== indexToRemove
+        )
+      );
+    });
+  };
+
+  const updateHardwareLine = (
+    index,
+    field,
+    value
+  ) => {
+    setHardwareLines((previous) =>
+      previous.map((line, lineIndex) =>
+        lineIndex === index
+          ? {
+            ...line,
+            [field]: value,
+          }
+          : line
+      )
+    );
+  };
+
+  const validateHardwarePacket = () => {
+    const nextErrors = {};
+
+    if (!String(
+      hardwareForm.itemName || ""
+    ).trim()) {
+      nextErrors.hardwareItemName =
+        "Packet name is required";
+    }
+
+    if (!String(
+      hardwareForm.plantCode || ""
+    ).trim()) {
+      nextErrors.hardwarePlantCode =
+        "Plant is required";
+    }
+
+    if (
+      !Array.isArray(hardwareLines) ||
+      hardwareLines.length === 0
+    ) {
+      nextErrors.hardwareLines =
+        "Add at least one hardware item";
+    }
+
+    hardwareLines.forEach(
+      (line, index) => {
+        if (!String(
+          line?.itemName || ""
+        ).trim()) {
+          nextErrors[
+            `hardware-line-name-${index}`
+          ] = "Hardware item is required";
+        }
+
+        const quantity =
+          Number(line?.quantity);
+
+        if (
+          !Number.isFinite(quantity) ||
+          quantity <= 0
+        ) {
+          nextErrors[
+            `hardware-line-qty-${index}`
+          ] = "Valid quantity is required";
+        }
+
+        if (!String(
+          line?.uom || ""
+        ).trim()) {
+          nextErrors[
+            `hardware-line-uom-${index}`
+          ] = "UOM is required";
+        }
+      }
+    );
+
+    setErrors(nextErrors);
+
+    return Object.keys(nextErrors)
+      .length === 0;
+  };
+
+  const openHardwareCreateModal =
+    async () => {
+      let plants =
+        myPlants;
+
+      if (plants.length === 0) {
+        plants =
+          await fetchMyPlants();
+      }
+
+      resetHardwarePacketForm(plants);
+      setHardwarePacketOpen(true);
+    };
+
+  const openHardwareEditModal = (
+    row
+  ) => {
+    if (row?.stickerNumber) {
+      showUiAlert(
+        "error",
+        "A generated hardware packet cannot be edited"
+      );
+
+      return;
+    }
+
+    const sourceLines =
+      Array.isArray(row?.lines)
+        ? row.lines
+        : Array.isArray(row?.hardwareLines)
+          ? row.hardwareLines
+          : [];
+
+    setHardwareEditingItem(row);
+
+    setHardwareForm({
+      itemName: row?.itemName || "",
+      pdNo: row?.pdNo || "",
+      drawingNo: row?.drawingNo || "",
+      clientName: row?.clientName || "",
+      clientAddress:
+        row?.clientAddress || "",
+      floor: row?.floor || "",
+      plantCode:
+        row?.plantCode || "",
+    });
+
+    setHardwareLines(
+      sourceLines.length > 0
+        ? renumberHardwareLines(
+          sourceLines.map(
+            (line, index) => ({
+              id: line?.id,
+              lineNo:
+                line?.lineNo ||
+                index + 1,
+              itemName:
+                line?.itemName || "",
+              quantity:
+                line?.quantity ?? "",
+              uom:
+                line?.uom || "Nos",
+            })
+          )
+        )
+        : [
+          {
+            lineNo: 1,
+            itemName: "",
+            quantity: "",
+            uom: "Nos",
+          },
+        ]
+    );
+
+    setErrors({});
+    setHardwarePacketOpen(true);
+  };
+
   const deletePacketItem = async () => {
     const row = deleteTarget;
 
@@ -3126,12 +3789,25 @@ function ZohoItemsPage() {
     try {
       setDeleteLoading(true);
 
-      const res = await authFetch(
-        `${API_BASE_URL}/api/packets/items/${encodeURIComponent(deleteId)}`,
-        {
-          method: "DELETE",
-        }
-      );
+      const deletePath =
+        getDeletePacketPath(row);
+
+      if (!deletePath) {
+        showUiAlert(
+          "error",
+          "Delete endpoint could not be resolved"
+        );
+
+        return;
+      }
+
+      const res =
+        await authFetch(
+          `${API_BASE_URL}${deletePath}`,
+          {
+            method: "DELETE",
+          }
+        );
 
       if (!res.ok) {
         const text = await res.text();
@@ -3174,9 +3850,39 @@ function ZohoItemsPage() {
   };
 
   useEffect(() => {
+    if (!cleanRole) {
+      return;
+    }
+
     fetchItems();
     fetchMyPlants();
-  }, []);
+  }, [cleanRole]);
+
+  useEffect(() => {
+    if (!isHardwarePacking) {
+      return;
+    }
+
+    setMasterWorkbenchOpen(false);
+    setCreateOpen(false);
+    setDetailsPopup(false);
+    setCustomCreateOpen(false);
+    setAddMoreOpen(false);
+    setCustomAddOpen(false);
+    setEditOpen(false);
+    setGeneratedHistoryOpen(false);
+
+
+    setEditItem(null);
+
+    if (historyPdfPreview?.url) {
+      URL.revokeObjectURL(
+        historyPdfPreview.url
+      );
+    }
+
+    setHistoryPdfPreview(null);
+  }, [isHardwarePacking]);
 
   useEffect(() => {
     preparePacketDetailRows(form.numberOfPackets);
@@ -3216,11 +3922,15 @@ function ZohoItemsPage() {
 
             <div>
               <div style={logo}>
-                Inventory Items
+                {isHardwarePacking
+                  ? "Hardware Packet Inventory"
+                  : "Inventory Items"}
               </div>
 
               <div style={subtitle}>
-                Manage packed inventory, packets and stickers
+                {isHardwarePacking
+                  ? "Create hardware packets, manage hardware contents and generate stickers"
+                  : "Manage packed inventory, packets and stickers"}
               </div>
             </div>
           </Box>
@@ -3232,56 +3942,84 @@ function ZohoItemsPage() {
               gap: 1.5,
             }}
           >
-            <Button
-              onClick={() => setMasterWorkbenchOpen(true)}
-              sx={historyHeaderButtonSx}
-            >
-              🧩 Master Packet Control
-            </Button>
-            <Button
-              onClick={openGeneratedHistory}
-              sx={historyHeaderButtonSx}
-            >
-              📜 Generated History
-            </Button>
+            {!isHardwarePacking && (
+              <>
+                <Button
+                  onClick={() =>
+                    setMasterWorkbenchOpen(true)
+                  }
+                  sx={historyHeaderButtonSx}
+                >
+                  🧩 Master Packet Control
+                </Button>
+
+                <Button
+                  onClick={openGeneratedHistory}
+                  sx={historyHeaderButtonSx}
+                >
+                  📜 Generated History
+                </Button>
+              </>
+            )}
+
             <Box sx={countBadgeSx}>
               Total Items:{" "}
-              <span style={{ color: "#60a5fa", fontWeight: 900 }}>
+              <span
+                style={{
+                  color: "#60a5fa",
+                  fontWeight: 900,
+                }}
+              >
                 {filteredRows.length}
               </span>
             </Box>
 
-            <Button
-              onClick={async () => {
-                let plants = myPlants;
-
-                if (plants.length === 0) {
-                  plants = await fetchMyPlants();
+            {isHardwarePacking ? (
+              <Button
+                onClick={
+                  openHardwareCreateModal
                 }
+                sx={premiumButton}
+              >
+                + Create Hardware Packet
+              </Button>
+            ) : (
+              <>
+                <Button
+                  onClick={async () => {
+                    let plants = myPlants;
 
-                resetCreateForm(plants);
-                setCreateOpen(true);
-              }}
-              sx={premiumButton}
-            >
-              + Create Item
-            </Button>
+                    if (plants.length === 0) {
+                      plants =
+                        await fetchMyPlants();
+                    }
 
-            <Button
-              onClick={async () => {
-                let plants = myPlants;
+                    resetCreateForm(plants);
+                    setCreateOpen(true);
+                  }}
+                  sx={premiumButton}
+                >
+                  + Create Item
+                </Button>
 
-                if (plants.length === 0) {
-                  plants = await fetchMyPlants();
-                }
+                <Button
+                  onClick={async () => {
+                    let plants = myPlants;
 
-                resetCustomCreateForm(plants);
-                setCustomCreateOpen(true);
-              }}
-              sx={actionSecondary}
-            >
-              + Custom Packet
-            </Button>
+                    if (plants.length === 0) {
+                      plants =
+                        await fetchMyPlants();
+                    }
+
+                    resetCustomCreateForm(plants);
+                    setCustomCreateOpen(true);
+                  }}
+                  sx={actionSecondary}
+                >
+                  + Custom Packet
+                </Button>
+              </>
+            )}
           </Box>
         </div>
 
@@ -3413,11 +4151,17 @@ function ZohoItemsPage() {
                       </div>
 
                       <div style={tableCellWrap}>
-                        {lastPacket ? (
+                        {isHardwarePacking ? (
+                          <span style={simpleMutedText}>
+                            —
+                          </span>
+                        ) : lastPacket ? (
                           <Box sx={actionCell}>
                             <Button
                               size="small"
-                              onClick={() => openAddPacketsModal(row)}
+                              onClick={() =>
+                                openAddPacketsModal(row)
+                              }
                               sx={{
                                 ...actionPrimary,
                                 ...smallActionButton,
@@ -3428,7 +4172,9 @@ function ZohoItemsPage() {
 
                             <Button
                               size="small"
-                              onClick={() => openCustomAddModal(row)}
+                              onClick={() =>
+                                openCustomAddModal(row)
+                              }
                               sx={{
                                 ...actionSuccess,
                                 ...smallActionButton,
@@ -3447,13 +4193,27 @@ function ZohoItemsPage() {
                       <div style={tableCellWrap}>
                         <Button
                           size="small"
-                          onClick={() => openEditModal(row)}
+                          disabled={
+                            isHardwarePacking &&
+                            Boolean(row.stickerNumber)
+                          }
+                          onClick={() =>
+                            openEditModal(row)
+                          }
                           sx={{
                             ...actionWarning,
                             ...tableActionButton,
+                            opacity:
+                              isHardwarePacking &&
+                                row.stickerNumber
+                                ? 0.45
+                                : 1,
                           }}
                         >
-                          Edit
+                          {isHardwarePacking &&
+                            row.stickerNumber
+                            ? "Locked"
+                            : "Edit"}
                         </Button>
                       </div>
 
@@ -3461,13 +4221,27 @@ function ZohoItemsPage() {
                         <Button
                           type="button"
                           size="small"
-                          onClick={() => openDeleteConfirm(row)}
+                          disabled={
+                            isHardwarePacking &&
+                            Boolean(row.stickerNumber)
+                          }
+                          onClick={() =>
+                            openDeleteConfirm(row)
+                          }
                           sx={{
                             ...actionDanger,
                             ...tableActionButton,
-                            opacity: 1,
+                            opacity:
+                              isHardwarePacking &&
+                                row.stickerNumber
+                                ? 0.45
+                                : 1,
                             pointerEvents: "auto",
-                            cursor: "pointer",
+                            cursor:
+                              isHardwarePacking &&
+                                row.stickerNumber
+                                ? "not-allowed"
+                                : "pointer",
                           }}
                         >
                           Delete
@@ -3810,63 +4584,64 @@ function ZohoItemsPage() {
           )}
         </InventoryModal>
 
+        {!isHardwarePacking && (
+          <InventoryModal
+            open={masterWorkbenchOpen}
+            onClose={() => setMasterWorkbenchOpen(false)}
+            icon="🧩"
+            title="Master Item Packet Control"
+            subtitle="Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
+            width={1560}
+            height="92vh"
+            footer={
+              <>
+                <Button
+                  onClick={() => fetchItems()}
+                  sx={modalSecondaryButtonSx}
+                >
+                  Refresh
+                </Button>
 
-        <InventoryModal
-          open={masterWorkbenchOpen}
-          onClose={() => setMasterWorkbenchOpen(false)}
-          icon="🧩"
-          title="Master Item Packet Control"
-          subtitle="Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
-          width={1560}
-          height="92vh"
-          footer={
-            <>
-              <Button
-                onClick={() => fetchItems()}
-                sx={modalSecondaryButtonSx}
-              >
-                Refresh
-              </Button>
-
-              <Button
-                onClick={() => setMasterWorkbenchOpen(false)}
-                sx={premiumButton}
-              >
-                Close
-              </Button>
-            </>
-          }
-        >
-          <Box sx={masterWorkbenchModalBodySx}>
-            <InventoryMasterWorkbench
-              rows={filteredRows}
-              isAdmin={isAdmin}
-              onGenerate={(row) => {
-                setMasterWorkbenchOpen(false);
-                openGenerateStickerPanel(row);
-              }}
-              onAdd={(row) => {
-                setMasterWorkbenchOpen(false);
-                openAddPacketsModal(row);
-              }}
-              onCustomAdd={(row) => {
-                setMasterWorkbenchOpen(false);
-                openCustomAddModal(row);
-              }}
-              onEdit={(row) => {
-                setMasterWorkbenchOpen(false);
-                openEditModal(row);
-              }}
-              onPreviewSticker={(row) => {
-                setMasterWorkbenchOpen(false);
-                previewExistingStickerPdf(row);
-              }}
-              onDownloadSticker={(row) => {
-                downloadExistingStickerPdf(row);
-              }}
-            />
-          </Box>
-        </InventoryModal>
+                <Button
+                  onClick={() => setMasterWorkbenchOpen(false)}
+                  sx={premiumButton}
+                >
+                  Close
+                </Button>
+              </>
+            }
+          >
+            <Box sx={masterWorkbenchModalBodySx}>
+              <InventoryMasterWorkbench
+                rows={filteredRows}
+                isAdmin={isAdmin}
+                onGenerate={(row) => {
+                  setMasterWorkbenchOpen(false);
+                  openGenerateStickerPanel(row);
+                }}
+                onAdd={(row) => {
+                  setMasterWorkbenchOpen(false);
+                  openAddPacketsModal(row);
+                }}
+                onCustomAdd={(row) => {
+                  setMasterWorkbenchOpen(false);
+                  openCustomAddModal(row);
+                }}
+                onEdit={(row) => {
+                  setMasterWorkbenchOpen(false);
+                  openEditModal(row);
+                }}
+                onPreviewSticker={(row) => {
+                  setMasterWorkbenchOpen(false);
+                  previewExistingStickerPdf(row);
+                }}
+                onDownloadSticker={(row) => {
+                  downloadExistingStickerPdf(row);
+                }}
+              />
+            </Box>
+          </InventoryModal>
+        )}
         {/* ===================== DRAWER ===================== */}
         <InventorySidePanel
           open={drawerOpen}
@@ -3954,11 +4729,23 @@ function ZohoItemsPage() {
 
             <Box sx={descriptionBoxSx}>
               <Box sx={detailLabelSx}>
-                Description
+                {isHardwarePacking
+                  ? "Hardware Contents"
+                  : "Description"}
               </Box>
 
-              <Box sx={descriptionTextSx}>
-                {getSafeValue(selectedItem?.description)}
+              <Box
+                sx={{
+                  ...descriptionTextSx,
+                  whiteSpace:
+                    isHardwarePacking
+                      ? "pre-wrap"
+                      : "normal",
+                }}
+              >
+                {getSafeValue(
+                  selectedItem?.description
+                )}
               </Box>
             </Box>
           </Box>
@@ -4004,16 +4791,33 @@ function ZohoItemsPage() {
               try {
                 setGenerating(true);
 
-                const genRes = await authFetch(
-                  `${API_BASE_URL}/api/packets/items/${encodeURIComponent(
-                    itemId
-                  )}/generate-sticker?factoryFloor=${encodeURIComponent(
+                const generatePath =
+                  getStickerGeneratePath(itemId);
+
+                if (!generatePath) {
+                  showUiAlert(
+                    "error",
+                    "Sticker generation endpoint missing"
+                  );
+
+                  return;
+                }
+
+                const query =
+                  `factoryFloor=${encodeURIComponent(
                     selectedItem?.floor || ""
-                  )}&showCompanyHeader=${form.showCompanyHeader}`,
-                  {
-                    method: "POST",
-                  }
-                );
+                  )}` +
+                  `&showCompanyHeader=${encodeURIComponent(
+                    form.showCompanyHeader
+                  )}`;
+
+                const genRes =
+                  await authFetch(
+                    `${API_BASE_URL}${generatePath}?${query}`,
+                    {
+                      method: "POST",
+                    }
+                  );
 
                 const contentType =
                   genRes.headers.get("content-type");
@@ -4139,6 +4943,7 @@ function ZohoItemsPage() {
             </>
           )}
         </InventorySidePanel>
+        {!isHardwarePacking && (
         <InventorySidePanel
           open={createOpen}
           onClose={() => setCreateOpen(false)}
@@ -4208,6 +5013,8 @@ function ZohoItemsPage() {
             Continue →
           </Button>
         </InventorySidePanel>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={detailsPopup}
           onClose={() => setDetailsPopup(false)}
@@ -4355,6 +5162,8 @@ function ZohoItemsPage() {
             ))}
           </Box>
         </InventoryModal>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={customCreateOpen}
           onClose={() => setCustomCreateOpen(false)}
@@ -4515,6 +5324,8 @@ function ZohoItemsPage() {
             </Box>
           </Box>
         </InventoryModal>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={addMoreOpen}
           onClose={() => setAddMoreOpen(false)}
@@ -4695,6 +5506,8 @@ function ZohoItemsPage() {
             ))}
           </Box>
         </InventoryModal>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={customAddOpen}
           onClose={() => setCustomAddOpen(false)}
@@ -4845,6 +5658,8 @@ function ZohoItemsPage() {
             </Box>
           </Box>
         </InventoryModal>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={editOpen}
           onClose={() => setEditOpen(false)}
@@ -4948,6 +5763,8 @@ function ZohoItemsPage() {
             })}
           </Box>
         </InventoryModal>
+        )}
+        {!isHardwarePacking && (
         <InventoryModal
           open={generatedHistoryOpen}
           onClose={closeGeneratedHistoryModal}
@@ -5551,6 +6368,424 @@ function ZohoItemsPage() {
             </Box>
           </Box>
         </InventoryModal>
+        )}
+        {isHardwarePacking && (
+        <InventoryModal
+          open={hardwarePacketOpen}
+          onClose={() => {
+            if (hardwareSaving) {
+              return;
+            }
+
+            setHardwarePacketOpen(false);
+            setHardwareEditingItem(null);
+          }}
+          icon="🔩"
+          title={
+            hardwareEditingItem
+              ? "Edit Hardware Packet"
+              : "Create Hardware Packet"
+          }
+          subtitle="Enter packet details and add every hardware item with quantity and UOM"
+          width={820}
+          height="92vh"
+          footer={
+            <>
+              <Button
+                disabled={hardwareSaving}
+                onClick={() => {
+                  setHardwarePacketOpen(false);
+                  setHardwareEditingItem(null);
+                }}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={hardwareSaving}
+                onClick={saveHardwarePacket}
+                sx={{
+                  ...premiumButton,
+                  opacity:
+                    hardwareSaving
+                      ? 0.55
+                      : 1,
+                }}
+              >
+                {hardwareSaving
+                  ? "Saving..."
+                  : hardwareEditingItem
+                    ? "Update Hardware Packet"
+                    : "Create Hardware Packet"}
+              </Button>
+            </>
+          }
+        >
+          <Box sx={modalScrollBodySx}>
+            <Box sx={sectionCardSx}>
+              <Box sx={sectionTitleSx}>
+                Packet Information
+              </Box>
+
+              <TextField
+                label="Packet / Item Name"
+                placeholder="Example: Kitchen Hardware Packet"
+                fullWidth
+                value={hardwareForm.itemName}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    itemName: e.target.value,
+                  }))
+                }
+                error={!!errors.hardwareItemName}
+                helperText={errors.hardwareItemName}
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="PD No."
+                fullWidth
+                value={hardwareForm.pdNo}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    pdNo: e.target.value,
+                  }))
+                }
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Drawing No."
+                fullWidth
+                value={hardwareForm.drawingNo}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    drawingNo: e.target.value,
+                  }))
+                }
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Client Name"
+                fullWidth
+                value={hardwareForm.clientName}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    clientName: e.target.value,
+                  }))
+                }
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Client Address"
+                fullWidth
+                multiline
+                minRows={2}
+                value={hardwareForm.clientAddress}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    clientAddress: e.target.value,
+                  }))
+                }
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                label="Floor / Area"
+                fullWidth
+                value={hardwareForm.floor}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    floor: e.target.value,
+                  }))
+                }
+                sx={formFieldSx(darkMode)}
+              />
+
+              <TextField
+                select
+                label="Plant"
+                fullWidth
+                value={hardwareForm.plantCode}
+                onChange={(e) =>
+                  setHardwareForm((previous) => ({
+                    ...previous,
+                    plantCode: e.target.value,
+                  }))
+                }
+                error={!!errors.hardwarePlantCode}
+                helperText={
+                  errors.hardwarePlantCode ||
+                  "Select an assigned plant"
+                }
+                sx={formFieldSx(darkMode)}
+                slotProps={selectMenuSlotProps}
+                SelectProps={{
+                  MenuProps:
+                    selectMenuSlotProps
+                      .select.MenuProps,
+                }}
+              >
+                {myPlants.map((plant) => (
+                  <MenuItem
+                    key={plant.plantCode}
+                    value={plant.plantCode}
+                  >
+                    {plant.plantCode}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+
+            <Box sx={sectionCardSx}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent:
+                    "space-between",
+                  gap: 2,
+                  mb: 2,
+                }}
+              >
+                <Box>
+                  <Box sx={sectionTitleSx}>
+                    Hardware Contents
+                  </Box>
+
+                  <Box
+                    sx={{
+                      color: "#94a3b8",
+                      fontSize: 12,
+                      mt: -1,
+                    }}
+                  >
+                    Each row will be printed separately in the sticker description section.
+                  </Box>
+                </Box>
+
+                <Button
+                  onClick={addHardwareLine}
+                  sx={actionSecondary}
+                >
+                  + Add Hardware
+                </Button>
+              </Box>
+
+              {errors.hardwareLines && (
+                <Box
+                  sx={{
+                    color: "#fca5a5",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    mb: 1.5,
+                  }}
+                >
+                  {errors.hardwareLines}
+                </Box>
+              )}
+
+              {hardwareLines.map(
+                (line, index) => (
+                  <Box
+                    key={
+                      line.id ||
+                      `hardware-line-${index}`
+                    }
+                    sx={{
+                      ...packetCardSx,
+                      mb: 1.5,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems: "center",
+                        mb: 1.5,
+                      }}
+                    >
+                      <Box sx={packetTitleSx}>
+                        Serial No. {index + 1}
+                      </Box>
+
+                      <Button
+                        size="small"
+                        disabled={
+                          hardwareLines.length === 1
+                        }
+                        onClick={() =>
+                          removeHardwareLine(index)
+                        }
+                        sx={{
+                          ...actionDanger,
+                          minWidth: 74,
+                          opacity:
+                            hardwareLines.length === 1
+                              ? 0.4
+                              : 1,
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </Box>
+
+                    <TextField
+                      label="Hardware Item"
+                      placeholder="Example: Soft Close Hinge"
+                      fullWidth
+                      value={line.itemName}
+                      onChange={(e) =>
+                        updateHardwareLine(
+                          index,
+                          "itemName",
+                          e.target.value
+                        )
+                      }
+                      error={
+                        !!errors[
+                        `hardware-line-name-${index}`
+                        ]
+                      }
+                      helperText={
+                        errors[
+                        `hardware-line-name-${index}`
+                        ]
+                      }
+                      sx={formFieldSx(darkMode)}
+                    />
+
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "1fr 1fr",
+                        gap: 1.5,
+                      }}
+                    >
+                      <TextField
+                        label="Quantity"
+                        type="number"
+                        fullWidth
+                        inputProps={{
+                          min: 0.001,
+                          step: "any",
+                        }}
+                        value={line.quantity}
+                        onChange={(e) =>
+                          updateHardwareLine(
+                            index,
+                            "quantity",
+                            e.target.value
+                          )
+                        }
+                        error={
+                          !!errors[
+                          `hardware-line-qty-${index}`
+                          ]
+                        }
+                        helperText={
+                          errors[
+                          `hardware-line-qty-${index}`
+                          ]
+                        }
+                        sx={formFieldSx(darkMode)}
+                      />
+
+                      <TextField
+                        select
+                        label="UOM"
+                        fullWidth
+                        value={line.uom}
+                        onChange={(e) =>
+                          updateHardwareLine(
+                            index,
+                            "uom",
+                            e.target.value
+                          )
+                        }
+                        error={
+                          !!errors[
+                          `hardware-line-uom-${index}`
+                          ]
+                        }
+                        helperText={
+                          errors[
+                          `hardware-line-uom-${index}`
+                          ]
+                        }
+                        sx={formFieldSx(darkMode)}
+                        slotProps={
+                          selectMenuSlotProps
+                        }
+                      >
+                        {hardwareUomOptions.map(
+                          (uom) => (
+                            <MenuItem
+                              key={uom}
+                              value={uom}
+                            >
+                              {uom}
+                            </MenuItem>
+                          )
+                        )}
+                      </TextField>
+                    </Box>
+                  </Box>
+                )
+              )}
+            </Box>
+
+            <Box
+              sx={{
+                p: 1.6,
+                borderRadius: "12px",
+                background:
+                  "rgba(59,130,246,.08)",
+                border:
+                  "1px solid rgba(59,130,246,.18)",
+              }}
+            >
+              <Box
+                sx={{
+                  color: "#93c5fd",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  mb: 1,
+                }}
+              >
+                Sticker Description Preview
+              </Box>
+
+              <Box
+                component="pre"
+                sx={{
+                  m: 0,
+                  color: "#cbd5e1",
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                }}
+              >
+                {buildHardwareDescription(
+                  hardwareLines
+                ) || "Add hardware items to preview the description."}
+              </Box>
+            </Box>
+          </Box>
+        </InventoryModal>
+        )}
       </div>
       {
         uiAlert && (

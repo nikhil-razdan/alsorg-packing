@@ -1,6 +1,8 @@
 package com.alsorg.packing.controller.dto;
 
+import com.alsorg.packing.domain.venflow.VenFlowAllocationStatus;
 import com.alsorg.packing.domain.venflow.VenFlowIssueStatus;
+import com.alsorg.packing.domain.venflow.VenFlowMaterialSource;
 import com.alsorg.packing.domain.venflow.VenFlowPoStatus;
 import com.alsorg.packing.domain.venflow.VenFlowProcessingStatus;
 import com.alsorg.packing.domain.venflow.VenFlowQcStatus;
@@ -8,7 +10,7 @@ import com.alsorg.packing.domain.venflow.VenFlowStage;
 import com.alsorg.packing.domain.venflow.VenFlowStockDecision;
 import com.alsorg.packing.domain.venflow.VenFlowStoreStatus;
 import com.alsorg.packing.domain.venflow.VenFlowUnit;
-
+import java.util.List;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -45,10 +47,35 @@ public final class VenFlowDtos {
                         String remarks) {
         }
 
+        public record MaterialMovementResponse(
+                        UUID id,
+                        UUID entryId,
+                        UUID allocationId,
+
+                        String movementType,
+                        BigDecimal quantity,
+
+                        String referenceNo,
+                        String description,
+                        String remarks,
+
+                        String performedBy,
+                        LocalDateTime createdAt) {
+        }
+
         public record StoreReviewRequest(
                         VenFlowStockDecision stockDecision,
                         BigDecimal availableQty,
                         String remarks) {
+        }
+
+        public record StoreDecisionRequest(
+                        BigDecimal availableQty,
+                        String purchaseRequestNo,
+                        LocalDate requisitionDate,
+                        String remarks,
+                        Boolean hold,
+                        Long rowVersion) {
         }
 
         public record ReserveMaterialRequest(
@@ -66,9 +93,11 @@ public final class VenFlowDtos {
                         String vendorName,
                         String poNo,
                         LocalDate poDate,
+                        BigDecimal orderedQty,
                         BigDecimal poAmount,
                         String poDocumentUrl,
-                        String remarks) {
+                        String remarks,
+                        Long rowVersion) {
         }
 
         public record VendorOrderRequest(
@@ -79,7 +108,8 @@ public final class VenFlowDtos {
         }
 
         public record DirectorDecisionRequest(
-                        String remarks) {
+                        String remarks,
+                        Long rowVersion) {
         }
 
         public record MaterialReceivedRequest(
@@ -100,6 +130,80 @@ public final class VenFlowDtos {
                         String rejectionReason) {
         }
 
+        public record QcInspectionRequest(
+                        BigDecimal inspectedQty,
+                        BigDecimal acceptedQty,
+                        BigDecimal rejectedQty,
+                        BigDecimal holdQty,
+
+                        Boolean sampleCompared,
+                        Boolean grainMatch,
+                        Boolean shadeMatch,
+                        Boolean thicknessOk,
+                        Boolean sizeOk,
+                        Boolean surfaceConditionOk,
+
+                        String qcRemarks,
+                        String rejectionReason,
+
+                        List<String> evidenceUrls,
+                        Long allocationVersion) {
+        }
+
+        public record MaterialAllocationResponse(
+                        UUID id,
+                        VenFlowMaterialSource sourceType,
+                        VenFlowAllocationStatus status,
+
+                        BigDecimal plannedQty,
+                        BigDecimal receivedQty,
+
+                        BigDecimal qcInspectedQty,
+                        BigDecimal qcAcceptedQty,
+                        BigDecimal qcRejectedQty,
+                        BigDecimal qcHoldQty,
+                        BigDecimal qcPendingQty,
+
+                        BigDecimal issuedQty,
+                        BigDecimal issueReadyQty,
+
+                        String purchaseRequestNo,
+                        LocalDate requisitionDate,
+                        Long rowVersion) {
+        }
+
+        public record MaterialSummaryResponse(
+                        UUID entryId,
+
+                        BigDecimal requiredQty,
+                        BigDecimal storeAvailableQty,
+                        BigDecimal toBeOrderedQty,
+
+                        BigDecimal orderedQty,
+                        BigDecimal purchasedReceivedQty,
+                        BigDecimal vendorOutstandingQty,
+
+                        BigDecimal qcPendingQty,
+                        BigDecimal qcAcceptedQty,
+                        BigDecimal qcRejectedQty,
+                        BigDecimal qcHoldQty,
+
+                        BigDecimal issuedQty,
+                        BigDecimal issueReadyQty,
+
+                        BigDecimal finalRequirementGap,
+
+                        BigDecimal usedQty,
+                        BigDecimal wastageQty,
+                        BigDecimal processingBalanceQty,
+
+                        int storeCoveragePercent,
+
+                        java.util.List<String> activeDepartments,
+
+                        java.util.List<MaterialAllocationResponse> allocations) {
+        }
+
         public record ProductionDetailsRequest(
                         String productionDetails,
                         String supervisorName,
@@ -115,7 +219,7 @@ public final class VenFlowDtos {
         public record ProcessingRequest(
                         BigDecimal usedQty,
                         BigDecimal wastageQty,
-                        BigDecimal balanceQty,
+                        BigDecimal processingBalanceQty,
                         String outputImageUrl,
                         String remarks) {
         }

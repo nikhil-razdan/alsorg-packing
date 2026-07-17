@@ -19,6 +19,7 @@ public class UserService {
         private static final Set<String> ALLOWED_ROLES = Set.of(
                         "ADMIN",
                         "PACKING",
+                        "HARDWARE_PACKING",
                         "WAREHOUSE",
                         "DISPATCH",
                         "LOGISTICS",
@@ -198,10 +199,24 @@ public class UserService {
 
                 user.setModules(cleanModules);
 
-                user.setWarehouseAccess(
-                                warehouseAccess
-                                                || "ADMIN".equals(role)
-                                                || "WAREHOUSE".equals(role));
+                boolean finalWarehouseAccess;
+
+                if ("ADMIN".equals(role)
+                                || "WAREHOUSE".equals(role)) {
+
+                        finalWarehouseAccess = true;
+
+                } else if ("HARDWARE_PACKING".equals(role)
+                                || "DRIVER".equals(role)) {
+
+                        finalWarehouseAccess = false;
+
+                } else {
+
+                        finalWarehouseAccess = warehouseAccess;
+                }
+
+                user.setWarehouseAccess(finalWarehouseAccess);
 
                 if ("DRIVER".equals(role)) {
                         if (driverId == null) {
@@ -304,11 +319,11 @@ public class UserService {
                 }
 
                 if (("PACKING".equals(role)
+                                || "HARDWARE_PACKING".equals(role)
                                 || "WAREHOUSE".equals(role)
                                 || "DISPATCH".equals(role)
                                 || "LOGISTICS".equals(role)
-                                || "DRIVER".equals(role))
-                                && !clean.contains("PACKFLOW")) {
+                                || "DRIVER".equals(role)) && !clean.contains("PACKFLOW")) {
                         throw new RuntimeException(
                                         "PackFlow role requires PackFlow module access");
                 }
@@ -325,6 +340,7 @@ public class UserService {
                         clean.add("BOMFLOW");
                         clean.add("VENFLOW");
                 } else if ("PACKING".equals(role)
+                                || "HARDWARE_PACKING".equals(role)
                                 || "WAREHOUSE".equals(role)
                                 || "DISPATCH".equals(role)
                                 || "LOGISTICS".equals(role)

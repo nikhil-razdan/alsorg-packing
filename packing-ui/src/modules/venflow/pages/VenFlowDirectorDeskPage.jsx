@@ -278,8 +278,10 @@ export default function VenFlowDirectorDeskPage() {
                         selectedEntry.id,
                         {
                             remarks:
-                                decisionRemarks
-                                    .trim(),
+                                decisionRemarks.trim(),
+
+                            rowVersion:
+                                selectedEntry.rowVersion,
                         }
                     );
             } else {
@@ -288,8 +290,10 @@ export default function VenFlowDirectorDeskPage() {
                         selectedEntry.id,
                         {
                             remarks:
-                                decisionRemarks
-                                    .trim(),
+                                decisionRemarks.trim(),
+
+                            rowVersion:
+                                selectedEntry.rowVersion,
                         }
                     );
             }
@@ -476,7 +480,9 @@ export default function VenFlowDirectorDeskPage() {
 
                         const pending =
                             row.stage ===
-                            "PO_PENDING_DIRECTOR_APPROVAL";
+                            "PO_PENDING_DIRECTOR_APPROVAL" &&
+                            row.poStatus ===
+                            "PENDING_DIRECTOR_APPROVAL";
 
                         return (
                             <Box
@@ -714,9 +720,11 @@ export default function VenFlowDirectorDeskPage() {
 
                 <DialogActions>
                     <Button
-                        onClick={() =>
-                            setDecisionMode("")
-                        }
+                        onClick={() => {
+                            setDecisionMode("");
+                            setSelectedEntry(null);
+                            setDecisionRemarks("");
+                        }}
                         disabled={saving}
                         sx={outlineBtnSx}
                     >

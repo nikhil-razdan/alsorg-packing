@@ -18,17 +18,13 @@ const readStoredRole = () => {
 
 export const VENFLOW_ROLES = Object.freeze({
 	ADMIN: "ADMIN",
+
 	MANAGER: "VENFLOW_MANAGER",
 	ENGINEERING: "VENFLOW_ENGINEERING",
 	STORE: "VENFLOW_STORE",
 	PURCHASE: "VENFLOW_PURCHASE",
-
-	/*
-	 * Reserved for the future dedicated Director role.
-	 * Currently ADMIN performs Director actions.
-	 */
+	QC: "VENFLOW_QC",
 	DIRECTOR: "VENFLOW_DIRECTOR",
-
 	PRODUCTION: "VENFLOW_PRODUCTION",
 	SUPERVISOR: "VENFLOW_SUPERVISOR",
 });
@@ -67,20 +63,18 @@ export const isVenFlowAdminOrManager = (role) => {
 };
 
 /*
- * Current implementation:
- * ADMIN acts as Director.
+ * ADMIN currently performs Director actions.
  *
- * Later, when VENFLOW_DIRECTOR is enabled, change this to:
- *
- * return (
- *     cleanRole === VENFLOW_ROLES.ADMIN ||
- *     cleanRole === VENFLOW_ROLES.DIRECTOR
- * );
+ * VENFLOW_DIRECTOR is also supported so the frontend remains
+ * compatible when the dedicated Director account is enabled.
  */
 export const isVenFlowDirector = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
-	return cleanRole === VENFLOW_ROLES.ADMIN;
+	return (
+		cleanRole === VENFLOW_ROLES.ADMIN ||
+		cleanRole === VENFLOW_ROLES.DIRECTOR
+	);
 };
 
 /* =========================================================
@@ -111,6 +105,25 @@ export const isVenFlowPurchase = (role) => {
 	return (
 		isVenFlowAdminOrManager(cleanRole) ||
 		cleanRole === VENFLOW_ROLES.PURCHASE
+	);
+};
+
+/*
+ * Backend QC access currently allows:
+ * - ADMIN
+ * - VENFLOW_MANAGER
+ * - VENFLOW_QC
+ * - VENFLOW_STORE
+ *
+ * Therefore Store users can also submit allocation-level QC.
+ */
+export const isVenFlowQc = (role) => {
+	const cleanRole = getVenFlowRole(role);
+
+	return (
+		isVenFlowAdminOrManager(cleanRole) ||
+		cleanRole === VENFLOW_ROLES.QC ||
+		cleanRole === VENFLOW_ROLES.STORE
 	);
 };
 
@@ -168,6 +181,10 @@ export const canOpenPurchaseDesk = (role) => {
 	return isVenFlowPurchase(role);
 };
 
+export const canOpenQcDesk = (role) => {
+	return isVenFlowQc(role);
+};
+
 export const canOpenDirectorDesk = (role) => {
 	return isVenFlowDirector(role);
 };
@@ -184,6 +201,11 @@ export const canOpenSupervisorDesk = (role) => {
 	return isVenFlowSupervisor(role);
 };
 
+/*
+ * Full Tracker remains restricted to ADMIN and VENFLOW_MANAGER.
+ * Department users access individual requirement details through
+ * their own desks.
+ */
 export const canOpenFullTracker = (role) => {
 	return isVenFlowAdminOrManager(role);
 };
@@ -199,30 +221,20 @@ export const canAccessVenFlowScreen = (
 	const cleanRole = getVenFlowRole(role);
 
 	/*
-	 * ADMIN has access to every VenFlow screen,
-	 * including Director Desk.
+	 * ADMIN can access every VenFlow screen.
 	 */
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
 		return true;
 	}
 
 	/*
-	 * Do not return true globally for MANAGER here.
-	 *
-	 * A global manager return previously allowed Manager to open
-	 * Director Desk and approve POs. Screen access must therefore
-	 * remain explicit below.
+	 * Shared read screens.
 	 */
-
-	if (screen === "dashboard") {
-		return true;
-	}
-
-	if (screen === "reports") {
-		return true;
-	}
-
-	if (screen === "detail") {
+	if (
+		screen === "dashboard" ||
+		screen === "reports" ||
+		screen === "detail"
+	) {
 		return true;
 	}
 
@@ -246,6 +258,12 @@ export const canAccessVenFlowScreen = (
 
 	if (screen === "purchase") {
 		return canOpenPurchaseDesk(
+			cleanRole
+		);
+	}
+
+	if (screen === "qc") {
+		return canOpenQcDesk(
 			cleanRole
 		);
 	}
@@ -296,6 +314,10 @@ export const defaultVenFlowPathForRole = (
 		return "/venflow/director";
 	}
 
+	if (cleanRole === VENFLOW_ROLES.DIRECTOR) {
+		return "/venflow/director";
+	}
+
 	if (cleanRole === VENFLOW_ROLES.MANAGER) {
 		return "/venflow/dashboard";
 	}
@@ -318,6 +340,10 @@ export const defaultVenFlowPathForRole = (
 		return "/venflow/purchase";
 	}
 
+	if (cleanRole === VENFLOW_ROLES.QC) {
+		return "/venflow/qc";
+	}
+
 	if (
 		cleanRole ===
 		VENFLOW_ROLES.PRODUCTION
@@ -330,18 +356,6 @@ export const defaultVenFlowPathForRole = (
 		VENFLOW_ROLES.SUPERVISOR
 	) {
 		return "/venflow/supervisor";
-	}
-
-	/*
-	 * Future dedicated Director role.
-	 * This route remains ready even though Director access currently
-	 * operates through ADMIN.
-	 */
-	if (
-		cleanRole ===
-		VENFLOW_ROLES.DIRECTOR
-	) {
-		return "/venflow/director";
 	}
 
 	return "/modules";
@@ -378,6 +392,10 @@ export const venFlowRoleLabel = (role) => {
 		VENFLOW_ROLES.PURCHASE
 	) {
 		return "Purchase User";
+	}
+
+	if (cleanRole === VENFLOW_ROLES.QC) {
+		return "QC User";
 	}
 
 	if (

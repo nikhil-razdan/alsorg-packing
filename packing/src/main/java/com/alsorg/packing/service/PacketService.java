@@ -21,6 +21,7 @@ import com.alsorg.packing.controller.dto.PacketItemResponse;
 import com.alsorg.packing.controller.dto.UpdatePacketItemRequest;
 import com.alsorg.packing.domain.common.Company;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
+import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.common.PacketStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.MasterItem;
@@ -35,6 +36,9 @@ import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 import java.util.Set;
+import java.util.Objects;
+import org.springframework.security.access.AccessDeniedException;
+import com.alsorg.packing.domain.users.User;
 
 @Service
 public class PacketService {
@@ -88,7 +92,15 @@ public class PacketService {
                         boolean preview) {
                 StickerPdfData pdf = new StickerPdfData();
 
-                String finalStickerNumber = preview ? "PREVIEW" : stickerNumber;
+                String finalStickerNumber = preview
+                                ? "PREVIEW"
+                                : stickerNumber;
+
+                PacketItemType itemType = effectiveItemType(item);
+
+                boolean hardwareSticker = itemType == PacketItemType.HARDWARE;
+
+                pdf.setHardwareSticker(hardwareSticker);
 
                 pdf.setStickerNumber(finalStickerNumber);
                 pdf.setBarcodeText(finalStickerNumber);
@@ -97,21 +109,36 @@ public class PacketService {
 
                 pdf.setQrPayload(
                                 preview
-                                                ? "ALSORG|PREVIEW|PI=" + item.getId()
-                                                : "ALSORG|PI=" + item.getId() + "|SN=" + stickerNumber);
+                                                ? "ALSORG|PREVIEW|TYPE="
+                                                                + itemType
+                                                                + "|PI="
+                                                                + item.getId()
+                                                : "ALSORG|TYPE="
+                                                                + itemType
+                                                                + "|PI="
+                                                                + item.getId()
+                                                                + "|SN="
+                                                                + stickerNumber);
 
                 pdf.setShowCompanyHeader(showCompanyHeader);
 
                 pdf.setItemName(
-                                safeForPdf(item.getItemName()) + " (" + safeForPdf(item.getSku()) + ")");
+                                safeForPdf(item.getItemName())
+                                                + " ("
+                                                + safeForPdf(item.getSku())
+                                                + ")");
+
+                pdf.setPacketNo(item.getPacketNumber());
+                pdf.setSku(item.getSku());
 
                 pdf.setDescription(item.getDescription());
                 pdf.setLocation(item.getLocation());
 
                 pdf.setFloor(
-                                factoryFloor != null && !factoryFloor.isBlank()
-                                                ? factoryFloor.trim()
-                                                : item.getFloor());
+                                factoryFloor != null
+                                                && !factoryFloor.isBlank()
+                                                                ? factoryFloor.trim()
+                                                                : item.getFloor());
 
                 pdf.setClientName(item.getClientName());
                 pdf.setClientAddress(item.getClientAddress());
@@ -120,9 +147,19 @@ public class PacketService {
                 pdf.setPrintIteration((int) iteration);
                 pdf.setQuantity(1);
                 pdf.setDate(java.time.LocalDate.now().toString());
-                pdf.setDimensions(formatDimensionWithVolume(item.getDimensions()));
-                pdf.setWeight(formatWeight(item.getWeight()));
-                pdf.setRemarks(item.getRemarks());
+
+                if (hardwareSticker) {
+                        pdf.setDimensions(null);
+                        pdf.setWeight(null);
+                        pdf.setRemarks(null);
+                } else {
+                        pdf.setDimensions(
+                                        formatDimensionWithVolume(
+                                                        item.getDimensions()));
+                        pdf.setWeight(
+                                        formatWeight(item.getWeight()));
+                        pdf.setRemarks(item.getRemarks());
+                }
 
                 return pdf;
         }
@@ -166,6 +203,9 @@ public class PacketService {
                 for (PacketItem item : items) {
                         item.setId(UUID.randomUUID());
                         item.setPacket(packet);
+                        if (item.getItemType() == null) {
+                                item.setItemType(PacketItemType.NORMAL);
+                        }
                         packetItemRepository.save(item);
                 }
 
@@ -220,12 +260,14 @@ public class PacketService {
         }
 
         @Transactional(readOnly = true)
-        public List<PacketItemResponse> getPacketItems(UUID packetId) {
-
+        public List<PacketItemResponse> getPacketItems(
+                        UUID packetId) {
                 return packetItemRepository.findByPacketId(packetId)
                                 .stream()
+                                .filter(item -> effectiveItemType(item) != PacketItemType.HARDWARE)
                                 .map(item -> {
                                         PacketItemResponse dto = new PacketItemResponse();
+
                                         dto.setItemId(item.getId());
                                         dto.setItemName(item.getItemName());
                                         dto.setFloor(item.getFloor());
@@ -233,10 +275,27 @@ public class PacketService {
                                         dto.setDrawingNo(item.getDrawingNo());
                                         dto.setClientName(item.getClientName());
                                         dto.setClientAddress(item.getClientAddress());
-                                        dto.setSku(item.getSku() != null ? item.getSku() : "-");
-                                        dto.setZohoItemId(item.getZohoItemId() != null ? item.getZohoItemId() : "-");
-                                        dto.setDescription(item.getDescription() != null ? item.getDescription() : "");
-                                        dto.setLocation(item.getLocation() != null ? item.getLocation() : "");
+
+                                        dto.setSku(
+                                                        item.getSku() != null
+                                                                        ? item.getSku()
+                                                                        : "-");
+
+                                        dto.setZohoItemId(
+                                                        item.getZohoItemId() != null
+                                                                        ? item.getZohoItemId()
+                                                                        : "-");
+
+                                        dto.setDescription(
+                                                        item.getDescription() != null
+                                                                        ? item.getDescription()
+                                                                        : "");
+
+                                        dto.setLocation(
+                                                        item.getLocation() != null
+                                                                        ? item.getLocation()
+                                                                        : "");
+
                                         return dto;
                                 })
                                 .toList();
@@ -268,6 +327,7 @@ public class PacketService {
                 master.setTotalPackets(req.numberOfPackets);
                 master.setFloor(req.floor);
                 master.setPlantCode(plantCode);
+                master.setItemType(PacketItemType.NORMAL);
 
                 master = masterItemRepository.save(master);
 
@@ -295,7 +355,7 @@ public class PacketService {
                         item.setId(UUID.randomUUID());
                         item.setPacket(packet);
                         item.setMasterItem(master);
-
+                        item.setItemType(PacketItemType.NORMAL);
                         item.setItemName(req.itemName);
                         item.setPdNo(req.pdNo);
                         item.setDrawingNo(req.drawingNo);
@@ -360,59 +420,30 @@ public class PacketService {
                 PacketItem item = packetItemRepository.findById(itemId)
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
-                assertPlantAccess(item.getPlantCode(), allowedPlants);
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware sticker preview must use the hardware packet API");
+                }
 
-                long iteration = item.getPrintIteration() == null
-                                ? 1
-                                : item.getPrintIteration();
+                assertPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
 
-                String previewStickerNumber = item.getStickerNumber() != null
-                                ? item.getStickerNumber()
-                                : "PREVIEW";
-
-                StickerPdfData pdf = buildStickerPdfData(
+                return previewStickerInternal(
                                 item,
-                                previewStickerNumber,
                                 factoryFloor,
-                                showCompanyHeader,
-                                iteration,
-                                true);
-
-                return pdfService.generateSticker(pdf);
-        }
-
-        public byte[] generateStickerForPacketItem(
-                        UUID itemId,
-                        String factoryFloor,
-                        boolean showCompanyHeader) {
-                return generateStickerForPacketItem(
-                                itemId,
-                                factoryFloor,
-                                showCompanyHeader,
-                                "SYSTEM",
-                                null);
-        }
-
-        public byte[] generateStickerForPacketItem(
-                        UUID itemId,
-                        String factoryFloor,
-                        boolean showCompanyHeader,
-                        String generatedBy) {
-                return generateStickerForPacketItem(
-                                itemId,
-                                factoryFloor,
-                                showCompanyHeader,
-                                generatedBy,
-                                null);
+                                showCompanyHeader);
         }
 
         @Transactional
-        public byte[] generateStickerForPacketItem(
+        private byte[] generateStickerInternal(
                         UUID itemId,
                         String factoryFloor,
                         boolean showCompanyHeader,
-                        String generatedBy,
-                        Set<String> allowedPlants) {
+                        User user,
+                        Set<String> allowedPlants,
+                        PacketItemType expectedType,
+                        String actorOverride) {
                 /*
                  * Lock this PacketItem for the complete sticker-generation
                  * transaction.
@@ -424,22 +455,35 @@ public class PacketService {
                  */
                 PacketItem item = packetItemRepository
                                 .findByIdForStickerGeneration(itemId)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Item not found"));
+                                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+                if (expectedType == PacketItemType.HARDWARE) {
+                        assertHardwarePacketAccess(
+                                        item,
+                                        user,
+                                        allowedPlants);
+                } else {
+                        assertNormalPacketAccess(
+                                        item,
+                                        user,
+                                        allowedPlants);
+                }
 
                 String plantCode = item.getPlantCode();
-
-                assertPlantAccess(
-                                plantCode,
-                                allowedPlants);
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
-                String actor = generatedBy != null &&
-                                !generatedBy.isBlank()
-                                                ? generatedBy.trim()
-                                                : "SYSTEM";
+                String authenticatedUsername = user != null
+                                && user.getUsername() != null
+                                && !user.getUsername().isBlank()
+                                                ? user.getUsername().trim()
+                                                : null;
+
+                String actor = firstNonBlankValue(
+                                actorOverride,
+                                authenticatedUsername,
+                                "SYSTEM");
 
                 LocalDateTime now = LocalDateTime.now(
                                 java.time.ZoneId.of(
@@ -509,9 +553,8 @@ public class PacketService {
                 item.setFgZoneCode(null);
 
                 item.setWarehouseCode(null);
-
+                item.setPackedBy(actor);
                 item.setPackedAt(now);
-                item.setCreatedBy(actor);
 
                 packetItemRepository.save(item);
 
@@ -592,6 +635,16 @@ public class PacketService {
 
                 dispatchedItem.setPackedAt(now);
                 dispatchedItem.setPackedBy(actor);
+                dispatchedItem.setItemType(
+                                item.getItemType() != null
+                                                ? item.getItemType()
+                                                : PacketItemType.NORMAL);
+
+                dispatchedItem.setLinkedPacketItemId(
+                                item.getLinkedPacketItemId());
+
+                dispatchedItem.setLinkedMasterItemId(
+                                item.getLinkedMasterItemId());
 
                 /*
                  * Do not rewrite the original creation time on every reprint.
@@ -667,6 +720,11 @@ public class PacketService {
                 PacketItem item = packetItemRepository.findById(itemId)
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware sticker details must be edited through the hardware packet API");
+                }
+
                 item.setItemName(keepExistingIfNull(req.getItemName(), item.getItemName()));
                 item.setPdNo(keepExistingIfNull(req.getPdNo(), item.getPdNo()));
                 item.setDrawingNo(keepExistingIfNull(req.getDrawingNo(), item.getDrawingNo()));
@@ -713,12 +771,17 @@ public class PacketService {
         }
 
         @Transactional
-        public void deleteItem(
-                        UUID itemId) {
-                PacketItem item = packetItemRepository
-                                .findById(itemId)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Item not found"));
+        public void deleteNormalItem(
+                        UUID itemId,
+                        User user,
+                        Set<String> allowedPlants) {
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+                assertNormalPacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
 
                 /*
                  * Normal user delete rule:
@@ -836,6 +899,10 @@ public class PacketService {
                                 .findFirst()
                                 .orElseThrow(() -> new RuntimeException("No company found"));
 
+                if (master.getItemType() == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware master items must be managed through the hardware packet API");
+                }
                 // ✅ CREATE NEW PACKET (MANDATORY)
                 Packet packet = new Packet();
                 packet.setId(UUID.randomUUID());
@@ -870,7 +937,7 @@ public class PacketService {
                         // ✅ FIXED LINKS
                         item.setMasterItem(master);
                         item.setPacket(packet); // 🔥 THIS WAS MISSING
-
+                        item.setItemType(PacketItemType.NORMAL);
                         item.setItemName(master.getItemName());
                         item.setPdNo(master.getPdNo());
                         item.setDrawingNo(master.getDrawingName());
@@ -918,6 +985,69 @@ public class PacketService {
                 return packetItemRepository.saveAll(items);
         }
 
+        private boolean isAdmin(User user) {
+                return user != null
+                                && "ADMIN".equalsIgnoreCase(user.getRole());
+        }
+
+        private boolean isHardwarePacking(User user) {
+                return user != null
+                                && "HARDWARE_PACKING".equalsIgnoreCase(user.getRole());
+        }
+
+        private void assertNormalPacketAccess(
+                        PacketItem item,
+                        User user,
+                        Set<String> allowedPlants) {
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware packets must be accessed through the hardware packet API");
+                }
+
+                if (isHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "Hardware packing users cannot access normal inventory");
+                }
+
+                if (isAdmin(user)) {
+                        return;
+                }
+
+                assertPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+        }
+
+        private void assertHardwarePacketAccess(
+                        PacketItem item,
+                        User user,
+                        Set<String> allowedPlants) {
+                if (effectiveItemType(item) != PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "This is not a hardware packet");
+                }
+
+                if (isAdmin(user)) {
+                        return;
+                }
+
+                if (!isHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "Hardware packing access required");
+                }
+
+                if (!Objects.equals(
+                                item.getCreatedByUserId(),
+                                user.getId())) {
+                        throw new AccessDeniedException(
+                                        "You cannot access hardware packets created by another user");
+                }
+
+                assertPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+        }
+
         @Transactional
         public PacketItem createCustomPacket(CreateItemRequest req) {
                 return createCustomPacket(req, "SYSTEM", req.getPlantCode());
@@ -947,6 +1077,7 @@ public class PacketService {
 
                 // 🔥 CREATE MASTER ITEM (same as existing)
                 MasterItem master = new MasterItem();
+                master.setItemType(PacketItemType.NORMAL);
                 master.setItemName(req.itemName);
                 master.setPdNo(req.pdNo);
                 master.setDrawingName(req.drawingNo);
@@ -982,6 +1113,7 @@ public class PacketService {
 
                 item.setId(UUID.randomUUID());
                 item.setPacket(packet);
+                item.setItemType(PacketItemType.NORMAL);
                 item.setMasterItem(master);
                 item.setDescription(req.getDescriptions().get(0));
                 item.setWeight(req.getWeights().get(0));
@@ -1038,6 +1170,11 @@ public class PacketService {
                 MasterItem master = masterItemRepository.findById(masterItemId)
                                 .orElseThrow(() -> new RuntimeException("Master item not found"));
 
+                if (master.getItemType() == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Custom normal packets cannot be added to a hardware master item");
+                }
+
                 String plantCode = master.getPlantCode();
 
                 assertPlantAccess(plantCode, allowedPlants);
@@ -1073,7 +1210,7 @@ public class PacketService {
                 item.setId(UUID.randomUUID());
                 item.setPacket(packet);
                 item.setMasterItem(master);
-
+                item.setItemType(PacketItemType.NORMAL);
                 item.setItemName(master.getItemName());
                 item.setPdNo(master.getPdNo());
                 item.setDrawingNo(master.getDrawingName());
@@ -1103,12 +1240,20 @@ public class PacketService {
         }
 
         @Transactional
-        public PacketItem updatePacketItem(
+        public PacketItem updateNormalPacketItem(
                         UUID itemId,
-                        UpdatePacketItemRequest req) {
-
+                        UpdatePacketItemRequest req,
+                        User user,
+                        Set<String> allowedPlants) {
                 PacketItem item = packetItemRepository.findById(itemId)
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
+
+                assertNormalPacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
+
+                // Keep your existing normal update logic here.
 
                 boolean stickerGenerated = item.getStickerNumber() != null;
 
@@ -1187,6 +1332,104 @@ public class PacketService {
                 }
 
                 throw new RuntimeException("Packet number missing. Cannot rebuild SKU.");
+        }
+
+        /*
+         * ============================================================
+         * LEGACY NORMAL-STICKER API
+         *
+         * Keep these methods because older controllers/services may
+         * already call them.
+         * They remain NORMAL-only and cannot print hardware packets.
+         * ============================================================
+         */
+
+        @Transactional
+        public byte[] generateStickerForPacketItem(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader) {
+                return generateStickerInternal(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                null,
+                                null,
+                                PacketItemType.NORMAL,
+                                "SYSTEM");
+        }
+
+        @Transactional
+        public byte[] generateStickerForPacketItem(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        String generatedBy) {
+                return generateStickerInternal(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                null,
+                                null,
+                                PacketItemType.NORMAL,
+                                generatedBy);
+        }
+
+        @Transactional
+        public byte[] generateStickerForPacketItem(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        String generatedBy,
+                        Set<String> allowedPlants) {
+                return generateStickerInternal(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                null,
+                                allowedPlants,
+                                PacketItemType.NORMAL,
+                                generatedBy);
+        }
+
+        /*
+         * ============================================================
+         * NEW USER-AWARE STICKER API
+         * ============================================================
+         */
+
+        @Transactional
+        public byte[] generateNormalSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        User user,
+                        Set<String> allowedPlants) {
+                return generateStickerInternal(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                user,
+                                allowedPlants,
+                                PacketItemType.NORMAL,
+                                null);
+        }
+
+        @Transactional
+        public byte[] generateHardwareSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        User user,
+                        Set<String> allowedPlants) {
+                return generateStickerInternal(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                user,
+                                allowedPlants,
+                                PacketItemType.HARDWARE,
+                                null);
         }
 
         private String formatDimensionWithVolume(String dim) {
@@ -1424,6 +1667,24 @@ public class PacketService {
                         PacketItem packetItem,
                         DispatchedItem dispatchedItem,
                         String actor) {
+
+                if (packetItem.getItemType() == null) {
+                        packetItem.setItemType(
+                                        dispatchedItem.getItemType() != null
+                                                        ? dispatchedItem.getItemType()
+                                                        : PacketItemType.NORMAL);
+                }
+
+                if (packetItem.getLinkedPacketItemId() == null) {
+                        packetItem.setLinkedPacketItemId(
+                                        dispatchedItem.getLinkedPacketItemId());
+                }
+
+                if (packetItem.getLinkedMasterItemId() == null) {
+                        packetItem.setLinkedMasterItemId(
+                                        dispatchedItem.getLinkedMasterItemId());
+                }
+
                 packetItem.setItemName(
                                 keepExistingIfBlank(
                                                 packetItem.getItemName(),
@@ -1550,6 +1811,16 @@ public class PacketService {
 
                 packetItem.setId(UUID.randomUUID());
                 packetItem.setPacket(packet);
+                packetItem.setItemType(
+                                dispatchedItem.getItemType() != null
+                                                ? dispatchedItem.getItemType()
+                                                : PacketItemType.NORMAL);
+
+                packetItem.setLinkedPacketItemId(
+                                dispatchedItem.getLinkedPacketItemId());
+
+                packetItem.setLinkedMasterItemId(
+                                dispatchedItem.getLinkedMasterItemId());
 
                 packetItem.setItemName(
                                 firstNonBlankValue(
@@ -1659,58 +1930,114 @@ public class PacketService {
         }
 
         @Transactional(readOnly = true)
-        public byte[] getLatestStickerPdfForPacketItem(
+        public byte[] previewNormalSticker(
                         UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        User user,
                         Set<String> allowedPlants) {
                 PacketItem item = packetItemRepository.findById(itemId)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Packet item not found"));
+                                .orElseThrow(() -> new RuntimeException("Item not found"));
 
-                assertLegacyPlantAccess(
-                                item.getPlantCode(),
+                assertNormalPacketAccess(
+                                item,
+                                user,
                                 allowedPlants);
 
+                return previewStickerInternal(
+                                item,
+                                factoryFloor,
+                                showCompanyHeader);
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] previewHardwareSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        User user,
+                        Set<String> allowedPlants) {
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException("Hardware packet not found"));
+
+                assertHardwarePacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
+
+                return previewStickerInternal(
+                                item,
+                                factoryFloor,
+                                showCompanyHeader);
+        }
+
+        private byte[] previewStickerInternal(
+                        PacketItem item,
+                        String factoryFloor,
+                        boolean showCompanyHeader) {
+                long iteration = item.getPrintIteration() == null
+                                ? 1
+                                : item.getPrintIteration();
+
+                String previewStickerNumber = item.getStickerNumber() != null
+                                ? item.getStickerNumber()
+                                : "PREVIEW";
+
+                StickerPdfData pdf = buildStickerPdfData(
+                                item,
+                                previewStickerNumber,
+                                factoryFloor,
+                                showCompanyHeader,
+                                iteration,
+                                true);
+
+                return pdfService.generateSticker(pdf);
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] getLatestHardwareStickerPdf(
+                        UUID itemId,
+                        User user,
+                        Set<String> allowedPlants) {
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException("Hardware packet not found"));
+
+                assertHardwarePacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
+
+                return getLatestStickerPdfInternal(item);
+        }
+
+        private byte[] getLatestStickerPdfInternal(
+                        PacketItem item) {
                 String activeStickerNumber = item.getStickerNumber();
 
-                /*
-                 * A CREATED item after Admin Center rollback has historical
-                 * stickers, but it does not have an active sticker.
-                 */
-                if (activeStickerNumber == null ||
-                                activeStickerNumber.isBlank()) {
-
+                if (activeStickerNumber == null
+                                || activeStickerNumber.isBlank()) {
                         throw new RuntimeException(
                                         "This packet item has no active sticker");
                 }
 
                 List<StickerHistory> historyList = stickerHistoryRepository
                                 .findByPacketItem_IdOrderByGeneratedAtDesc(
-                                                itemId);
+                                                item.getId());
 
-                /*
-                 * Only return history belonging to the currently active sticker.
-                 *
-                 * Never return an older/deactivated sticker through the
-                 * 'latest active sticker' endpoint.
-                 */
                 for (StickerHistory history : historyList) {
                         boolean sameSticker = activeStickerNumber.equals(
                                         history.getStickerNumber());
 
-                        boolean hasPdf = history.getPdfData() != null &&
-                                        history.getPdfData().length > 0;
+                        boolean hasPdf = history.getPdfData() != null
+                                        && history.getPdfData().length > 0;
 
                         if (sameSticker && hasPdf) {
                                 return history.getPdfData();
                         }
                 }
 
-                /*
-                 * Legacy fallback:
-                 * Active sticker number exists, but the stored BLOB is missing.
-                 */
-                long iteration = item.getPrintIteration() == null ||
-                                item.getPrintIteration() <= 0
+                long iteration = item.getPrintIteration() == null
+                                || item.getPrintIteration() <= 0
                                                 ? 1L
                                                 : item.getPrintIteration();
 
@@ -1726,40 +2053,106 @@ public class PacketService {
         }
 
         @Transactional(readOnly = true)
-        public byte[] getStickerHistoryPdf(
-                        UUID historyId,
+        public byte[] getLatestStickerPdfForPacketItem(
+                        UUID itemId,
                         Set<String> allowedPlants) {
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Packet item not found"));
 
-                StickerHistory history = stickerHistoryRepository.findById(historyId)
-                                .orElseThrow(() -> new RuntimeException("Sticker history not found"));
-
-                PacketItem item = history.getPacketItem();
-
-                if (item == null) {
-                        throw new RuntimeException("Sticker history has no packet item linked");
+                /*
+                 * Existing endpoint remains valid for all old NORMAL
+                 * packet-item callers, but cannot leak a hardware sticker.
+                 */
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware stickers must be accessed through the hardware packet API");
                 }
 
                 assertLegacyPlantAccess(
                                 item.getPlantCode(),
                                 allowedPlants);
 
-                if (history.getPdfData() != null &&
-                                history.getPdfData().length > 0) {
+                return getLatestStickerPdfInternal(item);
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] getStickerHistoryPdf(
+                        UUID historyId,
+                        Set<String> allowedPlants) {
+                StickerHistory history = stickerHistoryRepository.findById(historyId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Sticker history not found"));
+
+                PacketItem item = history.getPacketItem();
+
+                if (item == null) {
+                        throw new RuntimeException(
+                                        "Sticker history has no packet item linked");
+                }
+
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "Hardware sticker history must use the hardware packet API");
+                }
+
+                assertLegacyPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+
+                return getStickerHistoryPdfInternal(
+                                history,
+                                item);
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] getHardwareStickerHistoryPdf(
+                        UUID historyId,
+                        User user,
+                        Set<String> allowedPlants) {
+                StickerHistory history = stickerHistoryRepository.findById(historyId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Sticker history not found"));
+
+                PacketItem item = history.getPacketItem();
+
+                if (item == null) {
+                        throw new RuntimeException(
+                                        "Sticker history has no packet item linked");
+                }
+
+                assertHardwarePacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
+
+                return getStickerHistoryPdfInternal(
+                                history,
+                                item);
+        }
+
+        private byte[] getStickerHistoryPdfInternal(
+                        StickerHistory history,
+                        PacketItem item) {
+                if (history.getPdfData() != null
+                                && history.getPdfData().length > 0) {
                         return history.getPdfData();
                 }
 
-                String stickerNumber = history.getStickerNumber() != null &&
-                                !history.getStickerNumber().isBlank()
+                String stickerNumber = history.getStickerNumber() != null
+                                && !history.getStickerNumber().isBlank()
                                                 ? history.getStickerNumber()
                                                 : item.getStickerNumber();
 
-                if (stickerNumber == null || stickerNumber.isBlank()) {
-                        throw new RuntimeException("Sticker PDF data missing and sticker number not available");
+                if (stickerNumber == null
+                                || stickerNumber.isBlank()) {
+                        throw new RuntimeException(
+                                        "Sticker PDF data missing and sticker number not available");
                 }
 
-                long iteration = history.getPrintIteration() == null ||
-                                history.getPrintIteration() <= 0
-                                                ? 1
+                long iteration = history.getPrintIteration() == null
+                                || history.getPrintIteration() <= 0
+                                                ? 1L
                                                 : history.getPrintIteration();
 
                 StickerPdfData pdf = buildStickerPdfData(
@@ -1771,5 +2164,14 @@ public class PacketService {
                                 false);
 
                 return pdfService.generateSticker(pdf);
+        }
+
+        private PacketItemType effectiveItemType(
+                        PacketItem item) {
+                if (item == null || item.getItemType() == null) {
+                        return PacketItemType.NORMAL;
+                }
+
+                return item.getItemType();
         }
 }

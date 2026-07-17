@@ -1,0 +1,27 @@
+package com.alsorg.packing.domain.venflow;
+
+public enum VenFlowAllocationStatus {
+    QC_PENDING,
+
+    PURCHASE_REQUESTED,
+    PO_PENDING_DIRECTOR_APPROVAL,
+    PO_APPROVED,
+    PO_RETURNED,
+    ORDER_PLACED,
+
+    PARTIALLY_RECEIVED,
+    RECEIVED_GRN_PENDING,
+    GRN_DONE,
+
+    PARTIALLY_QC_ACCEPTED,
+    QC_ACCEPTED,
+    QC_REJECTED,
+    QC_HOLD,
+
+    READY_FOR_ISSUE,
+    PARTIALLY_ISSUED,
+    ISSUED,
+
+    CANCELLED,
+    MIGRATION_REVIEW
+}

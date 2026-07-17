@@ -17,7 +17,6 @@ import {
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import Drawer from "@mui/material/Drawer";
 import { useAuth } from "../auth/AuthContext";
-import { normalizeRole } from "../utils/permissions";
 import AppsIcon from "@mui/icons-material/Apps";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import LogoutIcon from "@mui/icons-material/Logout";
@@ -170,37 +169,66 @@ function UsersPage() {
 		);
 	};
 
-	const getSafeModulesForSave = (selectedRole, selectedModules, selectedWarehouseAccess) => {
-		const cleanRole = normalizeUserRole(selectedRole);
+	const getSafeModulesForSave = (
+		selectedRole,
+		selectedModules,
+		selectedWarehouseAccess
+	) => {
+		const cleanRole =
+			normalizeUserRole(
+				selectedRole
+			);
 
-		const nextModules = Array.from(
-			new Set(
-				Array.isArray(selectedModules)
-					? selectedModules.filter(Boolean)
-					: []
-			)
-		);
+		const nextModules =
+			Array.from(
+				new Set(
+					Array.isArray(
+						selectedModules
+					)
+						? selectedModules
+							.filter(Boolean)
+						: []
+				)
+			);
 
 		const isPackFlowRole =
 			cleanRole === "ADMIN" ||
 			cleanRole === "PACKING" ||
+			cleanRole ===
+			"HARDWARE_PACKING" ||
 			cleanRole === "WAREHOUSE" ||
 			cleanRole === "DISPATCH" ||
 			cleanRole === "LOGISTICS" ||
 			cleanRole === "DRIVER";
 
+		const effectiveWarehouseAccess =
+			cleanRole ===
+				"HARDWARE_PACKING"
+				? false
+				: selectedWarehouseAccess;
+
 		if (
 			isPackFlowRole ||
-			selectedWarehouseAccess ||
+			effectiveWarehouseAccess ||
 			cleanRole === "WAREHOUSE"
 		) {
-			if (!nextModules.includes("PACKFLOW")) {
-				nextModules.unshift("PACKFLOW");
+			if (
+				!nextModules.includes(
+					"PACKFLOW"
+				)
+			) {
+				nextModules.unshift(
+					"PACKFLOW"
+				);
 			}
 		}
 
 		if (cleanRole === "ADMIN") {
-			return ["PACKFLOW", "BOMFLOW", "VENFLOW"];
+			return [
+				"PACKFLOW",
+				"BOMFLOW",
+				"VENFLOW",
+			];
 		}
 
 		return nextModules;
@@ -210,6 +238,7 @@ function UsersPage() {
 		"ADMIN",
 
 		"PACKING",
+		"HARDWARE_PACKING",
 		"WAREHOUSE",
 		"DISPATCH",
 		"LOGISTICS",
@@ -243,26 +272,76 @@ function UsersPage() {
 		},
 	];
 
-	const defaultModulesForRole = (nextRole) => {
-		if (nextRole === "ADMIN") {
-			return ["PACKFLOW", "BOMFLOW", "VENFLOW"];
+	const roleRequiresPlantAccess = (
+		selectedRole
+	) => {
+		const cleanRole =
+			normalizeUserRole(selectedRole);
+
+		if (cleanRole === "ADMIN") {
+			return false;
+		}
+
+		if (cleanRole === "DRIVER") {
+			return false;
 		}
 
 		if (
-			nextRole === "PACKING" ||
-			nextRole === "WAREHOUSE" ||
-			nextRole === "DISPATCH" ||
-			nextRole === "LOGISTICS" ||
-			nextRole === "DRIVER"
+			cleanRole.startsWith(
+				"BOMFLOW_"
+			)
+		) {
+			return false;
+		}
+
+		if (
+			cleanRole ===
+			"VENFLOW_MANAGER"
+		) {
+			return false;
+		}
+
+		return true;
+	};
+
+	const defaultModulesForRole = (
+		nextRole
+	) => {
+		const cleanRole =
+			normalizeUserRole(nextRole);
+
+		if (cleanRole === "ADMIN") {
+			return [
+				"PACKFLOW",
+				"BOMFLOW",
+				"VENFLOW",
+			];
+		}
+
+		if (
+			cleanRole === "PACKING" ||
+			cleanRole === "HARDWARE_PACKING" ||
+			cleanRole === "WAREHOUSE" ||
+			cleanRole === "DISPATCH" ||
+			cleanRole === "LOGISTICS" ||
+			cleanRole === "DRIVER"
 		) {
 			return ["PACKFLOW"];
 		}
 
-		if (nextRole.startsWith("BOMFLOW_")) {
+		if (
+			cleanRole.startsWith(
+				"BOMFLOW_"
+			)
+		) {
 			return ["BOMFLOW"];
 		}
 
-		if (nextRole.startsWith("VENFLOW_")) {
+		if (
+			cleanRole.startsWith(
+				"VENFLOW_"
+			)
+		) {
 			return ["VENFLOW"];
 		}
 
@@ -386,10 +465,30 @@ function UsersPage() {
 				return;
 			}
 
+			if (
+				roleRequiresPlantAccess(role) &&
+				plantCodes.length === 0
+			) {
+				setSnackMsg(
+					"Please select at least one plant"
+				);
+				setSnackType("error");
+				setSnackOpen(true);
+				return;
+			}
+
+			const cleanSelectedRole =
+				normalizeUserRole(role);
+
 			const finalWarehouseAccess =
-				role === "WAREHOUSE" ||
-				role === "ADMIN" ||
-				warehouseAccess;
+				cleanSelectedRole ===
+					"HARDWARE_PACKING"
+					? false
+					: cleanSelectedRole ===
+					"WAREHOUSE" ||
+					cleanSelectedRole ===
+					"ADMIN" ||
+					warehouseAccess;
 
 			const finalModules =
 				getSafeModulesForSave(
@@ -490,10 +589,30 @@ function UsersPage() {
 				return;
 			}
 
+			if (
+				roleRequiresPlantAccess(editRole) &&
+				editPlantCodes.length === 0
+			) {
+				setSnackMsg(
+					"Please select at least one plant"
+				);
+				setSnackType("error");
+				setSnackOpen(true);
+				return;
+			}
+
+			const cleanSelectedRole =
+				normalizeUserRole(editRole);
+
 			const finalWarehouseAccess =
-				editRole === "WAREHOUSE" ||
-				editRole === "ADMIN" ||
-				editWarehouseAccess;
+				cleanSelectedRole ===
+					"HARDWARE_PACKING"
+					? false
+					: cleanSelectedRole ===
+					"WAREHOUSE" ||
+					cleanSelectedRole ===
+					"ADMIN" ||
+					editWarehouseAccess;
 
 			const finalModules =
 				getSafeModulesForSave(
@@ -634,6 +753,11 @@ function UsersPage() {
 		}
 	};
 
+	const normalizedCurrentRole =
+		normalizeUserRole(
+			currentRole
+		);
+
 	const filteredRows = useMemo(() => {
 		return users.filter(u =>
 			u.username.toLowerCase().includes(search.toLowerCase())
@@ -686,6 +810,16 @@ function UsersPage() {
 			return <InventoryIcon fontSize="small" />;
 		}
 
+		if (
+			role === "HARDWARE_PACKING"
+		) {
+			return (
+				<InventoryIcon
+					fontSize="small"
+				/>
+			);
+		}
+
 		return <InventoryIcon fontSize="small" />;
 	};
 
@@ -699,6 +833,13 @@ function UsersPage() {
 		if (role === "DRIVER") return driverChip;
 
 		if (role === "WAREHOUSE") return warehouseChip;
+
+		if (
+			role === "HARDWARE_PACKING"
+		) {
+			return packingChip;
+		}
+
 
 		if (role?.startsWith("BOMFLOW_")) return bomFlowChip;
 
@@ -812,13 +953,14 @@ function UsersPage() {
 						FlowSuite / Administration / User Management
 					</div>
 
-					{currentRole === "ADMIN" && (
-						<Chip
-							size="small"
-							label="ADMIN ACCESS"
-							sx={adminAccessChip}
-						/>
-					)}
+					{normalizedCurrentRole ===
+						"ADMIN" && (
+							<Chip
+								size="small"
+								label="ADMIN ACCESS"
+								sx={adminAccessChip}
+							/>
+						)}
 				</div>
 
 				<Box sx={searchPanel}>
@@ -1185,7 +1327,17 @@ function UsersPage() {
 													checked={
 														editRole === "ADMIN" ||
 														editRole === "WAREHOUSE" ||
-														editWarehouseAccess
+														(
+															editRole !==
+															"HARDWARE_PACKING" &&
+															editWarehouseAccess
+														)
+													}
+													disabled={
+														editRole === "ADMIN" ||
+														editRole === "WAREHOUSE" ||
+														editRole ===
+														"HARDWARE_PACKING"
 													}
 													onChange={(e) => {
 														if (editRole === "ADMIN" || editRole === "WAREHOUSE") {
@@ -1818,14 +1970,26 @@ function UsersPage() {
 											lineHeight: 1.4,
 										}}
 									>
-										Allow this user to open Warehouse page and view warehouse data
-										based on selected plant access.
+										{role === "HARDWARE_PACKING"
+											? "Hardware packing users are restricted to their own hardware packet workspace."
+											: "Allow this user to open Warehouse page and view warehouse data based on selected plant access."}
 									</Box>
 								</Box>
 
 								<Switch
-									checked={role === "ADMIN" || role === "WAREHOUSE" || warehouseAccess}
-									disabled={role === "ADMIN" || role === "WAREHOUSE"}
+									checked={
+										role === "ADMIN" ||
+										role === "WAREHOUSE" ||
+										(
+											role !== "HARDWARE_PACKING" &&
+											warehouseAccess
+										)
+									}
+									disabled={
+										role === "ADMIN" ||
+										role === "WAREHOUSE" ||
+										role === "HARDWARE_PACKING"
+									}
 									onChange={(e) => setWarehouseAccess(e.target.checked)}
 									sx={{
 										"& .MuiSwitch-switchBase.Mui-checked": {

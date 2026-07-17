@@ -4,13 +4,16 @@ import com.alsorg.packing.controller.dto.VenFlowDtos.*;
 import com.alsorg.packing.domain.venflow.*;
 import com.alsorg.packing.repository.VenFlowAuditLogRepository;
 import com.alsorg.packing.repository.VenFlowEntryRepository;
+import com.alsorg.packing.repository.VenFlowMaterialAllocationRepository;
+import com.alsorg.packing.repository.VenFlowMaterialMovementRepository;
+import com.alsorg.packing.repository.VenFlowQcInspectionRepository;
 import com.alsorg.packing.repository.VenFlowStageHistoryRepository;
-import com.alsorg.packing.service.VenFlowNotificationService;
-
+import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import java.util.stream.Collectors;
 
 import org.springframework.data.jpa.domain.Specification;
 
@@ -23,10 +26,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.web.server.ResponseStatusException;
-
+import java.net.URI;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -40,18 +44,27 @@ public class VenFlowService {
         private final VenFlowAccessService access;
         private final VenFlowStageHistoryRepository stageHistoryRepo;
         private final VenFlowNotificationService notificationService;
+        private final VenFlowMaterialAllocationRepository allocationRepo;
+        private final VenFlowMaterialMovementRepository movementRepo;
+        private final VenFlowQcInspectionRepository qcInspectionRepo;
 
         public VenFlowService(
                         VenFlowEntryRepository entryRepo,
                         VenFlowAuditLogRepository auditRepo,
                         VenFlowAccessService access,
                         VenFlowStageHistoryRepository stageHistoryRepo,
-                        VenFlowNotificationService notificationService) {
+                        VenFlowNotificationService notificationService,
+                        VenFlowMaterialAllocationRepository allocationRepo,
+                        VenFlowMaterialMovementRepository movementRepo,
+                        VenFlowQcInspectionRepository qcInspectionRepo) {
                 this.entryRepo = entryRepo;
                 this.auditRepo = auditRepo;
                 this.access = access;
                 this.stageHistoryRepo = stageHistoryRepo;
                 this.notificationService = notificationService;
+                this.allocationRepo = allocationRepo;
+                this.movementRepo = movementRepo;
+                this.qcInspectionRepo = qcInspectionRepo;
         }
 
         /*
@@ -100,10 +113,6 @@ public class VenFlowService {
                                 req.unit(),
                                 "Unit is required.");
 
-                requireText(
-                                req.sampleImageUrl(),
-                                "Sample Image is required.");
-
                 String plantCode = cleanUpper(
                                 req.plantCode());
 
@@ -132,31 +141,44 @@ public class VenFlowService {
 
                 entry.size = clean(req.size());
 
-                entry.requiredQty = req.requiredQty();
+                entry.requiredQty = quantity(
+                                req.requiredQty(),
+                                "Required Qty must be greater than zero.");
 
                 entry.orderedQty = null;
 
-                entry.receivedQty = BigDecimal.ZERO;
+                BigDecimal zeroQty = BigDecimal.ZERO.setScale(3);
 
-                entry.availableQty = BigDecimal.ZERO;
+                entry.receivedQty = zeroQty;
+                entry.availableQty = zeroQty;
+                entry.reservedQty = zeroQty;
+                entry.issuedQty = zeroQty;
+                entry.usedQty = zeroQty;
+                entry.wastageQty = zeroQty;
 
-                entry.reservedQty = BigDecimal.ZERO;
+                entry.toBeOrderedQty = zeroQty;
+                entry.purchaseRequestedQty = zeroQty;
 
-                entry.issuedQty = BigDecimal.ZERO;
+                entry.qcAcceptedQty = zeroQty;
+                entry.qcRejectedQty = zeroQty;
+                entry.qcHoldQty = zeroQty;
 
-                entry.usedQty = BigDecimal.ZERO;
+                entry.issueReadyQty = zeroQty;
+                entry.processingBalanceQty = zeroQty;
 
-                entry.wastageQty = BigDecimal.ZERO;
-
-                entry.balanceQty = req.requiredQty();
+                entry.balanceQty = entry.requiredQty;
 
                 entry.unit = req.unit();
 
                 entry.bomReference = clean(req.bomReference());
 
-                entry.bomAttachmentUrl = clean(req.bomAttachmentUrl());
+                entry.bomAttachmentUrl = cleanOptionalHttpUrl(
+                                req.bomAttachmentUrl(),
+                                "BOM Document URL");
 
-                entry.sampleImageUrl = clean(req.sampleImageUrl());
+                entry.sampleImageUrl = cleanOptionalHttpUrl(
+                                req.sampleImageUrl(),
+                                "Sample Image URL");
 
                 entry.remarks = clean(req.remarks());
 
@@ -168,7 +190,7 @@ public class VenFlowService {
 
                 entry.qcStatus = VenFlowQcStatus.NOT_REQUIRED;
 
-                entry.issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+                entry.issueStatus = VenFlowIssueStatus.NOT_READY;
 
                 entry.processingStatus = VenFlowProcessingStatus.NOT_STARTED;
 
@@ -200,10 +222,6 @@ public class VenFlowService {
                                         "Only an Engineering BOM / Indent can be sent to AKG Store.");
                 }
 
-                requireText(
-                                entry.sampleImageUrl,
-                                "Sample Image is required before sending to Store.");
-
                 String currentActor = actor();
 
                 entry.sentToStoreBy = currentActor;
@@ -217,274 +235,348 @@ public class VenFlowService {
                                 "Engineering sent BOM / Indent to AKG Store.");
         }
 
+        public MaterialSummaryResponse submitStoreDecision(
+                        UUID id,
+                        StoreDecisionRequest req) {
+                access.requireStore();
+
+                require(
+                                req,
+                                "Store decision body is required.");
+
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                boolean allowed = entry.stage == VenFlowStage.SENT_TO_STORE
+                                || entry.stage == VenFlowStage.STORE_REVIEWED
+                                || entry.stage == VenFlowStage.STOCK_AVAILABLE;
+
+                if (!allowed) {
+                        throw badRequest(
+                                        "Store Review & Action is allowed only after Engineering sends the requirement to Store.");
+                }
+
+                if (req.rowVersion() == null) {
+                        throw badRequest(
+                                        "Entry rowVersion is required.");
+                }
+
+                if (!Objects.equals(
+                                entry.rowVersion,
+                                req.rowVersion())) {
+                        throw conflict(
+                                        "This requirement was updated by another user. Reload before submitting Store Review.");
+                }
+
+                if (allocationRepo
+                                .existsByEntryIdAndActiveTrue(id)) {
+                        throw conflict(
+                                        "Store Review & Action has already been submitted for this requirement.");
+                }
+
+                BigDecimal required = quantity(
+                                entry.requiredQty,
+                                "Required Qty is missing.");
+
+                String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
+
+                /*
+                 * HOLD creates no allocation.
+                 */
+                if (Boolean.TRUE.equals(req.hold())) {
+                        requireText(
+                                        req.remarks(),
+                                        "Hold reason is required.");
+
+                        entry.stockDecision = VenFlowStockDecision.HOLD;
+
+                        entry.storeStatus = VenFlowStoreStatus.HOLD;
+
+                        entry.availableQty = BigDecimal.ZERO.setScale(3);
+
+                        entry.toBeOrderedQty = required;
+
+                        entry.purchaseRequestedQty = BigDecimal.ZERO.setScale(3);
+
+                        entry.storeReviewedBy = currentActor;
+
+                        entry.storeReviewedAt = now;
+                        entry.remarks = clean(req.remarks());
+
+                        transition(
+                                        entry,
+                                        VenFlowStage.STORE_REVIEWED,
+                                        "STORE_REQUIREMENT_HELD",
+                                        "Store placed the requirement on hold. "
+                                                        + entry.remarks);
+
+                        return materialSummary(id);
+                }
+
+                BigDecimal available = quantity(
+                                req.availableQty(),
+                                "Available Qty is required.");
+
+                if (available.compareTo(required) > 0) {
+                        throw badRequest(
+                                        "Available Qty cannot exceed Required Qty.");
+                }
+
+                BigDecimal toBeOrdered = required.subtract(available);
+
+                if (toBeOrdered.signum() > 0) {
+                        requireText(
+                                        req.purchaseRequestNo(),
+                                        "Purchase Request No. is required when To Be Ordered Qty is greater than zero.");
+
+                        require(
+                                        req.requisitionDate(),
+                                        "Requisition Date is required when To Be Ordered Qty is greater than zero.");
+                }
+
+                VenFlowStockDecision decision;
+
+                if (available.compareTo(required) == 0) {
+                        decision = VenFlowStockDecision.AVAILABLE;
+                } else if (available.signum() == 0) {
+                        decision = VenFlowStockDecision.NOT_AVAILABLE;
+                } else {
+                        decision = VenFlowStockDecision.PARTIALLY_AVAILABLE;
+                }
+
+                entry.stockDecision = decision;
+                entry.storeStatus = toStoreStatus(decision);
+
+                entry.availableQty = available;
+                entry.toBeOrderedQty = toBeOrdered;
+                entry.purchaseRequestedQty = toBeOrdered;
+
+                /*
+                 * PR quantity is not ordered quantity.
+                 */
+                entry.orderedQty = null;
+
+                /*
+                 * Reservation is no longer active.
+                 */
+                entry.reservedQty = BigDecimal.ZERO.setScale(3);
+
+                entry.storeReviewedBy = currentActor;
+
+                entry.storeReviewedAt = now;
+
+                entry.purchaseRequestNo = toBeOrdered.signum() > 0
+                                ? clean(
+                                                req.purchaseRequestNo())
+                                : null;
+
+                entry.requisitionSlipNo = entry.purchaseRequestNo;
+
+                entry.requisitionDate = toBeOrdered.signum() > 0
+                                ? req.requisitionDate()
+                                : null;
+
+                entry.purchaseRequestBy = toBeOrdered.signum() > 0
+                                ? currentActor
+                                : null;
+
+                entry.purchaseRequestAt = toBeOrdered.signum() > 0
+                                ? now
+                                : null;
+
+                entry.sentToPurchaseBy = toBeOrdered.signum() > 0
+                                ? currentActor
+                                : null;
+
+                entry.sentToPurchaseAt = toBeOrdered.signum() > 0
+                                ? now
+                                : null;
+
+                entry.qcStatus = available.signum() > 0
+                                ? VenFlowQcStatus.PENDING
+                                : VenFlowQcStatus.NOT_REQUIRED;
+
+                entry.issueStatus = VenFlowIssueStatus.NOT_READY;
+
+                if (hasText(req.remarks())) {
+                        entry.remarks = clean(req.remarks());
+                }
+
+                if (available.signum() > 0) {
+                        VenFlowMaterialAllocation storeAllocation = createAllocation(
+                                        entry,
+                                        VenFlowMaterialSource.STORE_STOCK,
+                                        VenFlowAllocationStatus.QC_PENDING,
+                                        available,
+                                        available,
+                                        null,
+                                        null);
+
+                        materialMovement(
+                                        entry,
+                                        storeAllocation,
+                                        "STORE_STOCK_SENT_TO_QC",
+                                        available,
+                                        "Store-available quantity sent directly to QC.",
+                                        req.remarks());
+                }
+
+                if (toBeOrdered.signum() > 0) {
+                        VenFlowMaterialAllocation purchaseAllocation = createAllocation(
+                                        entry,
+                                        VenFlowMaterialSource.PURCHASE,
+                                        VenFlowAllocationStatus.PURCHASE_REQUESTED,
+                                        toBeOrdered,
+                                        BigDecimal.ZERO.setScale(3),
+                                        req.purchaseRequestNo(),
+                                        req.requisitionDate());
+
+                        materialMovement(
+                                        entry,
+                                        purchaseAllocation,
+                                        "PURCHASE_REQUEST_CREATED",
+                                        toBeOrdered,
+                                        "Purchase Request created for shortage quantity.",
+                                        req.remarks());
+                }
+
+                reconcileEntry(
+                                entry,
+                                "STORE_REVIEW_AND_ACTION_SUBMITTED",
+                                "Required=" + required
+                                                + ", Store Available="
+                                                + available
+                                                + ", To QC="
+                                                + available
+                                                + ", To Be Ordered="
+                                                + toBeOrdered
+                                                + ".");
+
+                return materialSummary(id);
+        }
+
+        private VenFlowMaterialAllocation createAllocation(
+                        VenFlowEntry entry,
+                        VenFlowMaterialSource sourceType,
+                        VenFlowAllocationStatus status,
+                        BigDecimal plannedQty,
+                        BigDecimal receivedQty,
+                        String purchaseRequestNo,
+                        LocalDate requisitionDate) {
+                VenFlowMaterialAllocation allocation = new VenFlowMaterialAllocation();
+
+                allocation.entryId = entry.id;
+                allocation.sourceType = sourceType;
+                allocation.status = status;
+
+                allocation.plannedQty = plannedQty;
+                allocation.receivedQty = receivedQty;
+
+                allocation.qcInspectedQty = BigDecimal.ZERO.setScale(3);
+
+                allocation.qcAcceptedQty = BigDecimal.ZERO.setScale(3);
+
+                allocation.qcRejectedQty = BigDecimal.ZERO.setScale(3);
+
+                allocation.qcHoldQty = BigDecimal.ZERO.setScale(3);
+
+                allocation.issuedQty = BigDecimal.ZERO.setScale(3);
+
+                allocation.purchaseRequestNo = clean(purchaseRequestNo);
+
+                allocation.requisitionDate = requisitionDate;
+
+                allocation.active = true;
+                allocation.statusEnteredAt = LocalDateTime.now();
+
+                allocation.createdBy = actor();
+                allocation.updatedBy = actor();
+
+                return allocationRepo.save(
+                                allocation);
+        }
+
         /*
          * =========================================================
          * STORE - STOCK REVIEW
          * =========================================================
          */
 
+        @Deprecated
         public VenFlowEntry storeReview(
                         UUID id,
                         StoreReviewRequest req) {
+
                 access.requireStore();
 
-                require(
-                                req,
-                                "Request body is required.");
-
-                require(
-                                req.stockDecision(),
-                                "Stock decision is required.");
-
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                boolean allowedStage = entry.stage == VenFlowStage.SENT_TO_STORE
-                                || entry.stage == VenFlowStage.STORE_REVIEWED
-                                || entry.stage == VenFlowStage.STOCK_AVAILABLE;
-
-                if (!allowedStage) {
-                        throw badRequest(
-                                        "AKG Store review is allowed only after Engineering sends the indent.");
-                }
-
-                BigDecimal required = zero(entry.requiredQty);
-
-                BigDecimal available = zero(req.availableQty());
-
-                switch (req.stockDecision()) {
-                        case AVAILABLE -> {
-                                if (req.availableQty() == null) {
-                                        available = required;
-                                }
-
-                                if (available.compareTo(required) < 0) {
-                                        throw badRequest(
-                                                        "Use Partially Available when Available Qty is less than Required Qty.");
-                                }
-                        }
-
-                        case PARTIALLY_AVAILABLE -> {
-                                if (available.compareTo(
-                                                BigDecimal.ZERO) <= 0) {
-                                        throw badRequest(
-                                                        "Available Qty must be greater than zero for Partially Available.");
-                                }
-
-                                if (available.compareTo(required) >= 0) {
-                                        throw badRequest(
-                                                        "Use Available when Available Qty is equal to or greater than Required Qty.");
-                                }
-                        }
-
-                        case NOT_AVAILABLE,
-                                        HOLD,
-                                        PENDING ->
-                                available = BigDecimal.ZERO;
-                }
-
-                String currentActor = actor();
-
-                entry.stockDecision = req.stockDecision();
-
-                entry.storeStatus = toStoreStatus(
-                                req.stockDecision());
-
-                entry.availableQty = available;
-
-                entry.balanceQty = maxZero(
-                                required.subtract(
-                                                available));
-
-                entry.storeReviewedBy = currentActor;
-
-                entry.storeReviewedAt = LocalDateTime.now();
-
-                if (hasText(req.remarks())) {
-                        entry.remarks = clean(req.remarks());
-                }
-
-                VenFlowStage nextStage;
-
-                if (req.stockDecision() == VenFlowStockDecision.AVAILABLE
-                                || req.stockDecision() == VenFlowStockDecision.PARTIALLY_AVAILABLE) {
-                        nextStage = VenFlowStage.STOCK_AVAILABLE;
-                } else if (req.stockDecision() == VenFlowStockDecision.PENDING) {
-                        nextStage = VenFlowStage.SENT_TO_STORE;
-                } else {
-                        nextStage = VenFlowStage.STORE_REVIEWED;
-                }
-
-                return transition(
-                                entry,
-                                nextStage,
-                                "STORE_REVIEWED",
-                                "Store decision="
-                                                + entry.stockDecision
-                                                + ", available quantity="
-                                                + entry.availableQty
-                                                + ", balance quantity="
-                                                + entry.balanceQty
-                                                + ".");
+                throw gone(
+                                "Legacy Store Review is disabled. "
+                                                + "Use Store Review & Action through /store-decision.");
         }
 
+        @Deprecated
+        public VenFlowEntry raisePurchaseRequest(
+                        UUID id,
+                        PurchaseRequestRequest req) {
+
+                access.requireStore();
+
+                throw gone(
+                                "Purchase Request is created automatically through /store-decision.");
+        }
+
+        @Deprecated
+        public VenFlowEntry updateStoreStatus(
+                        UUID id,
+                        StoreStatusRequest req) {
+
+                access.requireStore();
+
+                throw gone(
+                                "Legacy store-status update is disabled. Use /store-decision.");
+        }
+
+        @Deprecated
+        public VenFlowEntry sendToPurchase(UUID id) {
+                access.requireStore();
+
+                throw gone(
+                                "Legacy send-to-purchase is disabled. Use /store-decision.");
+        }
+
+        @Deprecated
+        public VenFlowEntry updateRequisition(
+                        UUID id,
+                        RequisitionRequest req) {
+
+                access.requireStore();
+
+                throw gone(
+                                "Legacy requisition update is disabled. Use /store-decision.");
+        }
+
+        @Deprecated
+        public VenFlowEntry updateOrderedQty(
+                        UUID id,
+                        OrderedQtyRequest req) {
+
+                access.requirePurchase();
+
+                throw gone(
+                                "Legacy ordered-quantity update is disabled. "
+                                                + "Ordered Qty must be submitted through /po-raise.");
+        }
+
+        @Deprecated
         public VenFlowEntry reserveMaterial(
                         UUID id,
                         ReserveMaterialRequest req) {
                 access.requireStore();
 
-                require(
-                                req,
-                                "Request body is required.");
-
-                requirePositive(
-                                req.reservedQty(),
-                                "Reserved Qty must be greater than zero.");
-
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                boolean allowed = entry.stage == VenFlowStage.STOCK_AVAILABLE
-                                || entry.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
-
-                if (!allowed) {
-                        throw badRequest(
-                                        "Material can be reserved only after stock availability or QC OK inventory acceptance.");
-                }
-
-                BigDecimal maximumReservable;
-
-                if (entry.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE) {
-                        maximumReservable = calculateIssueReadyQty(entry);
-                } else {
-                        maximumReservable = zero(entry.availableQty);
-                }
-
-                if (req.reservedQty()
-                                .compareTo(
-                                                maximumReservable) > 0) {
-                        throw badRequest(
-                                        "Reserved Qty cannot exceed material available for this project.");
-                }
-
-                if (req.reservedQty()
-                                .compareTo(
-                                                zero(entry.requiredQty)) > 0) {
-                        throw badRequest(
-                                        "Reserved Qty cannot exceed Required Qty.");
-                }
-
-                String currentActor = actor();
-
-                entry.reservedQty = req.reservedQty();
-
-                entry.issueStatus = VenFlowIssueStatus.RESERVED;
-
-                entry.balanceQty = maxZero(
-                                zero(entry.requiredQty)
-                                                .subtract(
-                                                                entry.reservedQty));
-
-                entry.reservedBy = currentActor;
-
-                entry.reservedAt = LocalDateTime.now();
-
-                if (hasText(req.remarks())) {
-                        entry.remarks = clean(req.remarks());
-                }
-
-                return transition(
-                                entry,
-                                VenFlowStage.MATERIAL_RESERVED,
-                                "MATERIAL_RESERVED",
-                                "Reserved quantity="
-                                                + entry.reservedQty
-                                                + " "
-                                                + entry.unit
-                                                + ", remaining balance="
-                                                + entry.balanceQty
-                                                + ".");
-        }
-
-        public VenFlowEntry raisePurchaseRequest(
-                        UUID id,
-                        PurchaseRequestRequest req) {
-                access.requireStore();
-
-                require(
-                                req,
-                                "Request body is required.");
-
-                requireText(
-                                req.purchaseRequestNo(),
-                                "Purchase Request No. is required.");
-
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                boolean allowedStage = entry.stage == VenFlowStage.STORE_REVIEWED
-                                || entry.stage == VenFlowStage.STOCK_AVAILABLE
-                                || entry.stage == VenFlowStage.MATERIAL_RESERVED;
-
-                if (!allowedStage) {
-                        throw badRequest(
-                                        "Store review must be completed before raising Purchase Request.");
-                }
-
-                boolean allowedDecision = entry.stockDecision == VenFlowStockDecision.NOT_AVAILABLE
-                                || entry.stockDecision == VenFlowStockDecision.PARTIALLY_AVAILABLE
-                                || entry.stockDecision == VenFlowStockDecision.HOLD;
-
-                if (!allowedDecision) {
-                        throw badRequest(
-                                        "Purchase Request is allowed only for Not Available, Partially Available, or Hold stock.");
-                }
-
-                BigDecimal shortage = calculatePurchaseShortage(entry);
-
-                if (shortage.compareTo(
-                                BigDecimal.ZERO) <= 0) {
-                        throw badRequest(
-                                        "No purchase shortage remains for this requirement.");
-                }
-
-                String currentActor = actor();
-
-                entry.purchaseRequestNo = clean(
-                                req.purchaseRequestNo());
-
-                entry.requisitionSlipNo = clean(
-                                req.purchaseRequestNo());
-
-                entry.requisitionDate = req.requisitionDate();
-
-                /*
-                 * Order only the shortage, not the complete requirement.
-                 */
-                entry.orderedQty = shortage;
-
-                entry.balanceQty = shortage;
-
-                entry.purchaseRequestBy = currentActor;
-
-                entry.purchaseRequestAt = LocalDateTime.now();
-
-                entry.sentToPurchaseBy = currentActor;
-
-                entry.sentToPurchaseAt = LocalDateTime.now();
-
-                if (hasText(req.remarks())) {
-                        entry.remarks = clean(req.remarks());
-                }
-
-                return transition(
-                                entry,
-                                VenFlowStage.PURCHASE_REQUEST_RAISED,
-                                "PURCHASE_REQUEST_RAISED",
-                                "Purchase Request "
-                                                + entry.purchaseRequestNo
-                                                + " raised for shortage quantity "
-                                                + entry.orderedQty
-                                                + " "
-                                                + entry.unit
-                                                + ".");
+                throw new ResponseStatusException(
+                                HttpStatus.GONE,
+                                "Reserve Material has been replaced by Store Review & Action. "
+                                                + "Store-available material must move to QC.");
         }
 
         /*
@@ -498,69 +590,143 @@ public class VenFlowService {
                         PoRequest req) {
                 access.requirePurchase();
 
-                require(req, "Request body is required.");
-                requireText(req.vendorName(), "Vendor Name is required.");
-                requireText(req.poNo(), "PO No. is required.");
-                require(req.poDate(), "PO Date is required.");
+                require(req, "PO body is required.");
+                requireText(
+                                req.vendorName(),
+                                "Vendor Name is required.");
+                requireText(
+                                req.poNo(),
+                                "PO No. is required.");
+                require(
+                                req.poDate(),
+                                "PO Date is required.");
+                requireText(
+                                req.poDocumentUrl(),
+                                "PO Document URL is required.");
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                BigDecimal orderedQty = quantity(
+                                req.orderedQty(),
+                                "Ordered Qty is required.");
 
-                boolean allowed = e.stage == VenFlowStage.PURCHASE_REQUEST_RAISED
-                                || e.stage == VenFlowStage.PO_REJECTED_BY_DIRECTOR;
-
-                if (!allowed) {
+                if (orderedQty.signum() <= 0) {
                         throw badRequest(
-                                        "PO can be prepared only after Purchase Request or Director rejection.");
+                                        "Ordered Qty must be greater than zero.");
                 }
 
                 if (req.poAmount() == null
-                                || req.poAmount().compareTo(BigDecimal.ZERO) <= 0) {
+                                || req.poAmount()
+                                                .compareTo(BigDecimal.ZERO) <= 0) {
                         throw badRequest(
                                         "PO Amount must be greater than zero.");
                 }
 
-                requireText(
-                                req.poDocumentUrl(),
-                                "PO Document is required before Director submission.");
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                require(
+                                req.rowVersion(),
+                                "Entry rowVersion is required.");
+
+                if (!Objects.equals(
+                                entry.rowVersion,
+                                req.rowVersion())) {
+
+                        throw conflict(
+                                        "The requirement changed while the PO was being prepared. "
+                                                        + "Reload before submission.");
+                }
+
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                boolean allowed = purchase.status == VenFlowAllocationStatus.PURCHASE_REQUESTED
+                                || purchase.status == VenFlowAllocationStatus.PO_RETURNED;
+
+                if (!allowed) {
+                        throw badRequest(
+                                        "The Purchase allocation is not ready for PO preparation.");
+                }
+
+                if (orderedQty.compareTo(
+                                zero(purchase.plannedQty)) != 0) {
+                        throw badRequest(
+                                        "PO Ordered Qty must equal To Be Ordered Qty: "
+                                                        + purchase.plannedQty
+                                                        + " "
+                                                        + entry.unit
+                                                        + ".");
+                }
 
                 String currentActor = actor();
 
-                e.vendorName = clean(req.vendorName());
-                e.poNo = clean(req.poNo());
-                e.poDate = req.poDate();
-                e.poAmount = req.poAmount();
-                e.poDocumentUrl = clean(req.poDocumentUrl());
+                LocalDateTime now = LocalDateTime.now();
 
-                e.poStatus = VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL;
+                entry.vendorName = clean(req.vendorName());
 
-                e.poRaisedBy = currentActor;
-                e.poRaisedAt = LocalDateTime.now();
+                entry.poNo = clean(req.poNo());
 
-                e.poApprovalRequestedBy = currentActor;
-                e.poApprovalRequestedAt = LocalDateTime.now();
+                entry.poDate = req.poDate();
 
-                e.directorApprovalRemarks = null;
-                e.directorApprovedBy = null;
-                e.directorApprovedAt = null;
-                e.directorRejectedBy = null;
-                e.directorRejectedAt = null;
+                entry.orderedQty = orderedQty;
+
+                entry.poAmount = req.poAmount();
+
+                entry.poDocumentUrl = requireHttpUrl(
+                                req.poDocumentUrl(),
+                                "PO Document URL");
+
+                entry.poStatus = VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL;
+
+                entry.poRaisedBy = currentActor;
+
+                entry.poRaisedAt = now;
+
+                entry.poApprovalRequestedBy = currentActor;
+
+                entry.poApprovalRequestedAt = now;
+
+                entry.directorApprovalRemarks = null;
+                entry.directorApprovedBy = null;
+                entry.directorApprovedAt = null;
+                entry.directorRejectedBy = null;
+                entry.directorRejectedAt = null;
 
                 if (hasText(req.remarks())) {
-                        e.remarks = clean(req.remarks());
+                        entry.remarks = clean(req.remarks());
                 }
 
-                VenFlowEntry saved = transition(
-                                e,
-                                VenFlowStage.PO_PENDING_DIRECTOR_APPROVAL,
-                                "PO_SUBMITTED_FOR_DIRECTOR_APPROVAL",
-                                "PO " + e.poNo
-                                                + " for vendor "
-                                                + e.vendorName
-                                                + " and amount "
-                                                + e.poAmount
-                                                + " submitted for Director approval.");
+                purchase.status = VenFlowAllocationStatus.PO_PENDING_DIRECTOR_APPROVAL;
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
 
-                notificationService.publishPoApprovalRequired(saved);
+                allocationRepo.save(purchase);
+
+                materialMovement(
+                                entry,
+                                purchase,
+                                "PO_SUBMITTED_FOR_DIRECTOR_APPROVAL",
+                                orderedQty,
+                                "PO " + entry.poNo
+                                                + " submitted for Director approval.",
+                                req.remarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
+                                "PO_SUBMITTED_FOR_DIRECTOR_APPROVAL",
+                                "PO=" + entry.poNo
+                                                + ", Vendor="
+                                                + entry.vendorName
+                                                + ", Qty="
+                                                + orderedQty
+                                                + ", Amount="
+                                                + entry.poAmount
+                                                + ".");
+
+                notificationService
+                                .publishPoApprovalRequired(saved);
 
                 return saved;
         }
@@ -568,55 +734,99 @@ public class VenFlowService {
         @Deprecated
         public VenFlowEntry approvePo(
                         UUID id) {
-                return directorApprovePo(
-                                id,
-                                new DirectorDecisionRequest(
-                                                "Approved through legacy PO approval endpoint."));
+                access.requireDirector();
+
+                throw gone(
+                                "Legacy PO approval is disabled. "
+                                                + "Use Director PO approval with the entry rowVersion.");
         }
 
         public VenFlowEntry directorApprovePo(
                         UUID id,
                         DirectorDecisionRequest req) {
+
                 access.requireDirector();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                require(
+                                req,
+                                "Director decision body is required.");
 
-                if (entry.stage != VenFlowStage.PO_PENDING_DIRECTOR_APPROVAL
-                                || entry.poStatus != VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL) {
+                require(
+                                req.rowVersion(),
+                                "Entry rowVersion is required.");
+
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                if (!Objects.equals(
+                                entry.rowVersion,
+                                req.rowVersion())) {
+
+                        throw conflict(
+                                        "This PO was updated by another user. "
+                                                        + "Reload before approving.");
+                }
+
+                if (entry.poStatus != VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL) {
+
                         throw badRequest(
                                         "Only a PO pending Director approval can be approved.");
                 }
 
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                if (purchase.status != VenFlowAllocationStatus.PO_PENDING_DIRECTOR_APPROVAL) {
+
+                        throw badRequest(
+                                        "Purchase allocation is not pending Director approval.");
+                }
+
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
                 entry.poStatus = VenFlowPoStatus.DIRECTOR_APPROVED;
 
-                entry.directorApprovalRemarks = req == null
-                                ? null
-                                : clean(req.remarks());
+                entry.directorApprovalRemarks = clean(req.remarks());
 
                 entry.directorApprovedBy = currentActor;
-
-                entry.directorApprovedAt = LocalDateTime.now();
+                entry.directorApprovedAt = now;
 
                 entry.directorRejectedBy = null;
-
                 entry.directorRejectedAt = null;
 
-                VenFlowEntry saved = transition(
+                /*
+                 * Keep old approval fields synchronized while they exist.
+                 */
+                entry.poApprovedBy = currentActor;
+                entry.poApprovedAt = now;
+
+                purchase.status = VenFlowAllocationStatus.PO_APPROVED;
+
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
+
+                allocationRepo.save(purchase);
+
+                materialMovement(
                                 entry,
-                                VenFlowStage.PO_APPROVED_BY_DIRECTOR,
+                                purchase,
+                                "PO_APPROVED_BY_DIRECTOR",
+                                zero(entry.orderedQty),
+                                "Director approved PO " + entry.poNo + ".",
+                                req.remarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
                                 "PO_APPROVED_BY_DIRECTOR",
                                 "Director approved PO "
                                                 + entry.poNo
-                                                + (hasText(
-                                                                entry.directorApprovalRemarks)
-                                                                                ? ". Remarks: "
-                                                                                                + entry.directorApprovalRemarks
-                                                                                : "."));
+                                                + ".");
 
-                notificationService
-                                .publishPoApproved(saved);
+                notificationService.publishPoApproved(saved);
 
                 return saved;
         }
@@ -624,49 +834,93 @@ public class VenFlowService {
         public VenFlowEntry directorRejectPo(
                         UUID id,
                         DirectorDecisionRequest req) {
+
                 access.requireDirector();
 
                 require(
                                 req,
-                                "Decision body is required.");
+                                "Director decision body is required.");
+
+                require(
+                                req.rowVersion(),
+                                "Entry rowVersion is required.");
 
                 requireText(
                                 req.remarks(),
-                                "Return / rejection reason is required.");
+                                "PO return reason is required.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
-                if (entry.stage != VenFlowStage.PO_PENDING_DIRECTOR_APPROVAL
-                                || entry.poStatus != VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL) {
+                if (!Objects.equals(
+                                entry.rowVersion,
+                                req.rowVersion())) {
+
+                        throw conflict(
+                                        "This PO was updated by another user. "
+                                                        + "Reload before returning it.");
+                }
+
+                if (entry.poStatus != VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL) {
+
                         throw badRequest(
                                         "Only a PO pending Director approval can be returned.");
                 }
 
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                if (purchase.status != VenFlowAllocationStatus.PO_PENDING_DIRECTOR_APPROVAL) {
+
+                        throw badRequest(
+                                        "Purchase allocation is not pending Director approval.");
+                }
+
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
                 entry.poStatus = VenFlowPoStatus.DIRECTOR_REJECTED;
 
                 entry.directorApprovalRemarks = clean(req.remarks());
 
                 entry.directorRejectedBy = currentActor;
-
-                entry.directorRejectedAt = LocalDateTime.now();
+                entry.directorRejectedAt = now;
 
                 entry.directorApprovedBy = null;
-
                 entry.directorApprovedAt = null;
 
-                VenFlowEntry saved = transition(
+                entry.poApprovedBy = null;
+                entry.poApprovedAt = null;
+
+                purchase.status = VenFlowAllocationStatus.PO_RETURNED;
+
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
+
+                allocationRepo.save(purchase);
+
+                materialMovement(
                                 entry,
-                                VenFlowStage.PO_REJECTED_BY_DIRECTOR,
+                                purchase,
+                                "PO_RETURNED_BY_DIRECTOR",
+                                zero(entry.orderedQty),
+                                "Director returned PO "
+                                                + entry.poNo
+                                                + " to Purchase.",
+                                req.remarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
                                 "PO_REJECTED_BY_DIRECTOR",
                                 "Director returned PO "
                                                 + entry.poNo
                                                 + ". Reason: "
-                                                + entry.directorApprovalRemarks);
+                                                + clean(req.remarks()));
 
-                notificationService
-                                .publishPoRejected(saved);
+                notificationService.publishPoRejected(saved);
 
                 return saved;
         }
@@ -773,11 +1027,10 @@ public class VenFlowService {
         public VenFlowEntry placeVendorOrder(
                         UUID id,
                         VendorOrderRequest req) {
+
                 access.requirePurchase();
 
-                require(
-                                req,
-                                "Vendor order body is required.");
+                require(req, "Vendor order body is required.");
 
                 requireText(
                                 req.vendorOrderReference(),
@@ -787,50 +1040,75 @@ public class VenFlowService {
                                 req.vendorExpectedDate(),
                                 "Vendor Expected Date is required.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                if (entry.stage != VenFlowStage.PO_APPROVED_BY_DIRECTOR
-                                || entry.poStatus != VenFlowPoStatus.DIRECTOR_APPROVED) {
-                        throw badRequest(
-                                        "The vendor order can be placed only after Director approval.");
-                }
-
-                if (req.vendorExpectedDate()
-                                .isBefore(LocalDate.now())) {
+                if (req.vendorExpectedDate().isBefore(LocalDate.now())) {
                         throw badRequest(
                                         "Vendor Expected Date cannot be before today.");
                 }
 
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                if (entry.poStatus != VenFlowPoStatus.DIRECTOR_APPROVED) {
+                        throw badRequest(
+                                        "Only a Director-approved PO can be placed with the vendor.");
+                }
+
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                if (purchase.status != VenFlowAllocationStatus.PO_APPROVED) {
+
+                        throw badRequest(
+                                        "Purchase allocation is not Director-approved.");
+                }
+
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
                 entry.poStatus = VenFlowPoStatus.ORDER_PLACED;
 
-                entry.vendorOrderReference = clean(
-                                req.vendorOrderReference());
+                entry.vendorOrderReference = clean(req.vendorOrderReference());
 
-                entry.vendorAcknowledgementNo = clean(
-                                req.vendorAcknowledgementNo());
+                entry.vendorAcknowledgementNo = clean(req.vendorAcknowledgementNo());
 
                 entry.vendorExpectedDate = req.vendorExpectedDate();
 
                 entry.vendorOrderRemarks = clean(req.remarks());
 
                 entry.vendorOrderPlacedBy = currentActor;
+                entry.vendorOrderPlacedAt = now;
 
-                entry.vendorOrderPlacedAt = LocalDateTime.now();
+                purchase.status = VenFlowAllocationStatus.ORDER_PLACED;
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
 
-                VenFlowEntry saved = transition(
+                allocationRepo.save(purchase);
+
+                materialMovement(
                                 entry,
-                                VenFlowStage.ORDER_PLACED_WITH_VENDOR,
+                                purchase,
                                 "ORDER_PLACED_WITH_VENDOR",
-                                "Purchase placed the approved order with vendor "
+                                zero(purchase.plannedQty),
+                                "Approved PO placed with vendor. Reference: "
+                                                + entry.vendorOrderReference
+                                                + ".",
+                                req.remarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
+                                "ORDER_PLACED_WITH_VENDOR",
+                                "Purchase placed approved PO "
+                                                + entry.poNo
+                                                + " with vendor "
                                                 + entry.vendorName
                                                 + ". Vendor Order Reference: "
                                                 + entry.vendorOrderReference
                                                 + ".");
 
-                notificationService
-                                .publishVendorOrderPlaced(saved);
+                notificationService.publishVendorOrderPlaced(saved);
 
                 return saved;
         }
@@ -844,62 +1122,119 @@ public class VenFlowService {
         public VenFlowEntry materialReceived(
                         UUID id,
                         MaterialReceivedRequest req) {
+
                 access.requireStore();
 
-                require(
-                                req,
-                                "Request body is required.");
+                require(req, "Request body is required.");
 
                 requirePositive(
                                 req.receivedQty(),
                                 "Received Qty must be greater than zero.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                require(
+                                req.actualInHouseDate(),
+                                "Actual In-House Date is required.");
 
-                if (entry.stage != VenFlowStage.ORDER_PLACED_WITH_VENDOR
-                                || entry.poStatus != VenFlowPoStatus.ORDER_PLACED) {
+                if (req.actualInHouseDate().isAfter(LocalDate.now())) {
+                        throw badRequest(
+                                        "Actual In-House Date cannot be in the future.");
+                }
+
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                if (entry.poStatus != VenFlowPoStatus.ORDER_PLACED) {
                         throw badRequest(
                                         "Director-approved PO must be placed with the vendor before material receiving.");
                 }
 
-                if (entry.orderedQty != null
-                                && req.receivedQty()
-                                                .compareTo(
-                                                                entry.orderedQty) > 0) {
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                boolean receivable = purchase.status == VenFlowAllocationStatus.ORDER_PLACED
+                                || purchase.status == VenFlowAllocationStatus.PARTIALLY_RECEIVED;
+
+                if (!receivable) {
                         throw badRequest(
-                                        "Received Qty cannot exceed Ordered Qty.");
+                                        "This Purchase allocation is not open for material receiving.");
+                }
+
+                BigDecimal deliveryQty = quantity(
+                                req.receivedQty(),
+                                "Delivery Qty is invalid.");
+
+                BigDecimal orderedQty = zero(purchase.plannedQty);
+
+                if (orderedQty.signum() <= 0) {
+                        throw badRequest(
+                                        "Purchase allocation has no valid ordered quantity.");
+                }
+
+                BigDecimal updatedReceived = zero(purchase.receivedQty).add(deliveryQty);
+
+                if (updatedReceived.compareTo(orderedQty) > 0) {
+                        throw badRequest(
+                                        "Cumulative Received Qty cannot exceed Ordered Qty. "
+                                                        + "Ordered="
+                                                        + orderedQty
+                                                        + ", Already Received="
+                                                        + zero(purchase.receivedQty)
+                                                        + ", Current Delivery="
+                                                        + deliveryQty
+                                                        + ".");
                 }
 
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
-                entry.receivedQty = req.receivedQty();
+                purchase.receivedQty = updatedReceived;
+
+                purchase.status = updatedReceived.compareTo(orderedQty) < 0
+                                ? VenFlowAllocationStatus.PARTIALLY_RECEIVED
+                                : VenFlowAllocationStatus.RECEIVED_GRN_PENDING;
+
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
+
+                allocationRepo.save(purchase);
 
                 entry.actualInHouseDate = req.actualInHouseDate();
-
-                entry.balanceQty = calculateSupplyBalance(entry);
-
                 entry.materialReceivedBy = currentActor;
-
-                entry.materialReceivedAt = LocalDateTime.now();
+                entry.materialReceivedAt = now;
 
                 if (hasText(req.remarks())) {
                         entry.remarks = clean(req.remarks());
                 }
 
-                VenFlowEntry saved = transition(
+                materialMovement(
                                 entry,
-                                VenFlowStage.MATERIAL_RECEIVED_AT_STORE,
+                                purchase,
+                                "PURCHASE_DELIVERY_RECEIVED",
+                                deliveryQty,
+                                "Purchase delivery received. Cumulative received="
+                                                + updatedReceived
+                                                + " of "
+                                                + orderedQty
+                                                + ".",
+                                req.remarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
                                 "MATERIAL_RECEIVED_AT_STORE",
-                                "Store received "
-                                                + entry.receivedQty
+                                "Store received delivery quantity "
+                                                + deliveryQty
                                                 + " "
                                                 + entry.unit
-                                                + ". Remaining supply balance="
-                                                + entry.balanceQty
+                                                + ". Cumulative received="
+                                                + updatedReceived
+                                                + ", vendor outstanding="
+                                                + maxZero(orderedQty.subtract(updatedReceived))
                                                 + ".");
 
-                notificationService
-                                .publishMaterialReceived(saved);
+                notificationService.publishMaterialReceived(saved);
 
                 return saved;
         }
@@ -907,11 +1242,10 @@ public class VenFlowService {
         public VenFlowEntry grnEntry(
                         UUID id,
                         GrnRequest req) {
+
                 access.requireStore();
 
-                require(
-                                req,
-                                "Request body is required.");
+                require(req, "Request body is required.");
 
                 requireText(
                                 req.grnNo(),
@@ -921,134 +1255,85 @@ public class VenFlowService {
                                 req.grnDate(),
                                 "GRN Date is required.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                if (entry.stage != VenFlowStage.MATERIAL_RECEIVED_AT_STORE) {
+                if (req.grnDate().isAfter(LocalDate.now())) {
                         throw badRequest(
-                                        "Material must be received before GRN entry.");
+                                        "GRN Date cannot be in the future.");
                 }
 
+                VenFlowEntry entry = getVisibleForUpdate(id);
+
+                VenFlowMaterialAllocation purchase = allocationRepo
+                                .findActiveBySourceForUpdate(
+                                                id,
+                                                VenFlowMaterialSource.PURCHASE)
+                                .orElseThrow(() -> badRequest(
+                                                "No active Purchase allocation exists."));
+
+                if (purchase.status != VenFlowAllocationStatus.RECEIVED_GRN_PENDING) {
+
+                        throw badRequest(
+                                        "Complete material receiving before creating GRN.");
+                }
+
+                if (entry.actualInHouseDate != null
+                                && req.grnDate().isBefore(entry.actualInHouseDate)) {
+
+                        throw badRequest(
+                                        "GRN Date cannot be before Actual In-House Date.");
+                }
+
+                String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
+
                 entry.grnNo = clean(req.grnNo());
-
                 entry.grnDate = req.grnDate();
-
-                entry.grnBy = actor();
-
-                entry.grnAt = LocalDateTime.now();
-
-                entry.qcStatus = VenFlowQcStatus.PENDING;
+                entry.grnBy = currentActor;
+                entry.grnAt = now;
 
                 if (hasText(req.remarks())) {
                         entry.remarks = clean(req.remarks());
                 }
 
-                return transition(
+                purchase.status = VenFlowAllocationStatus.GRN_DONE;
+                purchase.statusEnteredAt = now;
+                purchase.updatedBy = currentActor;
+
+                allocationRepo.save(purchase);
+
+                materialMovement(
                                 entry,
-                                VenFlowStage.GRN_DONE,
+                                purchase,
+                                "GRN_COMPLETED",
+                                zero(purchase.receivedQty),
+                                "GRN " + entry.grnNo
+                                                + " completed. Purchase material is ready for QC.",
+                                req.remarks());
+
+                return reconcileEntry(
+                                entry,
                                 "GRN_DONE",
                                 "GRN "
                                                 + entry.grnNo
-                                                + " completed. QC is now pending.");
+                                                + " completed. Purchase allocation moved to QC.");
         }
 
+        @Deprecated
         public VenFlowEntry qualityCheck(
                         UUID id,
                         QcRequest req) {
-                access.requireStore();
+                access.requireQc();
 
-                require(
-                                req,
-                                "Request body is required.");
-
-                require(
-                                req.qcStatus(),
-                                "QC Status is required.");
-
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                boolean allowed = entry.stage == VenFlowStage.GRN_DONE
-                                || entry.stage == VenFlowStage.QC_PENDING;
-
-                if (!allowed) {
-                        throw badRequest(
-                                        "GRN must be completed before QC.");
-                }
-
-                boolean rejectionStatus = req.qcStatus() == VenFlowQcStatus.NOT_OK
-                                || req.qcStatus() == VenFlowQcStatus.HOLD
-                                || req.qcStatus() == VenFlowQcStatus.RETURN_TO_VENDOR;
-
-                if (rejectionStatus) {
-                        requireText(
-                                        req.rejectionReason(),
-                                        "Rejection / Hold reason is required.");
-                }
-
-                String currentActor = actor();
-
-                entry.qcStatus = req.qcStatus();
-
-                entry.qcRemarks = clean(req.qcRemarks());
-
-                entry.rejectionReason = clean(req.rejectionReason());
-
-                entry.qcCheckedBy = currentActor;
-
-                entry.qcCheckedAt = LocalDateTime.now();
-
-                VenFlowStage nextStage;
-
-                if (req.qcStatus() == VenFlowQcStatus.OK) {
-                        nextStage = VenFlowStage.QC_OK;
-                } else if (req.qcStatus() == VenFlowQcStatus.PENDING) {
-                        nextStage = VenFlowStage.QC_PENDING;
-                } else {
-                        nextStage = VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN;
-
-                        entry.storeStatus = VenFlowStoreStatus.HOLD;
-                }
-
-                return transition(
-                                entry,
-                                nextStage,
-                                "QUALITY_CHECK",
-                                "QC status="
-                                                + entry.qcStatus
-                                                + (hasText(entry.rejectionReason)
-                                                                ? ", reason="
-                                                                                + entry.rejectionReason
-                                                                : "")
-                                                + ".");
+                throw gone(
+                                "Use allocation-level QC through /entries/{entryId}/allocations/{allocationId}/qc.");
         }
 
+        @Deprecated
         public VenFlowEntry acceptInventory(
                         UUID id) {
                 access.requireStore();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                if (entry.stage != VenFlowStage.QC_OK) {
-                        throw badRequest(
-                                        "QC must be OK before accepting material into Store Inventory.");
-                }
-
-                String currentActor = actor();
-
-                entry.storeStatus = VenFlowStoreStatus.AVAILABLE_IN_STORE;
-
-                entry.inventoryAcceptedBy = currentActor;
-
-                entry.inventoryAcceptedAt = LocalDateTime.now();
-
-                entry.balanceQty = calculateSupplyBalance(entry);
-
-                return transition(
-                                entry,
-                                VenFlowStage.MATERIAL_ACCEPTED_IN_STORE,
-                                "MATERIAL_ACCEPTED_IN_STORE",
-                                "QC-approved material accepted into Store Inventory by "
-                                                + currentActor
-                                                + ".");
+                throw gone(
+                                "QC-accepted quantity is now automatically issue-ready. Separate inventory acceptance is no longer required.");
         }
 
         @Deprecated
@@ -1089,11 +1374,10 @@ public class VenFlowService {
         public VenFlowEntry issueMaterial(
                         UUID id,
                         IssueMaterialRequest req) {
+
                 access.requireStore();
 
-                require(
-                                req,
-                                "Request body is required.");
+                require(req, "Request body is required.");
 
                 requirePositive(
                                 req.issuedQty(),
@@ -1103,74 +1387,152 @@ public class VenFlowService {
                                 req.issuedTo(),
                                 "Issued To / Responsible Person is required.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
-                boolean allowed = entry.stage == VenFlowStage.MATERIAL_RESERVED
-                                || entry.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
-
-                if (!allowed) {
+                if (entry.stage == VenFlowStage.READY_FOR_NEXT_STAGE) {
                         throw badRequest(
-                                        "Material can be issued only after reservation or QC OK Store Inventory acceptance.");
+                                        "A completed VenFlow requirement cannot issue more material.");
                 }
 
-                BigDecimal readyQty = calculateIssueReadyQty(entry);
+                List<VenFlowMaterialAllocation> allocations = allocationRepo.findActiveForUpdate(id);
 
-                if (readyQty.compareTo(
-                                BigDecimal.ZERO) <= 0) {
-                        readyQty = min(
-                                        zero(entry.requiredQty),
-                                        zero(entry.availableQty));
+                if (allocations.isEmpty()) {
+                        throw badRequest(
+                                        "No active material allocation exists.");
                 }
 
-                if (req.issuedQty()
-                                .compareTo(
-                                                readyQty) > 0) {
+                BigDecimal qcPending = allocations.stream()
+                                .map(a -> maxZero(
+                                                zero(a.receivedQty)
+                                                                .subtract(zero(a.qcInspectedQty))))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                if (qcPending.signum() > 0) {
                         throw badRequest(
-                                        "Issued Qty cannot exceed reserved plus received material.");
+                                        "All received material must complete QC before material issue.");
                 }
 
-                if (req.issuedQty()
-                                .compareTo(
-                                                zero(entry.requiredQty)) > 0) {
+                BigDecimal rejected = allocations.stream()
+                                .map(a -> zero(a.qcRejectedQty))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal hold = allocations.stream()
+                                .map(a -> zero(a.qcHoldQty))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                if (rejected.signum() > 0 || hold.signum() > 0) {
                         throw badRequest(
-                                        "Issued Qty cannot exceed Required Qty.");
+                                        "QC Rejected or Hold material must be resolved before material issue.");
+                }
+
+                BigDecimal requestedIssue = quantity(
+                                req.issuedQty(),
+                                "Issued Qty is invalid.");
+
+                BigDecimal currentlyIssued = allocations.stream()
+                                .map(a -> zero(a.issuedQty))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal totalReady = allocations.stream()
+                                .map(a -> maxZero(
+                                                zero(a.qcAcceptedQty)
+                                                                .subtract(zero(a.issuedQty))))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                if (requestedIssue.compareTo(totalReady) > 0) {
+                        throw badRequest(
+                                        "Issued Qty cannot exceed QC-approved issue-ready quantity: "
+                                                        + totalReady
+                                                        + " "
+                                                        + entry.unit
+                                                        + ".");
+                }
+
+                BigDecimal remainingRequirement = maxZero(
+                                zero(entry.requiredQty).subtract(currentlyIssued));
+
+                if (requestedIssue.compareTo(remainingRequirement) > 0) {
+                        throw badRequest(
+                                        "Issued Qty cannot exceed the remaining project requirement: "
+                                                        + remainingRequirement
+                                                        + " "
+                                                        + entry.unit
+                                                        + ".");
                 }
 
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
-                entry.issuedQty = req.issuedQty();
+                BigDecimal remainingToIssue = requestedIssue;
+
+                for (VenFlowMaterialAllocation allocation : allocations) {
+                        if (remainingToIssue.signum() <= 0) {
+                                break;
+                        }
+
+                        BigDecimal allocationReady = maxZero(
+                                        zero(allocation.qcAcceptedQty)
+                                                        .subtract(zero(allocation.issuedQty)));
+
+                        if (allocationReady.signum() <= 0) {
+                                continue;
+                        }
+
+                        BigDecimal issuedFromAllocation = min(allocationReady, remainingToIssue);
+
+                        allocation.issuedQty = zero(allocation.issuedQty)
+                                        .add(issuedFromAllocation);
+
+                        if (allocation.issuedQty.compareTo(
+                                        zero(allocation.qcAcceptedQty)) < 0) {
+
+                                allocation.status = VenFlowAllocationStatus.PARTIALLY_ISSUED;
+                        } else {
+                                allocation.status = VenFlowAllocationStatus.ISSUED;
+                        }
+
+                        allocation.statusEnteredAt = now;
+                        allocation.updatedBy = currentActor;
+
+                        allocationRepo.save(allocation);
+
+                        materialMovement(
+                                        entry,
+                                        allocation,
+                                        "MATERIAL_ISSUED",
+                                        issuedFromAllocation,
+                                        "QC-approved material issued to "
+                                                        + clean(req.issuedTo())
+                                                        + ".",
+                                        req.remarks());
+
+                        remainingToIssue = remainingToIssue.subtract(issuedFromAllocation);
+                }
+
+                if (remainingToIssue.signum() > 0) {
+                        throw conflict(
+                                        "Unable to allocate the complete issue quantity. Reload and try again.");
+                }
 
                 entry.issuedTo = clean(req.issuedTo());
-
-                entry.issueStatus = VenFlowIssueStatus.ISSUED;
+                entry.issuedBy = currentActor;
+                entry.issuedAt = now;
 
                 entry.productionStatus = VenFlowProductionStatus.NOT_STARTED;
-
-                entry.balanceQty = maxZero(
-                                zero(entry.requiredQty)
-                                                .subtract(
-                                                                entry.issuedQty));
-
-                entry.issuedBy = currentActor;
-
-                entry.issuedAt = LocalDateTime.now();
 
                 if (hasText(req.remarks())) {
                         entry.remarks = clean(req.remarks());
                 }
 
-                return transition(
+                return reconcileEntry(
                                 entry,
-                                VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION,
                                 "MATERIAL_ISSUED_TO_PRODUCTION",
                                 "Issued "
-                                                + entry.issuedQty
+                                                + requestedIssue
                                                 + " "
                                                 + entry.unit
                                                 + " to "
                                                 + entry.issuedTo
-                                                + ". Remaining balance="
-                                                + entry.balanceQty
                                                 + ".");
         }
 
@@ -1275,13 +1637,14 @@ public class VenFlowService {
         public VenFlowEntry completeProcess(
                         UUID id,
                         ProcessingRequest req) {
+
                 access.requireProcessing();
 
                 require(
                                 req,
                                 "Request body is required.");
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
                 if (entry.stage != VenFlowStage.PROCESSING_STARTED) {
                         throw badRequest(
@@ -1298,43 +1661,52 @@ public class VenFlowService {
 
                 requireText(
                                 req.outputImageUrl(),
-                                "Output Image is required for process completion.");
+                                "Output Image URL is required for process completion.");
 
                 requireText(
                                 entry.supervisorName,
                                 "Responsible Person / Supervisor is required before completion.");
 
-                BigDecimal issued = zero(entry.issuedQty);
+                BigDecimal issued = quantity(
+                                zero(entry.issuedQty),
+                                "Issued Qty is invalid.");
 
-                BigDecimal used = req.usedQty();
+                BigDecimal used = quantity(
+                                req.usedQty(),
+                                "Used Qty is invalid.");
 
-                BigDecimal wastage = req.wastageQty();
+                BigDecimal wastage = quantity(
+                                req.wastageQty(),
+                                "Wastage Qty is invalid.");
 
-                BigDecimal calculatedBalance = issued
+                BigDecimal calculatedProcessingBalance = issued
                                 .subtract(used)
                                 .subtract(wastage);
 
-                if (calculatedBalance.compareTo(
-                                BigDecimal.ZERO) < 0) {
+                if (calculatedProcessingBalance.signum() < 0) {
                         throw badRequest(
                                         "Used Qty plus Wastage Qty cannot exceed Issued Qty.");
                 }
 
-                if (req.balanceQty() != null
-                                && req.balanceQty()
-                                                .compareTo(
-                                                                calculatedBalance) != 0) {
+                if (req.processingBalanceQty() != null
+                                && req.processingBalanceQty()
+                                                .compareTo(calculatedProcessingBalance) != 0) {
+
                         throw badRequest(
-                                        "Balance Qty must equal Issued Qty minus Used Qty minus Wastage Qty.");
+                                        "Processing Balance Qty must equal "
+                                                        + "Issued Qty minus Used Qty minus Wastage Qty.");
                 }
 
                 String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
 
                 entry.usedQty = used;
-
                 entry.wastageQty = wastage;
 
-                entry.balanceQty = calculatedBalance;
+                /*
+                 * Do not overwrite entry.balanceQty.
+                 */
+                entry.processingBalanceQty = calculatedProcessingBalance;
 
                 entry.outputImageUrl = clean(req.outputImageUrl());
 
@@ -1343,8 +1715,7 @@ public class VenFlowService {
                 entry.productionStatus = VenFlowProductionStatus.DONE;
 
                 entry.processCompletedBy = currentActor;
-
-                entry.processCompletedAt = LocalDateTime.now();
+                entry.processCompletedAt = now;
 
                 if (hasText(req.remarks())) {
                         entry.remarks = clean(req.remarks());
@@ -1355,13 +1726,13 @@ public class VenFlowService {
                                 VenFlowStage.PROCESS_COMPLETED,
                                 "PROCESS_COMPLETED",
                                 "Processing completed. Issued="
-                                                + entry.issuedQty
+                                                + issued
                                                 + ", used="
-                                                + entry.usedQty
+                                                + used
                                                 + ", wastage="
-                                                + entry.wastageQty
-                                                + ", balance="
-                                                + entry.balanceQty
+                                                + wastage
+                                                + ", processing balance="
+                                                + calculatedProcessingBalance
                                                 + ".");
         }
 
@@ -1490,8 +1861,7 @@ public class VenFlowService {
                                                 VenFlowStage.PO_REJECTED_BY_DIRECTOR,
                                                 VenFlowStage.PO_APPROVED_BY_DIRECTOR,
                                                 VenFlowStage.ORDER_PLACED_WITH_VENDOR,
-                                                VenFlowStage.MATERIAL_RECEIVED_AT_STORE,
-                                                VenFlowStage.PO_RAISED)));
+                                                VenFlowStage.MATERIAL_RECEIVED_AT_STORE)));
 
                 Pageable pageable = PageRequest.of(
                                 Math.max(page, 0),
@@ -1737,107 +2107,6 @@ public class VenFlowService {
                 return saved;
         }
 
-        public VenFlowEntry updateStoreStatus(
-                        UUID id,
-                        StoreStatusRequest req) {
-                access.requireStore();
-
-                require(
-                                req,
-                                "Request body is required.");
-
-                require(
-                                req.storeStatus(),
-                                "Store Status is required.");
-
-                VenFlowStockDecision decision = switch (req.storeStatus()) {
-                        case AVAILABLE_IN_STORE ->
-                                VenFlowStockDecision.AVAILABLE;
-
-                        case PARTIALLY_AVAILABLE ->
-                                VenFlowStockDecision.PARTIALLY_AVAILABLE;
-
-                        case NOT_AVAILABLE ->
-                                VenFlowStockDecision.NOT_AVAILABLE;
-
-                        case HOLD ->
-                                VenFlowStockDecision.HOLD;
-
-                        case PENDING ->
-                                VenFlowStockDecision.PENDING;
-                };
-
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                return storeReview(
-                                id,
-                                new StoreReviewRequest(
-                                                decision,
-                                                entry.availableQty,
-                                                "Updated through legacy store-status endpoint."));
-        }
-
-        public VenFlowEntry sendToPurchase(UUID id) {
-                VenFlowEntry e = getVisibleOrThrow(id);
-
-                if (e.stockDecision == null || e.stockDecision == VenFlowStockDecision.PENDING) {
-                        e.stockDecision = VenFlowStockDecision.NOT_AVAILABLE;
-                        entryRepo.save(e);
-                }
-
-                return raisePurchaseRequest(
-                                id,
-                                new PurchaseRequestRequest(
-                                                hasText(e.purchaseRequestNo)
-                                                                ? e.purchaseRequestNo
-                                                                : "PR-" + id.toString().substring(0, 8).toUpperCase(),
-                                                LocalDate.now(),
-                                                "Created from legacy send-to-purchase endpoint."));
-        }
-
-        public VenFlowEntry updateRequisition(UUID id, RequisitionRequest req) {
-                require(req, "Request body is required.");
-
-                return raisePurchaseRequest(
-                                id,
-                                new PurchaseRequestRequest(
-                                                req.requisitionSlipNo(),
-                                                req.requisitionDate(),
-                                                "Updated from legacy requisition endpoint."));
-        }
-
-        public VenFlowEntry updateOrderedQty(UUID id, OrderedQtyRequest req) {
-                access.requirePurchase();
-
-                require(req, "Request body is required.");
-                require(req.orderedQty(), "Ordered Qty is required.");
-                require(req.unit(), "Unit is required.");
-
-                if (req.orderedQty().compareTo(BigDecimal.ZERO) <= 0) {
-                        throw badRequest("Ordered Qty must be greater than zero.");
-                }
-
-                VenFlowEntry e = getVisibleOrThrow(id);
-
-                String oldValue = "Ordered=" + e.orderedQty
-                                + ", Unit=" + e.unit
-                                + ", Balance=" + e.balanceQty;
-
-                e.orderedQty = req.orderedQty();
-                e.unit = req.unit();
-                e.balanceQty = calculateBalance(e.requiredQty, e.receivedQty);
-                e.updatedBy = actor();
-
-                VenFlowEntry saved = entryRepo.save(e);
-
-                audit(id, "UPDATE_ORDERED_QTY", oldValue,
-                                "Ordered=" + saved.orderedQty
-                                                + ", Unit=" + saved.unit
-                                                + ", Balance=" + saved.balanceQty);
-
-                return saved;
-        }
-
         public VenFlowEntry updateExpectedDate(UUID id, ExpectedDateRequest req) {
                 access.requireEngineering();
 
@@ -1920,6 +2189,9 @@ public class VenFlowService {
         public VenFlowEntry jobDone(
                         UUID id,
                         ProductionActionRequest req) {
+
+                access.requireProcessing();
+
                 VenFlowEntry entry = getVisibleOrThrow(id);
 
                 String remarks = req == null
@@ -1929,17 +2201,20 @@ public class VenFlowService {
                 return completeProcess(
                                 id,
                                 new ProcessingRequest(
-                                                entry.usedQty,
-                                                entry.wastageQty,
-                                                entry.balanceQty,
+                                                zero(entry.usedQty),
+                                                zero(entry.wastageQty),
+                                                zero(entry.processingBalanceQty),
                                                 entry.outputImageUrl,
                                                 remarks));
         }
 
+        @Deprecated
         public VenFlowEntry complete(UUID id) {
-                return jobDone(
-                                id,
-                                new ProductionActionRequest("Completed from legacy complete endpoint."));
+                access.requireProcessing();
+
+                throw gone(
+                                "The legacy complete endpoint has been removed. "
+                                                + "Use /process-complete with quantities and a PROCESS_OUTPUT attachment.");
         }
 
         /*
@@ -1947,13 +2222,6 @@ public class VenFlowService {
          * VALIDATION / ACCESS HELPERS
          * =========================================================
          */
-
-        private void requireHeader(VenFlowEntry e) {
-                require(e.orderDate, "Order Date must be entered first.");
-                requireText(e.pdNo, "PD No. must be entered first.");
-                requireText(e.clientName, "Client Name must be entered first.");
-                requireText(e.plantCode, "Plant must be entered first.");
-        }
 
         private void require(Object value, String message) {
                 if (value == null) {
@@ -1979,26 +2247,12 @@ public class VenFlowService {
                 return value == null ? null : value.trim().toUpperCase();
         }
 
-        private BigDecimal calculateBalance(
-                        BigDecimal requiredQty,
-                        BigDecimal receivedQty) {
-                if (requiredQty == null) {
-                        return null;
-                }
-
-                return maxZero(
-                                requiredQty.subtract(
-                                                zero(receivedQty)));
-        }
-
         private Specification<VenFlowEntry> visibleSpec() {
+                access.requireVenFlowAccess();
+
                 Set<String> plants = access.allowedPlantCodes();
 
-                /*
-                 * ADMIN always sees all VenFlow entries.
-                 * VenFlow Manager sees all only when no plant restriction is assigned.
-                 */
-                boolean allPlants = access.isAdmin()
+                boolean allPlants = access.isDirector()
                                 || (access.isVenFlowManager()
                                                 && plants.isEmpty());
 
@@ -2014,6 +2268,32 @@ public class VenFlowService {
                 access.assertPlantAccess(e.plantCode);
 
                 return e;
+        }
+
+        private VenFlowEntry getVisibleForUpdate(
+                        UUID id) {
+                VenFlowEntry entry = entryRepo.findByIdForUpdate(id)
+                                .orElseThrow(() -> notFound(
+                                                "VenFlow entry not found."));
+
+                access.assertPlantAccess(
+                                entry.plantCode);
+
+                return entry;
+        }
+
+        private ResponseStatusException conflict(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.CONFLICT,
+                                message);
+        }
+
+        private ResponseStatusException gone(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.GONE,
+                                message);
         }
 
         /*
@@ -2032,6 +2312,343 @@ public class VenFlowService {
                 log.changedBy = actor();
 
                 auditRepo.save(log);
+        }
+
+        public MaterialSummaryResponse inspectAllocation(
+                        UUID entryId,
+                        UUID allocationId,
+                        QcInspectionRequest req) {
+
+                access.requireQc();
+
+                require(
+                                req,
+                                "QC inspection body is required.");
+
+                require(
+                                req.allocationVersion(),
+                                "Allocation rowVersion is required.");
+
+                VenFlowEntry entry = getVisibleForUpdate(entryId);
+
+                VenFlowMaterialAllocation allocation = allocationRepo
+                                .findActiveByIdForUpdate(
+                                                entryId,
+                                                allocationId)
+                                .orElseThrow(() -> notFound(
+                                                "Active material allocation not found."));
+
+                if (!Objects.equals(
+                                allocation.rowVersion,
+                                req.allocationVersion())) {
+
+                        throw conflict(
+                                        "This material allocation was updated by another user. "
+                                                        + "Reload before submitting QC.");
+                }
+
+                requirePositive(
+                                req.inspectedQty(),
+                                "Inspected Qty must be greater than zero.");
+
+                requireNonNegative(
+                                req.acceptedQty(),
+                                "Accepted Qty is required and cannot be negative.");
+
+                requireNonNegative(
+                                req.rejectedQty(),
+                                "Rejected Qty is required and cannot be negative.");
+
+                requireNonNegative(
+                                req.holdQty(),
+                                "Hold Qty is required and cannot be negative.");
+
+                BigDecimal inspected = quantity(
+                                req.inspectedQty(),
+                                "Inspected Qty is invalid.");
+
+                BigDecimal accepted = quantity(
+                                req.acceptedQty(),
+                                "Accepted Qty is invalid.");
+
+                BigDecimal rejected = quantity(
+                                req.rejectedQty(),
+                                "Rejected Qty is invalid.");
+
+                BigDecimal hold = quantity(
+                                req.holdQty(),
+                                "Hold Qty is invalid.");
+
+                BigDecimal classified = accepted
+                                .add(rejected)
+                                .add(hold);
+
+                if (classified.compareTo(inspected) != 0) {
+                        throw badRequest(
+                                        "Accepted Qty + Rejected Qty + Hold Qty "
+                                                        + "must equal Inspected Qty.");
+                }
+
+                BigDecimal allocationReceived = zero(allocation.receivedQty);
+
+                BigDecimal alreadyInspected = zero(allocation.qcInspectedQty);
+
+                BigDecimal pendingInspection = maxZero(
+                                allocationReceived.subtract(
+                                                alreadyInspected));
+
+                if (inspected.compareTo(pendingInspection) > 0) {
+                        throw badRequest(
+                                        "Inspected Qty cannot exceed pending QC quantity: "
+                                                        + pendingInspection
+                                                        + " "
+                                                        + entry.unit
+                                                        + ".");
+                }
+
+                require(
+                                req.thicknessOk(),
+                                "Thickness verification is required.");
+
+                require(
+                                req.sizeOk(),
+                                "Size verification is required.");
+
+                require(
+                                req.surfaceConditionOk(),
+                                "Surface-condition verification is required.");
+
+                boolean sampleAvailable = hasText(entry.sampleImageUrl);
+
+                if (sampleAvailable) {
+                        require(
+                                        req.sampleCompared(),
+                                        "Sample comparison is required because a Sample Image is available.");
+
+                        require(
+                                        req.grainMatch(),
+                                        "Grain Match verification is required.");
+
+                        require(
+                                        req.shadeMatch(),
+                                        "Shade Match verification is required.");
+                }
+
+                boolean checklistFailure = Boolean.FALSE.equals(req.sampleCompared())
+                                || Boolean.FALSE.equals(req.grainMatch())
+                                || Boolean.FALSE.equals(req.shadeMatch())
+                                || Boolean.FALSE.equals(req.thicknessOk())
+                                || Boolean.FALSE.equals(req.sizeOk())
+                                || Boolean.FALSE.equals(req.surfaceConditionOk());
+
+                boolean quantityFailure = rejected.signum() > 0
+                                || hold.signum() > 0;
+
+                if (checklistFailure && !quantityFailure) {
+                        throw badRequest(
+                                        "A failed QC checklist must classify quantity "
+                                                        + "as Rejected or Hold.");
+                }
+
+                if (quantityFailure || checklistFailure) {
+                        requireText(
+                                        req.rejectionReason(),
+                                        "Rejection / Hold reason is required for a QC exception.");
+                }
+
+                Set<String> evidenceUrls = req.evidenceUrls() == null
+                                ? new LinkedHashSet<>()
+                                : req.evidenceUrls()
+                                                .stream()
+                                                .filter(this::hasText)
+                                                .map(String::trim)
+                                                .collect(Collectors.toCollection(
+                                                                LinkedHashSet::new));
+
+                for (String evidenceUrl : evidenceUrls) {
+                        requireHttpUrl(
+                                        evidenceUrl,
+                                        "QC Evidence URL");
+                }
+
+                if ((quantityFailure || checklistFailure)
+                                && evidenceUrls.isEmpty()) {
+
+                        throw badRequest(
+                                        "At least one QC Evidence URL is required "
+                                                        + "for Rejected or Hold material.");
+                }
+
+                String currentActor = actor();
+                LocalDateTime now = LocalDateTime.now();
+
+                VenFlowQcInspection inspection = new VenFlowQcInspection();
+
+                inspection.entryId = entryId;
+                inspection.allocationId = allocationId;
+
+                inspection.inspectedQty = inspected;
+                inspection.acceptedQty = accepted;
+                inspection.rejectedQty = rejected;
+                inspection.holdQty = hold;
+                inspection.evidenceUrls.addAll(evidenceUrls);
+
+                inspection.sampleAvailable = sampleAvailable;
+                inspection.sampleCompared = req.sampleCompared();
+                inspection.grainMatch = req.grainMatch();
+                inspection.shadeMatch = req.shadeMatch();
+                inspection.thicknessOk = req.thicknessOk();
+                inspection.sizeOk = req.sizeOk();
+                inspection.surfaceConditionOk = req.surfaceConditionOk();
+
+                inspection.qcRemarks = clean(req.qcRemarks());
+
+                inspection.rejectionReason = clean(req.rejectionReason());
+
+                inspection.checkedBy = currentActor;
+                inspection.checkedAt = now;
+
+                qcInspectionRepo.save(inspection);
+
+                allocation.qcInspectedQty = alreadyInspected.add(inspected);
+
+                allocation.qcAcceptedQty = zero(allocation.qcAcceptedQty)
+                                .add(accepted);
+
+                allocation.qcRejectedQty = zero(allocation.qcRejectedQty)
+                                .add(rejected);
+
+                allocation.qcHoldQty = zero(allocation.qcHoldQty)
+                                .add(hold);
+
+                BigDecimal remainingAfterInspection = maxZero(
+                                allocationReceived.subtract(
+                                                allocation.qcInspectedQty));
+
+                /*
+                 * Exception status must take priority even when
+                 * some quantity is still pending inspection.
+                 */
+                if (zero(allocation.qcHoldQty).signum() > 0) {
+
+                        allocation.status = VenFlowAllocationStatus.QC_HOLD;
+
+                } else if (zero(allocation.qcRejectedQty).signum() > 0) {
+
+                        allocation.status = VenFlowAllocationStatus.QC_REJECTED;
+
+                } else if (remainingAfterInspection.signum() > 0) {
+
+                        allocation.status = zero(allocation.qcAcceptedQty).signum() > 0
+                                        ? VenFlowAllocationStatus.PARTIALLY_QC_ACCEPTED
+                                        : VenFlowAllocationStatus.QC_PENDING;
+
+                } else if (zero(allocation.qcAcceptedQty)
+                                .compareTo(
+                                                zero(allocation.issuedQty)) > 0) {
+
+                        allocation.status = VenFlowAllocationStatus.READY_FOR_ISSUE;
+
+                } else {
+
+                        allocation.status = VenFlowAllocationStatus.QC_ACCEPTED;
+                }
+
+                allocation.statusEnteredAt = now;
+                allocation.updatedBy = currentActor;
+
+                allocationRepo.save(allocation);
+
+                entry.qcCheckedBy = currentActor;
+                entry.qcCheckedAt = now;
+                entry.qcRemarks = clean(req.qcRemarks());
+                entry.rejectionReason = clean(req.rejectionReason());
+
+                materialMovement(
+                                entry,
+                                allocation,
+                                "QC_INSPECTION_COMPLETED",
+                                inspected,
+                                "Allocation QC completed. Accepted="
+                                                + accepted
+                                                + ", Rejected="
+                                                + rejected
+                                                + ", Hold="
+                                                + hold
+                                                + ".",
+                                req.qcRemarks());
+
+                VenFlowEntry saved = reconcileEntry(
+                                entry,
+                                "ALLOCATION_QC_COMPLETED",
+                                "Allocation "
+                                                + allocation.id
+                                                + " inspected. Accepted="
+                                                + accepted
+                                                + ", Rejected="
+                                                + rejected
+                                                + ", Hold="
+                                                + hold
+                                                + ".");
+
+                if (quantityFailure || checklistFailure) {
+                        notificationService.publishQcFailure(
+                                        saved,
+                                        rejected,
+                                        hold,
+                                        req.rejectionReason());
+                }
+
+                return materialSummary(entryId);
+        }
+
+        private String requireHttpUrl(
+                        String value,
+                        String fieldName) {
+
+                requireText(
+                                value,
+                                fieldName + " is required.");
+
+                String cleaned = value.trim();
+
+                try {
+                        URI uri = URI.create(cleaned);
+
+                        String scheme = uri.getScheme();
+
+                        boolean validScheme = "http".equalsIgnoreCase(scheme)
+                                        || "https".equalsIgnoreCase(scheme);
+
+                        if (!validScheme
+                                        || uri.getHost() == null
+                                        || uri.getHost().isBlank()) {
+
+                                throw badRequest(
+                                                fieldName
+                                                                + " must be a valid HTTP or HTTPS URL.");
+                        }
+
+                        return cleaned;
+
+                } catch (IllegalArgumentException ex) {
+                        throw badRequest(
+                                        fieldName
+                                                        + " must be a valid HTTP or HTTPS URL.");
+                }
+        }
+
+        private String cleanOptionalHttpUrl(
+                        String value,
+                        String fieldName) {
+
+                if (!hasText(value)) {
+                        return null;
+                }
+
+                return requireHttpUrl(
+                                value,
+                                fieldName);
         }
 
         private String actor() {
@@ -2080,55 +2697,6 @@ public class VenFlowService {
                                 safeSecond) <= 0
                                                 ? safeFirst
                                                 : safeSecond;
-        }
-
-        private BigDecimal calculateSupplyBalance(
-                        VenFlowEntry e) {
-                BigDecimal required = zero(e.requiredQty);
-
-                BigDecimal reserved = zero(e.reservedQty);
-                BigDecimal received = zero(e.receivedQty);
-
-                return maxZero(
-                                required
-                                                .subtract(reserved)
-                                                .subtract(received));
-        }
-
-        private BigDecimal calculateIssueReadyQty(
-                        VenFlowEntry entry) {
-                BigDecimal totalReady = zero(entry.reservedQty)
-                                .add(
-                                                zero(entry.receivedQty));
-
-                /*
-                 * Never allow the calculated issue-ready quantity to exceed
-                 * the original project requirement.
-                 */
-                return min(
-                                zero(entry.requiredQty),
-                                totalReady);
-        }
-
-        private BigDecimal calculatePurchaseShortage(
-                        VenFlowEntry entry) {
-                BigDecimal required = zero(entry.requiredQty);
-
-                BigDecimal reserved = zero(entry.reservedQty);
-
-                BigDecimal available = zero(entry.availableQty);
-
-                /*
-                 * Reserved quantity is part of available stock.
-                 * Use the higher committed-stock figure; do not add both.
-                 */
-                BigDecimal committedStock = reserved.compareTo(available) >= 0
-                                ? reserved
-                                : available;
-
-                return maxZero(
-                                required.subtract(
-                                                committedStock));
         }
 
         private long minutesInCurrentStage(
@@ -2218,6 +2786,10 @@ public class VenFlowService {
                                                                                                 VenFlowStage.PO_REJECTED_BY_DIRECTOR,
                                                                                                 VenFlowStage.ORDER_PLACED_WITH_VENDOR)));
 
+                if (hasText(plantCode)) {
+                        access.assertPlantAccess(plantCode);
+                }
+
                 Pageable pageable = PageRequest.of(
                                 Math.max(page, 0),
                                 Math.min(
@@ -2306,9 +2878,11 @@ public class VenFlowService {
 
                 String changedBy = actor();
 
-                VenFlowStage previousStage = entry.stage;
-
                 boolean newEntry = entry.id == null;
+
+                VenFlowStage previousStage = newEntry
+                                ? null
+                                : entry.stage;
 
                 boolean stageChanged = newEntry
                                 || previousStage != nextStage;
@@ -2452,5 +3026,585 @@ public class VenFlowService {
                         case PENDING ->
                                 VenFlowStoreStatus.PENDING;
                 };
+        }
+
+        private BigDecimal quantity(
+                        BigDecimal value,
+                        String message) {
+                require(value, message);
+
+                if (value.compareTo(BigDecimal.ZERO) < 0) {
+                        throw badRequest(message);
+                }
+
+                BigDecimal stripped = value.stripTrailingZeros();
+
+                if (stripped.scale() > 3) {
+                        throw badRequest(
+                                        "Quantity can have a maximum of 3 decimal places.");
+                }
+
+                return value.setScale(
+                                3,
+                                java.math.RoundingMode.UNNECESSARY);
+        }
+
+        private void materialMovement(
+                        VenFlowEntry entry,
+                        VenFlowMaterialAllocation allocation,
+                        String movementType,
+                        BigDecimal quantity,
+                        String description,
+                        String remarks) {
+                VenFlowMaterialMovement movement = new VenFlowMaterialMovement();
+
+                movement.entryId = entry.id;
+
+                movement.allocationId = allocation == null
+                                ? null
+                                : allocation.id;
+
+                movement.movementType = movementType;
+                movement.quantity = quantity;
+                movement.description = clean(description);
+                movement.remarks = clean(remarks);
+                movement.performedBy = actor();
+
+                movementRepo.save(movement);
+        }
+
+        private void refreshMaterialAggregates(
+                        VenFlowEntry entry,
+                        List<VenFlowMaterialAllocation> allocations) {
+                BigDecimal storeAvailable = allocations.stream()
+                                .filter(a -> a.sourceType == VenFlowMaterialSource.STORE_STOCK)
+                                .map(a -> zero(a.plannedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal toBeOrdered = allocations.stream()
+                                .filter(a -> a.sourceType == VenFlowMaterialSource.PURCHASE)
+                                .map(a -> zero(a.plannedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal purchaseReceived = allocations.stream()
+                                .filter(a -> a.sourceType == VenFlowMaterialSource.PURCHASE)
+                                .map(a -> zero(a.receivedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcInspected = allocations.stream()
+                                .map(a -> zero(a.qcInspectedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcAccepted = allocations.stream()
+                                .map(a -> zero(a.qcAcceptedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcRejected = allocations.stream()
+                                .map(a -> zero(a.qcRejectedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcHold = allocations.stream()
+                                .map(a -> zero(a.qcHoldQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal presentedToQc = allocations.stream()
+                                .map(a -> zero(a.receivedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal issued = allocations.stream()
+                                .map(a -> zero(a.issuedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcPending = maxZero(
+                                presentedToQc.subtract(qcInspected));
+
+                boolean qcBlocked = qcRejected.signum() > 0
+                                || qcHold.signum() > 0;
+
+                BigDecimal issueReady = qcBlocked
+                                ? BigDecimal.ZERO.setScale(3)
+                                : maxZero(qcAccepted.subtract(issued));
+
+                BigDecimal finalGap = maxZero(
+                                zero(entry.requiredQty).subtract(qcAccepted));
+
+                entry.availableQty = storeAvailable;
+                entry.toBeOrderedQty = toBeOrdered;
+                entry.purchaseRequestedQty = toBeOrdered;
+                entry.receivedQty = purchaseReceived;
+
+                entry.qcAcceptedQty = qcAccepted;
+                entry.qcRejectedQty = qcRejected;
+                entry.qcHoldQty = qcHold;
+
+                entry.issuedQty = issued;
+                entry.issueReadyQty = issueReady;
+
+                entry.balanceQty = finalGap;
+
+                entry.processingBalanceQty = maxZero(
+                                issued
+                                                .subtract(zero(entry.usedQty))
+                                                .subtract(zero(entry.wastageQty)));
+
+                if (qcHold.signum() > 0) {
+                        entry.qcStatus = VenFlowQcStatus.HOLD;
+
+                } else if (qcRejected.signum() > 0) {
+                        entry.qcStatus = VenFlowQcStatus.NOT_OK;
+
+                } else if (qcPending.signum() > 0) {
+                        entry.qcStatus = VenFlowQcStatus.PENDING;
+
+                } else if (qcAccepted.compareTo(
+                                zero(entry.requiredQty)) >= 0) {
+
+                        entry.qcStatus = VenFlowQcStatus.OK;
+
+                } else if (qcAccepted.signum() > 0) {
+                        entry.qcStatus = VenFlowQcStatus.PARTIALLY_ACCEPTED;
+
+                } else {
+                        entry.qcStatus = VenFlowQcStatus.NOT_REQUIRED;
+                }
+
+                if (issued.signum() == 0
+                                && issueReady.signum() == 0) {
+
+                        entry.issueStatus = VenFlowIssueStatus.NOT_READY;
+
+                } else if (issued.signum() == 0) {
+                        entry.issueStatus = VenFlowIssueStatus.READY_FOR_ISSUE;
+
+                } else if (issued.compareTo(qcAccepted) < 0) {
+                        entry.issueStatus = VenFlowIssueStatus.PARTIALLY_ISSUED;
+
+                } else {
+                        entry.issueStatus = VenFlowIssueStatus.ISSUED;
+                }
+
+        }
+
+        private VenFlowEntry reconcileEntry(
+                        VenFlowEntry entry,
+                        String action,
+                        String remarks) {
+                List<VenFlowMaterialAllocation> allocations = allocationRepo
+                                .findByEntryIdAndActiveTrueOrderByCreatedAtAsc(
+                                                entry.id);
+
+                refreshMaterialAggregates(
+                                entry,
+                                allocations);
+
+                VenFlowStage nextStage = determineAggregateStage(
+                                entry,
+                                allocations);
+
+                return transition(
+                                entry,
+                                nextStage,
+                                action,
+                                remarks);
+        }
+
+        private VenFlowStage determineAggregateStage(
+                        VenFlowEntry entry,
+                        List<VenFlowMaterialAllocation> allocations) {
+                if (entry.processingStatus == VenFlowProcessingStatus.READY_FOR_NEXT_STAGE) {
+                        return VenFlowStage.READY_FOR_NEXT_STAGE;
+                }
+
+                VenFlowMaterialAllocation purchase = allocations.stream()
+                                .filter(a -> a.sourceType == VenFlowMaterialSource.PURCHASE)
+                                .findFirst()
+                                .orElse(null);
+
+                /*
+                 * Open commercial branch remains the primary blocker.
+                 */
+                if (purchase != null) {
+                        switch (purchase.status) {
+                                case PURCHASE_REQUESTED:
+                                        return VenFlowStage.PURCHASE_REQUEST_RAISED;
+
+                                case PO_PENDING_DIRECTOR_APPROVAL:
+                                        return VenFlowStage.PO_PENDING_DIRECTOR_APPROVAL;
+
+                                case PO_RETURNED:
+                                        return VenFlowStage.PO_REJECTED_BY_DIRECTOR;
+
+                                case PO_APPROVED:
+                                        return VenFlowStage.PO_APPROVED_BY_DIRECTOR;
+
+                                case ORDER_PLACED:
+                                case PARTIALLY_RECEIVED:
+                                        return VenFlowStage.ORDER_PLACED_WITH_VENDOR;
+
+                                case RECEIVED_GRN_PENDING:
+                                        return VenFlowStage.MATERIAL_RECEIVED_AT_STORE;
+
+                                case GRN_DONE:
+                                case QC_PENDING:
+                                case PARTIALLY_QC_ACCEPTED:
+                                        return VenFlowStage.QC_PENDING;
+
+                                case QC_REJECTED:
+                                case QC_HOLD:
+                                        return VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN;
+
+                                default:
+                                        break;
+                        }
+                }
+
+                boolean qcPending = allocations.stream()
+                                .anyMatch(a -> a.status == VenFlowAllocationStatus.QC_PENDING
+                                                || a.status == VenFlowAllocationStatus.GRN_DONE
+                                                || a.status == VenFlowAllocationStatus.PARTIALLY_QC_ACCEPTED);
+
+                if (qcPending) {
+                        return VenFlowStage.QC_PENDING;
+                }
+
+                if (zero(entry.qcRejectedQty).signum() > 0
+                                || zero(entry.qcHoldQty).signum() > 0) {
+                        return VenFlowStage.MATERIAL_REJECTED_HOLD_RETURN;
+                }
+
+                if (entry.nextStageReadyAt != null) {
+                        return VenFlowStage.READY_FOR_NEXT_STAGE;
+                }
+
+                if (entry.supervisorInformedAt != null
+                                && entry.processingStatus == VenFlowProcessingStatus.COMPLETED) {
+                        return VenFlowStage.SUPERVISOR_INFORMED;
+                }
+
+                if (entry.processingStatus == VenFlowProcessingStatus.COMPLETED) {
+                        return VenFlowStage.PROCESS_COMPLETED;
+                }
+
+                if (entry.processingStatus == VenFlowProcessingStatus.STARTED) {
+                        return VenFlowStage.PROCESSING_STARTED;
+                }
+
+                if (zero(entry.issuedQty).signum() > 0) {
+                        return VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION;
+                }
+
+                if (zero(entry.issueReadyQty).signum() > 0) {
+                        return VenFlowStage.QC_OK;
+                }
+
+                if (zero(entry.qcAcceptedQty)
+                                .compareTo(
+                                                zero(entry.requiredQty)) >= 0) {
+                        return VenFlowStage.MATERIAL_ACCEPTED_IN_STORE;
+                }
+
+                return entry.stage == null
+                                ? VenFlowStage.INDENT_CREATED
+                                : entry.stage;
+        }
+
+        @Transactional(readOnly = true)
+        public MaterialSummaryResponse materialSummary(UUID id) {
+
+                VenFlowEntry entry = getVisibleOrThrow(id);
+
+                List<VenFlowMaterialAllocation> allocations = allocationRepo
+                                .findByEntryIdAndActiveTrueOrderByCreatedAtAsc(id);
+
+                BigDecimal required = zero(entry.requiredQty);
+
+                /*
+                 * Store allocation planned quantity represents the quantity
+                 * identified as physically available in Store.
+                 */
+                BigDecimal storeAvailable = allocations.stream()
+                                .filter(allocation -> allocation.sourceType == VenFlowMaterialSource.STORE_STOCK)
+                                .map(allocation -> zero(allocation.plannedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                /*
+                 * Purchase allocation planned quantity represents the shortage
+                 * submitted to Purchase.
+                 */
+                BigDecimal toBeOrdered = allocations.stream()
+                                .filter(allocation -> allocation.sourceType == VenFlowMaterialSource.PURCHASE)
+                                .map(allocation -> zero(allocation.plannedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal purchasedReceived = allocations.stream()
+                                .filter(allocation -> allocation.sourceType == VenFlowMaterialSource.PURCHASE)
+                                .map(allocation -> zero(allocation.receivedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcInspected = allocations.stream()
+                                .map(allocation -> zero(allocation.qcInspectedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcAccepted = allocations.stream()
+                                .map(allocation -> zero(allocation.qcAcceptedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcRejected = allocations.stream()
+                                .map(allocation -> zero(allocation.qcRejectedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcHold = allocations.stream()
+                                .map(allocation -> zero(allocation.qcHoldQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                /*
+                 * Store stock is inserted into receivedQty when its allocation
+                 * is created, so this correctly includes Store and Purchase QC.
+                 */
+                BigDecimal presentedToQc = allocations.stream()
+                                .map(allocation -> zero(allocation.receivedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                BigDecimal qcPending = maxZero(
+                                presentedToQc.subtract(qcInspected));
+
+                BigDecimal issued = allocations.stream()
+                                .map(allocation -> zero(allocation.issuedQty))
+                                .reduce(
+                                                BigDecimal.ZERO,
+                                                BigDecimal::add);
+
+                /*
+                 * Rejected or Hold material blocks further issue until the QC
+                 * exception is resolved.
+                 */
+                boolean qcBlocked = qcRejected.signum() > 0
+                                || qcHold.signum() > 0;
+
+                BigDecimal issueReady = qcBlocked
+                                ? BigDecimal.ZERO.setScale(3)
+                                : maxZero(qcAccepted.subtract(issued));
+
+                /*
+                 * orderedQty becomes meaningful after Purchase raises the PO.
+                 */
+                BigDecimal ordered = zero(entry.orderedQty);
+
+                BigDecimal vendorOutstanding = maxZero(
+                                ordered.subtract(purchasedReceived));
+
+                /*
+                 * Permanent meaning of finalGap:
+                 * Required quantity minus QC-accepted quantity.
+                 */
+                BigDecimal finalGap = maxZero(
+                                required.subtract(qcAccepted));
+
+                /*
+                 * Processing balance is separate from requirement balance.
+                 */
+                BigDecimal processingBalance = maxZero(
+                                issued
+                                                .subtract(zero(entry.usedQty))
+                                                .subtract(zero(entry.wastageQty)));
+
+                int coveragePercent;
+
+                if (required.signum() <= 0) {
+                        coveragePercent = 0;
+                } else {
+                        int calculatedCoverage = storeAvailable
+                                        .multiply(BigDecimal.valueOf(100))
+                                        .divide(
+                                                        required,
+                                                        0,
+                                                        java.math.RoundingMode.HALF_UP)
+                                        .intValue();
+
+                        /*
+                         * Prevent bad legacy data from showing more than 100%.
+                         */
+                        coveragePercent = Math.max(
+                                        0,
+                                        Math.min(calculatedCoverage, 100));
+                }
+
+                List<String> activeDepartments = calculateActiveDepartments(allocations);
+
+                List<MaterialAllocationResponse> allocationDtos = allocations.stream()
+                                .map(allocation -> {
+
+                                        BigDecimal allocationReceived = zero(allocation.receivedQty);
+
+                                        BigDecimal allocationInspected = zero(allocation.qcInspectedQty);
+
+                                        BigDecimal allocationAccepted = zero(allocation.qcAcceptedQty);
+
+                                        BigDecimal allocationRejected = zero(allocation.qcRejectedQty);
+
+                                        BigDecimal allocationHold = zero(allocation.qcHoldQty);
+
+                                        BigDecimal allocationIssued = zero(allocation.issuedQty);
+
+                                        BigDecimal allocationPending = maxZero(
+                                                        allocationReceived.subtract(
+                                                                        allocationInspected));
+
+                                        boolean allocationBlocked = allocationRejected.signum() > 0
+                                                        || allocationHold.signum() > 0;
+
+                                        BigDecimal allocationReady = allocationBlocked
+                                                        ? BigDecimal.ZERO.setScale(3)
+                                                        : maxZero(
+                                                                        allocationAccepted.subtract(
+                                                                                        allocationIssued));
+
+                                        return new MaterialAllocationResponse(
+                                                        allocation.id,
+                                                        allocation.sourceType,
+                                                        allocation.status,
+                                                        zero(allocation.plannedQty),
+                                                        allocationReceived,
+                                                        allocationInspected,
+                                                        allocationAccepted,
+                                                        allocationRejected,
+                                                        allocationHold,
+                                                        allocationPending,
+                                                        allocationIssued,
+                                                        allocationReady,
+                                                        allocation.purchaseRequestNo,
+                                                        allocation.requisitionDate,
+                                                        allocation.rowVersion);
+                                })
+                                .toList();
+
+                return new MaterialSummaryResponse(
+                                entry.id,
+
+                                required,
+                                storeAvailable,
+                                toBeOrdered,
+
+                                ordered,
+                                purchasedReceived,
+                                vendorOutstanding,
+
+                                qcPending,
+                                qcAccepted,
+                                qcRejected,
+                                qcHold,
+
+                                issued,
+                                issueReady,
+
+                                finalGap,
+
+                                zero(entry.usedQty),
+                                zero(entry.wastageQty),
+                                processingBalance,
+
+                                coveragePercent,
+                                activeDepartments,
+                                allocationDtos);
+        }
+
+        private List<String> calculateActiveDepartments(
+                        List<VenFlowMaterialAllocation> allocations) {
+                Set<String> departments = new LinkedHashSet<>();
+
+                for (VenFlowMaterialAllocation allocation : allocations) {
+                        switch (allocation.status) {
+                                case PURCHASE_REQUESTED,
+                                                PO_RETURNED,
+                                                PO_APPROVED ->
+                                        departments.add("PURCHASE");
+
+                                case PO_PENDING_DIRECTOR_APPROVAL ->
+                                        departments.add("DIRECTOR");
+
+                                case ORDER_PLACED ->
+                                        departments.add("PURCHASE / VENDOR");
+
+                                case PARTIALLY_RECEIVED,
+                                                RECEIVED_GRN_PENDING,
+                                                GRN_DONE ->
+                                        departments.add("STORE");
+
+                                case QC_PENDING,
+                                                PARTIALLY_QC_ACCEPTED,
+                                                QC_HOLD,
+                                                QC_REJECTED ->
+                                        departments.add("QC");
+
+                                case READY_FOR_ISSUE,
+                                                PARTIALLY_ISSUED ->
+                                        departments.add("STORE / PRODUCTION");
+
+                                case ISSUED ->
+                                        departments.add("PRODUCTION");
+
+                                default -> {
+                                }
+                        }
+                }
+
+                return List.copyOf(departments);
+        }
+
+        @Transactional(readOnly = true)
+        public List<MaterialMovementResponse> materialHistory(
+                        UUID id) {
+                getVisibleOrThrow(id);
+
+                return movementRepo
+                                .findByEntryIdOrderByCreatedAtDesc(
+                                                id)
+                                .stream()
+                                .map(movement -> new MaterialMovementResponse(
+                                                movement.id,
+                                                movement.entryId,
+                                                movement.allocationId,
+                                                movement.movementType,
+                                                movement.quantity,
+                                                movement.referenceNo,
+                                                movement.description,
+                                                movement.remarks,
+                                                movement.performedBy,
+                                                movement.createdAt))
+                                .toList();
         }
 }

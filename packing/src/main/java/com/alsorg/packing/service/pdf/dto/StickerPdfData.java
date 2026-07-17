@@ -32,6 +32,8 @@ public class StickerPdfData {
     private String qrPayload;
 
     private boolean showCompanyHeader;
+    private boolean hardwareSticker;
+    private String packetNo;
 
     public boolean isShowCompanyHeader() {
         return showCompanyHeader;
@@ -40,7 +42,7 @@ public class StickerPdfData {
     public void setShowCompanyHeader(boolean showCompanyHeader) {
         this.showCompanyHeader = showCompanyHeader;
     }
-    
+
     public long getPrintIteration() {
         return printIteration;
     }
@@ -51,8 +53,7 @@ public class StickerPdfData {
 
     public static StickerPdfData fromZohoItem(
             ZohoItemDTO item,
-            String stickerNumber
-    ) {
+            String stickerNumber) {
         StickerPdfData data = new StickerPdfData();
 
         data.setStickerNumber(stickerNumber);
@@ -72,8 +73,7 @@ public class StickerPdfData {
 
         data.setQuantity(1);
         data.setDate(
-            LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
-        );
+                LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
 
         return data;
     }
@@ -130,6 +130,22 @@ public class StickerPdfData {
 
     public String getLocation() {
         return location;
+    }
+
+    public boolean isHardwareSticker() {
+        return hardwareSticker;
+    }
+
+    public void setHardwareSticker(boolean hardwareSticker) {
+        this.hardwareSticker = hardwareSticker;
+    }
+
+    public String getPacketNo() {
+        return packetNo;
+    }
+
+    public void setPacketNo(String packetNo) {
+        this.packetNo = packetNo;
     }
 
     public void setLocation(String location) {
@@ -200,35 +216,35 @@ public class StickerPdfData {
         this.zohoItemId = zohoItemId;
     }
 
-	public String getDimensions() {
-		return dimensions;
-	}
+    public String getDimensions() {
+        return dimensions;
+    }
 
-	public void setDimensions(String dimensions) {
-		this.dimensions = dimensions;
-	}
+    public void setDimensions(String dimensions) {
+        this.dimensions = dimensions;
+    }
 
-	public String getWeight() {
-		return weight;
-	}
+    public String getWeight() {
+        return weight;
+    }
 
-	public void setWeight(String weight) {
-		this.weight = weight;
-	}
-	
-	public String getPacketItemId() {
-	    return packetItemId;
-	}
+    public void setWeight(String weight) {
+        this.weight = weight;
+    }
 
-	public void setPacketItemId(String packetItemId) {
-	    this.packetItemId = packetItemId;
-	}
+    public String getPacketItemId() {
+        return packetItemId;
+    }
 
-	public String getQrPayload() {
-	    return qrPayload;
-	}
+    public void setPacketItemId(String packetItemId) {
+        this.packetItemId = packetItemId;
+    }
 
-	public void setQrPayload(String qrPayload) {
-	    this.qrPayload = qrPayload;
-	}
+    public String getQrPayload() {
+        return qrPayload;
+    }
+
+    public void setQrPayload(String qrPayload) {
+        this.qrPayload = qrPayload;
+    }
 }

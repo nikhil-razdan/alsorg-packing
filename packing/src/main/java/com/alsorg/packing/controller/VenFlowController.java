@@ -21,7 +21,9 @@ public class VenFlowController {
     private final VenFlowService service;
     private final VenFlowNotificationService notificationService;
 
-    public VenFlowController(VenFlowService service, VenFlowNotificationService notificationService) {
+    public VenFlowController(
+            VenFlowService service,
+            VenFlowNotificationService notificationService) {
         this.service = service;
         this.notificationService = notificationService;
     }
@@ -101,27 +103,14 @@ public class VenFlowController {
      * =========================================================
      */
 
-    @PatchMapping("/entries/{id}/store-review")
-    public VenFlowEntry storeReview(
+    @PatchMapping("/entries/{id}/store-decision")
+    public MaterialSummaryResponse submitStoreDecision(
             @PathVariable UUID id,
-            @RequestBody StoreReviewRequest req) {
-        return service.storeReview(id, req);
+            @RequestBody StoreDecisionRequest req) {
+        return service.submitStoreDecision(
+                id,
+                req);
     }
-
-    @PatchMapping("/entries/{id}/reserve-material")
-    public VenFlowEntry reserveMaterial(
-            @PathVariable UUID id,
-            @RequestBody ReserveMaterialRequest req) {
-        return service.reserveMaterial(id, req);
-    }
-
-    @PatchMapping("/entries/{id}/purchase-request")
-    public VenFlowEntry raisePurchaseRequest(
-            @PathVariable UUID id,
-            @RequestBody PurchaseRequestRequest req) {
-        return service.raisePurchaseRequest(id, req);
-    }
-
     /*
      * =========================================================
      * PURCHASE DESK
@@ -161,6 +150,18 @@ public class VenFlowController {
         return service.approvePo(id);
     }
 
+    @GetMapping("/entries/{id}/material-summary")
+    public MaterialSummaryResponse materialSummary(
+            @PathVariable UUID id) {
+        return service.materialSummary(id);
+    }
+
+    @GetMapping("/entries/{id}/material-history")
+    public List<MaterialMovementResponse> materialHistory(
+            @PathVariable UUID id) {
+        return service.materialHistory(id);
+    }
+
     /*
      * =========================================================
      * AKG STORE DESK - RECEIVING / GRN / QC / INVENTORY
@@ -187,6 +188,17 @@ public class VenFlowController {
             @PathVariable UUID id,
             @RequestBody QcRequest req) {
         return service.qualityCheck(id, req);
+    }
+
+    @PostMapping("/entries/{entryId}/allocations/{allocationId}/qc")
+    public MaterialSummaryResponse inspectAllocation(
+            @PathVariable UUID entryId,
+            @PathVariable UUID allocationId,
+            @RequestBody QcInspectionRequest req) {
+        return service.inspectAllocation(
+                entryId,
+                allocationId,
+                req);
     }
 
     @PatchMapping("/entries/{id}/accept-inventory")

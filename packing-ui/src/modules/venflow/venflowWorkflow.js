@@ -624,17 +624,17 @@ export const STORE_VIEW_OPTIONS = Object.freeze([
 
 	Object.freeze([
 		VF_STAGE.STORE_REVIEWED,
-		"Stock Decision / PR Pending",
-	]),
+		"Store Decision Pending",
+	],),
 
 	Object.freeze([
 		VF_STAGE.STOCK_AVAILABLE,
-		"Stock Available / Reserve Pending",
+		"Store Stock / QC Pending",
 	]),
 
 	Object.freeze([
 		VF_STAGE.MATERIAL_RESERVED,
-		"Reserved / Issue Pending",
+		"Legacy Reserved Material",
 	]),
 
 	Object.freeze([
@@ -674,7 +674,7 @@ export const STORE_VIEW_OPTIONS = Object.freeze([
 
 	Object.freeze([
 		VF_STAGE.QC_OK,
-		"QC Approved / Inventory Pending",
+		"QC Approved / Issue Ready",
 	]),
 
 	Object.freeze([
@@ -684,7 +684,7 @@ export const STORE_VIEW_OPTIONS = Object.freeze([
 
 	Object.freeze([
 		VF_STAGE.MATERIAL_ACCEPTED_IN_STORE,
-		"Store Inventory / Issue Pending",
+		"Legacy Inventory Accepted",
 	]),
 
 	Object.freeze([
@@ -695,6 +695,28 @@ export const STORE_VIEW_OPTIONS = Object.freeze([
 	Object.freeze([
 		VF_STAGE.MATERIAL_ISSUED_TO_PRODUCTION,
 		"Issued to Production",
+	]),
+]);
+
+export const QC_VIEW_OPTIONS = Object.freeze([
+	Object.freeze([
+		"",
+		"All QC Stages",
+	]),
+
+	Object.freeze([
+		VF_STAGE.QC_PENDING,
+		"QC Inspection Pending",
+	]),
+
+	Object.freeze([
+		VF_STAGE.QC_OK,
+		"QC Accepted / Issue Ready",
+	]),
+
+	Object.freeze([
+		VF_STAGE.MATERIAL_REJECTED_HOLD_RETURN,
+		"Rejected / Hold Material",
 	]),
 ]);
 
@@ -886,7 +908,7 @@ export const getCurrentActionText = (
 ) => {
 	const entry =
 		entryOrStage &&
-		typeof entryOrStage === "object"
+			typeof entryOrStage === "object"
 			? entryOrStage
 			: null;
 
@@ -903,13 +925,13 @@ export const getCurrentActionText = (
 			return "AKG Store must review stock availability against the required project quantity.";
 
 		case VF_STAGE.STORE_REVIEWED:
-			return "Store must reserve available stock or raise a Purchase Request when stock is unavailable, partially available, or on hold.";
+			return "Store must submit one stock decision. Available quantity moves directly to allocation-level QC, while the shortage automatically creates a Purchase allocation.";
 
 		case VF_STAGE.STOCK_AVAILABLE:
-			return "Stock is available. Store must reserve the required project quantity before material issue.";
+			return "Store stock has been identified. The available allocation must complete QC before it can become issue-ready.";
 
 		case VF_STAGE.MATERIAL_RESERVED:
-			return "Material is reserved. Store can issue the material to Production. Any remaining shortage must continue through Purchase.";
+			return "This is a legacy reserved-material stage. New requirements move Store stock directly to allocation-level QC.";
 
 		case VF_STAGE.PURCHASE_REQUEST_RAISED:
 			return "Purchase must prepare the PO with vendor, amount, PO document and commercial details, then submit it for Director approval.";
@@ -934,16 +956,16 @@ export const getCurrentActionText = (
 
 		case VF_STAGE.GRN_DONE:
 		case VF_STAGE.QC_PENDING:
-			return "Store must complete QC. QC approval moves the material to Store Inventory; QC failure moves it to hold or return.";
+			return "QC must inspect each material allocation. Accepted quantity becomes issue-ready automatically; rejected or hold quantity blocks material issue.";
 
 		case VF_STAGE.QC_OK:
-			return "QC is approved. Store must accept the material into controlled Store Inventory.";
+			return "QC-approved material is issue-ready. Store can issue the approved quantity to Production when no QC quantity remains pending, rejected, or on hold.";
 
 		case VF_STAGE.QC_NOT_OK:
 			return "QC has failed. Record the rejection or hold reason and resolve return, replacement, or corrective action.";
 
 		case VF_STAGE.MATERIAL_ACCEPTED_IN_STORE:
-			return "The material is accepted in Store Inventory and can now be reserved and issued to Production.";
+			return "This is a legacy inventory-acceptance stage. New QC-approved material becomes issue-ready automatically.";
 
 		case VF_STAGE.MATERIAL_REJECTED_HOLD_RETURN:
 			return "The material is on hold or return. Store, Purchase and the vendor must resolve the rejection before the workflow continues.";

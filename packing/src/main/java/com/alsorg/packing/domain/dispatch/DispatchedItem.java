@@ -6,168 +6,177 @@ import java.util.UUID;
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import jakarta.persistence.*;
-import jakarta.persistence.Column;
+
+import com.alsorg.packing.domain.common.PacketItemType;
 
 @Entity
 @Table(name = "dispatched_items")
 public class DispatchedItem {
 
-    @Id
-    @Column(name = "zoho_item_id", nullable = false)
-    private String zohoItemId;
-    private UUID packetItemId;
-    private String stickerNumber;
-    private UUID packetId;
-    private String location;
-    private String weight;
-    private String dimensions;
-    @Column(nullable = false)
-    private String name;
+	@Id
+	@Column(name = "zoho_item_id", nullable = false)
+	private String zohoItemId;
+	private UUID packetItemId;
+	private String stickerNumber;
+	private UUID packetId;
+	private String location;
+	private String weight;
+	private String dimensions;
+	@Column(nullable = false)
+	private String name;
 
-    @Column(nullable = true)
-    private String sku;
+	@Column(nullable = true)
+	private String sku;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "item_type", nullable = false, length = 30)
+	private PacketItemType itemType = PacketItemType.NORMAL;
 
-    private String plantCode;
-    private String packedAreaCode;
-    private String fgAreaCode;
-    private String allowedWarehouseCodes;
-    private String currentLocationCode;
-    private String fgZoneCode;
-    
-    @Column(name = "client_name")
-    private String clientName;
-    private Integer quantity;
+	@Column(name = "linked_packet_item_id")
+	private UUID linkedPacketItemId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ItemDispatchStatus status;
+	@Column(name = "linked_master_item_id")
+	private UUID linkedMasterItemId;
 
-    @Column(name = "packed_at")
-    private LocalDateTime packedAt;
-    
-    private LocalDateTime createdAt;
+	private String plantCode;
+	private String packedAreaCode;
+	private String fgAreaCode;
+	private String allowedWarehouseCodes;
+	private String currentLocationCode;
+	private String fgZoneCode;
 
-    
-    @Column(nullable = false)
-    private Integer stock = 0;
+	@Column(name = "client_name")
+	private String clientName;
+	private Integer quantity;
 
-    /* ===================== RESTORE / APPROVAL ===================== */
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private ItemDispatchStatus status;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "approval_status")
-    private ApprovalStatus approvalStatus;
+	@Column(name = "packed_at")
+	private LocalDateTime packedAt;
 
-    @Column(name = "approval_requested_by")
-    private String approvalRequestedBy;
+	private LocalDateTime createdAt;
 
-    @Column(name = "approval_requested_at")
-    private LocalDateTime approvalRequestedAt;
-    
-    private String packedBy;
+	@Column(nullable = false)
+	private Integer stock = 0;
 
-    @Column(name = "approved_at")
-    private LocalDateTime approvedAt;
+	/* ===================== RESTORE / APPROVAL ===================== */
 
-    @Column(name = "approved_by")
-    private String approvedBy;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "approval_status")
+	private ApprovalStatus approvalStatus;
 
-    @Column(name = "restore_requested", nullable = false)
-    private boolean restoreRequested = false;
+	@Column(name = "approval_requested_by")
+	private String approvalRequestedBy;
 
-    @Column(name = "requested_by")
-    private String requestedBy;
+	@Column(name = "approval_requested_at")
+	private LocalDateTime approvalRequestedAt;
 
-    @Column(name = "requested_at")
-    private LocalDateTime requestedAt;
+	private String packedBy;
 
-    @Column(name = "rejection_reason")
-    private String rejectionReason;
+	@Column(name = "approved_at")
+	private LocalDateTime approvedAt;
 
-    /* ===================== DISPATCH ===================== */
+	@Column(name = "approved_by")
+	private String approvedBy;
 
-    @Column(name = "dispatched_by")
-    private String dispatchedBy;
+	@Column(name = "restore_requested", nullable = false)
+	private boolean restoreRequested = false;
 
-    @Column(name = "dispatched_at")
-    private LocalDateTime dispatchedAt;
-    
-    @Column(name = "floor_location")
-    private String floorLocation;
-    
-    @Column(name = "warehouse_code")
-    private String warehouseCode;
+	@Column(name = "requested_by")
+	private String requestedBy;
 
-    private LocalDateTime movedToFloorAt;
-    
-    private LocalDateTime storedAt;
+	@Column(name = "requested_at")
+	private LocalDateTime requestedAt;
 
-    private String chalaanNumber;
-    
-    @Column(name = "factory_floor")
-    private String factoryFloor;
-    
-    private String description;
-    private String clientAddress;
-    private String drawingNo;
-    private String remarks;
-    private String floor;
-    private String pdNo;
-    private String gatePassNumber;
-    private String fromLocation;
-    private String createdBy;
-    private UUID logisticsTripId;
+	@Column(name = "rejection_reason")
+	private String rejectionReason;
 
-    private UUID driverId;
+	/* ===================== DISPATCH ===================== */
 
-    private String driverName;
+	@Column(name = "dispatched_by")
+	private String dispatchedBy;
 
-    private UUID vehicleId;
+	@Column(name = "dispatched_at")
+	private LocalDateTime dispatchedAt;
 
-    private String vehicleNumber;
+	@Column(name = "floor_location")
+	private String floorLocation;
 
-    private LocalDateTime tripStartedAt;
+	@Column(name = "warehouse_code")
+	private String warehouseCode;
 
-    private LocalDateTime tripEndedAt;
+	private LocalDateTime movedToFloorAt;
 
-    private LocalDateTime deliveredAt;
-    
-    private String receiverName;
+	private LocalDateTime storedAt;
 
-    private String receiverPhone;
+	private String chalaanNumber;
 
-    private String podUrl;
+	@Column(name = "factory_floor")
+	private String factoryFloor;
 
-    private Double deliveryLatitude;
+	private String description;
+	private String clientAddress;
+	private String drawingNo;
+	private String remarks;
+	private String floor;
+	private String pdNo;
+	private String gatePassNumber;
+	private String fromLocation;
+	private String createdBy;
+	private UUID logisticsTripId;
 
-    private Double deliveryLongitude;
+	private UUID driverId;
 
-    private Double deliveryLocationAccuracy;
+	private String driverName;
 
-    @Column(length = 1500)
-    private String deliveryRemarks;
-    
-    public DispatchedItem() {
-    }
+	private UUID vehicleId;
 
-    /* ===================== GETTERS / SETTERS ===================== */
+	private String vehicleNumber;
 
-    public String getZohoItemId() {
-        return zohoItemId;
-    }
+	private LocalDateTime tripStartedAt;
 
-    public void setZohoItemId(String zohoItemId) {
-        this.zohoItemId = zohoItemId;
-    }
+	private LocalDateTime tripEndedAt;
 
-    public String getName() {
-        return name;
-    }
+	private LocalDateTime deliveredAt;
 
-    public void setName(String name) {
-        this.name = name;
-    }
-    
-    public String getPlantCode() {
+	private String receiverName;
+
+	private String receiverPhone;
+
+	private String podUrl;
+
+	private Double deliveryLatitude;
+
+	private Double deliveryLongitude;
+
+	private Double deliveryLocationAccuracy;
+
+	@Column(length = 1500)
+	private String deliveryRemarks;
+
+	public DispatchedItem() {
+	}
+
+	/* ===================== GETTERS / SETTERS ===================== */
+
+	public String getZohoItemId() {
+		return zohoItemId;
+	}
+
+	public void setZohoItemId(String zohoItemId) {
+		this.zohoItemId = zohoItemId;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getPlantCode() {
 		return plantCode;
 	}
 
@@ -199,133 +208,133 @@ public class DispatchedItem {
 		this.allowedWarehouseCodes = allowedWarehouseCodes;
 	}
 
-    public String getSku() {
-        return sku;
-    }
+	public String getSku() {
+		return sku;
+	}
 
-    public void setSku(String sku) {
-        this.sku = sku;
-    }
+	public void setSku(String sku) {
+		this.sku = sku;
+	}
 
-    public String getClientName() {
-        return clientName;
-    }
+	public String getClientName() {
+		return clientName;
+	}
 
-    public void setClientName(String clientName) {
-        this.clientName = clientName;
-    }
+	public void setClientName(String clientName) {
+		this.clientName = clientName;
+	}
 
-    public ItemDispatchStatus getStatus() {
-        return status;
-    }
+	public ItemDispatchStatus getStatus() {
+		return status;
+	}
 
-    public void setStatus(ItemDispatchStatus status) {
-        this.status = status;
-    }
+	public void setStatus(ItemDispatchStatus status) {
+		this.status = status;
+	}
 
-    public LocalDateTime getPackedAt() {
-        return packedAt;
-    }
+	public LocalDateTime getPackedAt() {
+		return packedAt;
+	}
 
-    public void setPackedAt(LocalDateTime packedAt) {
-        this.packedAt = packedAt;
-    }
+	public void setPackedAt(LocalDateTime packedAt) {
+		this.packedAt = packedAt;
+	}
 
-    public Integer getStock() {
-        return stock;
-    }
+	public Integer getStock() {
+		return stock;
+	}
 
-    public void setStock(Integer stock) {
-        this.stock = stock;
-    }
+	public void setStock(Integer stock) {
+		this.stock = stock;
+	}
 
-    public ApprovalStatus getApprovalStatus() {
-        return approvalStatus;
-    }
+	public ApprovalStatus getApprovalStatus() {
+		return approvalStatus;
+	}
 
-    public void setApprovalStatus(ApprovalStatus approvalStatus) {
-        this.approvalStatus = approvalStatus;
-    }
+	public void setApprovalStatus(ApprovalStatus approvalStatus) {
+		this.approvalStatus = approvalStatus;
+	}
 
-    public String getApprovalRequestedBy() {
-        return approvalRequestedBy;
-    }
+	public String getApprovalRequestedBy() {
+		return approvalRequestedBy;
+	}
 
-    public void setApprovalRequestedBy(String approvalRequestedBy) {
-        this.approvalRequestedBy = approvalRequestedBy;
-    }
+	public void setApprovalRequestedBy(String approvalRequestedBy) {
+		this.approvalRequestedBy = approvalRequestedBy;
+	}
 
-    public LocalDateTime getApprovalRequestedAt() {
-        return approvalRequestedAt;
-    }
+	public LocalDateTime getApprovalRequestedAt() {
+		return approvalRequestedAt;
+	}
 
-    public void setApprovalRequestedAt(LocalDateTime approvalRequestedAt) {
-        this.approvalRequestedAt = approvalRequestedAt;
-    }
+	public void setApprovalRequestedAt(LocalDateTime approvalRequestedAt) {
+		this.approvalRequestedAt = approvalRequestedAt;
+	}
 
-    public LocalDateTime getApprovedAt() {
-        return approvedAt;
-    }
+	public LocalDateTime getApprovedAt() {
+		return approvedAt;
+	}
 
-    public void setApprovedAt(LocalDateTime approvedAt) {
-        this.approvedAt = approvedAt;
-    }
+	public void setApprovedAt(LocalDateTime approvedAt) {
+		this.approvedAt = approvedAt;
+	}
 
-    public String getApprovedBy() {
-        return approvedBy;
-    }
+	public String getApprovedBy() {
+		return approvedBy;
+	}
 
-    public void setApprovedBy(String approvedBy) {
-        this.approvedBy = approvedBy;
-    }
+	public void setApprovedBy(String approvedBy) {
+		this.approvedBy = approvedBy;
+	}
 
-    public boolean isRestoreRequested() {
-        return restoreRequested;
-    }
+	public boolean isRestoreRequested() {
+		return restoreRequested;
+	}
 
-    public void setRestoreRequested(boolean restoreRequested) {
-        this.restoreRequested = restoreRequested;
-    }
+	public void setRestoreRequested(boolean restoreRequested) {
+		this.restoreRequested = restoreRequested;
+	}
 
-    public String getRequestedBy() {
-        return requestedBy;
-    }
+	public String getRequestedBy() {
+		return requestedBy;
+	}
 
-    public void setRequestedBy(String requestedBy) {
-        this.requestedBy = requestedBy;
-    }
+	public void setRequestedBy(String requestedBy) {
+		this.requestedBy = requestedBy;
+	}
 
-    public LocalDateTime getRequestedAt() {
-        return requestedAt;
-    }
+	public LocalDateTime getRequestedAt() {
+		return requestedAt;
+	}
 
-    public void setRequestedAt(LocalDateTime requestedAt) {
-        this.requestedAt = requestedAt;
-    }
+	public void setRequestedAt(LocalDateTime requestedAt) {
+		this.requestedAt = requestedAt;
+	}
 
-    public String getRejectionReason() {
-        return rejectionReason;
-    }
+	public String getRejectionReason() {
+		return rejectionReason;
+	}
 
-    public void setRejectionReason(String rejectionReason) {
-        this.rejectionReason = rejectionReason;
-    }
+	public void setRejectionReason(String rejectionReason) {
+		this.rejectionReason = rejectionReason;
+	}
 
-    public String getDispatchedBy() {
-        return dispatchedBy;
-    }
+	public String getDispatchedBy() {
+		return dispatchedBy;
+	}
 
-    public void setDispatchedBy(String dispatchedBy) {
-        this.dispatchedBy = dispatchedBy;
-    }
+	public void setDispatchedBy(String dispatchedBy) {
+		this.dispatchedBy = dispatchedBy;
+	}
 
-    public LocalDateTime getDispatchedAt() {
-        return dispatchedAt;
-    }
+	public LocalDateTime getDispatchedAt() {
+		return dispatchedAt;
+	}
 
-    public void setDispatchedAt(LocalDateTime dispatchedAt) {
-        this.dispatchedAt = dispatchedAt;
-    }
+	public void setDispatchedAt(LocalDateTime dispatchedAt) {
+		this.dispatchedAt = dispatchedAt;
+	}
 
 	public String getPackedBy() {
 		return packedBy;
@@ -334,28 +343,54 @@ public class DispatchedItem {
 	public void setPackedBy(String packedBy) {
 		this.packedBy = packedBy;
 	}
+
 	public String getFactoryFloor() {
-	    return factoryFloor;
+		return factoryFloor;
 	}
 
 	public void setFactoryFloor(String factoryFloor) {
-	    this.factoryFloor = factoryFloor;
+		this.factoryFloor = factoryFloor;
 	}
-	
-	public String getFloorLocation() { return floorLocation; }
-	public void setFloorLocation(String floorLocation) { this.floorLocation = floorLocation; }
 
-	public String getWarehouseCode() { return warehouseCode; }
-	public void setWarehouseCode(String warehouseCode) { this.warehouseCode = warehouseCode; }
+	public String getFloorLocation() {
+		return floorLocation;
+	}
 
-	public LocalDateTime getMovedToFloorAt() { return movedToFloorAt; }
-	public void setMovedToFloorAt(LocalDateTime movedToFloorAt) { this.movedToFloorAt = movedToFloorAt; }
+	public void setFloorLocation(String floorLocation) {
+		this.floorLocation = floorLocation;
+	}
 
-	public LocalDateTime getStoredAt() { return storedAt; }
-	public void setStoredAt(LocalDateTime storedAt) { this.storedAt = storedAt; }
+	public String getWarehouseCode() {
+		return warehouseCode;
+	}
 
-	public String getChalaanNumber() { return chalaanNumber; }
-	public void setChalaanNumber(String chalaanNumber) { this.chalaanNumber = chalaanNumber; }
+	public void setWarehouseCode(String warehouseCode) {
+		this.warehouseCode = warehouseCode;
+	}
+
+	public LocalDateTime getMovedToFloorAt() {
+		return movedToFloorAt;
+	}
+
+	public void setMovedToFloorAt(LocalDateTime movedToFloorAt) {
+		this.movedToFloorAt = movedToFloorAt;
+	}
+
+	public LocalDateTime getStoredAt() {
+		return storedAt;
+	}
+
+	public void setStoredAt(LocalDateTime storedAt) {
+		this.storedAt = storedAt;
+	}
+
+	public String getChalaanNumber() {
+		return chalaanNumber;
+	}
+
+	public void setChalaanNumber(String chalaanNumber) {
+		this.chalaanNumber = chalaanNumber;
+	}
 
 	public String getDescription() {
 		return description;
@@ -462,7 +497,6 @@ public class DispatchedItem {
 	}
 
 	public Integer getQuantity() {
-		// TODO Auto-generated method stub
 		return quantity;
 	}
 
@@ -621,12 +655,36 @@ public class DispatchedItem {
 	public void setDeliveryLocationAccuracy(Double deliveryLocationAccuracy) {
 		this.deliveryLocationAccuracy = deliveryLocationAccuracy;
 	}
-	
+
 	public String getDeliveryRemarks() {
-	    return deliveryRemarks;
+		return deliveryRemarks;
 	}
 
 	public void setDeliveryRemarks(String deliveryRemarks) {
-	    this.deliveryRemarks = deliveryRemarks;
+		this.deliveryRemarks = deliveryRemarks;
+	}
+
+	public PacketItemType getItemType() {
+		return itemType;
+	}
+
+	public void setItemType(PacketItemType itemType) {
+		this.itemType = itemType;
+	}
+
+	public UUID getLinkedPacketItemId() {
+		return linkedPacketItemId;
+	}
+
+	public void setLinkedPacketItemId(UUID linkedPacketItemId) {
+		this.linkedPacketItemId = linkedPacketItemId;
+	}
+
+	public UUID getLinkedMasterItemId() {
+		return linkedMasterItemId;
+	}
+
+	public void setLinkedMasterItemId(UUID linkedMasterItemId) {
+		this.linkedMasterItemId = linkedMasterItemId;
 	}
 }

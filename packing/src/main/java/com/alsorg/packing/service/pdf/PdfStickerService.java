@@ -50,68 +50,77 @@ public class PdfStickerService {
                     page,
                     AppendMode.OVERWRITE,
                     true,
-                    true
-            )) {
+                    true)) {
+
+                boolean hardwareSticker = data.isHardwareSticker();
+
+                String rawDescription = data.getDescription() == null
+                        ? "-"
+                        : data.getDescription();
+
+                String description = hardwareSticker
+                        ? rawDescription
+                        : firstNonBlank(
+                                reflectValue(
+                                        data,
+                                        "getPackingContents",
+                                        "getContents"),
+                                safe(data.getDescription()),
+                                "-");
 
                 String stickerNo = safe(data.getStickerNumber());
                 String pdNo = safe(data.getPdNo());
                 String drawingNo = safe(data.getDrawingNo());
 
                 String packetNo = firstNonBlank(
-                        reflectValue(data, "getPacketNo", "getPacketNumber", "getPacket"),
+                        data.getPacketNo(),
+                        reflectValue(
+                                data,
+                                "getPacketNumber",
+                                "getPacket"),
                         extractPacketNo(safe(data.getItemName())),
                         extractPacketNo(safe(data.getDescription())),
-                        "-"
-                );
+                        "-");
+
                 packetNo = cleanPacket(packetNo);
 
                 String floor = compactFloor(firstNonBlank(
                         safe(data.getFloor()),
-                        "-"
-                ));
+                        "-"));
 
                 String itemName = cleanItemName(safe(data.getItemName()));
 
                 String packingDate = firstNonBlank(
                         normalizeDate(reflectValue(data, "getPackingDate", "getPackedDate", "getCreatedAt")),
-                        todayIndia()
-                );
+                        todayIndia());
 
                 String clientName = safe(data.getClientName());
                 String clientAddress = safe(data.getClientAddress());
 
-                String description = firstNonBlank(
-                        reflectValue(data, "getPackingContents", "getContents"),
-                        safe(data.getDescription()),
-                        "-"
-                );
-
                 String remarks = firstNonBlank(
                         safe(data.getRemarks()),
                         reflectValue(data, "getRemark", "getSpecialInstructions", "getPackingRemarks"),
-                        "-"
-                );
-
-                boolean hasRemarks = remarks != null
-                        && !remarks.isBlank()
-                        && !remarks.equals("-");
+                        "-");
 
                 String dimensions = cleanDimensionValue(safe(data.getDimensions()));
 
                 String volume = firstNonBlank(
                         reflectValue(data, "getVolume", "getVolumeCbm", "getCbm"),
                         extractVolumeFromText(safe(data.getDimensions())),
-                        "-"
-                );
+                        "-");
                 volume = cleanVolume(volume);
 
                 String weight = cleanWeight(safe(data.getWeight()));
 
                 String codeSku = firstNonBlank(
-                        reflectValue(data, "getSku", "getCode", "getItemCode", "getPacketSku"),
+                        data.getSku(),
+                        reflectValue(
+                                data,
+                                "getCode",
+                                "getItemCode",
+                                "getPacketSku"),
                         buildWorkCode(pdNo, drawingNo, packetNo),
-                        "-"
-                );
+                        "-");
 
                 /* ================= BACKGROUND ================= */
                 cs.setNonStrokingColor(WHITE);
@@ -141,8 +150,7 @@ public class PdfStickerService {
                             headerX + 122,
                             headerY + 13,
                             String.valueOf(data.getPrintIteration()),
-                            WHITE
-                    );
+                            WHITE);
                 }
 
                 String topBadge = "PACKET " + packetNo + " | FLOOR " + floor;
@@ -158,8 +166,7 @@ public class PdfStickerService {
                         150,
                         24,
                         topBadge,
-                        BLACK
-                );
+                        BLACK);
 
                 /* ================= BODY GRID ================= */
                 float leftX = 18;
@@ -220,95 +227,236 @@ public class PdfStickerService {
                         leftW,
                         49,
                         clientName,
-                        clientAddress
-                );
+                        clientAddress);
 
                 /*
                  * Remarks integration:
                  * If remarks are not available, old layout remains unchanged.
                  * If remarks exist, only lower rows are compacted to insert REMARKS.
                  */
-                float snoY = hasRemarks ? 105 : 100;
-                float snoH = hasRemarks ? 40 : 45;
+                if (hardwareSticker) {
 
-                float snoLabelY = hasRemarks ? 132 : 132;
-                float snoValueY = hasRemarks ? 116 : 114;
-                float descriptionLabelY = hasRemarks ? 132 : 132;
-                float descriptionValueY = hasRemarks ? 119 : 119;
-                float dividerTopY = hasRemarks ? 140 : 140;
-                float dividerBottomY = hasRemarks ? 110 : 105;
+                    drawHardwareTrackingDescription(
+                            cs,
+                            bold,
+                            regular,
+                            stickerNo,
+                            rawDescription);
 
-                float bottomInfoY = hasRemarks ? 48 : 58;
-                float bottomInfoH = hasRemarks ? 25 : 34;
+                    /*
+                     * Signature remains exactly as the normal sticker.
+                     */
+                    drawRoundRect(
+                            cs,
+                            18,
+                            13,
+                            563,
+                            30,
+                            6,
+                            WHITE,
+                            BLACK,
+                            1.1f);
 
-                float signatureY = hasRemarks ? 13 : 17;
-                float signatureH = hasRemarks ? 30 : 33;
-                float signatureLabelY = hasRemarks ? 33 : 36;
-                float signatureLineY = hasRemarks ? 21.5f : 24.5f;
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            42,
+                            33,
+                            21.5f,
+                            135,
+                            "Prepared By");
 
-                /* ================= SNO + DESCRIPTION ================= */
-                drawRoundRect(cs, 18, snoY, 563, snoH, 6, WHITE, BLACK, 1.1f);
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            232,
+                            33,
+                            21.5f,
+                            135,
+                            "Checked By");
 
-                float serialX = 28;
-                float dividerX = 176;
-                float descriptionX = 190;
-                float descriptionMaxWidth = 378;
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            423,
+                            33,
+                            21.5f,
+                            135,
+                            "Delivered By");
 
-                drawTextWithFont(cs, bold, 7.7f, serialX, snoLabelY, "SNO / TRACKING ID", BLACK);
+                } else {
 
-                drawFitText(
-                        cs,
-                        bold,
-                        8.9f,
-                        6.4f,
-                        serialX,
-                        snoValueY,
-                        dividerX - serialX - 12,
-                        stickerNo,
-                        BLACK
-                );
+                    boolean hasRemarks = remarks != null
+                            && !remarks.isBlank()
+                            && !remarks.equals("-");
 
-                drawLine(cs, dividerX, dividerBottomY, dividerX, dividerTopY, BLACK, 0.8f);
+                    float snoY = hasRemarks ? 105 : 100;
+                    float snoH = hasRemarks ? 40 : 45;
 
-                drawTextWithFont(cs, bold, 8.2f, descriptionX, descriptionLabelY, "DESCRIPTION", BLACK);
+                    float snoLabelY = 132;
+                    float snoValueY = hasRemarks ? 116 : 114;
+                    float descriptionLabelY = 132;
+                    float descriptionValueY = 119;
+                    float dividerTopY = 140;
+                    float dividerBottomY = hasRemarks ? 110 : 105;
 
-                drawWrappedFitText(
-                        cs,
-                        bold,
-                        8.7f,
-                        5.7f,
-                        descriptionX,
-                        descriptionValueY,
-                        descriptionMaxWidth,
-                        hasRemarks ? 25 : 30,
-                        description,
-                        BLACK
-                );
+                    float bottomInfoY = hasRemarks ? 48 : 58;
 
-                /* ================= REMARKS ================= */
-                if (hasRemarks) {
-                    drawRemarksBox(
+                    float bottomInfoH = hasRemarks ? 25 : 34;
+
+                    float signatureY = hasRemarks ? 13 : 17;
+
+                    float signatureH = hasRemarks ? 30 : 33;
+
+                    float signatureLabelY = hasRemarks ? 33 : 36;
+
+                    float signatureLineY = hasRemarks ? 21.5f : 24.5f;
+
+                    drawRoundRect(
+                            cs,
+                            18,
+                            snoY,
+                            563,
+                            snoH,
+                            6,
+                            WHITE,
+                            BLACK,
+                            1.1f);
+
+                    float serialX = 28;
+                    float dividerX = 176;
+                    float descriptionX = 190;
+                    float descriptionMaxWidth = 378;
+
+                    drawTextWithFont(
+                            cs,
+                            bold,
+                            7.7f,
+                            serialX,
+                            snoLabelY,
+                            "SNO / TRACKING ID",
+                            BLACK);
+
+                    drawFitText(
+                            cs,
+                            bold,
+                            8.9f,
+                            6.4f,
+                            serialX,
+                            snoValueY,
+                            dividerX - serialX - 12,
+                            stickerNo,
+                            BLACK);
+
+                    drawLine(
+                            cs,
+                            dividerX,
+                            dividerBottomY,
+                            dividerX,
+                            dividerTopY,
+                            BLACK,
+                            0.8f);
+
+                    drawTextWithFont(
+                            cs,
+                            bold,
+                            8.2f,
+                            descriptionX,
+                            descriptionLabelY,
+                            "DESCRIPTION",
+                            BLACK);
+
+                    drawWrappedFitText(
+                            cs,
+                            bold,
+                            8.7f,
+                            5.7f,
+                            descriptionX,
+                            descriptionValueY,
+                            descriptionMaxWidth,
+                            hasRemarks ? 25 : 30,
+                            description,
+                            BLACK);
+
+                    if (hasRemarks) {
+                        drawRemarksBox(
+                                cs,
+                                bold,
+                                18,
+                                78,
+                                563,
+                                24,
+                                remarks);
+                    }
+
+                    drawBottomInfoCard(
                             cs,
                             bold,
                             18,
-                            78,
+                            bottomInfoY,
+                            250,
+                            bottomInfoH,
+                            "DIMENSION",
+                            dimensions);
+
+                    drawBottomInfoCard(
+                            cs,
+                            bold,
+                            278,
+                            bottomInfoY,
+                            100,
+                            bottomInfoH,
+                            "VOLUME",
+                            volume);
+
+                    drawBottomInfoCard(
+                            cs,
+                            bold,
+                            388,
+                            bottomInfoY,
+                            193,
+                            bottomInfoH,
+                            "WEIGHT",
+                            weight);
+
+                    drawRoundRect(
+                            cs,
+                            18,
+                            signatureY,
                             563,
-                            24,
-                            remarks
-                    );
+                            signatureH,
+                            6,
+                            WHITE,
+                            BLACK,
+                            1.1f);
+
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            42,
+                            signatureLabelY,
+                            signatureLineY,
+                            135,
+                            "Prepared By");
+
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            232,
+                            signatureLabelY,
+                            signatureLineY,
+                            135,
+                            "Checked By");
+
+                    drawSignatureBlock(
+                            cs,
+                            bold,
+                            423,
+                            signatureLabelY,
+                            signatureLineY,
+                            135,
+                            "Delivered By");
                 }
-
-                /* ================= DIMENSION / VOLUME / WEIGHT ================= */
-                drawBottomInfoCard(cs, bold, 18, bottomInfoY, 250, bottomInfoH, "DIMENSION", dimensions);
-                drawBottomInfoCard(cs, bold, 278, bottomInfoY, 100, bottomInfoH, "VOLUME", volume);
-                drawBottomInfoCard(cs, bold, 388, bottomInfoY, 193, bottomInfoH, "WEIGHT", weight);
-
-                /* ================= SIGNATURE SECTION ================= */
-                drawRoundRect(cs, 18, signatureY, 563, signatureH, 6, WHITE, BLACK, 1.1f);
-
-                drawSignatureBlock(cs, bold, 42, signatureLabelY, signatureLineY, 135, "Prepared By");
-                drawSignatureBlock(cs, bold, 232, signatureLabelY, signatureLineY, 135, "Checked By");
-                drawSignatureBlock(cs, bold, 423, signatureLabelY, signatureLineY, 135, "Delivered By");
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -328,8 +476,7 @@ public class PdfStickerService {
             float x,
             float y,
             float maxWidth,
-            String itemName
-    ) throws IOException {
+            String itemName) throws IOException {
 
         itemName = cleanPdfText(itemName);
 
@@ -360,8 +507,214 @@ public class PdfStickerService {
                 maxWidth,
                 21,
                 itemName,
-                BLACK
-        );
+                BLACK);
+    }
+
+    private void drawHardwareTrackingDescription(
+            PDPageContentStream cs,
+            PDFont bold,
+            PDFont regular,
+            String stickerNumber,
+            String rawDescription) throws IOException {
+
+        /*
+         * Covers all space previously used by:
+         * - SNO / Description
+         * - Remarks
+         * - Dimension
+         * - Volume
+         * - Weight
+         */
+        float boxX = 18;
+        float boxY = 48;
+        float boxW = 563;
+        float boxH = 97;
+
+        drawRoundRect(
+                cs,
+                boxX,
+                boxY,
+                boxW,
+                boxH,
+                6,
+                WHITE,
+                BLACK,
+                1.1f);
+
+        float dividerX = 163;
+
+        drawLine(
+                cs,
+                dividerX,
+                boxY + 5,
+                dividerX,
+                boxY + boxH - 5,
+                BLACK,
+                0.8f);
+
+        drawTextWithFont(
+                cs,
+                bold,
+                7.7f,
+                boxX + 10,
+                boxY + boxH - 15,
+                "SNO / TRACKING ID",
+                BLACK);
+
+        drawWrappedFitText(
+                cs,
+                bold,
+                10.2f,
+                6.3f,
+                boxX + 10,
+                boxY + boxH - 35,
+                dividerX - boxX - 20,
+                boxH - 42,
+                stickerNumber,
+                BLACK);
+
+        float descriptionX = dividerX + 12;
+        float descriptionWidth = boxX + boxW - descriptionX - 10;
+
+        drawTextWithFont(
+                cs,
+                bold,
+                8.3f,
+                descriptionX,
+                boxY + boxH - 15,
+                "DESCRIPTION",
+                BLACK);
+
+        drawHardwareItemLines(
+                cs,
+                regular,
+                descriptionX,
+                boxY + boxH - 31,
+                descriptionWidth,
+                boxH - 38,
+                rawDescription);
+    }
+
+    private void drawHardwareItemLines(
+            PDPageContentStream cs,
+            PDFont font,
+            float x,
+            float startY,
+            float maxWidth,
+            float maxHeight,
+            String description) throws IOException {
+
+        String raw = description == null || description.isBlank()
+                ? "-"
+                : description.trim();
+
+        String[] sourceLines = raw.split("\\R");
+
+        float fontSize = 8.2f;
+        float minimumFontSize = 5.2f;
+
+        while (fontSize >= minimumFontSize) {
+            float leading = fontSize + 1.6f;
+
+            List<String> renderedLines = wrapHardwareSourceLines(
+                    font,
+                    fontSize,
+                    sourceLines,
+                    maxWidth);
+
+            float requiredHeight = renderedLines.size() * leading;
+
+            if (requiredHeight <= maxHeight) {
+                for (int index = 0; index < renderedLines.size(); index++) {
+
+                    drawTextWithFont(
+                            cs,
+                            font,
+                            fontSize,
+                            x,
+                            startY - (index * leading),
+                            renderedLines.get(index),
+                            BLACK);
+                }
+
+                return;
+            }
+
+            fontSize -= 0.4f;
+        }
+
+        float leading = minimumFontSize + 1.6f;
+
+        List<String> renderedLines = wrapHardwareSourceLines(
+                font,
+                minimumFontSize,
+                sourceLines,
+                maxWidth);
+
+        int maximumLines = Math.max(
+                1,
+                (int) Math.floor(maxHeight / leading));
+
+        for (int index = 0; index < Math.min(
+                maximumLines,
+                renderedLines.size()); index++) {
+
+            String line = renderedLines.get(index);
+
+            if (index == maximumLines - 1
+                    && renderedLines.size() > maximumLines) {
+                line = truncateToWidth(
+                        font,
+                        minimumFontSize,
+                        line + "...",
+                        maxWidth);
+            }
+
+            drawTextWithFont(
+                    cs,
+                    font,
+                    minimumFontSize,
+                    x,
+                    startY - (index * leading),
+                    line,
+                    BLACK);
+        }
+    }
+
+    private List<String> wrapHardwareSourceLines(
+            PDFont font,
+            float fontSize,
+            String[] sourceLines,
+            float maxWidth) throws IOException {
+
+        List<String> output = new ArrayList<>();
+
+        if (sourceLines == null
+                || sourceLines.length == 0) {
+            output.add("-");
+            return output;
+        }
+
+        for (String sourceLine : sourceLines) {
+            String cleaned = cleanPdfText(sourceLine);
+
+            if (cleaned.isBlank()) {
+                continue;
+            }
+
+            output.addAll(
+                    wrapLines(
+                            font,
+                            fontSize,
+                            cleaned,
+                            maxWidth));
+        }
+
+        if (output.isEmpty()) {
+            output.add("-");
+        }
+
+        return output;
     }
 
     private void drawRemarksBox(
@@ -371,8 +724,7 @@ public class PdfStickerService {
             float y,
             float w,
             float h,
-            String remarks
-    ) throws IOException {
+            String remarks) throws IOException {
 
         drawRoundRect(cs, x, y, w, h, 6, WHITE, BLACK, 1.1f);
 
@@ -388,8 +740,7 @@ public class PdfStickerService {
                 w - 16,
                 10,
                 remarks,
-                BLACK
-        );
+                BLACK);
     }
 
     private void drawClientSiteBox(
@@ -401,8 +752,7 @@ public class PdfStickerService {
             float w,
             float h,
             String clientName,
-            String clientAddress
-    ) throws IOException {
+            String clientAddress) throws IOException {
 
         drawRoundRect(cs, x, y, w, h, 6, WHITE, BLACK, 1.1f);
 
@@ -420,8 +770,7 @@ public class PdfStickerService {
             float w,
             float h,
             String label,
-            String value
-    ) throws IOException {
+            String value) throws IOException {
 
         drawRoundRect(cs, x, y, w, h, 5, WHITE, BLACK, 1.1f);
         drawLine(cs, x + 2, y + h, x + w - 2, y + h, BLACK, 1.3f);
@@ -438,8 +787,7 @@ public class PdfStickerService {
             float w,
             float h,
             String label,
-            String value
-    ) throws IOException {
+            String value) throws IOException {
 
         drawRoundRect(cs, x, y, w, h, 5, WHITE, BLACK, 1.1f);
         drawLine(cs, x + 2, y + h, x + w - 2, y + h, BLACK, 1.3f);
@@ -460,8 +808,7 @@ public class PdfStickerService {
             float labelY,
             float lineY,
             float w,
-            String label
-    ) throws IOException {
+            String label) throws IOException {
 
         float labelWidth = font.getStringWidth(label) / 1000 * 8.4f;
         float labelX = x + ((w - labelWidth) / 2);
@@ -477,8 +824,7 @@ public class PdfStickerService {
             float x,
             float y,
             String text,
-            Color color
-    ) throws IOException {
+            Color color) throws IOException {
 
         cs.beginText();
         cs.setNonStrokingColor(color);
@@ -497,8 +843,7 @@ public class PdfStickerService {
             float w,
             float h,
             String text,
-            Color color
-    ) throws IOException {
+            Color color) throws IOException {
 
         text = cleanPdfText(text);
         float textWidth = font.getStringWidth(text) / 1000 * fontSize;
@@ -518,8 +863,7 @@ public class PdfStickerService {
             float w,
             float h,
             String text,
-            Color color
-    ) throws IOException {
+            Color color) throws IOException {
 
         text = cleanPdfText(text);
         float fontSize = startFont;
@@ -544,8 +888,7 @@ public class PdfStickerService {
                 w,
                 h,
                 truncateToWidth(font, minFont, text, w - 12),
-                color
-        );
+                color);
     }
 
     private void drawFitText(
@@ -557,8 +900,7 @@ public class PdfStickerService {
             float y,
             float maxWidth,
             String text,
-            Color color
-    ) throws IOException {
+            Color color) throws IOException {
 
         text = cleanPdfText(text);
         float fontSize = startFont;
@@ -587,8 +929,7 @@ public class PdfStickerService {
             float maxWidth,
             float maxHeight,
             String text,
-            Color color
-    ) throws IOException {
+            Color color) throws IOException {
 
         text = cleanPdfText(text);
         float fontSize = startFont;
@@ -628,8 +969,7 @@ public class PdfStickerService {
             PDFont font,
             float fontSize,
             String text,
-            float maxWidth
-    ) throws IOException {
+            float maxWidth) throws IOException {
 
         List<String> lines = new ArrayList<>();
 
@@ -642,7 +982,8 @@ public class PdfStickerService {
         StringBuilder line = new StringBuilder();
 
         for (String word : words) {
-            if (word == null || word.isBlank()) continue;
+            if (word == null || word.isBlank())
+                continue;
 
             if (textWidth(font, fontSize, word) > maxWidth) {
                 if (line.length() > 0) {
@@ -677,8 +1018,7 @@ public class PdfStickerService {
             PDFont font,
             float fontSize,
             String word,
-            float maxWidth
-    ) throws IOException {
+            float maxWidth) throws IOException {
 
         List<String> result = new ArrayList<>();
         StringBuilder part = new StringBuilder();
@@ -711,8 +1051,7 @@ public class PdfStickerService {
             PDFont font,
             float fontSize,
             String text,
-            float maxWidth
-    ) throws IOException {
+            float maxWidth) throws IOException {
 
         String suffix = "...";
         String result = cleanPdfText(text);
@@ -738,8 +1077,7 @@ public class PdfStickerService {
             float x2,
             float y2,
             Color color,
-            float width
-    ) throws IOException {
+            float width) throws IOException {
 
         cs.setStrokingColor(color);
         cs.setLineWidth(width);
@@ -757,8 +1095,7 @@ public class PdfStickerService {
             float r,
             Color fill,
             Color stroke,
-            float lineWidth
-    ) throws IOException {
+            float lineWidth) throws IOException {
 
         final float k = 0.55228475f;
 
@@ -794,20 +1131,24 @@ public class PdfStickerService {
     /* ================= DATA HELPERS ================= */
 
     private String safe(Object v) {
-        if (v == null) return "-";
+        if (v == null)
+            return "-";
 
         String s = v.toString().trim();
 
-        if (s.isBlank()) return "-";
+        if (s.isBlank())
+            return "-";
 
         return cleanPdfText(s);
     }
 
     private String firstNonBlank(String... values) {
-        if (values == null) return "-";
+        if (values == null)
+            return "-";
 
         for (String value : values) {
-            if (value == null) continue;
+            if (value == null)
+                continue;
 
             String cleaned = value.trim();
 
@@ -820,7 +1161,8 @@ public class PdfStickerService {
     }
 
     private String reflectValue(Object target, String... methodNames) {
-        if (target == null || methodNames == null) return "";
+        if (target == null || methodNames == null)
+            return "";
 
         for (String methodName : methodNames) {
             try {
@@ -848,7 +1190,8 @@ public class PdfStickerService {
     }
 
     private String normalizeDate(String value) {
-        if (value == null || value.isBlank() || value.equals("-")) return "";
+        if (value == null || value.isBlank() || value.equals("-"))
+            return "";
 
         String cleaned = value.trim();
 
@@ -864,7 +1207,8 @@ public class PdfStickerService {
     }
 
     private String compactFloor(String floor) {
-        if (floor == null || floor.equals("-")) return "-";
+        if (floor == null || floor.equals("-"))
+            return "-";
 
         String cleaned = floor.trim();
 
@@ -876,7 +1220,8 @@ public class PdfStickerService {
     }
 
     private String extractPacketNo(String text) {
-        if (text == null || text.equals("-")) return "";
+        if (text == null || text.equals("-"))
+            return "";
 
         Pattern pattern = Pattern.compile("(?i)Pkt[-\\s]*([0-9]+)");
         Matcher matcher = pattern.matcher(text);
@@ -889,7 +1234,8 @@ public class PdfStickerService {
     }
 
     private String cleanPacket(String packetNo) {
-        if (packetNo == null || packetNo.equals("-")) return "-";
+        if (packetNo == null || packetNo.equals("-"))
+            return "-";
 
         String cleaned = packetNo
                 .replaceAll("(?i)^pkt[-\\s]*", "")
@@ -907,7 +1253,8 @@ public class PdfStickerService {
     }
 
     private String cleanItemName(String itemName) {
-        if (itemName == null || itemName.equals("-")) return "-";
+        if (itemName == null || itemName.equals("-"))
+            return "-";
 
         String cleaned = itemName.trim();
 
@@ -917,7 +1264,8 @@ public class PdfStickerService {
     }
 
     private String cleanDimensionValue(String dimensions) {
-        if (dimensions == null || dimensions.equals("-")) return "-";
+        if (dimensions == null || dimensions.equals("-"))
+            return "-";
 
         String cleaned = dimensions
                 .replaceAll("\\([^)]*m3[^)]*\\)", "")
@@ -929,12 +1277,12 @@ public class PdfStickerService {
     }
 
     private String extractVolumeFromText(String text) {
-        if (text == null || text.equals("-")) return "";
+        if (text == null || text.equals("-"))
+            return "";
 
         Pattern pattern = Pattern.compile(
                 "\\(?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*m[³3]\\s*\\)?",
-                Pattern.CASE_INSENSITIVE
-        );
+                Pattern.CASE_INSENSITIVE);
 
         Matcher matcher = pattern.matcher(text);
 
@@ -946,14 +1294,16 @@ public class PdfStickerService {
     }
 
     private String cleanVolume(String volume) {
-        if (volume == null || volume.equals("-")) return "-";
+        if (volume == null || volume.equals("-"))
+            return "-";
 
         String cleaned = volume
                 .replace("m³", "")
                 .replace("m3", "")
                 .trim();
 
-        if (cleaned.isBlank()) return "-";
+        if (cleaned.isBlank())
+            return "-";
 
         return cleaned + " m3";
     }
@@ -973,7 +1323,8 @@ public class PdfStickerService {
     }
 
     private String cleanPdfText(String text) {
-        if (text == null) return "-";
+        if (text == null)
+            return "-";
 
         return text
                 .replace("\n", " ")

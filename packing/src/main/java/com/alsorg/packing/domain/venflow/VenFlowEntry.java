@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.venflow;
 
+import jakarta.persistence.Version;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -8,14 +9,21 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "ven_flow_entries", indexes = {
-        @Index(name = "idx_venflow_pd_no", columnList = "pdNo"),
-        @Index(name = "idx_venflow_client_name", columnList = "clientName"),
+        @Index(name = "idx_venflow_pd_no", columnList = "pd_no"),
+
+        @Index(name = "idx_venflow_client_name", columnList = "client_name"),
+
         @Index(name = "idx_venflow_stage", columnList = "stage"),
-        @Index(name = "idx_venflow_store_status", columnList = "storeStatus"),
+
+        @Index(name = "idx_venflow_store_status", columnList = "store_status"),
+
         @Index(name = "idx_venflow_plant_code", columnList = "plant_code"),
+
         @Index(name = "idx_venflow_po_status", columnList = "po_status"),
+
         @Index(name = "idx_venflow_production_status", columnList = "production_status"),
-        @Index(name = "idx_venflow_order_date", columnList = "orderDate")
+
+        @Index(name = "idx_venflow_order_date", columnList = "order_date")
 })
 public class VenFlowEntry {
 
@@ -23,24 +31,30 @@ public class VenFlowEntry {
     @GeneratedValue(strategy = GenerationType.UUID)
     public UUID id;
 
-    public LocalDate orderDate;
-
-    @Column(nullable = false)
-    public String pdNo;
-
-    @Column(nullable = false)
-    public String clientName;
-
     @Column(length = 1000)
     public String productDescription;
 
     public String veneerType;
 
-    @Column(name = "veneer_size")
-    public String size;
+    @Column(name = "order_date")
+    public LocalDate orderDate;
+
+    @Column(name = "pd_no", nullable = false)
+    public String pdNo;
+
+    @Column(name = "client_name", nullable = false)
+    public String clientName;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "store_status")
     public VenFlowStoreStatus storeStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stage", nullable = false)
+    public VenFlowStage stage = VenFlowStage.INDENT_CREATED;
+
+    @Column(name = "veneer_size")
+    public String size;
 
     public String requisitionSlipNo;
 
@@ -154,10 +168,6 @@ public class VenFlowEntry {
     @Column(name = "job_done_at")
     public LocalDateTime jobDoneAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    public VenFlowStage stage = VenFlowStage.INDENT_CREATED;
-
     @Column(name = "current_department")
     public String currentDepartment;
 
@@ -213,6 +223,9 @@ public class VenFlowEntry {
 
     @Column(name = "wastage_qty", precision = 12, scale = 3)
     public BigDecimal wastageQty;
+
+    @Column(name = "processing_balance_qty", precision = 12, scale = 3)
+    public BigDecimal processingBalanceQty = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "stock_decision")
@@ -302,7 +315,7 @@ public class VenFlowEntry {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "issue_status")
-    public VenFlowIssueStatus issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+    public VenFlowIssueStatus issueStatus = VenFlowIssueStatus.NOT_READY;
 
     @Column(name = "reserved_by")
     public String reservedBy;
@@ -341,6 +354,9 @@ public class VenFlowEntry {
     @Column(name = "output_image_url", length = 2000)
     public String outputImageUrl;
 
+    @Column(name = "process_output_attachment_id")
+    public UUID processOutputAttachmentId;
+
     @Column(name = "supervisor_name")
     public String supervisorName;
 
@@ -355,6 +371,28 @@ public class VenFlowEntry {
 
     @Column(name = "next_stage_ready_at")
     public LocalDateTime nextStageReadyAt;
+
+    @Column(name = "to_be_ordered_qty", precision = 12, scale = 3)
+    public BigDecimal toBeOrderedQty = BigDecimal.ZERO;
+
+    @Column(name = "purchase_requested_qty", precision = 12, scale = 3)
+    public BigDecimal purchaseRequestedQty = BigDecimal.ZERO;
+
+    @Column(name = "qc_accepted_qty", precision = 12, scale = 3)
+    public BigDecimal qcAcceptedQty = BigDecimal.ZERO;
+
+    @Column(name = "qc_rejected_qty", precision = 12, scale = 3)
+    public BigDecimal qcRejectedQty = BigDecimal.ZERO;
+
+    @Column(name = "qc_hold_qty", precision = 12, scale = 3)
+    public BigDecimal qcHoldQty = BigDecimal.ZERO;
+
+    @Column(name = "issue_ready_qty", precision = 12, scale = 3)
+    public BigDecimal issueReadyQty = BigDecimal.ZERO;
+
+    @Version
+    @Column(name = "row_version", nullable = false)
+    public Long rowVersion;
 
     @PrePersist
     public void prePersist() {
@@ -403,7 +441,7 @@ public class VenFlowEntry {
         }
 
         if (issueStatus == null) {
-            issueStatus = VenFlowIssueStatus.NOT_RESERVED;
+            issueStatus = VenFlowIssueStatus.NOT_READY;
         }
 
         if (processingStatus == null) {
@@ -412,6 +450,37 @@ public class VenFlowEntry {
 
         if (productionStatus == null) {
             productionStatus = VenFlowProductionStatus.NOT_STARTED;
+        }
+
+        if (toBeOrderedQty == null) {
+            toBeOrderedQty = BigDecimal.ZERO;
+        }
+
+        if (purchaseRequestedQty == null) {
+            purchaseRequestedQty = BigDecimal.ZERO;
+        }
+
+        if (qcAcceptedQty == null) {
+            qcAcceptedQty = BigDecimal.ZERO;
+        }
+
+        if (qcRejectedQty == null) {
+            qcRejectedQty = BigDecimal.ZERO;
+        }
+
+        if (qcHoldQty == null) {
+            qcHoldQty = BigDecimal.ZERO;
+        }
+
+        if (issueReadyQty == null) {
+            issueReadyQty = BigDecimal.ZERO;
+        }
+
+        if (rowVersion == null) {
+            rowVersion = 0L;
+        }
+        if (processingBalanceQty == null) {
+            processingBalanceQty = BigDecimal.ZERO;
         }
     }
 

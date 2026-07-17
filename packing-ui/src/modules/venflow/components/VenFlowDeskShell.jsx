@@ -16,15 +16,17 @@ import {
 	Typography,
 } from "@mui/material";
 
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+
 import SupervisorAccountOutlinedIcon
 	from "@mui/icons-material/SupervisorAccountOutlined";
 
 import {
 	PRODUCTION_VIEW_OPTIONS,
+	QC_VIEW_OPTIONS,
 	STORE_VIEW_OPTIONS,
 	SUPERVISOR_VIEW_OPTIONS,
 	VF_STAGE,
-	getStageLabel,
 	isVenFlowClosed,
 } from "../venflowWorkflow";
 
@@ -59,9 +61,19 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 const PO_STATUS_OPTIONS = [
 	["", "All"],
 	["NOT_RAISED", "Not Raised"],
-	["RAISED", "Raised"],
-	["APPROVED", "Approved"],
-	["REJECTED", "Rejected"],
+	[
+		"PENDING_DIRECTOR_APPROVAL",
+		"Pending Director Approval",
+	],
+	[
+		"DIRECTOR_APPROVED",
+		"Director Approved",
+	],
+	[
+		"DIRECTOR_REJECTED",
+		"Returned by Director",
+	],
+	["ORDER_PLACED", "Order Placed"],
 ];
 
 const STORE_STATUS_OPTIONS = [
@@ -77,7 +89,7 @@ const DESK_META = {
 	store: {
 		title: "Store Desk",
 		subtitle:
-			"Review veneer availability, reserve material, send requirements to Purchase, receive material and inform Production.",
+			"Submit the Store stock decision, send available quantity to QC, create the shortage Purchase allocation, receive purchased material and issue QC-approved quantity.",
 		activeTab: "store",
 		defaultStage: "SENT_TO_STORE",
 		searchLabel: "Search PD / Client / Veneer / Request No.",
@@ -85,6 +97,19 @@ const DESK_META = {
 		viewOptions: STORE_VIEW_OPTIONS,
 		primaryColor: "#3b82f6",
 		icon: <StorefrontOutlinedIcon />,
+	},
+	qc: {
+		title: "QC Desk",
+		subtitle:
+			"Inspect Store and Purchase material allocations, compare approved samples, record evidence URLs and classify accepted, rejected or hold quantity.",
+		activeTab: "qc",
+		defaultStage: VF_STAGE.QC_PENDING,
+		searchLabel:
+			"Search PD / Client / Material / Veneer",
+		viewLabel: "QC View",
+		viewOptions: QC_VIEW_OPTIONS,
+		primaryColor: "#f59e0b",
+		icon: <FactCheckOutlinedIcon />,
 	},
 	purchase: {
 		title: "Purchase Desk",
@@ -160,9 +185,11 @@ const getPriority = (row) => {
 
 	if (
 		[
-			"PO_RAISED",
-			"MATERIAL_ISSUED_TO_PRODUCTION",
-			"PROCESSING_STARTED",
+			VF_STAGE.PO_PENDING_DIRECTOR_APPROVAL,
+			VF_STAGE.PO_REJECTED_BY_DIRECTOR,
+			VF_STAGE.MATERIAL_REJECTED_HOLD_RETURN,
+			VF_STAGE.MATERIAL_ISSUED_TO_PRODUCTION,
+			VF_STAGE.PROCESSING_STARTED,
 		].includes(row?.stage)
 	) {
 		return "High";
@@ -313,6 +340,25 @@ const buildDeskKpis = (desk, dashboard, rows, total) => {
 	];
 };
 
+const getPoStatusColor = (status) => {
+	switch (status) {
+		case "PENDING_DIRECTOR_APPROVAL":
+			return "#f59e0b";
+
+		case "DIRECTOR_APPROVED":
+			return "#22c55e";
+
+		case "DIRECTOR_REJECTED":
+			return "#ef4444";
+
+		case "ORDER_PLACED":
+			return "#06b6d4";
+
+		default:
+			return "#64748b";
+	}
+};
+
 export default function VenFlowDeskShell({ desk = "store" }) {
 	const navigate = useNavigate();
 
@@ -399,21 +445,9 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 			let res;
 
 			if (desk === "purchase") {
-				res = await venflowApi.getPurchaseDesk(
-					params
-				);
-			} else if (desk === "supervisor") {
-				res = await venflowApi.getSupervisorDesk({
-					page: targetPage,
-					size,
-					search:
-						activeFilters.search ||
-						undefined,
-				});
+				res = await venflowApi.getPurchaseDesk(params);
 			} else {
-				res = await venflowApi.getEntries(
-					params
-				);
+				res = await venflowApi.getEntries(params);
 			}
 
 			const data = res.data || {};
@@ -487,6 +521,11 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 					active={desk === "store"}
 					label="Store Desk"
 					onClick={() => navigate("/venflow/store")}
+				/>
+				<DeskTab
+					active={desk === "qc"}
+					label="QC Desk"
+					onClick={() => navigate("/venflow/qc")}
 				/>
 				<DeskTab
 					active={desk === "purchase"}
@@ -684,14 +723,14 @@ export default function VenFlowDeskShell({ desk = "store" }) {
 											</Box>
 
 											<Chip
-												label={row.poStatus || "NOT_RAISED"}
+												label={
+													String(
+														row.poStatus || "NOT_RAISED"
+													).replaceAll("_", " ")
+												}
 												size="small"
 												sx={statusChipSx(
-													row.poStatus === "APPROVED"
-														? "#22c55e"
-														: row.poStatus === "RAISED"
-															? "#3b82f6"
-															: "#64748b"
+													getPoStatusColor(row.poStatus)
 												)}
 											/>
 
@@ -909,10 +948,14 @@ function PreviewPanel({
 
 				<Typography sx={nextActionTextSx}>
 					{desk === "store"
-						? "Review stock availability, reserve material or raise purchase request."
+						? "Submit the Store stock decision, receive purchased material, complete GRN or issue QC-approved quantity."
 						: desk === "purchase"
-							? "Update purchase details, raise PO or wait for approval."
-							: "Update production details, start processing or close completed work."}
+							? "Raise the PO with ordered quantity and document URL, correct returned POs or place a Director-approved order."
+							: desk === "qc"
+								? "Inspect pending material allocations and record accepted, rejected or hold quantity with evidence URLs."
+								: desk === "supervisor"
+									? "Review the completed process output and mark the requirement Ready for Next Stage."
+									: "Save processing responsibility, start processing, complete quantities and inform the Supervisor."}
 				</Typography>
 			</Box>
 

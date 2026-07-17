@@ -10,9 +10,11 @@ import {
 	Button,
 	Card,
 	CardContent,
+	Checkbox,
 	Chip,
 	CircularProgress,
 	Divider,
+	FormControlLabel,
 	MenuItem,
 	TextField,
 	Typography,
@@ -64,6 +66,7 @@ import {
 	isVenFlowProcessing,
 	isVenFlowSupervisor,
 	isVenFlowDirector,
+	isVenFlowQc,
 } from "../../../utils/venflowAccess";
 
 import {
@@ -101,21 +104,6 @@ const STOCK_DECISION_OPTIONS = [
 	{
 		value: "HOLD",
 		label: "Hold",
-	},
-];
-
-const QC_OPTIONS = [
-	{
-		value: "OK",
-		label: "QC OK",
-	},
-	{
-		value: "NOT_OK",
-		label: "QC Not OK",
-	},
-	{
-		value: "PENDING",
-		label: "QC Pending",
 	},
 ];
 
@@ -192,6 +180,53 @@ const formatCurrency = (value) => {
 		}
 	)}`;
 };
+
+const parseEvidenceUrls = (value) => {
+	return Array.from(
+		new Set(
+			String(value || "")
+				.split(/[\n,]+/)
+				.map((item) => item.trim())
+				.filter(Boolean)
+		)
+	);
+};
+
+const validateHttpUrl = (
+	value,
+	fieldName
+) => {
+	const cleaned = String(value || "").trim();
+
+	if (!cleaned) {
+		throw new Error(
+			`${fieldName} is required.`
+		);
+	}
+
+	try {
+		const url = new URL(cleaned);
+
+		if (
+			url.protocol !== "http:" &&
+			url.protocol !== "https:"
+		) {
+			throw new Error();
+		}
+
+		return cleaned;
+	} catch {
+		throw new Error(
+			`${fieldName} must be a valid HTTP or HTTPS URL.`
+		);
+	}
+};
+
+const allocationPendingQty = (allocation) =>
+	safeNumber(
+		allocation?.qcPendingQty ??
+		allocation?.pendingQcQty
+	);
 
 const getDirectorDecisionText = (
 	entry
@@ -388,7 +423,6 @@ export default function VenFlowDetailPage() {
 
 	const role = getVenFlowRole(authRole);
 
-	const isAdmin = isVenFlowAdmin(role);
 	const isAdminManager =
 		isVenFlowAdminOrManager(role);
 
@@ -410,19 +444,36 @@ export default function VenFlowDetailPage() {
 	const isDirector =
 		isVenFlowDirector(role);
 
+	const isQc =
+		isVenFlowQc(role);
+
 	const canSeeEngineering = isAdminManager || isEngineering;
 	const canSeeStore = isAdminManager || isStore;
+	const canSeeReceiving =
+		canSeeStore || isQc;
 	const canSeePurchase = isAdminManager || isPurchase;
 	const canSeeProcessing = isAdminManager || isProcessing;
 	const canSeeSupervisor = isAdminManager || isSupervisor;
 	const canSeeDirector = isDirector;
 
 	const canDirectorAction = isDirector;
-	const canEngineeringAction = isAdmin || isEngineering;
-	const canStoreAction = isAdmin || isStore;
-	const canPurchaseAction = isAdmin || isPurchase;
-	const canProcessingAction = isAdmin || isProcessing;
-	const canSupervisorAction = isAdmin || isSupervisor;
+	const canEngineeringAction =
+		isAdminManager || isEngineering;
+
+	const canStoreAction =
+		isAdminManager || isStore;
+
+	const canPurchaseAction =
+		isAdminManager || isPurchase;
+
+	const canQcAction =
+		isAdminManager || isQc;
+
+	const canProcessingAction =
+		isAdminManager || isProcessing;
+
+	const canSupervisorAction =
+		isAdminManager || isSupervisor;
 
 	const [entry, setEntry] = useState(null);
 	const [auditRows, setAuditRows] = useState([]);
@@ -430,6 +481,15 @@ export default function VenFlowDetailPage() {
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
 	const [activeTab, setActiveTab] = useState("overview");
+
+	const [materialSummary, setMaterialSummary] =
+		useState(null);
+
+	const [materialHistory, setMaterialHistory] =
+		useState([]);
+
+	const [qcForms, setQcForms] =
+		useState({});
 
 	const [productForm, setProductForm] = useState({
 		productDescription: "",
@@ -441,27 +501,20 @@ export default function VenFlowDetailPage() {
 		expectedDate: "",
 	});
 
-	const [storeReviewForm, setStoreReviewForm] = useState({
-		stockDecision: "PENDING",
-		availableQty: "",
-		remarks: "",
-	});
-
-	const [reserveForm, setReserveForm] = useState({
-		reservedQty: "",
-		remarks: "",
-	});
-
-	const [purchaseRequestForm, setPurchaseRequestForm] = useState({
-		purchaseRequestNo: "",
-		requisitionDate: "",
-		remarks: "",
-	});
+	const [storeDecisionForm, setStoreDecisionForm] =
+		useState({
+			mode: "REVIEW",
+			availableQty: "",
+			purchaseRequestNo: "",
+			requisitionDate: "",
+			remarks: "",
+		});
 
 	const [poForm, setPoForm] = useState({
 		vendorName: "",
 		poNo: "",
 		poDate: "",
+		orderedQty: "",
 		poAmount: "",
 		poDocumentUrl: "",
 		remarks: "",
@@ -477,12 +530,6 @@ export default function VenFlowDetailPage() {
 		grnNo: "",
 		grnDate: "",
 		remarks: "",
-	});
-
-	const [qcForm, setQcForm] = useState({
-		qcStatus: "OK",
-		qcRemarks: "",
-		rejectionReason: "",
 	});
 
 	const [productionDetailsForm, setProductionDetailsForm] = useState({
@@ -513,14 +560,31 @@ export default function VenFlowDetailPage() {
 	const [processingForm, setProcessingForm] = useState({
 		usedQty: "",
 		wastageQty: "",
-		balanceQty: "",
+		processingBalanceQty: "",
 		outputImageUrl: "",
 		remarks: "",
 	});
 
+	const outputImageUrl =
+		validateHttpUrl(
+			processingForm.outputImageUrl,
+			"Output Image URL"
+		);
+
 	const [remarksForm, setRemarksForm] = useState({
 		remarks: "",
 	});
+
+	const stage = entry?.stage || "";
+
+	const canSubmitStoreDecision =
+		canStoreAction &&
+		[
+			STAGE.SENT_TO_STORE,
+			STAGE.STORE_REVIEWED,
+			STAGE.STOCK_AVAILABLE,
+		].includes(stage) &&
+		(materialSummary?.allocations?.length || 0) === 0;
 
 	const tabItems = useMemo(
 		() => [
@@ -558,7 +622,7 @@ export default function VenFlowDetailPage() {
 				value: "receiving",
 				label: "Receiving & QC",
 				icon: <FactCheckOutlinedIcon />,
-				show: canSeeStore,
+				show: canSeeReceiving,
 			},
 			{
 				value: "issue",
@@ -613,10 +677,81 @@ export default function VenFlowDetailPage() {
 			setLoading(true);
 			setError("");
 
-			const res = await venflowApi.getEntry(id);
-			const row = res.data || {};
+			const [
+				entryResult,
+				auditResult,
+				summaryResult,
+				historyResult,
+			] = await Promise.allSettled([
+				venflowApi.getEntry(id),
+				venflowApi.getAudit(id),
+				venflowApi.getMaterialSummary(id),
+				venflowApi.getMaterialHistory(id),
+			]);
+
+			if (
+				entryResult.status !==
+				"fulfilled"
+			) {
+				throw entryResult.reason;
+			}
+
+			const row =
+				entryResult.value.data || {};
 
 			setEntry(row);
+
+			setAuditRows(
+				auditResult.status === "fulfilled" &&
+					Array.isArray(auditResult.value.data)
+					? auditResult.value.data
+					: []
+			);
+
+			const summary =
+				summaryResult.status === "fulfilled"
+					? summaryResult.value.data || null
+					: null;
+
+			setMaterialSummary(summary);
+
+			setMaterialHistory(
+				historyResult.status === "fulfilled" &&
+					Array.isArray(historyResult.value.data)
+					? historyResult.value.data
+					: []
+			);
+
+			const nextQcForms = {};
+
+			for (
+				const allocation
+				of summary?.allocations || []
+			) {
+				nextQcForms[allocation.id] = {
+					inspectedQty:
+						allocation.qcPendingQty ?? "",
+
+					acceptedQty:
+						allocation.qcPendingQty ?? "",
+
+					rejectedQty: 0,
+					holdQty: 0,
+
+					sampleCompared: true,
+					grainMatch: true,
+					shadeMatch: true,
+					thicknessOk: true,
+					sizeOk: true,
+					surfaceConditionOk: true,
+
+					qcRemarks: "",
+					rejectionReason: "",
+					evidenceUrlsText: "",
+				};
+			}
+
+			setQcForms(nextQcForms);
 
 			setProductForm({
 				productDescription:
@@ -631,13 +766,26 @@ export default function VenFlowDetailPage() {
 				expectedDate: row.expectedDate || "",
 			});
 
-			setStoreReviewForm({
-				stockDecision:
-					row.stockDecision ||
-					row.storeStatus ||
-					"PENDING",
-				availableQty: row.availableQty ?? "",
-				remarks: row.remarks || "",
+			setStoreDecisionForm({
+				mode:
+					row.stockDecision === "HOLD" ||
+						row.storeStatus === "HOLD"
+						? "HOLD"
+						: "REVIEW",
+
+				availableQty:
+					row.availableQty ?? "",
+
+				purchaseRequestNo:
+					row.purchaseRequestNo ||
+					row.requisitionSlipNo ||
+					"",
+
+				requisitionDate:
+					row.requisitionDate || "",
+
+				remarks:
+					row.remarks || "",
 			});
 
 			setVendorOrderForm({
@@ -655,54 +803,42 @@ export default function VenFlowDetailPage() {
 				remarks: "",
 			});
 
-			setReserveForm({
-				reservedQty:
-					row.reservedQty ??
-					row.availableQty ??
-					row.requiredQty ??
-					"",
-				remarks: row.remarks || "",
-			});
-
-			setPurchaseRequestForm({
-				purchaseRequestNo:
-					row.purchaseRequestNo ||
-					row.requisitionSlipNo ||
-					"",
-				requisitionDate:
-					row.requisitionDate ||
-					"",
-				remarks: row.remarks || "",
-			});
-
 			setPoForm({
-				vendorName: row.vendorName || "",
-				poNo: row.poNo || "",
-				poDate: row.poDate || "",
-				poAmount: row.poAmount ?? "",
-				poDocumentUrl: row.poDocumentUrl || "",
-				remarks: row.remarks || "",
+				vendorName:
+					row.vendorName || "",
+
+				poNo:
+					row.poNo || "",
+
+				poDate:
+					row.poDate || "",
+
+				orderedQty:
+					row.orderedQty ??
+					row.toBeOrderedQty ??
+					summary?.toBeOrderedQty ??
+					"",
+
+				poAmount:
+					row.poAmount ?? "",
+
+				poDocumentUrl:
+					row.poDocumentUrl || "",
+
+				remarks:
+					row.remarks || "",
 			});
 
 			setReceivedForm({
-				receivedQty: row.receivedQty ?? "",
-				actualInHouseDate: row.actualInHouseDate || "",
-				remarks: row.remarks || "",
+				receivedQty: "",
+				actualInHouseDate: "",
+				remarks: "",
 			});
 
 			setGrnForm({
 				grnNo: row.grnNo || "",
 				grnDate: row.grnDate || "",
 				remarks: row.remarks || "",
-			});
-
-			setQcForm({
-				qcStatus:
-					row.qcStatus === "NOT_REQUIRED"
-						? "OK"
-						: row.qcStatus || "OK",
-				qcRemarks: row.qcRemarks || "",
-				rejectionReason: row.rejectionReason || "",
 			});
 
 			setProductionDetailsForm({
@@ -713,36 +849,26 @@ export default function VenFlowDetailPage() {
 
 			setIssueForm({
 				issuedQty:
-					row.issuedQty ??
-					row.reservedQty ??
-					row.requiredQty ??
-					"",
-				issuedTo: row.issuedTo || "Harender",
-				remarks: row.remarks || "",
+					summary?.issueReadyQty ?? "",
+				issuedTo:
+					row.issuedTo || "Harender",
+				remarks: "",
 			});
 
 			setProcessingForm({
 				usedQty: row.usedQty ?? "",
 				wastageQty: row.wastageQty ?? "",
-				balanceQty: row.balanceQty ?? "",
-				outputImageUrl: row.outputImageUrl || "",
-				remarks: row.remarks || "",
+				processingBalanceQty:
+					row.processingBalanceQty ?? "",
+				outputImageUrl:
+					row.outputImageUrl || "",
+				remarks: "",
 			});
 
 			setRemarksForm({
 				remarks: row.remarks || "",
 			});
 
-			try {
-				const auditRes = await venflowApi.getAudit(id);
-				setAuditRows(
-					Array.isArray(auditRes.data)
-						? auditRes.data
-						: []
-				);
-			} catch {
-				setAuditRows([]);
-			}
 		} catch (err) {
 			setEntry(null);
 			setAuditRows([]);
@@ -771,6 +897,209 @@ export default function VenFlowDetailPage() {
 		}
 	};
 
+	const updateQcForm = (
+		allocationId,
+		key,
+		value
+	) => {
+		setQcForms((current) => ({
+			...current,
+			[allocationId]: {
+				...(current[allocationId] || {}),
+				[key]: value,
+			},
+		}));
+	};
+
+	const submitAllocationQc = (
+		allocation
+	) => {
+		return run(() => {
+			const form =
+				qcForms[allocation.id] || {};
+
+			if (
+				allocation.rowVersion === null ||
+				allocation.rowVersion === undefined
+			) {
+				throw new Error(
+					"Allocation rowVersion is missing. Add rowVersion to MaterialAllocationResponse and reload."
+				);
+			}
+
+			const inspectedQty =
+				requirePositiveNumber(
+					form.inspectedQty,
+					"Inspected Qty must be greater than zero."
+				);
+
+			const acceptedQty =
+				toNumberOrNull(
+					form.acceptedQty
+				);
+
+			const rejectedQty =
+				toNumberOrNull(
+					form.rejectedQty
+				);
+
+			const holdQty =
+				toNumberOrNull(
+					form.holdQty
+				);
+
+			if (
+				acceptedQty === null ||
+				acceptedQty < 0
+			) {
+				throw new Error(
+					"Accepted Qty cannot be negative."
+				);
+			}
+
+			if (
+				rejectedQty === null ||
+				rejectedQty < 0
+			) {
+				throw new Error(
+					"Rejected Qty cannot be negative."
+				);
+			}
+
+			if (
+				holdQty === null ||
+				holdQty < 0
+			) {
+				throw new Error(
+					"Hold Qty cannot be negative."
+				);
+			}
+
+			if (
+				acceptedQty +
+				rejectedQty +
+				holdQty !==
+				inspectedQty
+			) {
+				throw new Error(
+					"Accepted Qty + Rejected Qty + Hold Qty must equal Inspected Qty."
+				);
+			}
+
+			const checklistFailure =
+				(entry.sampleImageUrl &&
+					(
+						!form.sampleCompared ||
+						!form.grainMatch ||
+						!form.shadeMatch
+					)) ||
+				!form.thicknessOk ||
+				!form.sizeOk ||
+				!form.surfaceConditionOk;
+
+			const quantityFailure =
+				rejectedQty > 0 ||
+				holdQty > 0;
+
+			if (
+				(checklistFailure ||
+					quantityFailure) &&
+				!String(
+					form.rejectionReason || ""
+				).trim()
+			) {
+				throw new Error(
+					"Rejection / Hold Reason is required for a QC exception."
+				);
+			}
+
+			const evidenceUrls =
+				parseEvidenceUrls(
+					form.evidenceUrlsText
+				);
+
+			if (
+				(checklistFailure ||
+					quantityFailure) &&
+				evidenceUrls.length === 0
+			) {
+				throw new Error(
+					"At least one QC Evidence URL is required for rejected or hold material."
+				);
+			}
+
+			evidenceUrls.forEach(
+				(url, index) =>
+					validateHttpUrl(
+						url,
+						`QC Evidence URL ${index + 1}`
+					)
+			);
+
+			return venflowApi.submitQcInspection(
+				id,
+				allocation.id,
+				{
+					inspectedQty,
+					acceptedQty,
+					rejectedQty,
+					holdQty,
+
+					sampleCompared:
+						entry.sampleImageUrl
+							? Boolean(
+								form.sampleCompared
+							)
+							: null,
+
+					grainMatch:
+						entry.sampleImageUrl
+							? Boolean(
+								form.grainMatch
+							)
+							: null,
+
+					shadeMatch:
+						entry.sampleImageUrl
+							? Boolean(
+								form.shadeMatch
+							)
+							: null,
+
+					thicknessOk:
+						Boolean(
+							form.thicknessOk
+						),
+
+					sizeOk:
+						Boolean(
+							form.sizeOk
+						),
+
+					surfaceConditionOk:
+						Boolean(
+							form.surfaceConditionOk
+						),
+
+					qcRemarks:
+						String(
+							form.qcRemarks || ""
+						).trim(),
+
+					rejectionReason:
+						String(
+							form.rejectionReason || ""
+						).trim(),
+
+					evidenceUrls,
+
+					allocationVersion:
+						allocation.rowVersion,
+				}
+			);
+		});
+	};
+
 	if (loading) {
 		return (
 			<Box sx={loadingBoxSx}>
@@ -787,30 +1116,9 @@ export default function VenFlowDetailPage() {
 		);
 	}
 
-	const stage = entry.stage;
-	const stockDecision =
-		entry.stockDecision ||
-		entry.storeStatus ||
-		"PENDING";
-
 	const canSendToStore =
 		canEngineeringAction &&
 		stage === STAGE.INDENT_CREATED;
-
-	const canStoreReview =
-		canStoreAction &&
-		[
-			STAGE.SENT_TO_STORE,
-			STAGE.STORE_REVIEWED,
-			STAGE.STOCK_AVAILABLE,
-		].includes(stage);
-
-	const canReserveMaterial =
-		canStoreAction &&
-		[
-			STAGE.STOCK_AVAILABLE,
-			STAGE.MATERIAL_ACCEPTED_IN_STORE,
-		].includes(stage);
 
 	const canRaisePo =
 		canPurchaseAction &&
@@ -843,29 +1151,45 @@ export default function VenFlowDetailPage() {
 		canStoreAction &&
 		stage === STAGE.MATERIAL_RECEIVED_AT_STORE;
 
-	const canQc =
-		canStoreAction &&
-		[
-			STAGE.GRN_DONE,
-			STAGE.QC_PENDING,
-		].includes(stage);
+	const qcPendingQty =
+		safeNumber(
+			materialSummary?.qcPendingQty
+		);
 
-	const canAcceptInventory =
-		canStoreAction &&
-		stage === STAGE.QC_OK;
+	const qcRejectedQty =
+		safeNumber(
+			materialSummary?.qcRejectedQty
+		);
 
-	const canRaisePurchaseRequest =
+	const qcHoldQty =
+		safeNumber(
+			materialSummary?.qcHoldQty
+		);
+
+	const issueReadyQty =
+		safeNumber(
+			materialSummary?.issueReadyQty
+		);
+
+	const issuedQty =
+		requirePositiveNumber(
+			issueForm.issuedQty,
+			"Issued Qty must be greater than zero."
+		);
+
+	if (issuedQty > issueReadyQty) {
+		throw new Error(
+			`Issued Qty cannot exceed issue-ready quantity: ${issueReadyQty} ${entry.unit || ""}.`
+		);
+	}
+
+	const canIssueMaterial =
 		canStoreAction &&
-		[
-			STAGE.STORE_REVIEWED,
-			STAGE.STOCK_AVAILABLE,
-			STAGE.MATERIAL_RESERVED,
-		].includes(stage) &&
-		[
-			"NOT_AVAILABLE",
-			"PARTIALLY_AVAILABLE",
-			"HOLD",
-		].includes(stockDecision);
+		stage !== STAGE.READY_FOR_NEXT_STAGE &&
+		qcPendingQty === 0 &&
+		qcRejectedQty === 0 &&
+		qcHoldQty === 0 &&
+		issueReadyQty > 0;
 
 	const canIssueMaterial =
 		canStoreAction &&
@@ -1125,238 +1449,345 @@ export default function VenFlowDetailPage() {
 		</Box>
 	);
 
-	const renderStoreTab = () => (
-		<Box sx={tabContentSx}>
-			<Box sx={twoColumnSx}>
+	const renderStoreTab = () => {
+		const requiredQty =
+			safeNumber(entry.requiredQty);
+
+		const availableQty =
+			toNumberOrNull(
+				storeDecisionForm.availableQty
+			);
+
+		const holdMode =
+			storeDecisionForm.mode === "HOLD";
+
+		const calculatedShortage =
+			holdMode
+				? requiredQty
+				: Math.max(
+					requiredQty -
+					safeNumber(availableQty),
+					0
+				);
+
+		return (
+			<Box sx={tabContentSx}>
 				<Card sx={sectionCardSx}>
 					<CardContent sx={{ p: 0 }}>
 						<SectionHeader
 							number="01"
-							title="AKG Store Review"
-							subtitle="Review stock availability and update decision"
+							title="Store Review & Action"
+							subtitle="Submit one stock decision. Store-available quantity moves to QC and shortage quantity automatically creates the Purchase allocation."
 						/>
 
 						<Box sx={formGridSx}>
 							<TextField
 								select
-								label="Stock Decision"
-								value={storeReviewForm.stockDecision}
-								onChange={(e) => {
-									const nextDecision = e.target.value;
-
-									setStoreReviewForm((p) => {
-										let nextAvailable = p.availableQty;
-
-										if (nextDecision === "AVAILABLE") {
-											nextAvailable = entry.requiredQty ?? "";
-										} else if (nextDecision === "NOT_AVAILABLE") {
-											nextAvailable = 0;
-										}
-
-										return {
-											...p,
-											stockDecision: nextDecision,
-											availableQty: nextAvailable,
-										};
-									});
-
-									if (
-										nextDecision === "AVAILABLE" ||
-										nextDecision === "NOT_AVAILABLE"
-									) {
-										const nextAvailable =
-											nextDecision === "AVAILABLE"
-												? safeNumber(entry.requiredQty)
-												: 0;
-
-										setReserveForm((p) => ({
-											...p,
-											reservedQty: Math.max(nextAvailable, 0),
-										}));
-									}
-								}}
-								disabled={!canStoreAction}
+								label="Store Action"
+								value={storeDecisionForm.mode}
+								onChange={(e) =>
+									setStoreDecisionForm(
+										(current) => ({
+											...current,
+											mode: e.target.value,
+										})
+									)
+								}
+								disabled={
+									!canSubmitStoreDecision
+								}
 								sx={fieldSx}
-								SelectProps={{ MenuProps: darkMenuProps }}
+								SelectProps={{
+									MenuProps:
+										darkMenuProps,
+								}}
 							>
-								{STOCK_DECISION_OPTIONS.map((item) => (
-									<MenuItem key={item.value} value={item.value}>
-										{item.label}
-									</MenuItem>
-								))}
+								<MenuItem value="REVIEW">
+									Submit Stock Availability
+								</MenuItem>
+
+								<MenuItem value="HOLD">
+									Place Requirement on Hold
+								</MenuItem>
 							</TextField>
 
 							<TextField
-								label="Available Qty"
+								label="Available Qty in Store"
 								type="number"
-								value={storeReviewForm.availableQty}
-								onChange={(e) => {
-									const nextAvailableRaw = e.target.value;
-
-									setStoreReviewForm((p) => ({
-										...p,
-										availableQty: nextAvailableRaw,
-									}));
-
-									const available = toNumberOrNull(nextAvailableRaw);
-
-									if (available !== null) {
-										setReserveForm((p) => ({
-											...p,
-											reservedQty: Math.max(available, 0),
-										}));
-									}
+								value={
+									storeDecisionForm
+										.availableQty
+								}
+								onChange={(e) =>
+									setStoreDecisionForm(
+										(current) => ({
+											...current,
+											availableQty:
+												e.target.value,
+										})
+									)
+								}
+								disabled={
+									!canSubmitStoreDecision ||
+									holdMode
+								}
+								inputProps={{
+									min: 0,
+									max: requiredQty,
+									step: 0.001,
 								}}
-								disabled={!canStoreAction}
 								sx={fieldSx}
 							/>
+
+							<TextField
+								label="Required Qty"
+								value={`${entry.requiredQty ?? 0} ${entry.unit || ""}`}
+								disabled
+								sx={fieldSx}
+							/>
+
+							<TextField
+								label="To Be Ordered Qty"
+								value={`${calculatedShortage} ${entry.unit || ""}`}
+								disabled
+								sx={fieldSx}
+							/>
+
+							{!holdMode &&
+								calculatedShortage > 0 && (
+									<>
+										<TextField
+											label="Purchase Request No."
+											value={
+												storeDecisionForm
+													.purchaseRequestNo
+											}
+											onChange={(e) =>
+												setStoreDecisionForm(
+													(current) => ({
+														...current,
+														purchaseRequestNo:
+															e.target.value,
+													})
+												)
+											}
+											disabled={
+												!canSubmitStoreDecision
+											}
+											sx={fieldSx}
+										/>
+
+										<TextField
+											label="Requisition Date"
+											type="date"
+											InputLabelProps={{
+												shrink: true,
+											}}
+											value={
+												storeDecisionForm
+													.requisitionDate
+											}
+											onChange={(e) =>
+												setStoreDecisionForm(
+													(current) => ({
+														...current,
+														requisitionDate:
+															e.target.value,
+													})
+												)
+											}
+											disabled={
+												!canSubmitStoreDecision
+											}
+											sx={fieldSx}
+										/>
+									</>
+								)}
 						</Box>
 
 						<TextField
 							fullWidth
 							multiline
 							minRows={3}
-							label="Store Remarks"
-							value={storeReviewForm.remarks}
-							onChange={(e) =>
-								setStoreReviewForm((p) => ({
-									...p,
-									remarks: e.target.value,
-								}))
+							label={
+								holdMode
+									? "Hold Reason"
+									: "Store Remarks"
 							}
-							disabled={!canStoreAction}
-							sx={{ ...fieldSx, mt: 2 }}
-						/>
-
-						<Button
-							variant="contained"
-							disabled={saving || !canStoreReview}
-							onClick={() =>
-								run(() =>
-									venflowApi.storeReview(id, {
-										stockDecision: storeReviewForm.stockDecision,
-										availableQty: toNumberOrNull(storeReviewForm.availableQty),
-										remarks: storeReviewForm.remarks.trim(),
+							value={
+								storeDecisionForm.remarks
+							}
+							onChange={(e) =>
+								setStoreDecisionForm(
+									(current) => ({
+										...current,
+										remarks:
+											e.target.value,
 									})
 								)
 							}
-							sx={{ ...primaryBtnSx, mt: 2 }}
-						>
-							Save Store Review
-						</Button>
-
-						<Typography sx={hintSx}>
-							Store Review starts after Engineering sends the indent to AKG Store.
-						</Typography>
-					</CardContent>
-				</Card>
-
-				<Card sx={sectionCardSx}>
-					<CardContent sx={{ p: 0 }}>
-						<SectionHeader
-							number="02"
-							title="Store Decision Action"
-							subtitle="Reserve material or raise purchase request"
+							disabled={
+								!canSubmitStoreDecision
+							}
+							sx={{
+								...fieldSx,
+								mt: 2,
+							}}
 						/>
-
-						<Box sx={formGridSx}>
-							<TextField
-								label="Reserved Qty"
-								type="number"
-								value={reserveForm.reservedQty}
-								onChange={(e) =>
-									setReserveForm((p) => ({
-										...p,
-										reservedQty: e.target.value,
-									}))
-								}
-								disabled={!canStoreAction}
-								sx={fieldSx}
-							/>
-
-							<TextField
-								label="Purchase Request No."
-								value={purchaseRequestForm.purchaseRequestNo}
-								onChange={(e) =>
-									setPurchaseRequestForm((p) => ({
-										...p,
-										purchaseRequestNo: e.target.value,
-									}))
-								}
-								disabled={!canStoreAction}
-								sx={fieldSx}
-							/>
-
-							<TextField
-								label="Requisition Date"
-								type="date"
-								InputLabelProps={{ shrink: true }}
-								value={purchaseRequestForm.requisitionDate}
-								onChange={(e) =>
-									setPurchaseRequestForm((p) => ({
-										...p,
-										requisitionDate: e.target.value,
-									}))
-								}
-								disabled={!canStoreAction}
-								sx={fieldSx}
-							/>
-						</Box>
 
 						<Box sx={actionRowSx}>
 							<Button
 								variant="contained"
-								disabled={saving || !canReserveMaterial}
+								disabled={
+									saving ||
+									!canSubmitStoreDecision
+								}
 								onClick={() =>
-									run(() =>
-										venflowApi.reserveMaterial(id, {
-											reservedQty: requirePositiveNumber(
-												reserveForm.reservedQty,
-												"Reserved Qty must be greater than zero."
-											),
-											remarks: reserveForm.remarks.trim(),
-										})
-									)
+									run(() => {
+										if (
+											entry.rowVersion ===
+											null ||
+											entry.rowVersion ===
+											undefined
+										) {
+											throw new Error(
+												"Entry rowVersion is missing. Reload the requirement."
+											);
+										}
+
+										if (holdMode) {
+											if (
+												!storeDecisionForm
+													.remarks
+													.trim()
+											) {
+												throw new Error(
+													"Hold reason is required."
+												);
+											}
+
+											return venflowApi
+												.submitStoreDecision(
+													id,
+													{
+														availableQty:
+															null,
+														purchaseRequestNo:
+															null,
+														requisitionDate:
+															null,
+														hold: true,
+														remarks:
+															storeDecisionForm
+																.remarks
+																.trim(),
+														rowVersion:
+															entry.rowVersion,
+													}
+												);
+										}
+
+										const available =
+											toNumberOrNull(
+												storeDecisionForm
+													.availableQty
+											);
+
+										if (
+											available === null ||
+											available < 0
+										) {
+											throw new Error(
+												"Available Qty is required and cannot be negative."
+											);
+										}
+
+										if (
+											available >
+											requiredQty
+										) {
+											throw new Error(
+												"Available Qty cannot exceed Required Qty."
+											);
+										}
+
+										const shortage =
+											Math.max(
+												requiredQty -
+												available,
+												0
+											);
+
+										if (
+											shortage > 0 &&
+											!storeDecisionForm
+												.purchaseRequestNo
+												.trim()
+										) {
+											throw new Error(
+												"Purchase Request No. is required for shortage quantity."
+											);
+										}
+
+										if (
+											shortage > 0 &&
+											!storeDecisionForm
+												.requisitionDate
+										) {
+											throw new Error(
+												"Requisition Date is required for shortage quantity."
+											);
+										}
+
+										return venflowApi
+											.submitStoreDecision(
+												id,
+												{
+													availableQty:
+														available,
+													purchaseRequestNo:
+														shortage > 0
+															? storeDecisionForm
+																.purchaseRequestNo
+																.trim()
+															: null,
+													requisitionDate:
+														shortage > 0
+															? storeDecisionForm
+																.requisitionDate
+															: null,
+													hold: false,
+													remarks:
+														storeDecisionForm
+															.remarks
+															.trim(),
+													rowVersion:
+														entry.rowVersion,
+												}
+											);
+									})
 								}
 								sx={primaryBtnSx}
 							>
-								Reserve Material
-							</Button>
-
-							<Button
-								variant="outlined"
-								disabled={saving || !canRaisePurchaseRequest}
-								onClick={() =>
-									run(() => {
-										if (!purchaseRequestForm.purchaseRequestNo.trim()) {
-											throw new Error("Purchase Request No. is required.");
-										}
-
-										return venflowApi.raisePurchaseRequest(id, {
-											purchaseRequestNo:
-												purchaseRequestForm.purchaseRequestNo.trim(),
-											requisitionDate:
-												purchaseRequestForm.requisitionDate || null,
-											remarks:
-												purchaseRequestForm.remarks.trim(),
-										});
-									})
-								}
-								sx={outlineBtnSx}
-							>
-								Raise Purchase Request
+								{holdMode
+									? "Place on Hold"
+									: "Submit Store Decision"}
 							</Button>
 						</Box>
 
-						<Typography sx={hintSx}>
-							If stock is available, reserve it. If stock is not available / partial / hold,
-							raise Purchase Request.
-						</Typography>
+						{!canSubmitStoreDecision && (
+							<Typography sx={hintSx}>
+								Store Review & Action is available
+								only once. Existing material
+								allocations indicate that the Store
+								decision has already been submitted.
+							</Typography>
+						)}
 					</CardContent>
 				</Card>
 			</Box>
-		</Box>
-	);
+		);
+	};
 
 	const renderPurchaseTab = () => (
 		<Box sx={tabContentSx}>
@@ -1421,6 +1852,28 @@ export default function VenFlowDetailPage() {
 								!canPurchaseAction ||
 								!canRaisePo
 							}
+							sx={fieldSx}
+						/>
+
+						<TextField
+							label="Ordered Qty"
+							type="number"
+							value={poForm.orderedQty}
+							onChange={(e) =>
+								setPoForm((current) => ({
+									...current,
+									orderedQty:
+										e.target.value,
+								}))
+							}
+							disabled={
+								!canPurchaseAction ||
+								!canRaisePo
+							}
+							inputProps={{
+								min: 0,
+								step: 0.001,
+							}}
 							sx={fieldSx}
 						/>
 
@@ -1522,6 +1975,15 @@ export default function VenFlowDetailPage() {
 							onClick={() =>
 								run(() => {
 									if (
+										entry.rowVersion === null ||
+										entry.rowVersion === undefined
+									) {
+										throw new Error(
+											"Entry rowVersion is missing. Refresh the requirement and try again."
+										);
+									}
+
+									if (
 										!poForm.vendorName.trim()
 									) {
 										throw new Error(
@@ -1543,44 +2005,68 @@ export default function VenFlowDetailPage() {
 										);
 									}
 
+									const orderedQty =
+										requirePositiveNumber(
+											poForm.orderedQty,
+											"Ordered Qty must be greater than zero."
+										);
+
+									const expectedOrderQty =
+										safeNumber(
+											materialSummary
+												?.toBeOrderedQty
+										);
+
+									if (
+										expectedOrderQty > 0 &&
+										orderedQty !== expectedOrderQty
+									) {
+										throw new Error(
+											`Ordered Qty must exactly match the Purchase allocation quantity: ${expectedOrderQty} ${entry.unit || ""}.`
+										);
+									}
+
 									const amount =
 										requirePositiveNumber(
 											poForm.poAmount,
 											"PO Amount must be greater than zero."
 										);
 
-									if (
-										!poForm
-											.poDocumentUrl
-											.trim()
-									) {
-										throw new Error(
-											"PO Document URL is required."
+									const poDocumentUrl =
+										validateHttpUrl(
+											poForm.poDocumentUrl,
+											"PO Document URL"
 										);
-									}
 
-									return venflowApi
-										.raisePo(id, {
+									return venflowApi.raisePo(
+										id,
+										{
 											vendorName:
-												poForm.vendorName.trim(),
+												poForm.vendorName
+													.trim(),
 
 											poNo:
-												poForm.poNo.trim(),
+												poForm.poNo
+													.trim(),
 
 											poDate:
 												poForm.poDate,
 
+											orderedQty,
+
 											poAmount:
 												amount,
 
-											poDocumentUrl:
-												poForm
-													.poDocumentUrl
-													.trim(),
+											poDocumentUrl,
 
 											remarks:
-												poForm.remarks.trim(),
-										});
+												poForm.remarks
+													.trim(),
+
+											rowVersion:
+												entry.rowVersion,
+										}
+									);
 								})
 							}
 							sx={primaryBtnSx}
@@ -2038,6 +2524,9 @@ export default function VenFlowDetailPage() {
 													directorDecisionForm
 														.remarks
 														.trim(),
+
+												rowVersion:
+													entry.rowVersion,
 											}
 										)
 								)
@@ -2070,8 +2559,9 @@ export default function VenFlowDetailPage() {
 										.directorRejectPo(
 											id,
 											{
-												remarks:
-													reason,
+												remarks: reason,
+												rowVersion:
+													entry.rowVersion,
 											}
 										);
 								})
@@ -2148,202 +2638,679 @@ export default function VenFlowDetailPage() {
 		</Box>
 	);
 
-	const renderReceivingTab = () => (
-		<Box sx={tabContentSx}>
-			<Card sx={sectionCardSx}>
-				<CardContent sx={{ p: 0 }}>
-					<SectionHeader
-						number="01"
-						title="Store Receiving / GRN / QC / Inventory"
-						subtitle="Receive material, complete GRN, QC and inventory acceptance"
-					/>
+	const renderReceivingTab = () => {
+		const allocations =
+			materialSummary?.allocations || [];
 
-					<Box sx={formGridSx}>
-						<TextField
-							label="Received Qty"
-							type="number"
-							value={receivedForm.receivedQty}
-							onChange={(e) =>
-								setReceivedForm((p) => ({
-									...p,
-									receivedQty: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-						/>
+		const purchaseAllocation =
+			allocations.find(
+				(allocation) =>
+					allocation.sourceType ===
+					"PURCHASE"
+			);
 
-						<TextField
-							label="Actual In-house Date"
-							type="date"
-							InputLabelProps={{ shrink: true }}
-							value={receivedForm.actualInHouseDate}
-							onChange={(e) =>
-								setReceivedForm((p) => ({
-									...p,
-									actualInHouseDate: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-						/>
+		return (
+			<Box sx={tabContentSx}>
+				{canSeeStore && (
+					<Card sx={sectionCardSx}>
+						<CardContent sx={{ p: 0 }}>
+							<SectionHeader
+								number="01"
+								title="Purchase Receiving & GRN"
+								subtitle="Record each vendor delivery. GRN is enabled only after the complete Purchase allocation has been received."
+							/>
 
-						<TextField
-							label="GRN No."
-							value={grnForm.grnNo}
-							onChange={(e) =>
-								setGrnForm((p) => ({
-									...p,
-									grnNo: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-						/>
-
-						<TextField
-							label="GRN Date"
-							type="date"
-							InputLabelProps={{ shrink: true }}
-							value={grnForm.grnDate}
-							onChange={(e) =>
-								setGrnForm((p) => ({
-									...p,
-									grnDate: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-						/>
-
-						<TextField
-							select
-							label="QC Status"
-							value={qcForm.qcStatus}
-							onChange={(e) =>
-								setQcForm((p) => ({
-									...p,
-									qcStatus: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-							SelectProps={{ MenuProps: darkMenuProps }}
-						>
-							{QC_OPTIONS.map((item) => (
-								<MenuItem key={item.value} value={item.value}>
-									{item.label}
-								</MenuItem>
-							))}
-						</TextField>
-
-						<TextField
-							label="QC Remarks"
-							value={qcForm.qcRemarks}
-							onChange={(e) =>
-								setQcForm((p) => ({
-									...p,
-									qcRemarks: e.target.value,
-								}))
-							}
-							disabled={!canStoreAction}
-							sx={fieldSx}
-						/>
-					</Box>
-
-					<TextField
-						fullWidth
-						label="Rejection / Hold Reason"
-						value={qcForm.rejectionReason}
-						onChange={(e) =>
-							setQcForm((p) => ({
-								...p,
-								rejectionReason: e.target.value,
-							}))
-						}
-						disabled={!canStoreAction}
-						sx={{ ...fieldSx, mt: 2 }}
-					/>
-
-					<Box sx={actionRowSx}>
-						<Button
-							variant="contained"
-							disabled={saving || !canReceiveMaterial}
-							onClick={() =>
-								run(() =>
-									venflowApi.materialReceived(id, {
-										receivedQty: requirePositiveNumber(
-											receivedForm.receivedQty,
-											"Received Qty must be greater than zero."
-										),
-										actualInHouseDate:
-											receivedForm.actualInHouseDate || null,
-										remarks: receivedForm.remarks.trim(),
-									})
-								)
-							}
-							sx={primaryBtnSx}
-						>
-							Save Receiving
-						</Button>
-
-						<Button
-							variant="outlined"
-							disabled={saving || !canGrn}
-							onClick={() =>
-								run(() => {
-									if (!grnForm.grnNo.trim()) {
-										throw new Error("GRN No. is required.");
+							<Box sx={infoGridSx}>
+								<Info
+									label="Ordered Qty"
+									value={
+										materialSummary
+											?.orderedQty
 									}
+								/>
 
-									if (!grnForm.grnDate) {
-										throw new Error("GRN Date is required.");
+								<Info
+									label="Purchased Received"
+									value={
+										materialSummary
+											?.purchasedReceivedQty
 									}
+								/>
 
-									return venflowApi.grnEntry(id, {
-										grnNo: grnForm.grnNo.trim(),
-										grnDate: grnForm.grnDate,
-										remarks: grnForm.remarks.trim(),
-									});
-								})
-							}
-							sx={outlineBtnSx}
-						>
-							Save GRN
-						</Button>
+								<Info
+									label="Vendor Outstanding"
+									value={
+										materialSummary
+											?.vendorOutstandingQty
+									}
+								/>
 
-						<Button
-							variant="outlined"
-							disabled={saving || !canQc}
-							onClick={() =>
-								run(() =>
-									venflowApi.qualityCheck(id, {
-										qcStatus: qcForm.qcStatus,
-										qcRemarks: qcForm.qcRemarks.trim(),
-										rejectionReason: qcForm.rejectionReason.trim(),
-									})
-								)
-							}
-							sx={outlineBtnSx}
-						>
-							Save QC
-						</Button>
+								<Info
+									label="Purchase Allocation"
+									value={
+										purchaseAllocation
+											?.status
+									}
+								/>
+							</Box>
 
-						<Button
-							variant="contained"
-							disabled={saving || !canAcceptInventory}
-							onClick={() =>
-								run(() => venflowApi.acceptInventory(id))
-							}
-							sx={primaryBtnSx}
-						>
-							Accept Inventory
-						</Button>
-					</Box>
-				</CardContent>
-			</Card>
-		</Box>
-	);
+							<Box
+								sx={{
+									...formGridSx,
+									mt: 2,
+								}}
+							>
+								<TextField
+									label="Current Delivery Qty"
+									type="number"
+									value={
+										receivedForm
+											.receivedQty
+									}
+									onChange={(e) =>
+										setReceivedForm(
+											(current) => ({
+												...current,
+												receivedQty:
+													e.target.value,
+											})
+										)
+									}
+									disabled={
+										!canReceiveMaterial
+									}
+									sx={fieldSx}
+								/>
+
+								<TextField
+									label="Actual In-house Date"
+									type="date"
+									InputLabelProps={{
+										shrink: true,
+									}}
+									value={
+										receivedForm
+											.actualInHouseDate
+									}
+									onChange={(e) =>
+										setReceivedForm(
+											(current) => ({
+												...current,
+												actualInHouseDate:
+													e.target.value,
+											})
+										)
+									}
+									disabled={
+										!canReceiveMaterial
+									}
+									sx={fieldSx}
+								/>
+
+								<TextField
+									label="GRN No."
+									value={grnForm.grnNo}
+									onChange={(e) =>
+										setGrnForm(
+											(current) => ({
+												...current,
+												grnNo:
+													e.target.value,
+											})
+										)
+									}
+									disabled={!canGrn}
+									sx={fieldSx}
+								/>
+
+								<TextField
+									label="GRN Date"
+									type="date"
+									InputLabelProps={{
+										shrink: true,
+									}}
+									value={
+										grnForm.grnDate
+									}
+									onChange={(e) =>
+										setGrnForm(
+											(current) => ({
+												...current,
+												grnDate:
+													e.target.value,
+											})
+										)
+									}
+									disabled={!canGrn}
+									sx={fieldSx}
+								/>
+							</Box>
+
+							<Box sx={actionRowSx}>
+								<Button
+									variant="contained"
+									disabled={
+										saving ||
+										!canReceiveMaterial
+									}
+									onClick={() =>
+										run(() => {
+											const receivedQty =
+												requirePositiveNumber(
+													receivedForm
+														.receivedQty,
+													"Current Delivery Qty must be greater than zero."
+												);
+
+											if (
+												!receivedForm
+													.actualInHouseDate
+											) {
+												throw new Error(
+													"Actual In-house Date is required."
+												);
+											}
+
+											return venflowApi
+												.materialReceived(
+													id,
+													{
+														receivedQty,
+														actualInHouseDate:
+															receivedForm
+																.actualInHouseDate,
+														remarks:
+															receivedForm
+																.remarks
+																.trim(),
+													}
+												);
+										})
+									}
+									sx={primaryBtnSx}
+								>
+									Save Delivery
+								</Button>
+
+								<Button
+									variant="outlined"
+									disabled={
+										saving ||
+										!canGrn
+									}
+									onClick={() =>
+										run(() => {
+											if (
+												!grnForm
+													.grnNo
+													.trim()
+											) {
+												throw new Error(
+													"GRN No. is required."
+												);
+											}
+
+											if (
+												!grnForm.grnDate
+											) {
+												throw new Error(
+													"GRN Date is required."
+												);
+											}
+
+											return venflowApi
+												.grnEntry(
+													id,
+													{
+														grnNo:
+															grnForm
+																.grnNo
+																.trim(),
+														grnDate:
+															grnForm
+																.grnDate,
+														remarks:
+															grnForm
+																.remarks
+																.trim(),
+													}
+												);
+										})
+									}
+									sx={outlineBtnSx}
+								>
+									Complete GRN
+								</Button>
+							</Box>
+						</CardContent>
+					</Card>
+				)}
+
+				<Card sx={sectionCardSx}>
+					<CardContent sx={{ p: 0 }}>
+						<SectionHeader
+							number="02"
+							title="Allocation-level Quality Inspection"
+							subtitle="Inspect Store-stock and Purchase allocations separately. Accepted quantity becomes issue-ready automatically."
+						/>
+
+						{entry.sampleImageUrl && (
+							<Box sx={actionRowSx}>
+								<Button
+									variant="outlined"
+									onClick={() =>
+										window.open(
+											entry.sampleImageUrl,
+											"_blank",
+											"noopener,noreferrer"
+										)
+									}
+									sx={outlineBtnSx}
+								>
+									Open Approved Sample Image
+								</Button>
+							</Box>
+						)}
+
+						<Box sx={qcAllocationListSx}>
+							{allocations.map(
+								(allocation) => {
+									const form =
+										qcForms[
+										allocation.id
+										] || {};
+
+									const pendingQty =
+										allocationPendingQty(
+											allocation
+										);
+
+									return (
+										<Card
+											key={
+												allocation.id
+											}
+											sx={
+												qcAllocationCardSx
+											}
+										>
+											<Box
+												sx={
+													qcAllocationHeaderSx
+												}
+											>
+												<Box>
+													<Typography
+														sx={
+															qcAllocationTitleSx
+														}
+													>
+														{
+															allocation.sourceType
+														}{" "}
+														Allocation
+													</Typography>
+
+													<Typography
+														sx={
+															hintSx
+														}
+													>
+														Planned:{" "}
+														{
+															allocation.plannedQty
+														}{" "}
+														{
+															entry.unit
+														}
+														{" · "}
+														Received:{" "}
+														{
+															allocation.receivedQty
+														}
+														{" · "}
+														Pending QC:{" "}
+														{
+															pendingQty
+														}
+													</Typography>
+												</Box>
+
+												<VenFlowStatusChip
+													status={
+														allocation.status
+													}
+												/>
+											</Box>
+
+											<Box
+												sx={
+													formGridSx
+												}
+											>
+												<TextField
+													label="Inspected Qty"
+													type="number"
+													value={
+														form.inspectedQty ??
+														""
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"inspectedQty",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction ||
+														pendingQty <= 0
+													}
+													sx={fieldSx}
+												/>
+
+												<TextField
+													label="Accepted Qty"
+													type="number"
+													value={
+														form.acceptedQty ??
+														""
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"acceptedQty",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction ||
+														pendingQty <= 0
+													}
+													sx={fieldSx}
+												/>
+
+												<TextField
+													label="Rejected Qty"
+													type="number"
+													value={
+														form.rejectedQty ??
+														0
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"rejectedQty",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction ||
+														pendingQty <= 0
+													}
+													sx={fieldSx}
+												/>
+
+												<TextField
+													label="Hold Qty"
+													type="number"
+													value={
+														form.holdQty ??
+														0
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"holdQty",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction ||
+														pendingQty <= 0
+													}
+													sx={fieldSx}
+												/>
+											</Box>
+
+											<Box
+												sx={
+													qcChecklistSx
+												}
+											>
+												{entry.sampleImageUrl && (
+													<>
+														<QcCheck
+															label="Sample Compared"
+															checked={
+																form.sampleCompared
+															}
+															onChange={(
+																value
+															) =>
+																updateQcForm(
+																	allocation.id,
+																	"sampleCompared",
+																	value
+																)
+															}
+															disabled={
+																!canQcAction
+															}
+														/>
+
+														<QcCheck
+															label="Grain Match"
+															checked={
+																form.grainMatch
+															}
+															onChange={(
+																value
+															) =>
+																updateQcForm(
+																	allocation.id,
+																	"grainMatch",
+																	value
+																)
+															}
+															disabled={
+																!canQcAction
+															}
+														/>
+
+														<QcCheck
+															label="Shade Match"
+															checked={
+																form.shadeMatch
+															}
+															onChange={(
+																value
+															) =>
+																updateQcForm(
+																	allocation.id,
+																	"shadeMatch",
+																	value
+																)
+															}
+															disabled={
+																!canQcAction
+															}
+														/>
+													</>
+												)}
+
+												<QcCheck
+													label="Thickness OK"
+													checked={
+														form.thicknessOk
+													}
+													onChange={(
+														value
+													) =>
+														updateQcForm(
+															allocation.id,
+															"thicknessOk",
+															value
+														)
+													}
+													disabled={
+														!canQcAction
+													}
+												/>
+
+												<QcCheck
+													label="Size OK"
+													checked={
+														form.sizeOk
+													}
+													onChange={(
+														value
+													) =>
+														updateQcForm(
+															allocation.id,
+															"sizeOk",
+															value
+														)
+													}
+													disabled={
+														!canQcAction
+													}
+												/>
+
+												<QcCheck
+													label="Surface Condition OK"
+													checked={
+														form.surfaceConditionOk
+													}
+													onChange={(
+														value
+													) =>
+														updateQcForm(
+															allocation.id,
+															"surfaceConditionOk",
+															value
+														)
+													}
+													disabled={
+														!canQcAction
+													}
+												/>
+											</Box>
+
+											<Box
+												sx={{
+													...formGridSx,
+													mt: 2,
+												}}
+											>
+												<TextField
+													label="QC Remarks"
+													multiline
+													minRows={3}
+													value={
+														form.qcRemarks ??
+														""
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"qcRemarks",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction
+													}
+													sx={fieldSx}
+												/>
+
+												<TextField
+													label="Rejection / Hold Reason"
+													multiline
+													minRows={3}
+													value={
+														form.rejectionReason ??
+														""
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"rejectionReason",
+															e.target.value
+														)
+													}
+													disabled={
+														!canQcAction
+													}
+													sx={fieldSx}
+												/>
+
+												<TextField
+													label="QC Evidence URLs"
+													multiline
+													minRows={3}
+													value={
+														form.evidenceUrlsText ??
+														""
+													}
+													onChange={(e) =>
+														updateQcForm(
+															allocation.id,
+															"evidenceUrlsText",
+															e.target.value
+														)
+													}
+													placeholder={
+														"One URL per line\nhttps://..."
+													}
+													disabled={
+														!canQcAction
+													}
+													sx={{
+														...fieldSx,
+														gridColumn: {
+															md: "1 / -1",
+														},
+													}}
+												/>
+											</Box>
+
+											<Button
+												variant="contained"
+												disabled={
+													saving ||
+													!canQcAction ||
+													pendingQty <= 0
+												}
+												onClick={() =>
+													submitAllocationQc(
+														allocation
+													)
+												}
+												sx={{
+													...primaryBtnSx,
+													mt: 2,
+												}}
+											>
+												Submit QC Inspection
+											</Button>
+										</Card>
+									);
+								}
+							)}
+
+							{allocations.length === 0 && (
+								<Typography sx={hintSx}>
+									No material allocations have
+									been created yet.
+								</Typography>
+							)}
+						</Box>
+					</CardContent>
+				</Card>
+			</Box>
+		);
+	};
 
 	const renderIssueTab = () => (
 		<Box sx={tabContentSx}>
@@ -2384,6 +3351,33 @@ export default function VenFlowDetailPage() {
 						/>
 					</Box>
 
+					<Box
+						sx={{
+							...infoGridSx,
+							mt: 2,
+						}}
+					>
+						<Info
+							label="QC Pending"
+							value={qcPendingQty}
+						/>
+
+						<Info
+							label="QC Rejected"
+							value={qcRejectedQty}
+						/>
+
+						<Info
+							label="QC Hold"
+							value={qcHoldQty}
+						/>
+
+						<Info
+							label="Issue Ready"
+							value={issueReadyQty}
+						/>
+					</Box>
+
 					<Button
 						variant="contained"
 						disabled={saving || !canIssueMaterial}
@@ -2394,12 +3388,11 @@ export default function VenFlowDetailPage() {
 								}
 
 								return venflowApi.issueMaterial(id, {
-									issuedQty: requirePositiveNumber(
-										issueForm.issuedQty,
-										"Issued Qty must be greater than zero."
-									),
-									issuedTo: issueForm.issuedTo.trim(),
-									remarks: issueForm.remarks.trim(),
+									issuedQty,
+									issuedTo:
+										issueForm.issuedTo.trim(),
+									remarks:
+										issueForm.remarks.trim(),
 								});
 							})
 						}
@@ -2478,16 +3471,21 @@ export default function VenFlowDetailPage() {
 						/>
 
 						<TextField
-							label="Balance Qty"
+							label="Processing Balance Qty"
 							type="number"
-							value={processingForm.balanceQty}
-							onChange={(e) =>
-								setProcessingForm((p) => ({
-									...p,
-									balanceQty: e.target.value,
-								}))
+							value={
+								Math.max(
+									safeNumber(entry.issuedQty) -
+									safeNumber(
+										processingForm.usedQty
+									) -
+									safeNumber(
+										processingForm.wastageQty
+									),
+									0
+								)
 							}
-							disabled={!canProcessingAction}
+							disabled
 							sx={fieldSx}
 						/>
 
@@ -2599,12 +3597,9 @@ export default function VenFlowDetailPage() {
 										{
 											usedQty: used,
 											wastageQty: wastage,
-											balanceQty:
+											processingBalanceQty:
 												calculatedBalance,
-											outputImageUrl:
-												processingForm
-													.outputImageUrl
-													.trim(),
+											outputImageUrl,
 											remarks:
 												processingForm
 													.remarks
@@ -2862,6 +3857,11 @@ export default function VenFlowDetailPage() {
 					</Box>
 
 					<Box sx={sidePanelSx}>
+						<MaterialFlowPanel
+							summary={materialSummary}
+							history={materialHistory}
+							unit={entry.unit}
+						/>
 						<TimelinePanel
 							entry={entry}
 							auditRows={auditRows}
@@ -3036,6 +4036,235 @@ export default function VenFlowDetailPage() {
 				</Box>
 			</Card>
 		</Box>
+	);
+}
+
+function MaterialFlowPanel({
+	summary,
+	history,
+	unit,
+}) {
+	const allocations =
+		summary?.allocations || [];
+
+	return (
+		<Card sx={sideCardSx}>
+			<Typography sx={sideTitleSx}>
+				Material & History
+			</Typography>
+
+			<Box sx={sideInfoGridSx}>
+				<Info
+					label="Required"
+					value={`${summary?.requiredQty ?? 0} ${unit || ""}`}
+				/>
+
+				<Info
+					label="Store Available"
+					value={`${summary?.storeAvailableQty ?? 0} ${unit || ""}`}
+				/>
+
+				<Info
+					label="To Be Ordered"
+					value={`${summary?.toBeOrderedQty ?? 0} ${unit || ""}`}
+				/>
+
+				<Info
+					label="QC Pending"
+					value={`${summary?.qcPendingQty ?? 0} ${unit || ""}`}
+				/>
+
+				<Info
+					label="QC Accepted"
+					value={`${summary?.qcAcceptedQty ?? 0} ${unit || ""}`}
+				/>
+
+				<Info
+					label="Issue Ready"
+					value={`${summary?.issueReadyQty ?? 0} ${unit || ""}`}
+				/>
+			</Box>
+
+			<Divider
+				sx={{
+					...dividerSx,
+					my: 1.5,
+				}}
+			/>
+
+			<Typography sx={sideTitleSx}>
+				Allocations
+			</Typography>
+
+			<Box sx={recentListSx}>
+				{allocations.map(
+					(allocation) => (
+						<Box
+							key={allocation.id}
+							sx={recentItemSx}
+						>
+							<Box
+								sx={{
+									display: "flex",
+									justifyContent:
+										"space-between",
+									gap: 1,
+								}}
+							>
+								<Typography
+									sx={recentTitleSx}
+								>
+									{
+										allocation.sourceType
+									}
+								</Typography>
+
+								<VenFlowStatusChip
+									status={
+										allocation.status
+									}
+								/>
+							</Box>
+
+							<Typography
+								sx={recentTextSx}
+							>
+								Planned:{" "}
+								{
+									allocation.plannedQty
+								}
+								{" · "}
+								Received:{" "}
+								{
+									allocation.receivedQty
+								}
+								{" · "}
+								Accepted:{" "}
+								{
+									allocation.qcAcceptedQty
+								}
+								{" · "}
+								Issued:{" "}
+								{
+									allocation.issuedQty
+								}
+							</Typography>
+						</Box>
+					)
+				)}
+
+				{allocations.length === 0 && (
+					<Typography
+						sx={emptyTextSx}
+					>
+						No allocations created.
+					</Typography>
+				)}
+			</Box>
+
+			<Divider
+				sx={{
+					...dividerSx,
+					my: 1.5,
+				}}
+			/>
+
+			<Typography sx={sideTitleSx}>
+				Latest Material Movements
+			</Typography>
+
+			<Box sx={recentListSx}>
+				{(history || [])
+					.slice(0, 5)
+					.map((movement) => (
+						<Box
+							key={movement.id}
+							sx={recentItemSx}
+						>
+							<Typography
+								sx={recentDateSx}
+							>
+								{formatDateTime(
+									movement.createdAt
+								)}
+							</Typography>
+
+							<Typography
+								sx={recentTitleSx}
+							>
+								{String(
+									movement.movementType ||
+									"Movement"
+								).replaceAll(
+									"_",
+									" "
+								)}
+							</Typography>
+
+							<Typography
+								sx={recentTextSx}
+							>
+								{movement.quantity ?? 0}{" "}
+								{unit || ""}
+								{" · "}
+								{movement.description ||
+									"-"}
+							</Typography>
+						</Box>
+					))}
+
+				{(!history ||
+					history.length === 0) && (
+						<Typography
+							sx={emptyTextSx}
+						>
+							No material movement history.
+						</Typography>
+					)}
+			</Box>
+		</Card>
+	);
+}
+
+function QcCheck({
+	label,
+	checked,
+	onChange,
+	disabled,
+}) {
+	return (
+		<FormControlLabel
+			disabled={disabled}
+			control={
+				<Checkbox
+					checked={Boolean(checked)}
+					onChange={(e) =>
+						onChange(
+							e.target.checked
+						)
+					}
+					sx={{
+						color:
+							"rgba(255,255,255,.38)",
+
+						"&.Mui-checked": {
+							color: "#3b82f6",
+						},
+					}}
+				/>
+			}
+			label={label}
+			sx={{
+				m: 0,
+				color:
+					"rgba(255,255,255,.72)",
+
+				"& .MuiFormControlLabel-label": {
+					fontSize: 12,
+					fontWeight: 750,
+				},
+			}}
+		/>
 	);
 }
 
@@ -3860,6 +5089,55 @@ const activeActionTitleSx = {
 	fontWeight: 950,
 	textTransform: "uppercase",
 	letterSpacing: ".06em",
+};
+
+const qcAllocationListSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: "12px",
+	mt: 2,
+};
+
+const qcAllocationCardSx = {
+	p: 2,
+	borderRadius: "14px",
+	background: "rgba(2,6,23,.28)",
+	border:
+		"1px solid rgba(255,255,255,.08)",
+	color: "#fff",
+	boxShadow: "none",
+};
+
+const qcAllocationHeaderSx = {
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 1.5,
+	flexWrap: "wrap",
+	mb: 2,
+};
+
+const qcAllocationTitleSx = {
+	color: "#fff",
+	fontSize: 15,
+	fontWeight: 950,
+};
+
+const qcChecklistSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		sm: "repeat(2,minmax(0,1fr))",
+		lg: "repeat(3,minmax(0,1fr))",
+	},
+	gap: "4px 12px",
+	mt: 2,
+	p: 1.5,
+	borderRadius: "12px",
+	background:
+		"rgba(255,255,255,.025)",
+	border:
+		"1px solid rgba(255,255,255,.06)",
 };
 
 const activeActionTextSx = {

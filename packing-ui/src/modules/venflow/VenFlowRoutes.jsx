@@ -21,6 +21,8 @@ import VenFlowSupervisorDeskPage
 import VenFlowDirectorDeskPage
 	from "./pages/VenFlowDirectorDeskPage";
 
+import VenFlowQcDeskPage from "./pages/VenFlowQcDeskPage";
+
 import {
 	defaultVenFlowPathForRole,
 	getVenFlowRole,
@@ -83,6 +85,15 @@ export default function VenFlowRoutes() {
 					element={
 						<VenFlowRoleGuard screen="supervisor">
 							<VenFlowSupervisorDeskPage />
+						</VenFlowRoleGuard>
+					}
+				/>
+
+				<Route
+					path="qc"
+					element={
+						<VenFlowRoleGuard screen="qc">
+							<VenFlowQcDeskPage />
 						</VenFlowRoleGuard>
 					}
 				/>

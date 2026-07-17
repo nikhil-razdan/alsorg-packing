@@ -30,30 +30,16 @@ public class User {
     private String plantCode;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "user_plant_access",
-            joinColumns = @JoinColumn(name = "user_id"),
-            uniqueConstraints = {
-                    @UniqueConstraint(
-                            name = "uk_user_plant_access",
-                            columnNames = {"user_id", "plant_code"}
-                    )
-            }
-    )
+    @CollectionTable(name = "user_plant_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
+            @UniqueConstraint(name = "uk_user_plant_access", columnNames = { "user_id", "plant_code" })
+    })
     @Column(name = "plant_code")
     private Set<String> plantCodes = new LinkedHashSet<>();
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "user_module_access",
-            joinColumns = @JoinColumn(name = "user_id"),
-            uniqueConstraints = {
-                    @UniqueConstraint(
-                            name = "uk_user_module_access",
-                            columnNames = {"user_id", "module_key"}
-                    )
-            }
-    )
+    @CollectionTable(name = "user_module_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
+            @UniqueConstraint(name = "uk_user_module_access", columnNames = { "user_id", "module_key" })
+    })
     @Column(name = "module_key")
     private Set<String> modules = new LinkedHashSet<>();
 
@@ -163,13 +149,12 @@ public class User {
             return effective;
         }
 
-        if (
-                "PACKING".equals(r)
-                        || "WAREHOUSE".equals(r)
-                        || "DISPATCH".equals(r)
-                        || "LOGISTICS".equals(r)
-                        || "DRIVER".equals(r)
-        ) {
+        if ("PACKING".equals(r)
+                || "HARDWARE_PACKING".equals(r)
+                || "WAREHOUSE".equals(r)
+                || "DISPATCH".equals(r)
+                || "LOGISTICS".equals(r)
+                || "DRIVER".equals(r)) {
             effective.add("PACKFLOW");
         }
 
