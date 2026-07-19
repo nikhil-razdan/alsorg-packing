@@ -2983,8 +2983,6 @@ function DispatchedItemsPage() {
 	const isDispatch =
 		cleanRole === "DISPATCH";
 
-	const isAdmin = cleanRole === "ADMIN";
-	const isDispatch = cleanRole === "DISPATCH";
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [, setHistoryItem] = useState(null);
 	const [historyRows, setHistoryRows] = useState([]);
