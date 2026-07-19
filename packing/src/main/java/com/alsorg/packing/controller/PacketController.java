@@ -190,34 +190,26 @@ public class PacketController {
         }
 
         @GetMapping("/items")
-        public List<PacketItemResponse> getAllItems(
+        public ResponseEntity<List<PacketItemResponse>> getAllItems(
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                currentUserService.rejectHardwareUserFromNormalInventory(user);
+                User user = currentUserService
+                                .getCurrentUserFromAuth(
+                                                auth);
 
-                List<PacketItem> sourceItems;
+                currentUserService
+                                .rejectHardwareUserFromNormalInventory(
+                                                user);
 
-                if (currentUserService.isAdmin(user)) {
-                        sourceItems = packetItemRepository.findAll();
+                List<PacketItemResponse> response = packetService
+                                .getVisibleNormalInventoryItems(
+                                                user,
+                                                currentUserService
+                                                                .allowedPlants(
+                                                                                user));
 
-                        return sourceItems
-                                        .stream()
-                                        .filter(this::showOnInventoryPage)
-                                        .map(this::toPacketItemResponse)
-                                        .toList();
-                }
-
-                sourceItems = packetItemRepository.findVisibleByPlantsIncludingLegacy(
-                                currentUserService.allowedPlants(user));
-
-                return sourceItems
-                                .stream()
-                                .filter(item -> item.getItemType() != PacketItemType.HARDWARE)
-                                .filter(item -> "CREATED".equals(item.getStatus())
-                                                && item.getStickerNumber() == null)
-                                .map(this::toPacketItemResponse)
-                                .toList();
+                return ResponseEntity.ok(
+                                response);
         }
 
         @PostMapping("/add-more/{masterItemId}")

@@ -1,5 +1,7 @@
 package com.alsorg.packing.service;
 
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 import java.io.IOException;
 import com.alsorg.packing.repository.MasterItemRepository;
 import java.nio.file.Files;
@@ -54,6 +56,10 @@ public class PacketService {
         private final StickerHistoryRepository stickerHistoryRepository;
         private final PlantLocationService plantLocationService;
         private final ActivityLogService activityLogService;
+        private static final List<String> NORMAL_INVENTORY_CANDIDATE_STATUSES = List.of(
+                        "CREATED",
+                        "RESTORED",
+                        "READY");
 
         @Value("${sticker.storage.path}")
         private String stickerStoragePath;
@@ -231,6 +237,276 @@ public class PacketService {
         // =====================================================
         // READ APIs
         // =====================================================
+
+        @Transactional(readOnly = true)
+        public List<PacketItemResponse> getVisibleNormalInventoryItems(
+                        User user,
+                        Set<String> allowedPlants) {
+
+                if (user == null) {
+                        throw new AccessDeniedException(
+                                        "Authentication is required");
+                }
+
+                if (isHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "Hardware packing users cannot access normal inventory");
+                }
+
+                List<PacketItem> sourceItems;
+
+                /*
+                 * Admin:
+                 *
+                 * Query only NORMAL rows whose status could possibly
+                 * appear on the Inventory page.
+                 *
+                 * READY rows still require the PKD/FG location check.
+                 */
+                if (isAdmin(user)) {
+                        sourceItems = packetItemRepository
+                                        .findAdminNormalInventoryCandidates(
+                                                        PacketItemType.NORMAL,
+                                                        NORMAL_INVENTORY_CANDIDATE_STATUSES);
+
+                        return sourceItems
+                                        .stream()
+                                        .filter(
+                                                        this::isVisibleOnNormalInventoryPage)
+                                        .map(
+                                                        this::toInventoryPacketItemResponse)
+                                        .toList();
+                }
+
+                /*
+                 * Normalize plant codes before passing them to JPQL.
+                 */
+                Set<String> cleanPlants = allowedPlants == null
+                                ? Set.of()
+                                : allowedPlants
+                                                .stream()
+                                                .filter(Objects::nonNull)
+                                                .map(String::trim)
+                                                .filter(value -> !value.isBlank())
+                                                .collect(
+                                                                Collectors.toCollection(
+                                                                                LinkedHashSet::new));
+
+                /*
+                 * Non-admin normal Packing users only receive CREATED,
+                 * unprinted packets.
+                 */
+                if (cleanPlants.isEmpty()) {
+                        sourceItems = packetItemRepository
+                                        .findLegacyCreatedNormalInventory(
+                                                        PacketItemType.NORMAL);
+                } else {
+                        sourceItems = packetItemRepository
+                                        .findCreatedNormalInventoryForPlants(
+                                                        PacketItemType.NORMAL,
+                                                        cleanPlants);
+                }
+
+                return sourceItems
+                                .stream()
+                                .map(
+                                                this::toInventoryPacketItemResponse)
+                                .toList();
+        }
+
+        private PacketItemResponse toInventoryPacketItemResponse(
+                        PacketItem item) {
+
+                PacketItemResponse dto = new PacketItemResponse();
+
+                dto.setItemId(
+                                item.getId());
+
+                dto.setItemName(
+                                item.getItemName());
+
+                dto.setSku(
+                                item.getSku());
+
+                dto.setLocation(
+                                item.getLocation());
+
+                dto.setFloor(
+                                item.getFloor());
+
+                dto.setPdNo(
+                                item.getPdNo());
+
+                dto.setDrawingNo(
+                                item.getDrawingNo());
+
+                dto.setClientName(
+                                item.getClientName());
+
+                dto.setClientAddress(
+                                item.getClientAddress());
+
+                dto.setQuantity(
+                                item.getQuantity() != null
+                                                ? item.getQuantity()
+                                                : 1);
+
+                dto.setDescription(
+                                item.getDescription());
+
+                dto.setDimensions(
+                                item.getDimensions());
+
+                dto.setWeight(
+                                item.getWeight());
+
+                dto.setRemarks(
+                                item.getRemarks());
+
+                dto.setCreatedBy(
+                                item.getCreatedBy());
+
+                dto.setStickerNumber(
+                                item.getStickerNumber());
+
+                dto.setPlantCode(
+                                item.getPlantCode());
+
+                dto.setPackedAreaCode(
+                                item.getPackedAreaCode());
+
+                dto.setCurrentLocationCode(
+                                item.getCurrentLocationCode());
+
+                dto.setFgAreaCode(
+                                item.getFgAreaCode());
+
+                dto.setFgZoneCode(
+                                item.getFgZoneCode());
+
+                MasterItem master = item.getMasterItem();
+
+                if (master != null) {
+                        dto.setMasterItemId(
+                                        master.getId());
+
+                        dto.setTotalPackets(
+                                        master.getTotalPackets());
+                }
+
+                return dto;
+        }
+
+        private boolean isVisibleOnNormalInventoryPage(
+                        PacketItem item) {
+
+                if (item == null) {
+                        return false;
+                }
+
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        return false;
+                }
+
+                String status = cleanInventoryValue(
+                                item.getStatus())
+                                .toUpperCase();
+
+                if ("CREATED".equals(status)
+                                || "RESTORED".equals(status)) {
+                        return true;
+                }
+
+                if ("READY".equals(status)) {
+                        return isPackedPkdInventoryItem(
+                                        item);
+                }
+
+                return false;
+        }
+
+        private boolean isPackedPkdInventoryItem(
+                        PacketItem item) {
+
+                String packedAreaCode = cleanInventoryValue(
+                                item.getPackedAreaCode());
+
+                String fgAreaCode = cleanInventoryValue(
+                                item.getFgAreaCode());
+
+                String currentLocationCode = cleanInventoryValue(
+                                item.getCurrentLocationCode());
+
+                String location = cleanInventoryValue(
+                                item.getLocation());
+
+                String finalLocation = !currentLocationCode.isBlank()
+                                ? currentLocationCode
+                                : location;
+
+                if (finalLocation.isBlank()) {
+                        return false;
+                }
+
+                /*
+                 * Already in FG: do not show on Inventory.
+                 */
+                if (!fgAreaCode.isBlank()
+                                && (finalLocation.equalsIgnoreCase(
+                                                fgAreaCode)
+                                                || startsWithLocationCode(
+                                                                finalLocation,
+                                                                fgAreaCode))) {
+                        return false;
+                }
+
+                /*
+                 * Assigned PKD location.
+                 */
+                if (!packedAreaCode.isBlank()) {
+                        return finalLocation.equalsIgnoreCase(
+                                        packedAreaCode)
+                                        || startsWithLocationCode(
+                                                        finalLocation,
+                                                        packedAreaCode);
+                }
+
+                /*
+                 * Legacy fallback.
+                 */
+                return finalLocation
+                                .toUpperCase()
+                                .startsWith("PKD");
+        }
+
+        private boolean startsWithLocationCode(
+                        String value,
+                        String prefix) {
+
+                if (value == null
+                                || prefix == null) {
+                        return false;
+                }
+
+                String cleanValue = value.trim()
+                                .toUpperCase();
+
+                String cleanPrefix = prefix.trim()
+                                .toUpperCase();
+
+                return cleanValue.startsWith(
+                                cleanPrefix + "-")
+                                || cleanValue.startsWith(
+                                                cleanPrefix + " ");
+        }
+
+        private String cleanInventoryValue(
+                        String value) {
+
+                return value == null
+                                ? ""
+                                : value.trim();
+        }
 
         public Page<Packet> getPackets(UUID companyId, PacketStatus status, Pageable pageable) {
 

@@ -2,6 +2,7 @@ package com.alsorg.packing.domain.item;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.ArrayList;
@@ -11,17 +12,33 @@ import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.packet.Packet;
 
 @Entity
-@Table(name = "packet_items")
+@Table(name = "packet_items", indexes = {
+        @Index(name = "idx_packet_items_item_type_status", columnList = "item_type,status"),
+
+        @Index(name = "idx_packet_items_plant_type_status", columnList = "plant_code,item_type,status"),
+
+        @Index(name = "idx_packet_items_master_item", columnList = "master_item_id"),
+
+        @Index(name = "idx_packet_items_creator_type", columnList = "created_by_user_id,item_type"),
+
+        @Index(name = "idx_packet_items_master_packet", columnList = "master_item_id,packet_number"),
+
+        @Index(name = "idx_packet_items_sticker_number", columnList = "sticker_number")
+})
 public class PacketItem {
 
     @Id
     private UUID id;
 
+    @Column(name = "item_name", length = 500)
     private String itemName;
+
+    @Column(name = "sku", length = 500)
     private String sku;
     @Column(name = "zoho_item_id")
     private String zohoItemId; // ⚠ TEMP: will be removed later
     private Integer quantity;
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
     private String location;
     @Column(name = "packed_at")
@@ -32,19 +49,20 @@ public class PacketItem {
     private String plantCode;
     private String packedAreaCode;
     private String fgAreaCode;
+    @Column(name = "allowed_warehouse_codes", columnDefinition = "TEXT")
     private String allowedWarehouseCodes;
     private String currentLocationCode;
     private String fgZoneCode;
-    @Column(name = "pd_no")
+    @Column(name = "pd_no", length = 300)
     private String pdNo;
 
-    @Column(name = "drawing_no")
+    @Column(name = "drawing_no", length = 300)
     private String drawingNo;
 
-    @Column(name = "client_name")
+    @Column(name = "client_name", length = 500)
     private String clientName;
 
-    @Column(name = "client_address")
+    @Column(name = "client_address", columnDefinition = "TEXT")
     private String clientAddress;
 
     private String packetNumber; // P1, P2, etc
@@ -59,6 +77,7 @@ public class PacketItem {
     private String stickerNumber;
     private String dimensions;
     private String weight;
+    @Column(name = "remarks", columnDefinition = "TEXT")
     private String remarks;
     @Enumerated(EnumType.STRING)
     @Column(name = "item_type", nullable = false, length = 30)
@@ -84,10 +103,12 @@ public class PacketItem {
 
     @JsonIgnore
     @OneToMany(mappedBy = "packetItem", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @OrderBy("lineNo ASC")
     private List<HardwarePacketLine> hardwareLines = new ArrayList<>();
 
-    @ManyToOne
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "master_item_id")
     private MasterItem masterItem;
 
@@ -123,9 +144,9 @@ public class PacketItem {
         this.allowedWarehouseCodes = allowedWarehouseCodes;
     }
 
-    @ManyToOne
-    @JoinColumn(name = "packet_id", nullable = false)
     @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "packet_id", nullable = false)
     private Packet packet;
 
     @Column(name = "print_iteration")

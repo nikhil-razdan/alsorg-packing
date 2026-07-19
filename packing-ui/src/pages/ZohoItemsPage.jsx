@@ -2400,20 +2400,75 @@ function ZohoItemsPage() {
        * Load normal and hardware inventory simultaneously.
        */
       else if (isAdmin) {
+        let loadedNormalRows = [];
+        let loadedHardwareRows = [];
+
+        const publishRows = () => {
+          if (
+            controller.signal.aborted ||
+            requestId !==
+            inventoryRequestIdRef.current
+          ) {
+            return;
+          }
+
+          const mergedRows =
+            mergeInventoryRowSources(
+              loadedNormalRows,
+              loadedHardwareRows
+            );
+
+          setRows(mergedRows);
+          setRowCount(
+            mergedRows.length
+          );
+        };
+
+        const normalPromise =
+          fetchInventoryRowsFromPath(
+            "/api/packets/items",
+            controller.signal
+          )
+            .then((normalRows) => {
+              loadedNormalRows =
+                normalRows.map(
+                  normalizeNormalInventoryRow
+                );
+
+              /*
+               * Publish normal rows immediately.
+               */
+              publishRows();
+
+              return loadedNormalRows;
+            });
+
+        const hardwarePromise =
+          fetchInventoryRowsFromPath(
+            "/api/hardware-packets",
+            controller.signal
+          )
+            .then((hardwareRows) => {
+              loadedHardwareRows =
+                hardwareRows.map(
+                  normalizeHardwarePacketRow
+                );
+
+              /*
+               * Merge hardware rows whenever they finish.
+               */
+              publishRows();
+
+              return loadedHardwareRows;
+            });
+
         const [
           normalResult,
           hardwareResult,
         ] =
           await Promise.allSettled([
-            fetchInventoryRowsFromPath(
-              "/api/packets/items",
-              controller.signal
-            ),
-
-            fetchInventoryRowsFromPath(
-              "/api/hardware-packets",
-              controller.signal
-            ),
+            normalPromise,
+            hardwarePromise,
           ]);
 
         if (
@@ -2422,25 +2477,6 @@ function ZohoItemsPage() {
           return [];
         }
 
-        const normalRows =
-          normalResult.status ===
-            "fulfilled"
-            ? normalResult.value.map(
-              normalizeNormalInventoryRow
-            )
-            : [];
-
-        const hardwareRows =
-          hardwareResult.status ===
-            "fulfilled"
-            ? hardwareResult.value.map(
-              normalizeHardwarePacketRow
-            )
-            : [];
-
-        /*
-         * Only fail the complete page when both APIs fail.
-         */
         if (
           normalResult.status ===
           "rejected" &&
@@ -2456,16 +2492,6 @@ function ZohoItemsPage() {
           );
         }
 
-        finalRows =
-          mergeInventoryRowSources(
-            normalRows,
-            hardwareRows
-          );
-
-        /*
-         * Show a partial-data warning without hiding
-         * whichever inventory source loaded successfully.
-         */
         if (
           normalResult.status ===
           "rejected"
@@ -2479,7 +2505,7 @@ function ZohoItemsPage() {
             "error",
             normalResult.reason
               ?.message ||
-            "Hardware inventory loaded, but normal inventory could not be loaded"
+            "Normal inventory could not be loaded"
           );
         }
 
@@ -2496,9 +2522,15 @@ function ZohoItemsPage() {
             "error",
             hardwareResult.reason
               ?.message ||
-            "Normal inventory loaded, but hardware packets could not be loaded"
+            "Hardware inventory could not be loaded"
           );
         }
+
+        finalRows =
+          mergeInventoryRowSources(
+            loadedNormalRows,
+            loadedHardwareRows
+          );
       }
 
       /*
