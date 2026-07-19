@@ -10049,6 +10049,49 @@ const deleteItemValueSx = {
   mb: 1,
 };
 
+function premiumScrollbarSx(
+  accent = "#60a5fa"
+) {
+  return {
+    scrollbarWidth: "thin",
+    scrollbarColor: `${accent} rgba(15,23,42,.65)`,
+
+    "&::-webkit-scrollbar": {
+      width: 10,
+      height: 10,
+    },
+
+    "&::-webkit-scrollbar-track": {
+      background:
+        "rgba(15,23,42,.65)",
+      borderRadius: 999,
+    },
+
+    "&::-webkit-scrollbar-thumb": {
+      background: accent,
+      borderRadius: 999,
+      border:
+        "2px solid transparent",
+      backgroundClip:
+        "padding-box",
+      minHeight: 34,
+    },
+
+    "&::-webkit-scrollbar-thumb:hover": {
+      background: accent,
+      border:
+        "1px solid transparent",
+      backgroundClip:
+        "padding-box",
+    },
+
+    "&::-webkit-scrollbar-corner": {
+      background:
+        "transparent",
+    },
+  };
+}
+
 const deleteItemMetaSx = {
   color: "rgba(255,255,255,.58)",
   fontSize: 12,
