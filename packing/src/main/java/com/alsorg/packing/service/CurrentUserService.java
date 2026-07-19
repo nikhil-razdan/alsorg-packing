@@ -293,16 +293,61 @@ public class CurrentUserService {
                 "PACKING");
     }
 
-    public void requireHardwarePackingOrAdmin(User user) {
-        if (isAdmin(user) || isHardwarePacking(user)) {
+    /*
+     * Read-only hardware access.
+     *
+     * DISPATCH can see packets but cannot change them.
+     */
+    public boolean canReadHardwarePackets(
+            User user) {
+        return user != null
+                && (isAdmin(user)
+                        || isDispatch(user)
+                        || isHardwarePacking(user));
+    }
+
+    /*
+     * Hardware packet creation, update, deletion and
+     * sticker generation.
+     */
+    public boolean canWriteHardwarePackets(
+            User user) {
+        return user != null
+                && (isAdmin(user)
+                        || isHardwarePacking(user));
+    }
+
+    public void requireHardwareReadAccess(
+            User user) {
+        if (canReadHardwarePackets(user)) {
             return;
         }
 
         throw new AccessDeniedException(
-                "Hardware packing access required");
+                "Hardware packet read access required");
     }
 
-    public void rejectHardwareUserFromNormalInventory(User user) {
+    public void requireHardwareWriteAccess(
+            User user) {
+        if (canWriteHardwarePackets(user)) {
+            return;
+        }
+
+        throw new AccessDeniedException(
+                "Hardware packet write access required");
+    }
+
+    /*
+     * Keep for old code, but make it call the stricter
+     * write-access method.
+     */
+    public void requireHardwarePackingOrAdmin(
+            User user) {
+        requireHardwareWriteAccess(user);
+    }
+
+    public void rejectHardwareUserFromNormalInventory(
+            User user) {
         if (isHardwarePacking(user)) {
             throw new AccessDeniedException(
                     "Hardware packing users cannot access normal inventory");

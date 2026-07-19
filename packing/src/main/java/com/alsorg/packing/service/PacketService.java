@@ -170,13 +170,29 @@ public class PacketService {
                                 : value.trim();
         }
 
-        private void assertPlantAccess(String plantCode, Set<String> allowedPlants) {
-                if (plantCode == null || plantCode.isBlank()) {
-                        throw new RuntimeException("Plant code missing");
+        private void assertPlantAccess(
+                        String plantCode,
+                        Set<String> allowedPlants) {
+                if (plantCode == null
+                                || plantCode.isBlank()) {
+                        throw new RuntimeException(
+                                        "Plant code missing");
                 }
 
-                if (allowedPlants != null && !allowedPlants.contains(plantCode)) {
-                        throw new RuntimeException("User does not have access to plant: " + plantCode);
+                if (allowedPlants == null) {
+                        return;
+                }
+
+                boolean permitted = allowedPlants.stream()
+                                .filter(Objects::nonNull)
+                                .anyMatch(value -> value.trim()
+                                                .equalsIgnoreCase(
+                                                                plantCode.trim()));
+
+                if (!permitted) {
+                        throw new AccessDeniedException(
+                                        "User does not have access to plant: "
+                                                        + plantCode);
                 }
         }
         // =====================================================
@@ -458,7 +474,7 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
                 if (expectedType == PacketItemType.HARDWARE) {
-                        assertHardwarePacketAccess(
+                        assertHardwarePacketWriteAccess(
                                         item,
                                         user,
                                         allowedPlants);
@@ -995,6 +1011,13 @@ public class PacketService {
                                 && "HARDWARE_PACKING".equalsIgnoreCase(user.getRole());
         }
 
+        private boolean isDispatch(
+                        User user) {
+                return user != null
+                                && "DISPATCH".equalsIgnoreCase(
+                                                user.getRole());
+        }
+
         private void assertNormalPacketAccess(
                         PacketItem item,
                         User user,
@@ -1018,7 +1041,7 @@ public class PacketService {
                                 allowedPlants);
         }
 
-        private void assertHardwarePacketAccess(
+        private void assertHardwarePacketReadAccess(
                         PacketItem item,
                         User user,
                         Set<String> allowedPlants) {
@@ -1028,6 +1051,17 @@ public class PacketService {
                 }
 
                 if (isAdmin(user)) {
+                        return;
+                }
+
+                /*
+                 * Dispatch receives read-only access by assigned plant.
+                 */
+                if (isDispatch(user)) {
+                        assertPlantAccess(
+                                        item.getPlantCode(),
+                                        allowedPlants);
+
                         return;
                 }
 
@@ -1041,6 +1075,39 @@ public class PacketService {
                                 user.getId())) {
                         throw new AccessDeniedException(
                                         "You cannot access hardware packets created by another user");
+                }
+
+                assertPlantAccess(
+                                item.getPlantCode(),
+                                allowedPlants);
+        }
+
+        private void assertHardwarePacketWriteAccess(
+                        PacketItem item,
+                        User user,
+                        Set<String> allowedPlants) {
+                if (effectiveItemType(item) != PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "This is not a hardware packet");
+                }
+
+                if (isAdmin(user)) {
+                        return;
+                }
+
+                /*
+                 * DISPATCH deliberately does not pass this check.
+                 */
+                if (!isHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "Hardware packing write access required");
+                }
+
+                if (!Objects.equals(
+                                item.getCreatedByUserId(),
+                                user.getId())) {
+                        throw new AccessDeniedException(
+                                        "You cannot modify hardware packets created by another user");
                 }
 
                 assertPlantAccess(
@@ -1960,7 +2027,7 @@ public class PacketService {
                 PacketItem item = packetItemRepository.findById(itemId)
                                 .orElseThrow(() -> new RuntimeException("Hardware packet not found"));
 
-                assertHardwarePacketAccess(
+                assertHardwarePacketReadAccess(
                                 item,
                                 user,
                                 allowedPlants);
@@ -2002,7 +2069,7 @@ public class PacketService {
                 PacketItem item = packetItemRepository.findById(itemId)
                                 .orElseThrow(() -> new RuntimeException("Hardware packet not found"));
 
-                assertHardwarePacketAccess(
+                assertHardwarePacketReadAccess(
                                 item,
                                 user,
                                 allowedPlants);
@@ -2121,7 +2188,7 @@ public class PacketService {
                                         "Sticker history has no packet item linked");
                 }
 
-                assertHardwarePacketAccess(
+                assertHardwarePacketReadAccess(
                                 item,
                                 user,
                                 allowedPlants);

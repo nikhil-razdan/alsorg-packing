@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.alsorg.packing.domain.common.PacketItemType;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.alsorg.packing.domain.packet.Packet;
 
 @Entity
@@ -401,8 +400,10 @@ public class PacketItem {
         return hardwareLines;
     }
 
-    public void setHardwareLines(List<HardwarePacketLine> hardwareLines) {
-        this.hardwareLines = hardwareLines;
+    public void setHardwareLines(
+            List<HardwarePacketLine> hardwareLines) {
+        replaceHardwareLines(
+                hardwareLines);
     }
 
     public void addHardwareLine(HardwarePacketLine line) {
@@ -414,7 +415,12 @@ public class PacketItem {
         hardwareLines.add(line);
     }
 
-    public void replaceHardwareLines(List<HardwarePacketLine> lines) {
+    public void replaceHardwareLines(
+            List<HardwarePacketLine> lines) {
+        if (hardwareLines == null) {
+            hardwareLines = new ArrayList<>();
+        }
+
         hardwareLines.clear();
 
         if (lines == null) {
@@ -423,6 +429,22 @@ public class PacketItem {
 
         for (HardwarePacketLine line : lines) {
             addHardwareLine(line);
+        }
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void applyPacketItemDefaults() {
+        if (itemType == null) {
+            itemType = PacketItemType.NORMAL;
+        }
+
+        if (quantity == null) {
+            quantity = 1;
+        }
+
+        if (hardwareLines == null) {
+            hardwareLines = new ArrayList<>();
         }
     }
 }

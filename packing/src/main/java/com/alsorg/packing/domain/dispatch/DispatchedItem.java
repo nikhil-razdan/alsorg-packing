@@ -16,8 +16,11 @@ public class DispatchedItem {
 	@Id
 	@Column(name = "zoho_item_id", nullable = false)
 	private String zohoItemId;
-	private UUID packetItemId;
 	private String stickerNumber;
+	@Column(name = "packet_item_id")
+	private UUID packetItemId;
+
+	@Column(name = "packet_id")
 	private UUID packetId;
 	private String location;
 	private String weight;
@@ -686,5 +689,17 @@ public class DispatchedItem {
 
 	public void setLinkedMasterItemId(UUID linkedMasterItemId) {
 		this.linkedMasterItemId = linkedMasterItemId;
+	}
+
+	@PrePersist
+	@PreUpdate
+	private void applyDispatchDefaults() {
+		if (itemType == null) {
+			itemType = PacketItemType.NORMAL;
+		}
+
+		if (stock == null) {
+			stock = 0;
+		}
 	}
 }

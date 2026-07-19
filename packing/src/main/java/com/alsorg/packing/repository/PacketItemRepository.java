@@ -307,4 +307,26 @@ public interface PacketItemRepository
         List<PacketItem> findOwnedByItemTypeWithHardwareLines(
                         @Param("itemType") PacketItemType itemType,
                         @Param("userId") Long userId);
+
+        @Query("""
+                        select distinct p
+                        from PacketItem p
+                        left join fetch p.hardwareLines
+                        left join fetch p.masterItem
+                        where p.itemType = :itemType
+                          and p.plantCode in :plantCodes
+                        """)
+        List<PacketItem> findByItemTypeAndPlantCodeInWithHardwareLines(
+                        @Param("itemType") PacketItemType itemType,
+                        @Param("plantCodes") Collection<String> plantCodes);
+
+        @Query("""
+                        select distinct p
+                        from PacketItem p
+                        left join fetch p.hardwareLines
+                        left join fetch p.masterItem
+                        where p.masterItem.id = :masterItemId
+                        """)
+        List<PacketItem> findAllByMasterItemIdWithHardwareLines(
+                        @Param("masterItemId") UUID masterItemId);
 }

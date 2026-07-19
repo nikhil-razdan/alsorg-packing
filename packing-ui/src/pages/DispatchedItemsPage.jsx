@@ -2433,6 +2433,83 @@ const normalizeCompactSearch = (value) => {
 		.replace(/[^a-z0-9]/g, "");
 };
 
+const normalizeDispatchItemType = (
+	value
+) => {
+	const clean =
+		String(value || "NORMAL")
+			.trim()
+			.toUpperCase();
+
+	return clean === "HARDWARE"
+		? "HARDWARE"
+		: "NORMAL";
+};
+
+const resolveDispatchItemType = (
+	rowOrValue
+) => {
+	if (
+		rowOrValue &&
+		typeof rowOrValue === "object"
+	) {
+		const explicitType =
+			rowOrValue.itemType ||
+			rowOrValue.packetItemType ||
+			rowOrValue.type ||
+			"";
+
+		if (
+			normalizeDispatchItemType(
+				explicitType
+			) === "HARDWARE"
+		) {
+			return "HARDWARE";
+		}
+
+		if (
+			rowOrValue.hardwarePacket ===
+			true
+		) {
+			return "HARDWARE";
+		}
+
+		const sku =
+			String(
+				rowOrValue.sku || ""
+			)
+				.trim()
+				.toUpperCase();
+
+		/*
+		 * Compatibility for hardware rows created before
+		 * itemType was stored correctly.
+		 */
+		if (
+			sku.includes("/HW/PKT-") ||
+			sku.includes("/HW/")
+		) {
+			return "HARDWARE";
+		}
+
+		return "NORMAL";
+	}
+
+	return normalizeDispatchItemType(
+		rowOrValue
+	);
+};
+
+const isHardwareDispatchRow = (
+	row
+) => {
+	return (
+		resolveDispatchItemType(
+			row
+		) === "HARDWARE"
+	);
+};
+
 const getSmartStatusText = (status) => {
 	const cleanStatus = String(status || "")
 		.trim()
@@ -2485,17 +2562,43 @@ const tokenizeSmartSearch = (value) => {
 		.filter(Boolean);
 };
 
-const rowSmartHaystack = (row) => {
+const rowSmartHaystack = (
+	row
+) => {
+	const itemType =
+		resolveDispatchItemType(
+			row
+		);
+
+	const typeSearchTerms =
+		itemType === "HARDWARE"
+			? [
+				"hardware",
+				"hardware packet",
+				"hardware material",
+				"hardware packing",
+				"hw packet",
+			]
+			: [
+				"normal",
+				"normal packet",
+				"production packet",
+			];
+
 	const parts = [
 		row.name,
 		row.itemName,
 		row.sku,
+
 		row.clientName,
 		row.clientAddress,
+
 		row.pdNo,
 		row.drawingNo,
+
 		row.description,
 		row.remarks,
+
 		row.plantCode,
 		row.packedAreaCode,
 		row.currentLocationCode,
@@ -2503,21 +2606,39 @@ const rowSmartHaystack = (row) => {
 		row.fgAreaCode,
 		row.fgZoneCode,
 		row.warehouseCode,
+
 		row.gatePassNumber,
 		row.challanNumber,
+		row.chalaanNumber,
 		row.dispatchChallanNumber,
+
 		row.driverName,
 		row.vehicleNumber,
 		row.vehicleName,
+
 		row.status,
-		getSmartStatusText(row.status),
+		getSmartStatusText(
+			row.status
+		),
+
+		itemType,
+		...typeSearchTerms,
 	];
 
+	const joinedText =
+		parts
+			.filter(Boolean)
+			.join(" ");
+
 	const normalText =
-		normalizeSmartSearch(parts.filter(Boolean).join(" "));
+		normalizeSmartSearch(
+			joinedText
+		);
 
 	const compactText =
-		normalizeCompactSearch(parts.filter(Boolean).join(" "));
+		normalizeCompactSearch(
+			joinedText
+		);
 
 	return {
 		normalText,
@@ -2840,14 +2961,27 @@ function DispatchedItemsPage() {
 	const [statusFilter, setStatusFilter] = useState(["ALL"]);
 	const [groupBy, setGroupBy] = useState("NONE");
 	const [fromLocation, setFromLocation] = useState("");
+
 	const {
-		role,
+		user: currentUser,
+		role: authRole,
 	} = useAuth();
 
-	const cleanRole = String(role || "")
-		.replace("ROLE_", "")
-		.trim()
-		.toUpperCase();
+	const cleanRole =
+		String(
+			currentUser?.role ||
+			authRole ||
+			""
+		)
+			.replace(/^ROLE_/i, "")
+			.trim()
+			.toUpperCase();
+
+	const isAdmin =
+		cleanRole === "ADMIN";
+
+	const isDispatch =
+		cleanRole === "DISPATCH";
 
 	const isAdmin = cleanRole === "ADMIN";
 	const isDispatch = cleanRole === "DISPATCH";
@@ -2897,7 +3031,6 @@ function DispatchedItemsPage() {
 	const [pageSize, setPageSize] = useState(25);
 	const scannerInputRef = useRef(null);
 	const scanTimerRef = useRef(null);
-	const [fgZone, setFgZone] = useState("");
 	const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
 	const [scanMode, setScanMode] = useState("SINGLE");
 	const [scannerText, setScannerText] = useState("");
@@ -3002,23 +3135,99 @@ function DispatchedItemsPage() {
 	const [dispatchExportStatus, setDispatchExportStatus] = useState(["ALL"]);
 	const [dispatchExportFormat, setDispatchExportFormat] = useState("CSV");
 
-	const filteredRows = useMemo(() => {
-		if (!Array.isArray(rows)) {
-			return [];
-		}
-
-		return rows.filter((row) => {
-			if (!smartRowMatches(row, search)) {
-				return false;
+	const filteredRows =
+		useMemo(() => {
+			if (!Array.isArray(rows)) {
+				return [];
 			}
 
-			if (!statusMatchesSelection(row.status, statusFilter)) {
-				return false;
+			const list =
+				rows.filter((row) => {
+					if (
+						!smartRowMatches(
+							row,
+							search
+						)
+					) {
+						return false;
+					}
+
+					if (
+						!statusMatchesSelection(
+							row.status,
+							statusFilter
+						)
+					) {
+						return false;
+					}
+
+					return true;
+				});
+
+			if (groupBy === "STATUS") {
+				list.sort((a, b) => {
+					const statusCompare =
+						String(a.status || "")
+							.localeCompare(
+								String(
+									b.status || ""
+								)
+							);
+
+					if (statusCompare !== 0) {
+						return statusCompare;
+					}
+
+					return String(
+						a.name ||
+						a.itemName ||
+						""
+					).localeCompare(
+						String(
+							b.name ||
+							b.itemName ||
+							""
+						)
+					);
+				});
 			}
 
-			return true;
-		});
-	}, [rows, search, statusFilter]);
+			if (groupBy === "CLIENT") {
+				list.sort((a, b) => {
+					const clientCompare =
+						String(
+							a.clientName || ""
+						).localeCompare(
+							String(
+								b.clientName || ""
+							)
+						);
+
+					if (clientCompare !== 0) {
+						return clientCompare;
+					}
+
+					return String(
+						a.name ||
+						a.itemName ||
+						""
+					).localeCompare(
+						String(
+							b.name ||
+							b.itemName ||
+							""
+						)
+					);
+				});
+			}
+
+			return list;
+		}, [
+			rows,
+			search,
+			statusFilter,
+			groupBy,
+		]);
 
 	const filteredSelectableRows = useMemo(() => {
 		return filteredRows.filter((r) => !!r.zohoItemId);
@@ -3081,11 +3290,6 @@ function DispatchedItemsPage() {
 			safePageNo,
 			pageSize,
 		]);
-
-	useEffect(() => {
-		console.log("ROWS IDS:", rows.map(r => r.zohoItemId));
-		console.log("SELECTED IDS:", selectionModel);
-	}, [selectionModel, rows]);
 
 	useEffect(() => {
 		setPageNo(1);
@@ -3850,38 +4054,123 @@ function DispatchedItemsPage() {
 		try {
 			setLoading(true);
 
-			const res = await authFetch(`${API_BASE_URL}/api/dispatched`, {
-				method: "GET",
-			});
+			const res =
+				await authFetch(
+					`${API_BASE_URL}/api/dispatched`,
+					{
+						method: "GET",
+					}
+				);
 
 			if (!res.ok) {
-				const text = await res.text();
-				throw new Error(text || "Failed to fetch dispatched items");
+				const text =
+					await res.text();
+
+				throw new Error(
+					text ||
+					"Failed to fetch dispatched items"
+				);
 			}
 
-			const data = await res.json();
+			const data =
+				await res.json();
 
 			if (!Array.isArray(data)) {
-				console.error("Invalid API response:", data);
+				console.error(
+					"Invalid dispatch API response:",
+					data
+				);
+
 				setRows([]);
 				return [];
 			}
 
-			const cleaned = data
-				.filter((d) => d?.zohoItemId)
-				.map((d) => ({
-					...d,
-					stock: d.stock ?? 0,
-					status: String(d.status || "").trim().toUpperCase(),
-				}));
+			const cleaned =
+				data
+					.filter((item) => {
+						return Boolean(
+							String(
+								item?.zohoItemId ||
+								""
+							).trim()
+						);
+					})
+					.map((item) => {
+						const itemType =
+							resolveDispatchItemType(
+								item
+							);
+
+						const displayName =
+							String(
+								item?.name ||
+								item?.itemName ||
+								""
+							).trim();
+
+						return {
+							...item,
+
+							zohoItemId:
+								String(
+									item.zohoItemId
+								).trim(),
+
+							name:
+								displayName ||
+								"Unnamed Item",
+
+							itemName:
+								String(
+									item?.itemName ||
+									item?.name ||
+									""
+								).trim(),
+
+							stock:
+								item.stock ?? 0,
+
+							status:
+								String(
+									item.status || ""
+								)
+									.trim()
+									.toUpperCase(),
+
+							itemType,
+
+							packetItemId:
+								item?.packetItemId ||
+								item?.itemId ||
+								"",
+
+							linkedPacketItemId:
+								item?.linkedPacketItemId ||
+								null,
+
+							linkedMasterItemId:
+								item?.linkedMasterItemId ||
+								null,
+
+							hardwarePacket:
+								itemType ===
+								"HARDWARE",
+						};
+					});
 
 			setRows(cleaned);
 
 			return cleaned;
-		} catch (err) {
-			console.error(err);
+
+		} catch (error) {
+			console.error(
+				"Dispatch inventory fetch failed:",
+				error
+			);
+
 			setRows([]);
 			return [];
+
 		} finally {
 			setLoading(false);
 		}
@@ -4798,44 +5087,6 @@ function DispatchedItemsPage() {
 	};
 	/* ===================== ACTIONS ===================== */
 
-	const moveToFg = async () => {
-		if (!moveFgModal) return;
-
-		if (moveFgModal.plantCode === "AL-P1" && !fgZone) {
-			alert("Select FG-1 zone A, B or C");
-			return;
-		}
-
-		try {
-			setMoveFgLoading(true);
-
-			const res = await authFetch(
-				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
-					moveFgModal.zohoItemId
-				)}/move-to-fg?fgZoneCode=${encodeURIComponent(fgZone || "")}`,
-				{
-					method: "POST",
-					headers: getAuthHeaders(),
-				}
-			);
-
-			if (!res.ok) {
-				const text = await res.text();
-				alert(text || "Move to FG failed");
-				return;
-			}
-
-			setMoveFgModal(null);
-			setFgZone("");
-
-			await fetchData();
-		} catch (e) {
-			console.error(e);
-			alert("Move to FG failed");
-		} finally {
-			setMoveFgLoading(false);
-		}
-	};
 
 	const requestRestore = async (zohoItemId) => {
 		try {
@@ -4960,7 +5211,9 @@ function DispatchedItemsPage() {
 	const approveReturn = async (id) => {
 		try {
 			const res = await authFetch(
-				`${API_BASE_URL}/api/dispatched/${id}/approve-return`,
+				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+					id
+				)}/approve-return`,
 				{
 					method: "POST",
 					headers: getAuthHeaders(),
@@ -4978,7 +5231,9 @@ function DispatchedItemsPage() {
 	const rejectReturn = async (id) => {
 		try {
 			const res = await authFetch(
-				`${API_BASE_URL}/api/dispatched/${id}/reject-return`,
+				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+					id
+				)}/reject-return`,
 				{
 					method: "POST",
 					headers: getAuthHeaders(),
@@ -5222,7 +5477,24 @@ function DispatchedItemsPage() {
 								<DescriptionOutlinedIcon fontSize="small" />
 							</IconButton>
 						</Tooltip>
-
+						{isHardwareDispatchRow(row) && (
+							<Chip
+								size="small"
+								label="🔩 HARDWARE"
+								sx={{
+									height: 21,
+									mr: 0.8,
+									flexShrink: 0,
+									color: "#ddd6fe",
+									fontSize: 9,
+									fontWeight: 950,
+									background:
+										"rgba(139,92,246,.18)",
+									border:
+										"1px solid rgba(167,139,250,.28)",
+								}}
+							/>
+						)}
 						<span style={itemNameText} title={row.name}>
 							{row.name || "—"}
 						</span>
@@ -5278,17 +5550,83 @@ function DispatchedItemsPage() {
 		{
 			field: "description",
 			headerName: "Description",
-			width: 220,
+			width: 300,
 
 			renderHeader: () => (
 				<span>Description</span>
 			),
 
-			renderCell: (params) => (
-				<span style={simpleMutedText} title={params.value}>
-					{params.value || "No description"}
-				</span>
-			),
+			renderCell: (params) => {
+				const hardwareRow =
+					isHardwareDispatchRow(
+						params.row
+					);
+
+				return (
+					<Box
+						sx={{
+							minWidth: 0,
+							display: "flex",
+							flexDirection: "column",
+							gap: 0.5,
+						}}
+					>
+						{hardwareRow && (
+							<Box
+								sx={{
+									color: "#c4b5fd",
+									fontSize: 9,
+									fontWeight: 950,
+									letterSpacing: ".08em",
+									textTransform:
+										"uppercase",
+								}}
+							>
+								Hardware Contents
+							</Box>
+						)}
+
+						<Box
+							component="span"
+							title={
+								params.value ||
+								""
+							}
+							sx={{
+								color: "#94a3b8",
+								fontSize: 12,
+								fontWeight: 650,
+								lineHeight: 1.45,
+
+								whiteSpace:
+									hardwareRow
+										? "pre-wrap"
+										: "normal",
+
+								overflow: "hidden",
+								textOverflow:
+									"ellipsis",
+
+								display:
+									hardwareRow
+										? "-webkit-box"
+										: "block",
+
+								WebkitBoxOrient:
+									"vertical",
+
+								WebkitLineClamp:
+									hardwareRow
+										? 4
+										: 2,
+							}}
+						>
+							{params.value ||
+								"No description"}
+						</Box>
+					</Box>
+				);
+			},
 		},
 		{
 			field: "stock",
@@ -5534,18 +5872,21 @@ function DispatchedItemsPage() {
 								</Button>
 							</>
 						)}
-						{isAdmin && (
-							<Button
-								size="small"
-								onClick={() => openAdminStickerEdit(row)}
-								sx={{
-									...actionWarning,
-									...tableActionButton,
-								}}
-							>
-								Edit Sticker
-							</Button>
-						)}
+						{isAdmin &&
+							!isHardwareDispatchRow(row) && (
+								<Button
+									size="small"
+									onClick={() =>
+										openAdminStickerEdit(row)
+									}
+									sx={{
+										...actionWarning,
+										...tableActionButton,
+									}}
+								>
+									Edit Sticker
+								</Button>
+							)}
 						{canRequestRestore && (
 							<Button
 								size="small"
@@ -5597,14 +5938,21 @@ function DispatchedItemsPage() {
 
 
 	useEffect(() => {
+		if (!cleanRole) {
+			return;
+		}
+
 		fetchData();
 		fetchPlantConfigs();
-		fetchLogisticsMasters();
 
-		if (isDispatch || isAdmin) {
+		if (
+			isDispatch ||
+			isAdmin
+		) {
+			fetchLogisticsMasters();
 			loadCustomChallans();
 		}
-	}, []);
+	}, [cleanRole]);
 
 	const showChalaanPreview = (url, id = "DOCUMENT") => {
 		setChalaanPreview((prev) => {
@@ -5619,28 +5967,90 @@ function DispatchedItemsPage() {
 		});
 	};
 
-	const getActionStyle = (action = "") => {
-		const a = action.toLowerCase();
+	const getAuditActionTone = (
+		action = ""
+	) => {
+		const cleanAction =
+			String(action || "")
+				.trim()
+				.toLowerCase();
 
-		if (a.includes("approved"))
-			return { bg: "rgba(209,250,229,0.9)", color: "#065f46" };
+		if (
+			cleanAction.includes(
+				"approved"
+			)
+		) {
+			return {
+				bg:
+					"rgba(16,185,129,.14)",
+				color: "#6ee7b7",
+				border:
+					"1px solid rgba(16,185,129,.24)",
+			};
+		}
 
-		if (a.includes("rejected"))
-			return { bg: "rgba(254,226,226,0.9)", color: "#7f1d1d" };
+		if (
+			cleanAction.includes(
+				"rejected"
+			)
+		) {
+			return {
+				bg:
+					"rgba(239,68,68,.14)",
+				color: "#fca5a5",
+				border:
+					"1px solid rgba(239,68,68,.24)",
+			};
+		}
 
-		if (a.includes("requested"))
-			return { bg: "rgba(254,243,199,0.9)", color: "#92400e" };
+		if (
+			cleanAction.includes(
+				"requested"
+			)
+		) {
+			return {
+				bg:
+					"rgba(245,158,11,.14)",
+				color: "#fcd34d",
+				border:
+					"1px solid rgba(245,158,11,.24)",
+			};
+		}
 
-		if (a.includes("dispatched"))
-			return { bg: "rgba(209,250,229,0.6)", color: "#065f46" };
+		if (
+			cleanAction.includes(
+				"dispatched"
+			)
+		) {
+			return {
+				bg:
+					"rgba(59,130,246,.14)",
+				color: "#93c5fd",
+				border:
+					"1px solid rgba(59,130,246,.24)",
+			};
+		}
 
-		if (a.includes("packed"))
-			return { bg: "rgba(219,234,254,0.6)", color: "#1e40af" };
+		if (
+			cleanAction.includes("packed") ||
+			cleanAction.includes("sticker")
+		) {
+			return {
+				bg:
+					"rgba(139,92,246,.14)",
+				color: "#c4b5fd",
+				border:
+					"1px solid rgba(139,92,246,.24)",
+			};
+		}
 
-		if (a.includes("sticker"))
-			return { bg: "rgba(224,231,255,0.9)", color: "#3730a3" };
-
-		return { bg: "rgba(243,244,246,0.9)", color: "#374151" };
+		return {
+			bg:
+				"rgba(148,163,184,.12)",
+			color: "#cbd5e1",
+			border:
+				"1px solid rgba(148,163,184,.20)",
+		};
 	};
 
 	const fallbackPlantConfigs = {
@@ -5688,17 +6098,60 @@ function DispatchedItemsPage() {
 		);
 	};
 
-	const getRoleChipStyle = (role) => {
-		if (cleanRole === "ADMIN")
-			return { bg: "#111827", color: "#fff" };
+	const getRoleChipStyle = (
+		roleValue
+	) => {
+		const normalizedRole =
+			String(roleValue || "")
+				.replace(/^ROLE_/i, "")
+				.trim()
+				.toUpperCase();
 
-		if (cleanRole === "DISPATCH")
-			return { bg: "#065f46", color: "#ecfdf5" };
+		if (
+			normalizedRole === "ADMIN"
+		) {
+			return {
+				bg: "#111827",
+				color: "#fff",
+			};
+		}
 
-		if (cleanRole === "USER")
-			return { bg: "#1e40af", color: "#eff6ff" };
+		if (
+			normalizedRole ===
+			"DISPATCH"
+		) {
+			return {
+				bg: "#065f46",
+				color: "#ecfdf5",
+			};
+		}
 
-		return { bg: "#374151", color: "#f9fafb" };
+		if (
+			normalizedRole ===
+			"PACKING" ||
+			normalizedRole === "USER"
+		) {
+			return {
+				bg: "#1e40af",
+				color: "#eff6ff",
+			};
+		}
+
+		if (
+			normalizedRole ===
+			"HARDWARE_PACKING"
+		) {
+			return {
+				bg:
+					"rgba(109,40,217,.70)",
+				color: "#ede9fe",
+			};
+		}
+
+		return {
+			bg: "#374151",
+			color: "#f9fafb",
+		};
 	};
 
 	const getDateGroupLabel = (dateStr) => {
@@ -5722,9 +6175,6 @@ function DispatchedItemsPage() {
 			year: "numeric",
 		});
 	};
-
-	/* ===== FILTERED ROWS ===== */
-	console.log("🔥 selectionModel:", selectionModel);
 
 	const getRowId = (row) => row?.zohoItemId || "";
 
@@ -7272,22 +7722,29 @@ function DispatchedItemsPage() {
 									</Box>
 								)}
 
-								<Button
-									onClick={openCustomChallanModal}
-									sx={{
-										...modalSecondaryButtonSx,
-										height: 34,
-										color: "#fff",
-										background: "rgba(139,92,246,.14)",
-										border: "1px solid rgba(139,92,246,.24)",
+								{isDispatch && (
+									<Button
+										onClick={
+											openCustomChallanModal
+										}
+										sx={{
+											...modalSecondaryButtonSx,
+											height: 34,
+											color: "#fff",
+											background:
+												"rgba(139,92,246,.14)",
+											border:
+												"1px solid rgba(139,92,246,.24)",
 
-										"&:hover": {
-											background: "rgba(139,92,246,.22)",
-										},
-									}}
-								>
-									+ Create
-								</Button>
+											"&:hover": {
+												background:
+													"rgba(139,92,246,.22)",
+											},
+										}}
+									>
+										+ Create
+									</Button>
+								)}
 
 								<Button
 									onClick={loadCustomChallans}
@@ -7513,7 +7970,19 @@ function DispatchedItemsPage() {
 
 									<div
 										key={row.zohoItemId}
-										style={tableRow}
+										style={{
+											...tableRow,
+
+											...(isHardwareDispatchRow(row)
+												? {
+													borderLeft:
+														"4px solid #a78bfa",
+
+													background:
+														"linear-gradient(90deg,rgba(139,92,246,.10),rgba(15,23,42,.72))",
+												}
+												: {}),
+										}}
 									>
 
 										<div>

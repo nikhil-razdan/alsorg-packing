@@ -1,7 +1,9 @@
 package com.alsorg.packing.service;
 
 import static com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.*;
-
+import java.util.Comparator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -16,6 +18,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwareLineRequest;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwareLineResponse;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketAddRequest;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketCreateRequest;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketDraftRequest;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketResponse;
+import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketUpdateRequest;
 import com.alsorg.packing.domain.common.Company;
 import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.common.PacketStatus;
@@ -32,8 +41,7 @@ import com.alsorg.packing.repository.PacketRepository;
 @Service
 public class HardwarePacketService {
 
-    private static final ZoneId APP_ZONE =
-            ZoneId.of("Asia/Kolkata");
+    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
 
     /*
      * Fixed sticker size cannot carry an unlimited item list legibly.
@@ -60,8 +68,7 @@ public class HardwarePacketService {
             StickerSequenceService stickerSequenceService,
             PlantLocationService plantLocationService,
             CurrentUserService currentUserService,
-            PacketService packetService
-    ) {
+            PacketService packetService) {
         this.packetRepository = packetRepository;
         this.packetItemRepository = packetItemRepository;
         this.masterItemRepository = masterItemRepository;
@@ -75,30 +82,23 @@ public class HardwarePacketService {
     @Transactional
     public List<HardwarePacketResponse> createPackets(
             HardwarePacketCreateRequest request,
-            User user
-    ) {
+            User user) {
         currentUserService.requireHardwarePackingOrAdmin(user);
 
         validateCreateRequest(request);
 
-        String plantCode =
-                currentUserService.resolvePlantForWrite(
-                        user,
-                        request.plantCode()
-                );
+        String plantCode = currentUserService.resolvePlantForWrite(
+                user,
+                request.plantCode());
 
-        PlantLocationService.PlantConfig plant =
-                plantLocationService.getPlantConfig(plantCode);
+        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
 
         Company company = companyRepository.findAll()
                 .stream()
                 .findFirst()
-                .orElseThrow(() ->
-                        new RuntimeException("No company found")
-                );
+                .orElseThrow(() -> new RuntimeException("No company found"));
 
-        LocalDateTime now =
-                LocalDateTime.now(APP_ZONE);
+        LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
         String actor = safeActor(user);
 
@@ -106,8 +106,7 @@ public class HardwarePacketService {
 
         master.setItemName(cleanRequired(
                 request.itemName(),
-                "Hardware packet title is required"
-        ));
+                "Hardware packet title is required"));
         master.setPdNo(cleanOptional(request.pdNo()));
         master.setDrawingName(cleanOptional(request.drawingNo()));
         master.setClientName(cleanOptional(request.clientName()));
@@ -126,8 +125,7 @@ public class HardwarePacketService {
         packet.setId(UUID.randomUUID());
         packet.setCompany(company);
         packet.setStickerNumber(
-                stickerSequenceService.generateNextStickerNumber()
-        );
+                stickerSequenceService.generateNextStickerNumber());
         packet.setStatus(PacketStatus.CREATED);
         packet.setCreatedBy(actor);
         packet.setCreatedAt(now);
@@ -137,12 +135,9 @@ public class HardwarePacketService {
 
         List<PacketItem> packetItems = new ArrayList<>();
 
-        for (int packetIndex = 0;
-             packetIndex < request.packets().size();
-             packetIndex++) {
+        for (int packetIndex = 0; packetIndex < request.packets().size(); packetIndex++) {
 
-            HardwarePacketDraftRequest packetDraft =
-                    request.packets().get(packetIndex);
+            HardwarePacketDraftRequest packetDraft = request.packets().get(packetIndex);
 
             int packetNumber = packetIndex + 1;
 
@@ -167,9 +162,7 @@ public class HardwarePacketService {
                     buildHardwareSku(
                             master.getPdNo(),
                             master.getDrawingName(),
-                            packetNumber
-                    )
-            );
+                            packetNumber));
 
             item.setQuantity(1);
 
@@ -197,12 +190,10 @@ public class HardwarePacketService {
             item.setLinkedPacketItemId(null);
             item.setLinkedMasterItemId(null);
 
-            List<HardwarePacketLine> lines =
-                    buildLines(
-                            item,
-                            packetDraft.items(),
-                            now
-                    );
+            List<HardwarePacketLine> lines = buildLines(
+                    item,
+                    packetDraft.items(),
+                    now);
 
             item.replaceHardwareLines(lines);
 
@@ -214,43 +205,242 @@ public class HardwarePacketService {
              * - historical audit.
              */
             item.setDescription(
-                    buildDescriptionSnapshot(lines)
-            );
+                    buildDescriptionSnapshot(lines));
 
             packetItems.add(item);
         }
 
-        List<PacketItem> saved =
-                packetItemRepository.saveAll(packetItems);
+        List<PacketItem> saved = packetItemRepository.saveAll(packetItems);
 
         return saved.stream()
                 .map(this::toResponse)
                 .toList();
     }
 
+    @Transactional
+    public List<HardwarePacketResponse> addPackets(
+            UUID masterItemId,
+            HardwarePacketAddRequest request,
+            User user) {
+        currentUserService.requireHardwareWriteAccess(user);
+
+        validateAddRequest(request);
+
+        MasterItem master = masterItemRepository
+                .findByIdForHardwarePacketAppend(
+                        masterItemId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Hardware master item not found"));
+
+        assertHardwareMasterWriteAccess(
+                master,
+                user);
+
+        String plantCode = cleanRequired(
+                master.getPlantCode(),
+                "Hardware master plant is missing");
+
+        if (!currentUserService.isAdmin(user)
+                && !currentUserService.canAccessPlant(
+                        user,
+                        plantCode)) {
+            throw new AccessDeniedException(
+                    "You do not have access to this hardware master plant");
+        }
+
+        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                plantCode);
+
+        Company company = companyRepository.findAll()
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException(
+                        "No company found"));
+
+        List<PacketItem> existingItems = packetItemRepository
+                .findAllByMasterItemIdWithHardwareLines(
+                        masterItemId);
+
+        int highestPacketNumber = existingItems.stream()
+                .mapToInt(item -> extractPacketNoOrZero(
+                        item.getPacketNumber()))
+                .max()
+                .orElse(0);
+
+        LocalDateTime now = LocalDateTime.now(APP_ZONE);
+
+        String actor = safeActor(user);
+
+        /*
+         * If ADMIN adds a packet to somebody else's hardware
+         * master, ownership should remain with the original
+         * hardware user.
+         */
+        Long ownerUserId = master.getCreatedByUserId() != null
+                ? master.getCreatedByUserId()
+                : user.getId();
+
+        Packet packet = new Packet();
+
+        packet.setId(UUID.randomUUID());
+        packet.setCompany(company);
+        packet.setStickerNumber(
+                stickerSequenceService
+                        .generateNextStickerNumber());
+        packet.setStatus(PacketStatus.CREATED);
+        packet.setCreatedBy(actor);
+        packet.setCreatedAt(now);
+        packet.setStickerGenerated(false);
+
+        packet = packetRepository.save(packet);
+
+        List<PacketItem> newItems = new ArrayList<>();
+
+        for (int index = 0; index < request.packets().size(); index++) {
+            HardwarePacketDraftRequest draft = request.packets().get(index);
+
+            int packetNumber = highestPacketNumber + index + 1;
+
+            PacketItem item = new PacketItem();
+
+            item.setId(UUID.randomUUID());
+
+            item.setPacket(packet);
+            item.setMasterItem(master);
+
+            item.setItemType(
+                    PacketItemType.HARDWARE);
+
+            item.setCreatedByUserId(
+                    ownerUserId);
+
+            item.setItemName(
+                    master.getItemName());
+            item.setPdNo(
+                    master.getPdNo());
+            item.setDrawingNo(
+                    master.getDrawingName());
+            item.setClientName(
+                    master.getClientName());
+            item.setClientAddress(
+                    master.getAddress());
+            item.setFloor(
+                    master.getFloor());
+
+            item.setPacketNumber(
+                    "Pkt-" + packetNumber);
+
+            item.setSku(
+                    buildHardwareSku(
+                            master.getPdNo(),
+                            master.getDrawingName(),
+                            packetNumber));
+
+            item.setQuantity(1);
+
+            item.setPlantCode(
+                    plantCode);
+            item.setPackedAreaCode(
+                    plant.packedAreaCode());
+            item.setCurrentLocationCode(null);
+            item.setFgAreaCode(
+                    plant.fgAreaCode());
+            item.setFgZoneCode(null);
+
+            item.setLocation("FLOOR");
+            item.setStatus("CREATED");
+
+            item.setCreatedBy(actor);
+            item.setPackedBy(null);
+
+            item.setWeight(null);
+            item.setDimensions(null);
+            item.setRemarks(null);
+
+            item.setLinkedPacketItemId(null);
+            item.setLinkedMasterItemId(null);
+
+            List<HardwarePacketLine> lines = buildLines(
+                    item,
+                    draft.items(),
+                    now);
+
+            item.replaceHardwareLines(lines);
+
+            item.setDescription(
+                    buildDescriptionSnapshot(lines));
+
+            newItems.add(item);
+        }
+
+        List<PacketItem> saved = packetItemRepository.saveAll(
+                newItems);
+
+        master.setTotalPackets(
+                Math.toIntExact(
+                        existingItems.size()
+                                + saved.size()));
+
+        masterItemRepository.save(master);
+
+        return saved.stream()
+                .sorted(
+                        Comparator.comparingInt(item -> extractPacketNoOrZero(
+                                item.getPacketNumber())))
+                .map(this::toResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<HardwarePacketResponse> getVisiblePackets(
-            User user
-    ) {
-        currentUserService.requireHardwarePackingOrAdmin(user);
+            User user) {
+        currentUserService.requireHardwareReadAccess(user);
 
         List<PacketItem> source;
 
         if (currentUserService.isAdmin(user)) {
+
             source = packetItemRepository
                     .findAllByItemTypeWithHardwareLines(
-                            PacketItemType.HARDWARE
-                    );
+                            PacketItemType.HARDWARE);
+
+        } else if (currentUserService.isDispatch(user)) {
+
+            Set<String> allowedPlants = currentUserService.allowedPlants(user);
+
+            source = packetItemRepository
+                    .findByItemTypeAndPlantCodeInWithHardwareLines(
+                            PacketItemType.HARDWARE,
+                            allowedPlants);
+
         } else {
+
+            Set<String> allowedPlants = currentUserService.allowedPlants(user);
+
             source = packetItemRepository
                     .findOwnedByItemTypeWithHardwareLines(
                             PacketItemType.HARDWARE,
-                            user.getId()
-                    );
+                            user.getId())
+                    .stream()
+                    .filter(item -> containsPlantIgnoreCase(
+                            allowedPlants,
+                            item.getPlantCode()))
+                    .toList();
         }
 
         return source.stream()
                 .filter(this::showOnHardwareInventoryPage)
+                .sorted(
+                        Comparator
+                                .comparing(
+                                        (PacketItem item) -> item.getMasterItem() != null
+                                                ? item.getMasterItem()
+                                                        .getItemName()
+                                                : item.getItemName(),
+                                        Comparator.nullsLast(
+                                                String.CASE_INSENSITIVE_ORDER))
+                                .thenComparingInt(item -> extractPacketNoOrZero(
+                                        item.getPacketNumber())))
                 .map(this::toResponse)
                 .toList();
     }
@@ -259,27 +449,23 @@ public class HardwarePacketService {
     public HardwarePacketResponse updatePacket(
             UUID itemId,
             HardwarePacketUpdateRequest request,
-            User user
-    ) {
-        PacketItem item = getAccessibleHardwarePacket(
+            User user) {
+        PacketItem item = getWritableHardwarePacket(
                 itemId,
-                user
-        );
+                user);
 
         if (item.getStickerNumber() != null
                 && !item.getStickerNumber().isBlank()) {
             throw new RuntimeException(
                     "Printed hardware packet cannot be edited. "
-                            + "Create another packet or use an admin correction flow."
-            );
+                            + "Create another packet or use an admin correction flow.");
         }
 
         validateLines(request.items());
 
         item.setItemName(cleanRequired(
                 request.itemName(),
-                "Hardware packet title is required"
-        ));
+                "Hardware packet title is required"));
         item.setPdNo(cleanOptional(request.pdNo()));
         item.setDrawingNo(cleanOptional(request.drawingNo()));
         item.setClientName(cleanOptional(request.clientName()));
@@ -292,22 +478,17 @@ public class HardwarePacketService {
                 buildHardwareSku(
                         item.getPdNo(),
                         item.getDrawingNo(),
-                        packetNo
-                )
-        );
+                        packetNo));
 
-        List<HardwarePacketLine> lines =
-                buildLines(
-                        item,
-                        request.items(),
-                        LocalDateTime.now(APP_ZONE)
-                );
+        List<HardwarePacketLine> lines = buildLines(
+                item,
+                request.items(),
+                LocalDateTime.now(APP_ZONE));
 
         item.replaceHardwareLines(lines);
         item.setDescription(buildDescriptionSnapshot(lines));
 
-        PacketItem saved =
-                packetItemRepository.save(item);
+        PacketItem saved = packetItemRepository.save(item);
 
         return toResponse(saved);
     }
@@ -315,24 +496,20 @@ public class HardwarePacketService {
     @Transactional
     public void deletePacket(
             UUID itemId,
-            User user
-    ) {
-        PacketItem item = getAccessibleHardwarePacket(
+            User user) {
+        PacketItem item = getWritableHardwarePacket(
                 itemId,
-                user
-        );
+                user);
 
         if (!"CREATED".equalsIgnoreCase(item.getStatus())) {
             throw new RuntimeException(
-                    "Only newly created hardware packets can be deleted"
-            );
+                    "Only newly created hardware packets can be deleted");
         }
 
         if (item.getStickerNumber() != null
                 && !item.getStickerNumber().isBlank()) {
             throw new RuntimeException(
-                    "Printed hardware packet cannot be deleted"
-            );
+                    "Printed hardware packet cannot be deleted");
         }
 
         UUID masterId = item.getMasterItem() != null
@@ -347,8 +524,7 @@ public class HardwarePacketService {
         packetItemRepository.flush();
 
         if (masterId != null) {
-            long remaining =
-                    packetItemRepository.countByMasterItemId(masterId);
+            long remaining = packetItemRepository.countByMasterItemId(masterId);
 
             masterItemRepository.findById(masterId)
                     .ifPresent(master -> {
@@ -356,8 +532,7 @@ public class HardwarePacketService {
                             masterItemRepository.delete(master);
                         } else {
                             master.setTotalPackets(
-                                    Math.toIntExact(remaining)
-                            );
+                                    Math.toIntExact(remaining));
                             masterItemRepository.save(master);
                         }
                     });
@@ -374,67 +549,59 @@ public class HardwarePacketService {
             UUID itemId,
             String factoryFloor,
             boolean showCompanyHeader,
-            User user
-    ) {
+            User user) {
         return packetService.previewHardwareSticker(
                 itemId,
                 factoryFloor,
                 showCompanyHeader,
                 user,
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
     }
 
     public byte[] generateSticker(
             UUID itemId,
             String factoryFloor,
             boolean showCompanyHeader,
-            User user
-    ) {
+            User user) {
         return packetService.generateHardwareSticker(
                 itemId,
                 factoryFloor,
                 showCompanyHeader,
                 user,
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
     }
 
     public byte[] getLatestSticker(
             UUID itemId,
-            User user
-    ) {
+            User user) {
         return packetService.getLatestHardwareStickerPdf(
                 itemId,
                 user,
-                currentUserService.allowedPlants(user)
-        );
+                currentUserService.allowedPlants(user));
     }
 
-    private PacketItem getAccessibleHardwarePacket(
+    private PacketItem getWritableHardwarePacket(
             UUID itemId,
-            User user
-    ) {
-        currentUserService.requireHardwarePackingOrAdmin(user);
+            User user) {
+        currentUserService.requireHardwareWriteAccess(user);
 
         PacketItem item = packetItemRepository.findById(itemId)
-                .orElseThrow(() ->
-                        new RuntimeException("Hardware packet not found")
-                );
+                .orElseThrow(() -> new RuntimeException(
+                        "Hardware packet not found"));
 
-        assertHardwareOwnership(item, user);
+        assertHardwareWriteAccess(
+                item,
+                user);
 
         return item;
     }
 
-    private void assertHardwareOwnership(
+    private void assertHardwareWriteAccess(
             PacketItem item,
-            User user
-    ) {
+            User user) {
         if (item.getItemType() != PacketItemType.HARDWARE) {
             throw new AccessDeniedException(
-                    "This is not a hardware packet"
-            );
+                    "This is not a hardware packet");
         }
 
         if (currentUserService.isAdmin(user)) {
@@ -443,46 +610,37 @@ public class HardwarePacketService {
 
         if (!currentUserService.isHardwarePacking(user)) {
             throw new AccessDeniedException(
-                    "Hardware packing access required"
-            );
+                    "Hardware packing access required");
         }
 
         if (!Objects.equals(
                 item.getCreatedByUserId(),
-                user.getId()
-        )) {
+                user.getId())) {
             throw new AccessDeniedException(
-                    "You cannot access hardware packets created by another user"
-            );
+                    "You cannot modify hardware packets created by another user");
         }
 
-        if (!currentUserService.allowedPlants(user)
-                .contains(item.getPlantCode())) {
+        if (!currentUserService.canAccessPlant(
+                user,
+                item.getPlantCode())) {
             throw new AccessDeniedException(
-                    "You do not have access to this packet plant"
-            );
+                    "You do not have access to this packet plant");
         }
     }
 
     private List<HardwarePacketLine> buildLines(
             PacketItem packetItem,
             List<HardwareLineRequest> requests,
-            LocalDateTime now
-    ) {
+            LocalDateTime now) {
         validateLines(requests);
 
-        List<HardwarePacketLine> lines =
-                new ArrayList<>();
+        List<HardwarePacketLine> lines = new ArrayList<>();
 
-        for (int index = 0;
-             index < requests.size();
-             index++) {
+        for (int index = 0; index < requests.size(); index++) {
 
-            HardwareLineRequest request =
-                    requests.get(index);
+            HardwareLineRequest request = requests.get(index);
 
-            HardwarePacketLine line =
-                    new HardwarePacketLine();
+            HardwarePacketLine line = new HardwarePacketLine();
 
             line.setId(UUID.randomUUID());
             line.setPacketItem(packetItem);
@@ -490,9 +648,7 @@ public class HardwarePacketService {
             line.setItemName(
                     cleanRequired(
                             request.itemName(),
-                            "Hardware item name is required"
-                    )
-            );
+                            "Hardware item name is required"));
             line.setQuantity(request.quantity());
             line.setUom(normalizeUom(request.uom()));
             line.setHardwareInventoryItemId(null);
@@ -505,70 +661,76 @@ public class HardwarePacketService {
     }
 
     private String buildDescriptionSnapshot(
-            List<HardwarePacketLine> lines
-    ) {
+            List<HardwarePacketLine> lines) {
         return lines.stream()
-                .map(line ->
-                        line.getLineNo()
-                                + ". "
-                                + line.getItemName()
-                                + " - Qty: "
-                                + formatQuantity(line.getQuantity())
-                                + " "
-                                + line.getUom()
-                )
+                .map(line -> line.getLineNo()
+                        + ". "
+                        + line.getItemName()
+                        + " - Qty: "
+                        + formatQuantity(line.getQuantity())
+                        + " "
+                        + line.getUom())
                 .reduce(
-                        (left, right) -> left + "\n" + right
-                )
+                        (left, right) -> left + "\n" + right)
                 .orElse("-");
     }
 
     private HardwarePacketResponse toResponse(
-            PacketItem item
-    ) {
-        List<HardwareLineResponse> lines =
-                item.getHardwareLines() == null
-                        ? List.of()
-                        : item.getHardwareLines()
-                                .stream()
-                                .map(line ->
-                                        new HardwareLineResponse(
-                                                line.getId(),
-                                                line.getLineNo(),
-                                                line.getItemName(),
-                                                line.getQuantity(),
-                                                line.getUom()
-                                        )
-                                )
-                                .toList();
+            PacketItem item) {
+        List<HardwareLineResponse> lines = item.getHardwareLines() == null
+                ? List.of()
+                : item.getHardwareLines()
+                        .stream()
+                        .sorted(
+                                Comparator.comparingInt(
+                                        HardwarePacketLine::getLineNo))
+                        .map(line -> new HardwareLineResponse(
+                                line.getId(),
+                                line.getLineNo(),
+                                line.getItemName(),
+                                line.getQuantity(),
+                                line.getUom()))
+                        .toList();
 
         return new HardwarePacketResponse(
                 item.getId(),
+
                 item.getMasterItem() != null
                         ? item.getMasterItem().getId()
                         : null,
+
+                PacketItemType.HARDWARE,
+
                 item.getItemName(),
                 item.getPacketNumber(),
                 item.getSku(),
+
                 item.getPdNo(),
                 item.getDrawingNo(),
+
                 item.getClientName(),
                 item.getClientAddress(),
                 item.getFloor(),
+
+                item.getDescription(),
+
                 item.getPlantCode(),
                 item.getLocation(),
+                item.getPackedAreaCode(),
+                item.getCurrentLocationCode(),
+
                 item.getStatus(),
                 item.getStickerNumber(),
                 item.getPrintIteration(),
+
                 item.getCreatedBy(),
                 item.getCreatedByUserId(),
-                lines
-        );
+
+                lines);
     }
 
     private boolean showOnHardwareInventoryPage(
-            PacketItem item
-    ) {
+            PacketItem item) {
         if (item == null
                 || item.getItemType() != PacketItemType.HARDWARE
                 || item.getStatus() == null) {
@@ -586,26 +748,20 @@ public class HardwarePacketService {
             return false;
         }
 
-        String currentLocation =
-                firstNonBlank(
-                        item.getCurrentLocationCode(),
-                        item.getLocation()
-                );
+        String currentLocation = firstNonBlank(
+                item.getCurrentLocationCode(),
+                item.getLocation());
 
-        String fgArea =
-                cleanOptional(item.getFgAreaCode());
+        String fgArea = cleanOptional(item.getFgAreaCode());
 
         if (!fgArea.isBlank()
-                && (
-                    currentLocation.equals(fgArea)
-                    || currentLocation.startsWith(fgArea + "-")
-                    || currentLocation.startsWith(fgArea + " ")
-                )) {
+                && (currentLocation.equals(fgArea)
+                        || currentLocation.startsWith(fgArea + "-")
+                        || currentLocation.startsWith(fgArea + " "))) {
             return false;
         }
 
-        String packedArea =
-                cleanOptional(item.getPackedAreaCode());
+        String packedArea = cleanOptional(item.getPackedAreaCode());
 
         if (!packedArea.isBlank()) {
             return currentLocation.equals(packedArea)
@@ -617,41 +773,33 @@ public class HardwarePacketService {
     }
 
     private void validateCreateRequest(
-            HardwarePacketCreateRequest request
-    ) {
+            HardwarePacketCreateRequest request) {
         if (request == null) {
             throw new RuntimeException(
-                    "Hardware packet request is required"
-            );
+                    "Hardware packet request is required");
         }
 
         cleanRequired(
                 request.itemName(),
-                "Hardware packet title is required"
-        );
+                "Hardware packet title is required");
 
         if (request.packets() == null
                 || request.packets().isEmpty()) {
             throw new RuntimeException(
-                    "At least one hardware packet is required"
-            );
+                    "At least one hardware packet is required");
         }
 
-        if (request.packets().size()
-                > MAX_PACKETS_PER_REQUEST) {
+        if (request.packets().size() > MAX_PACKETS_PER_REQUEST) {
             throw new RuntimeException(
                     "Maximum "
                             + MAX_PACKETS_PER_REQUEST
-                            + " hardware packets are allowed per request"
-            );
+                            + " hardware packets are allowed per request");
         }
 
-        for (HardwarePacketDraftRequest packet :
-                request.packets()) {
+        for (HardwarePacketDraftRequest packet : request.packets()) {
             if (packet == null) {
                 throw new RuntimeException(
-                        "Invalid hardware packet entry"
-                );
+                        "Invalid hardware packet entry");
             }
 
             validateLines(packet.items());
@@ -659,20 +807,17 @@ public class HardwarePacketService {
     }
 
     private void validateLines(
-            List<HardwareLineRequest> lines
-    ) {
+            List<HardwareLineRequest> lines) {
         if (lines == null || lines.isEmpty()) {
             throw new RuntimeException(
-                    "At least one hardware item is required"
-            );
+                    "At least one hardware item is required");
         }
 
         if (lines.size() > MAX_LINES_PER_PACKET) {
             throw new RuntimeException(
                     "A hardware sticker supports a maximum of "
                             + MAX_LINES_PER_PACKET
-                            + " item rows. Create another hardware packet."
-            );
+                            + " item rows. Create another hardware packet.");
         }
 
         Set<String> duplicateCheck = new HashSet<>();
@@ -680,27 +825,23 @@ public class HardwarePacketService {
         for (HardwareLineRequest line : lines) {
             if (line == null) {
                 throw new RuntimeException(
-                        "Invalid hardware item row"
-                );
+                        "Invalid hardware item row");
             }
 
             String name = cleanRequired(
                     line.itemName(),
-                    "Hardware item name is required"
-            );
+                    "Hardware item name is required");
 
             if (name.length() > 300) {
                 throw new RuntimeException(
-                        "Hardware item name cannot exceed 300 characters"
-                );
+                        "Hardware item name cannot exceed 300 characters");
             }
 
             if (line.quantity() == null
                     || line.quantity()
                             .compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException(
-                        "Hardware item quantity must be greater than zero"
-                );
+                        "Hardware item quantity must be greater than zero");
             }
 
             String key = name.toLowerCase()
@@ -709,17 +850,111 @@ public class HardwarePacketService {
 
             if (!duplicateCheck.add(key)) {
                 throw new RuntimeException(
-                        "Duplicate hardware item row: " + name
-                );
+                        "Duplicate hardware item row: " + name);
             }
+        }
+    }
+
+    private boolean containsPlantIgnoreCase(
+            Set<String> allowedPlants,
+            String plantCode) {
+        if (allowedPlants == null
+                || allowedPlants.isEmpty()
+                || plantCode == null
+                || plantCode.isBlank()) {
+            return false;
+        }
+
+        return allowedPlants.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(value -> value.trim()
+                        .equalsIgnoreCase(
+                                plantCode.trim()));
+    }
+
+    private void validateAddRequest(
+            HardwarePacketAddRequest request) {
+        if (request == null) {
+            throw new RuntimeException(
+                    "Hardware packet request is required");
+        }
+
+        if (request.packets() == null
+                || request.packets().isEmpty()) {
+            throw new RuntimeException(
+                    "Add at least one hardware packet");
+        }
+
+        if (request.packets().size() > MAX_PACKETS_PER_REQUEST) {
+            throw new RuntimeException(
+                    "Maximum "
+                            + MAX_PACKETS_PER_REQUEST
+                            + " hardware packets are allowed per request");
+        }
+
+        for (HardwarePacketDraftRequest packet : request.packets()) {
+            if (packet == null) {
+                throw new RuntimeException(
+                        "Invalid hardware packet entry");
+            }
+
+            validateLines(
+                    packet.items());
+        }
+    }
+
+    private void assertHardwareMasterWriteAccess(
+            MasterItem master,
+            User user) {
+        if (master == null
+                || master.getItemType() != PacketItemType.HARDWARE) {
+            throw new AccessDeniedException(
+                    "This is not a hardware master item");
+        }
+
+        if (currentUserService.isAdmin(user)) {
+            return;
+        }
+
+        if (!currentUserService.isHardwarePacking(user)) {
+            throw new AccessDeniedException(
+                    "Hardware packing access required");
+        }
+
+        if (!Objects.equals(
+                master.getCreatedByUserId(),
+                user.getId())) {
+            throw new AccessDeniedException(
+                    "You cannot add packets to another user's hardware master");
+        }
+    }
+
+    private int extractPacketNoOrZero(
+            String packetNumber) {
+        if (packetNumber == null
+                || packetNumber.isBlank()) {
+            return 0;
+        }
+
+        Matcher matcher = Pattern.compile(
+                "(?i)Pkt-(\\d+)").matcher(packetNumber);
+
+        if (!matcher.find()) {
+            return 0;
+        }
+
+        try {
+            return Integer.parseInt(
+                    matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return 0;
         }
     }
 
     private String buildHardwareSku(
             String pdNo,
             String drawingNo,
-            int packetNo
-    ) {
+            int packetNo) {
         return safeSkuPart(pdNo)
                 + "/"
                 + safeSkuPart(drawingNo)
@@ -737,8 +972,7 @@ public class HardwarePacketService {
 
         if (clean.length() > 30) {
             throw new RuntimeException(
-                    "UOM cannot exceed 30 characters"
-            );
+                    "UOM cannot exceed 30 characters");
         }
 
         return clean;
@@ -753,15 +987,13 @@ public class HardwarePacketService {
         if (packetNumber == null
                 || !packetNumber.startsWith("Pkt-")) {
             throw new RuntimeException(
-                    "Hardware packet number is missing"
-            );
+                    "Hardware packet number is missing");
         }
 
         return Integer.parseInt(
                 packetNumber
                         .substring(4)
-                        .replaceAll("[^0-9]", "")
-        );
+                        .replaceAll("[^0-9]", ""));
     }
 
     private String safeSkuPart(String value) {
@@ -782,8 +1014,7 @@ public class HardwarePacketService {
 
     private String cleanRequired(
             String value,
-            String message
-    ) {
+            String message) {
         String clean = cleanOptional(value);
 
         if (clean.isBlank()) {

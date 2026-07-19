@@ -9,18 +9,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 @Entity
-@Table(
-        name = "hardware_packet_lines",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uq_hardware_packet_line_number",
-                        columnNames = {
-                                "packet_item_id",
-                                "line_no"
-                        }
-                )
-        }
-)
+@Table(name = "hardware_packet_lines", uniqueConstraints = {
+        @UniqueConstraint(name = "uq_hardware_packet_line_number", columnNames = {
+                "packet_item_id",
+                "line_no"
+        })
+})
 public class HardwarePacketLine {
 
     @Id
@@ -114,5 +108,21 @@ public class HardwarePacketLine {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    @PrePersist
+    private void applyCreateDefaults() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+
+        if (uom == null
+                || uom.isBlank()) {
+            uom = "Nos";
+        }
     }
 }
