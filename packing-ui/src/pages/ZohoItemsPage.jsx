@@ -8040,15 +8040,34 @@ function ZohoItemsPage() {
             <Box sx={modalScrollBodySx}>
               <Box sx={sectionCardSx}>
                 <Box sx={sectionTitleSx}>
-                  Packet Information
+                  {hardwareEditingItem
+                    ? "Hardware Master & Packet Information"
+                    : hardwareAddMaster
+                      ? "Inherited Hardware Master Information"
+                      : "Hardware Master Information"}
                 </Box>
+
+                {hardwareEditingItem && (
+                  <Box
+                    sx={{
+                      mt: -1,
+                      mb: 2,
+                      color: "#94a3b8",
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Changes to the name, PD number, drawing number,
+                    client and floor will update the hardware master
+                    and its unprinted packets.
+                  </Box>
+                )}
 
                 <TextField
                   label="Packet / Item Name"
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   placeholder="Example: Kitchen Hardware Packet"
@@ -8069,8 +8088,7 @@ function ZohoItemsPage() {
                   label="PD No."
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   fullWidth
@@ -8088,8 +8106,7 @@ function ZohoItemsPage() {
                   label="Drawing No."
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   fullWidth
@@ -8107,8 +8124,7 @@ function ZohoItemsPage() {
                   label="Client Name"
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   fullWidth
@@ -8126,8 +8142,7 @@ function ZohoItemsPage() {
                   label="Client Address"
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   fullWidth
@@ -8147,8 +8162,7 @@ function ZohoItemsPage() {
                   label="Floor / Area"
                   disabled={
                     Boolean(
-                      hardwareAddMaster ||
-                      hardwareEditingItem
+                      hardwareAddMaster
                     )
                   }
                   fullWidth

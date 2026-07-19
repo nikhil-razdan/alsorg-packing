@@ -455,9 +455,10 @@ public class HardwarePacketService {
             UUID itemId,
             HardwarePacketUpdateRequest request,
             User user) {
+
         /*
-         * Controller already has @PreAuthorize, but the service
-         * must still protect itself.
+         * Controller authorization is not enough.
+         * Protect direct service usage as well.
          */
         currentUserService.requireHardwareWriteAccess(user);
 
@@ -467,15 +468,14 @@ public class HardwarePacketService {
         }
 
         /*
-         * Validate before touching existing database rows.
+         * Validate incoming hardware rows before modifying
+         * any existing database data.
          */
         validateLines(request.items());
 
         /*
-         * Lock the parent PacketItem for the complete update.
-         *
-         * This prevents two users or duplicate browser requests
-         * from editing the same packet simultaneously.
+         * Lock the selected PacketItem for the duration
+         * of the complete edit operation.
          */
         PacketItem item = packetItemRepository
                 .findByIdForHardwarePacketUpdate(itemId)
@@ -487,24 +487,37 @@ public class HardwarePacketService {
                 user);
 
         /*
-         * Force initialization of the Hibernate-managed collection
-         * while the transaction is open.
+         * Initialize the managed hardware-line collection
+         * before clearing or replacing it.
          */
         item.getHardwareLines().size();
 
         /*
-         * Preserve the generated-sticker lock.
-         *
-         * Editing after generation would cause the current packet
-         * contents to differ from the saved sticker PDF.
+         * A generated hardware packet is immutable through
+         * the normal edit flow.
          */
-        if (item.getStickerNumber() != null &&
-                !item.getStickerNumber().isBlank()) {
+        if (item.getStickerNumber() != null
+                && !item.getStickerNumber().isBlank()) {
             throw new RuntimeException(
-                    "Printed hardware packet cannot be edited. " +
-                            "Create another packet or use an admin correction flow.");
+                    "Printed hardware packet cannot be edited. "
+                            + "Create another packet or use an admin correction flow.");
         }
 
+        MasterItem master = item.getMasterItem();
+
+        if (master == null) {
+            throw new RuntimeException(
+                    "Hardware master item is missing");
+        }
+
+        if (master.getItemType() != PacketItemType.HARDWARE) {
+            throw new AccessDeniedException(
+                    "This is not a hardware master item");
+        }
+
+        /*
+         * Clean the editable master-level fields.
+         */
         String itemName = cleanRequired(
                 request.itemName(),
                 "Hardware packet title is required");
@@ -524,70 +537,151 @@ public class HardwarePacketService {
         String floor = cleanOptional(
                 request.floor());
 
-        int packetNo = extractPacketNo(
-                item.getPacketNumber());
-
         /*
-         * Update selected PacketItem metadata.
-         */
-        item.setItemName(itemName);
-        item.setPdNo(pdNo);
-        item.setDrawingNo(drawingNo);
-        item.setClientName(clientName);
-        item.setClientAddress(clientAddress);
-        item.setFloor(floor);
-
-        item.setSku(
-                buildHardwareSku(
-                        pdNo,
-                        drawingNo,
-                        packetNo));
-
-        /*
-         * Keep the linked MasterItem consistent.
+         * =====================================================
+         * UPDATE THE ACTUAL HARDWARE MASTER
+         * =====================================================
          *
-         * This prevents the Master Packet Control card from showing
-         * old metadata after editing a packet.
+         * These fields represent the whole hardware master,
+         * not only the selected packet.
          */
-        MasterItem master = item.getMasterItem();
+        master.setItemName(
+                itemName);
 
-        if (master != null) {
-            master.setItemName(itemName);
-            master.setPdNo(pdNo);
-            master.setDrawingName(drawingNo);
-            master.setClientName(clientName);
-            master.setAddress(clientAddress);
-            master.setFloor(floor);
+        master.setPdNo(
+                pdNo);
 
-            masterItemRepository.save(master);
+        master.setDrawingName(
+                drawingNo);
+
+        master.setClientName(
+                clientName);
+
+        master.setAddress(
+                clientAddress);
+
+        master.setFloor(
+                floor);
+
+        masterItemRepository.save(
+                master);
+
+        /*
+         * Load all sibling packets belonging to this master.
+         *
+         * They are Hibernate-managed entities because this query
+         * runs inside the current transaction.
+         */
+        List<PacketItem> masterPackets = new ArrayList<>(
+                packetItemRepository
+                        .findAllByMasterItemIdWithHardwareLines(
+                                master.getId()));
+
+        /*
+         * Defensive fallback in case the selected packet is not
+         * returned by the sibling query.
+         */
+        boolean selectedItemIncluded = masterPackets.stream()
+                .anyMatch(packet -> Objects.equals(
+                        packet.getId(),
+                        item.getId()));
+
+        if (!selectedItemIncluded) {
+            masterPackets.add(
+                    item);
         }
 
         /*
          * =====================================================
-         * PHASE 1: DELETE OLD HARDWARE LINES
+         * SYNCHRONIZE UNPRINTED HARDWARE PACKETS
          * =====================================================
          *
-         * This is the critical duplicate-key fix.
+         * Update:
+         * - the selected packet;
+         * - every other unprinted packet under the master.
          *
-         * Old line_no 1, 2, 3... must be physically deleted before
-         * the new rows reuse line numbers 1, 2, 3...
+         * Printed sibling PacketItem snapshots are intentionally
+         * preserved because they may correspond to an existing PDF.
          */
-        item.getHardwareLines().clear();
+        for (PacketItem masterPacket : masterPackets) {
+
+            if (masterPacket == null
+                    || masterPacket.getItemType() != PacketItemType.HARDWARE) {
+                continue;
+            }
+
+            boolean selectedPacket = Objects.equals(
+                    masterPacket.getId(),
+                    item.getId());
+
+            boolean unprintedPacket = masterPacket.getStickerNumber() == null
+                    || masterPacket.getStickerNumber()
+                            .isBlank();
+
+            if (!selectedPacket
+                    && !unprintedPacket) {
+                continue;
+            }
+
+            masterPacket.setItemName(
+                    itemName);
+
+            masterPacket.setPdNo(
+                    pdNo);
+
+            masterPacket.setDrawingNo(
+                    drawingNo);
+
+            masterPacket.setClientName(
+                    clientName);
+
+            masterPacket.setClientAddress(
+                    clientAddress);
+
+            masterPacket.setFloor(
+                    floor);
+
+            int siblingPacketNo = extractPacketNo(
+                    masterPacket.getPacketNumber());
+
+            masterPacket.setSku(
+                    buildHardwareSku(
+                            pdNo,
+                            drawingNo,
+                            siblingPacketNo));
+        }
 
         /*
-         * Force orphanRemoval deletes now.
+         * =====================================================
+         * PHASE 1: DELETE THE SELECTED PACKET'S OLD LINES
+         * =====================================================
          *
-         * Without this flush, Hibernate can try to insert the new
-         * line_no=1 before deleting the old line_no=1.
+         * The database has a unique constraint on:
+         *
+         * packet_item_id + line_no
+         *
+         * Therefore the old line numbers must be deleted before
+         * inserting the replacement line numbers.
+         */
+        item.getHardwareLines()
+                .clear();
+
+        /*
+         * Flush now so orphanRemoval physically deletes old rows
+         * before the replacement rows reuse line_no 1, 2, 3...
+         *
+         * This flush will also persist the master and sibling
+         * metadata changes made above.
          */
         packetItemRepository.flush();
 
         /*
          * =====================================================
-         * PHASE 2: CREATE NEW HARDWARE LINES
+         * PHASE 2: CREATE REPLACEMENT HARDWARE LINES
          * =====================================================
          */
-        LocalDateTime now = LocalDateTime.now(APP_ZONE);
+        LocalDateTime now = LocalDateTime.now(
+                APP_ZONE);
 
         List<HardwarePacketLine> newLines = buildLines(
                 item,
@@ -595,15 +689,20 @@ public class HardwarePacketService {
                 now);
 
         /*
-         * Do not call replaceHardwareLines here.
+         * Add the new lines to the existing managed collection.
          *
-         * The old managed collection has already been cleared and
-         * flushed. Add new rows to that same managed collection.
+         * Do not call replaceHardwareLines() here because the
+         * collection was deliberately cleared and flushed above.
          */
         for (HardwarePacketLine line : newLines) {
-            item.addHardwareLine(line);
+            item.addHardwareLine(
+                    line);
         }
 
+        /*
+         * Refresh the selected packet's printable description
+         * using its newly submitted hardware contents.
+         */
         item.setDescription(
                 buildDescriptionSnapshot(
                         newLines));
@@ -611,7 +710,14 @@ public class HardwarePacketService {
         PacketItem saved = packetItemRepository.saveAndFlush(
                 item);
 
-        return toResponse(saved);
+        /*
+         * Keep the collection initialized before response mapping.
+         */
+        saved.getHardwareLines()
+                .size();
+
+        return toResponse(
+                saved);
     }
 
     @Transactional
@@ -798,40 +904,86 @@ public class HardwarePacketService {
 
     private HardwarePacketResponse toResponse(
             PacketItem item) {
+
+        if (item == null) {
+            throw new RuntimeException(
+                    "Hardware packet response item is missing");
+        }
+
         List<HardwareLineResponse> lines = item.getHardwareLines() == null
                 ? List.of()
                 : item.getHardwareLines()
                         .stream()
+                        .filter(Objects::nonNull)
                         .sorted(
                                 Comparator.comparingInt(
-                                        HardwarePacketLine::getLineNo))
+                                        line -> line.getLineNo() != null
+                                                ? line.getLineNo()
+                                                : Integer.MAX_VALUE))
                         .map(line -> new HardwareLineResponse(
                                 line.getId(),
-                                line.getLineNo(),
+
+                                line.getLineNo() != null
+                                        ? line.getLineNo()
+                                        : 0,
+
                                 line.getItemName(),
                                 line.getQuantity(),
                                 line.getUom()))
                         .toList();
 
+        MasterItem master = item.getMasterItem();
+
+        /*
+         * MasterItem is the source of truth for information
+         * shared by every packet under the same hardware master.
+         *
+         * PacketItem values are used only for legacy rows where
+         * the MasterItem relationship is unavailable.
+         */
+        String responseItemName = master != null
+                ? master.getItemName()
+                : item.getItemName();
+
+        String responsePdNo = master != null
+                ? master.getPdNo()
+                : item.getPdNo();
+
+        String responseDrawingNo = master != null
+                ? master.getDrawingName()
+                : item.getDrawingNo();
+
+        String responseClientName = master != null
+                ? master.getClientName()
+                : item.getClientName();
+
+        String responseClientAddress = master != null
+                ? master.getAddress()
+                : item.getClientAddress();
+
+        String responseFloor = master != null
+                ? master.getFloor()
+                : item.getFloor();
+
         return new HardwarePacketResponse(
                 item.getId(),
 
-                item.getMasterItem() != null
-                        ? item.getMasterItem().getId()
+                master != null
+                        ? master.getId()
                         : null,
 
                 PacketItemType.HARDWARE,
 
-                item.getItemName(),
+                responseItemName,
                 item.getPacketNumber(),
                 item.getSku(),
 
-                item.getPdNo(),
-                item.getDrawingNo(),
+                responsePdNo,
+                responseDrawingNo,
 
-                item.getClientName(),
-                item.getClientAddress(),
-                item.getFloor(),
+                responseClientName,
+                responseClientAddress,
+                responseFloor,
 
                 item.getDescription(),
 
