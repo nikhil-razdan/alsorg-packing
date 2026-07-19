@@ -4419,6 +4419,72 @@ function ZohoItemsPage() {
   };
 
   const openDeleteConfirm = (row) => {
+    if (!row) {
+      showUiAlert(
+        "error",
+        "Inventory item information is missing"
+      );
+
+      return;
+    }
+
+    const packetItemId =
+      getPacketItemIdForSticker(row);
+
+    if (!packetItemId) {
+      showUiAlert(
+        "error",
+        "Packet Item ID is missing. This item cannot be deleted."
+      );
+
+      return;
+    }
+
+    const hardwareRow =
+      isHardwarePacketRow(row);
+
+    const stickerGenerated =
+      Boolean(
+        String(
+          row?.stickerNumber || ""
+        ).trim()
+      );
+
+    /*
+     * Backend does not permit deletion of a printed
+     * hardware packet, including for ADMIN.
+     *
+     * Keep the button clickable, but explain why the
+     * deletion cannot proceed.
+     */
+    if (
+      hardwareRow &&
+      stickerGenerated
+    ) {
+      showUiAlert(
+        "error",
+        "Printed hardware packets cannot be deleted. Use the Admin correction or rollback flow instead."
+      );
+
+      return;
+    }
+
+    /*
+     * Hardware packet deletion is allowed only for
+     * ADMIN and HARDWARE_PACKING.
+     */
+    if (
+      hardwareRow &&
+      !canManageHardwarePackets
+    ) {
+      showUiAlert(
+        "error",
+        "You have view-only access to this hardware packet"
+      );
+
+      return;
+    }
+
     setDeleteTarget(row);
     setDeleteConfirmOpen(true);
   };
@@ -5102,7 +5168,7 @@ function ZohoItemsPage() {
     const row = deleteTarget;
 
     const deleteId =
-      row?.itemId || row?.id || row?.packetItemId;
+      getPacketItemIdForSticker(row);
 
     if (!deleteId) {
       showUiAlert(
@@ -5137,21 +5203,30 @@ function ZohoItemsPage() {
         );
 
       if (!res.ok) {
-        const text = await res.text();
-        console.error("Delete backend error:", text);
+        const message =
+          await readApiErrorMessage(res);
+
+        console.error(
+          "Delete backend error:",
+          message
+        );
 
         showUiAlert(
           "error",
-          text || "Delete failed from backend"
+          message ||
+          "Delete failed from backend"
         );
 
         return;
       }
 
-      setRows((prev) =>
-        prev.filter((r) => {
-          const id = r.itemId || r.id || r.packetItemId;
-          return id !== deleteId;
+      setRows((previousRows) =>
+        previousRows.filter((item) => {
+          const currentId =
+            getPacketItemIdForSticker(item);
+
+          return String(currentId) !==
+            String(deleteId);
         })
       );
 
@@ -5702,26 +5777,21 @@ function ZohoItemsPage() {
                         <Button
                           type="button"
                           size="small"
-                          disabled={
-                            deleteLocked
-                          }
-                          onClick={() =>
-                            openDeleteConfirm(row)
-                          }
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            openDeleteConfirm(row);
+                          }}
                           sx={{
                             ...actionDanger,
                             ...tableActionButton,
                             opacity:
-                              deleteLocked
-                                ? 0.45
+                              hardwareStickerLocked
+                                ? 0.7
                                 : 1,
-
                             pointerEvents: "auto",
-
-                            cursor:
-                              deleteLocked
-                                ? "not-allowed"
-                                : "pointer",
+                            cursor: "pointer",
                           }}
                         >
                           Delete
@@ -5989,7 +6059,11 @@ function ZohoItemsPage() {
               </Box>
 
               <Box sx={deleteWarningTextSx}>
-                Once deleted, this item will be removed from the Inventory page.
+                {isHardwarePacketRow(
+                  deleteTarget
+                )
+                  ? "This hardware packet and all of its hardware content rows will be permanently removed."
+                  : "Once deleted, this packet item will be removed from the Inventory page."}
               </Box>
             </Box>
           </Box>

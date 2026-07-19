@@ -2984,7 +2984,8 @@ function DispatchedItemsPage() {
 		cleanRole === "DISPATCH";
 
 	const [historyOpen, setHistoryOpen] = useState(false);
-	const [, setHistoryItem] = useState(null);
+	const [historyItem, setHistoryItem] =
+		useState(null);
 	const [historyRows, setHistoryRows] = useState([]);
 	const [historyLoading, setHistoryLoading] = useState(false);
 	const [auditOpen, setAuditOpen] = useState(false);
@@ -3354,6 +3355,101 @@ function DispatchedItemsPage() {
 			credentials: "include",
 			headers: getAuthHeaders(options.headers || {}),
 		});
+	};
+
+	const getStickerHistoryListPath = (
+		row,
+		packetItemId
+	) => {
+		const cleanItemId =
+			String(packetItemId || "").trim();
+
+		if (!cleanItemId) {
+			return "";
+		}
+
+		if (isHardwareDispatchRow(row)) {
+			return `/api/hardware-packets/${encodeURIComponent(
+				cleanItemId
+			)}/history`;
+		}
+
+		return `/api/stickers/${encodeURIComponent(
+			cleanItemId
+		)}/history`;
+	};
+
+	const getStickerHistoryPdfPath = (
+		row,
+		historyId
+	) => {
+		const cleanHistoryId =
+			String(historyId || "").trim();
+
+		if (!cleanHistoryId) {
+			return "";
+		}
+
+		if (isHardwareDispatchRow(row)) {
+			return `/api/hardware-packets/history/${encodeURIComponent(
+				cleanHistoryId
+			)}/download-pdf`;
+		}
+
+		return `/api/stickers/history/${encodeURIComponent(
+			cleanHistoryId
+		)}/download-pdf`;
+	};
+
+	const normalizeStickerHistoryRows = (
+		payload
+	) => {
+		if (Array.isArray(payload)) {
+			return payload;
+		}
+
+		if (Array.isArray(payload?.content)) {
+			return payload.content;
+		}
+
+		if (Array.isArray(payload?.history)) {
+			return payload.history;
+		}
+
+		if (Array.isArray(payload?.items)) {
+			return payload.items;
+		}
+
+		return [];
+	};
+
+	const readResponseError = async (
+		response,
+		fallbackMessage
+	) => {
+		try {
+			const text =
+				await response.text();
+
+			if (!text) {
+				return fallbackMessage;
+			}
+
+			try {
+				const parsed =
+					JSON.parse(text);
+
+				return (
+					parsed?.message ||
+					parsed?.error ||
+					text
+				);
+			} catch {
+				return text;
+			}
+		} catch {
+			return fallbackMessage;
+		}
 	};
 
 	const normalizeGatePassDropdownLocation = (row) => {
@@ -5249,87 +5345,413 @@ function DispatchedItemsPage() {
 
 	/* ===================== DOWNLOAD ===================== */
 
-	const openStickerHistory = async (row) => {
-		try {
-			if (!row?.zohoItemId) {
-				alert("Dispatched Item ID missing");
-				return;
-			}
+	const openStickerHistory = async (
+		row
+	) => {
+		const dispatchedItemId =
+			String(
+				row?.zohoItemId || ""
+			).trim();
 
+		if (!dispatchedItemId) {
+			alert(
+				"Dispatched Item ID missing"
+			);
+
+			return;
+		}
+
+		try {
 			setHistoryOpen(true);
 			setHistoryLoading(true);
 			setHistoryRows([]);
-			setHistoryItem(row.zohoItemId);
 
-			const ensureRes = await authFetch(
-				`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(row.zohoItemId)}/ensure-history`,
-				{
-					method: "POST",
-					headers: getAuthHeaders(),
-				}
-			);
+			/*
+			 * Save the complete row.
+			 * The modal later needs itemType to choose
+			 * NORMAL or HARDWARE PDF endpoints.
+			 */
+			setHistoryItem(row);
+
+			/*
+			 * This endpoint repairs old dispatch records,
+			 * links packetItemId and rebuilds missing
+			 * sticker history when necessary.
+			 */
+			const ensureRes =
+				await authFetch(
+					`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(
+						dispatchedItemId
+					)}/ensure-history`,
+					{
+						method: "POST",
+					}
+				);
 
 			if (!ensureRes.ok) {
-				const text = await ensureRes.text();
-				throw new Error(text || "Sticker history rebuild failed");
+				const message =
+					await readResponseError(
+						ensureRes,
+						"Sticker history rebuild failed"
+					);
+
+				throw new Error(message);
 			}
 
-			const ensureData = await ensureRes.json();
+			const ensureData =
+				await ensureRes.json();
 
 			const packetItemId =
-				ensureData?.packetItemId ||
-				row.packetItemId ||
-				row.itemId ||
-				row.id;
+				String(
+					ensureData?.packetItemId ||
+					row?.packetItemId ||
+					row?.itemId ||
+					row?.id ||
+					""
+				).trim();
 
 			if (!packetItemId) {
-				throw new Error("Packet Item ID missing after history rebuild");
+				throw new Error(
+					"Packet Item ID missing after history rebuild"
+				);
 			}
 
 			/*
-			 * Step 2:
-			 * Now load normal sticker history.
+			 * Prefer backend itemType because old dispatch
+			 * rows may not have itemType stored correctly.
 			 */
-			const res = await authFetch(
-				`${API_BASE_URL}/api/stickers/${encodeURIComponent(packetItemId)}/history`,
-				{
-					method: "GET",
-					headers: getAuthHeaders(),
-				}
+			const resolvedItemType =
+				resolveDispatchItemType({
+					...row,
+
+					itemType:
+						ensureData?.itemType ||
+						row?.itemType,
+
+					packetItemType:
+						ensureData?.packetItemType ||
+						row?.packetItemType,
+
+					hardwarePacket:
+						ensureData?.hardwarePacket ??
+						row?.hardwarePacket,
+				});
+
+			const resolvedHistoryItem = {
+				...row,
+
+				packetItemId,
+
+				itemType:
+					resolvedItemType,
+
+				hardwarePacket:
+					resolvedItemType ===
+					"HARDWARE",
+
+				stickerNumber:
+					ensureData?.stickerNumber ||
+					row?.stickerNumber ||
+					"",
+			};
+
+			setHistoryItem(
+				resolvedHistoryItem
 			);
 
-			if (!res.ok) {
-				const text = await res.text();
-				throw new Error(text || "History fetch failed");
+			const historyPath =
+				getStickerHistoryListPath(
+					resolvedHistoryItem,
+					packetItemId
+				);
+
+			if (!historyPath) {
+				throw new Error(
+					"Sticker history endpoint could not be resolved"
+				);
 			}
 
-			const data = await res.json();
+			const historyRes =
+				await authFetch(
+					`${API_BASE_URL}${historyPath}`,
+					{
+						method: "GET",
+					}
+				);
 
-			setHistoryRows(Array.isArray(data) ? data : []);
+			if (!historyRes.ok) {
+				const message =
+					await readResponseError(
+						historyRes,
+						"History fetch failed"
+					);
+
+				throw new Error(message);
+			}
+
+			const historyData =
+				await historyRes.json();
+
+			setHistoryRows(
+				normalizeStickerHistoryRows(
+					historyData
+				)
+			);
 
 			/*
-			 * Keep row corrected in UI memory too.
+			 * Keep the corrected packetItemId and
+			 * item type in the Dispatch table state.
 			 */
-			setRows((prev) =>
-				prev.map((item) =>
-					item.zohoItemId === row.zohoItemId
+			setRows((previousRows) =>
+				previousRows.map((item) =>
+					item.zohoItemId ===
+						dispatchedItemId
 						? {
 							...item,
+
 							packetItemId,
+
+							itemType:
+								resolvedItemType,
+
+							hardwarePacket:
+								resolvedItemType ===
+								"HARDWARE",
+
 							stickerNumber:
 								ensureData?.stickerNumber ||
-								item.stickerNumber,
+								item?.stickerNumber ||
+								"",
 						}
 						: item
 				)
 			);
-		} catch (err) {
-			console.error(err);
-			alert(err.message || "Failed to load sticker history");
+		} catch (error) {
+			console.error(
+				"Sticker history failed:",
+				error
+			);
+
+			setHistoryRows([]);
+
+			alert(
+				error?.message ||
+				"Failed to load sticker history"
+			);
 		} finally {
 			setHistoryLoading(false);
 		}
 	};
+
+	const fetchStickerHistoryPdfBlob =
+		async (historyRow) => {
+			const historyId =
+				historyRow?.id ||
+				historyRow?.historyId;
+
+			if (!historyId) {
+				throw new Error(
+					"Sticker history ID missing"
+				);
+			}
+
+			if (!historyItem) {
+				throw new Error(
+					"Selected packet information missing"
+				);
+			}
+
+			const pdfPath =
+				getStickerHistoryPdfPath(
+					historyItem,
+					historyId
+				);
+
+			if (!pdfPath) {
+				throw new Error(
+					"Sticker PDF endpoint could not be resolved"
+				);
+			}
+
+			const response =
+				await authFetch(
+					`${API_BASE_URL}${pdfPath}`,
+					{
+						method: "GET",
+
+						headers: {
+							Accept:
+								"application/pdf",
+						},
+					}
+				);
+
+			if (!response.ok) {
+				const message =
+					await readResponseError(
+						response,
+						"Sticker PDF fetch failed"
+					);
+
+				throw new Error(message);
+			}
+
+			const contentType =
+				String(
+					response.headers.get(
+						"content-type"
+					) || ""
+				).toLowerCase();
+
+			if (
+				contentType &&
+				!contentType.includes(
+					"application/pdf"
+				)
+			) {
+				throw new Error(
+					"Backend did not return a PDF"
+				);
+			}
+
+			const blob =
+				await response.blob();
+
+			if (!blob || blob.size === 0) {
+				throw new Error(
+					"Empty sticker PDF received"
+				);
+			}
+
+			return blob;
+		};
+
+	const previewStickerHistoryPdf =
+		async (historyRow) => {
+			/*
+			 * Open before await so the browser does not
+			 * treat it as an unsolicited popup.
+			 */
+			const previewWindow =
+				window.open(
+					"",
+					"_blank",
+					"noopener,noreferrer"
+				);
+
+			if (!previewWindow) {
+				alert(
+					"Popup blocked. Please allow popups for this site."
+				);
+
+				return;
+			}
+
+			try {
+				previewWindow.document.write(`
+        <html>
+          <head>
+            <title>Loading Sticker PDF</title>
+          </head>
+
+          <body style="
+            margin:0;
+            min-height:100vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:#0f172a;
+            color:#ffffff;
+            font-family:Arial,sans-serif;
+          ">
+            Loading sticker PDF...
+          </body>
+        </html>
+      `);
+
+				const blob =
+					await fetchStickerHistoryPdfBlob(
+						historyRow
+					);
+
+				const blobUrl =
+					URL.createObjectURL(blob);
+
+				previewWindow.location.replace(
+					blobUrl
+				);
+
+				setTimeout(() => {
+					URL.revokeObjectURL(
+						blobUrl
+					);
+				}, 60000);
+			} catch (error) {
+				console.error(
+					"Sticker preview failed:",
+					error
+				);
+
+				previewWindow.close();
+
+				alert(
+					error?.message ||
+					"Preview failed"
+				);
+			}
+		};
+
+	const downloadStickerHistoryPdf =
+		async (historyRow) => {
+			try {
+				const blob =
+					await fetchStickerHistoryPdfBlob(
+						historyRow
+					);
+
+				const url =
+					URL.createObjectURL(blob);
+
+				const stickerNumber =
+					String(
+						historyRow?.stickerNumber ||
+						"STICKER"
+					)
+						.trim()
+						.replace(
+							/[^\w.-]+/g,
+							"_"
+						);
+
+				const anchor =
+					document.createElement("a");
+
+				anchor.href = url;
+				anchor.download =
+					`STICKER_${stickerNumber}.pdf`;
+
+				document.body.appendChild(
+					anchor
+				);
+
+				anchor.click();
+				anchor.remove();
+
+				setTimeout(() => {
+					URL.revokeObjectURL(url);
+				}, 10000);
+			} catch (error) {
+				console.error(
+					"Sticker download failed:",
+					error
+				);
+
+				alert(
+					error?.message ||
+					"Download failed"
+				);
+			}
+		};
 
 	const openAuditLogs = async (zohoItemId) => {
 		try {
