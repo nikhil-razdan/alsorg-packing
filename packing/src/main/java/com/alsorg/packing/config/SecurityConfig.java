@@ -22,101 +22,134 @@ import org.springframework.web.cors.CorsConfigurationSource;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+        private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter
-    ) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-    }
+        public SecurityConfig(
+                        JwtAuthenticationFilter jwtAuthenticationFilter) {
+                this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        }
 
-    @Bean
-    public SecurityFilterChain filterChain(
-            HttpSecurity http,
-            CorsConfigurationSource corsConfigurationSource
-    ) throws Exception {
+        @Bean
+        public SecurityFilterChain filterChain(
+                        HttpSecurity http,
+                        CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        http
-                .cors(cors ->
-                        cors.configurationSource(corsConfigurationSource)
-                )
-                .csrf(csrf -> csrf.disable())
-                .httpBasic(httpBasic -> httpBasic.disable())
-                .formLogin(formLogin -> formLogin.disable())
-                .logout(logout -> logout.disable())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
-                .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint((request, response, ex) -> {
-                            response.setStatus(401);
-                            response.setContentType("application/json");
-                            response.setCharacterEncoding("UTF-8");
-                            response.getWriter()
-                                    .write("{\"message\":\"Unauthorized\"}");
-                        })
-                        .accessDeniedHandler((request, response, ex) -> {
-                            response.setStatus(403);
-                            response.setContentType("application/json");
-                            response.setCharacterEncoding("UTF-8");
-                            response.getWriter()
-                                    .write("{\"message\":\"Forbidden\"}");
-                        })
-                )
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                HttpMethod.OPTIONS,
-                                "/**"
-                        ).permitAll()
+                http
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                                .csrf(csrf -> csrf.disable())
+                                .httpBasic(httpBasic -> httpBasic.disable())
+                                .formLogin(formLogin -> formLogin.disable())
+                                .logout(logout -> logout.disable())
+                                .sessionManagement(session -> session.sessionCreationPolicy(
+                                                SessionCreationPolicy.STATELESS))
+                                .exceptionHandling(exception -> exception
+                                                .authenticationEntryPoint((request, response, ex) -> {
+                                                        response.setStatus(401);
+                                                        response.setContentType("application/json");
+                                                        response.setCharacterEncoding("UTF-8");
+                                                        response.getWriter()
+                                                                        .write("{\"message\":\"Unauthorized\"}");
+                                                })
+                                                .accessDeniedHandler((request, response, ex) -> {
+                                                        response.setStatus(403);
+                                                        response.setContentType("application/json");
+                                                        response.setCharacterEncoding("UTF-8");
+                                                        response.getWriter()
+                                                                        .write("{\"message\":\"Forbidden\"}");
+                                                }))
+                                .authorizeHttpRequests(auth -> auth
 
-                        /*
-                         * Login/logout/me must be public.
-                         * /api/auth/me itself decides whether user is authenticated.
-                         */
-                        .requestMatchers(
-                                "/api/auth/login",
-                                "/api/auth/logout",
-                                "/api/auth/me"
-                        ).permitAll()
+                                                /*
+                                                 * CORS preflight.
+                                                 */
+                                                .requestMatchers(
+                                                                HttpMethod.OPTIONS,
+                                                                "/**")
+                                                .permitAll()
 
-                        /*
-                         * Generated history must NOT be public.
-                         * It should work through HttpOnly cookie auth.
-                         */
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/stickers/generated-history",
-                                "/api/stickers/generated-history/users",
-                                "/api/stickers/history/*/download",
-                                "/api/stickers/history/*/download-pdf"
-                        ).authenticated()
+                                                /*
+                                                 * Public authentication endpoints.
+                                                 */
+                                                .requestMatchers(
+                                                                "/api/auth/login",
+                                                                "/api/auth/logout",
+                                                                "/api/auth/me")
+                                                .permitAll()
 
-                        .requestMatchers(
-                                "/api/users/**"
-                        ).hasAuthority("ADMIN")
+                                                /*
+                                                 * Generated-history screen.
+                                                 *
+                                                 * The controller applies the final per-user rule:
+                                                 * ADMIN sees all.
+                                                 * Other authenticated users see their own.
+                                                 */
+                                                .requestMatchers(
+                                                                HttpMethod.GET,
+                                                                "/api/stickers/generated-history",
+                                                                "/api/stickers/generated-history/users")
+                                                .authenticated()
 
-                        .anyRequest().authenticated()
-                )
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                                                /*
+                                                 * Dispatch can repair/rebuild missing sticker history.
+                                                 */
+                                                .requestMatchers(
+                                                                HttpMethod.POST,
+                                                                "/api/stickers/dispatched/*/ensure-history")
+                                                .hasAnyAuthority(
+                                                                "ADMIN",
+                                                                "DISPATCH")
 
-        return http.build();
-    }
+                                                /*
+                                                 * Item-wise Sticker History modal and its PDF.
+                                                 *
+                                                 * Plant access and hardware ownership are still checked
+                                                 * inside PacketService.
+                                                 */
+                                                .requestMatchers(
+                                                                HttpMethod.GET,
+                                                                "/api/stickers/*/history",
+                                                                "/api/stickers/history/*/download-pdf")
+                                                .hasAnyAuthority(
+                                                                "ADMIN",
+                                                                "DISPATCH",
+                                                                "PACKING",
+                                                                "HARDWARE_PACKING")
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        DelegatingPasswordEncoder encoder =
-                (DelegatingPasswordEncoder)
-                        PasswordEncoderFactories.createDelegatingPasswordEncoder();
+                                                /*
+                                                 * User management.
+                                                 */
+                                                .requestMatchers(
+                                                                "/api/users/**")
+                                                .hasAuthority("ADMIN")
 
-        encoder.setDefaultPasswordEncoderForMatches(
-                new BCryptPasswordEncoder()
-        );
+                                                /*
+                                                 * HardwarePacketController already has method-level
+                                                 * 
+                                                 * @PreAuthorize rules.
+                                                 */
+                                                .requestMatchers(
+                                                                "/api/hardware-packets/**")
+                                                .authenticated()
 
-        return encoder;
-    }
+                                                /*
+                                                 * Everything else requires authentication.
+                                                 */
+                                                .anyRequest().authenticated())
+                                .addFilterBefore(
+                                                jwtAuthenticationFilter,
+                                                UsernamePasswordAuthenticationFilter.class);
+
+                return http.build();
+        }
+
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                DelegatingPasswordEncoder encoder = (DelegatingPasswordEncoder) PasswordEncoderFactories
+                                .createDelegatingPasswordEncoder();
+
+                encoder.setDefaultPasswordEncoderForMatches(
+                                new BCryptPasswordEncoder());
+
+                return encoder;
+        }
 }

@@ -1977,22 +1977,31 @@ public class PacketService {
         private void assertLegacyPlantAccess(
                         String plantCode,
                         Set<String> allowedPlants) {
-                if (allowedPlants == null || allowedPlants.isEmpty()) {
+                /*
+                 * null may represent unrestricted internal/Admin access.
+                 */
+                if (allowedPlants == null) {
                         return;
                 }
 
                 /*
-                 * Legacy safety:
-                 * Old records may not have plantCode.
-                 * Do not block them.
+                 * Preserve legacy records that genuinely have no plant.
                  */
-                if (plantCode == null || plantCode.isBlank()) {
+                if (plantCode == null ||
+                                plantCode.isBlank()) {
                         return;
                 }
 
-                if (!allowedPlants.contains(plantCode)) {
-                        throw new RuntimeException(
-                                        "User does not have access to plant: " + plantCode);
+                boolean permitted = allowedPlants.stream()
+                                .filter(Objects::nonNull)
+                                .map(String::trim)
+                                .anyMatch(allowedPlant -> allowedPlant.equalsIgnoreCase(
+                                                plantCode.trim()));
+
+                if (!permitted) {
+                        throw new AccessDeniedException(
+                                        "User does not have access to plant: " +
+                                                        plantCode);
                 }
         }
 
@@ -2198,6 +2207,48 @@ public class PacketService {
                                 item);
         }
 
+        @Transactional(readOnly = true)
+        public PacketItem requireStickerHistoryReadAccess(
+                        UUID packetItemId,
+                        User user,
+                        Set<String> allowedPlants) {
+                if (user == null) {
+                        throw new AccessDeniedException(
+                                        "Authentication is required");
+                }
+
+                PacketItem item = packetItemRepository.findById(packetItemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Packet item not found"));
+
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        /*
+                         * ADMIN:
+                         * Can read every hardware sticker.
+                         *
+                         * DISPATCH:
+                         * Can read hardware sticker history for assigned plants.
+                         *
+                         * HARDWARE_PACKING:
+                         * Can read owned hardware packets for assigned plants.
+                         */
+                        assertHardwarePacketReadAccess(
+                                        item,
+                                        user,
+                                        allowedPlants);
+                } else {
+                        /*
+                         * Normal packet access remains plant-aware.
+                         */
+                        assertNormalPacketAccess(
+                                        item,
+                                        user,
+                                        allowedPlants);
+                }
+
+                return item;
+        }
+
         private byte[] getStickerHistoryPdfInternal(
                         StickerHistory history,
                         PacketItem item) {
@@ -2241,4 +2292,5 @@ public class PacketService {
 
                 return item.getItemType();
         }
+
 }

@@ -165,6 +165,8 @@ function InventorySidePanel({
 function InventoryMasterWorkbench({
   rows,
   isAdmin,
+  canCreateNormalPackets,
+  canManageHardwarePackets,
   onGenerate,
   onAdd,
   onCustomAdd,
@@ -182,104 +184,127 @@ function InventoryMasterWorkbench({
   const [pageSize, setPageSize] =
     useState(6);
 
-  const groups =
-    useMemo(() => {
-      const map =
-        new Map();
+  const groups = useMemo(() => {
+    const map = new Map();
 
-      rows.forEach((row) => {
-        const itemType =
-          getInventoryRowItemType(
-            row
+    const sourceRows =
+      Array.isArray(rows)
+        ? rows
+        : [];
+
+    sourceRows.forEach((row) => {
+      const itemType =
+        getInventoryRowItemType(row);
+
+      const key =
+        row.masterItemId ||
+        [
+          itemType,
+          row.itemName,
+          row.pdNo,
+          row.drawingNo,
+          row.clientName,
+        ]
+          .filter(Boolean)
+          .join("|") ||
+        row.itemId ||
+        row.packetItemId ||
+        row.id;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+
+          masterItemId:
+            row.masterItemId,
+
+          itemType,
+
+          itemName:
+            row.itemName ||
+            row.name ||
+            "Unknown Item",
+
+          clientName:
+            row.clientName ||
+            "—",
+
+          pdNo:
+            row.pdNo ||
+            "—",
+
+          drawingNo:
+            row.drawingNo ||
+            "—",
+
+          plantCode:
+            row.plantCode ||
+            "Unassigned",
+
+          rows: [],
+        });
+      }
+
+      map.get(key).rows.push(row);
+    });
+
+    return Array.from(map.values())
+      .map((group) => {
+        const sortedRows =
+          [...group.rows].sort(
+            (left, right) =>
+              getInventoryPacketNumber(left) -
+              getInventoryPacketNumber(right)
           );
 
-        const key =
-          row.masterItemId ||
-          [
-            itemType,
-            row.itemName,
-            row.pdNo,
-            row.drawingNo,
-            row.clientName,
-          ]
-            .filter(Boolean)
-            .join("|") ||
-          row.itemId;
+        const total =
+          sortedRows.length;
 
-        if (!map.has(key)) {
-          map.set(key, {
-            key,
+        const generated =
+          sortedRows.filter((row) =>
+            Boolean(
+              String(
+                row?.stickerNumber || ""
+              ).trim()
+            )
+          ).length;
 
-            masterItemId:
-              row.masterItemId,
+        const pending =
+          total - generated;
 
-            itemType,
+        const percent =
+          total > 0
+            ? Math.round(
+              (generated / total) *
+              100
+            )
+            : 0;
 
-            itemName:
-              row.itemName ||
-              "Unknown Item",
+        const dispatched =
+          sortedRows.filter((row) =>
+            String(row?.status || "")
+              .trim()
+              .toUpperCase()
+              .includes("DISPATCH")
+          ).length;
 
-            clientName:
-              row.clientName ||
-              "—",
-
-            pdNo:
-              row.pdNo ||
-              "—",
-
-            drawingNo:
-              row.drawingNo ||
-              "—",
-
-            plantCode:
-              row.plantCode ||
-              "Unassigned",
-
-            rows: [],
-          });
-        }
-
-        map.get(key).rows.push(
-          row
-        );
-      });
-
-      return Array.from(map.values())
-        .map((group) => {
-          const total =
-            group.rows.length;
-
-          const generated =
-            group.rows.filter((row) => row.stickerNumber).length;
-
-          const pending =
-            total - generated;
-
-          const percent =
-            total > 0
-              ? Math.round((generated / total) * 100)
-              : 0;
-
-          const dispatched =
-            group.rows.filter((row) =>
-              String(row.status || "")
-                .toUpperCase()
-                .includes("DISPATCH")
-            ).length;
-
-          return {
-            ...group,
-            total,
-            generated,
-            pending,
-            percent,
-            dispatched,
-          };
-        })
-        .sort((a, b) =>
-          String(a.itemName).localeCompare(String(b.itemName))
-        );
-    }, [rows]);
+        return {
+          ...group,
+          rows: sortedRows,
+          total,
+          generated,
+          pending,
+          percent,
+          dispatched,
+        };
+      })
+      .sort((a, b) =>
+        String(a.itemName || "")
+          .localeCompare(
+            String(b.itemName || "")
+          )
+      );
+  }, [rows]);
 
   const totalPages =
     Math.max(
@@ -364,21 +389,6 @@ function InventoryMasterWorkbench({
         : {};
     });
   };
-
-  const closeHardwarePacketModal =
-    () => {
-      if (hardwareSaving) {
-        return;
-      }
-
-      setHardwarePacketOpen(
-        false
-      );
-
-      resetHardwarePacketForm(
-        myPlants
-      );
-    };
 
   return (
     <Box sx={inventoryWorkbenchShellSx}>
@@ -551,6 +561,29 @@ function InventoryMasterWorkbench({
                         row.stickerNumber
                       );
 
+                    const canManageThisRow =
+                      hardwareRow
+                        ? canManageHardwarePackets
+                        : canCreateNormalPackets;
+
+                    const stickerAlreadyGenerated =
+                      Boolean(
+                        String(
+                          row?.stickerNumber || ""
+                        ).trim()
+                      );
+
+                    const generateLocked =
+                      !canManageThisRow ||
+                      (
+                        stickerAlreadyGenerated &&
+                        !isAdmin
+                      );
+
+                    const editLocked =
+                      !canManageThisRow ||
+                      hardwareStickerLocked;
+
                     return (
                       <Box
                         key={
@@ -600,9 +633,19 @@ function InventoryMasterWorkbench({
                         <Box sx={inventoryPacketActionsSx}>
                           <Button
                             size="small"
-                            onClick={() => onGenerate(row)}
-                            disabled={row.stickerNumber && !isAdmin}
-                            sx={inventoryMiniBtnSx("#60a5fa")}
+                            onClick={() =>
+                              onGenerate(row)
+                            }
+                            disabled={generateLocked}
+                            sx={{
+                              ...inventoryMiniBtnSx(
+                                "#60a5fa"
+                              ),
+                              opacity:
+                                generateLocked
+                                  ? 0.45
+                                  : 1,
+                            }}
                           >
                             {row.stickerNumber && isAdmin
                               ? "Reprint"
@@ -639,13 +682,25 @@ function InventoryMasterWorkbench({
 
                           <Button
                             size="small"
-                            disabled={
-                              hardwareStickerLocked
+                            disabled={editLocked}
+                            onClick={() =>
+                              onEdit(row)
                             }
-                            onClick={() => onEdit(row)}
-                            sx={inventoryMiniBtnSx("#f59e0b")}
+                            sx={{
+                              ...inventoryMiniBtnSx(
+                                "#f59e0b"
+                              ),
+                              opacity:
+                                editLocked
+                                  ? 0.45
+                                  : 1,
+                            }}
                           >
-                            Edit
+                            {hardwareStickerLocked
+                              ? "Locked"
+                              : canManageThisRow
+                                ? "Edit"
+                                : "Read Only"}
                           </Button>
                         </Box>
                       </Box>
@@ -654,27 +709,37 @@ function InventoryMasterWorkbench({
 
                   <Box sx={inventoryPacketFooterSx}>
                     {isHardwareGroup ? (
-                      <Button
-                        size="small"
-                        disabled={
-                          typeof onAddHardwarePackets !==
-                          "function"
-                        }
-                        onClick={() =>
-                          onAddHardwarePackets(
-                            lastRow
-                          )
-                        }
-                        sx={inventoryMiniBtnSx(
-                          "#a78bfa"
-                        )}
-                      >
-                        + Add Hardware Packets
-                      </Button>
-                    ) : (
+                      canManageHardwarePackets ? (
+                        <Button
+                          size="small"
+                          disabled={
+                            !lastRow ||
+                            typeof onAddHardwarePackets !==
+                            "function"
+                          }
+                          onClick={() =>
+                            onAddHardwarePackets(
+                              lastRow
+                            )
+                          }
+                          sx={inventoryMiniBtnSx(
+                            "#a78bfa"
+                          )}
+                        >
+                          + Add Hardware Packets
+                        </Button>
+                      ) : (
+                        <Chip
+                          size="small"
+                          label="Read Only"
+                          sx={inventorySoftChipSx}
+                        />
+                      )
+                    ) : canCreateNormalPackets ? (
                       <>
                         <Button
                           size="small"
+                          disabled={!lastRow}
                           onClick={() =>
                             onAdd(lastRow)
                           }
@@ -687,6 +752,7 @@ function InventoryMasterWorkbench({
 
                         <Button
                           size="small"
+                          disabled={!lastRow}
                           onClick={() =>
                             onCustomAdd(lastRow)
                           }
@@ -697,6 +763,12 @@ function InventoryMasterWorkbench({
                           + Custom Packet
                         </Button>
                       </>
+                    ) : (
+                      <Chip
+                        size="small"
+                        label="Read Only"
+                        sx={inventorySoftChipSx}
+                      />
                     )}
                   </Box>
                 </Box>
@@ -890,6 +962,38 @@ const isHardwarePacketRow = (
   );
 };
 
+const getInventoryPacketNumber = (
+  rowOrValue
+) => {
+  const candidates =
+    typeof rowOrValue === "object"
+      ? [
+        rowOrValue?.packetNumber,
+        rowOrValue?.sku,
+      ]
+      : [rowOrValue];
+
+  for (const candidate of candidates) {
+    const match =
+      String(candidate || "")
+        .match(/Pkt-(\d+)/i);
+
+    if (match) {
+      const packetNumber =
+        Number(match[1]);
+
+      if (
+        Number.isFinite(packetNumber) &&
+        packetNumber > 0
+      ) {
+        return packetNumber;
+      }
+    }
+  }
+
+  return 0;
+};
+
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
@@ -924,15 +1028,74 @@ function ZohoItemsPage() {
   const isAdmin =
     cleanRole === "ADMIN";
 
+  const isPacking =
+    cleanRole === "PACKING";
+
   const isHardwarePacking =
     cleanRole ===
     "HARDWARE_PACKING";
 
+  const isDispatch =
+    cleanRole === "DISPATCH";
+
+  /*
+   * Normal inventory write operations:
+   * - ADMIN
+   * - PACKING
+   */
+  const canCreateNormalPackets =
+    isAdmin ||
+    isPacking;
+
+  /*
+   * Hardware inventory write operations:
+   * - ADMIN
+   * - HARDWARE_PACKING
+   */
   const canManageHardwarePackets =
     isAdmin ||
     isHardwarePacking;
 
-  const getAuthHeaders = () => ({});
+  /*
+   * Sticker generation follows the packet type.
+   */
+  const canGenerateInventorySticker = (
+    row
+  ) => {
+    return isHardwarePacketRow(row)
+      ? canManageHardwarePackets
+      : canCreateNormalPackets;
+  };
+
+  /*
+   * Edit/delete follows the packet type.
+   */
+  const canManageInventoryRow = (
+    row
+  ) => {
+    return isHardwarePacketRow(row)
+      ? canManageHardwarePackets
+      : canCreateNormalPackets;
+  };
+
+  /*
+   * Keep the existing generated-history behaviour:
+   * ADMIN sees all.
+   * PACKING sees own history.
+   */
+  const canViewGeneratedHistory =
+    isAdmin ||
+    isPacking;
+
+  /*
+   * ADMIN, PACKING and HARDWARE_PACKING can use
+   * the master workbench.
+   */
+  const canUseMasterWorkbench =
+    isAdmin ||
+    isPacking ||
+    isHardwarePacking;
+
 
   const authFetch = (
     url,
@@ -1806,8 +1969,8 @@ function ZohoItemsPage() {
                 itemId,
 
               itemType:
-                normalizeInventoryItemType(
-                  row?.itemType
+                getInventoryRowItemType(
+                  row
                 ),
             };
           });
@@ -2161,17 +2324,22 @@ function ZohoItemsPage() {
     closeHistoryPdfPreview();
   };
 
-  const getPacketNumber = (sku) => {
-    const match = sku?.match(/Pkt-(\d+)/);
-    return match ? Number(match[1]) : 0;
-  };
-
   const maxPacketMap = useMemo(() => {
     const map = {};
 
     rows.forEach((r) => {
-      const key = r.masterItemId || r.itemName;
-      const pktNo = getPacketNumber(r.sku);
+      const key =
+        r?.masterItemId ||
+        [
+          getInventoryRowItemType(r),
+          r?.itemName,
+          r?.pdNo,
+          r?.drawingNo,
+        ]
+          .filter(Boolean)
+          .join("|");
+      const pktNo =
+        getInventoryPacketNumber(r);
 
       if (!map[key] || pktNo > map[key]) {
         map[key] = pktNo;
@@ -2941,12 +3109,35 @@ function ZohoItemsPage() {
     generatedHistoryTotalPages,
   ]);
 
-  const isLastPacket = (row) => {
-    const key = row.masterItemId || row.itemName;
-    const current = getPacketNumber(row.sku) || 0;
-    const max = maxPacketMap?.[key] || 0;
+  const isLastPacket = (
+    row
+  ) => {
+    const key =
+      row?.masterItemId ||
+      [
+        getInventoryRowItemType(row),
+        row?.itemName,
+        row?.pdNo,
+        row?.drawingNo,
+      ]
+        .filter(Boolean)
+        .join("|");
 
-    return current >= max;
+    const current =
+      getInventoryPacketNumber(
+        row
+      );
+
+    const max =
+      Number(
+        maxPacketMap?.[key] || 0
+      );
+
+    return (
+      current > 0 &&
+      max > 0 &&
+      current === max
+    );
   };
 
   const safeExcelValue = (value) => {
@@ -3687,12 +3878,9 @@ function ZohoItemsPage() {
         getStickerPreviewPath(row);
 
       if (!previewPath) {
-        showUiAlert(
-          "error",
+        throw new Error(
           "Sticker preview endpoint missing"
         );
-
-        return;
       }
 
       const query =
@@ -3712,10 +3900,21 @@ function ZohoItemsPage() {
 
       const contentType = res.headers.get("content-type");
 
-      if (!res.ok || !contentType?.includes("pdf")) {
-        const message = await readApiErrorMessage(res);
-        showUiAlert("error", message || "Preview failed");
-        return;
+      if (
+        !res.ok ||
+        !contentType
+          ?.toLowerCase()
+          .includes("pdf")
+      ) {
+        const message =
+          await readApiErrorMessage(
+            res
+          );
+
+        throw new Error(
+          message ||
+          "Preview failed"
+        );
       }
 
       const blob = await res.blob();
@@ -3724,7 +3923,15 @@ function ZohoItemsPage() {
       setStickerReviewPdf(url);
     } catch (e) {
       console.error(e);
-      showUiAlert("error", "Sticker preview failed");
+      showUiAlert(
+        "error",
+        e?.message ||
+        "Sticker preview failed"
+      );
+
+      setStickerReviewOpen(
+        false
+      );
     } finally {
       setStickerReviewLoading(false);
     }
@@ -3792,6 +3999,10 @@ function ZohoItemsPage() {
   };
 
   const saveHardwarePacket = async () => {
+
+    if (hardwareSaving) {
+      return;
+    }
     const editingItemId =
       getPacketItemIdForSticker(
         hardwareEditingItem
@@ -3826,24 +4037,20 @@ function ZohoItemsPage() {
     const normalizeItems = (
       lines
     ) => {
-      return (Array.isArray(lines)
-        ? lines
-        : []
-      ).map((line, index) => ({
-        lineNo:
-          Number(
-            line?.lineNo ||
-            line?.serialNumber ||
-            index + 1
-          ),
-
+      return (
+        Array.isArray(lines)
+          ? lines
+          : []
+      ).map((line) => ({
         itemName:
           String(
             line?.itemName || ""
           ).trim(),
 
         quantity:
-          Number(line?.quantity),
+          Number(
+            line?.quantity
+          ),
 
         uom:
           String(
@@ -4061,12 +4268,7 @@ function ZohoItemsPage() {
       payload = {
         ...masterDetails,
         items:
-          normalizedEditItems.map(
-            ({
-              lineNo,
-              ...item
-            }) => item
-          ),
+          normalizedEditItems,
       };
 
       failureMessage =
@@ -4086,17 +4288,7 @@ function ZohoItemsPage() {
 
       payload = {
         packets:
-          normalizedPackets.map(
-            (packet) => ({
-              items:
-                packet.items.map(
-                  ({
-                    lineNo,
-                    ...item
-                  }) => item
-                ),
-            })
-          ),
+          normalizedPackets,
       };
 
       failureMessage =
@@ -4139,17 +4331,7 @@ function ZohoItemsPage() {
           cleanPlantCode,
 
         packets:
-          normalizedPackets.map(
-            (packet) => ({
-              items:
-                packet.items.map(
-                  ({
-                    lineNo,
-                    ...item
-                  }) => item
-                ),
-            })
-          ),
+          normalizedPackets,
       };
 
       failureMessage =
@@ -4204,17 +4386,9 @@ function ZohoItemsPage() {
         }
       }
 
-      setHardwarePacketOpen(false);
-      setHardwareEditingItem(null);
-      setHardwareAddMaster(null);
-
-      setHardwareLines([
-        createEmptyHardwareLine(1),
-      ]);
-
-      setHardwarePacketDrafts([
-        createEmptyHardwarePacketDraft(),
-      ]);
+      setHardwarePacketOpen(
+        false
+      );
 
       resetHardwarePacketForm(
         myPlants
@@ -4328,6 +4502,21 @@ function ZohoItemsPage() {
 
     setErrors({});
   };
+
+  const closeHardwarePacketModal =
+    () => {
+      if (hardwareSaving) {
+        return;
+      }
+
+      setHardwarePacketOpen(
+        false
+      );
+
+      resetHardwarePacketForm(
+        myPlants
+      );
+    };
 
   const renumberHardwareLines = (
     lines
@@ -4717,6 +4906,17 @@ function ZohoItemsPage() {
   const openHardwareAddPacketsModal = (
     row
   ) => {
+
+    if (
+      !canManageHardwarePackets
+    ) {
+      showUiAlert(
+        "error",
+        "You do not have permission to add hardware packets"
+      );
+
+      return;
+    }
     if (!row?.masterItemId) {
       showUiAlert(
         "error",
@@ -4787,6 +4987,18 @@ function ZohoItemsPage() {
 
   const openHardwareCreateModal =
     async () => {
+
+      if (
+        !canManageHardwarePackets
+      ) {
+        showUiAlert(
+          "error",
+          "You do not have permission to create hardware packets"
+        );
+
+        return;
+      }
+
       let plants =
         myPlants;
 
@@ -4810,6 +5022,18 @@ function ZohoItemsPage() {
   const openHardwareEditModal = (
     row
   ) => {
+
+    if (
+      !canManageHardwarePackets
+    ) {
+      showUiAlert(
+        "error",
+        "You have view-only access to this hardware packet"
+      );
+
+      return;
+    }
+
     if (row?.stickerNumber) {
       showUiAlert(
         "error",
@@ -4962,30 +5186,62 @@ function ZohoItemsPage() {
   }, [cleanRole]);
 
   useEffect(() => {
-    if (!isHardwarePacking) {
-      return;
+    /*
+     * Close normal write modals whenever the current
+     * role cannot manage normal inventory.
+     */
+    if (!canCreateNormalPackets) {
+      setCreateOpen(false);
+      setDetailsPopup(false);
+      setCustomCreateOpen(false);
+      setAddMoreOpen(false);
+      setCustomAddOpen(false);
+      setEditOpen(false);
+
+      setEditItem(null);
     }
 
-    setMasterWorkbenchOpen(false);
-    setCreateOpen(false);
-    setDetailsPopup(false);
-    setCustomCreateOpen(false);
-    setAddMoreOpen(false);
-    setCustomAddOpen(false);
-    setEditOpen(false);
-    setGeneratedHistoryOpen(false);
+    /*
+     * Generated history has its own permission.
+     */
+    if (!canViewGeneratedHistory) {
+      setGeneratedHistoryOpen(false);
 
+      if (
+        historyPdfPreview?.url
+      ) {
+        URL.revokeObjectURL(
+          historyPdfPreview.url
+        );
+      }
 
-    setEditItem(null);
-
-    if (historyPdfPreview?.url) {
-      URL.revokeObjectURL(
-        historyPdfPreview.url
+      setHistoryPdfPreview(
+        null
       );
     }
 
-    setHistoryPdfPreview(null);
-  }, [isHardwarePacking]);
+    /*
+     * Close hardware form when the role cannot
+     * manage hardware packets.
+     */
+    if (!canManageHardwarePackets) {
+      setHardwarePacketOpen(false);
+      setHardwareEditingItem(null);
+      setHardwareAddMaster(null);
+    }
+
+    /*
+     * Workbench is available only to inventory roles.
+     */
+    if (!canUseMasterWorkbench) {
+      setMasterWorkbenchOpen(false);
+    }
+  }, [
+    canCreateNormalPackets,
+    canViewGeneratedHistory,
+    canManageHardwarePackets,
+    canUseMasterWorkbench,
+  ]);
 
   useEffect(() => {
     preparePacketDetailRows(form.numberOfPackets);
@@ -5045,18 +5301,20 @@ function ZohoItemsPage() {
               gap: 1.5,
             }}
           >
-            <Button
-              onClick={() =>
-                setMasterWorkbenchOpen(
-                  true
-                )
-              }
-              sx={historyHeaderButtonSx}
-            >
-              🧩 Master Packet Control
-            </Button>
+            {canUseMasterWorkbench && (
+              <Button
+                onClick={() =>
+                  setMasterWorkbenchOpen(
+                    true
+                  )
+                }
+                sx={historyHeaderButtonSx}
+              >
+                🧩 Master Packet Control
+              </Button>
+            )}
 
-            {!isHardwarePacking && (
+            {canViewGeneratedHistory && (
               <Button
                 onClick={
                   openGeneratedHistory
@@ -5079,7 +5337,7 @@ function ZohoItemsPage() {
               </span>
             </Box>
 
-            {!isHardwarePacking && (
+            {canCreateNormalPackets && (
               <>
                 <Button
                   onClick={async () => {
@@ -5255,6 +5513,43 @@ function ZohoItemsPage() {
                       row.stickerNumber
                     );
 
+                  const canManageRow =
+                    canManageInventoryRow(
+                      row
+                    );
+
+                  const stickerGenerated =
+                    Boolean(
+                      String(
+                        row?.stickerNumber || ""
+                      ).trim()
+                    );
+
+                  const generateLocked =
+                    !canGenerateInventorySticker(
+                      row
+                    ) ||
+                    (
+                      stickerGenerated &&
+                      !isAdmin
+                    );
+
+                  const status =
+                    String(
+                      row?.status || ""
+                    )
+                      .trim()
+                      .toUpperCase();
+
+                  const deleteLocked =
+                    !canManageRow ||
+                    stickerGenerated ||
+                    status !== "CREATED";
+
+                  const editLocked =
+                    !canManageRow ||
+                    hardwareStickerLocked;
+
                   const lastPacket =
                     isLastPacket(row);
 
@@ -5289,12 +5584,18 @@ function ZohoItemsPage() {
                       <div style={tableCellWrap}>
                         <Button
                           size="small"
-                          disabled={generating || (!!row.stickerNumber && !isAdmin)}
+                          disabled={
+                            generating ||
+                            generateLocked
+                          }
                           onClick={() => openGenerateStickerPanel(row)}
                           sx={{
                             ...actionPrimary,
                             ...tableActionButton,
-                            opacity: row.stickerNumber && !isAdmin ? 0.45 : 1,
+                            opacity:
+                              generateLocked
+                                ? 0.45
+                                : 1,
                           }}
                         >
                           {row.stickerNumber
@@ -5333,7 +5634,10 @@ function ZohoItemsPage() {
                               —
                             </span>
                           )
-                        ) : lastPacket ? (
+                        ) : (
+                          lastPacket &&
+                          canCreateNormalPackets
+                        ) ? (
                           <Box sx={actionCell}>
                             <Button
                               size="small"
@@ -5372,7 +5676,7 @@ function ZohoItemsPage() {
                         <Button
                           size="small"
                           disabled={
-                            hardwareStickerLocked
+                            editLocked
                           }
                           onClick={() =>
                             openEditModal(row)
@@ -5388,7 +5692,9 @@ function ZohoItemsPage() {
                         >
                           {hardwareStickerLocked
                             ? "Locked"
-                            : "Edit"}
+                            : canManageRow
+                              ? "Edit"
+                              : "Read Only"}
                         </Button>
                       </div>
 
@@ -5397,7 +5703,7 @@ function ZohoItemsPage() {
                           type="button"
                           size="small"
                           disabled={
-                            hardwareStickerLocked
+                            deleteLocked
                           }
                           onClick={() =>
                             openDeleteConfirm(row)
@@ -5406,14 +5712,14 @@ function ZohoItemsPage() {
                             ...actionDanger,
                             ...tableActionButton,
                             opacity:
-                              isHardwarePacking &&
-                                row.stickerNumber
+                              deleteLocked
                                 ? 0.45
                                 : 1,
+
                             pointerEvents: "auto",
+
                             cursor:
-                              isHardwarePacking &&
-                                row.stickerNumber
+                              deleteLocked
                                 ? "not-allowed"
                                 : "pointer",
                           }}
@@ -5822,6 +6128,12 @@ function ZohoItemsPage() {
             <InventoryMasterWorkbench
               rows={filteredRows}
               isAdmin={isAdmin}
+              canCreateNormalPackets={
+                canCreateNormalPackets
+              }
+              canManageHardwarePackets={
+                canManageHardwarePackets
+              }
               onGenerate={(row) => {
                 setMasterWorkbenchOpen(false);
                 openGenerateStickerPanel(row);
@@ -7587,14 +7899,9 @@ function ZohoItemsPage() {
         {(isHardwarePacking || isAdmin) && (
           <InventoryModal
             open={hardwarePacketOpen}
-            onClose={() => {
-              if (hardwareSaving) {
-                return;
-              }
-
-              setHardwarePacketOpen(false);
-              setHardwareEditingItem(null);
-            }}
+            onClose={
+              closeHardwarePacketModal
+            }
             icon="🔩"
             title={
               hardwareEditingItem
@@ -7620,10 +7927,9 @@ function ZohoItemsPage() {
               <>
                 <Button
                   disabled={hardwareSaving}
-                  onClick={() => {
-                    setHardwarePacketOpen(false);
-                    setHardwareEditingItem(null);
-                  }}
+                  onClick={
+                    closeHardwarePacketModal
+                  }
                   sx={modalSecondaryButtonSx}
                 >
                   Cancel
@@ -7665,7 +7971,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="Packet / Item Name"
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   placeholder="Example: Kitchen Hardware Packet"
                   fullWidth
                   value={hardwareForm.itemName}
@@ -7682,7 +7993,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="PD No."
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   fullWidth
                   value={hardwareForm.pdNo}
                   onChange={(e) =>
@@ -7696,7 +8012,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="Drawing No."
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   fullWidth
                   value={hardwareForm.drawingNo}
                   onChange={(e) =>
@@ -7710,7 +8031,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="Client Name"
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   fullWidth
                   value={hardwareForm.clientName}
                   onChange={(e) =>
@@ -7724,7 +8050,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="Client Address"
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   fullWidth
                   multiline
                   minRows={2}
@@ -7740,7 +8071,12 @@ function ZohoItemsPage() {
 
                 <TextField
                   label="Floor / Area"
-                  disabled={Boolean(hardwareAddMaster)}
+                  disabled={
+                    Boolean(
+                      hardwareAddMaster ||
+                      hardwareEditingItem
+                    )
+                  }
                   fullWidth
                   value={hardwareForm.floor}
                   onChange={(e) =>

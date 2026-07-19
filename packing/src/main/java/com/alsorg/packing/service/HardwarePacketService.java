@@ -408,10 +408,15 @@ public class HardwarePacketService {
 
             Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-            source = packetItemRepository
-                    .findByItemTypeAndPlantCodeInWithHardwareLines(
-                            PacketItemType.HARDWARE,
-                            allowedPlants);
+            if (allowedPlants == null ||
+                    allowedPlants.isEmpty()) {
+                source = List.of();
+            } else {
+                source = packetItemRepository
+                        .findByItemTypeAndPlantCodeInWithHardwareLines(
+                                PacketItemType.HARDWARE,
+                                allowedPlants);
+            }
 
         } else {
 
@@ -450,45 +455,161 @@ public class HardwarePacketService {
             UUID itemId,
             HardwarePacketUpdateRequest request,
             User user) {
-        PacketItem item = getWritableHardwarePacket(
-                itemId,
-                user);
+        /*
+         * Controller already has @PreAuthorize, but the service
+         * must still protect itself.
+         */
+        currentUserService.requireHardwareWriteAccess(user);
 
-        if (item.getStickerNumber() != null
-                && !item.getStickerNumber().isBlank()) {
+        if (request == null) {
             throw new RuntimeException(
-                    "Printed hardware packet cannot be edited. "
-                            + "Create another packet or use an admin correction flow.");
+                    "Hardware packet update request is required");
         }
 
+        /*
+         * Validate before touching existing database rows.
+         */
         validateLines(request.items());
 
-        item.setItemName(cleanRequired(
-                request.itemName(),
-                "Hardware packet title is required"));
-        item.setPdNo(cleanOptional(request.pdNo()));
-        item.setDrawingNo(cleanOptional(request.drawingNo()));
-        item.setClientName(cleanOptional(request.clientName()));
-        item.setClientAddress(cleanOptional(request.clientAddress()));
-        item.setFloor(cleanOptional(request.floor()));
+        /*
+         * Lock the parent PacketItem for the complete update.
+         *
+         * This prevents two users or duplicate browser requests
+         * from editing the same packet simultaneously.
+         */
+        PacketItem item = packetItemRepository
+                .findByIdForHardwarePacketUpdate(itemId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Hardware packet not found"));
 
-        int packetNo = extractPacketNo(item.getPacketNumber());
+        assertHardwareWriteAccess(
+                item,
+                user);
+
+        /*
+         * Force initialization of the Hibernate-managed collection
+         * while the transaction is open.
+         */
+        item.getHardwareLines().size();
+
+        /*
+         * Preserve the generated-sticker lock.
+         *
+         * Editing after generation would cause the current packet
+         * contents to differ from the saved sticker PDF.
+         */
+        if (item.getStickerNumber() != null &&
+                !item.getStickerNumber().isBlank()) {
+            throw new RuntimeException(
+                    "Printed hardware packet cannot be edited. " +
+                            "Create another packet or use an admin correction flow.");
+        }
+
+        String itemName = cleanRequired(
+                request.itemName(),
+                "Hardware packet title is required");
+
+        String pdNo = cleanOptional(
+                request.pdNo());
+
+        String drawingNo = cleanOptional(
+                request.drawingNo());
+
+        String clientName = cleanOptional(
+                request.clientName());
+
+        String clientAddress = cleanOptional(
+                request.clientAddress());
+
+        String floor = cleanOptional(
+                request.floor());
+
+        int packetNo = extractPacketNo(
+                item.getPacketNumber());
+
+        /*
+         * Update selected PacketItem metadata.
+         */
+        item.setItemName(itemName);
+        item.setPdNo(pdNo);
+        item.setDrawingNo(drawingNo);
+        item.setClientName(clientName);
+        item.setClientAddress(clientAddress);
+        item.setFloor(floor);
 
         item.setSku(
                 buildHardwareSku(
-                        item.getPdNo(),
-                        item.getDrawingNo(),
+                        pdNo,
+                        drawingNo,
                         packetNo));
 
-        List<HardwarePacketLine> lines = buildLines(
+        /*
+         * Keep the linked MasterItem consistent.
+         *
+         * This prevents the Master Packet Control card from showing
+         * old metadata after editing a packet.
+         */
+        MasterItem master = item.getMasterItem();
+
+        if (master != null) {
+            master.setItemName(itemName);
+            master.setPdNo(pdNo);
+            master.setDrawingName(drawingNo);
+            master.setClientName(clientName);
+            master.setAddress(clientAddress);
+            master.setFloor(floor);
+
+            masterItemRepository.save(master);
+        }
+
+        /*
+         * =====================================================
+         * PHASE 1: DELETE OLD HARDWARE LINES
+         * =====================================================
+         *
+         * This is the critical duplicate-key fix.
+         *
+         * Old line_no 1, 2, 3... must be physically deleted before
+         * the new rows reuse line numbers 1, 2, 3...
+         */
+        item.getHardwareLines().clear();
+
+        /*
+         * Force orphanRemoval deletes now.
+         *
+         * Without this flush, Hibernate can try to insert the new
+         * line_no=1 before deleting the old line_no=1.
+         */
+        packetItemRepository.flush();
+
+        /*
+         * =====================================================
+         * PHASE 2: CREATE NEW HARDWARE LINES
+         * =====================================================
+         */
+        LocalDateTime now = LocalDateTime.now(APP_ZONE);
+
+        List<HardwarePacketLine> newLines = buildLines(
                 item,
                 request.items(),
-                LocalDateTime.now(APP_ZONE));
+                now);
 
-        item.replaceHardwareLines(lines);
-        item.setDescription(buildDescriptionSnapshot(lines));
+        /*
+         * Do not call replaceHardwareLines here.
+         *
+         * The old managed collection has already been cleared and
+         * flushed. Add new rows to that same managed collection.
+         */
+        for (HardwarePacketLine line : newLines) {
+            item.addHardwareLine(line);
+        }
 
-        PacketItem saved = packetItemRepository.save(item);
+        item.setDescription(
+                buildDescriptionSnapshot(
+                        newLines));
+
+        PacketItem saved = packetItemRepository.saveAndFlush(
+                item);
 
         return toResponse(saved);
     }

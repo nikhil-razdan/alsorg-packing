@@ -1,200 +1,354 @@
 package com.alsorg.packing.controller;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.Map;
-import com.alsorg.packing.service.PacketService;
+import java.util.Set;
+import java.util.UUID;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.transaction.annotation.Transactional;
+
 import org.springframework.web.bind.annotation.*;
+
 import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse;
 import com.alsorg.packing.controller.dto.StickerHistoryResponse;
+
+import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.domain.users.User;
+
 import com.alsorg.packing.repository.StickerHistoryRepository;
+
 import com.alsorg.packing.service.CurrentUserService;
+import com.alsorg.packing.service.PacketService;
 
 @RestController
 @RequestMapping("/api/stickers")
 public class StickerHistoryController {
 
-        private final StickerHistoryRepository repository;
-        private final CurrentUserService currentUserService;
-        private final PacketService packetService;
+    private final StickerHistoryRepository repository;
+    private final CurrentUserService currentUserService;
+    private final PacketService packetService;
 
-        public StickerHistoryController(
-                        StickerHistoryRepository repository,
-                        CurrentUserService currentUserService,
-                        PacketService packetService) {
-                this.repository = repository;
-                this.currentUserService = currentUserService;
-                this.packetService = packetService;
-        }
+    public StickerHistoryController(
+            StickerHistoryRepository repository,
+            CurrentUserService currentUserService,
+            PacketService packetService
+    ) {
+        this.repository = repository;
+        this.currentUserService = currentUserService;
+        this.packetService = packetService;
+    }
 
-        /*
-         * GENERATED HISTORY
-         *
-         * ADMIN:
-         * - Can see all generated history
-         * - Can filter by generatedBy
-         *
-         * NON-ADMIN:
-         * - Can only see own generated history
-         */
+    /*
+     * =====================================================
+     * GENERATED HISTORY
+     * =====================================================
+     *
+     * ADMIN:
+     * - All generated sticker history.
+     *
+     * OTHER USERS:
+     * - Own generated history only.
+     *
+     * This endpoint is separate from Dispatch's item-wise
+     * sticker-history modal.
+     */
 
-        @GetMapping("/generated-history")
-        public ResponseEntity<List<GeneratedPacketHistoryResponse>> generatedHistory(
-                        @RequestParam(required = false) String generatedBy,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+    @GetMapping("/generated-history")
+    public ResponseEntity<List<GeneratedPacketHistoryResponse>>
+    generatedHistory(
+            @RequestParam(required = false) String generatedBy,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-                if (currentUserService.isAdmin(user)) {
-                        if (generatedBy != null
-                                        && !generatedBy.isBlank()
-                                        && !"ALL".equalsIgnoreCase(generatedBy)) {
-                                return ResponseEntity.ok(
-                                                repository.findGeneratedPacketHistoryByUser(
-                                                                generatedBy));
-                        }
-
-                        return ResponseEntity.ok(
-                                        repository.findGeneratedPacketHistoryAll());
-                }
-
+        if (currentUserService.isAdmin(user)) {
+            if (
+                    generatedBy != null &&
+                    !generatedBy.isBlank() &&
+                    !"ALL".equalsIgnoreCase(generatedBy)
+            ) {
                 return ResponseEntity.ok(
-                                repository.findGeneratedPacketHistoryByUser(
-                                                user.getUsername()));
+                        repository.findGeneratedPacketHistoryByUser(
+                                generatedBy.trim()
+                        )
+                );
+            }
+
+            return ResponseEntity.ok(
+                    repository.findGeneratedPacketHistoryAll()
+            );
         }
 
-        /*
-         * GENERATED BY USER DROPDOWN
-         *
-         * ADMIN:
-         * - Can see all users who generated stickers
-         *
-         * NON-ADMIN:
-         * - Can only see own username
-         */
+        return ResponseEntity.ok(
+                repository.findGeneratedPacketHistoryByUser(
+                        user.getUsername()
+                )
+        );
+    }
 
-        @GetMapping("/generated-history/users")
-        public ResponseEntity<List<String>> generatedHistoryUsers(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+    /*
+     * =====================================================
+     * GENERATED-BY USER DROPDOWN
+     * =====================================================
+     */
 
-                if (currentUserService.isAdmin(user)) {
-                        return ResponseEntity.ok(
-                                        repository.findDistinctGeneratedByUsers());
-                }
+    @GetMapping("/generated-history/users")
+    public ResponseEntity<List<String>> generatedHistoryUsers(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-                return ResponseEntity.ok(
-                                List.of(user.getUsername()));
+        if (currentUserService.isAdmin(user)) {
+            return ResponseEntity.ok(
+                    repository.findDistinctGeneratedByUsers()
+            );
         }
 
-        /*
-         * ITEM-WISE STICKER HISTORY
-         */
+        return ResponseEntity.ok(
+                List.of(user.getUsername())
+        );
+    }
 
-        @GetMapping("/{itemId}/history")
-        public List<StickerHistoryResponse> history(
-                        @PathVariable UUID itemId) {
-                return repository.findHistoryByItemId(itemId);
-        }
+    /*
+     * =====================================================
+     * ITEM-WISE STICKER HISTORY
+     * =====================================================
+     *
+     * This endpoint is used by the Dispatch page.
+     *
+     * ADMIN:
+     * - Can read all.
+     *
+     * DISPATCH:
+     * - Can read normal/hardware history for assigned plants.
+     *
+     * HARDWARE_PACKING:
+     * - Can read owned hardware packets.
+     *
+     * Other permitted users:
+     * - Continue using normal PacketService plant access.
+     */
 
-        /*
-         * GENERATED HISTORY PDF PREVIEW / DOWNLOAD
-         *
-         * ADMIN:
-         * - Can open any generated sticker PDF
-         *
-         * NON-ADMIN:
-         * - Can open only own generated sticker PDFs
-         */
+    @Transactional(readOnly = true)
+    @GetMapping("/{itemId}/history")
+    public ResponseEntity<List<StickerHistoryResponse>> history(
+            @PathVariable UUID itemId,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-        @Transactional(readOnly = true)
-        @GetMapping("/history/{historyId}/download-pdf")
-        public ResponseEntity<byte[]> download(
-                        @PathVariable UUID historyId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        Set<String> allowedPlants =
+                currentUserService.allowedPlants(user);
 
-                StickerHistory history = repository.findById(historyId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Sticker history not found"));
+        packetService.requireStickerHistoryReadAccess(
+                itemId,
+                user,
+                allowedPlants
+        );
 
-                if (!currentUserService.isAdmin(user)) {
-                        String generatedBy = history.getGeneratedBy();
+        return ResponseEntity.ok(
+                repository.findHistoryByItemId(itemId)
+        );
+    }
 
-                        if (generatedBy == null
-                                        || generatedBy.isBlank()
-                                        || !generatedBy.equalsIgnoreCase(user.getUsername())) {
-                                throw new ResponseStatusException(
-                                                HttpStatus.FORBIDDEN,
-                                                "You cannot access this sticker PDF");
-                        }
-                }
+    /*
+     * =====================================================
+     * STICKER HISTORY PDF
+     * =====================================================
+     *
+     * Important correction:
+     *
+     * Do not authorize only by generatedBy.
+     *
+     * Dispatch users need to open stickers generated by Packing
+     * and Hardware Packing users.
+     */
 
-                byte[] pdfData = history.getPdfData();
+    @Transactional(readOnly = true)
+    @GetMapping("/history/{historyId}/download-pdf")
+    public ResponseEntity<byte[]> download(
+            @PathVariable UUID historyId,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
 
-                if (pdfData == null || pdfData.length == 0) {
-                        throw new ResponseStatusException(
+        Set<String> allowedPlants =
+                currentUserService.allowedPlants(user);
+
+        StickerHistory history =
+                repository.findByIdWithPacketItem(historyId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
-                                        "Sticker PDF not found");
-                }
+                                        "Sticker history not found"
+                                )
+                        );
 
-                String stickerNumber = history.getStickerNumber() != null
-                                && !history.getStickerNumber().isBlank()
-                                                ? history.getStickerNumber()
-                                                : historyId.toString();
+        PacketItem packetItem =
+                history.getPacketItem();
 
-                return ResponseEntity.ok()
-                                .header(
-                                                HttpHeaders.CONTENT_DISPOSITION,
-                                                "inline; filename="
-                                                                + stickerNumber
-                                                                + ".pdf")
-                                .contentType(MediaType.APPLICATION_PDF)
-                                .body(pdfData);
+        if (packetItem != null) {
+            /*
+             * Main authorization route.
+             *
+             * This allows Dispatch to read normal and hardware
+             * sticker PDFs according to its assigned plants.
+             */
+            packetService.requireStickerHistoryReadAccess(
+                    packetItem.getId(),
+                    user,
+                    allowedPlants
+            );
+        } else {
+            /*
+             * Legacy safety for old StickerHistory records that
+             * were saved without packet_item_id.
+             *
+             * ADMIN may open them.
+             * The original generator may also open them.
+             * Dispatch is denied because there is no linked plant
+             * that can be validated safely.
+             */
+            boolean originalGenerator =
+                    history.getGeneratedBy() != null &&
+                    user.getUsername() != null &&
+                    history.getGeneratedBy()
+                            .equalsIgnoreCase(
+                                    user.getUsername()
+                            );
+
+            if (
+                    !currentUserService.isAdmin(user) &&
+                    !originalGenerator
+            ) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "This legacy sticker record is not linked to a packet item"
+                );
+            }
         }
 
-        @PostMapping("/dispatched/{zohoItemId}/ensure-history")
-        public ResponseEntity<Map<String, Object>> ensureHistoryForDispatchedItem(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        byte[] pdfData =
+                history.getPdfData();
 
-                if (!currentUserService.isAdmin(user) &&
-                                !currentUserService.isDispatch(user)) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.FORBIDDEN,
-                                        "Only ADMIN or DISPATCH can rebuild sticker history");
-                }
-
-                StickerHistory history = packetService.ensureStickerHistoryForDispatchedItem(
-                                zohoItemId,
-                                user.getUsername(),
-                                currentUserService.allowedPlants(user));
-
-                UUID packetItemId = history.getPacketItem() != null
-                                ? history.getPacketItem().getId()
-                                : null;
-
-                if (packetItemId == null) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.INTERNAL_SERVER_ERROR,
-                                        "Packet item could not be resolved for sticker history");
-                }
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "packetItemId", packetItemId.toString(),
-                                                "historyId", history.getId().toString(),
-                                                "stickerNumber", history.getStickerNumber(),
-                                                "message", "Sticker history is ready"));
+        if (
+                pdfData == null ||
+                pdfData.length == 0
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Sticker PDF not found"
+            );
         }
+
+        String stickerNumber =
+                history.getStickerNumber() != null &&
+                !history.getStickerNumber().isBlank()
+                        ? history.getStickerNumber().trim()
+                        : historyId.toString();
+
+        String safeFileName =
+                stickerNumber
+                        .replace("\"", "")
+                        .replace("\r", "")
+                        .replace("\n", "");
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" +
+                                safeFileName +
+                                ".pdf\""
+                )
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfData);
+    }
+
+    /*
+     * =====================================================
+     * DISPATCH HISTORY REBUILD
+     * =====================================================
+     */
+
+    @PostMapping("/dispatched/{zohoItemId}/ensure-history")
+    public ResponseEntity<Map<String, Object>>
+    ensureHistoryForDispatchedItem(
+            @PathVariable String zohoItemId,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
+
+        if (
+                !currentUserService.isAdmin(user) &&
+                !currentUserService.isDispatch(user)
+        ) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN or DISPATCH can rebuild sticker history"
+            );
+        }
+
+        StickerHistory history =
+                packetService.ensureStickerHistoryForDispatchedItem(
+                        zohoItemId,
+                        user.getUsername(),
+                        currentUserService.allowedPlants(user)
+                );
+
+        UUID packetItemId =
+                history.getPacketItem() != null
+                        ? history.getPacketItem().getId()
+                        : null;
+
+        if (packetItemId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Packet item could not be resolved for sticker history"
+            );
+        }
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "packetItemId",
+                        packetItemId.toString(),
+
+                        "historyId",
+                        history.getId().toString(),
+
+                        "stickerNumber",
+                        history.getStickerNumber(),
+
+                        "message",
+                        "Sticker history is ready"
+                )
+        );
+    }
 }

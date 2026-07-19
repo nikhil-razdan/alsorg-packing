@@ -128,6 +128,26 @@ public interface PacketItemRepository
 
         /*
          * =====================================================
+         * HARDWARE PACKET EDIT LOCK
+         * =====================================================
+         *
+         * Lock the PacketItem while its hardware lines are being
+         * deleted and recreated.
+         *
+         * Do not JOIN FETCH hardwareLines in this lock query.
+         * The collection will be initialized inside the transaction.
+         */
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                        SELECT p
+                        FROM PacketItem p
+                        WHERE p.id = :itemId
+                        """)
+        Optional<PacketItem> findByIdForHardwarePacketUpdate(
+                        @Param("itemId") UUID itemId);
+
+        /*
+         * =====================================================
          * ADMIN LIFECYCLE ROLLBACK
          * =====================================================
          */
