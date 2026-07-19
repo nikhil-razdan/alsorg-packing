@@ -1192,16 +1192,6 @@ function ZohoItemsPage() {
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
 
-  const inventoryPacketGridTemplate =
-    `
-    120px
-    minmax(220px, 1.1fr)
-    minmax(360px, 2fr)
-    minmax(180px, .8fr)
-    minmax(180px, .8fr)
-    minmax(430px, 2fr)
-  `;
-
   const [
     inventoryColumnWidths,
     setInventoryColumnWidths,
@@ -10650,6 +10640,16 @@ const inventoryPacketTableSx = {
     "#a78bfa"
   ),
 };
+
+const inventoryPacketGridTemplate =
+  `
+    120px
+    minmax(220px, 1.1fr)
+    minmax(360px, 2fr)
+    minmax(180px, .8fr)
+    minmax(180px, .8fr)
+    minmax(430px, 2fr)
+  `;
 
 const inventoryPacketHeadSx = {
   display:
