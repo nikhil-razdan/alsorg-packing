@@ -1,4 +1,10 @@
-import { useEffect, useState, useMemo } from "react";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+} from "react";
+
 import {
   Button,
   TextField,
@@ -962,6 +968,71 @@ const isHardwarePacketRow = (
   );
 };
 
+const inventoryExpandableCellStyle =
+{
+  display:
+    "flex",
+
+  alignItems:
+    "flex-start",
+
+  justifyContent:
+    "flex-start",
+
+  minWidth:
+    0,
+
+  minHeight:
+    "100%",
+
+  padding:
+    "11px 10px",
+
+  whiteSpace:
+    "normal",
+
+  overflow:
+    "visible",
+};
+
+const inventoryLongTextStyle =
+{
+  display:
+    "block",
+
+  width:
+    "100%",
+
+  minWidth:
+    0,
+
+  whiteSpace:
+    "normal",
+
+  overflow:
+    "visible",
+
+  textOverflow:
+    "clip",
+
+  overflowWrap:
+    "anywhere",
+
+  wordBreak:
+    "break-word",
+
+  lineHeight:
+    1.5,
+};
+
+const inventoryMultilineTextStyle =
+{
+  ...inventoryLongTextStyle,
+
+  whiteSpace:
+    "pre-wrap",
+};
+
 const getInventoryPacketNumber = (
   rowOrValue
 ) => {
@@ -994,10 +1065,120 @@ const getInventoryPacketNumber = (
   return 0;
 };
 
+const INVENTORY_TABLE_COLUMNS = [
+  {
+    key: "generate",
+    label: "Generate",
+    width: 120,
+    minWidth: 100,
+  },
+  {
+    key: "addPackets",
+    label: "Add Packets",
+    width: 190,
+    minWidth: 150,
+  },
+  {
+    key: "edit",
+    label: "Edit",
+    width: 105,
+    minWidth: 90,
+  },
+  {
+    key: "delete",
+    label: "Delete",
+    width: 105,
+    minWidth: 90,
+  },
+  {
+    key: "itemName",
+    label: "Item Name",
+    width: 290,
+    minWidth: 180,
+  },
+  {
+    key: "sku",
+    label: "SKU",
+    width: 270,
+    minWidth: 170,
+  },
+  {
+    key: "pdNo",
+    label: "PD No",
+    width: 150,
+    minWidth: 110,
+  },
+  {
+    key: "drawingNo",
+    label: "DWG No",
+    width: 170,
+    minWidth: 120,
+  },
+  {
+    key: "plant",
+    label: "Plant",
+    width: 130,
+    minWidth: 105,
+  },
+  {
+    key: "location",
+    label: "Location",
+    width: 170,
+    minWidth: 130,
+  },
+  {
+    key: "client",
+    label: "Client",
+    width: 220,
+    minWidth: 150,
+  },
+  {
+    key: "address",
+    label: "Address",
+    width: 280,
+    minWidth: 180,
+  },
+  {
+    key: "description",
+    label: "Description",
+    width: 420,
+    minWidth: 240,
+  },
+  {
+    key: "status",
+    label: "Status",
+    width: 170,
+    minWidth: 130,
+  },
+  {
+    key: "stickerPdf",
+    label: "Sticker PDF",
+    width: 220,
+    minWidth: 180,
+  },
+];
+
+const createDefaultInventoryColumnWidths =
+  () => {
+    return Object.fromEntries(
+      INVENTORY_TABLE_COLUMNS.map(
+        column => [
+          column.key,
+          column.width,
+        ]
+      )
+    );
+  };
+
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const inventoryRequestIdRef =
+    useRef(0);
+
+  const inventoryAbortControllerRef =
+    useRef(null);
   const [activeStep, setActiveStep] = useState(0);
   const [errors, setErrors] = useState({});
   const [addMoreOpen, setAddMoreOpen] = useState(false);
@@ -1010,6 +1191,160 @@ function ZohoItemsPage() {
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
   const darkMode = true;
+
+  const inventoryPacketGridTemplate =
+    `
+    120px
+    minmax(220px, 1.1fr)
+    minmax(360px, 2fr)
+    minmax(180px, .8fr)
+    minmax(180px, .8fr)
+    minmax(430px, 2fr)
+  `;
+
+  const [
+    inventoryColumnWidths,
+    setInventoryColumnWidths,
+  ] = useState(
+    createDefaultInventoryColumnWidths
+  );
+
+
+
+  const inventoryGridTemplateColumns =
+    useMemo(() => {
+      return INVENTORY_TABLE_COLUMNS
+        .map(
+          column =>
+            `${inventoryColumnWidths[
+            column.key
+            ]}px`
+        )
+        .join(" ");
+    }, [
+      inventoryColumnWidths,
+    ]);
+
+  const inventoryTablePixelWidth =
+    useMemo(() => {
+      return INVENTORY_TABLE_COLUMNS
+        .reduce(
+          (total, column) =>
+            total +
+            Number(
+              inventoryColumnWidths[
+              column.key
+              ] ||
+              column.width
+            ),
+          0
+        );
+    }, [
+      inventoryColumnWidths,
+    ]);
+
+
+  const startInventoryColumnResize = (
+    event,
+    column
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    inventoryColumnResizeRef.current =
+    {
+      key: column.key,
+      startX: event.clientX,
+      startWidth:
+        inventoryColumnWidths[
+        column.key
+        ],
+      minWidth:
+        column.minWidth ||
+        80,
+    };
+
+    document.body.style.cursor =
+      "col-resize";
+
+    document.body.style.userSelect =
+      "none";
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (
+      event
+    ) => {
+      const resize =
+        inventoryColumnResizeRef
+          .current;
+
+      if (!resize) {
+        return;
+      }
+
+      const movement =
+        event.clientX -
+        resize.startX;
+
+      const nextWidth =
+        Math.max(
+          resize.minWidth,
+          resize.startWidth +
+          movement
+        );
+
+      setInventoryColumnWidths(
+        previous => ({
+          ...previous,
+          [resize.key]:
+            nextWidth,
+        })
+      );
+    };
+
+    const handleMouseUp = () => {
+      inventoryColumnResizeRef.current =
+        null;
+
+      document.body.style.cursor =
+        "";
+
+      document.body.style.userSelect =
+        "";
+    };
+
+    window.addEventListener(
+      "mousemove",
+      handleMouseMove
+    );
+
+    window.addEventListener(
+      "mouseup",
+      handleMouseUp
+    );
+
+    return () => {
+      window.removeEventListener(
+        "mousemove",
+        handleMouseMove
+      );
+
+      window.removeEventListener(
+        "mouseup",
+        handleMouseUp
+      );
+
+      document.body.style.cursor =
+        "";
+
+      document.body.style.userSelect =
+        "";
+    };
+  }, []);
+
+  const inventoryColumnResizeRef =
+    useRef(null);
 
   const {
     user: currentUser,
@@ -1875,12 +2210,16 @@ function ZohoItemsPage() {
   };
 
   const fetchInventoryRowsFromPath =
-    async (path) => {
+    async (
+      path,
+      signal
+    ) => {
       const res =
         await authFetch(
           `${API_BASE_URL}${path}`,
           {
             method: "GET",
+            signal,
           }
         );
 
@@ -1908,171 +2247,363 @@ function ZohoItemsPage() {
           }
         }
 
-        throw new Error(message);
+        throw new Error(
+          message
+        );
       }
 
-      const payload =
-        await res.json();
+      const responseText =
+        await res.text();
+
+      if (!responseText) {
+        return [];
+      }
+
+      let payload;
+
+      try {
+        payload =
+          JSON.parse(
+            responseText
+          );
+      } catch {
+        throw new Error(
+          "Inventory API returned an invalid response"
+        );
+      }
 
       return extractInventoryRows(
         payload
       );
     };
 
+  const normalizeNormalInventoryRow = (
+    row
+  ) => {
+    const itemId =
+      row?.itemId ||
+      row?.packetItemId ||
+      row?.id ||
+      "";
+
+    return {
+      ...row,
+
+      itemId,
+
+      packetItemId:
+        row?.packetItemId ||
+        itemId,
+
+      masterItemId:
+        row?.masterItemId ||
+        row?.masterId ||
+        "",
+
+      itemType:
+        normalizeInventoryItemType(
+          row?.itemType
+        ),
+
+      itemName:
+        row?.itemName ||
+        row?.name ||
+        "Unnamed Item",
+
+      description:
+        row?.description ||
+        "",
+
+      status:
+        String(
+          row?.status ||
+          "CREATED"
+        )
+          .trim()
+          .toUpperCase(),
+    };
+  };
+
+  const mergeInventoryRowSources = (
+    ...sources
+  ) => {
+    const rowsById =
+      new Map();
+
+    sources
+      .flat()
+      .filter(Boolean)
+      .forEach((row) => {
+        const key =
+          String(
+            row?.itemId ||
+            row?.packetItemId ||
+            row?.id ||
+            row?.sku ||
+            ""
+          ).trim();
+
+        if (!key) {
+          return;
+        }
+
+        rowsById.set(
+          key,
+          row
+        );
+      });
+
+    return Array.from(
+      rowsById.values()
+    );
+  };
+
   const fetchItems = async () => {
+    const requestId =
+      inventoryRequestIdRef.current + 1;
+
+    inventoryRequestIdRef.current =
+      requestId;
+
+    /*
+     * Cancel any older inventory request.
+     */
+    if (
+      inventoryAbortControllerRef
+        .current
+    ) {
+      inventoryAbortControllerRef
+        .current
+        .abort();
+    }
+
+    const controller =
+      new AbortController();
+
+    inventoryAbortControllerRef.current =
+      controller;
+
     try {
       setLoading(true);
 
       let finalRows = [];
 
       /*
-       * HARDWARE_PACKING:
-       * Show only packets owned by the logged-in
-       * hardware user.
+       * HARDWARE PACKING:
+       * Load only the user's hardware packets.
        */
       if (isHardwarePacking) {
         const hardwareRows =
           await fetchInventoryRowsFromPath(
-            "/api/hardware-packets"
+            "/api/hardware-packets",
+            controller.signal
           );
 
         finalRows =
           hardwareRows.map(
             normalizeHardwarePacketRow
           );
+      }
 
-      } else {
-        /*
-         * Preserve the previous normal inventory
-         * behaviour for all normal PackFlow users.
-         */
+      /*
+       * ADMIN:
+       * Load normal and hardware inventory simultaneously.
+       */
+      else if (isAdmin) {
+        const [
+          normalResult,
+          hardwareResult,
+        ] =
+          await Promise.allSettled([
+            fetchInventoryRowsFromPath(
+              "/api/packets/items",
+              controller.signal
+            ),
+
+            fetchInventoryRowsFromPath(
+              "/api/hardware-packets",
+              controller.signal
+            ),
+          ]);
+
+        if (
+          controller.signal.aborted
+        ) {
+          return [];
+        }
+
         const normalRows =
-          await fetchInventoryRowsFromPath(
-            "/api/packets/items"
+          normalResult.status ===
+            "fulfilled"
+            ? normalResult.value.map(
+              normalizeNormalInventoryRow
+            )
+            : [];
+
+        const hardwareRows =
+          hardwareResult.status ===
+            "fulfilled"
+            ? hardwareResult.value.map(
+              normalizeHardwarePacketRow
+            )
+            : [];
+
+        /*
+         * Only fail the complete page when both APIs fail.
+         */
+        if (
+          normalResult.status ===
+          "rejected" &&
+          hardwareResult.status ===
+          "rejected"
+        ) {
+          throw (
+            normalResult.reason ||
+            hardwareResult.reason ||
+            new Error(
+              "Failed to load inventory"
+            )
           );
-
-        const normalizedNormalRows =
-          normalRows.map((row) => {
-            const itemId =
-              row?.itemId ||
-              row?.packetItemId ||
-              row?.id ||
-              "";
-
-            return {
-              ...row,
-
-              itemId,
-
-              packetItemId:
-                row?.packetItemId ||
-                itemId,
-
-              itemType:
-                getInventoryRowItemType(
-                  row
-                ),
-            };
-          });
+        }
 
         finalRows =
-          normalizedNormalRows;
+          mergeInventoryRowSources(
+            normalRows,
+            hardwareRows
+          );
 
         /*
-         * ADMIN additionally sees hardware packets.
-         *
-         * If the hardware endpoint fails, normal
-         * inventory remains visible.
+         * Show a partial-data warning without hiding
+         * whichever inventory source loaded successfully.
          */
-        if (isAdmin) {
-          try {
-            const hardwareRows =
-              await fetchInventoryRowsFromPath(
-                "/api/hardware-packets"
-              );
+        if (
+          normalResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Normal inventory fetch failed:",
+            normalResult.reason
+          );
 
-            const normalizedHardwareRows =
-              hardwareRows.map(
-                normalizeHardwarePacketRow
-              );
+          showUiAlert(
+            "error",
+            normalResult.reason
+              ?.message ||
+            "Hardware inventory loaded, but normal inventory could not be loaded"
+          );
+        }
 
-            const rowsById =
-              new Map();
+        if (
+          hardwareResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Hardware inventory fetch failed:",
+            hardwareResult.reason
+          );
 
-            for (
-              const row of [
-                ...normalizedNormalRows,
-                ...normalizedHardwareRows,
-              ]
-            ) {
-              const key =
-                String(
-                  row?.itemId ||
-                  row?.packetItemId ||
-                  row?.id ||
-                  row?.sku ||
-                  ""
-                ).trim();
-
-              if (!key) {
-                continue;
-              }
-
-              rowsById.set(
-                key,
-                row
-              );
-            }
-
-            finalRows =
-              Array.from(
-                rowsById.values()
-              );
-
-          } catch (
-          hardwareError
-          ) {
-            console.error(
-              "Hardware inventory fetch failed:",
-              hardwareError
-            );
-
-            showUiAlert(
-              "error",
-              "Normal inventory loaded, but hardware packets could not be loaded"
-            );
-          }
+          showUiAlert(
+            "error",
+            hardwareResult.reason
+              ?.message ||
+            "Normal inventory loaded, but hardware packets could not be loaded"
+          );
         }
       }
 
-      setRows(finalRows);
+      /*
+       * NORMAL PACKFLOW USERS:
+       * Preserve existing normal inventory behaviour.
+       */
+      else {
+        const normalRows =
+          await fetchInventoryRowsFromPath(
+            "/api/packets/items",
+            controller.signal
+          );
+
+        finalRows =
+          normalRows.map(
+            normalizeNormalInventoryRow
+          );
+      }
+
+      /*
+       * Ignore this result when a newer request has
+       * already started.
+       */
+      if (
+        requestId !==
+        inventoryRequestIdRef.current
+      ) {
+        return [];
+      }
+
+      setRows(
+        finalRows
+      );
+
       setRowCount(
         finalRows.length
       );
 
       return finalRows;
-
     } catch (error) {
+      if (
+        error?.name ===
+        "AbortError" ||
+        controller.signal.aborted
+      ) {
+        return [];
+      }
+
       console.error(
         "Inventory fetch failed:",
         error
       );
 
-      setRows([]);
-      setRowCount(0);
+      /*
+       * Preserve already loaded rows during a refresh failure.
+       * Do not blank the complete table.
+       */
+      if (
+        requestId ===
+        inventoryRequestIdRef.current
+      ) {
+        setRows(
+          previous =>
+            previous.length > 0
+              ? previous
+              : []
+        );
 
-      showUiAlert(
-        "error",
-        error?.message ||
-        "Failed to load inventory"
-      );
+        setRowCount(
+          previous =>
+            previous > 0
+              ? previous
+              : 0
+        );
+
+        showUiAlert(
+          "error",
+          error?.message ||
+          "Failed to load inventory"
+        );
+      }
 
       return [];
-
     } finally {
-      setLoading(false);
+      if (
+        requestId ===
+        inventoryRequestIdRef.current
+      ) {
+        setLoading(
+          false
+        );
+      }
     }
   };
+
   usePackFlowDataRefresh(
     "inventory",
     async () => {
@@ -5319,6 +5850,14 @@ function ZohoItemsPage() {
   ]);
 
   useEffect(() => {
+    return () => {
+      inventoryAbortControllerRef
+        .current
+        ?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     preparePacketDetailRows(form.numberOfPackets);
   }, [form.numberOfPackets]);
 
@@ -5535,49 +6074,229 @@ function ZohoItemsPage() {
               <MenuItem value="STICKER_PRINTED">Sticker Printed</MenuItem>
             </TextField>
           )}
+          <Button
+            size="small"
+            onClick={() =>
+              setInventoryColumnWidths(
+                createDefaultInventoryColumnWidths()
+              )
+            }
+            sx={{
+              minWidth:
+                118,
+
+              height:
+                38,
+
+              borderRadius:
+                "10px",
+
+              textTransform:
+                "none",
+
+              fontWeight:
+                850,
+
+              color:
+                "#cbd5e1",
+
+              background:
+                "rgba(255,255,255,.05)",
+
+              border:
+                "1px solid rgba(255,255,255,.08)",
+
+              "&:hover": {
+                color:
+                  "#fff",
+
+                background:
+                  "rgba(255,255,255,.10)",
+              },
+            }}
+          >
+            Reset Columns
+          </Button>
         </Box>
 
 
         <div style={wrap}>
-          <Box sx={tableWrapper}>
+          {loading &&
+            rows.length > 0 && (
+              <LinearProgress
+                sx={{
+                  mb: 1.2,
+                  height: 3,
+                  borderRadius: 999,
+
+                  background:
+                    "rgba(96,165,250,.10)",
+
+                  "& .MuiLinearProgress-bar":
+                  {
+                    borderRadius: 999,
+                    background:
+                      "linear-gradient(90deg,#2563eb,#60a5fa)",
+                  },
+                }}
+              />
+            )}
+          <Box
+            sx={{
+              ...tableWrapper,
+
+              width: "100%",
+              overflowX: "auto",
+              overflowY: "hidden",
+
+              ...premiumScrollbarSx(
+                "#60a5fa"
+              ),
+            }}
+          >
             <div
               style={{
-                width: "max-content",
-                minWidth: inventoryMinWidth,
+                width:
+                  inventoryTablePixelWidth,
+
+                minWidth:
+                  "100%",
               }}
             >
-              <div style={tableHeader}>
-                <div>Generate</div>
-                <div>Add Packets</div>
-                <div>Edit</div>
-                <div>Delete</div>
-                <div>Item Name</div>
-                <div>SKU</div>
-                <div>PD No</div>
-                <div>DWG No</div>
-                <div>Plant</div>
-                <div>Location</div>
-                <div>Client</div>
-                <div>Address</div>
-                <div>Description</div>
-                <div>Status</div>
-                <div>Sticker PDF</div>
+              <div
+                style={{
+                  ...tableHeader,
+
+                  display: "grid",
+
+                  gridTemplateColumns:
+                    inventoryGridTemplateColumns,
+
+                  width:
+                    inventoryTablePixelWidth,
+
+                  minWidth:
+                    inventoryTablePixelWidth,
+
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 12,
+                }}
+              >
+                {INVENTORY_TABLE_COLUMNS.map(
+                  column => (
+                    <div
+                      key={column.key}
+                      style={{
+                        position:
+                          "relative",
+
+                        display:
+                          "flex",
+
+                        alignItems:
+                          "center",
+
+                        minWidth:
+                          0,
+
+                        paddingRight:
+                          13,
+                      }}
+                    >
+                      <span
+                        style={{
+                          overflow:
+                            "hidden",
+
+                          textOverflow:
+                            "ellipsis",
+
+                          whiteSpace:
+                            "nowrap",
+                        }}
+                      >
+                        {column.label}
+                      </span>
+
+                      <span
+                        role="separator"
+                        aria-label={`Resize ${column.label} column`}
+                        onMouseDown={event =>
+                          startInventoryColumnResize(
+                            event,
+                            column
+                          )
+                        }
+                        style={{
+                          position:
+                            "absolute",
+
+                          top:
+                            0,
+
+                          right:
+                            -4,
+
+                          width:
+                            9,
+
+                          height:
+                            "100%",
+
+                          cursor:
+                            "col-resize",
+
+                          zIndex:
+                            5,
+                        }}
+                      >
+                        <span
+                          style={{
+                            position:
+                              "absolute",
+
+                            top:
+                              "18%",
+
+                            bottom:
+                              "18%",
+
+                            left:
+                              4,
+
+                            width:
+                              1,
+
+                            borderRadius:
+                              999,
+
+                            background:
+                              "rgba(148,163,184,.32)",
+                          }}
+                        />
+                      </span>
+                    </div>
+                  )
+                )}
               </div>
 
               <div style={tableBody}>
-                {loading && (
-                  <div style={emptyTableState}>
-                    Loading inventory items...
-                  </div>
-                )}
+                {loading &&
+                  rows.length === 0 && (
+                    <div style={emptyTableState}>
+                      Loading inventory items...
+                    </div>
+                  )}
 
-                {!loading && paginatedRows.length === 0 && (
-                  <div style={emptyTableState}>
-                    No inventory items found.
-                  </div>
-                )}
+                {!loading &&
+                  paginatedRows.length === 0 && (
+                    <div style={emptyTableState}>
+                      No inventory items found.
+                    </div>
+                  )}
 
-                {!loading && paginatedRows.map((row) => {
+                {paginatedRows.map((row) => {
 
                   const hardwareRow =
                     isHardwarePacketRow(row);
@@ -5642,6 +6361,27 @@ function ZohoItemsPage() {
                       style={{
                         ...tableRow,
 
+                        display:
+                          "grid",
+
+                        gridTemplateColumns:
+                          inventoryGridTemplateColumns,
+
+                        width:
+                          inventoryTablePixelWidth,
+
+                        minWidth:
+                          inventoryTablePixelWidth,
+
+                        minHeight:
+                          72,
+
+                        height:
+                          "auto",
+
+                        alignItems:
+                          "stretch",
+
                         ...(isHardwarePacketRow(row)
                           ? {
                             background:
@@ -5656,7 +6396,12 @@ function ZohoItemsPage() {
                           : {}),
                       }}
                     >
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Button
                           size="small"
                           disabled={
@@ -5681,7 +6426,12 @@ function ZohoItemsPage() {
                         </Button>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         {isHardwarePacketRow(row) ? (
                           lastPacket &&
                             canManageHardwarePackets ? (
@@ -5747,7 +6497,12 @@ function ZohoItemsPage() {
                         )}
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Button
                           size="small"
                           disabled={
@@ -5773,7 +6528,12 @@ function ZohoItemsPage() {
                         </Button>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Button
                           type="button"
                           size="small"
@@ -5798,7 +6558,12 @@ function ZohoItemsPage() {
                         </Button>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Box
                           sx={{
                             display: "flex",
@@ -5827,7 +6592,11 @@ function ZohoItemsPage() {
                           )}
 
                           <span
-                            style={simpleCellText}
+                            style={{
+                              ...simpleCellText,
+                              ...inventoryLongTextStyle,
+                              fontWeight: 850,
+                            }}
                             title={row.itemName}
                           >
                             {row.itemName || "—"}
@@ -5835,34 +6604,65 @@ function ZohoItemsPage() {
                         </Box>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
-                          style={simpleMonoText}
+                          style={{
+                            ...simpleMonoText,
+                            ...inventoryLongTextStyle,
+                            wordBreak: "break-all",
+                          }}
                           title={row.sku}
                         >
                           {row.sku || "—"}
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
-                          style={simpleMutedText}
+                          style={{
+                            ...simpleMutedText,
+                            ...inventoryLongTextStyle,
+                          }}
                           title={row.pdNo}
                         >
                           {row.pdNo || "—"}
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
-                          style={simpleMonoText}
+                          style={{
+                            ...simpleMonoText,
+                            ...inventoryLongTextStyle,
+                            wordBreak: "break-all",
+                          }}
                           title={row.drawingNo}
                         >
                           {row.drawingNo || "—"}
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Chip
                           size="small"
                           label={row.plantCode || "Unassigned"}
@@ -5870,7 +6670,12 @@ function ZohoItemsPage() {
                         />
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Chip
                           size="small"
                           label={getPackingLocationCode(row)}
@@ -5878,33 +6683,58 @@ function ZohoItemsPage() {
                         />
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
-                          style={simpleCellText}
+                          style={{
+                            ...simpleCellText,
+                            ...inventoryLongTextStyle,
+                          }}
                           title={row.clientName}
                         >
                           {row.clientName || "—"}
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
-                          style={simpleMutedText}
+                          style={{
+                            ...simpleMutedText,
+                            ...inventoryLongTextStyle,
+                          }}
                           title={row.clientAddress}
                         >
                           {row.clientAddress || "—"}
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <span
                           style={{
                             ...simpleMutedText,
-                            whiteSpace:
-                              isHardwarePacketRow(row)
-                                ? "pre-wrap"
-                                : "normal",
-                            lineHeight: 1.5,
+
+                            ...(isHardwarePacketRow(
+                              row
+                            )
+                              ? inventoryMultilineTextStyle
+                              : inventoryLongTextStyle),
+
+                            lineHeight:
+                              1.55,
                           }}
                           title={row.description}
                         >
@@ -5912,7 +6742,12 @@ function ZohoItemsPage() {
                         </span>
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         <Chip
                           label={getStickerStatusLabel(row)}
                           size="small"
@@ -5920,7 +6755,12 @@ function ZohoItemsPage() {
                         />
                       </div>
 
-                      <div style={tableCellWrap}>
+                      <div
+                        style={{
+                          ...tableCellWrap,
+                          ...inventoryExpandableCellStyle,
+                        }}
+                      >
                         {row.stickerNumber ? (
                           <Box sx={actionCell}>
                             <Button
@@ -9748,66 +10588,110 @@ const inventoryMasterCountSx = {
 };
 
 const inventoryPacketTableSx = {
-  background: "rgba(2,6,23,.18)",
-  maxHeight: "min(360px, 42vh)",
-  overflow: "auto",
-  borderTop: "1px solid rgba(255,255,255,.06)",
+  width:
+    "100%",
 
-  scrollbarWidth: "thin",
-  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+  overflowX:
+    "auto",
 
-  "&::-webkit-scrollbar": {
-    width: 10,
-    height: 10,
-  },
+  overflowY:
+    "hidden",
 
-  "&::-webkit-scrollbar-track": {
-    background: "rgba(15,23,42,.85)",
-    borderRadius: 999,
-  },
+  borderRadius:
+    "14px",
 
-  "&::-webkit-scrollbar-thumb": {
-    background: "linear-gradient(180deg,#2563eb,#60a5fa)",
-    borderRadius: 999,
-    border: "2px solid rgba(15,23,42,.95)",
-  },
+  border:
+    "1px solid rgba(255,255,255,.07)",
+
+  ...premiumScrollbarSx(
+    "#a78bfa"
+  ),
 };
 
 const inventoryPacketHeadSx = {
-  position: "sticky",
-  top: 0,
-  zIndex: 4,
+  display:
+    "grid",
 
-  display: "grid",
   gridTemplateColumns:
-    "90px minmax(220px,1.2fr) minmax(260px,1.3fr) 140px minmax(180px,1fr) minmax(320px,1.4fr)",
+    inventoryPacketGridTemplate,
 
-  color: "rgba(255,255,255,.62)",
-  fontSize: 10,
-  fontWeight: 950,
-  borderBottom: "1px solid rgba(255,255,255,.08)",
-  background: "#0f172a",
-  textTransform: "uppercase",
-  letterSpacing: ".06em",
-  minWidth: 1210,
+  minWidth:
+    1520,
 
-  "& > div": {
-    padding: "10px 9px",
-  },
+  alignItems:
+    "center",
+
+  gap:
+    0,
+
+  px:
+    1.4,
+
+  py:
+    1.2,
+
+  color:
+    "#94a3b8",
+
+  fontSize:
+    11,
+
+  fontWeight:
+    900,
+
+  textTransform:
+    "uppercase",
+
+  letterSpacing:
+    ".08em",
+
+  background:
+    "rgba(15,23,42,.92)",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.07)",
 };
 
 const inventoryPacketRowSx = {
-  display: "grid",
-  gridTemplateColumns:
-    "90px minmax(220px,1.2fr) minmax(260px,1.3fr) 140px minmax(180px,1fr) minmax(320px,1.4fr)",
-  alignItems: "center",
-  borderBottom: "1px solid rgba(255,255,255,.06)",
-  minHeight: 46,
-  background: "rgba(255,255,255,.025)",
-  minWidth: 1210,
+  display:
+    "grid",
 
-  "& > div": {
-    padding: "6px 9px",
+  gridTemplateColumns:
+    inventoryPacketGridTemplate,
+
+  minWidth:
+    1520,
+
+  minHeight:
+    70,
+
+  height:
+    "auto",
+
+  alignItems:
+    "stretch",
+
+  px:
+    1.4,
+
+  py:
+    1,
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.055)",
+
+  "& > *": {
+    minWidth:
+      0,
+
+    display:
+      "flex",
+
+    alignItems:
+      "flex-start",
+
+    padding:
+      "8px 10px",
   },
 };
 
@@ -9828,12 +10712,32 @@ const inventoryPacketMonoSx = {
 };
 
 const inventoryPacketSubSx = {
-  color: "rgba(255,255,255,.58)",
-  fontSize: 11,
-  fontWeight: 650,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
+  color:
+    "#94a3b8",
+
+  fontSize:
+    12,
+
+  fontWeight:
+    650,
+
+  lineHeight:
+    1.5,
+
+  whiteSpace:
+    "pre-wrap",
+
+  overflowWrap:
+    "anywhere",
+
+  wordBreak:
+    "break-word",
+
+  overflow:
+    "visible",
+
+  textOverflow:
+    "clip",
 };
 
 const inventoryPacketActionsSx = {
