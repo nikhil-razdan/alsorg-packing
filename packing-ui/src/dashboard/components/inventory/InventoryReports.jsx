@@ -472,9 +472,96 @@ const makeSearchText = (row) =>
     .join(" ")
     .toLowerCase();
 
+const extractReportRows = (
+  payload
+) => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (
+    Array.isArray(
+      payload?.rows
+    )
+  ) {
+    return payload.rows;
+  }
+
+  if (
+    Array.isArray(
+      payload?.content
+    )
+  ) {
+    return payload.content;
+  }
+
+  if (
+    Array.isArray(
+      payload?.items
+    )
+  ) {
+    return payload.items;
+  }
+
+  if (
+    Array.isArray(
+      payload?.data
+    )
+  ) {
+    return payload.data;
+  }
+
+  return [];
+};
+
+const formatMasterReportRows = (
+  rows,
+  keyPrefix = "master"
+) => {
+  const sourceRows =
+    Array.isArray(rows)
+      ? rows
+      : [];
+
+  return sourceRows.map(
+    (row, index) => ({
+      key:
+        row?.masterItemId ||
+        `${keyPrefix}-${index}`,
+
+      ...row,
+
+      drawingName:
+        row?.drawingName ||
+        row?.drawingNo ||
+        "-",
+
+      packingProgress:
+        row?.packingProgress !== undefined &&
+          row?.packingProgress !== null
+          ? `${Math.round(
+            Number(
+              row.packingProgress ||
+              0
+            )
+          )}%`
+          : "0%",
+
+      exceptionReason:
+        row?.exceptionReason ||
+        "Clear",
+    })
+  );
+};
+
 function InventoryReports() {
   const [loading, setLoading] =
     useState(true);
+
+  const [
+    exporting,
+    setExporting,
+  ] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -565,9 +652,9 @@ function InventoryReports() {
               : []
           );
           setMasterRows(
-            Array.isArray(masterData)
-              ? masterData
-              : []
+            extractReportRows(
+              masterData
+            )
           );
         }
       )
@@ -645,9 +732,9 @@ function InventoryReports() {
           : []
       );
       setMasterRows(
-        Array.isArray(masterData)
-          ? masterData
-          : []
+        extractReportRows(
+          masterData
+        )
       );
     } catch (e) {
       console.error(e);
@@ -1093,6 +1180,16 @@ function InventoryReports() {
     ["exceptionReason", "Exception"],
   ];
 
+  const formattedMasterRows =
+    useMemo(
+      () =>
+        formatMasterReportRows(
+          masterRows,
+          "master"
+        ),
+      [masterRows]
+    );
+
   const tableConfigs = {
     DATE: {
       title: "Date-wise Throughput",
@@ -1108,17 +1205,7 @@ function InventoryReports() {
     MASTER_ITEMS: {
       title: "Master Item Register",
       columns: masterItemColumns,
-      rows: masterRows.map((row, index) => ({
-        key: row.masterItemId || `master-${index}`,
-        ...row,
-        packingProgress:
-          row.packingProgress !== undefined &&
-            row.packingProgress !== null
-            ? `${Math.round(Number(row.packingProgress || 0))}%`
-            : "0%",
-        exceptionReason:
-          row.exceptionReason || "Clear",
-      })),
+      rows: formattedMasterRows,
     },
 
     PACKING_USER: {
@@ -1219,71 +1306,179 @@ function InventoryReports() {
       String(row.bucket).includes("90")
     ) || agingBucketRows[0];
 
-  const downloadExcelReport = async () => {
-    const workbook =
-      new ExcelJS.Workbook();
+  const loadAllMasterItemRows =
+    async () => {
+      const pageSize = 100;
+      const maximumPages = 500;
 
-    workbook.creator =
-      "ALSORG Inventory Dashboard";
+      const collected = [];
 
-    workbook.created = new Date();
+      let page = 0;
+      let expectedTotal = null;
 
-    const addTitle = (
-      sheet,
-      title,
-      colCount
-    ) => {
-      sheet.mergeCells(
-        1,
-        1,
-        1,
-        colCount
+      while (
+        page < maximumPages
+      ) {
+        const response =
+          await fetchMasterItemReport({
+            status: "ALL",
+
+            from:
+              toStartDateTime(
+                fromDate
+              ),
+
+            to:
+              toEndDateTime(
+                toDate
+              ),
+
+            page,
+            size: pageSize,
+
+            limit: pageSize,
+            offset:
+              page *
+              pageSize,
+          });
+
+        const batch =
+          extractReportRows(
+            response
+          );
+
+        collected.push(
+          ...batch
+        );
+
+        /*
+         * Do not default missing totals to zero.
+         * Otherwise export would stop after page one.
+         */
+        const rawTotal =
+          response?.total ??
+          response?.totalElements ??
+          response?.rowCount;
+
+        if (
+          rawTotal !== undefined &&
+          rawTotal !== null &&
+          rawTotal !== ""
+        ) {
+          const parsedTotal =
+            Number(rawTotal);
+
+          if (
+            Number.isFinite(
+              parsedTotal
+            ) &&
+            parsedTotal >= 0
+          ) {
+            expectedTotal =
+              parsedTotal;
+          }
+        }
+
+        if (
+          batch.length === 0
+        ) {
+          break;
+        }
+
+        if (
+          expectedTotal !== null &&
+          collected.length >=
+          expectedTotal
+        ) {
+          break;
+        }
+
+        if (
+          batch.length <
+          pageSize
+        ) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      /*
+       * Protect against accidental duplicate rows between pages.
+       */
+      const uniqueRows =
+        new Map();
+
+      collected.forEach(
+        (row, index) => {
+          const key =
+            row?.masterItemId ||
+            `master-row-${index}`;
+
+          uniqueRows.set(
+            key,
+            row
+          );
+        }
       );
 
-      const cell =
-        sheet.getCell(1, 1);
-
-      cell.value = title;
-
-      cell.font = {
-        bold: true,
-        size: 18,
-        color: {
-          argb: "FFFFFFFF",
-        },
-      };
-
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: {
-          argb: "FF0F172A",
-        },
-      };
-      addRowsSheet(
-        "Master Items",
-        "Master Item Register",
-        masterItemColumns,
-        masterRows.map((row, index) => ({
-          key: row.masterItemId || `master-${index}`,
-          ...row,
-          packingProgress:
-            row.packingProgress !== undefined &&
-              row.packingProgress !== null
-              ? `${Math.round(Number(row.packingProgress || 0))}%`
-              : "0%",
-          exceptionReason:
-            row.exceptionReason || "Clear",
-        }))
+      return Array.from(
+        uniqueRows.values()
       );
-
-      sheet.getRow(1).height = 28;
     };
 
-    const styleHeader = (row) => {
-      row.eachCell((cell) => {
+  const buildExcelReport =
+    async () => {
+
+      const allMasterRows =
+        await loadAllMasterItemRows();
+
+      const exportMasterRows =
+        formatMasterReportRows(
+          allMasterRows,
+          "master-export"
+        );
+
+      const workbook =
+        new ExcelJS.Workbook();
+
+      workbook.creator =
+        "ALSORG Inventory Dashboard";
+
+      workbook.created = new Date();
+
+      const addTitle = (
+        sheet,
+        title,
+        colCount
+      ) => {
+        if (!sheet) {
+          throw new Error(
+            `Cannot add title "${title}" because worksheet is missing`
+          );
+        }
+
+        const safeColumnCount =
+          Math.max(
+            Number(colCount || 1),
+            1
+          );
+
+        sheet.mergeCells(
+          1,
+          1,
+          1,
+          safeColumnCount
+        );
+
+        const cell =
+          sheet.getCell(1, 1);
+
+        cell.value = title;
+
         cell.font = {
           bold: true,
+          size: 18,
           color: {
             argb: "FFFFFFFF",
           },
@@ -1293,492 +1488,774 @@ function InventoryReports() {
           type: "pattern",
           pattern: "solid",
           fgColor: {
-            argb: "FF1D4ED8",
+            argb: "FF0F172A",
           },
         };
 
         cell.alignment = {
           vertical: "middle",
-          horizontal: "center",
+          horizontal: "left",
         };
 
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
-    };
+        sheet.getRow(1).height = 28;
+      };
 
-    const autoFit = (sheet) => {
-      sheet.columns.forEach((column) => {
-        let max = 12;
+      const styleHeader = (row) => {
+        row.eachCell((cell) => {
+          cell.font = {
+            bold: true,
+            color: {
+              argb: "FFFFFFFF",
+            },
+          };
 
-        column.eachCell(
-          { includeEmpty: true },
-          (cell) => {
-            const value =
-              cell.value == null
-                ? ""
-                : String(cell.value);
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: "FF1D4ED8",
+            },
+          };
 
-            max = Math.max(
-              max,
-              value.length + 2
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      };
+
+      const autoFit = (
+        sheet
+      ) => {
+        sheet.columns.forEach(
+          (column, columnIndex) => {
+            let maximumLength = 12;
+
+            column.eachCell(
+              {
+                includeEmpty: true,
+              },
+              (cell) => {
+                const rawValue =
+                  cell.value;
+
+                let text = "";
+
+                if (
+                  rawValue === null ||
+                  rawValue === undefined
+                ) {
+                  text = "";
+                } else if (
+                  typeof rawValue ===
+                  "object"
+                ) {
+                  text =
+                    rawValue?.text ||
+                    rawValue?.result ||
+                    String(rawValue);
+                } else {
+                  text =
+                    String(rawValue);
+                }
+
+                /*
+                 * Use the longest individual line, not the
+                 * complete paragraph length.
+                 */
+                const longestLine =
+                  text
+                    .split(/\r?\n/)
+                    .reduce(
+                      (
+                        longest,
+                        current
+                      ) =>
+                        Math.max(
+                          longest,
+                          current.length
+                        ),
+                      0
+                    );
+
+                maximumLength =
+                  Math.max(
+                    maximumLength,
+                    longestLine + 2
+                  );
+              }
             );
+
+            /*
+             * Wider maximum for descriptive columns.
+             */
+            const headerValue =
+              String(
+                sheet.getCell(
+                  3,
+                  columnIndex + 1
+                ).value || ""
+              ).toLowerCase();
+
+            const isLongTextColumn =
+              headerValue.includes(
+                "item"
+              ) ||
+              headerValue.includes(
+                "client"
+              ) ||
+              headerValue.includes(
+                "exception"
+              ) ||
+              headerValue.includes(
+                "insight"
+              ) ||
+              headerValue.includes(
+                "recommendation"
+              );
+
+            const maximumWidth =
+              isLongTextColumn
+                ? 55
+                : 36;
+
+            column.width =
+              Math.min(
+                Math.max(
+                  maximumLength,
+                  12
+                ),
+                maximumWidth
+              );
           }
         );
+      };
 
-        column.width = Math.min(
-          Math.max(max, 12),
-          36
-        );
-      });
-    };
+      const finishSheet = (
+        sheet
+      ) => {
+        sheet.views = [
+          {
+            state: "frozen",
+            ySplit: 3,
+          },
+        ];
 
-    const finishSheet = (sheet) => {
-      sheet.views = [
-        {
-          state: "frozen",
-          ySplit: 2,
-        },
-      ];
+        autoFit(sheet);
+      };
 
-      autoFit(sheet);
-    };
-
-    const addRowsSheet = (
-      name,
-      title,
-      columns,
-      rows
-    ) => {
-      const sheet =
-        workbook.addWorksheet(name);
-
-      addTitle(
-        sheet,
+      const addRowsSheet = (
+        name,
         title,
-        columns.length
-      );
+        columns = [],
+        rows = []
+      ) => {
+        const cleanSheetName =
+          String(name || "Report")
+            .replace(
+              /[\\/*?:[\]]/g,
+              " "
+            )
+            .trim()
+            .slice(0, 31) ||
+          "Report";
 
-      sheet.addRow([]);
+        /*
+         * Fail early with a meaningful error instead of
+         * letting ExcelJS fail deep inside the workbook.
+         */
+        if (
+          workbook.getWorksheet(
+            cleanSheetName
+          )
+        ) {
+          throw new Error(
+            `Duplicate worksheet requested: ${cleanSheetName}`
+          );
+        }
 
-      const header =
-        sheet.addRow(
-          columns.map((col) => col[1])
-        );
+        const safeColumns =
+          Array.isArray(columns)
+            ? columns
+            : [];
 
-      styleHeader(header);
+        const safeRows =
+          Array.isArray(rows)
+            ? rows
+            : [];
 
-      rows.forEach((row) => {
-        sheet.addRow(
-          columns.map((col) =>
-            row[col[0]] ?? "-"
+        const sheet =
+          workbook.addWorksheet(
+            cleanSheetName
+          );
+
+        addTitle(
+          sheet,
+          title,
+          Math.max(
+            safeColumns.length,
+            1
           )
         );
-      });
 
-      finishSheet(sheet);
+        sheet.addRow([]);
+
+        if (
+          safeColumns.length === 0
+        ) {
+          sheet.addRow([
+            "No columns configured",
+          ]);
+
+          finishSheet(sheet);
+
+          return sheet;
+        }
+
+        const header =
+          sheet.addRow(
+            safeColumns.map(
+              (column) =>
+                column?.[1] ||
+                column?.[0] ||
+                "-"
+            )
+          );
+
+        styleHeader(header);
+
+        sheet.autoFilter = {
+          from: {
+            row: header.number,
+            column: 1,
+          },
+
+          to: {
+            row: header.number,
+            column:
+              safeColumns.length,
+          },
+        };
+
+        if (
+          safeRows.length === 0
+        ) {
+          const noDataRow =
+            sheet.addRow([
+              "No data available",
+            ]);
+
+          if (
+            safeColumns.length > 1
+          ) {
+            sheet.mergeCells(
+              noDataRow.number,
+              1,
+              noDataRow.number,
+              safeColumns.length
+            );
+          }
+
+          noDataRow.getCell(1)
+            .alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+        } else {
+          safeRows.forEach(
+            (row) => {
+              const worksheetRow =
+                sheet.addRow(
+                  safeColumns.map(
+                    ([key]) => {
+                      const value =
+                        row?.[key];
+
+                      if (
+                        value === undefined ||
+                        value === null ||
+                        value === ""
+                      ) {
+                        return "-";
+                      }
+
+                      return value;
+                    }
+                  )
+                );
+
+              worksheetRow.eachCell(
+                (cell) => {
+                  cell.alignment = {
+                    vertical: "top",
+                    horizontal: "left",
+                    wrapText: true,
+                  };
+
+                  cell.border = {
+                    bottom: {
+                      style: "hair",
+                      color: {
+                        argb:
+                          "FFD1D5DB",
+                      },
+                    },
+                  };
+                }
+              );
+            }
+          );
+        }
+
+        finishSheet(sheet);
+
+        return sheet;
+      };
+
+      /*
+      KPI SUMMARY
+      */
+
+      const kpiSheet =
+        workbook.addWorksheet(
+          "KPI Summary"
+        );
+
+      addTitle(
+        kpiSheet,
+        "Inventory KPI Summary",
+        3
+      );
+
+      kpiSheet.addRow([]);
+
+      const kpiHeader =
+        kpiSheet.addRow([
+          "KPI",
+          "Value",
+          "Insight",
+        ]);
+
+      styleHeader(kpiHeader);
+
+      [
+        [
+          "Inventory Items",
+          kpis.totalInventory,
+          "Warehouse + Ready To Dispatch + Ready",
+        ],
+        [
+          "Warehouse Items",
+          kpis.warehouseItems,
+          "Current warehouse stock",
+        ],
+        [
+          "Ready To Dispatch",
+          kpis.readyToDispatch,
+          "Items waiting for dispatch",
+        ],
+        [
+          "Ready Items",
+          kpis.readyItems,
+          "Ready / processed stock",
+        ],
+        [
+          "Packed Items",
+          kpis.packedItems,
+          "Sticker generated / packed stock",
+        ],
+        [
+          "Dispatched Items",
+          kpis.dispatchedItems,
+          "Challan generated / dispatched stock",
+        ],
+        [
+          "Pending Items",
+          kpis.pendingItems,
+          "Items still pending in flow",
+        ],
+        [
+          "Stickers Generated",
+          kpis.stickersGenerated,
+          "Total labels printed",
+        ],
+        [
+          "Packing In Selected Range",
+          kpis.packedInRange,
+          "Date-filtered packing activity",
+        ],
+        [
+          "Dispatch In Selected Range",
+          kpis.dispatchedInRange,
+          "Date-filtered dispatch activity",
+        ],
+        [
+          "Unique Clients",
+          kpis.uniqueClients,
+          "Clients involved in selected range",
+        ],
+        [
+          "Critical Aging Items",
+          kpis.criticalAging,
+          "Items older than 30 days",
+        ],
+        [
+          "Item / Packet Detail Rows",
+          kpis.itemPacketRows,
+          "Total item / packet rows across inventory, packing and dispatch",
+        ],
+        [
+          "Inventory Item / Packet Rows",
+          kpis.inventoryItemPacketRows,
+          "Current inventory packet-level rows",
+        ],
+        [
+          "Packing Item / Packet Rows",
+          kpis.packingItemPacketRows,
+          "Packed item / packet rows in selected range",
+        ],
+        [
+          "Dispatch Item / Packet Rows",
+          kpis.dispatchItemPacketRows,
+          "Dispatched item / packet rows in selected range",
+        ],
+        [
+          "Dispatch Completion Rate",
+          formatPercent(
+            kpis.completionRate
+          ),
+          "Dispatched items divided by inventory items",
+        ],
+      ].forEach((row) =>
+        kpiSheet.addRow(row)
+      );
+
+      finishSheet(kpiSheet);
+
+      /*
+  MAIN REPORT SHEETS
+  */
+
+      addRowsSheet(
+        "Master Items",
+        "Master Item Register",
+        masterItemColumns,
+        exportMasterRows
+      );
+
+      addRowsSheet(
+        "Date Wise",
+        "Date-wise Inventory Throughput",
+        tableConfigs.DATE.columns,
+        dateWiseRows
+      );
+
+      addRowsSheet(
+        "Packing User Wise",
+        "Packing User-wise Report",
+        tableConfigs.PACKING_USER.columns,
+        packingUserRows
+      );
+
+      addRowsSheet(
+        "Dispatch User Wise",
+        "Dispatch User-wise Report",
+        tableConfigs.DISPATCH_USER.columns,
+        dispatchUserRows
+      );
+
+      addRowsSheet(
+        "Client Wise",
+        "Client-wise Inventory Movement",
+        tableConfigs.CLIENT.columns,
+        clientWiseRows
+      );
+
+      addRowsSheet(
+        "Inventory Aging",
+        "Inventory Aging Bucket Report",
+        tableConfigs.AGING.columns,
+        agingBucketRows
+      );
+
+      addRowsSheet(
+        "All Item Packets",
+        "All Item / Packet Detail",
+        itemPacketColumns,
+        allItemPacketRows
+      );
+
+      addRowsSheet(
+        "Inventory Item Packets",
+        "Inventory Item / Packet Detail",
+        itemPacketColumns,
+        inventoryItemPacketRows
+      );
+
+      addRowsSheet(
+        "Packing Item Packets",
+        "Packing Item / Packet Detail",
+        itemPacketColumns,
+        packingItemPacketRows
+      );
+
+      addRowsSheet(
+        "Dispatch Item Packets",
+        "Dispatch Item / Packet Detail",
+        itemPacketColumns,
+        dispatchItemPacketRows
+      );
+
+      /*
+      RAW PACKING DATA
+      */
+
+      const rawPacking =
+        packingRows.map((row) => ({
+          zohoItemId: rowValue(row, [
+            "zohoItemId",
+          ]),
+
+          itemName: rowValue(row, [
+            "itemName",
+          ]),
+
+          clientName: rowValue(row, [
+            "clientName",
+            "client",
+          ]),
+
+          packetNumber:
+            getPacketNumber(row),
+
+          packetName:
+            getPacketName(row),
+
+          packedAt: getExcelDateTime(
+            rowValue(row, [
+              "packedAt",
+            ], null)
+          ),
+
+          packedBy: rowValue(row, [
+            "packedBy",
+            "createdBy",
+          ]),
+        }));
+
+      addRowsSheet(
+        "Raw Packing",
+        "Raw Packing Data",
+        [
+          ["zohoItemId", "Zoho Item ID"],
+          ["itemName", "Item Name"],
+          ["clientName", "Client"],
+          ["packetNumber", "Packet No"],
+          ["packetName", "Packet Name"],
+          ["packedAt", "Packed At"],
+          ["packedBy", "Packed By"],
+        ],
+        rawPacking
+      );
+
+      /*
+      RAW DISPATCH DATA
+      */
+
+      const rawDispatch =
+        dispatchRows.map((row) => ({
+          zohoItemId: rowValue(row, [
+            "zohoItemId",
+          ]),
+
+          itemName: rowValue(row, [
+            "itemName",
+          ]),
+
+          clientName: rowValue(row, [
+            "clientName",
+            "client",
+          ]),
+
+          packetNumber:
+            getPacketNumber(row),
+
+          packetName:
+            getPacketName(row),
+
+          dispatchedAt: getExcelDateTime(
+            rowValue(row, [
+              "dispatchedAt",
+            ], null)
+          ),
+
+          dispatchedBy: rowValue(row, [
+            "dispatchedBy",
+            "createdBy",
+          ]),
+        }));
+
+      addRowsSheet(
+        "Raw Dispatch",
+        "Raw Dispatch Data",
+        [
+          ["zohoItemId", "Zoho Item ID"],
+          ["itemName", "Item Name"],
+          ["clientName", "Client"],
+          ["packetNumber", "Packet No"],
+          ["packetName", "Packet Name"],
+          ["dispatchedAt", "Dispatched At"],
+          ["dispatchedBy", "Dispatched By"],
+        ],
+        rawDispatch
+      );
+
+      /*
+      INSIGHTS
+      */
+
+      const insightsSheet =
+        workbook.addWorksheet(
+          "Insights"
+        );
+
+      addTitle(
+        insightsSheet,
+        "Inventory Insights",
+        3
+      );
+
+      insightsSheet.addRow([]);
+
+      const insightHeader =
+        insightsSheet.addRow([
+          "Insight",
+          "Value",
+          "Recommendation",
+        ]);
+
+      styleHeader(insightHeader);
+
+      [
+        [
+          "Top Packing User",
+          topPacker
+            ? `${topPacker.user} - ${topPacker.count} packed`
+            : "-",
+          "Use this user as benchmark for packing productivity.",
+        ],
+        [
+          "Top Dispatch User",
+          topDispatcher
+            ? `${topDispatcher.user} - ${topDispatcher.count} dispatched`
+            : "-",
+          "Review dispatch flow and replicate best practices.",
+        ],
+        [
+          "Busiest Date",
+          busiestDate
+            ? `${busiestDate.label} - ${busiestDate.total} total movements`
+            : "-",
+          "Check manpower and vehicle allocation for this date.",
+        ],
+        [
+          "Critical Aging Bucket",
+          criticalBucket
+            ? `${criticalBucket.bucket} - ${criticalBucket.count} items`
+            : "-",
+          "Prioritize old inventory for dispatch or warehouse review.",
+        ],
+        [
+          "Pending Items",
+          kpis.pendingItems,
+          kpis.pendingItems > 0
+            ? "Review pending queue and ownership."
+            : "Pending inventory is under control.",
+        ],
+        [
+          "Item / Packet Detail Rows",
+          allItemPacketRows.length,
+          "Use this sheet to audit every inventory, packing and dispatch packet-level movement.",
+        ],
+        [
+          "Packing Item / Packet Rows",
+          packingItemPacketRows.length,
+          "Use this for user-wise packing verification and packet traceability.",
+        ],
+        [
+          "Dispatch Item / Packet Rows",
+          dispatchItemPacketRows.length,
+          "Use this to verify dispatched packets against challan and client movement.",
+        ],
+        [
+          "Dispatch Completion Rate",
+          formatPercent(
+            kpis.completionRate
+          ),
+          kpis.completionRate >= 0.8
+            ? "Completion rate is healthy."
+            : "Completion rate needs improvement.",
+        ]
+      ].forEach((row) =>
+        insightsSheet.addRow(row)
+      );
+
+      finishSheet(insightsSheet);
+
+      const buffer =
+        await workbook.xlsx.writeBuffer();
+
+      const fileName = `Inventory_Report_${fromDate}_to_${toDate}.xlsx`;
+
+      saveAs(
+        new Blob([buffer], {
+          type:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        fileName
+      );
     };
 
-    /*
-    KPI SUMMARY
-    */
+  const downloadExcelReport =
+    async () => {
+      if (
+        exporting ||
+        loading
+      ) {
+        return;
+      }
 
-    const kpiSheet =
-      workbook.addWorksheet(
-        "KPI Summary"
-      );
+      try {
+        setExporting(true);
+        setError("");
 
-    addTitle(
-      kpiSheet,
-      "Inventory KPI Summary",
-      3
-    );
+        await buildExcelReport();
+      } catch (error) {
+        console.error(
+          "Inventory Excel export failed:",
+          error
+        );
 
-    kpiSheet.addRow([]);
+        const message =
+          error?.message ||
+          "Failed to generate Inventory Excel report";
 
-    const kpiHeader =
-      kpiSheet.addRow([
-        "KPI",
-        "Value",
-        "Insight",
-      ]);
+        setError(message);
 
-    styleHeader(kpiHeader);
-
-    [
-      [
-        "Inventory Items",
-        kpis.totalInventory,
-        "Warehouse + Ready To Dispatch + Ready",
-      ],
-      [
-        "Warehouse Items",
-        kpis.warehouseItems,
-        "Current warehouse stock",
-      ],
-      [
-        "Ready To Dispatch",
-        kpis.readyToDispatch,
-        "Items waiting for dispatch",
-      ],
-      [
-        "Ready Items",
-        kpis.readyItems,
-        "Ready / processed stock",
-      ],
-      [
-        "Packed Items",
-        kpis.packedItems,
-        "Sticker generated / packed stock",
-      ],
-      [
-        "Dispatched Items",
-        kpis.dispatchedItems,
-        "Challan generated / dispatched stock",
-      ],
-      [
-        "Pending Items",
-        kpis.pendingItems,
-        "Items still pending in flow",
-      ],
-      [
-        "Stickers Generated",
-        kpis.stickersGenerated,
-        "Total labels printed",
-      ],
-      [
-        "Packing In Selected Range",
-        kpis.packedInRange,
-        "Date-filtered packing activity",
-      ],
-      [
-        "Dispatch In Selected Range",
-        kpis.dispatchedInRange,
-        "Date-filtered dispatch activity",
-      ],
-      [
-        "Unique Clients",
-        kpis.uniqueClients,
-        "Clients involved in selected range",
-      ],
-      [
-        "Critical Aging Items",
-        kpis.criticalAging,
-        "Items older than 30 days",
-      ],
-      [
-        "Item / Packet Detail Rows",
-        kpis.itemPacketRows,
-        "Total item / packet rows across inventory, packing and dispatch",
-      ],
-      [
-        "Inventory Item / Packet Rows",
-        kpis.inventoryItemPacketRows,
-        "Current inventory packet-level rows",
-      ],
-      [
-        "Packing Item / Packet Rows",
-        kpis.packingItemPacketRows,
-        "Packed item / packet rows in selected range",
-      ],
-      [
-        "Dispatch Item / Packet Rows",
-        kpis.dispatchItemPacketRows,
-        "Dispatched item / packet rows in selected range",
-      ],
-      [
-        "Dispatch Completion Rate",
-        formatPercent(
-          kpis.completionRate
-        ),
-        "Dispatched items divided by inventory items",
-      ],
-    ].forEach((row) =>
-      kpiSheet.addRow(row)
-    );
-
-    finishSheet(kpiSheet);
-
-    /*
-    MAIN REPORT SHEETS
-    */
-
-    addRowsSheet(
-      "Date Wise",
-      "Date-wise Inventory Throughput",
-      tableConfigs.DATE.columns,
-      dateWiseRows
-    );
-
-    addRowsSheet(
-      "Packing User Wise",
-      "Packing User-wise Report",
-      tableConfigs.PACKING_USER.columns,
-      packingUserRows
-    );
-
-    addRowsSheet(
-      "Dispatch User Wise",
-      "Dispatch User-wise Report",
-      tableConfigs.DISPATCH_USER.columns,
-      dispatchUserRows
-    );
-
-    addRowsSheet(
-      "Client Wise",
-      "Client-wise Inventory Movement",
-      tableConfigs.CLIENT.columns,
-      clientWiseRows
-    );
-
-    addRowsSheet(
-      "Inventory Aging",
-      "Inventory Aging Bucket Report",
-      tableConfigs.AGING.columns,
-      agingBucketRows
-    );
-
-    addRowsSheet(
-      "All Item Packets",
-      "All Item / Packet Detail",
-      itemPacketColumns,
-      allItemPacketRows
-    );
-
-    addRowsSheet(
-      "Inventory Item Packets",
-      "Inventory Item / Packet Detail",
-      itemPacketColumns,
-      inventoryItemPacketRows
-    );
-
-    addRowsSheet(
-      "Packing Item Packets",
-      "Packing Item / Packet Detail",
-      itemPacketColumns,
-      packingItemPacketRows
-    );
-
-    addRowsSheet(
-      "Dispatch Item Packets",
-      "Dispatch Item / Packet Detail",
-      itemPacketColumns,
-      dispatchItemPacketRows
-    );
-
-    /*
-    RAW PACKING DATA
-    */
-
-    const rawPacking =
-      packingRows.map((row) => ({
-        zohoItemId: rowValue(row, [
-          "zohoItemId",
-        ]),
-
-        itemName: rowValue(row, [
-          "itemName",
-        ]),
-
-        clientName: rowValue(row, [
-          "clientName",
-          "client",
-        ]),
-
-        packetNumber:
-          getPacketNumber(row),
-
-        packetName:
-          getPacketName(row),
-
-        packedAt: getExcelDateTime(
-          rowValue(row, [
-            "packedAt",
-          ], null)
-        ),
-
-        packedBy: rowValue(row, [
-          "packedBy",
-          "createdBy",
-        ]),
-      }));
-
-    addRowsSheet(
-      "Raw Packing",
-      "Raw Packing Data",
-      [
-        ["zohoItemId", "Zoho Item ID"],
-        ["itemName", "Item Name"],
-        ["clientName", "Client"],
-        ["packetNumber", "Packet No"],
-        ["packetName", "Packet Name"],
-        ["packedAt", "Packed At"],
-        ["packedBy", "Packed By"],
-      ],
-      rawPacking
-    );
-
-    /*
-    RAW DISPATCH DATA
-    */
-
-    const rawDispatch =
-      dispatchRows.map((row) => ({
-        zohoItemId: rowValue(row, [
-          "zohoItemId",
-        ]),
-
-        itemName: rowValue(row, [
-          "itemName",
-        ]),
-
-        clientName: rowValue(row, [
-          "clientName",
-          "client",
-        ]),
-
-        packetNumber:
-          getPacketNumber(row),
-
-        packetName:
-          getPacketName(row),
-
-        dispatchedAt: getExcelDateTime(
-          rowValue(row, [
-            "dispatchedAt",
-          ], null)
-        ),
-
-        dispatchedBy: rowValue(row, [
-          "dispatchedBy",
-          "createdBy",
-        ]),
-      }));
-
-    addRowsSheet(
-      "Raw Dispatch",
-      "Raw Dispatch Data",
-      [
-        ["zohoItemId", "Zoho Item ID"],
-        ["itemName", "Item Name"],
-        ["clientName", "Client"],
-        ["packetNumber", "Packet No"],
-        ["packetName", "Packet Name"],
-        ["dispatchedAt", "Dispatched At"],
-        ["dispatchedBy", "Dispatched By"],
-      ],
-      rawDispatch
-    );
-
-    /*
-    INSIGHTS
-    */
-
-    const insightsSheet =
-      workbook.addWorksheet(
-        "Insights"
-      );
-
-    addTitle(
-      insightsSheet,
-      "Inventory Insights",
-      3
-    );
-
-    insightsSheet.addRow([]);
-
-    const insightHeader =
-      insightsSheet.addRow([
-        "Insight",
-        "Value",
-        "Recommendation",
-      ]);
-
-    styleHeader(insightHeader);
-
-    [
-      [
-        "Top Packing User",
-        topPacker
-          ? `${topPacker.user} - ${topPacker.count} packed`
-          : "-",
-        "Use this user as benchmark for packing productivity.",
-      ],
-      [
-        "Top Dispatch User",
-        topDispatcher
-          ? `${topDispatcher.user} - ${topDispatcher.count} dispatched`
-          : "-",
-        "Review dispatch flow and replicate best practices.",
-      ],
-      [
-        "Busiest Date",
-        busiestDate
-          ? `${busiestDate.label} - ${busiestDate.total} total movements`
-          : "-",
-        "Check manpower and vehicle allocation for this date.",
-      ],
-      [
-        "Critical Aging Bucket",
-        criticalBucket
-          ? `${criticalBucket.bucket} - ${criticalBucket.count} items`
-          : "-",
-        "Prioritize old inventory for dispatch or warehouse review.",
-      ],
-      [
-        "Pending Items",
-        kpis.pendingItems,
-        kpis.pendingItems > 0
-          ? "Review pending queue and ownership."
-          : "Pending inventory is under control.",
-      ],
-      [
-        "Item / Packet Detail Rows",
-        allItemPacketRows.length,
-        "Use this sheet to audit every inventory, packing and dispatch packet-level movement.",
-      ],
-      [
-        "Packing Item / Packet Rows",
-        packingItemPacketRows.length,
-        "Use this for user-wise packing verification and packet traceability.",
-      ],
-      [
-        "Dispatch Item / Packet Rows",
-        dispatchItemPacketRows.length,
-        "Use this to verify dispatched packets against challan and client movement.",
-      ],
-      [
-        "Dispatch Completion Rate",
-        formatPercent(
-          kpis.completionRate
-        ),
-        kpis.completionRate >= 0.8
-          ? "Completion rate is healthy."
-          : "Completion rate needs improvement.",
-      ]
-    ].forEach((row) =>
-      insightsSheet.addRow(row)
-    );
-
-    finishSheet(insightsSheet);
-
-    const buffer =
-      await workbook.xlsx.writeBuffer();
-
-    const fileName = `Inventory_Report_${fromDate}_to_${toDate}.xlsx`;
-
-    saveAs(
-      new Blob([buffer], {
-        type:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      fileName
-    );
-  };
+        window.alert(
+          message
+        );
+      } finally {
+        setExporting(false);
+      }
+    };
 
   return (
     <div style={wrap}>
@@ -1794,11 +2271,31 @@ function InventoryReports() {
         </div>
 
         <button
-          style={downloadBtn}
-          onClick={downloadExcelReport}
-          disabled={loading}
+          type="button"
+          style={{
+            ...downloadBtn,
+
+            opacity:
+              loading || exporting
+                ? 0.65
+                : 1,
+
+            cursor:
+              loading || exporting
+                ? "not-allowed"
+                : "pointer",
+          }}
+          onClick={
+            downloadExcelReport
+          }
+          disabled={
+            loading ||
+            exporting
+          }
         >
-          Download Excel Report
+          {exporting
+            ? "Generating Excel..."
+            : "Download Excel Report"}
         </button>
       </div>
 
