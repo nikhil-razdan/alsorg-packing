@@ -390,6 +390,90 @@ export async function createDispatchChallan({
   };
 }
 
+/*
+ * =========================================================
+ * CURRENT DISPATCH-CHALLAN FLOW
+ * =========================================================
+ *
+ * This is the current source of truth for item-based trips.
+ * Do not redirect these functions to /api/logistics/trips.
+ */
+
+export async function fetchDispatchChallans() {
+  return requestJson(
+    "/api/dispatched/challans",
+    {
+      errorMessage:
+        "Failed to fetch dispatch challans",
+    }
+  );
+}
+
+export async function endDispatchChallanTrip(
+  challanNumber,
+  tripEndedAt
+) {
+  if (!challanNumber) {
+    throw new Error(
+      "Challan number is required"
+    );
+  }
+
+  if (!tripEndedAt) {
+    throw new Error(
+      "Trip end time is required"
+    );
+  }
+
+  return requestJson(
+    `/api/dispatched/challans/${encodeURIComponent(
+      challanNumber
+    )}/end-trip`,
+    {
+      method: "POST",
+
+      body: {
+        tripEndedAt:
+          normalizeLocalDateTime(
+            tripEndedAt
+          ),
+      },
+
+      errorMessage:
+        "Failed to save trip end time",
+    }
+  );
+}
+
+export async function fetchDispatchChallanPdf(
+  challanNumber
+) {
+  if (!challanNumber) {
+    throw new Error(
+      "Challan number is required"
+    );
+  }
+
+  const response =
+    await requestBlob(
+      `/api/chalaan/dispatched/${encodeURIComponent(
+        challanNumber
+      )}/download`,
+      {
+        method: "GET",
+
+        headers: {
+          Accept: "application/pdf",
+        },
+
+        errorMessage:
+          "Failed to load challan PDF",
+      }
+    );
+
+  return response.blob();
+}
+
 export async function fetchLogisticsTrips() {
   return requestJson(
     "/api/logistics/trips",

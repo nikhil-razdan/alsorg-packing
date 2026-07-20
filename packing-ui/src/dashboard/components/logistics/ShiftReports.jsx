@@ -185,7 +185,7 @@ const styleWorksheet = (worksheet) => {
 };
 
 function ShiftReports({
-  showAlert = () => {},
+  showAlert = () => { },
 }) {
   const [loading, setLoading] =
     useState(true);
@@ -208,42 +208,42 @@ function ShiftReports({
   const [toDate, setToDate] =
     useState("");
 
-	useEffect(() => {
-	  let active = true;
+  useEffect(() => {
+    let active = true;
 
-	  Promise.all([
-	    fetchDrivers(),
-	    fetchShifts(),
-	  ])
-	    .then(([driverData, shiftData]) => {
-	      if (!active) return;
+    Promise.all([
+      fetchDrivers(),
+      fetchShifts(),
+    ])
+      .then(([driverData, shiftData]) => {
+        if (!active) return;
 
-	      setDrivers(driverData || []);
-	      setShifts(shiftData || []);
-	    })
-	    .catch((e) => {
-	      if (!active) return;
+        setDrivers(driverData || []);
+        setShifts(shiftData || []);
+      })
+      .catch((e) => {
+        if (!active) return;
 
-	      console.error(e);
+        console.error(e);
 
-	      showAlert(
-	        getBackendMessage(
-	          e,
-	          "Failed to load shift reports"
-	        ),
-	        "error"
-	      );
-	    })
-	    .finally(() => {
-	      if (!active) return;
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load shift reports"
+          ),
+          "error"
+        );
+      })
+      .finally(() => {
+        if (!active) return;
 
-	      setLoading(false);
-	    });
+        setLoading(false);
+      });
 
-	  return () => {
-	    active = false;
-	  };
-	}, [showAlert]);
+    return () => {
+      active = false;
+    };
+  }, [showAlert]);
 
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
@@ -258,7 +258,7 @@ function ShiftReports({
       if (
         driverId &&
         String(shiftDriverId) !==
-          String(driverId)
+        String(driverId)
       ) {
         return false;
       }
@@ -298,7 +298,7 @@ function ShiftReports({
         );
         acc.totalLoaders += numberValue(
           shift.totalLoaders ??
-            shift.totalHelpers
+          shift.totalHelpers
         );
         acc.totalDistance += numberValue(
           shift.totalDistance
@@ -306,9 +306,9 @@ function ShiftReports({
         acc.totalFuel += numberValue(
           shift.fuelUsed
         );
-		
-		acc.totalHours +=
-		  getSafeShiftHours(shift);
+
+        acc.totalHours +=
+          getSafeShiftHours(shift);
 
         if (isShiftOverSixPm(shift)) {
           acc.overShiftCount += 1;
@@ -371,7 +371,7 @@ function ShiftReports({
       );
       current.totalLoaders += numberValue(
         shift.totalLoaders ??
-          shift.totalHelpers
+        shift.totalHelpers
       );
       current.totalDistance += numberValue(
         shift.totalDistance
@@ -379,8 +379,8 @@ function ShiftReports({
       current.totalFuel += numberValue(
         shift.fuelUsed
       );
-	  current.totalHours +=
-	    getSafeShiftHours(shift);
+      current.totalHours +=
+        getSafeShiftHours(shift);
 
       if (isShiftOverSixPm(shift)) {
         current.overShiftCount += 1;
@@ -432,7 +432,7 @@ function ShiftReports({
       );
       current.totalLoaders += numberValue(
         shift.totalLoaders ??
-          shift.totalHelpers
+        shift.totalHelpers
       );
       current.totalDistance += numberValue(
         shift.totalDistance
@@ -440,13 +440,13 @@ function ShiftReports({
       current.totalFuel += numberValue(
         shift.fuelUsed
       );
-	  current.totalHours +=
-	    getSafeShiftHours(shift);
+      current.totalHours +=
+        getSafeShiftHours(shift);
 
       current.drivers.add(
         shift.driver?.name ||
-          shift.driverId ||
-          "Unknown"
+        shift.driverId ||
+        "Unknown"
       );
 
       if (isShiftOverSixPm(shift)) {
@@ -484,7 +484,7 @@ function ShiftReports({
     setFromDate("");
     setToDate("");
   };
-  
+
   const downloadExcelReport = async () => {
     const workbook = new ExcelJS.Workbook();
 
@@ -836,7 +836,7 @@ function ShiftReports({
         numberValue(shift.totalTrips),
         numberValue(
           shift.totalLoaders ??
-            shift.totalHelpers
+          shift.totalHelpers
         ),
         numberValue(shift.totalDistance),
         numberValue(shift.fuelUsed),
@@ -964,7 +964,7 @@ function ShiftReports({
       <div style={header}>
         <div>
           <div style={title}>
-            Shift Reports
+            Operations Reports
           </div>
 
           <div style={subtitle}>
@@ -1039,14 +1039,14 @@ function ShiftReports({
         >
           Clear Filters
         </button>
-		
-		<button
-		  style={downloadBtn}
-		  onClick={downloadExcelReport}
-		  disabled={loading}
-		>
-		  Download Excel Report
-		</button>
+
+        <button
+          style={downloadBtn}
+          onClick={downloadExcelReport}
+          disabled={loading}
+        >
+          Download Excel Report
+        </button>
       </div>
 
       <div style={summaryGrid}>
@@ -1085,30 +1085,30 @@ function ShiftReports({
       </div>
 
       <div style={table}>
-	  <div style={head}>
-	    <div>
-	      {reportMode === "DRIVER"
-	        ? "Driver"
-	        : "Date"}
-	    </div>
+        <div style={head}>
+          <div>
+            {reportMode === "DRIVER"
+              ? "Driver"
+              : "Date"}
+          </div>
 
-	    <div>
-	      {reportMode === "DATE"
-	        ? "Drivers"
-	        : "Driver ID"}
-	    </div>
+          <div>
+            {reportMode === "DATE"
+              ? "Drivers"
+              : "Driver ID"}
+          </div>
 
-	    <div>Shifts</div>
-	    <div>Trips</div>
-	    <div>Helpers</div>
-	    <div>Hours</div>
-	    <div>Distance</div>
-	    <div>Fuel</div>
-	    <div>Over Shift</div>
-	    <div>Completed</div>
-	    <div>Active</div>
-	    <div>Cancelled</div>
-	  </div>
+          <div>Shifts</div>
+          <div>Trips</div>
+          <div>Helpers</div>
+          <div>Hours</div>
+          <div>Distance</div>
+          <div>Fuel</div>
+          <div>Over Shift</div>
+          <div>Completed</div>
+          <div>Active</div>
+          <div>Cancelled</div>
+        </div>
 
         {loading && (
           <div style={emptyRow}>
@@ -1129,15 +1129,15 @@ function ShiftReports({
               key={row.key}
               style={bodyRow}
             >
-			<div style={nameCell}>
-			  {row.label}
-			</div>
+              <div style={nameCell}>
+                {row.label}
+              </div>
 
-			<div>
-			  {reportMode === "DATE"
-			    ? row.driverCount
-			    : "-"}
-			</div>
+              <div>
+                {reportMode === "DATE"
+                  ? row.driverCount
+                  : "-"}
+              </div>
 
               <div>{row.totalShifts}</div>
               <div>{row.totalTrips}</div>

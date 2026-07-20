@@ -5,32 +5,43 @@ function ExecutiveSidebar({
   const items = [
     {
       key: "summary",
-      label: "Executive Summary",
+      icon: "◉",
+      label: "Unified Summary",
     },
-
+    {
+      key: "dispatch",
+      icon: "📄",
+      label: "Dispatch Challans",
+    },
     {
       key: "drivers",
-      label: "Driver Performance",
+      icon: "👤",
+      label: "Driver Operations",
     },
-
     {
       key: "vehicles",
+      icon: "🚚",
       label: "Vehicle Utilization",
     },
-
     {
-      key: "operations",
-      label: "Operations Intelligence",
+      key: "manual",
+      icon: "🛣️",
+      label: "Manual / Legacy",
     },
-
+    {
+      key: "resources",
+      icon: "⛽",
+      label: "Resource Analytics",
+    },
     {
       key: "alerts",
-      label: "Alerts & Insights",
+      icon: "⚠️",
+      label: "Operational Attention",
     },
-
     {
       key: "routes",
-      label: "Route Analysis",
+      icon: "📍",
+      label: "Manual Routes",
     },
   ];
 
@@ -40,78 +51,100 @@ function ExecutiveSidebar({
         🚚 Logistics IQ
       </div>
 
-      {items.map((item) => (
-        <button
-          key={item.key}
-          onClick={() =>
-            setSection(item.key)
-          }
-          style={{
-            ...navBtn,
+      <div style={sidebarSub}>
+        Unified analytics
+      </div>
 
-            background:
-              section === item.key
+      {items.map((item) => {
+        const active =
+          section === item.key;
+
+        return (
+          <button
+            type="button"
+            key={item.key}
+            onClick={() =>
+              setSection(item.key)
+            }
+            style={{
+              ...navBtn,
+
+              background: active
                 ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-                : "transparent",
+                : "rgba(255,255,255,.025)",
 
-            border:
-              section === item.key
-                ? "1px solid rgba(59,130,246,.4)"
-                : "1px solid rgba(255,255,255,.05)",
-          }}
-        >
-          {item.label}
-        </button>
-      ))}
+              border: active
+                ? "1px solid rgba(96,165,250,.42)"
+                : "1px solid rgba(255,255,255,.055)",
+
+              boxShadow: active
+                ? "0 12px 28px rgba(37,99,235,.22)"
+                : "none",
+            }}
+          >
+            <span style={navIcon}>
+              {item.icon}
+            </span>
+
+            <span>
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 const sidebar = {
-  width: 260,
+  width: 245,
+  flexShrink: 0,
   background:
     "rgba(15,23,42,.75)",
-
   border:
     "1px solid rgba(255,255,255,.06)",
-
   borderRadius: 24,
-
-  padding: 18,
-
+  padding: 16,
   display: "flex",
-
   flexDirection: "column",
-
-  gap: 12,
+  gap: 9,
+  position: "sticky",
+  top: 18,
 };
 
 const logo = {
   color: "#fff",
+  fontSize: 22,
+  fontWeight: 950,
+  marginBottom: 2,
+};
 
-  fontSize: 24,
-
-  fontWeight: 900,
-
+const sidebarSub = {
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 750,
   marginBottom: 10,
 };
 
 const navBtn = {
-  height: 58,
-
-  borderRadius: 16,
-
-  border: "none",
-
+  minHeight: 48,
+  borderRadius: 14,
   color: "#fff",
-
   cursor: "pointer",
-
-  fontWeight: 700,
-
+  fontWeight: 800,
   background: "transparent",
+  transition: "all .2s ease",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "0 13px",
+  textAlign: "left",
+};
 
-  transition: "all .25s ease",
+const navIcon = {
+  width: 23,
+  display: "inline-flex",
+  justifyContent: "center",
 };
 
 export default ExecutiveSidebar;

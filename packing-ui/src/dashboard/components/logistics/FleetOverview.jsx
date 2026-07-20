@@ -1,4 +1,8 @@
-function FleetOverview() {
+function FleetOverview({
+  totalVehicles = 0,
+  activeVehicles = 0,
+  utilization = 0,
+}) {
   return (
     <div style={wrap}>
       <div style={title}>
@@ -7,18 +11,20 @@ function FleetOverview() {
 
       <div style={grid}>
         <Card
-          title="Vehicles Active"
-          value="18"
+          title="Registered Vehicles"
+          value={totalVehicles}
         />
 
         <Card
-          title="Maintenance Due"
-          value="3"
+          title="Vehicles Assigned"
+          value={activeVehicles}
         />
 
         <Card
-          title="Fuel Efficiency"
-          value="81%"
+          title="Fleet Utilization"
+          value={`${Number(
+            utilization || 0
+          ).toFixed(0)}%`}
         />
       </div>
     </div>

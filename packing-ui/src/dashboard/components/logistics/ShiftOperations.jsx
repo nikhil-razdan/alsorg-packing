@@ -51,7 +51,8 @@ const getShiftSearchText = (shift) => {
 };
 
 function ShiftOperations({
-  showAlert = () => {},
+  showAlert = () => { },
+  openCreateToken = 0,
 }) {
   const [createOpen, setCreateOpen] =
     useState(false);
@@ -71,15 +72,24 @@ function ShiftOperations({
   const [pageSize, setPageSize] =
     useState(25);
 
-	const [selectedIds, setSelectedIds] =
-	  useState([]);
+  const [selectedIds, setSelectedIds] =
+    useState([]);
 
-	const [bulkStatus, setBulkStatus] =
-	  useState("");
-	  
-	  const [search, setSearch] =
-	    useState("");
-	  
+  const [bulkStatus, setBulkStatus] =
+    useState("");
+
+  const [search, setSearch] =
+    useState("");
+
+  useEffect(() => {
+    if (!openCreateToken) {
+      return;
+    }
+
+    setEditingShift(null);
+    setCreateOpen(true);
+  }, [openCreateToken]);
+
   const load = async () => {
     try {
       setLoading(true);
@@ -138,7 +148,7 @@ function ShiftOperations({
       active = false;
     };
   }, [showAlert]);
-  
+
   const remove = async (id) => {
     try {
       await deleteShift(id);
@@ -184,8 +194,8 @@ function ShiftOperations({
           nextStatus === "COMPLETED"
             ? "Shift completed and moved to history"
             : nextStatus === "CANCELLED"
-            ? "Shift cancelled and moved to history"
-            : "Shift status updated successfully",
+              ? "Shift cancelled and moved to history"
+              : "Shift status updated successfully",
           "success"
         );
 
@@ -202,146 +212,146 @@ function ShiftOperations({
       }
     };
 
-	const activeShifts = shifts.filter((s) => {
-	  const status = normalizeStatus(s.status);
+  const activeShifts = shifts.filter((s) => {
+    const status = normalizeStatus(s.status);
 
-	  return ![
-	    "COMPLETED",
-	    "CANCELLED",
-	  ].includes(status);
-	});
+    return ![
+      "COMPLETED",
+      "CANCELLED",
+    ].includes(status);
+  });
 
-	const searchTerm =
-	  search.trim().toLowerCase();
+  const searchTerm =
+    search.trim().toLowerCase();
 
-	const filteredActiveShifts =
-	  searchTerm.length === 0
-	    ? activeShifts
-	    : activeShifts.filter((s) =>
-	        getShiftSearchText(s).includes(
-	          searchTerm
-	        )
-	      );
+  const filteredActiveShifts =
+    searchTerm.length === 0
+      ? activeShifts
+      : activeShifts.filter((s) =>
+        getShiftSearchText(s).includes(
+          searchTerm
+        )
+      );
 
-	const totalPages = Math.max(
-	  1,
-	  Math.ceil(
-	    filteredActiveShifts.length / pageSize
-	  )
-	);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      filteredActiveShifts.length / pageSize
+    )
+  );
 
-	const currentPage = Math.min(
-	  pageNo,
-	  totalPages
-	);
+  const currentPage = Math.min(
+    pageNo,
+    totalPages
+  );
 
-	const paginatedShifts =
-	  filteredActiveShifts.slice(
-	    (currentPage - 1) * pageSize,
-	    currentPage * pageSize
-	  );
-	  
-	  const visibleIds = paginatedShifts.map(
-	    (s) => s.id
-	  );
+  const paginatedShifts =
+    filteredActiveShifts.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
 
-	  const allVisibleSelected =
-	    visibleIds.length > 0 &&
-	    visibleIds.every((id) =>
-	      selectedIds.includes(id)
-	    );
+  const visibleIds = paginatedShifts.map(
+    (s) => s.id
+  );
 
-	  const toggleOne = (id) => {
-	    setSelectedIds((prev) =>
-	      prev.includes(id)
-	        ? prev.filter((x) => x !== id)
-	        : [...prev, id]
-	    );
-	  };
+  const allVisibleSelected =
+    visibleIds.length > 0 &&
+    visibleIds.every((id) =>
+      selectedIds.includes(id)
+    );
 
-	  const toggleAllVisible = () => {
-	    if (allVisibleSelected) {
-	      setSelectedIds((prev) =>
-	        prev.filter(
-	          (id) => !visibleIds.includes(id)
-	        )
-	      );
-	    } else {
-	      setSelectedIds((prev) =>
-	        Array.from(
-	          new Set([
-	            ...prev,
-	            ...visibleIds,
-	          ])
-	        )
-	      );
-	    }
-	  };
+  const toggleOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id]
+    );
+  };
 
-	  const clearSelection = () => {
-	    setSelectedIds([]);
-	    setBulkStatus("");
-	  };
-	  
-	  const bulkChangeStatus = async () => {
-	  	  if (selectedIds.length === 0) {
-	  	    showAlert(
-	  	      "Please select at least one shift",
-	  	      "error"
-	  	    );
-	  	    return;
-	  	  }
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedIds((prev) =>
+        prev.filter(
+          (id) => !visibleIds.includes(id)
+        )
+      );
+    } else {
+      setSelectedIds((prev) =>
+        Array.from(
+          new Set([
+            ...prev,
+            ...visibleIds,
+          ])
+        )
+      );
+    }
+  };
 
-	  	  if (!bulkStatus) {
-	  	    showAlert(
-	  	      "Please select a status",
-	  	      "error"
-	  	    );
-	  	    return;
-	  	  }
+  const clearSelection = () => {
+    setSelectedIds([]);
+    setBulkStatus("");
+  };
 
-	  	  try {
-	  	    await Promise.all(
-	  	      selectedIds.map((id) =>
-	  	        updateShiftStatus(id, bulkStatus)
-	  	      )
-	  	    );
+  const bulkChangeStatus = async () => {
+    if (selectedIds.length === 0) {
+      showAlert(
+        "Please select at least one shift",
+        "error"
+      );
+      return;
+    }
 
-	  	    await load();
+    if (!bulkStatus) {
+      showAlert(
+        "Please select a status",
+        "error"
+      );
+      return;
+    }
 
-	  	    showAlert(
-	  	      bulkStatus === "COMPLETED"
-	  	        ? "Selected shifts completed and moved to history"
-	  	        : bulkStatus === "CANCELLED"
-	  	        ? "Selected shifts cancelled and moved to history"
-	  	        : "Selected shifts updated successfully",
-	  	      "success"
-	  	    );
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          updateShiftStatus(id, bulkStatus)
+        )
+      );
 
-	  	    clearSelection();
-	  	  } catch (e) {
-	  	    console.error(e);
+      await load();
 
-	  	    showAlert(
-	  	      getBackendMessage(
-	  	        e,
-	  	        "Failed to update selected shifts"
-	  	      ),
-	  	      "error"
-	  	    );
-	  	  }
-	  	};
+      showAlert(
+        bulkStatus === "COMPLETED"
+          ? "Selected shifts completed and moved to history"
+          : bulkStatus === "CANCELLED"
+            ? "Selected shifts cancelled and moved to history"
+            : "Selected shifts updated successfully",
+        "success"
+      );
+
+      clearSelection();
+    } catch (e) {
+      console.error(e);
+
+      showAlert(
+        getBackendMessage(
+          e,
+          "Failed to update selected shifts"
+        ),
+        "error"
+      );
+    }
+  };
 
   return (
     <div style={wrap}>
       <div style={header}>
         <div>
           <div style={title}>
-            Shift Operations
+            Legacy Operations
           </div>
 
           <div style={subtitle}>
-            Real-time logistics shifts
+            Existing shift records and non-challan trips
           </div>
         </div>
 
@@ -351,99 +361,112 @@ function ShiftOperations({
             setCreateOpen(true)
           }
         >
-          + Create Shift
+          + Add Manual Operation
         </button>
       </div>
-	  
-	  <div style={bulkBar}>
-	  <input
-	    value={search}
-	    onChange={(e) => {
-	      setSearch(e.target.value);
-	      setPageNo(1);
-	      setSelectedIds([]);
-	    }}
-	    placeholder="Search driver, vehicle, date, route, status..."
-	    style={searchInput}
-	  />
-	    <div style={bulkInfo}>
-	      Selected:{" "}
-	      <strong>{selectedIds.length}</strong>
-	    </div>
 
-	    <select
-	      value={bulkStatus}
-	      onChange={(e) =>
-	        setBulkStatus(e.target.value)
-	      }
-	      style={bulkSelect}
-	    >
-	      <option value="">
-	        Select Status
-	      </option>
+      <div style={manualNotice}>
+        <div style={manualNoticeTitle}>
+          Use this only when there is no item dispatch challan
+        </div>
 
-	      {statusOptions.map((status) => (
-	        <option
-	          key={status}
-	          value={status}
-	        >
-	          {status}
-	        </option>
-	      ))}
-	    </select>
+        <div style={manualNoticeText}>
+          Examples: material pickup, empty vehicle return,
+          internal vehicle movement, site visit, maintenance run
+          or another trip that does not carry dispatched packet items.
+          Existing historical shift records remain unchanged.
+        </div>
+      </div>
 
-	    <button
-	      style={{
-	        ...bulkBtn,
-	        opacity:
-	          selectedIds.length === 0 ||
-	          !bulkStatus
-	            ? 0.55
-	            : 1,
-	        cursor:
-	          selectedIds.length === 0 ||
-	          !bulkStatus
-	            ? "not-allowed"
-	            : "pointer",
-	      }}
-	      disabled={
-	        selectedIds.length === 0 ||
-	        !bulkStatus
-	      }
-	      onClick={bulkChangeStatus}
-	    >
-	      Bulk Change Status
-	    </button>
+      <div style={bulkBar}>
+        <input
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPageNo(1);
+            setSelectedIds([]);
+          }}
+          placeholder="Search driver, vehicle, date, route, status..."
+          style={searchInput}
+        />
+        <div style={bulkInfo}>
+          Selected:{" "}
+          <strong>{selectedIds.length}</strong>
+        </div>
 
-	    {selectedIds.length > 0 && (
-	      <button
-	        style={clearBtn}
-	        onClick={clearSelection}
-	      >
-	        Clear
-	      </button>
-	    )}
-	  </div>
+        <select
+          value={bulkStatus}
+          onChange={(e) =>
+            setBulkStatus(e.target.value)
+          }
+          style={bulkSelect}
+        >
+          <option value="">
+            Select Status
+          </option>
+
+          {statusOptions.map((status) => (
+            <option
+              key={status}
+              value={status}
+            >
+              {status}
+            </option>
+          ))}
+        </select>
+
+        <button
+          style={{
+            ...bulkBtn,
+            opacity:
+              selectedIds.length === 0 ||
+                !bulkStatus
+                ? 0.55
+                : 1,
+            cursor:
+              selectedIds.length === 0 ||
+                !bulkStatus
+                ? "not-allowed"
+                : "pointer",
+          }}
+          disabled={
+            selectedIds.length === 0 ||
+            !bulkStatus
+          }
+          onClick={bulkChangeStatus}
+        >
+          Bulk Change Status
+        </button>
+
+        {selectedIds.length > 0 && (
+          <button
+            style={clearBtn}
+            onClick={clearSelection}
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
       <div style={table}>
-	  <div style={head}>
-	    <div>
-	      <input
-	        type="checkbox"
-	        checked={allVisibleSelected}
-	        onChange={toggleAllVisible}
-	        title="Select all visible shifts"
-	      />
-	    </div>
+        <div style={head}>
+          <div>
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleAllVisible}
+              title="Select all visible shifts"
+            />
+          </div>
 
-	    <div>Driver</div>
-	    <div>Vehicle</div>
-	    <div>Date</div>
-	    <div>Trips</div>
-	    <div>Route</div>
-	    <div>Status</div>
-	    <div>Actions</div>
-	  </div>
+          <div>Driver</div>
+          <div>Vehicle</div>
+          <div>Date</div>
+          <div>Trips</div>
+          <div>Route</div>
+          <div>Status</div>
+          <div>Actions</div>
+        </div>
 
         {loading && (
           <div style={emptyRow}>
@@ -454,97 +477,97 @@ function ShiftOperations({
         {!loading &&
           paginatedShifts.length === 0 && (
             <div style={emptyRow}>
-			{search
-			  ? "No shifts matched your search"
-			  : "No shifts found"}
+              {search
+                ? "No shifts matched your search"
+                : "No shifts found"}
             </div>
           )}
 
         {!loading &&
           paginatedShifts.map((s) => (
-			<div
-			  key={s.id}
-			  style={{
-			    ...row,
-			    ...(isShiftOverSixPm(s)
-			      ? lateShiftRow
-			      : {}),
-			  }}
-			>
-			<div>
-			  <input
-			    type="checkbox"
-			    checked={selectedIds.includes(
-			      s.id
-			    )}
-			    onChange={() =>
-			      toggleOne(s.id)
-			    }
-			  />
-			</div>
+            <div
+              key={s.id}
+              style={{
+                ...row,
+                ...(isShiftOverSixPm(s)
+                  ? lateShiftRow
+                  : {}),
+              }}
+            >
+              <div>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(
+                    s.id
+                  )}
+                  onChange={() =>
+                    toggleOne(s.id)
+                  }
+                />
+              </div>
               <div>
                 {s.driver?.name || "-"}
               </div>
 
-			  <div>
-			    {s.vehicle?.vehicleNumber ||
-			      "-"}
-			  </div>
+              <div>
+                {s.vehicle?.vehicleNumber ||
+                  "-"}
+              </div>
 
-			  <div>
-			    <div style={dateText}>
-			      {formatShiftDate(s)}
-			    </div>
+              <div>
+                <div style={dateText}>
+                  {formatShiftDate(s)}
+                </div>
 
-			    <div
-			      style={{
-			        ...timeText,
-			        ...(isShiftOverSixPm(s)
-			          ? lateTimeText
-			          : {}),
-			      }}
-			    >
-			      {formatShiftTimeRange(s)}
-			    </div>
+                <div
+                  style={{
+                    ...timeText,
+                    ...(isShiftOverSixPm(s)
+                      ? lateTimeText
+                      : {}),
+                  }}
+                >
+                  {formatShiftTimeRange(s)}
+                </div>
 
-			    {isShiftOverSixPm(s) && (
-			      <div style={lateBadge}>
-			        Over Shift
-			      </div>
-			    )}
-			  </div>
+                {isShiftOverSixPm(s) && (
+                  <div style={lateBadge}>
+                    Over Shift
+                  </div>
+                )}
+              </div>
 
-			  <div>
-			    {s.totalTrips ?? "-"}
-			  </div>
+              <div>
+                {s.totalTrips ?? "-"}
+              </div>
 
               <div>
                 {s.routeCategory || "-"}
               </div>
 
-			  <div>
-			  <select
-			    value={normalizeStatus(s.status)}
-			    onChange={(e) =>
-			      quickStatusChange(
-			        s,
-			        e.target.value
-			      )
-			    }
-			    style={statusSelect(
-			      normalizeStatus(s.status)
-			    )}
-			  >
-			    {statusOptions.map((status) => (
-			      <option
-			        key={status}
-			        value={status}
-			      >
-			        {status}
-			      </option>
-			    ))}
-			  </select>
-			    </div>
+              <div>
+                <select
+                  value={normalizeStatus(s.status)}
+                  onChange={(e) =>
+                    quickStatusChange(
+                      s,
+                      e.target.value
+                    )
+                  }
+                  style={statusSelect(
+                    normalizeStatus(s.status)
+                  )}
+                >
+                  {statusOptions.map((status) => (
+                    <option
+                      key={status}
+                      value={status}
+                    >
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div style={actions}>
                 <button
@@ -569,13 +592,13 @@ function ShiftOperations({
           ))}
       </div>
 
-	  <LogisticsPagination
-	    pageNo={currentPage}
-	    setPageNo={setPageNo}
-	    pageSize={pageSize}
-	    setPageSize={setPageSize}
-	    totalItems={filteredActiveShifts.length}
-	  />
+      <LogisticsPagination
+        pageNo={currentPage}
+        setPageNo={setPageNo}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        totalItems={filteredActiveShifts.length}
+      />
 
       {createOpen && (
         <LogisticsShiftModal
@@ -800,6 +823,30 @@ const bulkBtn = {
   fontWeight: 800,
 };
 
+const manualNotice = {
+  marginBottom: 16,
+  padding: 14,
+  borderRadius: 15,
+  background:
+    "linear-gradient(135deg,rgba(139,92,246,.12),rgba(15,23,42,.42))",
+  border:
+    "1px solid rgba(139,92,246,.20)",
+};
+
+const manualNoticeTitle = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 13,
+};
+
+const manualNoticeText = {
+  color: "#94a3b8",
+  marginTop: 5,
+  fontSize: 12,
+  fontWeight: 650,
+  lineHeight: 1.5,
+};
+
 const clearBtn = {
   height: 38,
   borderRadius: 12,
@@ -824,27 +871,27 @@ const statusSelect = (value) => ({
     value === "WORKING"
       ? "#4ade80"
       : value === "COMPLETED"
-      ? "#60a5fa"
-      : value === "CANCELLED"
-      ? "#f87171"
-      : value === "OFF"
-      ? "#fbbf24"
-      : value === "ON_LEAVE"
-      ? "#fbbf24"
-      : "#cbd5e1",
+        ? "#60a5fa"
+        : value === "CANCELLED"
+          ? "#f87171"
+          : value === "OFF"
+            ? "#fbbf24"
+            : value === "ON_LEAVE"
+              ? "#fbbf24"
+              : "#cbd5e1",
 
   background:
     value === "WORKING"
       ? "rgba(34,197,94,0.15)"
       : value === "COMPLETED"
-      ? "rgba(59,130,246,0.15)"
-      : value === "CANCELLED"
-      ? "rgba(239,68,68,0.15)"
-      : value === "OFF"
-      ? "rgba(251,191,36,0.15)"
-      : value === "ON_LEAVE"
-      ? "rgba(251,191,36,0.15)"
-      : "rgba(148,163,184,0.15)",
+        ? "rgba(59,130,246,0.15)"
+        : value === "CANCELLED"
+          ? "rgba(239,68,68,0.15)"
+          : value === "OFF"
+            ? "rgba(251,191,36,0.15)"
+            : value === "ON_LEAVE"
+              ? "rgba(251,191,36,0.15)"
+              : "rgba(148,163,184,0.15)",
 
   fontSize: 12,
   fontWeight: 800,

@@ -134,7 +134,7 @@ function LogisticsShiftModal({
   onClose,
   onCreated,
   onSaved,
-  showAlert = () => {},
+  showAlert = () => { },
 
   mode = "create",
   shift = null,
@@ -190,8 +190,8 @@ function LogisticsShiftModal({
 
     setHistoryPageNo(1);
 
-	setHistoryFromDate("");
-	setHistoryToDate("");
+    setHistoryFromDate("");
+    setHistoryToDate("");
   }, [
     open,
     initialDriverId,
@@ -272,8 +272,8 @@ function LogisticsShiftModal({
         const shiftDate =
           toDateOnly(
             s.shiftStart ||
-              s.date ||
-              s.createdAt
+            s.date ||
+            s.createdAt
           );
 
         if (!shiftDate) return false;
@@ -297,14 +297,14 @@ function LogisticsShiftModal({
       .sort((a, b) => {
         const aTime = new Date(
           a.shiftStart ||
-            a.createdAt ||
-            0
+          a.createdAt ||
+          0
         ).getTime();
 
         const bTime = new Date(
           b.shiftStart ||
-            b.createdAt ||
-            0
+          b.createdAt ||
+          0
         ).getTime();
 
         return bTime - aTime;
@@ -321,7 +321,7 @@ function LogisticsShiftModal({
     1,
     Math.ceil(
       driverHistoryRows.length /
-        historyPageSize
+      historyPageSize
     )
   );
 
@@ -333,9 +333,9 @@ function LogisticsShiftModal({
   const paginatedHistoryRows =
     driverHistoryRows.slice(
       (historyCurrentPage - 1) *
-        historyPageSize,
+      historyPageSize,
       historyCurrentPage *
-        historyPageSize
+      historyPageSize
     );
 
   if (!open) return null;
@@ -510,16 +510,16 @@ function LogisticsShiftModal({
               {showDriverHistory
                 ? `${selectedDriverName} Shift Control`
                 : isEdit
-                ? "Edit Logistics Shift"
-                : "Logistics Shift Entry"}
+                  ? "Edit Logistics Shift"
+                  : "Manual Logistics Operation"}
             </div>
 
             <div style={subtitle}>
               {showDriverHistory
                 ? "View previous shift operations and create a new shift"
                 : isEdit
-                ? "Update shift details and status"
-                : "Driver and vehicle operations management"}
+                  ? "Update shift details and status"
+                  : "Create a trip or operation that does not have a dispatch challan"}
             </div>
           </div>
 
@@ -600,44 +600,44 @@ function LogisticsShiftModal({
 
               {paginatedHistoryRows.length ===
                 0 && (
-                <div style={historyEmpty}>
-                  No previous shifts found for this driver in selected date range
-                </div>
-              )}
+                  <div style={historyEmpty}>
+                    No previous shifts found for this driver in selected date range
+                  </div>
+                )}
 
               {paginatedHistoryRows.map(
                 (s) => (
-					<div
-					  key={s.id}
-					  style={{
-					    ...historyRow,
-					    ...(isShiftOverSixPm(s)
-					      ? historyLateRow
-					      : {}),
-					  }}
-					>
-					<div>
-					  <div style={historyDateText}>
-					    {formatShiftDate(s)}
-					  </div>
+                  <div
+                    key={s.id}
+                    style={{
+                      ...historyRow,
+                      ...(isShiftOverSixPm(s)
+                        ? historyLateRow
+                        : {}),
+                    }}
+                  >
+                    <div>
+                      <div style={historyDateText}>
+                        {formatShiftDate(s)}
+                      </div>
 
-					  <div
-					    style={{
-					      ...historyTimeText,
-					      ...(isShiftOverSixPm(s)
-					        ? historyLateTimeText
-					        : {}),
-					    }}
-					  >
-					    {formatShiftTimeRange(s)}
-					  </div>
+                      <div
+                        style={{
+                          ...historyTimeText,
+                          ...(isShiftOverSixPm(s)
+                            ? historyLateTimeText
+                            : {}),
+                        }}
+                      >
+                        {formatShiftTimeRange(s)}
+                      </div>
 
-					  {isShiftOverSixPm(s) && (
-					    <div style={historyLateBadge}>
-					      After 6 PM
-					    </div>
-					  )}
-					</div>
+                      {isShiftOverSixPm(s) && (
+                        <div style={historyLateBadge}>
+                          After 6 PM
+                        </div>
+                      )}
+                    </div>
 
                     <div>
                       {s.vehicle
@@ -744,12 +744,12 @@ function LogisticsShiftModal({
               <div style={sectionTitle}>
                 {isEdit
                   ? "Edit Shift Details"
-                  : "Create New Shift"}
+                  : "Create Manual Operation"}
               </div>
 
-			  <div style={sectionSub}>
-			    General shift time is 09:00 AM - 06:00 PM. Change start/end only when actual timing is different.
-			  </div>
+              <div style={sectionSub}>
+                General shift time is 09:00 AM - 06:00 PM. Change start/end only when actual timing is different.
+              </div>
             </div>
           </div>
 
@@ -1014,8 +1014,8 @@ function LogisticsShiftModal({
             {saving
               ? "Saving..."
               : isEdit
-              ? "Update Shift"
-              : "Create Shift"}
+                ? "Update Shift"
+                : "Create Operation"}
           </button>
         </div>
       </div>
@@ -1297,18 +1297,18 @@ const historyStatus = (value) => ({
     value === "WORKING"
       ? "rgba(34,197,94,.14)"
       : value === "COMPLETED"
-      ? "rgba(59,130,246,.14)"
-      : value === "CANCELLED"
-      ? "rgba(239,68,68,.14)"
-      : "rgba(251,191,36,.14)",
+        ? "rgba(59,130,246,.14)"
+        : value === "CANCELLED"
+          ? "rgba(239,68,68,.14)"
+          : "rgba(251,191,36,.14)",
   color:
     value === "WORKING"
       ? "#4ade80"
       : value === "COMPLETED"
-      ? "#60a5fa"
-      : value === "CANCELLED"
-      ? "#f87171"
-      : "#fbbf24",
+        ? "#60a5fa"
+        : value === "CANCELLED"
+          ? "#f87171"
+          : "#fbbf24",
 });
 
 const grid = {

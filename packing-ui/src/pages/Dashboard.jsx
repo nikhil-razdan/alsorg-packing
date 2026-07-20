@@ -7,11 +7,9 @@ import ScheduledReports from "../dashboard/components/ScheduledReports";
 import {
   fetchDashboardStats,
   fetchDashboardActivity,
-  fetchLogisticsStats,
   fetchDailyThroughputUsers,
 } from "../dashboard/api/dashboardApi";
-import AnalyticsGrid from "../dashboard/components/AnalyticsGrid";
-import LogisticsShiftModal from "../dashboard/components/logistics/LogisticsShiftModal";
+
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 import InventorySidebar from
   "../dashboard/components/inventory/InventorySidebar";
@@ -428,15 +426,12 @@ function DashboardPage() {
   const [stats, setStats] = useState(emptyDashboardStats);
 
   const [activityLogs, setActivityLogs] = useState([]);
-  const [logistics, setLogistics] = useState(null);
   const [chartType, setChartType] = useState("donut");
   const [mode, setMode] = useState("inventory");
   const [inventorySection, setInventorySection] =
     useState("summary");
 
   const [activeStatCard, setActiveStatCard] = useState(null);
-  const [shiftModal, setShiftModal] =
-    useState(false);
 
   const [throughputModal, setThroughputModal] = useState({
     open: false,
@@ -562,14 +557,6 @@ function DashboardPage() {
     bar: 1,
     corporate: 2,
   }[chartType] || 0;
-
-  useEffect(() => {
-    fetchLogisticsStats()
-      .then((data) => {
-        setLogistics(data);
-      })
-      .catch(console.error);
-  }, []);
 
   const refreshInventoryDashboard =
     useCallback(async () => {
@@ -1580,24 +1567,11 @@ function DashboardPage() {
 
         {mode === "logistics" && (
           <LogisticsDashboard
-            logistics={logistics ?? emptyLogistics}
-            setShiftModal={setShiftModal}
             StatCard={StatCard}
-            AnalyticsGrid={AnalyticsGrid}
           />
         )}
 
       </div>
-      <LogisticsShiftModal
-        open={shiftModal}
-        onClose={() =>
-          setShiftModal(false)
-        }
-        onCreated={() => {
-          fetchLogisticsStats()
-            .then(setLogistics);
-        }}
-      />
       <ThroughputUserModal
         open={throughputModal.open}
         title={throughputModal.title}
@@ -1657,23 +1631,6 @@ const backgroundText = {
   pointerEvents: "none",
   letterSpacing: 8,
   opacity: 0.45,
-};
-
-const emptyLogistics = {
-  totalTrips: 0,
-  totalLoaders: 0,
-  efficiency: 0,
-  activeDrivers: 0,
-  activeVehicles: 0,
-  averageTripsPerDriver: 0,
-  averageTripsPerVehicle: 0,
-  tripsOverTime: {},
-  shiftPerformance: {},
-  vehicleUtilization: {},
-  driverTrips: {},
-  driverPerformance: {},
-  overtimeAnalytics: {},
-  tripsByLocation: {},
 };
 
 const content = {

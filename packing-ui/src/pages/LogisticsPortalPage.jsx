@@ -5,12 +5,11 @@ import {
 
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
+
+import LogisticsOperationsHub from "../dashboard/components/logistics/LogisticsOperationsHub";
 import ShiftReports from "../dashboard/components/logistics/ShiftReports";
-import DispatchChallans from "../dashboard/components/logistics/DispatchChallans";
-import ShiftOperations from "../dashboard/components/logistics/ShiftOperations";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
-import ShiftHistory from "../dashboard/components/logistics/ShiftHistory";
 
 function LogisticsPortalPage() {
   const [tab, setTab] =
@@ -25,17 +24,22 @@ function LogisticsPortalPage() {
   const [snackType, setSnackType] =
     useState("success");
 
-  const showAlert = useCallback(
-    (
-      message,
-      type = "success"
-    ) => {
-      setSnackMsg(message);
-      setSnackType(type);
-      setSnackOpen(true);
-    },
-    []
-  );
+  const showAlert =
+    useCallback(
+      (
+        message,
+        type = "success"
+      ) => {
+        setSnackMsg(
+          message ||
+            "Operation completed"
+        );
+
+        setSnackType(type);
+        setSnackOpen(true);
+      },
+      []
+    );
 
   return (
     <div style={page}>
@@ -47,8 +51,16 @@ function LogisticsPortalPage() {
             </div>
 
             <div style={subtitle}>
-              Driver, vehicle and shift operations control center
+              Unified dispatch,
+              non-challan operations,
+              driver and vehicle control
+              center
             </div>
+          </div>
+
+          <div style={liveBadge}>
+            <span style={liveDot} />
+            LIVE OPERATIONS
           </div>
         </div>
 
@@ -60,17 +72,7 @@ function LogisticsPortalPage() {
             onClick={() =>
               setTab("operations")
             }
-            label="Shift Operations"
-          />
-
-          <SidebarButton
-            active={
-              tab === "challans"
-            }
-            onClick={() =>
-              setTab("challans")
-            }
-            label="Dispatch Challans"
+            label="Trip Operations"
           />
 
           <SidebarButton
@@ -95,33 +97,17 @@ function LogisticsPortalPage() {
 
           <SidebarButton
             active={
-              tab === "history"
-            }
-            onClick={() =>
-              setTab("history")
-            }
-            label="Shift History"
-          />
-
-          <SidebarButton
-            active={
               tab === "reports"
             }
             onClick={() =>
               setTab("reports")
             }
-            label="Shift Reports"
+            label="Operations Reports"
           />
         </div>
 
         {tab === "operations" && (
-          <ShiftOperations
-            showAlert={showAlert}
-          />
-        )}
-
-        {tab === "challans" && (
-          <DispatchChallans
+          <LogisticsOperationsHub
             showAlert={showAlert}
           />
         )}
@@ -138,20 +124,34 @@ function LogisticsPortalPage() {
           />
         )}
 
-        {tab === "history" && (
-          <ShiftHistory
-            showAlert={showAlert}
-          />
+        {tab === "reports" && (
+          <>
+            <div style={reportNotice}>
+              <div style={reportNoticeTitle}>
+                Manual-shift analytics
+              </div>
+
+              <div style={reportNoticeText}>
+                The existing Excel report
+                continues to use legacy
+                manual-shift metrics such
+                as helpers, fuel, distance
+                and overtime. Dispatch
+                challans remain visible in
+                Trip Operations and are not
+                counted twice.
+              </div>
+            </div>
+
+            <ShiftReports
+              showAlert={showAlert}
+            />
+          </>
         )}
 
-        {tab === "reports" && (
-          <ShiftReports
-            showAlert={showAlert}
-          />
-        )}
         <Snackbar
           open={snackOpen}
-          autoHideDuration={3000}
+          autoHideDuration={3500}
           onClose={() =>
             setSnackOpen(false)
           }
@@ -168,7 +168,7 @@ function LogisticsPortalPage() {
             }
             sx={{
               borderRadius: "14px",
-              fontWeight: 700,
+              fontWeight: 800,
               boxShadow:
                 "0 18px 45px rgba(0,0,0,.35)",
             }}
@@ -188,19 +188,25 @@ function SidebarButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         ...sidebarBtn,
+
         background: active
           ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-          : "rgba(255,255,255,0.04)",
+          : "rgba(255,255,255,.035)",
 
         border: active
-          ? "1px solid rgba(59,130,246,0.4)"
-          : "1px solid rgba(255,255,255,0.06)",
+          ? "1px solid rgba(96,165,250,.52)"
+          : "1px solid rgba(255,255,255,.065)",
 
         boxShadow: active
-          ? "0 10px 25px rgba(37,99,235,0.35)"
+          ? "0 10px 28px rgba(37,99,235,.28)"
+          : "none",
+
+        transform: active
+          ? "translateY(-1px)"
           : "none",
       }}
     >
@@ -212,7 +218,7 @@ function SidebarButton({
 const page = {
   minHeight: "100vh",
   background:
-    "linear-gradient(135deg,#020617,#0f172a)",
+    "radial-gradient(circle at top right,rgba(37,99,235,.10),transparent 32%),linear-gradient(135deg,#020617,#0f172a)",
 };
 
 const content = {
@@ -223,39 +229,92 @@ const headerRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 24,
+  gap: 16,
+  marginBottom: 22,
+  flexWrap: "wrap",
 };
 
 const logo = {
   color: "#fff",
   fontSize: 32,
-  fontWeight: 900,
-  marginBottom: 8,
+  fontWeight: 950,
+  marginBottom: 7,
 };
 
 const subtitle = {
-  color: "rgba(255,255,255,0.65)",
-  fontSize: 14,
+  color: "rgba(255,255,255,.62)",
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const liveBadge = {
+  height: 38,
+  padding: "0 14px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  borderRadius: 999,
+  color: "#4ade80",
+  background:
+    "rgba(34,197,94,.10)",
+  border:
+    "1px solid rgba(34,197,94,.18)",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".7px",
+};
+
+const liveDot = {
+  width: 8,
+  height: 8,
+  borderRadius: "50%",
+  background: "#22c55e",
+  boxShadow:
+    "0 0 14px rgba(34,197,94,.75)",
 };
 
 const tabsRow = {
   display: "flex",
-  gap: 12,
-  marginBottom: 24,
+  gap: 10,
+  marginBottom: 22,
   flexWrap: "wrap",
 };
 
 const sidebarBtn = {
-  height: 48,
-  borderRadius: 14,
-  border: "none",
+  height: 44,
+  borderRadius: 13,
   color: "#fff",
   cursor: "pointer",
-  paddingLeft: 18,
-  paddingRight: 18,
-  fontWeight: 700,
-  fontSize: 14,
-  transition: "all 0.25s ease",
+  paddingLeft: 17,
+  paddingRight: 17,
+  fontWeight: 800,
+  fontSize: 13,
+  transition:
+    "all .22s ease",
+};
+
+const reportNotice = {
+  marginBottom: 16,
+  padding: 16,
+  borderRadius: 16,
+  background:
+    "rgba(59,130,246,.09)",
+  border:
+    "1px solid rgba(59,130,246,.17)",
+};
+
+const reportNoticeTitle = {
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 13,
+};
+
+const reportNoticeText = {
+  marginTop: 5,
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 650,
+  lineHeight: 1.55,
 };
 
 export default LogisticsPortalPage;
