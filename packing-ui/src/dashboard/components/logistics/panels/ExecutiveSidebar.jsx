@@ -48,11 +48,7 @@ function ExecutiveSidebar({
   return (
     <div style={sidebar}>
       <div style={logo}>
-        🚚 Logistics IQ
-      </div>
-
-      <div style={sidebarSub}>
-        Unified analytics
+        Logistics
       </div>
 
       {items.map((item) => {
@@ -117,13 +113,6 @@ const logo = {
   fontSize: 22,
   fontWeight: 950,
   marginBottom: 2,
-};
-
-const sidebarSub = {
-  color: "#64748b",
-  fontSize: 11,
-  fontWeight: 750,
-  marginBottom: 10,
 };
 
 const navBtn = {
