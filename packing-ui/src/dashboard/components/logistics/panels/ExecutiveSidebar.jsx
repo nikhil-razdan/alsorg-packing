@@ -48,7 +48,7 @@ function ExecutiveSidebar({
   return (
     <div style={sidebar}>
       <div style={logo}>
-        Logistics
+        LOGISTICS
       </div>
 
       {items.map((item) => {
