@@ -32,7 +32,7 @@ function LogisticsPortalPage() {
       ) => {
         setSnackMsg(
           message ||
-            "Operation completed"
+          "Operation completed"
         );
 
         setSnackType(type);
@@ -51,10 +51,7 @@ function LogisticsPortalPage() {
             </div>
 
             <div style={subtitle}>
-              Unified dispatch,
-              non-challan operations,
-              driver and vehicle control
-              center
+              Driver, fleet and movement control center
             </div>
           </div>
 
