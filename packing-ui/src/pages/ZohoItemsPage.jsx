@@ -43,7 +43,18 @@ function InventoryModal({
   return (
     <Box
       sx={enhancedOverlaySx}
-      onClick={onClose}
+      onClick={(event) => {
+        /*
+         * Close only when the actual backdrop is clicked.
+         * Portalled MUI menus must not close this modal.
+         */
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
     >
       <Box
         sx={{
@@ -127,7 +138,14 @@ function InventorySidePanel({
   return (
     <Box
       sx={sidePanelOverlaySx}
-      onClick={onClose}
+      onClick={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
     >
       <Box
         sx={sidePanelSx}
@@ -919,6 +937,191 @@ const createEmptyHardwarePacketDraft =
     ],
   });
 
+const HARDWARE_UOM_OPTIONS = [
+  "Nos",
+  "Set",
+  "Pair",
+  "Box",
+  "Packet",
+  "Meter",
+  "Kg",
+  "Gram",
+  "MM",
+];
+
+/*
+ * InventoryModal uses zIndex 5000.
+ * MUI menus normally use approximately zIndex 1300,
+ * which puts the UOM menu behind this custom modal.
+ *
+ * Keep the menu portalled to document.body and raise
+ * its z-index above InventoryModal.
+ */
+const HARDWARE_UOM_MENU_PROPS = {
+  disablePortal: false,
+  disableScrollLock: true,
+
+  anchorOrigin: {
+    vertical: "bottom",
+    horizontal: "left",
+  },
+
+  transformOrigin: {
+    vertical: "top",
+    horizontal: "left",
+  },
+
+  sx: {
+    zIndex: "10000 !important",
+  },
+
+  PaperProps: {
+    sx: {
+      mt: 0.6,
+      minWidth: 130,
+      maxHeight: 280,
+
+      overflowY: "auto",
+
+      color: "#e2e8f0",
+
+      background:
+        "linear-gradient(180deg,#172033 0%,#0f172a 100%)",
+
+      border:
+        "1px solid rgba(148,163,184,.20)",
+
+      borderRadius: "12px",
+
+      boxShadow:
+        "0 22px 60px rgba(2,6,23,.82)",
+
+      scrollbarWidth: "thin",
+      scrollbarColor:
+        "rgba(167,139,250,.65) rgba(15,23,42,.70)",
+
+      "&::-webkit-scrollbar": {
+        width: 7,
+      },
+
+      "&::-webkit-scrollbar-track": {
+        background:
+          "rgba(15,23,42,.70)",
+      },
+
+      "&::-webkit-scrollbar-thumb": {
+        borderRadius: 999,
+        background:
+          "rgba(167,139,250,.65)",
+      },
+    },
+  },
+
+  MenuListProps: {
+    dense: true,
+
+    sx: {
+      py: 0.7,
+
+      "& .MuiMenuItem-root": {
+        minHeight: 38,
+        mx: 0.7,
+        px: 1.3,
+
+        borderRadius: "8px",
+
+        color: "#cbd5e1",
+
+        fontSize: 12,
+        fontWeight: 800,
+
+        "&:hover": {
+          color: "#fff",
+
+          background:
+            "rgba(139,92,246,.16)",
+        },
+
+        "&.Mui-selected": {
+          color: "#fff",
+
+          background:
+            "rgba(139,92,246,.24)",
+        },
+
+        "&.Mui-selected:hover": {
+          background:
+            "rgba(139,92,246,.32)",
+        },
+      },
+    },
+  },
+};
+
+function HardwareUomSelect({
+  value = "Nos",
+  onChange,
+  error = false,
+  helperText = "",
+}) {
+  return (
+    <TextField
+      select
+      label="UOM"
+      fullWidth
+      value={value || "Nos"}
+      onChange={onChange}
+      error={error}
+      helperText={helperText}
+      sx={{
+        ...formFieldSx(true),
+        mb: 0,
+
+        "& .MuiSelect-select": {
+          color: "#fff",
+          WebkitTextFillColor: "#fff",
+          fontWeight: 800,
+        },
+
+        "& .MuiSvgIcon-root": {
+          color: "#94a3b8",
+        },
+      }}
+
+      /*
+       * SelectProps supports the MUI version already
+       * being used elsewhere in this file.
+       */
+      SelectProps={{
+        MenuProps:
+          HARDWARE_UOM_MENU_PROPS,
+      }}
+
+      /*
+       * Keep slotProps as forward compatibility for
+       * newer MUI versions.
+       */
+      slotProps={{
+        select: {
+          MenuProps:
+            HARDWARE_UOM_MENU_PROPS,
+        },
+      }}
+    >
+      {HARDWARE_UOM_OPTIONS.map(
+        (uom) => (
+          <MenuItem
+            key={uom}
+            value={uom}
+          >
+            {uom}
+          </MenuItem>
+        )
+      )}
+    </TextField>
+  );
+}
+
 const normalizeInventoryItemType = (
   value
 ) => {
@@ -1176,7 +1379,6 @@ function ZohoItemsPage() {
   const [loading, setLoading] = useState(false);
   const inventoryRequestIdRef =
     useRef(0);
-
   const inventoryAbortControllerRef =
     useRef(null);
   const [activeStep, setActiveStep] = useState(0);
@@ -1583,118 +1785,6 @@ function ZohoItemsPage() {
   ] = useState(() => [
     createEmptyHardwarePacketDraft(),
   ]);
-
-  const hardwareUomOptions = [
-    "Nos",
-    "Set",
-    "Pair",
-    "Box",
-    "Packet",
-    "Meter",
-    "Kg",
-    "Gram",
-    "MM",
-  ];
-
-  /*
-   * Hardware UOM dropdown must remain portalled.
-   * The high z-index places it above the custom InventoryModal.
-   *
-   * Do not use disablePortal: true because InventoryModal uses
-   * overflow: hidden and the options may then be clipped.
-   */
-  const hardwareUomMenuProps = {
-    disablePortal: false,
-    keepMounted: true,
-    disableScrollLock: true,
-
-    anchorOrigin: {
-      vertical: "bottom",
-      horizontal: "left",
-    },
-
-    transformOrigin: {
-      vertical: "top",
-      horizontal: "left",
-    },
-
-    sx: {
-      zIndex: "25000 !important",
-    },
-
-    PaperProps: {
-      sx: {
-        mt: 0.6,
-        minWidth: 130,
-        maxHeight: 280,
-
-        color: "#e2e8f0",
-
-        background:
-          "linear-gradient(180deg,#172033 0%,#0f172a 100%)",
-
-        border:
-          "1px solid rgba(148,163,184,.20)",
-
-        borderRadius: "12px",
-
-        boxShadow:
-          "0 20px 50px rgba(2,6,23,.72)",
-
-        overflowY: "auto",
-
-        "&::-webkit-scrollbar": {
-          width: 7,
-        },
-
-        "&::-webkit-scrollbar-thumb": {
-          borderRadius: 999,
-          background:
-            "rgba(148,163,184,.35)",
-        },
-      },
-    },
-
-    MenuListProps: {
-      dense: true,
-
-      sx: {
-        py: 0.7,
-
-        "& .MuiMenuItem-root": {
-          minHeight: 38,
-          mx: 0.7,
-          px: 1.3,
-
-          borderRadius: "8px",
-
-          color: "#cbd5e1",
-
-          fontSize: 12,
-          fontWeight: 750,
-
-          "&:hover": {
-            color: "#fff",
-
-            background:
-              "rgba(139,92,246,.16)",
-          },
-
-          "&.Mui-selected": {
-            color: "#fff",
-
-            background:
-              "rgba(139,92,246,.24)",
-          },
-
-          "&.Mui-selected:hover": {
-            background:
-              "rgba(139,92,246,.30)",
-          },
-        },
-      },
-    },
-  };
 
   const hardwareUomSelectSlotProps = {
     select: {
@@ -9320,9 +9410,7 @@ function ZohoItemsPage() {
                             )}
                           />
 
-                          <TextField
-                            select
-                            label="UOM"
+                          <HardwareUomSelect
                             value={
                               line?.uom || "Nos"
                             }
@@ -9333,21 +9421,19 @@ function ZohoItemsPage() {
                                 event.target.value
                               )
                             }
-                            sx={formFieldSx(
-                              darkMode
-                            )}
-                          >
-                            {hardwareUomOptions.map(
-                              (uom) => (
-                                <MenuItem
-                                  key={uom}
-                                  value={uom}
-                                >
-                                  {uom}
-                                </MenuItem>
+                            error={
+                              Boolean(
+                                errors[
+                                `hardware-edit-uom-${lineIndex}`
+                                ]
                               )
-                            )}
-                          </TextField>
+                            }
+                            helperText={
+                              errors[
+                              `hardware-edit-uom-${lineIndex}`
+                              ] || ""
+                            }
+                          />
 
                           <Button
                             type="button"
@@ -9554,39 +9640,31 @@ function ZohoItemsPage() {
                                     )}
                                   />
 
-                                  <TextField
-                                    select
-                                    label="UOM"
+                                  <HardwareUomSelect
                                     value={
-                                      line?.uom ||
-                                      "Nos"
+                                      line?.uom || "Nos"
                                     }
-                                    onChange={(
-                                      event
-                                    ) =>
+                                    onChange={(event) =>
                                       updateHardwareDraftItem(
                                         packetIndex,
                                         itemIndex,
                                         "uom",
-                                        event.target
-                                          .value
+                                        event.target.value
                                       )
                                     }
-                                    sx={formFieldSx(
-                                      darkMode
-                                    )}
-                                  >
-                                    {hardwareUomOptions.map(
-                                      (uom) => (
-                                        <MenuItem
-                                          key={uom}
-                                          value={uom}
-                                        >
-                                          {uom}
-                                        </MenuItem>
+                                    error={
+                                      Boolean(
+                                        errors[
+                                        `hardware-packet-${packetIndex}-uom-${itemIndex}`
+                                        ]
                                       )
-                                    )}
-                                  </TextField>
+                                    }
+                                    helperText={
+                                      errors[
+                                      `hardware-packet-${packetIndex}-uom-${itemIndex}`
+                                      ] || ""
+                                    }
+                                  />
 
                                   <Button
                                     type="button"
@@ -11179,6 +11257,7 @@ const enhancedOverlaySx = {
 const enhancedModalSx = {
   p: 0,
   position: "relative",
+  zIndex: 5001,
   overflow: "hidden",
   borderRadius: 14,
   color: "#fff",
