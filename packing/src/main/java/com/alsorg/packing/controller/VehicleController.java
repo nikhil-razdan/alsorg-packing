@@ -21,14 +21,23 @@ public class VehicleController {
     public VehicleController(
             VehicleService service,
             CurrentUserService currentUserService) {
+
         this.service = service;
-        this.currentUserService = currentUserService;
+        this.currentUserService =
+                currentUserService;
     }
 
     @PostMapping
     public ResponseEntity<?> create(
             @RequestBody Vehicle vehicle,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false)
+            String auth,
+            @RequestHeader(
+                    value = "X-Client-Type",
+                    required = false)
+            String clientType) {
 
         User user = currentUserService
                 .getCurrentUserFromAuth(auth);
@@ -36,14 +45,26 @@ public class VehicleController {
         if (!currentUserService.isAdmin(user)
                 && !currentUserService.isDispatch(user)
                 && !currentUserService.isLogistics(user)) {
+
             return ResponseEntity
                     .status(403)
                     .body(
                             "Only ADMIN, DISPATCH or LOGISTICS can create vehicles");
         }
 
+        boolean mobileClient =
+                "mobile".equalsIgnoreCase(
+                        String.valueOf(clientType)
+                                .trim());
+
+        /*
+         * Mobile quick-create can omit vehicleType.
+         * Normal web creation still requires it.
+         */
         return ResponseEntity.ok(
-                service.create(vehicle));
+                service.create(
+                        vehicle,
+                        mobileClient));
     }
 
     @GetMapping
@@ -55,13 +76,17 @@ public class VehicleController {
     public ResponseEntity<?> update(
             @PathVariable UUID id,
             @RequestBody Vehicle vehicle,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false)
+            String auth) {
 
         User user = currentUserService
                 .getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isAdmin(user)
                 && !currentUserService.isLogistics(user)) {
+
             return ResponseEntity
                     .status(403)
                     .body(
@@ -69,19 +94,25 @@ public class VehicleController {
         }
 
         return ResponseEntity.ok(
-                service.update(id, vehicle));
+                service.update(
+                        id,
+                        vehicle));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(
             @PathVariable UUID id,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false)
+            String auth) {
 
         User user = currentUserService
                 .getCurrentUserFromAuth(auth);
 
         if (!currentUserService.isAdmin(user)
                 && !currentUserService.isLogistics(user)) {
+
             return ResponseEntity
                     .status(403)
                     .body(
