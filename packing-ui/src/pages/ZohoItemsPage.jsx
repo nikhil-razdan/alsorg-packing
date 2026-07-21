@@ -43,14 +43,7 @@ function InventoryModal({
   return (
     <Box
       sx={enhancedOverlaySx}
-      onClick={(event) => {
-        if (
-          event.target ===
-          event.currentTarget
-        ) {
-          onClose();
-        }
-      }}
+      onClick={onClose}
     >
       <Box
         sx={{
@@ -9249,90 +9242,399 @@ function ZohoItemsPage() {
                    * Keep using hardwareLines because only one existing
                    * packet is being edited.
                    */
-                  <TextField
-                    select
-                    label="UOM"
-                    value={
-                      line?.uom || "Nos"
-                    }
-                    onChange={(event) =>
-                      updateHardwareLine(
-                        lineIndex,
-                        "uom",
-                        event.target.value
-                      )
-                    }
-                    sx={{
-                      ...formFieldSx(
-                        darkMode
-                      ),
-
-                      /*
-                       * Prevent field margins from affecting
-                       * the grid row alignment.
-                       */
-                      mb: 0,
-                    }}
-                    slotProps={
-                      hardwareUomSelectSlotProps
-                    }
-                    SelectProps={{
-                      MenuProps:
-                        hardwareUomMenuProps,
-                    }}
-                  >
-                    {hardwareUomOptions.map(
-                      (uom) => (
-                        <MenuItem
-                          key={uom}
-                          value={uom}
+                  hardwareLines.map(
+                    (line, lineIndex) => (
+                      <Box
+                        key={
+                          line?.id ||
+                          `hardware-edit-line-${lineIndex}`
+                        }
+                        sx={{
+                          ...packetCardSx,
+                          mb: 1.5,
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            mb: 1.2,
+                            color: "#c4b5fd",
+                            fontSize: 12,
+                            fontWeight: 900,
+                          }}
                         >
-                          {uom}
-                        </MenuItem>
-                      )
-                    )}
-                  </TextField>
+                          Serial No.{" "}
+                          {lineIndex + 1}
+                        </Box>
+
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "minmax(220px, 1fr) 130px 130px auto",
+                            gap: 1.5,
+                            alignItems: "center",
+
+                            "@media (max-width: 850px)":
+                            {
+                              gridTemplateColumns:
+                                "1fr",
+                            },
+                          }}
+                        >
+                          <TextField
+                            label="Hardware Item"
+                            value={
+                              line?.itemName || ""
+                            }
+                            onChange={(event) =>
+                              updateHardwareLine(
+                                lineIndex,
+                                "itemName",
+                                event.target.value
+                              )
+                            }
+                            sx={formFieldSx(
+                              darkMode
+                            )}
+                          />
+
+                          <TextField
+                            label="Quantity"
+                            type="number"
+                            value={
+                              line?.quantity || ""
+                            }
+                            onChange={(event) =>
+                              updateHardwareLine(
+                                lineIndex,
+                                "quantity",
+                                event.target.value
+                              )
+                            }
+                            inputProps={{
+                              min: 0.001,
+                              step: 0.001,
+                            }}
+                            sx={formFieldSx(
+                              darkMode
+                            )}
+                          />
+
+                          <TextField
+                            select
+                            label="UOM"
+                            value={
+                              line?.uom || "Nos"
+                            }
+                            onChange={(event) =>
+                              updateHardwareLine(
+                                lineIndex,
+                                "uom",
+                                event.target.value
+                              )
+                            }
+                            sx={formFieldSx(
+                              darkMode
+                            )}
+                          >
+                            {hardwareUomOptions.map(
+                              (uom) => (
+                                <MenuItem
+                                  key={uom}
+                                  value={uom}
+                                >
+                                  {uom}
+                                </MenuItem>
+                              )
+                            )}
+                          </TextField>
+
+                          <Button
+                            type="button"
+                            disabled={
+                              hardwareLines.length <=
+                              1
+                            }
+                            onClick={() =>
+                              removeHardwareLine(
+                                lineIndex
+                              )
+                            }
+                            sx={actionDanger}
+                          >
+                            Remove
+                          </Button>
+                        </Box>
+                      </Box>
+                    )
+                  )
                 ) : (
-                  <TextField
-                    select
-                    label="UOM"
-                    value={
-                      line?.uom || "Nos"
-                    }
-                    onChange={(event) =>
-                      updateHardwareDraftItem(
-                        packetIndex,
-                        itemIndex,
-                        "uom",
-                        event.target.value
-                      )
-                    }
-                    sx={{
-                      ...formFieldSx(
-                        darkMode
-                      ),
+                  hardwarePacketDrafts.map(
+                    (
+                      packetDraft,
+                      packetIndex
+                    ) => {
+                      const packetItems =
+                        Array.isArray(
+                          packetDraft?.items
+                        )
+                          ? packetDraft.items
+                          : [];
 
-                      mb: 0,
-                    }}
-                    slotProps={
-                      hardwareUomSelectSlotProps
-                    }
-                    SelectProps={{
-                      MenuProps:
-                        hardwareUomMenuProps,
-                    }}
-                  >
-                    {hardwareUomOptions.map(
-                      (uom) => (
-                        <MenuItem
-                          key={uom}
-                          value={uom}
+                      return (
+                        <Box
+                          key={
+                            packetDraft?.key ||
+                            `hardware-packet-${packetIndex}`
+                          }
+                          sx={{
+                            ...packetCardSx,
+                            mb: 2,
+                            border:
+                              "1px solid rgba(167,139,250,.24)",
+                          }}
                         >
-                          {uom}
-                        </MenuItem>
-                      )
-                    )}
-                  </TextField>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent:
+                                "space-between",
+                              gap: 1,
+                              mb: 1.5,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                color: "#ddd6fe",
+                                fontSize: 14,
+                                fontWeight: 950,
+                              }}
+                            >
+                              Packet{" "}
+                              {packetIndex + 1}
+                            </Box>
+
+                            <Box
+                              sx={{
+                                display: "flex",
+                                gap: 1,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <Button
+                                type="button"
+                                size="small"
+                                disabled={
+                                  packetItems.length >=
+                                  8
+                                }
+                                onClick={() =>
+                                  addHardwareDraftItem(
+                                    packetIndex
+                                  )
+                                }
+                                sx={actionSecondary}
+                              >
+                                + Hardware Item
+                              </Button>
+
+                              <Button
+                                type="button"
+                                size="small"
+                                disabled={
+                                  hardwarePacketDrafts
+                                    .length <= 1
+                                }
+                                onClick={() =>
+                                  removeHardwarePacketDraft(
+                                    packetIndex
+                                  )
+                                }
+                                sx={actionDanger}
+                              >
+                                Remove Packet
+                              </Button>
+                            </Box>
+                          </Box>
+
+                          {packetItems.map(
+                            (
+                              line,
+                              itemIndex
+                            ) => (
+                              <Box
+                                key={`hardware-packet-${packetIndex}-item-${itemIndex}`}
+                                sx={{
+                                  p: 1.4,
+                                  mb: 1.2,
+                                  borderRadius:
+                                    "12px",
+                                  background:
+                                    "rgba(255,255,255,.025)",
+                                  border:
+                                    "1px solid rgba(255,255,255,.06)",
+                                }}
+                              >
+                                <Box
+                                  sx={{
+                                    mb: 1.2,
+                                    color:
+                                      "#c4b5fd",
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  Serial No.{" "}
+                                  {itemIndex + 1}
+                                </Box>
+
+                                <Box
+                                  sx={{
+                                    display: "grid",
+                                    gridTemplateColumns:
+                                      "minmax(220px, 1fr) 130px 130px auto",
+                                    gap: 1.5,
+                                    alignItems:
+                                      "center",
+
+                                    "@media (max-width: 850px)":
+                                    {
+                                      gridTemplateColumns:
+                                        "1fr",
+                                    },
+                                  }}
+                                >
+                                  <TextField
+                                    label="Hardware Item"
+                                    value={
+                                      line?.itemName ||
+                                      ""
+                                    }
+                                    onChange={(
+                                      event
+                                    ) =>
+                                      updateHardwareDraftItem(
+                                        packetIndex,
+                                        itemIndex,
+                                        "itemName",
+                                        event.target
+                                          .value
+                                      )
+                                    }
+                                    sx={formFieldSx(
+                                      darkMode
+                                    )}
+                                  />
+
+                                  <TextField
+                                    label="Quantity"
+                                    type="number"
+                                    value={
+                                      line?.quantity ||
+                                      ""
+                                    }
+                                    onChange={(
+                                      event
+                                    ) =>
+                                      updateHardwareDraftItem(
+                                        packetIndex,
+                                        itemIndex,
+                                        "quantity",
+                                        event.target
+                                          .value
+                                      )
+                                    }
+                                    inputProps={{
+                                      min: 0.001,
+                                      step: 0.001,
+                                    }}
+                                    sx={formFieldSx(
+                                      darkMode
+                                    )}
+                                  />
+
+                                  <TextField
+                                    select
+                                    label="UOM"
+                                    value={
+                                      line?.uom ||
+                                      "Nos"
+                                    }
+                                    onChange={(
+                                      event
+                                    ) =>
+                                      updateHardwareDraftItem(
+                                        packetIndex,
+                                        itemIndex,
+                                        "uom",
+                                        event.target
+                                          .value
+                                      )
+                                    }
+                                    sx={formFieldSx(
+                                      darkMode
+                                    )}
+                                  >
+                                    {hardwareUomOptions.map(
+                                      (uom) => (
+                                        <MenuItem
+                                          key={uom}
+                                          value={uom}
+                                        >
+                                          {uom}
+                                        </MenuItem>
+                                      )
+                                    )}
+                                  </TextField>
+
+                                  <Button
+                                    type="button"
+                                    disabled={
+                                      packetItems.length <=
+                                      1
+                                    }
+                                    onClick={() =>
+                                      removeHardwareDraftItem(
+                                        packetIndex,
+                                        itemIndex
+                                      )
+                                    }
+                                    sx={actionDanger}
+                                  >
+                                    Remove
+                                  </Button>
+                                </Box>
+                              </Box>
+                            )
+                          )}
+
+                          <Box
+                            component="pre"
+                            sx={{
+                              mt: 1,
+                              mb: 0,
+                              p: 1.2,
+                              color: "#c4b5fd",
+                              whiteSpace:
+                                "pre-wrap",
+                              fontFamily:
+                                "inherit",
+                              fontSize: 11,
+                              background:
+                                "rgba(139,92,246,.07)",
+                              borderRadius:
+                                "10px",
+                            }}
+                          >
+                            {buildHardwareDescription(
+                              packetItems
+                            )}
+                          </Box>
+                        </Box>
+                      );
+                    }
+                  )
                 )}
               </Box>
 
@@ -10871,7 +11173,7 @@ const enhancedOverlaySx = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  zIndex: 15000,
+  zIndex: 5000,
 };
 
 const enhancedModalSx = {
@@ -10891,7 +11193,7 @@ const enhancedModalSx = {
 
   "& > *": {
     position: "relative",
-    zIndex: 15001,
+    zIndex: 1,
   },
 };
 
