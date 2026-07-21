@@ -1087,25 +1087,9 @@ function HardwareUomSelect({
           color: "#94a3b8",
         },
       }}
-
-      /*
-       * SelectProps supports the MUI version already
-       * being used elsewhere in this file.
-       */
       SelectProps={{
         MenuProps:
           HARDWARE_UOM_MENU_PROPS,
-      }}
-
-      /*
-       * Keep slotProps as forward compatibility for
-       * newer MUI versions.
-       */
-      slotProps={{
-        select: {
-          MenuProps:
-            HARDWARE_UOM_MENU_PROPS,
-        },
       }}
     >
       {HARDWARE_UOM_OPTIONS.map(
@@ -1785,13 +1769,6 @@ function ZohoItemsPage() {
   ] = useState(() => [
     createEmptyHardwarePacketDraft(),
   ]);
-
-  const hardwareUomSelectSlotProps = {
-    select: {
-      MenuProps:
-        hardwareUomMenuProps,
-    },
-  };
 
   const buildHardwareDescription = (
     lines = []
