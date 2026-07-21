@@ -19,180 +19,136 @@ import com.alsorg.packing.reporting.service.ReportExportService;
 @RequestMapping("/api/reports/export")
 public class ReportExportController {
 
-    private final DispatchReportService dispatchService;
-    private final PackingReportService packingService;
-    private final ReportExportService exportService;
-    private final CombinedReportService combinedService;
-    private final InventoryReportWorkbookService workbookService;
+        private final DispatchReportService dispatchService;
+        private final PackingReportService packingService;
+        private final ReportExportService exportService;
+        private final CombinedReportService combinedService;
+        private final InventoryReportWorkbookService workbookService;
 
-    public ReportExportController(
-            DispatchReportService dispatchService,
-            ReportExportService exportService,
-            PackingReportService packingService,
-            InventoryReportWorkbookService workbookService,
-            CombinedReportService combinedService
-    ) {
-        this.dispatchService = dispatchService;
-        this.exportService = exportService;
-        this.packingService = packingService;
-        this.combinedService = combinedService;
-        this.workbookService = workbookService;
-    }
+        public ReportExportController(
+                        DispatchReportService dispatchService,
+                        ReportExportService exportService,
+                        PackingReportService packingService,
+                        InventoryReportWorkbookService workbookService,
+                        CombinedReportService combinedService) {
+                this.dispatchService = dispatchService;
+                this.exportService = exportService;
+                this.packingService = packingService;
+                this.combinedService = combinedService;
+                this.workbookService = workbookService;
+        }
 
-    @GetMapping("/dispatch/csv")
-    public ResponseEntity<byte[]> exportDispatchCsv(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+        @GetMapping("/dispatch/csv")
+        public ResponseEntity<byte[]> exportDispatchCsv(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
 
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        List<DispatchReportRow> rows =
-                dispatchService.getDispatchReport(from, to);
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                List<DispatchReportRow> rows = dispatchService.getDispatchReport(from, to);
 
-        byte[] csv = exportService.exportDispatchCsv(rows);
+                byte[] csv = exportService.exportDispatchCsv(rows);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=dispatch-report.csv")
-                .contentType(MediaType.TEXT_PLAIN)
-                .body(csv);
-    }
-    
-    @GetMapping("/dispatch/excel")
-    public ResponseEntity<byte[]> exportDispatchExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+                return ResponseEntity.ok()
+                                .header(HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=dispatch-report.csv")
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .body(csv);
+        }
 
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        byte[] excel =
-                workbookService.exportInventoryReport(
-                        "dispatch",
-                        from,
-                        to
-                );
+        @GetMapping("/dispatch/excel")
+        public ResponseEntity<byte[]> exportDispatchExcel(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=dispatch-professional-report.xlsx"
-                )
-                .contentType(
-                        MediaType.parseMediaType(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                )
-                .body(excel);
-    }
-    
-    @GetMapping("/packing/csv")
-    public ResponseEntity<byte[]> exportPackingCsv(
-            @RequestParam
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                byte[] excel = workbookService.exportInventoryReport(
+                                "dispatch",
+                                from,
+                                to);
 
-            @RequestParam
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        List<PackingReportRow> rows =
-                packingService.getPackingReport(from, to);
+                return ResponseEntity.ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=\"Dispatch Register.xlsx\"")
+                                .contentType(
+                                                MediaType.parseMediaType(
+                                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                .body(excel);
+        }
 
-        byte[] csv = exportService.exportPackingCsv(rows);
+        @GetMapping("/packing/csv")
+        public ResponseEntity<byte[]> exportPackingCsv(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
 
-        return ResponseEntity.ok()
-                .header(
-                    HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=packing-report.csv"
-                )
-                .contentType(MediaType.TEXT_PLAIN)
-                .body(csv);
-    }
-    
-    @GetMapping("/packing/excel")
-    public ResponseEntity<byte[]> exportPackingExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                List<PackingReportRow> rows = packingService.getPackingReport(from, to);
 
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        byte[] excel =
-                workbookService.exportInventoryReport(
-                        "packing",
-                        from,
-                        to
-                );
+                byte[] csv = exportService.exportPackingCsv(rows);
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=packing-professional-report.xlsx"
-                )
-                .contentType(
-                        MediaType.parseMediaType(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                )
-                .body(excel);
-    }
-    
-    @GetMapping("/combined/excel")
-    public ResponseEntity<byte[]> exportCombinedExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+                return ResponseEntity.ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=packing-report.csv")
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .body(csv);
+        }
 
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        byte[] excel =
-                workbookService.exportInventoryReport(
-                        "inventory",
-                        from,
-                        to
-                );
+        @GetMapping("/packing/excel")
+        public ResponseEntity<byte[]> exportPackingExcel(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=inventory-professional-report.xlsx"
-                )
-                .contentType(
-                        MediaType.parseMediaType(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                )
-                .body(excel);
-    }
-    
-    @GetMapping("/inventory/excel")
-    public ResponseEntity<byte[]> exportInventoryExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime from,
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                byte[] excel = workbookService.exportInventoryReport(
+                                "packing",
+                                from,
+                                to);
 
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to
-    ) {
-        byte[] excel =
-                workbookService.exportInventoryReport(
-                        "inventory",
-                        from,
-                        to
-                );
+                return ResponseEntity.ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=packing-professional-report.xlsx")
+                                .contentType(
+                                                MediaType.parseMediaType(
+                                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                .body(excel);
+        }
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=inventory-professional-report.xlsx"
-                )
-                .contentType(
-                        MediaType.parseMediaType(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                )
-                .body(excel);
-    }
+        @GetMapping("/combined/excel")
+        public ResponseEntity<byte[]> exportCombinedExcel(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                byte[] excel = workbookService.exportInventoryReport(
+                                "inventory",
+                                from,
+                                to);
+
+                return ResponseEntity.ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=inventory-professional-report.xlsx")
+                                .contentType(
+                                                MediaType.parseMediaType(
+                                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                .body(excel);
+        }
+
+        @GetMapping("/inventory/excel")
+        public ResponseEntity<byte[]> exportInventoryExcel(
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+
+                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+                byte[] excel = workbookService.exportInventoryReport(
+                                "inventory",
+                                from,
+                                to);
+
+                return ResponseEntity.ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=inventory-professional-report.xlsx")
+                                .contentType(
+                                                MediaType.parseMediaType(
+                                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                .body(excel);
+        }
 
 }

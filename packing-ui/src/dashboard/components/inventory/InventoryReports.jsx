@@ -303,6 +303,41 @@ const getPacketName = (row) =>
     "-"
   );
 
+const getPdNo = (row) =>
+  rowValue(
+    row,
+    [
+      "pdNo",
+      "pdNumber",
+    ],
+    "-"
+  );
+
+const getDrawingNo = (row) =>
+  rowValue(
+    row,
+    [
+      "drawingNo",
+      "drawingName",
+      "dwgNo",
+    ],
+    "-"
+  );
+
+const getArea = (row) =>
+  rowValue(
+    row,
+    [
+      "area",
+      "currentLocationCode",
+      "location",
+      "fgAreaCode",
+      "packedAreaCode",
+      "warehouseCode",
+    ],
+    "-"
+  );
+
 const getItemStatus = (row, fallback = "-") =>
   rowValue(
     row,
@@ -326,6 +361,34 @@ const itemPacketColumns = [
   ["actionAt", "Action At"],
   ["actionBy", "Action By"],
   ["ageDays", "Age Days"],
+];
+
+const dispatchDetailColumns = [
+  ["serialNumber", "S.No."],
+  ["zohoItemId", "Zoho Item ID"],
+  ["pdNo", "PD No."],
+  ["drawingNo", "Dwg No."],
+  ["sku", "SKU / Code"],
+  ["itemName", "Item Name"],
+  ["description", "Description"],
+  ["clientName", "Client"],
+  ["clientAddress", "Client Address"],
+  ["plantCode", "Plant"],
+  ["floor", "Floor"],
+  ["area", "Area"],
+  ["warehouseCode", "Warehouse"],
+  ["packetNumber", "Pkt No."],
+  ["packetName", "Packet Name"],
+  ["quantity", "Qty"],
+  ["status", "Status"],
+  ["packedAt", "Packing Date"],
+  ["packedBy", "Packed By"],
+  ["dispatchedAt", "Dispatch Date"],
+  ["dispatchedBy", "Dispatched By"],
+  ["challanNumber", "Challan No."],
+  ["driverName", "Driver"],
+  ["vehicleNumber", "Vehicle"],
+  ["remarks", "Remarks"],
 ];
 
 const buildPackingItemPacketRow = (
@@ -369,32 +432,230 @@ const buildDispatchItemPacketRow = (
 ) => ({
   key: `dispatch-${rowValue(
     row,
-    ["zohoItemId", "id"],
+    [
+      "challanNumber",
+      "zohoItemId",
+      "id",
+    ],
     index
+  )}-${rowValue(
+    row,
+    ["dispatchedAt"],
+    "date"
   )}-${index}`,
+
+  serialNumber: index + 1,
+
   module: "Dispatch",
-  zohoItemId: rowValue(row, [
-    "zohoItemId",
-    "itemId",
-  ]),
-  itemName: rowValue(row, [
-    "itemName",
-    "name",
-  ]),
-  clientName: rowValue(row, [
-    "clientName",
-    "client",
-  ]),
-  packetNumber: getPacketNumber(row),
-  packetName: getPacketName(row),
-  status: "DISPATCHED",
-  actionAt: getExcelDateTime(
-    rowValue(row, ["dispatchedAt"], null)
+
+  zohoItemId: rowValue(
+    row,
+    [
+      "zohoItemId",
+      "itemId",
+    ],
+    "-"
   ),
-  actionBy: rowValue(row, [
-    "dispatchedBy",
-    "createdBy",
-  ]),
+
+  pdNo: getPdNo(row),
+
+  drawingNo:
+    getDrawingNo(row),
+
+  sku: rowValue(
+    row,
+    [
+      "sku",
+      "codeSku",
+      "code",
+    ],
+    "-"
+  ),
+
+  itemName: rowValue(
+    row,
+    [
+      "itemName",
+      "name",
+    ],
+    "-"
+  ),
+
+  description: rowValue(
+    row,
+    [
+      "description",
+      "itemDescription",
+    ],
+    "-"
+  ),
+
+  clientName: rowValue(
+    row,
+    [
+      "clientName",
+      "client",
+    ],
+    "-"
+  ),
+
+  clientAddress: rowValue(
+    row,
+    [
+      "clientAddress",
+      "address",
+    ],
+    "-"
+  ),
+
+  plantCode: rowValue(
+    row,
+    [
+      "plantCode",
+      "plant",
+    ],
+    "-"
+  ),
+
+  floor: rowValue(
+    row,
+    [
+      "floor",
+      "factoryFloor",
+    ],
+    "-"
+  ),
+
+  area: getArea(row),
+
+  warehouseCode: rowValue(
+    row,
+    [
+      "warehouseCode",
+      "warehouse",
+    ],
+    "-"
+  ),
+
+  packetNumber:
+    getPacketNumber(row),
+
+  packetName:
+    getPacketName(row),
+
+  quantity: numberValue(
+    rowValue(
+      row,
+      [
+        "quantity",
+        "qty",
+      ],
+      1
+    )
+  ),
+
+  status: getItemStatus(
+    row,
+    "DISPATCHED"
+  ),
+
+  packedAt: getExcelDateTime(
+    rowValue(
+      row,
+      [
+        "packedAt",
+        "packingDate",
+      ],
+      null
+    )
+  ),
+
+  packedBy: rowValue(
+    row,
+    [
+      "packedBy",
+      "createdBy",
+    ],
+    "-"
+  ),
+
+  dispatchedAt:
+    getExcelDateTime(
+      rowValue(
+        row,
+        [
+          "dispatchedAt",
+          "dispatchDate",
+        ],
+        null
+      )
+    ),
+
+  dispatchedBy: rowValue(
+    row,
+    [
+      "dispatchedBy",
+      "createdBy",
+    ],
+    "-"
+  ),
+
+  challanNumber: rowValue(
+    row,
+    [
+      "challanNumber",
+      "chalaanNumber",
+    ],
+    "-"
+  ),
+
+  driverName: rowValue(
+    row,
+    [
+      "driverName",
+      "driver",
+    ],
+    "-"
+  ),
+
+  vehicleNumber: rowValue(
+    row,
+    [
+      "vehicleNumber",
+      "vehicleNo",
+    ],
+    "-"
+  ),
+
+  remarks: rowValue(
+    row,
+    [
+      "remarks",
+      "remark",
+    ],
+    "-"
+  ),
+
+  /*
+   * Existing compact item/packet fields remain available.
+   */
+  actionAt: getExcelDateTime(
+    rowValue(
+      row,
+      ["dispatchedAt"],
+      null
+    )
+  ),
+
+  actionBy: rowValue(
+    row,
+    [
+      "dispatchedBy",
+      "createdBy",
+    ],
+    "-"
+  ),
+
   ageDays: "-",
 });
 
@@ -1267,8 +1528,8 @@ function InventoryReports() {
     },
 
     DISPATCH_ITEMS: {
-      title: "Dispatch Item / Packet Detail",
-      columns: itemPacketColumns,
+      title: "Detailed Dispatch Item Register",
+      columns: dispatchDetailColumns,
       rows: dispatchItemPacketRows,
     },
   };
@@ -1965,6 +2226,13 @@ function InventoryReports() {
       );
 
       addRowsSheet(
+        "Dispatch Register",
+        "Detailed Dispatch Item Register",
+        dispatchDetailColumns,
+        dispatchItemPacketRows
+      );
+
+      addRowsSheet(
         "Dispatch User Wise",
         "Dispatch User-wise Report",
         tableConfigs.DISPATCH_USER.columns,
@@ -2070,50 +2338,173 @@ function InventoryReports() {
       */
 
       const rawDispatch =
-        dispatchRows.map((row) => ({
-          zohoItemId: rowValue(row, [
-            "zohoItemId",
-          ]),
+        dispatchRows.map(
+          (row, index) => ({
+            serialNumber:
+              index + 1,
 
-          itemName: rowValue(row, [
-            "itemName",
-          ]),
+            zohoItemId: rowValue(
+              row,
+              ["zohoItemId"],
+              "-"
+            ),
 
-          clientName: rowValue(row, [
-            "clientName",
-            "client",
-          ]),
+            pdNo:
+              getPdNo(row),
 
-          packetNumber:
-            getPacketNumber(row),
+            drawingNo:
+              getDrawingNo(row),
 
-          packetName:
-            getPacketName(row),
+            sku: rowValue(
+              row,
+              [
+                "sku",
+                "codeSku",
+              ],
+              "-"
+            ),
 
-          dispatchedAt: getExcelDateTime(
-            rowValue(row, [
-              "dispatchedAt",
-            ], null)
-          ),
+            itemName: rowValue(
+              row,
+              ["itemName"],
+              "-"
+            ),
 
-          dispatchedBy: rowValue(row, [
-            "dispatchedBy",
-            "createdBy",
-          ]),
-        }));
+            description: rowValue(
+              row,
+              ["description"],
+              "-"
+            ),
+
+            clientName: rowValue(
+              row,
+              [
+                "clientName",
+                "client",
+              ],
+              "-"
+            ),
+
+            clientAddress: rowValue(
+              row,
+              [
+                "clientAddress",
+                "address",
+              ],
+              "-"
+            ),
+
+            plantCode: rowValue(
+              row,
+              ["plantCode"],
+              "-"
+            ),
+
+            floor: rowValue(
+              row,
+              ["floor"],
+              "-"
+            ),
+
+            area:
+              getArea(row),
+
+            warehouseCode: rowValue(
+              row,
+              ["warehouseCode"],
+              "-"
+            ),
+
+            packetNumber:
+              getPacketNumber(row),
+
+            packetName:
+              getPacketName(row),
+
+            quantity: numberValue(
+              rowValue(
+                row,
+                [
+                  "quantity",
+                  "qty",
+                ],
+                1
+              )
+            ),
+
+            status: getItemStatus(
+              row,
+              "DISPATCHED"
+            ),
+
+            packedAt: getExcelDateTime(
+              rowValue(
+                row,
+                ["packedAt"],
+                null
+              )
+            ),
+
+            packedBy: rowValue(
+              row,
+              [
+                "packedBy",
+                "createdBy",
+              ],
+              "-"
+            ),
+
+            dispatchedAt:
+              getExcelDateTime(
+                rowValue(
+                  row,
+                  ["dispatchedAt"],
+                  null
+                )
+              ),
+
+            dispatchedBy: rowValue(
+              row,
+              [
+                "dispatchedBy",
+                "createdBy",
+              ],
+              "-"
+            ),
+
+            challanNumber: rowValue(
+              row,
+              [
+                "challanNumber",
+                "chalaanNumber",
+              ],
+              "-"
+            ),
+
+            driverName: rowValue(
+              row,
+              ["driverName"],
+              "-"
+            ),
+
+            vehicleNumber: rowValue(
+              row,
+              ["vehicleNumber"],
+              "-"
+            ),
+
+            remarks: rowValue(
+              row,
+              ["remarks"],
+              "-"
+            ),
+          })
+        );
 
       addRowsSheet(
         "Raw Dispatch",
         "Raw Dispatch Data",
-        [
-          ["zohoItemId", "Zoho Item ID"],
-          ["itemName", "Item Name"],
-          ["clientName", "Client"],
-          ["packetNumber", "Packet No"],
-          ["packetName", "Packet Name"],
-          ["dispatchedAt", "Dispatched At"],
-          ["dispatchedBy", "Dispatched By"],
-        ],
+        dispatchDetailColumns,
         rawDispatch
       );
 
@@ -2453,7 +2844,16 @@ function InventoryReports() {
       </div>
 
       <div style={tableWrap}>
-        <table style={table}>
+        <table
+          style={{
+            ...table,
+
+            minWidth: Math.max(
+              1100,
+              activeConfig.columns.length * 145
+            ),
+          }}
+        >
           <thead>
             <tr>
               {activeConfig.columns.map(
@@ -2750,6 +3150,8 @@ const th = {
   zIndex: 1,
   borderBottom:
     "1px solid rgba(255,255,255,.06)",
+  minWidth: 110,
+  whiteSpace: "nowrap",
 };
 
 const td = {
@@ -2757,6 +3159,11 @@ const td = {
   color: "rgba(255,255,255,.84)",
   borderBottom:
     "1px solid rgba(255,255,255,.045)",
+  verticalAlign: "top",
+  minWidth: 110,
+  maxWidth: 320,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
 };
 
 const empty = {
