@@ -18,14 +18,14 @@ import MatFlowLayout
 import MatFlowRouteGuard
 	from "./MatFlowRouteGuard";
 
-import MatFlowDashboardPage
-	from "./pages/MatFlowDashboardPage";
-import MatFlowReleaseListPage
-	from "./pages/MatFlowReleaseListPage";
-import MatFlowReleaseDetailPage
-	from "./pages/MatFlowReleaseDetailPage";
-import MatFlowQueuePage
-	from "./pages/MatFlowQueuePage";
+import MatFlowDashboard
+	from "./pages/MatFlowDashboard";
+import MatFlowReleaseList
+	from "./pages/MatFlowReleaseList";
+import MatFlowReleaseDetail
+	from "./pages/MatFlowReleaseDetail";
+import MatFlowQueue
+	from "./pages/MatFlowQueue";
 import MatFlowRecordDetailPage
 	from "./pages/MatFlowRecordDetailPage";
 
@@ -67,7 +67,7 @@ export default function MatFlowRoutes() {
 					path="dashboard"
 					element={
 						<MatFlowRouteGuard screen="dashboard">
-							<MatFlowDashboardPage />
+							<MatFlowDashboard />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -76,7 +76,7 @@ export default function MatFlowRoutes() {
 					path="releases"
 					element={
 						<MatFlowRouteGuard screen="releases">
-							<MatFlowReleaseListPage />
+							<MatFlowReleaseList />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -85,7 +85,7 @@ export default function MatFlowRoutes() {
 					path="releases/:releaseId"
 					element={
 						<MatFlowRouteGuard screen="release-detail">
-							<MatFlowReleaseDetailPage />
+							<MatFlowReleaseDetail />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -94,7 +94,7 @@ export default function MatFlowRoutes() {
 					path="production"
 					element={
 						<MatFlowRouteGuard screen="production">
-							<MatFlowQueuePage mode="production" />
+							<MatFlowQueue mode="production" />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -114,7 +114,7 @@ export default function MatFlowRoutes() {
 					path="store"
 					element={
 						<MatFlowRouteGuard screen="store">
-							<MatFlowQueuePage mode="store" />
+							<MatFlowQueue mode="store" />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -123,7 +123,7 @@ export default function MatFlowRoutes() {
 					path="indents"
 					element={
 						<MatFlowRouteGuard screen="indents">
-							<MatFlowQueuePage mode="indents" />
+							<MatFlowQueue mode="indents" />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -143,7 +143,7 @@ export default function MatFlowRoutes() {
 					path="purchase"
 					element={
 						<MatFlowRouteGuard screen="purchase">
-							<MatFlowQueuePage mode="purchase" />
+							<MatFlowQueue mode="purchase" />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -152,7 +152,7 @@ export default function MatFlowRoutes() {
 					path="approvals"
 					element={
 						<MatFlowRouteGuard screen="approvals">
-							<MatFlowQueuePage mode="approvals" />
+							<MatFlowQueue mode="approvals" />
 						</MatFlowRouteGuard>
 					}
 				/>
@@ -172,7 +172,7 @@ export default function MatFlowRoutes() {
 					path="reports"
 					element={
 						<MatFlowRouteGuard screen="reports">
-							<MatFlowDashboardPage />
+							<MatFlowDashboard />
 						</MatFlowRouteGuard>
 					}
 				/>
