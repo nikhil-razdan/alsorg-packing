@@ -75,6 +75,10 @@ export default function BOMFlowProductMaster() {
 			...prev,
 			[key]: value,
 		}));
+
+		if (error) {
+			setError("");
+		}
 	};
 
 	useEffect(() => {
@@ -178,6 +182,44 @@ export default function BOMFlowProductMaster() {
 			(completed / checks.length) * 100
 		);
 	}, [form]);
+
+	const productTitle = useMemo(() => {
+		const name = String(
+			form.productName || ""
+		).trim();
+
+		if (name) {
+			return name;
+		}
+
+		return productId
+			? "Edit Product"
+			: "Create New Product";
+	}, [
+		form.productName,
+		productId,
+	]);
+
+	const productCode = useMemo(() => {
+		const code = String(
+			form.productCode || ""
+		).trim();
+
+		return code
+			? code.toUpperCase()
+			: "CODE PENDING";
+	}, [form.productCode]);
+
+	const productStatus =
+		String(
+			savedProduct?.status || "DRAFT"
+		).toUpperCase();
+
+	const dimensionsReady = [
+		form.length,
+		form.width,
+		form.height,
+	].every(hasPositiveNumber);
 
 	const validateForm = () => {
 		if (!hasText(form.productName)) {
@@ -333,6 +375,29 @@ export default function BOMFlowProductMaster() {
 		}
 	};
 
+	if (loading) {
+		return (
+			<Box
+				sx={{
+					minHeight: "320px",
+					display: "grid",
+					placeItems: "center",
+					color: "#fff",
+				}}
+			>
+				<Typography
+					sx={{
+						color:
+							"rgba(255,255,255,.68)",
+						fontWeight: 800,
+					}}
+				>
+					Loading product...
+				</Typography>
+			</Box>
+		);
+	}
+
 	return (
 		<Box sx={pageSx}>
 			<Box sx={heroSx}>
@@ -351,7 +416,10 @@ export default function BOMFlowProductMaster() {
 
 					<Box sx={heroMetaRowSx}>
 						<Chip label={productCode} sx={metaChipSx} />
-						<Chip label="● Draft" sx={draftChipSx} />
+						<Chip
+							label={`● ${productStatus}`}
+							sx={draftChipSx}
+						/>
 						<Chip label={`${completion}% Complete`} sx={completeChipSx} />
 					</Box>
 				</Box>
@@ -439,10 +507,8 @@ export default function BOMFlowProductMaster() {
 					icon={<StraightenOutlinedIcon />}
 					title="Dimensions"
 					value={
-						Number(form.length) > 0 ||
-							Number(form.width) > 0 ||
-							Number(form.height) > 0
-							? "Entered"
+						dimensionsReady
+							? "Ready"
 							: "Pending"
 					}
 					subtitle="Length, width and height"
@@ -590,7 +656,7 @@ export default function BOMFlowProductMaster() {
 								label="Height (mm) *"
 								value={form.height}
 								onChange={(e) =>
-									updateField("Height", e.target.value)
+									updateField("height", e.target.value)
 								}
 								inputProps={{
 									min: 0,
@@ -786,18 +852,23 @@ export default function BOMFlowProductMaster() {
 						</Box>
 
 						<ChecklistItem
-							done={Boolean(form.productName)}
+							done={hasText(form.productName)}
 							label="Product name added"
 						/>
 
 						<ChecklistItem
-							done={Boolean(form.productCode)}
+							done={hasText(form.productCode)}
 							label="Product code assigned"
 						/>
 
 						<ChecklistItem
-							done={Boolean(form.category)}
+							done={hasText(form.category)}
 							label="Category selected"
+						/>
+
+						<ChecklistItem
+							done={dimensionsReady}
+							label="Dimensions completed"
 						/>
 
 						<ChecklistItem

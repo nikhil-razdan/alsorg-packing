@@ -26,6 +26,7 @@ import {
 	Button,
 	Card,
 	Chip,
+	CircularProgress,
 	Collapse,
 	IconButton,
 	LinearProgress,
@@ -75,6 +76,30 @@ const sectionColor = (key) => {
 
 	return colors[key] || "#60a5fa";
 };
+
+const quickActions = [
+	{
+		title: "Product Master",
+		subtitle:
+			"Return to product selection and revision management.",
+		icon: <Inventory2OutlinedIcon />,
+		path: "/bomflow/products",
+	},
+	{
+		title: "Rate Master",
+		subtitle:
+			"Review missing and approved material rates.",
+		icon: <PriceChangeOutlinedIcon />,
+		path: "/bomflow/rate-master",
+	},
+	{
+		title: "BOM Reports",
+		subtitle:
+			"Open BOM and costing export reports.",
+		icon: <AssessmentOutlinedIcon />,
+		path: "/bomflow/reports",
+	},
+];
 
 export default function BOMFlowBOMBuilder() {
 	const navigate = useNavigate();
@@ -159,6 +184,15 @@ export default function BOMFlowBOMBuilder() {
 			[]
 		);
 	}, [revision]);
+
+	const missingRateRows = useMemo(() => {
+		return revisionRows.filter((row) => {
+			return Number(row?.rate ?? 0) <= 0;
+		});
+	}, [revisionRows]);
+
+	const firstMissingRate =
+		missingRateRows[0] || null;
 
 	const materialSections = useMemo(() => {
 		const grouped = new Map();
@@ -395,6 +429,51 @@ export default function BOMFlowBOMBuilder() {
 		}
 	};
 
+	if (loading) {
+		return (
+			<Box
+				sx={{
+					minHeight: "340px",
+					display: "grid",
+					placeItems: "center",
+				}}
+			>
+				<CircularProgress />
+			</Box>
+		);
+	}
+
+	const handleDeleteRow = async (row) => {
+		if (
+			!editable ||
+			!revision?.id ||
+			!row?.id
+		) {
+			return;
+		}
+
+		setWorking(true);
+		setError("");
+
+		try {
+			await bomFlowApi.deleteRevisionLine(
+				revision.id,
+				row.id,
+				row.rowVersion
+			);
+
+			await loadRevision();
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to delete the BOM row."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
+
 	return (
 		<Box sx={styles.BOM_viewShellSx}>
 			<Box sx={pageSx}>
@@ -439,7 +518,11 @@ export default function BOMFlowBOMBuilder() {
 
 							<MetaPill
 								label="Created By"
-								value="Admin"
+								value={
+									revision?.createdBy ||
+									revision?.updatedBy ||
+									"-"
+								}
 								accent="#22c55e"
 							/>
 
@@ -674,7 +757,12 @@ export default function BOMFlowBOMBuilder() {
 
 									<Collapse in={isOpen}>
 										{section.rows.length > 0 ? (
-											<SectionTable rows={section.rows} />
+											<SectionTable
+												rows={section.rows}
+												editable={editable && !working}
+												onDelete={handleDeleteRow}
+												validRates={section.validRates}
+											/>
 										) : (
 											<EmptySection
 												accent={section.accent}
@@ -743,23 +831,66 @@ export default function BOMFlowBOMBuilder() {
 								<WarningAmberOutlinedIcon sx={{ color: "#fca5a5" }} />
 							</Box>
 
-							<Box sx={missingRateBoxSx}>
-								<Box>
-									<Typography sx={missingTitleSx}>
-										Brass Handles Custom
-									</Typography>
+							{firstMissingRate ? (
+								<Box sx={missingRateBoxSx}>
+									<Box>
+										<Typography sx={missingTitleSx}>
+											{firstMissingRate.itemName ||
+												firstMissingRate.item ||
+												"Unnamed Material"}
+										</Typography>
 
-									<Typography sx={missingSubSx}>
-										Metal • Artisan Metals • NOS
-									</Typography>
+										<Typography sx={missingSubSx}>
+											{firstMissingRate.section ||
+												firstMissingRate.category ||
+												"Uncategorized"}
+											{" • "}
+											{firstMissingRate.brand ||
+												firstMissingRate.vendorName ||
+												"No vendor"}
+											{" • "}
+											{firstMissingRate.unit || "-"}
+										</Typography>
+									</Box>
+
+									<Chip
+										label={`${missingRateRows.length} Missing`}
+										size="small"
+										sx={missingChipSx}
+									/>
 								</Box>
+							) : (
+								<Box
+									sx={{
+										...missingRateBoxSx,
+										border:
+											"1px solid rgba(34,197,94,.20)",
+									}}
+								>
+									<Box>
+										<Typography sx={missingTitleSx}>
+											All Rates Available
+										</Typography>
 
-								<Chip
-									label="Missing"
-									size="small"
-									sx={missingChipSx}
-								/>
-							</Box>
+										<Typography sx={missingSubSx}>
+											No material rate is currently blocking review.
+										</Typography>
+									</Box>
+
+									<Chip
+										label="Ready"
+										size="small"
+										sx={{
+											...missingChipSx,
+											color: "#4ade80",
+											background:
+												"rgba(34,197,94,.12)",
+											border:
+												"1px solid rgba(34,197,94,.22)",
+										}}
+									/>
+								</Box>
+							)}
 
 							<Button
 								fullWidth
@@ -787,9 +918,14 @@ export default function BOMFlowBOMBuilder() {
 
 							<Box sx={splitListSx}>
 								{materialSections.map((section) => {
-									const percent = Math.round(
-										(section.totalValue / totalCost) * 100
-									);
+									const percent =
+										totalCost > 0
+											? Math.round(
+												(section.totalValue /
+													totalCost) *
+												100
+											)
+											: 0;
 
 									return (
 										<Box key={section.key} sx={splitItemSx}>
@@ -872,6 +1008,7 @@ function SectionTable({
 	rows,
 	editable,
 	onDelete,
+	validRates,
 }) {
 	return (
 		<Box sx={tableShellSx}>
@@ -887,12 +1024,16 @@ function SectionTable({
 				<div>GST%</div>
 			</Box>
 
-			{rows.map((row) => {
+			{rows.map((row, index) => {
 				const missing = row.status === "missing";
 
 				return (
 					<Box
-						key={row.item}
+						key={
+							row.id ||
+							row.itemCode ||
+							`${row.itemName || "row"}-${index}`
+						}
 						sx={missing ? missingRowSx : tableRowSx}
 					>
 						<Box
@@ -955,7 +1096,14 @@ function SectionTable({
 						</Typography>
 
 						<Typography sx={numberCellSx}>
-							{row.gst}
+							{Number(
+								row.gstPercent ??
+								row.gst ??
+								0
+							).toLocaleString("en-US", {
+								maximumFractionDigits: 2,
+							})}
+							%
 						</Typography>
 					</Box>
 				);
@@ -967,7 +1115,7 @@ function SectionTable({
 				</Button>
 
 				<Typography sx={validRateSx}>
-					Valid Rates: 2/3
+					Valid Rates: {validRates || "0/0"}
 				</Typography>
 			</Box>
 		</Box>
