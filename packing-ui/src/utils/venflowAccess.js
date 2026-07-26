@@ -53,6 +53,12 @@ export const isVenFlowManager = (role) => {
 	);
 };
 
+export const isRecognizedVenFlowRole = (role) => {
+	const cleanRole = getVenFlowRole(role);
+
+	return Object.values(VENFLOW_ROLES).includes(cleanRole);
+};
+
 export const isVenFlowAdminOrManager = (role) => {
 	const cleanRole = getVenFlowRole(role);
 
@@ -220,16 +226,14 @@ export const canAccessVenFlowScreen = (
 ) => {
 	const cleanRole = getVenFlowRole(role);
 
-	/*
-	 * ADMIN can access every VenFlow screen.
-	 */
 	if (cleanRole === VENFLOW_ROLES.ADMIN) {
 		return true;
 	}
 
-	/*
-	 * Shared read screens.
-	 */
+	if (!isRecognizedVenFlowRole(cleanRole)) {
+		return false;
+	}
+
 	if (
 		screen === "dashboard" ||
 		screen === "reports" ||

@@ -32,7 +32,6 @@ public class VenFlowDelayMonitor {
                 this.notificationService = notificationService;
         }
 
-        @Scheduled(fixedDelayString = "${venflow.alert-check-ms:3600000}")
         @Scheduled(fixedDelayString = "${venflow.alert-check-ms:3600000}", initialDelayString = "${venflow.alert-initial-delay-ms:60000}")
         public void checkDelays() {
 

@@ -13,7 +13,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import java.util.stream.Collectors;
 
 import org.springframework.data.jpa.domain.Specification;
 
@@ -26,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.web.server.ResponseStatusException;
-import java.net.URI;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,6 +46,8 @@ public class VenFlowService {
         private final VenFlowMaterialAllocationRepository allocationRepo;
         private final VenFlowMaterialMovementRepository movementRepo;
         private final VenFlowQcInspectionRepository qcInspectionRepo;
+        private final VenFlowAttachmentService attachmentService;
+        private final VenFlowPoVerificationService poVerificationService;
 
         public VenFlowService(
                         VenFlowEntryRepository entryRepo,
@@ -56,7 +57,9 @@ public class VenFlowService {
                         VenFlowNotificationService notificationService,
                         VenFlowMaterialAllocationRepository allocationRepo,
                         VenFlowMaterialMovementRepository movementRepo,
-                        VenFlowQcInspectionRepository qcInspectionRepo) {
+                        VenFlowQcInspectionRepository qcInspectionRepo,
+                        VenFlowAttachmentService attachmentService,
+                        VenFlowPoVerificationService poVerificationService) {
                 this.entryRepo = entryRepo;
                 this.auditRepo = auditRepo;
                 this.access = access;
@@ -65,6 +68,8 @@ public class VenFlowService {
                 this.allocationRepo = allocationRepo;
                 this.movementRepo = movementRepo;
                 this.qcInspectionRepo = qcInspectionRepo;
+                this.attachmentService = attachmentService;
+                this.poVerificationService = poVerificationService;
         }
 
         /*
@@ -172,14 +177,6 @@ public class VenFlowService {
 
                 entry.bomReference = clean(req.bomReference());
 
-                entry.bomAttachmentUrl = cleanOptionalHttpUrl(
-                                req.bomAttachmentUrl(),
-                                "BOM Document URL");
-
-                entry.sampleImageUrl = cleanOptionalHttpUrl(
-                                req.sampleImageUrl(),
-                                "Sample Image URL");
-
                 entry.remarks = clean(req.remarks());
 
                 entry.stockDecision = VenFlowStockDecision.PENDING;
@@ -215,7 +212,7 @@ public class VenFlowService {
                         UUID id) {
                 access.requireEngineering();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
                 if (entry.stage != VenFlowStage.INDENT_CREATED) {
                         throw badRequest(
@@ -600,9 +597,6 @@ public class VenFlowService {
                 require(
                                 req.poDate(),
                                 "PO Date is required.");
-                requireText(
-                                req.poDocumentUrl(),
-                                "PO Document URL is required.");
 
                 BigDecimal orderedQty = quantity(
                                 req.orderedQty(),
@@ -674,10 +668,16 @@ public class VenFlowService {
 
                 entry.poAmount = req.poAmount();
 
-                entry.poDocumentUrl = requireHttpUrl(
-                                req.poDocumentUrl(),
-                                "PO Document URL");
+                require(
+                                req.poAttachmentId(),
+                                "PO Document attachment is required.");
 
+                attachmentService.requireActiveAttachment(
+                                id,
+                                req.poAttachmentId(),
+                                VenFlowAttachmentType.PO_DOCUMENT);
+
+                entry.poDocumentUrl = null;
                 entry.poStatus = VenFlowPoStatus.PENDING_DIRECTOR_APPROVAL;
 
                 entry.poRaisedBy = currentActor;
@@ -724,6 +724,11 @@ public class VenFlowService {
                                                 + ", Amount="
                                                 + entry.poAmount
                                                 + ".");
+
+                poVerificationService.createPendingSnapshot(
+                                saved,
+                                purchase,
+                                req.poAttachmentId());
 
                 notificationService
                                 .publishPoApprovalRequired(saved);
@@ -782,8 +787,20 @@ public class VenFlowService {
                 if (purchase.status != VenFlowAllocationStatus.PO_PENDING_DIRECTOR_APPROVAL) {
 
                         throw badRequest(
-                                        "Purchase allocation is not pending Director approval.");
+                                        "Purchase allocation is not pending "
+                                                        + "Director approval.");
                 }
+
+                /*
+                 * Lock and validate the exact PO snapshot selected
+                 * by the Director.
+                 */
+                VenFlowPoVerification verification = poVerificationService
+                                .requirePendingForDecision(
+                                                entry,
+                                                purchase,
+                                                req.verificationId(),
+                                                req.verificationRevision());
 
                 String currentActor = actor();
                 LocalDateTime now = LocalDateTime.now();
@@ -826,7 +843,17 @@ public class VenFlowService {
                                                 + entry.poNo
                                                 + ".");
 
-                notificationService.publishPoApproved(saved);
+                /*
+                 * Mark the same immutable snapshot approved.
+                 * This is in the same transaction as the PO decision.
+                 */
+                poVerificationService.markApproved(
+                                verification,
+                                currentActor,
+                                req.remarks());
+
+                notificationService.publishPoApproved(
+                                saved);
 
                 return saved;
         }
@@ -876,8 +903,20 @@ public class VenFlowService {
                 if (purchase.status != VenFlowAllocationStatus.PO_PENDING_DIRECTOR_APPROVAL) {
 
                         throw badRequest(
-                                        "Purchase allocation is not pending Director approval.");
+                                        "Purchase allocation is not pending "
+                                                        + "Director approval.");
                 }
+
+                /*
+                 * Lock and validate the exact PO snapshot selected
+                 * by the Director.
+                 */
+                VenFlowPoVerification verification = poVerificationService
+                                .requirePendingForDecision(
+                                                entry,
+                                                purchase,
+                                                req.verificationId(),
+                                                req.verificationRevision());
 
                 String currentActor = actor();
                 LocalDateTime now = LocalDateTime.now();
@@ -920,7 +959,13 @@ public class VenFlowService {
                                                 + ". Reason: "
                                                 + clean(req.remarks()));
 
-                notificationService.publishPoRejected(saved);
+                poVerificationService.markReturned(
+                                verification,
+                                currentActor,
+                                req.remarks());
+
+                notificationService.publishPoRejected(
+                                saved);
 
                 return saved;
         }
@@ -1340,7 +1385,7 @@ public class VenFlowService {
         public VenFlowEntry informProduction(UUID id) {
                 access.requireStore();
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                VenFlowEntry e = getVisibleForUpdate(id);
 
                 boolean allowed = e.stage == VenFlowStage.MATERIAL_RESERVED
                                 || e.stage == VenFlowStage.MATERIAL_ACCEPTED_IN_STORE
@@ -1557,7 +1602,7 @@ public class VenFlowService {
                                 req.supervisorName(),
                                 "Responsible Person / Supervisor is required.");
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                VenFlowEntry e = getVisibleForUpdate(id);
 
                 boolean allowed = e.stage == VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION
                                 || e.stage == VenFlowStage.PROCESSING_STARTED
@@ -1604,7 +1649,7 @@ public class VenFlowService {
                         UUID id) {
                 access.requireProcessing();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
                 if (entry.stage != VenFlowStage.MATERIAL_ISSUED_TO_PRODUCTION) {
                         throw badRequest(
@@ -1659,9 +1704,14 @@ public class VenFlowService {
                                 req.wastageQty(),
                                 "Wastage Qty is required and cannot be negative.");
 
-                requireText(
-                                req.outputImageUrl(),
-                                "Output Image URL is required for process completion.");
+                require(
+                                req.outputAttachmentId(),
+                                "Process Output attachment is required for process completion.");
+
+                attachmentService.requireActiveAttachment(
+                                id,
+                                req.outputAttachmentId(),
+                                VenFlowAttachmentType.PROCESS_OUTPUT);
 
                 requireText(
                                 entry.supervisorName,
@@ -1708,7 +1758,12 @@ public class VenFlowService {
                  */
                 entry.processingBalanceQty = calculatedProcessingBalance;
 
-                entry.outputImageUrl = clean(req.outputImageUrl());
+                entry.processOutputAttachmentId = req.outputAttachmentId();
+
+                /*
+                 * Old URL storage is no longer used for newly completed processes.
+                 */
+                entry.outputImageUrl = null;
 
                 entry.processingStatus = VenFlowProcessingStatus.COMPLETED;
 
@@ -1746,7 +1801,7 @@ public class VenFlowService {
                         UUID id) {
                 access.requireProcessingOrSupervisor();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
                 if (entry.stage != VenFlowStage.PROCESS_COMPLETED) {
                         throw badRequest(
@@ -1778,7 +1833,7 @@ public class VenFlowService {
                         UUID id) {
                 access.requireSupervisor();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
                 if (entry.stage != VenFlowStage.SUPERVISOR_INFORMED) {
                         throw badRequest(
@@ -2065,11 +2120,11 @@ public class VenFlowService {
         public VenFlowEntry updateRemarks(UUID id, RemarksRequest req) {
                 require(req, "Request body is required.");
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                VenFlowEntry e = getVisibleForUpdate(id);
 
                 String oldValue = e.remarks;
 
-                e.remarks = req.remarks();
+                e.remarks = clean(req.remarks());
                 e.updatedBy = actor();
 
                 VenFlowEntry saved = entryRepo.save(e);
@@ -2079,50 +2134,113 @@ public class VenFlowService {
                 return saved;
         }
 
-        public VenFlowEntry updateProductDetails(UUID id, ProductDetailsRequest req) {
+        public VenFlowEntry updateProductDetails(
+                        UUID id,
+                        ProductDetailsRequest req) {
+
                 access.requireEngineering();
 
-                require(req, "Request body is required.");
+                require(
+                                req,
+                                "Request body is required.");
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                requireText(
+                                req.productDescription(),
+                                "Product Description is required.");
 
-                String oldValue = "Product=" + e.productDescription
-                                + ", Veneer=" + e.veneerType
-                                + ", Size=" + e.size;
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
-                e.productDescription = clean(req.productDescription());
-                e.materialName = clean(req.productDescription());
-                e.veneerType = clean(req.veneerType());
-                e.size = clean(req.size());
+                if (entry.stage != VenFlowStage.INDENT_CREATED) {
 
-                e.updatedBy = actor();
+                        throw badRequest(
+                                        "Product details can only be changed "
+                                                        + "before the requirement is sent to Store.");
+                }
 
-                VenFlowEntry saved = entryRepo.save(e);
+                String oldValue = "Product="
+                                + entry.productDescription
+                                + ", Material="
+                                + entry.materialName
+                                + ", Veneer="
+                                + entry.veneerType
+                                + ", Size="
+                                + entry.size;
 
-                audit(id, "UPDATE_PRODUCT_DETAILS", oldValue,
-                                "Product=" + saved.productDescription
-                                                + ", Veneer=" + saved.veneerType
-                                                + ", Size=" + saved.size);
+                entry.productDescription = clean(req.productDescription());
+
+                /*
+                 * Do not overwrite materialName.
+                 */
+                entry.veneerType = clean(req.veneerType());
+
+                entry.size = clean(req.size());
+
+                entry.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(entry);
+
+                audit(
+                                id,
+                                "UPDATE_PRODUCT_DETAILS",
+                                oldValue,
+                                "Product="
+                                                + saved.productDescription
+                                                + ", Material="
+                                                + saved.materialName
+                                                + ", Veneer="
+                                                + saved.veneerType
+                                                + ", Size="
+                                                + saved.size);
 
                 return saved;
         }
 
-        public VenFlowEntry updateExpectedDate(UUID id, ExpectedDateRequest req) {
+        public VenFlowEntry updateExpectedDate(
+                        UUID id,
+                        ExpectedDateRequest req) {
+
                 access.requireEngineering();
 
-                require(req, "Request body is required.");
-                require(req.expectedDate(), "Expected Date is required.");
+                require(
+                                req,
+                                "Request body is required.");
 
-                VenFlowEntry e = getVisibleOrThrow(id);
+                require(
+                                req.expectedDate(),
+                                "Expected Date is required.");
 
-                String oldValue = String.valueOf(e.expectedDate);
+                VenFlowEntry entry = getVisibleForUpdate(id);
 
-                e.expectedDate = req.expectedDate();
-                e.updatedBy = actor();
+                if (entry.stage == VenFlowStage.READY_FOR_NEXT_STAGE) {
 
-                VenFlowEntry saved = entryRepo.save(e);
+                        throw badRequest(
+                                        "Expected Date cannot be changed "
+                                                        + "after the workflow has been completed.");
+                }
 
-                audit(id, "UPDATE_EXPECTED_DATE", oldValue, String.valueOf(saved.expectedDate));
+                if (entry.orderDate != null
+                                && req.expectedDate()
+                                                .isBefore(entry.orderDate)) {
+
+                        throw badRequest(
+                                        "Expected Date cannot be before Order Date.");
+                }
+
+                String oldValue = String.valueOf(
+                                entry.expectedDate);
+
+                entry.expectedDate = req.expectedDate();
+
+                entry.updatedBy = actor();
+
+                VenFlowEntry saved = entryRepo.save(entry);
+
+                audit(
+                                id,
+                                "UPDATE_EXPECTED_DATE",
+                                oldValue,
+                                String.valueOf(
+                                                saved.expectedDate));
 
                 return saved;
         }
@@ -2189,23 +2307,11 @@ public class VenFlowService {
         public VenFlowEntry jobDone(
                         UUID id,
                         ProductionActionRequest req) {
-
                 access.requireProcessing();
 
-                VenFlowEntry entry = getVisibleOrThrow(id);
-
-                String remarks = req == null
-                                ? "Completed through legacy job-done endpoint."
-                                : req.remarks();
-
-                return completeProcess(
-                                id,
-                                new ProcessingRequest(
-                                                zero(entry.usedQty),
-                                                zero(entry.wastageQty),
-                                                zero(entry.processingBalanceQty),
-                                                entry.outputImageUrl,
-                                                remarks));
+                throw gone(
+                                "The legacy job-done endpoint is disabled. "
+                                                + "Use /process-complete with quantities and a PROCESS_OUTPUT attachment.");
         }
 
         @Deprecated
@@ -2261,18 +2367,29 @@ public class VenFlowService {
                                 allPlants);
         }
 
-        private VenFlowEntry getVisibleOrThrow(UUID id) {
-                VenFlowEntry e = entryRepo.findById(id)
-                                .orElseThrow(() -> notFound("VenFlow entry not found."));
+        private VenFlowEntry getVisibleOrThrow(
+                        UUID id) {
 
-                access.assertPlantAccess(e.plantCode);
+                access.requireVenFlowAccess();
 
-                return e;
+                VenFlowEntry entry = entryRepo
+                                .findById(id)
+                                .orElseThrow(() -> notFound(
+                                                "VenFlow entry not found."));
+
+                access.assertPlantAccess(
+                                entry.plantCode);
+
+                return entry;
         }
 
         private VenFlowEntry getVisibleForUpdate(
                         UUID id) {
-                VenFlowEntry entry = entryRepo.findByIdForUpdate(id)
+
+                access.requireVenFlowAccess();
+
+                VenFlowEntry entry = entryRepo
+                                .findByIdForUpdate(id)
                                 .orElseThrow(() -> notFound(
                                                 "VenFlow entry not found."));
 
@@ -2418,7 +2535,10 @@ public class VenFlowService {
                                 req.surfaceConditionOk(),
                                 "Surface-condition verification is required.");
 
-                boolean sampleAvailable = hasText(entry.sampleImageUrl);
+                boolean sampleAvailable = attachmentService.existsActiveAttachment(
+                                entryId,
+                                VenFlowAttachmentType.SAMPLE_IMAGE)
+                                || hasText(entry.sampleImageUrl);
 
                 if (sampleAvailable) {
                         require(
@@ -2456,26 +2576,38 @@ public class VenFlowService {
                                         "Rejection / Hold reason is required for a QC exception.");
                 }
 
-                Set<String> evidenceUrls = req.evidenceUrls() == null
-                                ? new LinkedHashSet<>()
-                                : req.evidenceUrls()
-                                                .stream()
-                                                .filter(this::hasText)
-                                                .map(String::trim)
-                                                .collect(Collectors.toCollection(
-                                                                LinkedHashSet::new));
+                Set<UUID> evidenceAttachmentIds = new LinkedHashSet<>();
 
-                for (String evidenceUrl : evidenceUrls) {
-                        requireHttpUrl(
-                                        evidenceUrl,
-                                        "QC Evidence URL");
+                if (req.evidenceAttachmentIds() != null) {
+                        for (UUID attachmentId : req.evidenceAttachmentIds()) {
+
+                                if (attachmentId != null) {
+                                        evidenceAttachmentIds.add(
+                                                        attachmentId);
+                                }
+                        }
+                }
+
+                /*
+                 * Verify that every supplied attachment:
+                 * 1. Exists.
+                 * 2. Is active.
+                 * 3. Belongs to this VenFlow entry.
+                 * 4. Is specifically a QC_EVIDENCE attachment.
+                 */
+                for (UUID attachmentId : evidenceAttachmentIds) {
+
+                        attachmentService.requireActiveAttachment(
+                                        entryId,
+                                        attachmentId,
+                                        VenFlowAttachmentType.QC_EVIDENCE);
                 }
 
                 if ((quantityFailure || checklistFailure)
-                                && evidenceUrls.isEmpty()) {
+                                && evidenceAttachmentIds.isEmpty()) {
 
                         throw badRequest(
-                                        "At least one QC Evidence URL is required "
+                                        "At least one QC Evidence attachment is required "
                                                         + "for Rejected or Hold material.");
                 }
 
@@ -2491,7 +2623,8 @@ public class VenFlowService {
                 inspection.acceptedQty = accepted;
                 inspection.rejectedQty = rejected;
                 inspection.holdQty = hold;
-                inspection.evidenceUrls.addAll(evidenceUrls);
+                inspection.evidenceAttachmentIds.addAll(
+                                evidenceAttachmentIds);
 
                 inspection.sampleAvailable = sampleAvailable;
                 inspection.sampleCompared = req.sampleCompared();
@@ -2600,55 +2733,6 @@ public class VenFlowService {
                 }
 
                 return materialSummary(entryId);
-        }
-
-        private String requireHttpUrl(
-                        String value,
-                        String fieldName) {
-
-                requireText(
-                                value,
-                                fieldName + " is required.");
-
-                String cleaned = value.trim();
-
-                try {
-                        URI uri = URI.create(cleaned);
-
-                        String scheme = uri.getScheme();
-
-                        boolean validScheme = "http".equalsIgnoreCase(scheme)
-                                        || "https".equalsIgnoreCase(scheme);
-
-                        if (!validScheme
-                                        || uri.getHost() == null
-                                        || uri.getHost().isBlank()) {
-
-                                throw badRequest(
-                                                fieldName
-                                                                + " must be a valid HTTP or HTTPS URL.");
-                        }
-
-                        return cleaned;
-
-                } catch (IllegalArgumentException ex) {
-                        throw badRequest(
-                                        fieldName
-                                                        + " must be a valid HTTP or HTTPS URL.");
-                }
-        }
-
-        private String cleanOptionalHttpUrl(
-                        String value,
-                        String fieldName) {
-
-                if (!hasText(value)) {
-                        return null;
-                }
-
-                return requireHttpUrl(
-                                value,
-                                fieldName);
         }
 
         private String actor() {
@@ -2902,15 +2986,17 @@ public class VenFlowService {
                                         previousStage,
                                         nextStage);
 
-                        notificationService
-                                        .publishDirectorActivity(
-                                                        saved,
-                                                        action,
-                                                        previousStage,
-                                                        nextStage,
-                                                        remarks,
-                                                        changedBy);
-
+                        /*
+                         * Same-stage data updates should not produce general
+                         * Director activity notifications.
+                         *
+                         * Important events already have dedicated notifications,
+                         * such as:
+                         * - PO approval required
+                         * - PO approved or returned
+                         * - material received
+                         * - QC exception
+                         */
                         return saved;
                 }
 

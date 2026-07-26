@@ -1,4 +1,25 @@
-import React, { useMemo, useState } from "react";
+import {
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
+
+import {
+	useNavigate,
+	useParams,
+} from "react-router-dom";
+
+import bomFlowApi
+	from "../api/bomFlowApi.js";
+
+import {
+	canApproveBomFlowRevision,
+	canEditBomFlowRevision,
+	canReleaseBomToMatFlow,
+	canReviewBomFlowRevision,
+	canSubmitBomFlowRevision,
+	getBomFlowRole,
+} from "../../../utils/bomflowAccess.js";
 
 import {
 	Box,
@@ -35,130 +56,225 @@ import SpeedOutlinedIcon from "@mui/icons-material/SpeedOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 
-const metalRows = [
-	{
-		item: "MS Pipe 1×1 Inch",
-		category: "Mild Steel",
-		brand: "Tata Steel",
-		unit: "RFT",
-		qty: "45.00",
-		rate: "₹ 120.00",
-		amount: "5,400.00",
-		amountValue: 5400,
-		gst: "18%",
-		status: "valid",
-	},
-	{
-		item: "MS Sheet 2mm",
-		category: "Mild Steel",
-		brand: "Local Vendor",
-		unit: "SQF",
-		qty: "12.50",
-		rate: "₹ 340.00",
-		amount: "4,250.00",
-		amountValue: 4250,
-		gst: "18%",
-		status: "valid",
-	},
-	{
-		item: "Brass Handles Custom",
-		category: "Brass",
-		brand: "Artisan Metals",
-		unit: "NOS",
-		qty: "3.00",
-		rate: "Missing",
-		amount: "-",
-		amountValue: 0,
-		gst: "18%",
-		status: "missing",
-	},
-];
-
-const materialSections = [
-	{
-		key: "metal",
-		title: "Metal",
-		count: "3 Items",
-		total: "₹ 12,450.00",
-		totalValue: 12450,
-		accent: "#60a5fa",
-		openByDefault: true,
-		rows: metalRows,
-		validRates: "2/3",
-	},
-	{
-		key: "wood",
-		title: "Wood / Material",
-		count: "1 Item",
-		total: "₹ 15,800.00",
-		totalValue: 15800,
-		accent: "#8b5cf6",
-		rows: [],
-		validRates: "1/1",
-	},
-	{
-		key: "hardware",
-		title: "Hardware",
-		count: "4 Items",
-		total: "₹ 6,250.00",
-		totalValue: 6250,
-		accent: "#f59e0b",
-		rows: [],
-		validRates: "4/4",
-	},
-	{
-		key: "stone",
-		title: "Stone / Glass",
-		count: "2 Items",
-		total: "₹ 8,900.00",
-		totalValue: 8900,
-		accent: "#14b8a6",
-		rows: [],
-		validRates: "2/2",
-	},
-	{
-		key: "paint",
-		title: "Paint / Polish",
-		count: "1 Item",
-		total: "₹ 1,850.00",
-		totalValue: 1850,
-		accent: "#ec4899",
-		rows: [],
-		validRates: "1/1",
-	},
-];
-
-const quickActions = [
-	{
-		title: "Add Material Row",
-		subtitle: "Insert one more item into selected section",
-		icon: <AddIcon />,
-		path: null,
-	},
-	{
-		title: "Update Missing Rates",
-		subtitle: "Open rate master and complete pending rates",
-		icon: <PriceChangeOutlinedIcon />,
-		path: "/bomflow/rate-master",
-	},
-	{
-		title: "Export BOM Sheet",
-		subtitle: "Generate Excel / PDF costing report",
-		icon: <AssessmentOutlinedIcon />,
-		path: "/bomflow/reports",
-	},
-];
 
 const formatCurrency = (value) => {
 	return `₹ ${Number(value || 0).toLocaleString("en-IN")}`;
 };
 
+const sectionColor = (key) => {
+	const colors = {
+		metal: "#60a5fa",
+		wood: "#8b5cf6",
+		hardware: "#f59e0b",
+		stone: "#14b8a6",
+		glass: "#38bdf8",
+		upholstery: "#ec4899",
+		paint: "#f472b6",
+		packaging: "#22c55e",
+		miscellaneous: "#94a3b8",
+	};
+
+	return colors[key] || "#60a5fa";
+};
+
 export default function BOMFlowBOMBuilder() {
 	const navigate = useNavigate();
+	const { revisionId } = useParams();
 
-	const [openSections, setOpenSections] = useState({
-		metal: true,
-	});
+	const role = getBomFlowRole();
+
+	const [revision, setRevision] =
+		useState(null);
+
+	const [loading, setLoading] =
+		useState(true);
+
+	const [working, setWorking] =
+		useState(false);
+
+	const [error, setError] =
+		useState("");
+
+	const [openSections, setOpenSections] =
+		useState({});
+
+	const loadRevision = async () => {
+		if (!revisionId) {
+			setError("BOM revision ID is missing.");
+			setLoading(false);
+			return;
+		}
+
+		setLoading(true);
+		setError("");
+
+		try {
+			const response =
+				await bomFlowApi.getRevision(
+					revisionId
+				);
+
+			setRevision(response);
+
+			const rows =
+				response?.items ||
+				response?.lines ||
+				[];
+
+			const sectionState = {};
+
+			rows.forEach((row) => {
+				const key =
+					String(
+						row?.section ||
+						row?.category ||
+						"miscellaneous"
+					)
+						.trim()
+						.toLowerCase()
+						.replace(/[^a-z0-9]+/g, "-");
+
+				sectionState[key] = true;
+			});
+
+			setOpenSections(sectionState);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to load BOM revision."
+			);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		loadRevision();
+	}, [revisionId]);
+
+	const revisionRows = useMemo(() => {
+		return (
+			revision?.items ||
+			revision?.lines ||
+			[]
+		);
+	}, [revision]);
+
+	const materialSections = useMemo(() => {
+		const grouped = new Map();
+
+		revisionRows.forEach((row) => {
+			const title =
+				row?.section ||
+				row?.category ||
+				"Miscellaneous";
+
+			const key = String(title)
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-");
+
+			if (!grouped.has(key)) {
+				grouped.set(key, {
+					key,
+					title,
+					rows: [],
+					totalValue: 0,
+					missingRates: 0,
+					accent: sectionColor(key),
+				});
+			}
+
+			const section = grouped.get(key);
+
+			const quantity = Number(
+				row?.requiredQty ??
+				row?.quantity ??
+				0
+			);
+
+			const rate = Number(row?.rate ?? 0);
+
+			const amount = Number(
+				row?.amount ??
+				quantity * rate
+			);
+
+			const normalizedRow = {
+				...row,
+				qty: quantity,
+				rateValue: rate,
+				amountValue: amount,
+				status:
+					rate > 0
+						? "valid"
+						: "missing",
+			};
+
+			section.rows.push(normalizedRow);
+			section.totalValue += amount;
+
+			if (rate <= 0) {
+				section.missingRates += 1;
+			}
+		});
+
+		return Array.from(grouped.values()).map(
+			(section) => ({
+				...section,
+				count: `${section.rows.length} ${section.rows.length === 1
+					? "Item"
+					: "Items"
+					}`,
+				total: formatCurrency(
+					section.totalValue
+				),
+				validRates: `${section.rows.length -
+					section.missingRates
+					}/${section.rows.length}`,
+			})
+		);
+	}, [revisionRows]);
+
+	const totalCost = useMemo(() => {
+		return materialSections.reduce(
+			(sum, section) =>
+				sum + section.totalValue,
+			0
+		);
+	}, [materialSections]);
+
+	const totalRows = revisionRows.length;
+
+	const missingRates =
+		materialSections.reduce(
+			(sum, section) =>
+				sum + section.missingRates,
+			0
+		);
+
+	const validRatePercent =
+		totalRows > 0
+			? Math.round(
+				((totalRows - missingRates) /
+					totalRows) *
+				100
+			)
+			: 0;
+
+	const completionPercent =
+		totalRows > 0
+			? Math.round(
+				((totalRows - missingRates) /
+					totalRows) *
+				100
+			)
+			: 0;
+
+	const editable =
+		revision?.status === "DRAFT" &&
+		canEditBomFlowRevision(role);
 
 	const toggleSection = (key) => {
 		setOpenSections((prev) => ({
@@ -167,26 +283,118 @@ export default function BOMFlowBOMBuilder() {
 		}));
 	};
 
-	const totalCost = useMemo(() => {
-		return materialSections.reduce(
-			(sum, section) => sum + Number(section.totalValue || 0),
-			0
-		);
-	}, []);
+	const handleSubmit = async () => {
+		if (!canSubmitBomFlowRevision(role)) {
+			return;
+		}
 
-	const missingRates = metalRows.filter(
-		(row) => row.status === "missing"
-	).length;
+		if (missingRates > 0) {
+			setError(
+				"Complete all missing rates before submission."
+			);
+			return;
+		}
 
-	const totalRows = materialSections.reduce((sum, section) => {
-		const count = Number(String(section.count).split(" ")[0] || 0);
-		return sum + count;
-	}, 0);
+		setWorking(true);
+		setError("");
 
-	const validRatePercent =
-		Math.round(((totalRows - missingRates) / totalRows) * 100) || 0;
+		try {
+			const updated =
+				await bomFlowApi.submitRevision(
+					revision.id,
+					revision.rowVersion
+				);
 
-	const completionPercent = 72;
+			setRevision(updated);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to submit revision."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const handleVerify = async () => {
+		setWorking(true);
+		setError("");
+
+		try {
+			const updated =
+				await bomFlowApi.verifyRevision(
+					revision.id,
+					"BOM revision verified.",
+					revision.rowVersion
+				);
+
+			setRevision(updated);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to verify revision."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const handleApprove = async () => {
+		setWorking(true);
+		setError("");
+
+		try {
+			const updated =
+				await bomFlowApi.approveRevision(
+					revision.id,
+					"BOM revision approved.",
+					revision.rowVersion
+				);
+
+			setRevision(updated);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to approve revision."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const handleRelease = async () => {
+		setWorking(true);
+		setError("");
+
+		try {
+			const release =
+				await bomFlowApi.releaseToMatFlow(
+					revision.id,
+					revision.rowVersion
+				);
+
+			if (!release?.id) {
+				throw new Error(
+					"MatFlow release ID was not returned."
+				);
+			}
+
+			navigate(
+				`/matflow/releases/${release.id}`
+			);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to release BOM to MatFlow."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
 
 	return (
 		<Box sx={styles.BOM_viewShellSx}>
@@ -195,12 +403,22 @@ export default function BOMFlowBOMBuilder() {
 					<Box sx={heroLeftSx}>
 						<Box sx={chipRowSx}>
 							<Chip label="BOM BUILDER" sx={labelChipSx} />
-							<Chip label="PRJ-2024-089" sx={projectChipSx} />
-							<Chip label="● DRAFT" sx={draftChipSx} />
+							<Chip
+								label={
+									revision?.projectCode ||
+									revision?.projectReference ||
+									"NO PROJECT"
+								}
+								sx={projectChipSx}
+							/>
+							<Chip
+								label={`● ${revision?.status || "LOADING"}`}
+								sx={draftChipSx}
+							/>
 						</Box>
 
 						<Typography sx={pageTitleSx}>
-							Executive Office Desk - Mod A
+							{revision?.productName || "BOM Revision"}
 						</Typography>
 
 						<Typography sx={pageSubSx}>
@@ -212,7 +430,11 @@ export default function BOMFlowBOMBuilder() {
 						<Box sx={heroMetaSx}>
 							<MetaPill
 								label="Revision"
-								value="R2"
+								value={
+									revision?.revisionNo ||
+									revision?.revisionNumber ||
+									"-"
+								}
 								accent="#60a5fa"
 							/>
 
@@ -260,19 +482,68 @@ export default function BOMFlowBOMBuilder() {
 						</Card>
 
 						<Box sx={heroActionRowSx}>
-							<Button
-								startIcon={<SaveOutlinedIcon />}
-								sx={secondaryBtnSx}
-							>
-								Save Draft
-							</Button>
+							{editable && (
+								<Button
+									disabled={working}
+									startIcon={<SaveOutlinedIcon />}
+									onClick={loadRevision}
+									sx={secondaryBtnSx}
+								>
+									Refresh Draft
+								</Button>
+							)}
 
-							<Button
-								endIcon={<ArrowForwardIcon />}
-								sx={primaryBtnSx}
-							>
-								Send Review
-							</Button>
+							{revision?.status === "DRAFT" &&
+								canSubmitBomFlowRevision(role) && (
+									<Button
+										disabled={
+											working ||
+											missingRates > 0 ||
+											totalRows === 0
+										}
+										endIcon={<ArrowForwardIcon />}
+										onClick={handleSubmit}
+										sx={primaryBtnSx}
+									>
+										Send Review
+									</Button>
+								)}
+
+							{[
+								"SUBMITTED",
+								"UNDER_REVIEW",
+							].includes(revision?.status) &&
+								canReviewBomFlowRevision(role) && (
+									<Button
+										disabled={working}
+										onClick={handleVerify}
+										sx={primaryBtnSx}
+									>
+										Verify Revision
+									</Button>
+								)}
+
+							{revision?.status === "VERIFIED" &&
+								canApproveBomFlowRevision(role) && (
+									<Button
+										disabled={working}
+										onClick={handleApprove}
+										sx={primaryBtnSx}
+									>
+										Approve Revision
+									</Button>
+								)}
+
+							{revision?.status === "APPROVED" &&
+								canReleaseBomToMatFlow(role) && (
+									<Button
+										disabled={working}
+										onClick={handleRelease}
+										sx={primaryBtnSx}
+									>
+										Release to MatFlow
+									</Button>
+								)}
 						</Box>
 					</Box>
 				</Box>
@@ -598,7 +869,11 @@ export default function BOMFlowBOMBuilder() {
 	);
 }
 
-function SectionTable({ rows }) {
+function SectionTable({
+	rows,
+	editable,
+	onDelete,
+}) {
 	return (
 		<Box sx={tableShellSx}>
 			<Box sx={tableHeadSx}>
@@ -621,7 +896,16 @@ function SectionTable({ rows }) {
 						key={row.item}
 						sx={missing ? missingRowSx : tableRowSx}
 					>
-						<Box sx={deleteCellSx}>
+						<Box
+							sx={{
+								...deleteCellSx,
+								opacity: editable ? 1 : 0.3,
+								pointerEvents: editable
+									? "auto"
+									: "none",
+							}}
+							onClick={() => onDelete?.(row)}
+						>
 							<DeleteOutlineIcon fontSize="small" />
 						</Box>
 
@@ -637,19 +921,17 @@ function SectionTable({ rows }) {
 								/>
 							)}
 
-							<Typography
-								sx={missing ? missingItemSx : itemNameSx}
-							>
-								{row.item}
+							<Typography sx={itemNameSx}>
+								{row.itemName || row.item}
 							</Typography>
 						</Box>
 
 						<Typography sx={cellTextSx}>
-							{row.category}
+							{row.category || row.section}
 						</Typography>
 
 						<Typography sx={cellTextSx}>
-							{row.brand}
+							{row.brand || row.vendorName || "-"}
 						</Typography>
 
 						<Typography sx={cellStrongSx}>
@@ -657,24 +939,20 @@ function SectionTable({ rows }) {
 						</Typography>
 
 						<Typography sx={numberCellSx}>
-							{row.qty}
+							{Number(row.qty || 0).toLocaleString(
+								"en-US",
+								{
+									maximumFractionDigits: 3,
+								}
+							)}
 						</Typography>
 
-						{missing ? (
-							<Box sx={missingRateSx}>
-								Missing
-							</Box>
-						) : (
-							<Typography sx={rateCellSx}>
-								{row.rate}{" "}
-								<span style={{ color: "#22c55e" }}>
-									●
-								</span>
-							</Typography>
-						)}
+						<Typography sx={rateCellSx}>
+							{formatCurrency(row.rateValue)}
+						</Typography>
 
 						<Typography sx={numberCellSx}>
-							{row.amount}
+							{formatCurrency(row.amountValue)}
 						</Typography>
 
 						<Typography sx={numberCellSx}>

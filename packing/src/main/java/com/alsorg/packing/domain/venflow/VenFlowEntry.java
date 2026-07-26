@@ -476,9 +476,6 @@ public class VenFlowEntry {
             issueReadyQty = BigDecimal.ZERO;
         }
 
-        if (rowVersion == null) {
-            rowVersion = 0L;
-        }
         if (processingBalanceQty == null) {
             processingBalanceQty = BigDecimal.ZERO;
         }

@@ -42,8 +42,75 @@ public final class VenFlowDtos {
                         BigDecimal requiredQty,
                         VenFlowUnit unit,
                         String bomReference,
-                        String bomAttachmentUrl,
-                        String sampleImageUrl,
+                        String remarks) {
+        }
+
+        public record PoRequest(
+                        String vendorName,
+                        String poNo,
+                        LocalDate poDate,
+                        BigDecimal orderedQty,
+                        BigDecimal poAmount,
+                        UUID poAttachmentId,
+                        String remarks,
+                        Long rowVersion) {
+        }
+
+        public record DirectorDecisionRequest(
+                        UUID verificationId,
+                        Integer verificationRevision,
+                        Long rowVersion,
+                        String remarks) {
+        }
+
+        public record QcInspectionRequest(
+                        BigDecimal inspectedQty,
+                        BigDecimal acceptedQty,
+                        BigDecimal rejectedQty,
+                        BigDecimal holdQty,
+
+                        Boolean sampleCompared,
+                        Boolean grainMatch,
+                        Boolean shadeMatch,
+                        Boolean thicknessOk,
+                        Boolean sizeOk,
+                        Boolean surfaceConditionOk,
+
+                        String qcRemarks,
+                        String rejectionReason,
+
+                        List<UUID> evidenceAttachmentIds,
+                        Long allocationVersion) {
+        }
+
+        public record MaterialAllocationResponse(
+                        UUID id,
+                        VenFlowMaterialSource sourceType,
+                        VenFlowAllocationStatus status,
+
+                        BigDecimal plannedQty,
+                        BigDecimal receivedQty,
+
+                        BigDecimal qcInspectedQty,
+                        BigDecimal qcAcceptedQty,
+                        BigDecimal qcRejectedQty,
+                        BigDecimal qcHoldQty,
+                        BigDecimal qcPendingQty,
+
+                        BigDecimal issuedQty,
+                        BigDecimal issueReadyQty,
+
+                        String purchaseRequestNo,
+                        LocalDate requisitionDate,
+
+                        Long rowVersion) {
+        }
+
+        public record ProcessingRequest(
+                        BigDecimal usedQty,
+                        BigDecimal wastageQty,
+                        BigDecimal processingBalanceQty,
+                        UUID outputAttachmentId,
                         String remarks) {
         }
 
@@ -89,27 +156,11 @@ public final class VenFlowDtos {
                         String remarks) {
         }
 
-        public record PoRequest(
-                        String vendorName,
-                        String poNo,
-                        LocalDate poDate,
-                        BigDecimal orderedQty,
-                        BigDecimal poAmount,
-                        String poDocumentUrl,
-                        String remarks,
-                        Long rowVersion) {
-        }
-
         public record VendorOrderRequest(
                         String vendorOrderReference,
                         String vendorAcknowledgementNo,
                         LocalDate vendorExpectedDate,
                         String remarks) {
-        }
-
-        public record DirectorDecisionRequest(
-                        String remarks,
-                        Long rowVersion) {
         }
 
         public record MaterialReceivedRequest(
@@ -128,48 +179,6 @@ public final class VenFlowDtos {
                         VenFlowQcStatus qcStatus,
                         String qcRemarks,
                         String rejectionReason) {
-        }
-
-        public record QcInspectionRequest(
-                        BigDecimal inspectedQty,
-                        BigDecimal acceptedQty,
-                        BigDecimal rejectedQty,
-                        BigDecimal holdQty,
-
-                        Boolean sampleCompared,
-                        Boolean grainMatch,
-                        Boolean shadeMatch,
-                        Boolean thicknessOk,
-                        Boolean sizeOk,
-                        Boolean surfaceConditionOk,
-
-                        String qcRemarks,
-                        String rejectionReason,
-
-                        List<String> evidenceUrls,
-                        Long allocationVersion) {
-        }
-
-        public record MaterialAllocationResponse(
-                        UUID id,
-                        VenFlowMaterialSource sourceType,
-                        VenFlowAllocationStatus status,
-
-                        BigDecimal plannedQty,
-                        BigDecimal receivedQty,
-
-                        BigDecimal qcInspectedQty,
-                        BigDecimal qcAcceptedQty,
-                        BigDecimal qcRejectedQty,
-                        BigDecimal qcHoldQty,
-                        BigDecimal qcPendingQty,
-
-                        BigDecimal issuedQty,
-                        BigDecimal issueReadyQty,
-
-                        String purchaseRequestNo,
-                        LocalDate requisitionDate,
-                        Long rowVersion) {
         }
 
         public record MaterialSummaryResponse(
@@ -213,14 +222,6 @@ public final class VenFlowDtos {
         public record IssueMaterialRequest(
                         BigDecimal issuedQty,
                         String issuedTo,
-                        String remarks) {
-        }
-
-        public record ProcessingRequest(
-                        BigDecimal usedQty,
-                        BigDecimal wastageQty,
-                        BigDecimal processingBalanceQty,
-                        String outputImageUrl,
                         String remarks) {
         }
 

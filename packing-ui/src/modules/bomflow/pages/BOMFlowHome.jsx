@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 
 import { useNavigate } from "react-router-dom";
-
+import { useAuth } from "../../../auth/AuthContext.jsx";
 import * as styles from "../styles/bomStyles.js";
 
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -25,75 +25,86 @@ import LogoutIcon from "@mui/icons-material/Logout";
 
 const modules = [
 	{
+		title: "Dashboard",
+		subtitle:
+			"View live products, revisions, approvals, missing rates and MatFlow releases.",
+		icon: <AssessmentOutlinedIcon />,
+		status: "Available",
+		action: "Open Dashboard",
+		path: "/bomflow/dashboard",
+		enabled: true,
+	},
+	{
 		title: "Product Master",
 		subtitle:
-			"Create product details, drawing number, collection, size, category and product photo.",
+			"Create products, dimensions, drawing references, categories and project allocation.",
 		icon: <Inventory2OutlinedIcon />,
-		status: "Ready to Start",
-		action: "Create Product",
+		status: "Available",
+		action: "View Products",
 		path: "/bomflow/products",
 		enabled: true,
 	},
 	{
 		title: "BOM Builder",
 		subtitle:
-			"Create section-wise BOM for metal, wood, hardware, stone, glass, upholstery, paint and labour.",
+			"Select a product and open one of its BOM revisions for material planning.",
 		icon: <RuleOutlinedIcon />,
-		status: "Ready to Start",
-		action: "Open BOM Builder",
-		path: "/bomflow/bom-builder",
+		status: "Via Product",
+		action: "Select Product",
+		path: "/bomflow/products",
 		enabled: true,
 	},
 	{
 		title: "Rate Master",
 		subtitle:
-			"Maintain material rates, vendor rates, purchase register rates, bill copies and effective dates.",
+			"Maintain material rates, purchase rates, effective dates and rate evidence.",
 		icon: <PriceChangeOutlinedIcon />,
-		status: "Planned",
+		status: "Next Phase",
 		action: "Open Rate Master",
 		path: "/bomflow/rate-master",
 		enabled: false,
 	},
 	{
-		title: "Labour Master",
-		subtitle:
-			"Maintain process-wise labour rates, departments, working time and labour calculation rules.",
-		icon: <EngineeringOutlinedIcon />,
-		status: "Planned",
-		action: "Open Labour Master",
-		path: "/bomflow/labour-master",
-		enabled: false,
-	},
-	{
 		title: "Costing Engine",
 		subtitle:
-			"Calculate direct material, direct labour, overheads, prime cost and final product costing.",
+			"Calculate material, labour, overheads, product cost and selling-price logic.",
 		icon: <CalculateOutlinedIcon />,
-		status: "Planned",
+		status: "Next Phase",
 		action: "View Costing",
 		path: "/bomflow/costing",
 		enabled: false,
 	},
 	{
-		title: "Reports",
+		title: "MatFlow Releases",
 		subtitle:
-			"Export Price Sheet, Direct Material, Direct Labour, Change Log, PDF approval and summaries.",
-		icon: <AssessmentOutlinedIcon />,
-		status: "Planned",
-		action: "View Reports",
-		path: "/bomflow/reports",
-		enabled: false,
+			"View approved BOM revisions released for production material planning.",
+		icon: <EngineeringOutlinedIcon />,
+		status: "Available",
+		action: "Open MatFlow",
+		path: "/matflow/releases",
+		enabled: true,
 	},
 ];
 
 export default function BOMFlowHome() {
 	const navigate = useNavigate();
 
-	const username = localStorage.getItem("username") || "User";
+	const {
+		user,
+		logout: authLogout,
+	} = useAuth();
 
-	const logout = () => {
-		localStorage.clear();
-		navigate("/login", { replace: true });
+	const username =
+		user?.username ||
+		localStorage.getItem("username") ||
+		"User";
+
+	const handleLogout = async () => {
+		await authLogout();
+
+		navigate("/login", {
+			replace: true,
+		});
 	};
 
 	return (
@@ -131,7 +142,7 @@ export default function BOMFlowHome() {
 
 						<Button
 							startIcon={<LogoutIcon />}
-							onClick={logout}
+							onClick={handleLogout}
 							sx={{
 								...styles.BOM_secondaryActionBtnSx,
 								color: "#fca5a5",
@@ -205,15 +216,15 @@ export default function BOMFlowHome() {
 											item.enabled
 												? styles.BOM_openBtnSx
 												: {
-														height: 42,
-														borderRadius: "14px",
-														textTransform: "none",
-														fontWeight: 850,
-														borderColor:
-															"rgba(255,255,255,.08) !important",
-														color:
-															"rgba(255,255,255,.36) !important",
-												  }
+													height: 42,
+													borderRadius: "14px",
+													textTransform: "none",
+													fontWeight: 850,
+													borderColor:
+														"rgba(255,255,255,.08) !important",
+													color:
+														"rgba(255,255,255,.36) !important",
+												}
 										}
 									>
 										{item.enabled ? item.action : "Coming Soon"}

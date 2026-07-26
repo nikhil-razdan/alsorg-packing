@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
-import VenFlowRoutes from "./modules/venflow/VenFlowRoutes";
+import MatFlowRoutes from "./modules/matflow/MatFlowRoutes";
 import DashboardPage from "./pages/Dashboard";
 import ZohoItemsPage from "./pages/ZohoItemsPage";
 import LoginPage from "./pages/LoginPage";
@@ -14,11 +14,13 @@ import RequireAuth from "./auth/RequireAuth";
 import RequireRole from "./auth/RequireRole";
 import RequireWarehouseAccess from "./auth/RequireWarehouseAccess";
 import RequireModule from "./auth/RequireModule";
-import { AuthProvider } from "./auth/AuthContext";
+import {
+	AuthProvider,
+	useAuth,
+} from "./auth/AuthContext";
 
 import ModuleHub from "./shell/ModuleHub";
 import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
-import { useAuth } from "./auth/AuthContext";
 import useViewportHeight from "./useViewportHeight";
 
 function PackFlowDefaultRedirect() {
@@ -201,12 +203,24 @@ function App() {
 					/>
 
 					<Route
+						path="/matflow/*"
+						element={
+							<RequireAuth>
+								<RequireModule moduleKey="MATFLOW">
+									<MatFlowRoutes />
+								</RequireModule>
+							</RequireAuth>
+						}
+					/>
+
+					<Route
 						path="/venflow/*"
 						element={
 							<RequireAuth>
-								<RequireModule moduleKey="VENFLOW">
-									<VenFlowRoutes />
-								</RequireModule>
+								<Navigate
+									to="/matflow"
+									replace
+								/>
 							</RequireAuth>
 						}
 					/>

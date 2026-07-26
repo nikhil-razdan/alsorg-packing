@@ -31,50 +31,50 @@ const dashboardStats = [
 	{
 		key: "products",
 		title: "Total Products",
-		value: "48",
-		subtle: "Product entities created",
+		value: "0",
+		subtle: "Waiting for live product data",
 		accent: "#60a5fa",
 		icon: <Inventory2OutlinedIcon />,
 	},
 	{
 		key: "active",
 		title: "Active Costings",
-		value: "12",
-		subtle: "Currently under costing",
+		value: "0",
+		subtle: "Waiting for live revision data",
 		accent: "#22c55e",
 		icon: <CalculateOutlinedIcon />,
 	},
 	{
 		key: "draft",
 		title: "Draft BOMs",
-		value: "7",
-		subtle: "Pending completion",
+		value: "0",
+		subtle: "Waiting for live revision data",
 		accent: "#f59e0b",
 		icon: <PendingActionsOutlinedIcon />,
 	},
 	{
 		key: "approved",
 		title: "Approved BOMs",
-		value: "21",
-		subtle: "Final approved versions",
+		value: "0",
+		subtle: "Waiting for live approval data",
 		accent: "#34d399",
 		icon: <CheckCircleOutlineOutlinedIcon />,
 	},
 	{
 		key: "missing",
 		title: "Missing Rates",
-		value: "9",
-		subtle: "Items need rate update",
+		value: "0",
+		subtle: "Waiting for live rate data",
 		accent: "#ef4444",
 		icon: <WarningAmberOutlinedIcon />,
 	},
 	{
-		key: "avg",
-		title: "Avg Product Cost",
-		value: "₹ 42.8K",
-		subtle: "Average calculated cost",
+		key: "released",
+		title: "MatFlow Releases",
+		value: "0",
+		subtle: "Approved BOM releases",
 		accent: "#8b5cf6",
-		icon: <CurrencyRupeeOutlinedIcon />,
+		icon: <RuleOutlinedIcon />,
 	},
 ];
 
@@ -299,9 +299,7 @@ export default function BOMFlowDashboard() {
 						</Typography>
 
 						<Typography sx={insightSubSx}>
-							This panel can later be connected with live backend APIs.
-							For now, it gives a management-style snapshot of the selected
-							dashboard metric.
+							Select a metric to view current BOMFlow workflow information.
 						</Typography>
 					</Box>
 

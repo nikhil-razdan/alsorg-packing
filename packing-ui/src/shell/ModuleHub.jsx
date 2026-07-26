@@ -1,5 +1,9 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+
+import {
+	useNavigate,
+} from "react-router-dom";
+
 import {
 	Box,
 	Button,
@@ -9,14 +13,31 @@ import {
 	Typography,
 } from "@mui/material";
 
-import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import LogoutIcon from "@mui/icons-material/Logout";
+import Inventory2OutlinedIcon
+	from "@mui/icons-material/Inventory2Outlined";
 
-import { useAuth } from "../auth/AuthContext";
+import AccountTreeOutlinedIcon
+	from "@mui/icons-material/AccountTreeOutlined";
+
+import LayersOutlinedIcon
+	from "@mui/icons-material/LayersOutlined";
+
+import AdminPanelSettingsOutlinedIcon
+	from "@mui/icons-material/AdminPanelSettingsOutlined";
+
+import ArrowForwardIcon
+	from "@mui/icons-material/ArrowForward";
+
+import LogoutIcon
+	from "@mui/icons-material/Logout";
+
+import { useAuth }
+	from "../auth/AuthContext";
+
+import {
+	MODULE_KEYS,
+	hasModuleAccessFromUser,
+} from "../utils/moduleAccess";
 
 export default function ModuleHub() {
 	const navigate = useNavigate();
@@ -28,79 +49,162 @@ export default function ModuleHub() {
 		logout,
 	} = useAuth();
 
-	const username = user?.username || "User";
+	const username =
+		user?.username ||
+		localStorage.getItem("username") ||
+		"User";
 
-	const hasModuleAccess = (moduleKey) =>
-		modules.includes(moduleKey);
+	/*
+	 * AuthContext may keep role/modules separately from user.
+	 * Build one reliable object for module-access checks.
+	 */
+	const accessUser = {
+		...(user || {}),
+		role:
+			role ||
+			user?.role ||
+			"",
+		modules:
+			Array.isArray(modules)
+				? modules
+				: Array.isArray(user?.modules)
+					? user.modules
+					: [],
+	};
+
+	const canAccess = (moduleKey) => {
+		return hasModuleAccessFromUser(
+			accessUser,
+			moduleKey
+		);
+	};
 
 	const cards = [
 		{
-			key: "PACKFLOW",
+			key: MODULE_KEYS.PACKFLOW,
 			title: "PackFlow",
 			subtitle:
 				"Inventory, packing, warehouse, dispatch, logistics and operational tracking.",
-			icon: <Inventory2OutlinedIcon fontSize="large" />,
+			icon: (
+				<Inventory2OutlinedIcon
+					fontSize="large"
+				/>
+			),
 			path: "/packflow/dashboard",
-			tags: ["Inventory", "Warehouse", "Dispatch", "Logistics"],
-			visible: hasModuleAccess("PACKFLOW"),
+			tags: [
+				"Inventory",
+				"Warehouse",
+				"Dispatch",
+				"Logistics",
+			],
+			visible: canAccess(
+				MODULE_KEYS.PACKFLOW
+			),
 			accent: "Inventory Control",
 		},
 		{
-			key: "BOMFLOW",
+			key: MODULE_KEYS.BOMFLOW,
 			title: "BOMFlow",
 			subtitle:
-				"Product BOM creation, material costing, labour costing, rate master and cost control.",
-			icon: <AccountTreeOutlinedIcon fontSize="large" />,
+				"Product master, BOM revisions, costing, engineering review, approval and MatFlow release.",
+			icon: (
+				<AccountTreeOutlinedIcon
+					fontSize="large"
+				/>
+			),
 			path: "/bomflow/dashboard",
-			tags: ["Product Master", "BOM Builder", "Rate Master", "Costing"],
-			visible: hasModuleAccess("BOMFLOW"),
-			accent: "Costing Control",
+			tags: [
+				"Product Master",
+				"BOM Builder",
+				"Review",
+				"Approval",
+			],
+			visible: canAccess(
+				MODULE_KEYS.BOMFLOW
+			),
+			accent: "BOM Control",
 		},
 		{
-			key: "VENFLOW",
-			title: "VenFlow",
+			key: MODULE_KEYS.MATFLOW,
+			title: "MatFlow",
 			subtitle:
-				"Veneer requirement, store availability, requisition, ordered quantity, received quantity and balance tracking.",
-			icon: <LayersOutlinedIcon fontSize="large" />,
-			path: "/venflow/dashboard",
-			tags: ["Veneer", "Production", "Store", "Requisition"],
-			visible: hasModuleAccess("VENFLOW"),
-			accent: "Veneer Control",
+				"Approved BOM releases, production requisitions, store blocking, material indents and procurement workflow.",
+			icon: (
+				<LayersOutlinedIcon
+					fontSize="large"
+				/>
+			),
+			path: "/matflow",
+			tags: [
+				"BOM Releases",
+				"Production",
+				"Store",
+				"Purchase",
+			],
+			visible: canAccess(
+				MODULE_KEYS.MATFLOW
+			),
+			accent: "Material Control",
 		},
 		{
 			key: "USERS",
 			title: "User Management",
 			subtitle:
-				"Manage users, roles, module visibility, access control and admin permissions.",
-			icon: <AdminPanelSettingsOutlinedIcon fontSize="large" />,
+				"Manage users, roles, module visibility, access control and administrative permissions.",
+			icon: (
+				<AdminPanelSettingsOutlinedIcon
+					fontSize="large"
+				/>
+			),
 			path: "/users",
-			tags: ["Users", "Roles", "Access", "Permissions"],
-			visible: role === "ADMIN",
+			tags: [
+				"Users",
+				"Roles",
+				"Modules",
+				"Permissions",
+			],
+			visible:
+				String(role || "")
+					.trim()
+					.toUpperCase() ===
+				"ADMIN",
 			accent: "Admin Control",
 		},
 	].filter((card) => card.visible);
 
 	const handleLogout = async () => {
 		await logout();
-		navigate("/login", { replace: true });
+
+		navigate("/login", {
+			replace: true,
+		});
 	};
 
 	return (
 		<Box sx={pageSx}>
 			<Box sx={ambientGlowOne} />
 			<Box sx={ambientGlowTwo} />
-			<Box sx={backgroundText}>FlowSuite</Box>
+
+			<Box sx={backgroundText}>
+				FlowSuite
+			</Box>
 
 			<Box sx={topBarSx}>
 				<Box sx={brandWrapSx}>
-					<Box sx={brandMarkSx}>A</Box>
+					<Box sx={brandMarkSx}>
+						A
+					</Box>
 
 					<Box>
-						<Typography sx={brandTitleSx}>
+						<Typography
+							sx={brandTitleSx}
+						>
 							FlowSuite
 						</Typography>
 
-						<Typography sx={brandSubSx}>
+						<Typography
+							sx={brandSubSx}
+						>
 							Alsorg Operations Suite
 						</Typography>
 					</Box>
@@ -117,60 +221,106 @@ export default function ModuleHub() {
 
 			<Box sx={containerSx}>
 				<Box sx={heroSx}>
-					<Chip label="GLOBAL MODULE HUB" sx={badgeSx} />
+					<Chip
+						label="GLOBAL MODULE HUB"
+						sx={badgeSx}
+					/>
 
-					<Typography variant="h2" sx={titleSx}>
+					<Typography
+						variant="h2"
+						sx={titleSx}
+					>
 						Welcome, {username}
 					</Typography>
 
 					<Typography sx={subtitleSx}>
 						Select the system module you want to open. Access is shown
-						based on the permissions assigned by Admin.
+						based on permissions assigned by Admin.
 					</Typography>
 				</Box>
 
 				{cards.length === 0 ? (
 					<Card sx={emptyCardSx}>
-						<Typography variant="h6" sx={{ fontWeight: 900, color: "#fff" }}>
+						<Typography
+							variant="h6"
+							sx={{
+								fontWeight: 900,
+								color: "#fff",
+							}}
+						>
 							No module access assigned
 						</Typography>
 
-						<Typography sx={{ mt: 1, color: "rgba(255,255,255,.58)" }}>
-							Please contact Admin to assign PackFlow, BOMFlow or VenFlow access.
+						<Typography
+							sx={{
+								mt: 1,
+								color:
+									"rgba(255,255,255,.58)",
+							}}
+						>
+							Please contact Admin to assign PackFlow, BOMFlow or
+							MatFlow access.
 						</Typography>
 					</Card>
 				) : (
 					<Box sx={moduleGridSx}>
 						{cards.map((card) => (
-							<Card key={card.key} sx={moduleCardSx}>
-								<CardContent sx={cardContentSx}>
+							<Card
+								key={card.key}
+								sx={moduleCardSx}
+							>
+								<CardContent
+									sx={cardContentSx}
+								>
 									<Box sx={cardTopSx}>
 										<Box sx={iconBoxSx}>
 											{card.icon}
 										</Box>
 
-										<Chip label={card.accent} size="small" sx={cardChipSx} />
+										<Chip
+											label={card.accent}
+											size="small"
+											sx={cardChipSx}
+										/>
 									</Box>
 
-									<Typography variant="h4" sx={cardTitleSx}>
+									<Typography
+										variant="h4"
+										sx={cardTitleSx}
+									>
 										{card.title}
 									</Typography>
 
-									<Typography sx={cardSubtitleSx}>
+									<Typography
+										sx={cardSubtitleSx}
+									>
 										{card.subtitle}
 									</Typography>
 
 									<Box sx={tagWrapSx}>
-										{card.tags.map((tag) => (
-											<Chip key={tag} label={tag} size="small" sx={tagSx} />
-										))}
+										{card.tags.map(
+											(tag) => (
+												<Chip
+													key={tag}
+													label={tag}
+													size="small"
+													sx={tagSx}
+												/>
+											)
+										)}
 									</Box>
 
 									<Button
 										fullWidth
 										variant="contained"
-										endIcon={<ArrowForwardIcon />}
-										onClick={() => navigate(card.path)}
+										endIcon={
+											<ArrowForwardIcon />
+										}
+										onClick={() =>
+											navigate(
+												card.path
+											)
+										}
 										sx={openBtnSx}
 									>
 										Open {card.title}

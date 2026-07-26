@@ -1,4 +1,16 @@
-import React, { useMemo, useState } from "react";
+import {
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
+
+import {
+	useNavigate,
+	useParams,
+} from "react-router-dom";
+
+import bomFlowApi
+	from "../api/bomFlowApi";
 
 import {
 	Box,
@@ -10,6 +22,7 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
+
 
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import StraightenOutlinedIcon from "@mui/icons-material/StraightenOutlined";
@@ -29,18 +42,33 @@ import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 
 export default function BOMFlowProductMaster() {
+	const navigate = useNavigate();
+	const { productId } = useParams();
+
 	const [form, setForm] = useState({
 		productName: "",
 		productCode: "",
 		drawingNumber: "",
 		category: "",
 		collection: "",
-		length: "0.00",
-		width: "0.00",
-		height: "0.00",
+		length: "",
+		width: "",
+		height: "",
 		projectReference: "",
 		clientEntity: "",
 	});
+
+	const [savedProduct, setSavedProduct] =
+		useState(null);
+
+	const [loading, setLoading] =
+		useState(Boolean(productId));
+
+	const [saving, setSaving] =
+		useState(false);
+
+	const [error, setError] =
+		useState("");
 
 	const updateField = (key, value) => {
 		setForm((prev) => ({
@@ -49,28 +77,261 @@ export default function BOMFlowProductMaster() {
 		}));
 	};
 
+	useEffect(() => {
+		if (!productId) {
+			return;
+		}
+
+		let active = true;
+
+		const loadProduct = async () => {
+			setLoading(true);
+			setError("");
+
+			try {
+				const product =
+					await bomFlowApi.getProduct(productId);
+
+				if (!active) {
+					return;
+				}
+
+				setSavedProduct(product);
+
+				setForm({
+					productName:
+						product?.productName || "",
+					productCode:
+						product?.productCode || "",
+					drawingNumber:
+						product?.drawingNumber || "",
+					category:
+						product?.category || "",
+					collection:
+						product?.collection || "",
+					length:
+						product?.length != null
+							? String(product.length)
+							: "",
+					width:
+						product?.width != null
+							? String(product.width)
+							: "",
+					height:
+						product?.height != null
+							? String(product.height)
+							: "",
+					projectReference:
+						product?.projectReference || "",
+					clientEntity:
+						product?.clientEntity || "",
+				});
+			} catch (requestError) {
+				if (active) {
+					setError(
+						requestError?.response?.data?.message ||
+						requestError?.message ||
+						"Unable to load product."
+					);
+				}
+			} finally {
+				if (active) {
+					setLoading(false);
+				}
+			}
+		};
+
+		loadProduct();
+
+		return () => {
+			active = false;
+		};
+	}, [productId]);
+
+	const hasText = (value) => {
+		return String(value ?? "").trim().length > 0;
+	};
+
+	const hasPositiveNumber = (value) => {
+		const numericValue = Number(value);
+
+		return (
+			Number.isFinite(numericValue) &&
+			numericValue > 0
+		);
+	};
+
 	const completion = useMemo(() => {
-		const requiredFields = [
-			form.productName,
-			form.productCode,
-			form.category,
-			form.length,
-			form.width,
-			form.height,
+		const checks = [
+			hasText(form.productName),
+			hasText(form.productCode),
+			hasText(form.category),
+			hasPositiveNumber(form.length),
+			hasPositiveNumber(form.width),
+			hasPositiveNumber(form.height),
 		];
 
-		const filled = requiredFields.filter((value) => {
-			return String(value || "").trim() !== "";
-		}).length;
+		const completed =
+			checks.filter(Boolean).length;
 
-		return Math.round((filled / requiredFields.length) * 100);
+		return Math.round(
+			(completed / checks.length) * 100
+		);
 	}, [form]);
 
-	const productTitle =
-		form.productName.trim() || "New Product Entity";
+	const validateForm = () => {
+		if (!hasText(form.productName)) {
+			return "Product name is required.";
+		}
 
-	const productCode =
-		form.productCode.trim() || "CODE PENDING";
+		if (!hasText(form.productCode)) {
+			return "Product code is required.";
+		}
+
+		if (!hasText(form.category)) {
+			return "Product category is required.";
+		}
+
+		if (!hasPositiveNumber(form.length)) {
+			return "Length must be greater than zero.";
+		}
+
+		if (!hasPositiveNumber(form.width)) {
+			return "Width must be greater than zero.";
+		}
+
+		if (!hasPositiveNumber(form.height)) {
+			return "Height must be greater than zero.";
+		}
+
+		return "";
+	};
+
+	const buildPayload = () => {
+		return {
+			productName: form.productName.trim(),
+			productCode:
+				form.productCode.trim().toUpperCase(),
+			drawingNumber:
+				form.drawingNumber.trim() || null,
+			category: form.category,
+			collection:
+				form.collection.trim() || null,
+			length: Number(form.length),
+			width: Number(form.width),
+			height: Number(form.height),
+			projectReference:
+				form.projectReference.trim() || null,
+			clientEntity:
+				form.clientEntity.trim() || null,
+		};
+	};
+
+	const saveProduct = async () => {
+		const validationError = validateForm();
+
+		if (validationError) {
+			setError(validationError);
+			return null;
+		}
+
+		setSaving(true);
+		setError("");
+
+		try {
+			const payload = buildPayload();
+
+			const product =
+				savedProduct?.id || productId
+					? await bomFlowApi.updateProduct(
+						savedProduct?.id || productId,
+						payload,
+						savedProduct?.rowVersion
+					)
+					: await bomFlowApi.createProduct(
+						payload
+					);
+
+			setSavedProduct(product);
+
+			return product;
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to save product."
+			);
+
+			return null;
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const handleSaveDraft = async () => {
+		const product = await saveProduct();
+
+		if (
+			product?.id &&
+			!productId
+		) {
+			navigate(
+				`/bomflow/products/${product.id}/edit`,
+				{ replace: true }
+			);
+		}
+	};
+
+	const handleStartBom = async () => {
+		const product = await saveProduct();
+
+		if (!product?.id) {
+			return;
+		}
+
+		try {
+			const existing =
+				await bomFlowApi.listProductRevisions(
+					product.id
+				);
+
+			const revisions = Array.isArray(existing)
+				? existing
+				: existing?.content || [];
+
+			let revision = revisions.find(
+				(item) =>
+					item?.status === "DRAFT"
+			);
+
+			if (!revision) {
+				revision =
+					await bomFlowApi.createRevision(
+						product.id,
+						{
+							remarks:
+								"Initial BOM revision",
+						}
+					);
+			}
+
+			if (!revision?.id) {
+				throw new Error(
+					"BOM revision ID was not returned."
+				);
+			}
+
+			navigate(
+				`/bomflow/revisions/${revision.id}`
+			);
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.message ||
+				"Unable to start BOM revision."
+			);
+		}
+	};
 
 	return (
 		<Box sx={pageSx}>
@@ -126,13 +387,21 @@ export default function BOMFlowProductMaster() {
 
 					<Box sx={heroActionRowSx}>
 						<Button
+							disabled={saving || loading}
+							onClick={handleSaveDraft}
 							startIcon={<SaveOutlinedIcon />}
 							sx={secondaryBtnSx}
 						>
-							Save Draft
+							{saving ? "Saving..." : "Save Draft"}
 						</Button>
 
 						<Button
+							disabled={
+								saving ||
+								loading ||
+								completion < 100
+							}
+							onClick={handleStartBom}
 							endIcon={<ArrowForwardIcon />}
 							sx={primaryBtnSx}
 						>
@@ -141,7 +410,22 @@ export default function BOMFlowProductMaster() {
 					</Box>
 				</Box>
 			</Box>
-
+			{error && (
+				<Box
+					sx={{
+						p: "11px 13px",
+						borderRadius: "9px",
+						color: "#fca5a5",
+						background: "rgba(239,68,68,.12)",
+						border:
+							"1px solid rgba(239,68,68,.24)",
+						fontSize: "12px",
+						fontWeight: 750,
+					}}
+				>
+					{error}
+				</Box>
+			)}
 			<Box sx={summaryGridSx}>
 				<MiniStat
 					icon={<InfoOutlinedIcon />}
@@ -156,8 +440,8 @@ export default function BOMFlowProductMaster() {
 					title="Dimensions"
 					value={
 						Number(form.length) > 0 ||
-						Number(form.width) > 0 ||
-						Number(form.height) > 0
+							Number(form.width) > 0 ||
+							Number(form.height) > 0
 							? "Entered"
 							: "Pending"
 					}
@@ -272,31 +556,46 @@ export default function BOMFlowProductMaster() {
 						<Box sx={threeColumnGridSx}>
 							<TextField
 								fullWidth
-								label="Length (mm)"
+								type="number"
+								label="Length (mm) *"
 								value={form.length}
 								onChange={(e) =>
 									updateField("length", e.target.value)
 								}
+								inputProps={{
+									min: 0,
+									step: "0.01",
+								}}
 								sx={fieldSx}
 							/>
 
 							<TextField
 								fullWidth
-								label="Width / Depth (mm)"
+								type="number"
+								label="Width (mm) *"
 								value={form.width}
 								onChange={(e) =>
 									updateField("width", e.target.value)
 								}
+								inputProps={{
+									min: 0,
+									step: "0.01",
+								}}
 								sx={fieldSx}
 							/>
 
 							<TextField
 								fullWidth
-								label="Height (mm)"
+								type="number"
+								label="Height (mm) *"
 								value={form.height}
 								onChange={(e) =>
-									updateField("height", e.target.value)
+									updateField("Height", e.target.value)
 								}
+								inputProps={{
+									min: 0,
+									step: "0.01",
+								}}
 								sx={fieldSx}
 							/>
 						</Box>

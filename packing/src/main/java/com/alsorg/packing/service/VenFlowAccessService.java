@@ -235,6 +235,14 @@ public class VenFlowAccessService {
         }
     }
 
+    public void requirePurchaseOrDirector() {
+        if (!isPurchase() && !isDirector()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Purchase or Director access required");
+        }
+    }
+
     public boolean isQc() {
         String role = currentRole();
 

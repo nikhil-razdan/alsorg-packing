@@ -310,10 +310,8 @@ public class VenFlowController {
     @PatchMapping("/entries/{id}/director-approve-po")
     public VenFlowEntry directorApprovePo(
             @PathVariable UUID id,
-            @RequestBody(required = false) DirectorDecisionRequest req) {
-        return service.directorApprovePo(
-                id,
-                req);
+            @RequestBody DirectorDecisionRequest req) {
+        return service.directorApprovePo(id, req);
     }
 
     @PatchMapping("/entries/{id}/director-reject-po")
