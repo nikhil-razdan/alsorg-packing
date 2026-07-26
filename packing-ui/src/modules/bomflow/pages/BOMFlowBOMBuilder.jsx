@@ -32,7 +32,6 @@ import {
 	Typography,
 } from "@mui/material";
 
-import { useNavigate } from "react-router-dom";
 
 import * as styles from "../styles/bomStyles.js";
 
