@@ -19,15 +19,15 @@ import MatFlowRouteGuard
 	from "./MatFlowRouteGuard";
 
 import MatFlowDashboard
-	from "./pages/MatFlowDashboard";
+	from "./s/MatFlowDashboard";
 import MatFlowReleaseList
-	from "./pages/MatFlowReleaseList";
+	from "./s/MatFlowReleaseList";
 import MatFlowReleaseDetail
-	from "./pages/MatFlowReleaseDetail";
+	from "./s/MatFlowReleaseDetail";
 import MatFlowQueue
-	from "./pages/MatFlowQueue";
-import MatFlowRecordDetailPage
-	from "./pages/MatFlowRecordDetailPage";
+	from "./s/MatFlowQueue";
+import MatFlowRecordDetail
+	from "./s/MatFlowRecordDetail";
 
 function MatFlowHomeRedirect() {
 	const {
@@ -103,7 +103,7 @@ export default function MatFlowRoutes() {
 					path="requisitions/:requisitionId"
 					element={
 						<MatFlowRouteGuard screen="requisition-detail">
-							<MatFlowRecordDetailPage
+							<MatFlowRecordDetail
 								type="requisition"
 							/>
 						</MatFlowRouteGuard>
@@ -132,7 +132,7 @@ export default function MatFlowRoutes() {
 					path="indents/:indentId"
 					element={
 						<MatFlowRouteGuard screen="indent-detail">
-							<MatFlowRecordDetailPage
+							<MatFlowRecordDetail
 								type="indent"
 							/>
 						</MatFlowRouteGuard>
@@ -161,7 +161,7 @@ export default function MatFlowRoutes() {
 					path="purchase-orders/:purchaseOrderId"
 					element={
 						<MatFlowRouteGuard screen="purchase-order-detail">
-							<MatFlowRecordDetailPage
+							<MatFlowRecordDetail
 								type="purchaseOrder"
 							/>
 						</MatFlowRouteGuard>
