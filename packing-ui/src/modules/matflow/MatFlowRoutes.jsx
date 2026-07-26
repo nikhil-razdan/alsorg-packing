@@ -19,15 +19,15 @@ import MatFlowRouteGuard
 	from "./MatFlowRouteGuard";
 
 import MatFlowDashboard
-	from "./s/MatFlowDashboard";
+	from "./pages/MatFlowDashboard";
 import MatFlowReleaseList
-	from "./s/MatFlowReleaseList";
+	from "./pages/MatFlowReleaseList";
 import MatFlowReleaseDetail
-	from "./s/MatFlowReleaseDetail";
+	from "./pages/MatFlowReleaseDetail";
 import MatFlowQueue
-	from "./s/MatFlowQueue";
+	from "./pages/MatFlowQueue";
 import MatFlowRecordDetail
-	from "./s/MatFlowRecordDetail";
+	from "./pages/MatFlowRecordDetail";
 
 function MatFlowHomeRedirect() {
 	const {
