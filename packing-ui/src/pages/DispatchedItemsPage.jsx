@@ -3062,6 +3062,9 @@ function DispatchedItemsPage() {
 	const [createDriverOpen, setCreateDriverOpen] =
 		useState(false);
 
+	const [dispatchExportDriverLookup, setDispatchExportDriverLookup] =
+		useState(new Map());
+
 	const [createDriverLoading, setCreateDriverLoading] =
 		useState(false);
 
@@ -3878,6 +3881,121 @@ function DispatchedItemsPage() {
 		row?.chalaanNo ||
 		"";
 
+	const loadDispatchExportDriverLookup = async () => {
+		const res = await authFetch(
+			`${API_BASE_URL}/api/dispatched/challans`,
+			{
+				method: "GET",
+			}
+		);
+
+		if (!res.ok) {
+			const text = await res.text();
+
+			throw new Error(
+				text || "Failed to load dispatch challan drivers"
+			);
+		}
+
+		const challans = await res.json();
+
+		const nextLookup = new Map();
+
+		(Array.isArray(challans) ? challans : []).forEach(
+			(challan) => {
+				const driverName =
+					String(challan?.driverName || "").trim();
+
+				if (!driverName) {
+					return;
+				}
+
+				const challanNumber =
+					String(
+						challan?.challanNumber ||
+						challan?.chalaanNumber ||
+						""
+					)
+						.trim()
+						.toUpperCase();
+
+				if (challanNumber) {
+					nextLookup.set(
+						`CHALLAN:${challanNumber}`,
+						driverName
+					);
+				}
+
+				(challan?.items || []).forEach((item) => {
+					const itemId =
+						String(
+							item?.zohoItemId ||
+							item?.id ||
+							""
+						).trim();
+
+					if (itemId) {
+						nextLookup.set(
+							`ITEM:${itemId}`,
+							driverName
+						);
+					}
+				});
+			}
+		);
+
+		setDispatchExportDriverLookup(nextLookup);
+	};
+
+	const getDispatchExportDriverName = (row) => {
+		const directDriverName =
+			String(
+				row?.driverName ||
+				row?.driver?.name ||
+				row?.assignedDriverName ||
+				""
+			).trim();
+
+		if (directDriverName) {
+			return directDriverName;
+		}
+
+		const itemId =
+			String(
+				row?.zohoItemId ||
+				row?.id ||
+				""
+			).trim();
+
+		if (itemId) {
+			const itemDriver =
+				dispatchExportDriverLookup.get(
+					`ITEM:${itemId}`
+				);
+
+			if (itemDriver) {
+				return itemDriver;
+			}
+		}
+
+		const challanNumber =
+			String(getDispatchChallanNo(row) || "")
+				.trim()
+				.toUpperCase();
+
+		if (challanNumber) {
+			const challanDriver =
+				dispatchExportDriverLookup.get(
+					`CHALLAN:${challanNumber}`
+				);
+
+			if (challanDriver) {
+				return challanDriver;
+			}
+		}
+
+		return "";
+	};
 	/*
  * Only the exact DISPATCHED status goes into the first Excel sheet.
  *
@@ -4062,13 +4180,8 @@ function DispatchedItemsPage() {
 			key: "driverName",
 			header: "Driver Name",
 			width: 24,
-
 			getValue: (row) =>
-				firstDispatchExportValue(
-					row?.driverName,
-					row?.driver?.name,
-					row?.driver
-				),
+				getDispatchExportDriverName(row),
 		},
 	];
 
@@ -4276,25 +4389,35 @@ function DispatchedItemsPage() {
 		});
 	};
 
-	const openDispatchExportModal = () => {
-		const normalizedStatuses =
-			normalizeStatusSelection(statusFilter);
+	const openDispatchExportModal = async () => {
+		setDispatchExportStatus(
+			normalizeStatusSelection(statusFilter)
+		);
 
-		setDispatchExportStatus(normalizedStatuses);
 		setDispatchExportFormat("EXCEL");
 		setDispatchExportOpen(true);
+
+		try {
+			await loadDispatchExportDriverLookup();
+		} catch (error) {
+			console.error(
+				"Unable to load challan driver names:",
+				error
+			);
+		}
 	};
 
-	const dispatchExportPreviewRows =
-		useMemo(() => {
-			return buildDispatchExportRows(
-				dispatchExportStatus
-			);
-		}, [
-			rows,
-			search,
-			dispatchExportStatus,
-		]);
+	const dispatchExportPreviewRows = useMemo(() => {
+		return buildDispatchExportRows(
+			dispatchExportStatus
+		);
+	}, [
+		rows,
+		search,
+		dispatchExportStatus,
+		dispatchExportFormat,
+		dispatchExportDriverLookup,
+	]);
 
 	const formatDispatchPreviewValue = (
 		value
