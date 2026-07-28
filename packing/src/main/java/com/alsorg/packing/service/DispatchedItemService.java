@@ -893,7 +893,7 @@ public class DispatchedItemService {
 
         d.setLinkedMasterItemId(
                 item.getLinkedMasterItemId());
-                
+
         d.setZohoItemId(id); // primary key
         d.setName(item.getItemName());
         d.setPacketItemId(item.getId());
@@ -911,6 +911,13 @@ public class DispatchedItemService {
         d.setStock(1);
         d.setStatus(ItemDispatchStatus.READY);
         d.setStickerNumber(item.getStickerNumber());
+
+        /*
+         * Required by the Dispatch Register Excel report.
+         * Preserve the real sticker/packing timestamp.
+         */
+        d.setPackedAt(item.getPackedAt());
+
         d.setWarehouseCode(null);
         d.setGatePassNumber(null);
         d.setPdNo(item.getPdNo());

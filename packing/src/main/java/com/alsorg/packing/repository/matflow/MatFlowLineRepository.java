@@ -8,7 +8,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,4 +60,13 @@ public interface MatFlowLineRepository
     Optional<MatFlowLine> findActiveByIdForUpdate(
             @Param("releaseId") UUID releaseId,
             @Param("lineId") UUID lineId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select line
+            from MatFlowLine line
+            where line.id = :id
+            """)
+    Optional<MatFlowLine> findByIdForUpdate(
+            @Param("id") UUID id);
 }

@@ -346,6 +346,20 @@ const getBackPathForRole = (role) => {
 		return "/venflow/purchase";
 	}
 
+	if (
+		cleanRole ===
+		"VENFLOW_QC"
+	) {
+		return "/venflow/qc";
+	}
+
+	if (
+		cleanRole ===
+		"VENFLOW_DIRECTOR"
+	) {
+		return "/venflow/director";
+	}
+
 	return "/venflow/dashboard";
 };
 
@@ -447,6 +461,9 @@ export default function VenFlowDetailPage() {
 	const isQc =
 		isVenFlowQc(role);
 
+	const isAdmin =
+		isVenFlowAdmin(role);
+
 	const canSeeEngineering = isAdminManager || isEngineering;
 	const canSeeStore = isAdminManager || isStore;
 	const canSeeReceiving =
@@ -454,9 +471,11 @@ export default function VenFlowDetailPage() {
 	const canSeePurchase = isAdminManager || isPurchase;
 	const canSeeProcessing = isAdminManager || isProcessing;
 	const canSeeSupervisor = isAdminManager || isSupervisor;
-	const canSeeDirector = isDirector;
+	const canSeeDirector =
+		isAdmin || isDirector;
 
-	const canDirectorAction = isDirector;
+	const canDirectorAction =
+		isAdmin || isDirector;
 	const canEngineeringAction =
 		isAdminManager || isEngineering;
 
@@ -484,6 +503,9 @@ export default function VenFlowDetailPage() {
 
 	const [materialSummary, setMaterialSummary] =
 		useState(null);
+
+	const [materialSummaryReady, setMaterialSummaryReady] =
+		useState(false);
 
 	const [materialHistory, setMaterialHistory] =
 		useState([]);
@@ -565,12 +587,6 @@ export default function VenFlowDetailPage() {
 		remarks: "",
 	});
 
-	const outputImageUrl =
-		validateHttpUrl(
-			processingForm.outputImageUrl,
-			"Output Image URL"
-		);
-
 	const [remarksForm, setRemarksForm] = useState({
 		remarks: "",
 	});
@@ -579,12 +595,17 @@ export default function VenFlowDetailPage() {
 
 	const canSubmitStoreDecision =
 		canStoreAction &&
+		materialSummaryReady &&
 		[
 			STAGE.SENT_TO_STORE,
 			STAGE.STORE_REVIEWED,
 			STAGE.STOCK_AVAILABLE,
 		].includes(stage) &&
-		(materialSummary?.allocations?.length || 0) === 0;
+		(
+			materialSummary
+				?.allocations
+				?.length ?? 0
+		) === 0;
 
 	const tabItems = useMemo(
 		() => [
@@ -674,6 +695,8 @@ export default function VenFlowDetailPage() {
 
 	const load = async () => {
 		try {
+
+			setMaterialSummaryReady(false);
 			setLoading(true);
 			setError("");
 
@@ -708,12 +731,17 @@ export default function VenFlowDetailPage() {
 					: []
 			);
 
+			const summaryLoaded =
+				summaryResult.status ===
+				"fulfilled";
+
 			const summary =
-				summaryResult.status === "fulfilled"
+				summaryLoaded
 					? summaryResult.value.data || null
 					: null;
 
 			setMaterialSummary(summary);
+			setMaterialSummaryReady(summaryLoaded);
 
 			setMaterialHistory(
 				historyResult.status === "fulfilled" &&
@@ -1143,13 +1171,26 @@ export default function VenFlowDetailPage() {
 
 	const canReceiveMaterial =
 		canStoreAction &&
-		stage ===
-		STAGE.ORDER_PLACED_WITH_VENDOR &&
-		entry.poStatus === "ORDER_PLACED";
+		materialSummaryReady &&
+		[
+			STAGE.ORDER_PLACED_WITH_VENDOR,
+			STAGE.MATERIAL_RECEIVED_AT_STORE,
+		].includes(stage) &&
+		entry.poStatus === "ORDER_PLACED" &&
+		vendorOutstandingQty > 0;
 
 	const canGrn =
 		canStoreAction &&
-		stage === STAGE.MATERIAL_RECEIVED_AT_STORE;
+		materialSummaryReady &&
+		stage ===
+		STAGE.MATERIAL_RECEIVED_AT_STORE &&
+		vendorOutstandingQty === 0;
+
+	const vendorOutstandingQty =
+		safeNumber(
+			materialSummary
+				?.vendorOutstandingQty
+		);
 
 	const qcPendingQty =
 		safeNumber(
@@ -1170,18 +1211,6 @@ export default function VenFlowDetailPage() {
 		safeNumber(
 			materialSummary?.issueReadyQty
 		);
-
-	const issuedQty =
-		requirePositiveNumber(
-			issueForm.issuedQty,
-			"Issued Qty must be greater than zero."
-		);
-
-	if (issuedQty > issueReadyQty) {
-		throw new Error(
-			`Issued Qty cannot exceed issue-ready quantity: ${issueReadyQty} ${entry.unit || ""}.`
-		);
-	}
 
 	const canIssueMaterial =
 		canStoreAction &&
@@ -3376,17 +3405,34 @@ export default function VenFlowDetailPage() {
 						disabled={saving || !canIssueMaterial}
 						onClick={() =>
 							run(() => {
-								if (!issueForm.issuedTo.trim()) {
-									throw new Error("Issued To is required.");
+								const issuedQty =
+									requirePositiveNumber(
+										issueForm.issuedQty,
+										"Issued Qty must be greater than zero."
+									);
+
+								if (issuedQty > issueReadyQty) {
+									throw new Error(
+										`Issued Qty cannot exceed issue-ready quantity: ${issueReadyQty} ${entry.unit || ""}.`
+									);
 								}
 
-								return venflowApi.issueMaterial(id, {
-									issuedQty,
-									issuedTo:
-										issueForm.issuedTo.trim(),
-									remarks:
-										issueForm.remarks.trim(),
-								});
+								if (!issueForm.issuedTo.trim()) {
+									throw new Error(
+										"Issued To is required."
+									);
+								}
+
+								return venflowApi.issueMaterial(
+									id,
+									{
+										issuedQty,
+										issuedTo:
+											issueForm.issuedTo.trim(),
+										remarks:
+											issueForm.remarks.trim(),
+									}
+								);
 							})
 						}
 						sx={{ ...primaryBtnSx, mt: 2 }}
@@ -3576,6 +3622,12 @@ export default function VenFlowDetailPage() {
 											"Used Qty plus Wastage Qty cannot exceed Issued Qty."
 										);
 									}
+
+									const outputImageUrl =
+										validateHttpUrl(
+											processingForm.outputImageUrl,
+											"Output Image URL"
+										);
 
 									if (
 										!processingForm.outputImageUrl.trim()

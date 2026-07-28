@@ -37,6 +37,8 @@ public class MatFlowRequisitionLine {
     @Column(name = "mat_flow_line_id", nullable = false)
     public UUID matFlowLineId;
 
+    @Column(name = "demand_committed", nullable = false)
+    private boolean demandCommitted = false;
     /*
      * Snapshot references copied from MatFlowLine.
      */
@@ -140,5 +142,13 @@ public class MatFlowRequisitionLine {
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public boolean isDemandCommitted() {
+        return demandCommitted;
+    }
+
+    public void setDemandCommitted(boolean demandCommitted) {
+        this.demandCommitted = demandCommitted;
     }
 }

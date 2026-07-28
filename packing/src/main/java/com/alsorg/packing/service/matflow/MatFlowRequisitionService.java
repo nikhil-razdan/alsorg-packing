@@ -11,6 +11,7 @@ import com.alsorg.packing.domain.matflow.MatFlowRelease;
 import com.alsorg.packing.domain.matflow.MatFlowReleaseStatus;
 import com.alsorg.packing.domain.matflow.MatFlowRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
+import com.alsorg.packing.domain.matflow.MatFlowRequisitionLineStatus;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionStatus;
 import com.alsorg.packing.controller.dto.matflow.MatFlowRequisitionDtos.UpdateRequisitionRequest;
 import com.alsorg.packing.repository.matflow.MatFlowLineRepository;
@@ -1035,5 +1036,258 @@ public class MatFlowRequisitionService {
 
         return detail(
                 saved.id);
+    }
+
+    private BigDecimal nz(BigDecimal value) {
+        return value == null
+                ? BigDecimal.ZERO
+                : value;
+    }
+
+    private void commitRequisitionDemand(
+            MatFlowRequisition requisition) {
+        if (requisition.getLines() == null ||
+                requisition.getLines().isEmpty()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "At least one requisition line is required.");
+        }
+
+        for (MatFlowRequisitionLine requisitionLine : requisition.getLines()) {
+
+            if (requisitionLine.isDemandCommitted()) {
+                continue;
+            }
+
+            if (requisitionLine.getMatFlowLine() == null ||
+                    requisitionLine.getMatFlowLine().getId() == null) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "A requisition line is not linked to a MatFlow release line.");
+            }
+
+            BigDecimal requestedQty = nz(requisitionLine.getRequestedQty());
+
+            if (requestedQty.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Requested quantity must be greater than zero.");
+            }
+
+            UUID sourceLineId = requisitionLine
+                    .getMatFlowLine()
+                    .getId();
+
+            MatFlowLine sourceLine = matFlowLineRepo
+                    .findByIdForUpdate(sourceLineId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "MatFlow release line not found: " +
+                                    sourceLineId));
+
+            BigDecimal requiredQty = nz(sourceLine.getRequiredQty());
+
+            BigDecimal currentRequisitionedQty = nz(sourceLine.getRequisitionedQty());
+
+            BigDecimal remainingQty = requiredQty.subtract(
+                    currentRequisitionedQty);
+
+            if (remainingQty.compareTo(BigDecimal.ZERO) < 0) {
+                remainingQty = BigDecimal.ZERO;
+            }
+
+            if (requestedQty.compareTo(remainingQty) > 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Requested quantity " +
+                                requestedQty.stripTrailingZeros().toPlainString() +
+                                " exceeds remaining quantity " +
+                                remainingQty.stripTrailingZeros().toPlainString() +
+                                " for material " +
+                                sourceLine.getItemName() +
+                                ".");
+            }
+
+            BigDecimal newRequisitionedQty = currentRequisitionedQty.add(
+                    requestedQty);
+
+            sourceLine.setRequisitionedQty(
+                    newRequisitionedQty);
+
+            sourceLine.setStatus(
+                    MatFlowLineStatus.STORE_REVIEW_PENDING);
+
+            requisitionLine.setDemandCommitted(true);
+
+            requisitionLine.setStatus(
+                    MatFlowRequisitionLineStatus.STORE_REVIEW_PENDING);
+
+            matFlowLineRepo.save(sourceLine);
+        }
+    }
+
+    private void releaseRequisitionDemand(
+            MatFlowRequisition requisition) {
+        if (requisition.getLines() == null) {
+            return;
+        }
+
+        for (MatFlowRequisitionLine requisitionLine : requisition.getLines()) {
+
+            if (!requisitionLine.isDemandCommitted()) {
+                continue;
+            }
+
+            BigDecimal blockedQty = nz(requisitionLine.getBlockedQty());
+
+            BigDecimal issuedQty = nz(requisitionLine.getIssuedQty());
+
+            BigDecimal shortageQty = nz(requisitionLine.getShortageQty());
+
+            if (blockedQty.compareTo(BigDecimal.ZERO) > 0 ||
+                    issuedQty.compareTo(BigDecimal.ZERO) > 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Committed requisition demand cannot be released after stock has been blocked or material has been issued.");
+            }
+
+            /*
+             * A shortage by itself may already be referenced by an indent.
+             * If your entity contains indentedQty, also check it here.
+             */
+            if (shortageQty.compareTo(BigDecimal.ZERO) > 0 &&
+                    isRequisitionLineCoveredByIndent(
+                            requisitionLine)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Committed requisition demand cannot be released because a material indent already references the shortage.");
+            }
+
+            UUID sourceLineId = requisitionLine
+                    .getMatFlowLine()
+                    .getId();
+
+            MatFlowLine sourceLine = matFlowLineRepo
+                    .findByIdForUpdate(sourceLineId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "MatFlow release line not found: " +
+                                    sourceLineId));
+
+            BigDecimal currentRequisitionedQty = nz(sourceLine.getRequisitionedQty());
+
+            BigDecimal requestedQty = nz(requisitionLine.getRequestedQty());
+
+            BigDecimal updatedQty = currentRequisitionedQty.subtract(
+                    requestedQty);
+
+            if (updatedQty.compareTo(BigDecimal.ZERO) < 0) {
+                updatedQty = BigDecimal.ZERO;
+            }
+
+            sourceLine.setRequisitionedQty(
+                    updatedQty);
+
+            sourceLine.setStatus(
+                    resolveRequisitionAggregateStatus(
+                            sourceLine.getRequiredQty(),
+                            updatedQty));
+
+            requisitionLine.setDemandCommitted(false);
+
+            matFlowLineRepository.save(sourceLine);
+        }
+    }
+
+    private void releaseRequisitionDemand(
+            MatFlowRequisition requisition) {
+        if (requisition.getLines() == null) {
+            return;
+        }
+
+        for (MatFlowRequisitionLine requisitionLine : requisition.getLines()) {
+
+            if (!requisitionLine.isDemandCommitted()) {
+                continue;
+            }
+
+            BigDecimal blockedQty = nz(requisitionLine.getBlockedQty());
+
+            BigDecimal issuedQty = nz(requisitionLine.getIssuedQty());
+
+            BigDecimal shortageQty = nz(requisitionLine.getShortageQty());
+
+            if (blockedQty.compareTo(BigDecimal.ZERO) > 0 ||
+                    issuedQty.compareTo(BigDecimal.ZERO) > 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Committed requisition demand cannot be released after stock has been blocked or material has been issued.");
+            }
+
+            /*
+             * A shortage by itself may already be referenced by an indent.
+             * If your entity contains indentedQty, also check it here.
+             */
+            if (shortageQty.compareTo(BigDecimal.ZERO) > 0 &&
+                    isRequisitionLineCoveredByIndent(
+                            requisitionLine)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Committed requisition demand cannot be released because a material indent already references the shortage.");
+            }
+
+            UUID sourceLineId = requisitionLine
+                    .getMatFlowLine()
+                    .getId();
+
+            MatFlowLine sourceLine = matFlowLineRepo
+                    .findByIdForUpdate(sourceLineId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "MatFlow release line not found: " +
+                                    sourceLineId));
+
+            BigDecimal currentRequisitionedQty = nz(sourceLine.getRequisitionedQty());
+
+            BigDecimal requestedQty = nz(requisitionLine.getRequestedQty());
+
+            BigDecimal updatedQty = currentRequisitionedQty.subtract(
+                    requestedQty);
+
+            if (updatedQty.compareTo(BigDecimal.ZERO) < 0) {
+                updatedQty = BigDecimal.ZERO;
+            }
+
+            sourceLine.setRequisitionedQty(
+                    updatedQty);
+
+            sourceLine.setStatus(
+                    resolveRequisitionAggregateStatus(
+                            sourceLine.getRequiredQty(),
+                            updatedQty));
+
+            requisitionLine.setDemandCommitted(false);
+
+            matFlowLineRepo.save(sourceLine);
+        }
+    }
+
+    private MatFlowLineStatus resolveRequisitionAggregateStatus(
+            BigDecimal requiredQty,
+            BigDecimal requisitionedQty) {
+        BigDecimal required = nz(requiredQty);
+        BigDecimal requisitioned = nz(requisitionedQty);
+
+        if (requisitioned.compareTo(BigDecimal.ZERO) <= 0) {
+            return MatFlowLineStatus.NOT_REQUISITIONED;
+        }
+
+        if (requisitioned.compareTo(required) < 0) {
+            return MatFlowLineStatus.PARTIALLY_REQUISITIONED;
+        }
+
+        return MatFlowLineStatus.REQUISITIONED;
     }
 }

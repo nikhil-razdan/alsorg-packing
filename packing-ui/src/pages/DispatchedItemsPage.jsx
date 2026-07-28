@@ -20,6 +20,7 @@ import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import MasterItemsModal from "../dashboard/components/inventory/MasterItemsModal";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
+import ExcelJS from "exceljs";
 import {
 	fetchDrivers,
 	fetchVehicles,
@@ -2706,8 +2707,24 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 		label: "Dispatched",
 	},
 	{
+		value: "OUT_FOR_DELIVERY",
+		label: "Out For Delivery",
+	},
+	{
+		value: "DELIVERED",
+		label: "Delivered",
+	},
+	{
 		value: "WAREHOUSE_RETURN_REQUESTED",
 		label: "Warehouse Return Requested",
+	},
+	{
+		value: "RESTORED",
+		label: "Restored",
+	},
+	{
+		value: "AVAILABLE",
+		label: "Available",
 	},
 ];
 
@@ -3130,9 +3147,17 @@ function DispatchedItemsPage() {
 		location: "",
 	});
 
-	const [dispatchExportOpen, setDispatchExportOpen] = useState(false);
-	const [dispatchExportStatus, setDispatchExportStatus] = useState(["ALL"]);
-	const [dispatchExportFormat, setDispatchExportFormat] = useState("CSV");
+	const [dispatchExportOpen, setDispatchExportOpen] =
+		useState(false);
+
+	const [dispatchExportStatus, setDispatchExportStatus] =
+		useState(["ALL"]);
+
+	const [dispatchExportFormat, setDispatchExportFormat] =
+		useState("EXCEL");
+
+	const [dispatchExportLoading, setDispatchExportLoading] =
+		useState(false);
 
 	const filteredRows =
 		useMemo(() => {
@@ -3853,84 +3878,377 @@ function DispatchedItemsPage() {
 		row?.chalaanNo ||
 		"";
 
+	/*
+ * Only the exact DISPATCHED status goes into the first Excel sheet.
+ *
+ * OUT_FOR_DELIVERY, DELIVERED, RESTORED, READY, IN_WAREHOUSE and
+ * every other status remain in the "Other Status" sheet.
+ */
+	const DISPATCHED_EXCEL_STATUSES =
+		new Set(["DISPATCHED"]);
+
+	/*
+	 * Excel column definitions.
+	 *
+	 * key:
+	 *   Internal preview/export object key.
+	 *
+	 * header:
+	 *   Visible Excel header.
+	 *
+	 * width:
+	 *   Excel column width.
+	 *
+	 * getValue:
+	 *   Safely resolves current and legacy API property names.
+	 */
 	const dispatchExportColumns = [
 		{
-			header: "Item Name",
-			getValue: (row) => row.name || row.itemName || "",
+			key: "packingDate",
+			header: "Packing Date",
+			width: 16,
+			isDate: true,
+
+			getValue: (row) =>
+				resolveDispatchExcelDate(
+					row?.packedAt ||
+					row?.packingDate ||
+					row?.packedDate ||
+					row?.stickerGeneratedAt ||
+					null
+				),
 		},
 		{
-			header: "SKU",
-			getValue: (row) => row.sku || "",
+			key: "dispatchDate",
+			header: "Dispatch Date",
+			width: 16,
+			isDate: true,
+
+			getValue: (row) => {
+				/*
+				 * Never invent a dispatch date.
+				 *
+				 * A value is included only when the backend has actually
+				 * stored dispatchedAt.
+				 */
+				if (!row?.dispatchedAt) {
+					return null;
+				}
+
+				return resolveDispatchExcelDate(
+					row.dispatchedAt
+				);
+			},
 		},
 		{
-			header: "PD No",
-			getValue: (row) => row.pdNo || "",
+			key: "pdNo",
+			header: "PD No.",
+			width: 17,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.pdNo,
+					row?.pdNumber,
+					row?.productionNo
+				),
 		},
 		{
-			header: "DWG No",
-			getValue: (row) => row.drawingNo || "",
+			key: "clientName",
+			header: "Client Name",
+			width: 28,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.clientName,
+					row?.client
+				),
 		},
 		{
+			key: "drawingNo",
+			header: "Dwg No.",
+			width: 18,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.drawingNo,
+					row?.dwgNo,
+					row?.drawingNumber
+				),
+		},
+		{
+			key: "itemArea",
+			header: "Item Area",
+			width: 20,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.itemArea,
+					row?.itemAreaCode,
+					row?.area,
+					row?.packedAreaCode,
+					row?.currentLocationCode,
+					row?.location,
+					row?.floor
+				),
+		},
+		{
+			key: "packetNo",
+			header: "Pkt No.",
+			width: 20,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.packetNo,
+					row?.packetNumber,
+					row?.pktNo,
+					row?.packetCode,
+					row?.packet?.packetNo,
+					row?.packet?.packetNumber,
+
+					/*
+					 * Legacy fallback:
+					 * Existing Dispatch rows frequently carry the visible
+					 * packet reference inside SKU.
+					 */
+					row?.sku
+				),
+		},
+		{
+			key: "description",
 			header: "Description",
-			getValue: (row) => row.description || "",
+			width: 42,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.description,
+					row?.name,
+					row?.itemName
+				),
 		},
 		{
-			header: "Stock",
-			getValue: (row) => row.stock ?? 0,
-		},
-		{
-			header: "Client",
-			getValue: (row) => row.clientName || "",
-		},
-		{
+			key: "plant",
 			header: "Plant",
-			getValue: (row) => row.plantCode || "",
+			width: 15,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.plantCode,
+					row?.plant
+				),
 		},
 		{
-			header: "Location",
-			getValue: (row) => getCurrentLocation(row) || "",
-		},
-		{
+			key: "status",
 			header: "Status",
-			getValue: (row) => getDisplayStatus(row).label || "",
+			width: 26,
+
+			getValue: (row) =>
+				getDisplayStatus(row)?.label ||
+				firstDispatchExportValue(
+					row?.status
+				),
 		},
 		{
-			header: "Driver",
-			getValue: (row) => row.driverName || "",
+			key: "address",
+			header: "Address",
+			width: 44,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.clientAddress,
+					row?.address,
+					row?.siteAddress,
+					row?.deliveryAddress
+				),
 		},
 		{
-			header: "Vehicle",
-			getValue: (row) => row.vehicleNumber || "",
-		},
-		{
-			header: "Challan No",
-			getValue: (row) => getDispatchChallanNo(row) || "",
-		},
-		{
-			header: "Gate Pass No",
-			getValue: (row) => row.gatePassNumber || "",
+			key: "driverName",
+			header: "Driver Name",
+			width: 24,
+
+			getValue: (row) =>
+				firstDispatchExportValue(
+					row?.driverName,
+					row?.driver?.name,
+					row?.driver
+				),
 		},
 	];
 
-	const openDispatchExportModal = () => {
-		setDispatchExportStatus(
-			normalizeStatusSelection(statusFilter)
-		);
+	/*
+	 * Removes line breaks and unnecessary spaces from exported text.
+	 *
+	 * This prevents one description/address from making Excel rows
+	 * unnecessarily large.
+	 */
+	const cleanDispatchExportText = (
+		value
+	) => {
+		if (
+			value === null ||
+			value === undefined
+		) {
+			return "";
+		}
 
-		setDispatchExportFormat("CSV");
-		setDispatchExportOpen(true);
+		return String(value)
+			.replace(/\r?\n|\r/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
 	};
 
-	const getDispatchExportSourceRows = (statusValue) => {
+	/*
+	 * Returns the first meaningful value from a list of current and
+	 * legacy API property names.
+	 */
+	const firstDispatchExportValue = (
+		...values
+	) => {
+		for (const value of values) {
+			const cleanValue =
+				cleanDispatchExportText(value);
+
+			if (cleanValue) {
+				return cleanValue;
+			}
+		}
+
+		return "";
+	};
+
+	/*
+	 * Converts backend dates to genuine JavaScript Date objects.
+	 *
+	 * Only the date portion is retained because the requested report
+	 * requires Packing Date and Dispatch Date rather than timestamps.
+	 *
+	 * Creating the date from year/month/day also avoids timezone shifts
+	 * when Excel opens the workbook on another computer.
+	 */
+	const resolveDispatchExcelDate = (
+		value
+	) => {
+		if (!value) {
+			return null;
+		}
+
+		if (
+			value instanceof Date &&
+			!Number.isNaN(value.getTime())
+		) {
+			return new Date(
+				value.getFullYear(),
+				value.getMonth(),
+				value.getDate()
+			);
+		}
+
+		const text =
+			String(value).trim();
+
+		const isoDateMatch =
+			text.match(
+				/^(\d{4})-(\d{2})-(\d{2})/
+			);
+
+		if (isoDateMatch) {
+			const year =
+				Number(isoDateMatch[1]);
+
+			const month =
+				Number(isoDateMatch[2]);
+
+			const day =
+				Number(isoDateMatch[3]);
+
+			return new Date(
+				year,
+				month - 1,
+				day
+			);
+		}
+
+		const parsedDate =
+			new Date(text);
+
+		if (
+			Number.isNaN(
+				parsedDate.getTime()
+			)
+		) {
+			return null;
+		}
+
+		return new Date(
+			parsedDate.getFullYear(),
+			parsedDate.getMonth(),
+			parsedDate.getDate()
+		);
+	};
+
+	const isDispatchedExcelStatus = (
+		status
+	) => {
+		const cleanStatus =
+			String(status || "")
+				.trim()
+				.toUpperCase();
+
+		return DISPATCHED_EXCEL_STATUSES.has(
+			cleanStatus
+		);
+	};
+
+	/*
+	 * Provides stable numeric date sorting.
+	 */
+	const getDispatchExportDateValue = (
+		value
+	) => {
+		if (!value) {
+			return 0;
+		}
+
+		const date =
+			value instanceof Date
+				? value
+				: new Date(value);
+
+		return Number.isNaN(date.getTime())
+			? 0
+			: date.getTime();
+	};
+
+	/*
+	 * Uses:
+	 * - current global search
+	 * - statuses selected inside the export modal
+	 *
+	 * Pagination continues to be ignored.
+	 */
+	const getDispatchExportSourceRows = (
+		statusValue
+	) => {
 		const selectedStatuses =
-			normalizeStatusSelection(statusValue);
+			normalizeStatusSelection(
+				statusValue
+			);
 
 		return (rows || []).filter((row) => {
-			if (!smartRowMatches(row, search)) {
+			if (
+				!smartRowMatches(
+					row,
+					search
+				)
+			) {
 				return false;
 			}
 
-			if (!statusMatchesSelection(row.status, selectedStatuses)) {
+			if (
+				!statusMatchesSelection(
+					row.status,
+					selectedStatuses
+				)
+			) {
 				return false;
 			}
 
@@ -3938,186 +4256,988 @@ function DispatchedItemsPage() {
 		});
 	};
 
-	const buildDispatchExportRows = (statusValue) => {
-		return getDispatchExportSourceRows(statusValue).map((row) => {
-			const exportRow = {};
+	/*
+	 * Used by modal preview and CSV compatibility.
+	 */
+	const buildDispatchExportRows = (
+		statusValue
+	) => {
+		return getDispatchExportSourceRows(
+			statusValue
+		).map((row) => {
+			const result = {};
 
-			dispatchExportColumns.forEach((column) => {
-				exportRow[column.header] = column.getValue(row);
-			});
+			dispatchExportColumns.forEach(
+				(column) => {
+					result[column.key] =
+						column.getValue(row);
+				}
+			);
 
-			return exportRow;
+			return result;
 		});
 	};
 
-	const dispatchExportPreviewRows = useMemo(() => {
-		return buildDispatchExportRows(dispatchExportStatus);
-	}, [
-		rows,
-		search,
-		dispatchExportStatus,
-		dispatchExportFormat,
-	]);
+	const dispatchExportPreviewRows =
+		useMemo(() => {
+			return buildDispatchExportRows(
+				dispatchExportStatus
+			);
+		}, [
+			rows,
+			search,
+			dispatchExportStatus,
+		]);
 
-	const csvEscape = (value) => {
+	const formatDispatchPreviewValue = (
+		value
+	) => {
+		if (
+			value instanceof Date &&
+			!Number.isNaN(value.getTime())
+		) {
+			return value.toLocaleDateString(
+				"en-GB",
+				{
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+				}
+			);
+		}
+
+		const cleanValue =
+			cleanDispatchExportText(
+				value
+			);
+
+		return cleanValue || "—";
+	};
+
+	const csvEscape = (
+		value
+	) => {
+		let finalValue = value;
+
+		if (
+			value instanceof Date &&
+			!Number.isNaN(value.getTime())
+		) {
+			finalValue =
+				value.toLocaleDateString(
+					"en-GB"
+				);
+		}
+
 		const text =
-			String(value ?? "")
-				.replace(/\r?\n|\r/g, " ")
-				.trim();
+			cleanDispatchExportText(
+				finalValue
+			);
 
-		return `"${text.replace(/"/g, '""')}"`;
+		return `"${text.replace(
+			/"/g,
+			'""'
+		)}"`;
 	};
 
-	const escapeHtml = (value) => {
-		return String(value ?? "")
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;")
-			.replace(/"/g, "&quot;")
-			.replace(/'/g, "&#039;");
-	};
-
-	const normalizeExportFileName = (value) => {
-		return String(value || "DISPATCH_EXPORT")
-			.trim()
-			.replace(/[^\w.-]+/g, "_")
-			.replace(/^_+|_+$/g, "") || "DISPATCH_EXPORT";
-	};
-
-	const downloadTextFile = ({
-		content,
+	const downloadDispatchBlob = ({
+		blob,
 		fileName,
-		mimeType,
 	}) => {
-		const blob =
-			new Blob([content], {
-				type: mimeType,
-			});
-
 		const url =
 			URL.createObjectURL(blob);
 
-		const a =
+		const anchor =
 			document.createElement("a");
 
-		a.href = url;
-		a.download = fileName;
+		anchor.href = url;
+		anchor.download = fileName;
 
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
+		document.body.appendChild(
+			anchor
+		);
+
+		anchor.click();
+		anchor.remove();
 
 		setTimeout(() => {
 			URL.revokeObjectURL(url);
 		}, 10000);
 	};
 
-	const exportDispatchData = () => {
-		const exportRows =
-			buildDispatchExportRows(dispatchExportStatus);
+	/*
+	 * Excel status formatting.
+	 */
+	const getDispatchExcelStatusStyle = (
+		status
+	) => {
+		const cleanStatus =
+			String(status || "")
+				.trim()
+				.toUpperCase();
 
-		if (exportRows.length === 0) {
-			alert("No rows found for selected export status");
-			return;
+		if (cleanStatus === "DISPATCHED") {
+			return {
+				fill: "FFD1FAE5",
+				font: "FF047857",
+			};
 		}
 
-		const baseFileName = "Dispatch Register";
+		if (
+			cleanStatus ===
+			"READY_TO_DISPATCH"
+		) {
+			return {
+				fill: "FFDBEAFE",
+				font: "FF1D4ED8",
+			};
+		}
 
-		const headers =
-			dispatchExportColumns.map((column) => column.header);
+		if (cleanStatus === "READY") {
+			return {
+				fill: "FFFEF3C7",
+				font: "FF92400E",
+			};
+		}
 
-		if (dispatchExportFormat === "CSV") {
-			const csv =
-				"\uFEFF" +
+		if (
+			cleanStatus ===
+			"READY_TO_STORE" ||
+			cleanStatus ===
+			"WAREHOUSE_REQUESTED"
+		) {
+			return {
+				fill: "FFFFEDD5",
+				font: "FFC2410C",
+			};
+		}
+
+		if (
+			cleanStatus ===
+			"IN_WAREHOUSE"
+		) {
+			return {
+				fill: "FFEDE9FE",
+				font: "FF6D28D9",
+			};
+		}
+
+		if (
+			cleanStatus ===
+			"WAREHOUSE_RETURN_REQUESTED"
+		) {
+			return {
+				fill: "FFFEE2E2",
+				font: "FFB91C1C",
+			};
+		}
+
+		if (
+			cleanStatus === "LOADED" ||
+			cleanStatus ===
+			"OUT_FOR_DELIVERY"
+		) {
+			return {
+				fill: "FFE0F2FE",
+				font: "FF0369A1",
+			};
+		}
+
+		if (
+			cleanStatus === "DELIVERED"
+		) {
+			return {
+				fill: "FFDCFCE7",
+				font: "FF166534",
+			};
+		}
+
+		if (
+			cleanStatus === "RESTORED"
+		) {
+			return {
+				fill: "FFF3E8FF",
+				font: "FF7E22CE",
+			};
+		}
+
+		return {
+			fill: "FFF1F5F9",
+			font: "FF475569",
+		};
+	};
+
+	/*
+	 * Creates one professionally formatted workbook sheet.
+	 */
+	const createDispatchExcelSheet = ({
+		workbook,
+		sheetName,
+		title,
+		subtitle,
+		sourceRows,
+		accentColor,
+	}) => {
+		const worksheet =
+			workbook.addWorksheet(
+				sheetName,
+				{
+					properties: {
+						defaultRowHeight: 20,
+						tabColor: {
+							argb: accentColor,
+						},
+					},
+					views: [
+						{
+							state: "frozen",
+							ySplit: 5,
+							activeCell: "A6",
+							showGridLines: false,
+						},
+					],
+				}
+			);
+
+		worksheet.pageSetup = {
+			paperSize: 9,
+			orientation: "landscape",
+			fitToPage: true,
+			fitToWidth: 1,
+			fitToHeight: 0,
+			horizontalCentered: true,
+			printTitlesRow: "1:5",
+
+			margins: {
+				left: 0.25,
+				right: 0.25,
+				top: 0.5,
+				bottom: 0.5,
+				header: 0.2,
+				footer: 0.2,
+			},
+		};
+
+		worksheet.headerFooter.oddFooter =
+			"&LALSORG&CPage &P of &N&RDispatch Register";
+
+		dispatchExportColumns.forEach(
+			(column, index) => {
+				worksheet.getColumn(
+					index + 1
+				).width = column.width;
+			}
+		);
+
+		/*
+		 * Report title.
+		 */
+		worksheet.mergeCells("A1:L1");
+
+		const titleCell =
+			worksheet.getCell("A1");
+
+		titleCell.value = title;
+
+		titleCell.font = {
+			name: "Calibri",
+			size: 20,
+			bold: true,
+			color: {
+				argb: "FFFFFFFF",
+			},
+		};
+
+		titleCell.alignment = {
+			horizontal: "left",
+			vertical: "middle",
+		};
+
+		titleCell.fill = {
+			type: "pattern",
+			pattern: "solid",
+			fgColor: {
+				argb: "FF0F172A",
+			},
+		};
+
+		titleCell.border = {
+			bottom: {
+				style: "thick",
+				color: {
+					argb: accentColor,
+				},
+			},
+		};
+
+		worksheet.getRow(1).height = 34;
+
+		/*
+		 * Subtitle.
+		 */
+		worksheet.mergeCells("A2:L2");
+
+		const subtitleCell =
+			worksheet.getCell("A2");
+
+		subtitleCell.value = subtitle;
+
+		subtitleCell.font = {
+			name: "Calibri",
+			size: 11,
+			italic: true,
+			color: {
+				argb: "FF475569",
+			},
+		};
+
+		subtitleCell.alignment = {
+			vertical: "middle",
+		};
+
+		subtitleCell.fill = {
+			type: "pattern",
+			pattern: "solid",
+			fgColor: {
+				argb: "FFF8FAFC",
+			},
+		};
+
+		worksheet.getRow(2).height = 24;
+
+		/*
+		 * Summary strip.
+		 */
+		worksheet.mergeCells("A3:D3");
+		worksheet.mergeCells("E3:H3");
+		worksheet.mergeCells("I3:L3");
+
+		const generatedAt =
+			new Date().toLocaleString(
+				"en-IN",
+				{
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+					hour: "2-digit",
+					minute: "2-digit",
+				}
+			);
+
+		worksheet.getCell("A3").value =
+			`Total Records: ${sourceRows.length}`;
+
+		worksheet.getCell("E3").value =
+			`Generated: ${generatedAt}`;
+
+		worksheet.getCell("I3").value =
+			search
+				? `Search Applied: ${search}`
+				: "Search Applied: None";
+
+		["A3", "E3", "I3"].forEach(
+			(cellReference) => {
+				const cell =
+					worksheet.getCell(
+						cellReference
+					);
+
+				cell.font = {
+					name: "Calibri",
+					size: 10,
+					bold: true,
+					color: {
+						argb: "FF334155",
+					},
+				};
+
+				cell.alignment = {
+					vertical: "middle",
+					horizontal: "left",
+				};
+
+				cell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: {
+						argb: "FFE2E8F0",
+					},
+				};
+
+				cell.border = {
+					top: {
+						style: "thin",
+						color: {
+							argb:
+								"FFCBD5E1",
+						},
+					},
+					bottom: {
+						style: "thin",
+						color: {
+							argb:
+								"FFCBD5E1",
+						},
+					},
+				};
+			}
+		);
+
+		worksheet.getRow(3).height = 22;
+		worksheet.getRow(4).height = 8;
+
+		/*
+		 * Header row.
+		 */
+		const headerRowNumber = 5;
+
+		const headerRow =
+			worksheet.getRow(
+				headerRowNumber
+			);
+
+		headerRow.values = [
+			"",
+			...dispatchExportColumns.map(
+				(column) => column.header
+			),
+		];
+
+		/*
+		 * Because ExcelJS row.values can use a one-based array,
+		 * explicitly set each cell to prevent an accidental blank
+		 * first column.
+		 */
+		dispatchExportColumns.forEach(
+			(column, index) => {
+				headerRow.getCell(
+					index + 1
+				).value = column.header;
+			}
+		);
+
+		headerRow.height = 28;
+
+		headerRow.eachCell(
+			{
+				includeEmpty: true,
+			},
+			(cell) => {
+				cell.font = {
+					name: "Calibri",
+					size: 11,
+					bold: true,
+					color: {
+						argb: "FFFFFFFF",
+					},
+				};
+
+				cell.alignment = {
+					horizontal: "center",
+					vertical: "middle",
+					wrapText: true,
+				};
+
+				cell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: {
+						argb: accentColor,
+					},
+				};
+
+				cell.border = {
+					top: {
+						style: "thin",
+						color: {
+							argb:
+								"FFFFFFFF",
+						},
+					},
+					left: {
+						style: "thin",
+						color: {
+							argb:
+								"FFD1D5DB",
+						},
+					},
+					bottom: {
+						style: "thin",
+						color: {
+							argb:
+								"FFD1D5DB",
+						},
+					},
+					right: {
+						style: "thin",
+						color: {
+							argb:
+								"FFD1D5DB",
+						},
+					},
+				};
+			}
+		);
+
+		/*
+		 * Data rows.
+		 */
+		sourceRows.forEach(
+			(sourceRow, index) => {
+				const rowValues =
+					dispatchExportColumns.map(
+						(column) =>
+							column.getValue(
+								sourceRow
+							)
+					);
+
+				const excelRow =
+					worksheet.addRow(
+						rowValues
+					);
+
+				excelRow.height = 31;
+
+				const evenRow =
+					index % 2 === 1;
+
+				excelRow.eachCell(
+					{
+						includeEmpty: true,
+					},
+					(cell, columnNumber) => {
+						cell.font = {
+							name: "Calibri",
+							size: 10,
+							color: {
+								argb:
+									"FF1E293B",
+							},
+						};
+
+						cell.fill = {
+							type: "pattern",
+							pattern: "solid",
+							fgColor: {
+								argb: evenRow
+									? "FFF8FAFC"
+									: "FFFFFFFF",
+							},
+						};
+
+						cell.border = {
+							top: {
+								style: "thin",
+								color: {
+									argb:
+										"FFE2E8F0",
+								},
+							},
+							left: {
+								style: "thin",
+								color: {
+									argb:
+										"FFE2E8F0",
+								},
+							},
+							bottom: {
+								style: "thin",
+								color: {
+									argb:
+										"FFE2E8F0",
+								},
+							},
+							right: {
+								style: "thin",
+								color: {
+									argb:
+										"FFE2E8F0",
+								},
+							},
+						};
+
+						cell.alignment = {
+							vertical: "middle",
+
+							horizontal:
+								columnNumber === 1 ||
+									columnNumber === 2
+									? "center"
+									: "left",
+
+							wrapText:
+								[
+									4,
+									8,
+									11,
+								].includes(
+									columnNumber
+								),
+						};
+					}
+				);
+
+				/*
+				 * Genuine Excel date formatting.
+				 */
+				excelRow.getCell(1).numFmt =
+					"dd-mmm-yyyy";
+
+				excelRow.getCell(2).numFmt =
+					"dd-mmm-yyyy";
+
+				/*
+				 * Force identifiers to remain text.
+				 * This prevents PD/DWG/packet values such as 01/02
+				 * from being converted into dates by Excel.
+				 */
 				[
-					headers.map(csvEscape).join(","),
-					...exportRows.map((row) =>
-						headers
-							.map((header) => csvEscape(row[header]))
-							.join(",")
-					),
-				].join("\n");
+					3,
+					5,
+					7,
+				].forEach(
+					(columnNumber) => {
+						excelRow.getCell(
+							columnNumber
+						).numFmt = "@";
+					}
+				);
 
-			downloadTextFile({
-				content: csv,
-				fileName: `${baseFileName}.csv`,
-				mimeType: "text/csv;charset=utf-8;",
+				/*
+				 * Status cell styling.
+				 */
+				const statusStyle =
+					getDispatchExcelStatusStyle(
+						sourceRow?.status
+					);
+
+				const statusCell =
+					excelRow.getCell(10);
+
+				statusCell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: {
+						argb:
+							statusStyle.fill,
+					},
+				};
+
+				statusCell.font = {
+					name: "Calibri",
+					size: 10,
+					bold: true,
+					color: {
+						argb:
+							statusStyle.font,
+					},
+				};
+
+				statusCell.alignment = {
+					horizontal: "center",
+					vertical: "middle",
+					wrapText: true,
+				};
+			}
+		);
+
+		/*
+		 * Keep both sheets available even when one category has no rows.
+		 */
+		if (sourceRows.length === 0) {
+			worksheet.mergeCells("A6:L6");
+
+			const emptyCell =
+				worksheet.getCell("A6");
+
+			emptyCell.value =
+				"No records matched this sheet.";
+
+			emptyCell.font = {
+				name: "Calibri",
+				size: 11,
+				italic: true,
+				color: {
+					argb: "FF64748B",
+				},
+			};
+
+			emptyCell.alignment = {
+				horizontal: "center",
+				vertical: "middle",
+			};
+
+			emptyCell.fill = {
+				type: "pattern",
+				pattern: "solid",
+				fgColor: {
+					argb: "FFF8FAFC",
+				},
+			};
+
+			worksheet.getRow(6).height = 34;
+		}
+
+		const finalRow =
+			Math.max(
+				headerRowNumber,
+				worksheet.rowCount
+			);
+
+		worksheet.autoFilter = {
+			from: {
+				row: headerRowNumber,
+				column: 1,
+			},
+			to: {
+				row: finalRow,
+				column:
+					dispatchExportColumns.length,
+			},
+		};
+
+		worksheet.printArea =
+			`A1:L${finalRow}`;
+
+		return worksheet;
+	};
+
+	/*
+	 * Generates the real XLSX workbook.
+	 */
+	const exportDispatchExcelWorkbook =
+		async () => {
+			const scopedRows =
+				getDispatchExportSourceRows(
+					dispatchExportStatus
+				);
+
+			if (scopedRows.length === 0) {
+				throw new Error(
+					"No rows found for selected export status"
+				);
+			}
+
+			const dispatchedRows =
+				scopedRows
+					.filter((row) =>
+						isDispatchedExcelStatus(
+							row?.status
+						)
+					)
+					.sort((a, b) => {
+						return (
+							getDispatchExportDateValue(
+								b?.dispatchedAt
+							) -
+							getDispatchExportDateValue(
+								a?.dispatchedAt
+							)
+						);
+					});
+
+			const otherStatusRows =
+				scopedRows
+					.filter(
+						(row) =>
+							!isDispatchedExcelStatus(
+								row?.status
+							)
+					)
+					.sort((a, b) => {
+						const statusCompare =
+							String(
+								a?.status || ""
+							).localeCompare(
+								String(
+									b?.status || ""
+								)
+							);
+
+						if (statusCompare !== 0) {
+							return statusCompare;
+						}
+
+						return (
+							getDispatchExportDateValue(
+								b?.packedAt
+							) -
+							getDispatchExportDateValue(
+								a?.packedAt
+							)
+						);
+					});
+
+			const workbook =
+				new ExcelJS.Workbook();
+
+			workbook.creator =
+				"ALSORG PackFlow";
+
+			workbook.lastModifiedBy =
+				firstDispatchExportValue(
+					currentUser?.username,
+					currentUser?.name,
+					localStorage.getItem(
+						"username"
+					),
+					"ALSORG"
+				);
+
+			workbook.company = "ALSORG";
+			workbook.title =
+				"Dispatch Register";
+
+			workbook.subject =
+				"Dispatch and inventory status register";
+
+			workbook.category =
+				"Dispatch Report";
+
+			workbook.description =
+				"ALSORG Dispatch Register with dispatched and other status records on separate worksheets.";
+
+			workbook.keywords =
+				"ALSORG, Dispatch, Packing, Warehouse, Register";
+
+			workbook.created =
+				new Date();
+
+			workbook.modified =
+				new Date();
+
+			createDispatchExcelSheet({
+				workbook,
+				sheetName: "Dispatched",
+				title:
+					"ALSORG DISPATCH REGISTER — DISPATCHED",
+				subtitle:
+					"Records whose current status is DISPATCHED",
+				sourceRows: dispatchedRows,
+				accentColor: "FF059669",
 			});
 
-			setDispatchExportOpen(false);
-			return;
-		}
+			createDispatchExcelSheet({
+				workbook,
+				sheetName: "Other Status",
+				title:
+					"ALSORG DISPATCH REGISTER — OTHER STATUS",
+				subtitle:
+					"Packed, warehouse, ready-to-dispatch, restored and all non-dispatched records",
+				sourceRows: otherStatusRows,
+				accentColor: "FF2563EB",
+			});
 
-		const tableHead =
-			headers
-				.map((header) => `<th>${escapeHtml(header)}</th>`)
-				.join("");
+			const workbookBuffer =
+				await workbook.xlsx.writeBuffer();
 
-		const tableBody =
-			exportRows
-				.map((row) => {
-					const cells =
-						headers
-							.map((header) => `<td>${escapeHtml(row[header])}</td>`)
-							.join("");
-
-					return `<tr>${cells}</tr>`;
-				})
-				.join("");
-
-		const excelHtml = `
-		<html>
-			<head>
-				<meta charset="UTF-8" />
-				<style>
-					body {
-						font-family: Arial, sans-serif;
+			const blob =
+				new Blob(
+					[workbookBuffer],
+					{
+						type:
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 					}
+				);
 
-					table {
-						border-collapse: collapse;
-						width: 100%;
-					}
+			downloadDispatchBlob({
+				blob,
+				fileName:
+					"Dispatch Register.xlsx",
+			});
+		};
 
-					th {
-						background: #111827;
-						color: #ffffff;
-						font-weight: 700;
-						border: 1px solid #d1d5db;
-						padding: 8px;
-						text-align: left;
-					}
+	/*
+	 * Main modal export action.
+	 *
+	 * CSV is preserved for backward compatibility.
+	 * Excel generates the requested two-sheet workbook.
+	 */
+	const exportDispatchData =
+		async () => {
+			const exportRows =
+				buildDispatchExportRows(
+					dispatchExportStatus
+				);
 
-					td {
-						border: 1px solid #d1d5db;
-						padding: 8px;
-						mso-number-format: "\\@";
-					}
-				</style>
-			</head>
+			if (exportRows.length === 0) {
+				alert(
+					"No rows found for selected export status"
+				);
 
-			<body>
-				<table>
-					<thead>
-						<tr>${tableHead}</tr>
-					</thead>
+				return;
+			}
 
-					<tbody>
-						${tableBody}
-					</tbody>
-				</table>
-			</body>
-		</html>
-	`;
+			try {
+				setDispatchExportLoading(true);
 
-		downloadTextFile({
-			content: excelHtml,
-			fileName: `${baseFileName}.xls`,
-			mimeType: "application/vnd.ms-excel;charset=utf-8;",
-		});
+				if (
+					dispatchExportFormat ===
+					"CSV"
+				) {
+					const headers =
+						dispatchExportColumns.map(
+							(column) =>
+								column.header
+						);
 
-		setDispatchExportOpen(false);
-	};
+					const csv =
+						"\uFEFF" +
+						[
+							headers
+								.map(csvEscape)
+								.join(","),
+
+							...exportRows.map(
+								(row) =>
+									dispatchExportColumns
+										.map(
+											(column) =>
+												csvEscape(
+													row[
+													column
+														.key
+													]
+												)
+										)
+										.join(",")
+							),
+						].join("\n");
+
+					const csvBlob =
+						new Blob(
+							[csv],
+							{
+								type:
+									"text/csv;charset=utf-8;",
+							}
+						);
+
+					downloadDispatchBlob({
+						blob: csvBlob,
+						fileName:
+							"Dispatch Register.csv",
+					});
+				} else {
+					await exportDispatchExcelWorkbook();
+				}
+
+				setDispatchExportOpen(false);
+			} catch (error) {
+				console.error(
+					"Dispatch export failed:",
+					error
+				);
+
+				alert(
+					error?.message ||
+					"Dispatch export failed"
+				);
+			} finally {
+				setDispatchExportLoading(false);
+			}
+		};
 
 	const formatLocalDateTimeDisplay = (value) => {
 		if (!value) return "—";
@@ -8897,17 +10017,20 @@ function DispatchedItemsPage() {
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Export dispatch table columns by selected status
+											Create a professional Dispatch Register with separate Dispatched and Other Status sheets
 										</Box>
 									</Box>
 								</Box>
 
 								<IconButton
-									sx={modalCloseButtonSx}
-									onClick={() => setDispatchExportOpen(false)}
-								>
-									×
-								</IconButton>
+	disabled={dispatchExportLoading}
+	sx={modalCloseButtonSx}
+	onClick={() =>
+		setDispatchExportOpen(false)
+	}
+>
+	×
+</IconButton>
 							</Box>
 
 							<Box sx={modalContentSx}>
@@ -9062,6 +10185,16 @@ function DispatchedItemsPage() {
 									/>
 
 									<HistoryMiniStat
+										label="Excel Sheets"
+										value={
+											dispatchExportFormat === "EXCEL"
+												? 2
+												: 1
+										}
+										accent="#22c55e"
+									/>
+
+									<HistoryMiniStat
 										label="Status"
 										value={renderStatusSelectionLabel(dispatchExportStatus)}
 										accent="#a78bfa"
@@ -9082,8 +10215,8 @@ function DispatchedItemsPage() {
 										fontWeight: 750,
 									}}
 								>
-									Export preview uses the same dispatch table column order.
-									Search filter is also applied. Pagination is ignored.
+									The Excel workbook contains two sheets: Dispatched and Other Status.
+									The global search and selected export statuses are applied. Pagination is ignored.
 								</Box>
 
 								<Box
@@ -9106,7 +10239,7 @@ function DispatchedItemsPage() {
 										<thead>
 											<tr>
 												{dispatchExportColumns.map((column) => (
-													<th key={column.header}>
+													<th key={column.key}>
 														{column.header}
 													</th>
 												))}
@@ -9114,18 +10247,31 @@ function DispatchedItemsPage() {
 										</thead>
 
 										<tbody>
-											{dispatchExportPreviewRows.slice(0, 20).map((row, index) => (
-												<tr key={index}>
-													{dispatchExportColumns.map((column) => (
-														<td
-															key={column.header}
-															title={row[column.header]}
-														>
-															{row[column.header] || "—"}
-														</td>
-													))}
-												</tr>
-											))}
+											{dispatchExportPreviewRows
+												.slice(0, 20)
+												.map((row, index) => (
+													<tr key={index}>
+														{dispatchExportColumns.map(
+															(column) => {
+																const displayValue =
+																	formatDispatchPreviewValue(
+																		row[column.key]
+																	);
+
+																return (
+																	<td
+																		key={column.key}
+																		title={
+																			displayValue
+																		}
+																	>
+																		{displayValue}
+																	</td>
+																);
+															}
+														)}
+													</tr>
+												))}
 										</tbody>
 									</Box>
 
@@ -9153,24 +10299,40 @@ function DispatchedItemsPage() {
 
 							<Box sx={modalFooterSx}>
 								<Button
-									onClick={() => setDispatchExportOpen(false)}
+									disabled={dispatchExportLoading}
+									onClick={() =>
+										setDispatchExportOpen(false)
+									}
 									sx={modalSecondaryButtonSx}
 								>
 									Cancel
 								</Button>
 
 								<Button
-									disabled={dispatchExportPreviewRows.length === 0}
+									disabled={
+										dispatchExportLoading ||
+										dispatchExportPreviewRows.length === 0
+									}
 									onClick={exportDispatchData}
 									sx={{
 										...premiumButton,
+
 										background:
 											dispatchExportFormat === "EXCEL"
 												? "linear-gradient(135deg,#059669,#10b981)"
 												: "linear-gradient(135deg,#2563eb,#3b82f6)",
+
+										"&.Mui-disabled": {
+											color:
+												"rgba(255,255,255,.45)",
+											background:
+												"rgba(255,255,255,.08)",
+										},
 									}}
 								>
-									Export {dispatchExportFormat}
+									{dispatchExportLoading
+										? "Preparing Report..."
+										: `Export ${dispatchExportFormat}`}
 								</Button>
 							</Box>
 						</Box>
