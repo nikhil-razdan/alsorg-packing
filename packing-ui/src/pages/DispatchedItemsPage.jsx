@@ -4278,6 +4278,15 @@ function DispatchedItemsPage() {
 		});
 	};
 
+	const openDispatchExportModal = () => {
+		const normalizedStatuses =
+			normalizeStatusSelection(statusFilter);
+
+		setDispatchExportStatus(normalizedStatuses);
+		setDispatchExportFormat("EXCEL");
+		setDispatchExportOpen(true);
+	};
+
 	const dispatchExportPreviewRows =
 		useMemo(() => {
 			return buildDispatchExportRows(
@@ -10023,14 +10032,14 @@ function DispatchedItemsPage() {
 								</Box>
 
 								<IconButton
-	disabled={dispatchExportLoading}
-	sx={modalCloseButtonSx}
-	onClick={() =>
-		setDispatchExportOpen(false)
-	}
->
-	×
-</IconButton>
+									disabled={dispatchExportLoading}
+									sx={modalCloseButtonSx}
+									onClick={() =>
+										setDispatchExportOpen(false)
+									}
+								>
+									×
+								</IconButton>
 							</Box>
 
 							<Box sx={modalContentSx}>
