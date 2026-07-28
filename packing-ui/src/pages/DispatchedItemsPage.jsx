@@ -3976,19 +3976,17 @@ function DispatchedItemsPage() {
 				),
 		},
 		{
-			key: "itemArea",
-			header: "Item Area",
-			width: 20,
-
+			key: "itemName",
+			header: "Item Name",
+			width: 30,
 			getValue: (row) =>
 				firstDispatchExportValue(
-					row?.itemArea,
-					row?.itemAreaCode,
-					row?.area,
-					row?.packedAreaCode,
-					row?.currentLocationCode,
-					row?.location,
-					row?.floor
+					row?.itemName,
+					row?.name,
+					row?.productName,
+					row?.packetItemName,
+					row?.packetItem?.itemName,
+					row?.packetItem?.name
 				),
 		},
 		{
