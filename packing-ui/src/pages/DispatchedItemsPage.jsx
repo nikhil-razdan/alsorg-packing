@@ -3881,44 +3881,88 @@ function DispatchedItemsPage() {
 		row?.chalaanNo ||
 		"";
 
-	const loadDispatchExportDriverLookup = async () => {
-		const res = await authFetch(
-			`${API_BASE_URL}/api/dispatched/challans`,
-			{
-				method: "GET",
-			}
-		);
+	const normalizeDispatchDriverName = (value) => {
+		const cleanValue =
+			String(value ?? "")
+				.trim()
+				.replace(/\s+/g, " ");
 
-		if (!res.ok) {
-			const text = await res.text();
+		const placeholderValues =
+			new Set([
+				"",
+				"-",
+				"—",
+				"N/A",
+				"NA",
+				"NONE",
+				"NULL",
+				"UNDEFINED",
+			]);
 
-			throw new Error(
-				text || "Failed to load dispatch challan drivers"
-			);
-		}
+		return placeholderValues.has(
+			cleanValue.toUpperCase()
+		)
+			? ""
+			: cleanValue;
+	};
 
-		const challans = await res.json();
+	const normalizeDispatchLookupId = (value) => {
+		return String(value ?? "")
+			.trim()
+			.toLowerCase();
+	};
 
-		const nextLookup = new Map();
+	const normalizeDispatchLookupChallan = (value) => {
+		return String(value ?? "")
+			.trim()
+			.toUpperCase();
+	};
+
+	const buildDispatchHistoryItemFingerprint = (item) => {
+		return [
+			item?.sku,
+			item?.pdNo,
+			item?.drawingNo,
+			item?.name || item?.itemName,
+			item?.clientName,
+		]
+			.map((value) =>
+				normalizeSmartSearch(value)
+			)
+			.join("|");
+	};
+
+	const buildDispatchDriverLookupFromHistory = (
+		challans
+	) => {
+		const nextLookup =
+			new Map();
 
 		(Array.isArray(challans) ? challans : []).forEach(
 			(challan) => {
 				const driverName =
-					String(challan?.driverName || "").trim();
+					normalizeDispatchDriverName(
+						challan?.driverName
+					);
 
+				/*
+				 * A challan without a real driver name
+				 * cannot contribute to the lookup.
+				 */
 				if (!driverName) {
 					return;
 				}
 
 				const challanNumber =
-					String(
+					normalizeDispatchLookupChallan(
 						challan?.challanNumber ||
 						challan?.chalaanNumber ||
-						""
-					)
-						.trim()
-						.toUpperCase();
+						challan?.dispatchChallanNumber
+					);
 
+				/*
+				 * Challan-level lookup.
+				 */
 				if (challanNumber) {
 					nextLookup.set(
 						`CHALLAN:${challanNumber}`,
@@ -3926,17 +3970,56 @@ function DispatchedItemsPage() {
 					);
 				}
 
-				(challan?.items || []).forEach((item) => {
-					const itemId =
-						String(
-							item?.zohoItemId ||
-							item?.id ||
-							""
-						).trim();
+				const historyItems =
+					Array.isArray(challan?.items)
+						? challan.items
+						: [];
 
-					if (itemId) {
+				historyItems.forEach((item) => {
+					/*
+					 * Backend currently returns zohoItemId.
+					 * The additional fields safely support
+					 * legacy response versions.
+					 */
+					const possibleItemIds = [
+						item?.zohoItemId,
+						item?.dispatchedItemId,
+						item?.itemId,
+						item?.packetItemId,
+						item?.id,
+					]
+						.map(
+							normalizeDispatchLookupId
+						)
+						.filter(Boolean);
+
+					possibleItemIds.forEach(
+						(itemId) => {
+							nextLookup.set(
+								`ITEM:${itemId}`,
+								driverName
+							);
+						}
+					);
+
+					/*
+					 * Secondary fallback for old records where
+					 * the item identifier may have changed.
+					 */
+					const fingerprint =
+						buildDispatchHistoryItemFingerprint(
+							item
+						);
+
+					if (
+						challanNumber &&
+						fingerprint.replace(
+							/\|/g,
+							""
+						)
+					) {
 						nextLookup.set(
-							`ITEM:${itemId}`,
+							`CHALLAN_DETAIL:${challanNumber}|${fingerprint}`,
 							driverName
 						);
 					}
@@ -3944,57 +4027,149 @@ function DispatchedItemsPage() {
 			}
 		);
 
-		setDispatchExportDriverLookup(nextLookup);
+		return nextLookup;
 	};
 
-	const getDispatchExportDriverName = (row) => {
-		const directDriverName =
-			String(
-				row?.driverName ||
-				row?.driver?.name ||
-				row?.assignedDriverName ||
-				""
-			).trim();
+	const loadDispatchExportDriverLookup = async () => {
+		const response =
+			await authFetch(
+				`${API_BASE_URL}/api/dispatched/challans`,
+				{
+					method: "GET",
+					headers: {
+						Accept: "application/json",
+					},
+				}
+			);
 
-		if (directDriverName) {
-			return directDriverName;
-		}
-
-		const itemId =
-			String(
-				row?.zohoItemId ||
-				row?.id ||
-				""
-			).trim();
-
-		if (itemId) {
-			const itemDriver =
-				dispatchExportDriverLookup.get(
-					`ITEM:${itemId}`
+		if (!response.ok) {
+			const message =
+				await readResponseError(
+					response,
+					"Failed to load challan history drivers"
 				);
 
-			if (itemDriver) {
-				return itemDriver;
+			throw new Error(message);
+		}
+
+		const payload =
+			await response.json();
+
+		const challans =
+			Array.isArray(payload)
+				? payload
+				: Array.isArray(payload?.content)
+					? payload.content
+					: Array.isArray(payload?.items)
+						? payload.items
+						: [];
+
+		const freshLookup =
+			buildDispatchDriverLookupFromHistory(
+				challans
+			);
+
+		/*
+		 * Update preview state.
+		 */
+		setDispatchExportDriverLookup(
+			freshLookup
+		);
+
+		/*
+		 * Critical:
+		 * Return the fresh Map so Excel does not have to
+		 * wait for React state to update.
+		 */
+		return freshLookup;
+	};
+
+	const getDispatchExportDriverName = (
+		row,
+		driverLookup = dispatchExportDriverLookup
+	) => {
+		const activeLookup =
+			driverLookup instanceof Map
+				? driverLookup
+				: dispatchExportDriverLookup;
+
+		/*
+		 * 1. Match the Dispatch row ID against the exact
+		 * challan-history item zohoItemId.
+		 */
+		const possibleRowIds = [
+			row?.zohoItemId,
+			row?.dispatchedItemId,
+			row?.packetItemId,
+			row?.itemId,
+			row?.id,
+		]
+			.map(normalizeDispatchLookupId)
+			.filter(Boolean);
+
+		for (const rowId of possibleRowIds) {
+			const historyDriver =
+				normalizeDispatchDriverName(
+					activeLookup.get(
+						`ITEM:${rowId}`
+					)
+				);
+
+			if (historyDriver) {
+				return historyDriver;
 			}
 		}
 
+		/*
+		 * 2. Match through the challan number.
+		 */
 		const challanNumber =
-			String(getDispatchChallanNo(row) || "")
-				.trim()
-				.toUpperCase();
+			normalizeDispatchLookupChallan(
+				getDispatchChallanNo(row)
+			);
 
 		if (challanNumber) {
 			const challanDriver =
-				dispatchExportDriverLookup.get(
-					`CHALLAN:${challanNumber}`
+				normalizeDispatchDriverName(
+					activeLookup.get(
+						`CHALLAN:${challanNumber}`
+					)
 				);
 
 			if (challanDriver) {
 				return challanDriver;
 			}
+
+			/*
+			 * 3. Legacy fallback using challan plus item details.
+			 */
+			const fingerprint =
+				buildDispatchHistoryItemFingerprint(
+					row
+				);
+
+			const detailDriver =
+				normalizeDispatchDriverName(
+					activeLookup.get(
+						`CHALLAN_DETAIL:${challanNumber}|${fingerprint}`
+					)
+				);
+
+			if (detailDriver) {
+				return detailDriver;
+			}
 		}
 
-		return "";
+		/*
+		 * 4. Use Dispatch row metadata only when challan
+		 * history did not provide a result.
+		 */
+		return normalizeDispatchDriverName(
+			row?.driverName ||
+			row?.assignedDriverName ||
+			row?.driver?.name ||
+			row?.driver
+		);
 	};
 	/*
  * Only the exact DISPATCHED status goes into the first Excel sheet.
@@ -4180,8 +4355,15 @@ function DispatchedItemsPage() {
 			key: "driverName",
 			header: "Driver Name",
 			width: 24,
-			getValue: (row) =>
-				getDispatchExportDriverName(row),
+
+			getValue: (
+				row,
+				context = {}
+			) =>
+				getDispatchExportDriverName(
+					row,
+					context.driverLookup
+				),
 		},
 	];
 
@@ -4371,8 +4553,14 @@ function DispatchedItemsPage() {
 	 * Used by modal preview and CSV compatibility.
 	 */
 	const buildDispatchExportRows = (
-		statusValue
+		statusValue,
+		driverLookup = dispatchExportDriverLookup
 	) => {
+		const activeDriverLookup =
+			driverLookup instanceof Map
+				? driverLookup
+				: dispatchExportDriverLookup;
+
 		return getDispatchExportSourceRows(
 			statusValue
 		).map((row) => {
@@ -4381,7 +4569,13 @@ function DispatchedItemsPage() {
 			dispatchExportColumns.forEach(
 				(column) => {
 					result[column.key] =
-						column.getValue(row);
+						column.getValue(
+							row,
+							{
+								driverLookup:
+									activeDriverLookup,
+							}
+						);
 				}
 			);
 
@@ -4389,22 +4583,32 @@ function DispatchedItemsPage() {
 		});
 	};
 
-	const openDispatchExportModal = async () => {
+	const openDispatchExportModal = () => {
 		setDispatchExportStatus(
-			normalizeStatusSelection(statusFilter)
+			normalizeStatusSelection(
+				statusFilter
+			)
 		);
 
-		setDispatchExportFormat("EXCEL");
-		setDispatchExportOpen(true);
+		setDispatchExportFormat(
+			"EXCEL"
+		);
 
-		try {
-			await loadDispatchExportDriverLookup();
-		} catch (error) {
-			console.error(
-				"Unable to load challan driver names:",
-				error
-			);
-		}
+		setDispatchExportOpen(
+			true
+		);
+
+		/*
+		 * Load driver names for modal preview.
+		 * Export will independently verify them again.
+		 */
+		loadDispatchExportDriverLookup()
+			.catch((error) => {
+				console.error(
+					"Unable to load preview driver names:",
+					error
+				);
+			});
 	};
 
 	const dispatchExportPreviewRows = useMemo(() => {
@@ -4607,6 +4811,7 @@ function DispatchedItemsPage() {
 		subtitle,
 		sourceRows,
 		accentColor,
+		driverLookup,
 	}) => {
 		const worksheet =
 			workbook.addWorksheet(
@@ -4918,7 +5123,10 @@ function DispatchedItemsPage() {
 					dispatchExportColumns.map(
 						(column) =>
 							column.getValue(
-								sourceRow
+								sourceRow,
+								{
+									driverLookup,
+								}
 							)
 					);
 
@@ -5137,7 +5345,9 @@ function DispatchedItemsPage() {
 	 * Generates the real XLSX workbook.
 	 */
 	const exportDispatchExcelWorkbook =
-		async () => {
+		async (
+			driverLookup
+		) => {
 			const scopedRows =
 				getDispatchExportSourceRows(
 					dispatchExportStatus
@@ -5246,6 +5456,7 @@ function DispatchedItemsPage() {
 					"Records whose current status is DISPATCHED",
 				sourceRows: dispatchedRows,
 				accentColor: "FF059669",
+				driverLookup,
 			});
 
 			createDispatchExcelSheet({
@@ -5257,6 +5468,7 @@ function DispatchedItemsPage() {
 					"Packed, warehouse, ready-to-dispatch, restored and all non-dispatched records",
 				sourceRows: otherStatusRows,
 				accentColor: "FF2563EB",
+				driverLookup,
 			});
 
 			const workbookBuffer =
@@ -5286,21 +5498,32 @@ function DispatchedItemsPage() {
 	 */
 	const exportDispatchData =
 		async () => {
-			const exportRows =
-				buildDispatchExportRows(
-					dispatchExportStatus
-				);
-
-			if (exportRows.length === 0) {
-				alert(
-					"No rows found for selected export status"
-				);
-
-				return;
-			}
-
 			try {
-				setDispatchExportLoading(true);
+				setDispatchExportLoading(
+					true
+				);
+
+				/*
+				 * Always fetch fresh challan history immediately
+				 * before creating the file.
+				 *
+				 * Do not rely only on React state because setState
+				 * is asynchronous.
+				 */
+				const freshDriverLookup =
+					await loadDispatchExportDriverLookup();
+
+				const exportRows =
+					buildDispatchExportRows(
+						dispatchExportStatus,
+						freshDriverLookup
+					);
+
+				if (exportRows.length === 0) {
+					throw new Error(
+						"No rows found for selected export status"
+					);
+				}
 
 				if (
 					dispatchExportFormat ===
@@ -5326,8 +5549,7 @@ function DispatchedItemsPage() {
 											(column) =>
 												csvEscape(
 													row[
-													column
-														.key
+													column.key
 													]
 												)
 										)
@@ -5350,10 +5572,14 @@ function DispatchedItemsPage() {
 							"Dispatch Register.csv",
 					});
 				} else {
-					await exportDispatchExcelWorkbook();
+					await exportDispatchExcelWorkbook(
+						freshDriverLookup
+					);
 				}
 
-				setDispatchExportOpen(false);
+				setDispatchExportOpen(
+					false
+				);
 			} catch (error) {
 				console.error(
 					"Dispatch export failed:",
@@ -5365,7 +5591,9 @@ function DispatchedItemsPage() {
 					"Dispatch export failed"
 				);
 			} finally {
-				setDispatchExportLoading(false);
+				setDispatchExportLoading(
+					false
+				);
 			}
 		};
 
