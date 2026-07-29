@@ -38,6 +38,7 @@ import ApprovalOutlinedIcon
 	from "@mui/icons-material/ApprovalOutlined";
 import ArrowForwardIcon
 	from "@mui/icons-material/ArrowForward";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 
 const stages = [
 	{
