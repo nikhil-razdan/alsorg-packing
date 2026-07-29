@@ -15,7 +15,6 @@ import bomFlowApi
 import {
 	canApproveBomFlowRevision,
 	canEditBomFlowRevision,
-	canReleaseBomToMatFlow,
 	canReviewBomFlowRevision,
 	canSubmitBomFlowRevision,
 	getBomFlowRole,
@@ -398,37 +397,6 @@ export default function BOMFlowBOMBuilder() {
 		}
 	};
 
-	const handleRelease = async () => {
-		setWorking(true);
-		setError("");
-
-		try {
-			const release =
-				await bomFlowApi.releaseToMatFlow(
-					revision.id,
-					revision.rowVersion
-				);
-
-			if (!release?.id) {
-				throw new Error(
-					"MatFlow release ID was not returned."
-				);
-			}
-
-			navigate(
-				`/matflow/releases/${release.id}`
-			);
-		} catch (requestError) {
-			setError(
-				requestError?.response?.data?.message ||
-				requestError?.message ||
-				"Unable to release BOM to MatFlow."
-			);
-		} finally {
-			setWorking(false);
-		}
-	};
-
 	if (loading) {
 		return (
 			<Box
@@ -613,17 +581,6 @@ export default function BOMFlowBOMBuilder() {
 										sx={primaryBtnSx}
 									>
 										Approve Revision
-									</Button>
-								)}
-
-							{revision?.status === "APPROVED" &&
-								canReleaseBomToMatFlow(role) && (
-									<Button
-										disabled={working}
-										onClick={handleRelease}
-										sx={primaryBtnSx}
-									>
-										Release to MatFlow
 									</Button>
 								)}
 						</Box>

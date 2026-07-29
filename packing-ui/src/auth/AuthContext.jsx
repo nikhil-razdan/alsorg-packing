@@ -12,79 +12,263 @@ import { normalizeRole } from "../utils/permissions";
 
 const AuthContext = createContext(null);
 
+const normalizeValues = (values) => {
+	if (!Array.isArray(values)) {
+		return [];
+	}
+
+	return Array.from(
+		new Set(
+			values
+				.map((value) =>
+					String(value || "")
+						.trim()
+						.toUpperCase()
+				)
+				.filter(Boolean)
+		)
+	);
+};
+
+const clearCompatibilityStorage = () => {
+	localStorage.removeItem("token");
+	localStorage.removeItem("accessToken");
+	localStorage.removeItem("currentUser");
+	localStorage.removeItem("username");
+	localStorage.removeItem("role");
+	localStorage.removeItem("plantCode");
+	localStorage.removeItem("plantCodes");
+};
+
+const persistCompatibilityUser = (user) => {
+	if (!user) {
+		clearCompatibilityStorage();
+		return;
+	}
+
+	localStorage.setItem(
+		"currentUser",
+		JSON.stringify(user)
+	);
+
+	localStorage.setItem(
+		"username",
+		user.username || ""
+	);
+
+	localStorage.setItem(
+		"role",
+		user.role || ""
+	);
+
+	localStorage.setItem(
+		"plantCode",
+		user.plantCode || ""
+	);
+
+	localStorage.setItem(
+		"plantCodes",
+		JSON.stringify(
+			user.plantCodes || []
+		)
+	);
+};
+
+const unwrapAuthResponse = (response) => {
+	return (
+		response?.data?.data ??
+		response?.data ??
+		{}
+	);
+};
+
 export function AuthProvider({ children }) {
-	const [user, setUser] = useState(null);
-	const [authLoading, setAuthLoading] = useState(true);
+	const [user, setUserState] =
+		useState(null);
+
+	const [authLoading, setAuthLoading] =
+		useState(true);
+
+	const setUser = useCallback(
+		(nextUser) => {
+			const cleanUser =
+				nextUser || null;
+
+			setUserState(cleanUser);
+			persistCompatibilityUser(
+				cleanUser
+			);
+		},
+		[]
+	);
+
+	const clearSession = useCallback(() => {
+		setUserState(null);
+		clearCompatibilityStorage();
+	}, []);
 
 	const loadMe = useCallback(async () => {
-		try {
-			const res = await API.get("/auth/me");
-			const data = res.data || {};
+		setAuthLoading(true);
 
-			setUser({
+		try {
+			const response =
+				await API.get("/auth/me");
+
+			const data =
+				unwrapAuthResponse(response);
+
+			if (
+				data.authenticated !== true ||
+				data.enabled !== true ||
+				!data.id ||
+				!String(
+					data.username || ""
+				).trim()
+			) {
+				clearSession();
+				return null;
+			}
+
+			const cleanRole =
+				normalizeRole(data.role);
+
+			const primaryPlantCode =
+				String(
+					data.plantCode || ""
+				)
+					.trim()
+					.toUpperCase();
+
+			const plantCodes =
+				normalizeValues([
+					...(
+						Array.isArray(
+							data.plantCodes
+						)
+							? data.plantCodes
+							: []
+					),
+					primaryPlantCode,
+				]);
+
+			const nextUser = {
 				id: data.id,
-				username: data.username || "",
-				role: normalizeRole(data.role),
-				enabled: data.enabled === true,
+
+				username:
+					String(
+						data.username || ""
+					).trim(),
+
+				role: cleanRole,
+
+				enabled: true,
+
 				warehouseAccess:
-					data.warehouseAccess === true ||
-					normalizeRole(data.role) === "ADMIN" ||
-					normalizeRole(data.role) === "WAREHOUSE",
-				plantCode: data.plantCode || "",
-				plantCodes: Array.isArray(data.plantCodes)
-					? data.plantCodes
-					: [],
-				modules: Array.isArray(data.modules)
-					? data.modules
-					: [],
-				driverId: data.driverId || null,
-			});
+					data.warehouseAccess ===
+					true ||
+					cleanRole === "ADMIN" ||
+					cleanRole === "WAREHOUSE",
+
+				plantCode:
+					primaryPlantCode ||
+					plantCodes[0] ||
+					"",
+
+				plantCodes,
+
+				modules:
+					normalizeValues(
+						data.modules
+					),
+
+				driverId:
+					data.driverId || null,
+			};
+
+			setUser(nextUser);
+
+			return nextUser;
 		} catch {
-			setUser(null);
+			clearSession();
+			return null;
 		} finally {
 			setAuthLoading(false);
 		}
-	}, []);
+	}, [
+		clearSession,
+		setUser,
+	]);
 
 	useEffect(() => {
 		loadMe();
 
 		const onUnauthorized = () => {
-			setUser(null);
+			clearSession();
 		};
 
-		window.addEventListener("app:unauthorized", onUnauthorized);
+		window.addEventListener(
+			"app:unauthorized",
+			onUnauthorized
+		);
 
 		return () => {
-			window.removeEventListener("app:unauthorized", onUnauthorized);
+			window.removeEventListener(
+				"app:unauthorized",
+				onUnauthorized
+			);
 		};
-	}, [loadMe]);
+	}, [
+		clearSession,
+		loadMe,
+	]);
 
 	const logout = useCallback(async () => {
 		try {
 			await API.post("/auth/logout");
 		} catch {
-			// ignore
+			/*
+			 * Local authentication state must still
+			 * be cleared when the API is unavailable.
+			 */
 		}
 
-		setUser(null);
-	}, []);
+		clearSession();
+	}, [clearSession]);
 
 	const value = useMemo(
 		() => ({
 			user,
 			setUser,
 			authLoading,
-			isLoggedIn: Boolean(user),
-			role: user?.role || "",
-			modules: user?.modules || [],
-			plantCodes: user?.plantCodes || [],
-			warehouseAccess: Boolean(user?.warehouseAccess),
+
+			isLoggedIn: Boolean(
+				user?.id &&
+				user?.enabled === true
+			),
+
+			role:
+				user?.role || "",
+
+			modules:
+				user?.modules || [],
+
+			plantCode:
+				user?.plantCode || "",
+
+			plantCodes:
+				user?.plantCodes || [],
+
+			warehouseAccess:
+				Boolean(
+					user?.warehouseAccess
+				),
+
 			loadMe,
 			logout,
 		}),
 		[
 			user,
+			setUser,
 			authLoading,
 			loadMe,
 			logout,
@@ -99,11 +283,14 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-	const ctx = useContext(AuthContext);
+	const context =
+		useContext(AuthContext);
 
-	if (!ctx) {
-		throw new Error("useAuth must be used inside AuthProvider");
+	if (!context) {
+		throw new Error(
+			"useAuth must be used inside AuthProvider"
+		);
 	}
 
-	return ctx;
+	return context;
 }

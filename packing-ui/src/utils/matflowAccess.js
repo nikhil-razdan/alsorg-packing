@@ -1,10 +1,14 @@
-import { normalizeRole } from "./permissions";
+import { normalizeRole }
+    from "./permissions";
 
 const readStoredRole = () => {
     try {
-        const currentUser = JSON.parse(
-            localStorage.getItem("currentUser") || "{}"
-        );
+        const currentUser =
+            JSON.parse(
+                localStorage.getItem(
+                    "currentUser"
+                ) || "{}"
+            );
 
         return (
             currentUser?.role ||
@@ -12,147 +16,301 @@ const readStoredRole = () => {
             ""
         );
     } catch {
-        return localStorage.getItem("role") || "";
+        return (
+            localStorage.getItem("role") ||
+            ""
+        );
     }
 };
 
-export const MATFLOW_ROLES = Object.freeze({
-    ADMIN: "ADMIN",
+export const MATFLOW_ROLES =
+    Object.freeze({
+        ADMIN: "ADMIN",
+        MANAGER: "MATFLOW_MANAGER",
+        ENGINEERING:
+            "MATFLOW_ENGINEERING",
+        STORE: "MATFLOW_STORE",
+        PURCHASE: "MATFLOW_PURCHASE",
+        PROCESSING:
+            "MATFLOW_PROCESSING",
+        PRODUCTION:
+            "MATFLOW_PRODUCTION",
+        QC: "MATFLOW_QC",
+        DIRECTOR: "MATFLOW_DIRECTOR",
+    });
 
-    MANAGER: "MATFLOW_MANAGER",
-    ENGINEERING: "MATFLOW_ENGINEERING",
-    PRODUCTION: "MATFLOW_PRODUCTION",
-    STORE: "MATFLOW_STORE",
-    PURCHASE: "MATFLOW_PURCHASE",
-    APPROVER: "MATFLOW_APPROVER",
-});
-
-/*
- * Temporary role aliases.
- *
- * Keep these while existing VenFlow users are being migrated
- * to MATFLOW_* roles.
- *
- * Remove these aliases only after the database and user screens
- * have been completely migrated.
- */
-const LEGACY_ROLE_ALIASES = Object.freeze({
-    VENFLOW_MANAGER: MATFLOW_ROLES.MANAGER,
-    VENFLOW_ENGINEERING: MATFLOW_ROLES.ENGINEERING,
-
-    VENFLOW_PRODUCTION: MATFLOW_ROLES.PRODUCTION,
-    VENFLOW_SUPERVISOR: MATFLOW_ROLES.PRODUCTION,
-
-    VENFLOW_STORE: MATFLOW_ROLES.STORE,
-    VENFLOW_QC: MATFLOW_ROLES.STORE,
-
-    VENFLOW_PURCHASE: MATFLOW_ROLES.PURCHASE,
-
-    VENFLOW_DIRECTOR: MATFLOW_ROLES.APPROVER,
-});
-
-export const getMatFlowRole = (role) => {
-    const cleanRole = normalizeRole(
-        role || readStoredRole()
+const ALL_MATFLOW_ROLES =
+    Object.freeze(
+        Object.values(MATFLOW_ROLES)
     );
 
-    return (
-        LEGACY_ROLE_ALIASES[cleanRole] ||
-        cleanRole
+const SCREEN_ROLES =
+    Object.freeze({
+        dashboard:
+            ALL_MATFLOW_ROLES,
+
+        tracking:
+            ALL_MATFLOW_ROLES,
+
+        projects: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.ENGINEERING,
+            MATFLOW_ROLES.DIRECTOR,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        materials: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.ENGINEERING,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.PURCHASE,
+            MATFLOW_ROLES.QC,
+        ],
+
+        boms: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.ENGINEERING,
+            MATFLOW_ROLES.DIRECTOR,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        "bom-create": [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.ENGINEERING,
+        ],
+
+        "bom-edit": [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.ENGINEERING,
+        ],
+
+        "bom-detail": [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.ENGINEERING,
+            MATFLOW_ROLES.DIRECTOR,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        "bom-approval": [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.DIRECTOR,
+        ],
+
+        production: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        requisitions: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        "requisition-detail": [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        store: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        transfers: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.PROCESSING,
+            MATFLOW_ROLES.QC,
+            MATFLOW_ROLES.PRODUCTION,
+        ],
+
+        indents: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.PURCHASE,
+        ],
+
+        purchase: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.PURCHASE,
+            MATFLOW_ROLES.DIRECTOR,
+        ],
+
+        receiving: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.PURCHASE,
+            MATFLOW_ROLES.QC,
+        ],
+
+        approvals: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.DIRECTOR,
+        ],
+
+        qc: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.QC,
+            MATFLOW_ROLES.STORE,
+        ],
+
+        processing: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.PROCESSING,
+        ],
+
+        returns: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.PRODUCTION,
+            MATFLOW_ROLES.QC,
+            MATFLOW_ROLES.PROCESSING,
+        ],
+
+        ledger: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.STORE,
+            MATFLOW_ROLES.DIRECTOR,
+        ],
+
+        reports: [
+            MATFLOW_ROLES.ADMIN,
+            MATFLOW_ROLES.MANAGER,
+            MATFLOW_ROLES.DIRECTOR,
+        ],
+    });
+
+export const getMatFlowRole = (
+    role
+) => {
+    return normalizeRole(
+        role || readStoredRole()
     );
 };
 
-/* =========================================================
- * BASIC ROLE CHECKS
- * ========================================================= */
+export const hasMatFlowRole = (
+    role
+) => {
+    return ALL_MATFLOW_ROLES.includes(
+        getMatFlowRole(role)
+    );
+};
 
-export const isMatFlowAdmin = (role) => {
+export const isMatFlowAdmin = (
+    role
+) => {
     return (
         getMatFlowRole(role) ===
         MATFLOW_ROLES.ADMIN
     );
 };
 
-export const isMatFlowManager = (role) => {
+export const isMatFlowManager = (
+    role
+) => {
     return (
         getMatFlowRole(role) ===
         MATFLOW_ROLES.MANAGER
     );
 };
 
-export const isMatFlowAdminOrManager = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowEngineering = (
+    role
+) => {
     return (
-        cleanRole === MATFLOW_ROLES.ADMIN ||
-        cleanRole === MATFLOW_ROLES.MANAGER
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.ENGINEERING
     );
 };
 
-export const isMatFlowEngineering = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowStore = (
+    role
+) => {
     return (
-        isMatFlowAdminOrManager(cleanRole) ||
-        cleanRole === MATFLOW_ROLES.ENGINEERING
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.STORE
     );
 };
 
-export const isMatFlowProduction = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowPurchase = (
+    role
+) => {
     return (
-        isMatFlowAdminOrManager(cleanRole) ||
-        cleanRole === MATFLOW_ROLES.PRODUCTION
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.PURCHASE
     );
 };
 
-export const isMatFlowStore = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowProcessing = (
+    role
+) => {
     return (
-        isMatFlowAdminOrManager(cleanRole) ||
-        cleanRole === MATFLOW_ROLES.STORE
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.PROCESSING
     );
 };
 
-export const isMatFlowPurchase = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowProduction = (
+    role
+) => {
     return (
-        isMatFlowAdminOrManager(cleanRole) ||
-        cleanRole === MATFLOW_ROLES.PURCHASE
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.PRODUCTION
     );
 };
 
-export const isMatFlowApprover = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
+export const isMatFlowQc = (
+    role
+) => {
     return (
-        cleanRole === MATFLOW_ROLES.ADMIN ||
-        cleanRole === MATFLOW_ROLES.APPROVER
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.QC
     );
 };
 
-export const hasMatFlowRole = (role) => {
-    const cleanRole = getMatFlowRole(role);
-
-    return Object.values(
-        MATFLOW_ROLES
-    ).includes(cleanRole);
+export const isMatFlowDirector = (
+    role
+) => {
+    return (
+        getMatFlowRole(role) ===
+        MATFLOW_ROLES.DIRECTOR
+    );
 };
-
-/* =========================================================
- * SCREEN PERMISSIONS
- * ========================================================= */
 
 export const canAccessMatFlowScreen = (
     screen,
     role
 ) => {
-    const cleanRole = getMatFlowRole(role);
+    const cleanRole =
+        getMatFlowRole(role);
 
-    if (cleanRole === MATFLOW_ROLES.ADMIN) {
+    if (
+        cleanRole ===
+        MATFLOW_ROLES.ADMIN
+    ) {
         return true;
     }
 
@@ -160,99 +318,60 @@ export const canAccessMatFlowScreen = (
         return false;
     }
 
-    switch (screen) {
-        case "dashboard":
-        case "releases":
-        case "release-detail":
-        case "reports":
-            return true;
+    const allowedRoles =
+        SCREEN_ROLES[screen];
 
-        case "production":
-        case "requisition-detail":
-            return isMatFlowProduction(cleanRole);
-
-        case "store":
-            return isMatFlowStore(cleanRole);
-
-        case "indents":
-        case "indent-detail":
-            return (
-                isMatFlowStore(cleanRole) ||
-                isMatFlowPurchase(cleanRole)
-            );
-
-        case "purchase":
-            return isMatFlowPurchase(cleanRole);
-
-        case "approvals":
-        case "purchase-order-detail":
-            return isMatFlowApprover(cleanRole);
-
-        default:
-            return false;
+    if (!Array.isArray(allowedRoles)) {
+        return false;
     }
-};
 
-/* =========================================================
- * DEFAULT LANDING
- * ========================================================= */
+    return allowedRoles.includes(
+        cleanRole
+    );
+};
 
 export const defaultMatFlowPathForRole = (
     role
 ) => {
-    const cleanRole = getMatFlowRole(role);
+    const cleanRole =
+        getMatFlowRole(role);
 
-    if (
-        cleanRole === MATFLOW_ROLES.ADMIN ||
-        cleanRole === MATFLOW_ROLES.MANAGER
-    ) {
-        return "/matflow/dashboard";
+    switch (cleanRole) {
+        case MATFLOW_ROLES.ADMIN:
+        case MATFLOW_ROLES.MANAGER:
+            return "/matflow/dashboard";
+
+        case MATFLOW_ROLES.ENGINEERING:
+            return "/matflow/boms";
+
+        case MATFLOW_ROLES.STORE:
+            return "/matflow/store";
+
+        case MATFLOW_ROLES.PURCHASE:
+            return "/matflow/purchase";
+
+        case MATFLOW_ROLES.PROCESSING:
+            return "/matflow/processing";
+
+        case MATFLOW_ROLES.PRODUCTION:
+            return "/matflow/production";
+
+        case MATFLOW_ROLES.QC:
+            return "/matflow/qc";
+
+        case MATFLOW_ROLES.DIRECTOR:
+            return "/matflow/approvals";
+
+        default:
+            return "/modules";
     }
-
-    if (
-        cleanRole ===
-        MATFLOW_ROLES.ENGINEERING
-    ) {
-        return "/matflow/releases";
-    }
-
-    if (
-        cleanRole ===
-        MATFLOW_ROLES.PRODUCTION
-    ) {
-        return "/matflow/production";
-    }
-
-    if (
-        cleanRole ===
-        MATFLOW_ROLES.STORE
-    ) {
-        return "/matflow/store";
-    }
-
-    if (
-        cleanRole ===
-        MATFLOW_ROLES.PURCHASE
-    ) {
-        return "/matflow/purchase";
-    }
-
-    if (
-        cleanRole ===
-        MATFLOW_ROLES.APPROVER
-    ) {
-        return "/matflow/approvals";
-    }
-
-    return "/modules";
 };
 
-/* =========================================================
- * DISPLAY LABELS
- * ========================================================= */
-
-export const matFlowRoleLabel = (role) => {
-    const cleanRole = getMatFlowRole(role);
+export const matFlowRoleLabel = (
+    role
+) => {
+    const cleanRole =
+        getMatFlowRole(role);
 
     switch (cleanRole) {
         case MATFLOW_ROLES.ADMIN:
@@ -264,17 +383,23 @@ export const matFlowRoleLabel = (role) => {
         case MATFLOW_ROLES.ENGINEERING:
             return "Engineering";
 
-        case MATFLOW_ROLES.PRODUCTION:
-            return "Production";
-
         case MATFLOW_ROLES.STORE:
-            return "Store";
+            return "Stores";
 
         case MATFLOW_ROLES.PURCHASE:
             return "Purchase";
 
-        case MATFLOW_ROLES.APPROVER:
-            return "Purchase Approver";
+        case MATFLOW_ROLES.PROCESSING:
+            return "Processing";
+
+        case MATFLOW_ROLES.PRODUCTION:
+            return "Production";
+
+        case MATFLOW_ROLES.QC:
+            return "Quality Control";
+
+        case MATFLOW_ROLES.DIRECTOR:
+            return "Director";
 
         default:
             return "MatFlow User";

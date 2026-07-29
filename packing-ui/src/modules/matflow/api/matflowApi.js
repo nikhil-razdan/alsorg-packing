@@ -1,36 +1,320 @@
 import API from "../../../services/api";
 
-const BASE = "/api/matflow";
+const BASE = "/matflow";
+
+const unwrap = (response) => {
+	return (
+		response?.data?.data ??
+		response?.data ??
+		null
+	);
+};
 
 const cleanParams = (params = {}) => {
 	return Object.fromEntries(
-		Object.entries(params).filter(([, value]) => {
-			return (
-				value !== undefined &&
-				value !== null &&
-				value !== ""
-			);
-		})
+		Object.entries(params).filter(
+			([, value]) => {
+				return (
+					value !== undefined &&
+					value !== null &&
+					value !== ""
+				);
+			}
+		)
 	);
+};
+
+const requireId = (
+	value,
+	label = "Record ID"
+) => {
+	const id =
+		String(value || "").trim();
+
+	if (!id) {
+		throw new Error(
+			`${label} is required.`
+		);
+	}
+
+	return id;
+};
+
+const get = async (
+	path,
+	params
+) => {
+	const response =
+		await API.get(
+			path,
+			params
+				? {
+					params:
+						cleanParams(params),
+				}
+				: undefined
+		);
+
+	return unwrap(response);
+};
+
+const post = async (
+	path,
+	body = {}
+) => {
+	const response =
+		await API.post(
+			path,
+			body
+		);
+
+	return unwrap(response);
+};
+
+const put = async (
+	path,
+	body = {}
+) => {
+	const response =
+		await API.put(
+			path,
+			body
+		);
+
+	return unwrap(response);
 };
 
 export const matflowApi = {
 	/* =====================================================
-	 * RELEASES
+	 * DASHBOARD AND REPORTING
 	 * ===================================================== */
 
-	listReleases(params = {}) {
-		return API.get(
-			`${BASE}/releases`,
-			{
-				params: cleanParams(params),
-			}
+	getDashboard(params = {}) {
+		return get(
+			`${BASE}/reports/dashboard`,
+			params
 		);
 	},
 
-	getRelease(releaseId) {
-		return API.get(
-			`${BASE}/releases/${releaseId}`
+	getProjectTracking(
+		projectDrawingId
+	) {
+		return get(
+			`${BASE}/reports/projects/${requireId(
+				projectDrawingId,
+				"Project drawing ID"
+			)}`
+		);
+	},
+
+	listShortages(params = {}) {
+		return get(
+			`${BASE}/reports/shortages`,
+			params
+		);
+	},
+
+	listStockLedger(params = {}) {
+		return get(
+			`${BASE}/reports/stock-ledger`,
+			params
+		);
+	},
+
+	listAuditLogs(params = {}) {
+		return get(
+			`${BASE}/reports/audit`,
+			params
+		);
+	},
+
+	/* =====================================================
+	 * MATERIAL MASTER
+	 * ===================================================== */
+
+	listMaterials(params = {}) {
+		return get(
+			`${BASE}/materials`,
+			params
+		);
+	},
+
+	getMaterial(materialId) {
+		return get(
+			`${BASE}/materials/${requireId(
+				materialId,
+				"Material ID"
+			)}`
+		);
+	},
+
+	createMaterial(body) {
+		return post(
+			`${BASE}/materials`,
+			body
+		);
+	},
+
+	updateMaterial(
+		materialId,
+		body
+	) {
+		return put(
+			`${BASE}/materials/${requireId(
+				materialId,
+				"Material ID"
+			)}`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * LOCATIONS
+	 * ===================================================== */
+
+	listLocations(params = {}) {
+		return get(
+			`${BASE}/locations`,
+			params
+		);
+	},
+
+	createLocation(body) {
+		return post(
+			`${BASE}/locations`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * PROJECTS AND DRAWINGS
+	 * ===================================================== */
+
+	listProjects(params = {}) {
+		return get(
+			`${BASE}/projects`,
+			params
+		);
+	},
+
+	getProject(projectDrawingId) {
+		return get(
+			`${BASE}/projects/${requireId(
+				projectDrawingId,
+				"Project drawing ID"
+			)}`
+		);
+	},
+
+	createProject(body) {
+		return post(
+			`${BASE}/projects`,
+			body
+		);
+	},
+
+	updateProject(
+		projectDrawingId,
+		body
+	) {
+		return put(
+			`${BASE}/projects/${requireId(
+				projectDrawingId,
+				"Project drawing ID"
+			)}`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * OPERATIONAL MATFLOW BOMS
+	 * ===================================================== */
+
+	listBoms(params = {}) {
+		return get(
+			`${BASE}/boms`,
+			params
+		);
+	},
+
+	getBom(bomId) {
+		return get(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}`
+		);
+	},
+
+	createBom(body) {
+		return post(
+			`${BASE}/boms`,
+			body
+		);
+	},
+
+	updateBom(
+		bomId,
+		body
+	) {
+		return put(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}`,
+			body
+		);
+	},
+
+	submitBom(
+		bomId,
+		body
+	) {
+		return post(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}/submit`,
+			body
+		);
+	},
+
+	approveBom(
+		bomId,
+		body
+	) {
+		return post(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}/approve`,
+			body
+		);
+	},
+
+	returnBom(
+		bomId,
+		body
+	) {
+		return post(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}/return`,
+			body
+		);
+	},
+
+	createBomRevision(
+		bomId,
+		body = {}
+	) {
+		return post(
+			`${BASE}/boms/${requireId(
+				bomId,
+				"BOM ID"
+			)}/revisions`,
+			body
 		);
 	},
 
@@ -39,199 +323,406 @@ export const matflowApi = {
 	 * ===================================================== */
 
 	listRequisitions(params = {}) {
-		return API.get(
+		return get(
 			`${BASE}/requisitions`,
-			{
-				params: cleanParams(params),
-			}
+			params
 		);
 	},
 
-	getRequisition(requisitionId) {
-		return API.get(
-			`${BASE}/requisitions/${requisitionId}`
+	getRequisition(
+		requisitionId
+	) {
+		return get(
+			`${BASE}/requisitions/${requireId(
+				requisitionId,
+				"Requisition ID"
+			)}`
 		);
 	},
 
-	createRequisition(releaseId, body) {
-		return API.post(
-			`${BASE}/requisitions/release/${releaseId}`,
+	createRequisition(body) {
+		return post(
+			`${BASE}/requisitions`,
 			body
 		);
 	},
 
-	submitRequisition(requisitionId, body) {
-		return API.post(
-			`${BASE}/requisitions/${requisitionId}/submit`,
+	submitRequisition(
+		requisitionId,
+		body
+	) {
+		return post(
+			`${BASE}/requisitions/${requireId(
+				requisitionId,
+				"Requisition ID"
+			)}/submit`,
+			body
+		);
+	},
+
+	planRequisition(
+		requisitionId,
+		body
+	) {
+		return post(
+			`${BASE}/requisitions/${requireId(
+				requisitionId,
+				"Requisition ID"
+			)}/plan`,
+			body
+		);
+	},
+
+	cancelRequisition(
+		requisitionId,
+		body
+	) {
+		return post(
+			`${BASE}/requisitions/${requireId(
+				requisitionId,
+				"Requisition ID"
+			)}/cancel`,
 			body
 		);
 	},
 
 	/* =====================================================
-	 * STORE REVIEW
+	 * RESERVATIONS
 	 * ===================================================== */
 
-	listStoreQueue(params = {}) {
-		/*
-		 * Uses the requisition list endpoint as the source of truth.
-		 * The backend may filter by status/desk.
-		 */
-		return API.get(
-			`${BASE}/requisitions`,
-			{
-				params: cleanParams({
-					...params,
-					desk: "STORE",
-				}),
-			}
-		);
-	},
-
-	submitStoreReview(
-		requisitionId,
+	releaseReservation(
+		reservationId,
 		body
 	) {
-		return API.post(
-			`${BASE}/store/requisitions/${requisitionId}/review`,
+		return post(
+			`${BASE}/reservations/${requireId(
+				reservationId,
+				"Reservation ID"
+			)}/release`,
 			body
 		);
 	},
 
-	returnRequisitionToProduction(
-		requisitionId,
+	issueDirectReservation(
+		reservationId,
 		body
 	) {
-		return API.post(
-			`${BASE}/store/requisitions/${requisitionId}/return`,
+		return post(
+			`${BASE}/reservations/${requireId(
+				reservationId,
+				"Reservation ID"
+			)}/issue-direct`,
 			body
-		);
-	},
-
-	listStockBlocks(params = {}) {
-		return API.get(
-			`${BASE}/store/stock-blocks`,
-			{
-				params: cleanParams(params),
-			}
 		);
 	},
 
 	/* =====================================================
-	 * MATERIAL INDENTS
+	 * TRANSFERS
+	 * ===================================================== */
+
+	listTransfers(params = {}) {
+		return get(
+			`${BASE}/transfers`,
+			params
+		);
+	},
+
+	getTransfer(transferId) {
+		return get(
+			`${BASE}/transfers/${requireId(
+				transferId,
+				"Transfer ID"
+			)}`
+		);
+	},
+
+	dispatchTransfer(
+		transferId,
+		body
+	) {
+		return post(
+			`${BASE}/transfers/${requireId(
+				transferId,
+				"Transfer ID"
+			)}/dispatch`,
+			body
+		);
+	},
+
+	receiveTransfer(
+		transferId,
+		body
+	) {
+		return post(
+			`${BASE}/transfers/${requireId(
+				transferId,
+				"Transfer ID"
+			)}/receive`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * INDENTS
 	 * ===================================================== */
 
 	listIndents(params = {}) {
-		return API.get(
+		return get(
 			`${BASE}/indents`,
-			{
-				params: cleanParams(params),
-			}
+			params
 		);
 	},
 
 	getIndent(indentId) {
-		return API.get(
-			`${BASE}/indents/${indentId}`
-		);
-	},
-
-	submitIndent(indentId, body) {
-		return API.post(
-			`${BASE}/indents/${indentId}/submit`,
-			body
+		return get(
+			`${BASE}/indents/${requireId(
+				indentId,
+				"Indent ID"
+			)}`
 		);
 	},
 
 	/* =====================================================
-	 * PURCHASE QUEUE / QUOTATIONS
+	 * VENDORS
 	 * ===================================================== */
 
-	listPurchaseQueue(params = {}) {
-		return API.get(
-			`${BASE}/indents`,
-			{
-				params: cleanParams({
-					...params,
-					desk: "PURCHASE",
-				}),
-			}
+	listVendors(params = {}) {
+		return get(
+			`${BASE}/vendors`,
+			params
 		);
 	},
 
-	listVendorQuotes(params = {}) {
-		return API.get(
-			`${BASE}/vendor-quotes`,
-			{
-				params: cleanParams(params),
-			}
+	createVendor(body) {
+		return post(
+			`${BASE}/vendors`,
+			body
 		);
 	},
 
-	getVendorQuote(quoteId) {
-		return API.get(
-			`${BASE}/vendor-quotes/${quoteId}`
-		);
-	},
-
-	createVendorQuote(body) {
-		return API.post(
-			`${BASE}/vendor-quotes`,
+	updateVendor(
+		vendorId,
+		body
+	) {
+		return put(
+			`${BASE}/vendors/${requireId(
+				vendorId,
+				"Vendor ID"
+			)}`,
 			body
 		);
 	},
 
 	/* =====================================================
-	 * PURCHASE ORDERS
+	 * PURCHASE ORDERS AND GRN
 	 * ===================================================== */
 
 	listPurchaseOrders(params = {}) {
-		return API.get(
+		return get(
 			`${BASE}/purchase-orders`,
-			{
-				params: cleanParams(params),
-			}
+			params
 		);
 	},
 
-	getPurchaseOrder(purchaseOrderId) {
-		return API.get(
-			`${BASE}/purchase-orders/${purchaseOrderId}`
+	getPurchaseOrder(
+		purchaseOrderId
+	) {
+		return get(
+			`${BASE}/purchase-orders/${requireId(
+				purchaseOrderId,
+				"Purchase order ID"
+			)}`
 		);
 	},
 
 	createPurchaseOrder(body) {
-		return API.post(
+		return post(
 			`${BASE}/purchase-orders`,
 			body
 		);
 	},
 
-	submitPurchaseOrder(
+	placePurchaseOrder(
 		purchaseOrderId,
 		body
 	) {
-		return API.post(
-			`${BASE}/purchase-orders/${purchaseOrderId}/submit`,
+		return post(
+			`${BASE}/purchase-orders/${requireId(
+				purchaseOrderId,
+				"Purchase order ID"
+			)}/place`,
 			body
 		);
 	},
 
-	approvePurchaseOrder(
-		purchaseOrderId,
-		body
-	) {
-		return API.post(
-			`${BASE}/purchase-orders/${purchaseOrderId}/approve`,
+	createGoodsReceipt(body) {
+		return post(
+			`${BASE}/grns`,
 			body
 		);
 	},
 
-	returnPurchaseOrder(
-		purchaseOrderId,
+	/* =====================================================
+	 * QC
+	 * ===================================================== */
+
+	listQcInspections(params = {}) {
+		return get(
+			`${BASE}/qc`,
+			params
+		);
+	},
+
+	getQcInspection(
+		inspectionId
+	) {
+		return get(
+			`${BASE}/qc/${requireId(
+				inspectionId,
+				"QC inspection ID"
+			)}`
+		);
+	},
+
+	decideQc(
+		inspectionId,
 		body
 	) {
-		return API.post(
-			`${BASE}/purchase-orders/${purchaseOrderId}/return`,
+		return post(
+			`${BASE}/qc/${requireId(
+				inspectionId,
+				"QC inspection ID"
+			)}/decision`,
+			body
+		);
+	},
+
+	returnQcToVendor(
+		inspectionId,
+		body
+	) {
+		return post(
+			`${BASE}/qc/${requireId(
+				inspectionId,
+				"QC inspection ID"
+			)}/return-to-vendor`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * PROCESSING
+	 * ===================================================== */
+
+	listProcessingJobs(params = {}) {
+		return get(
+			`${BASE}/processing-jobs`,
+			params
+		);
+	},
+
+	getProcessingJob(jobId) {
+		return get(
+			`${BASE}/processing-jobs/${requireId(
+				jobId,
+				"Processing job ID"
+			)}`
+		);
+	},
+
+	createProcessingJob(body) {
+		return post(
+			`${BASE}/processing-jobs`,
+			body
+		);
+	},
+
+	startProcessingJob(
+		jobId,
+		body
+	) {
+		return post(
+			`${BASE}/processing-jobs/${requireId(
+				jobId,
+				"Processing job ID"
+			)}/start`,
+			body
+		);
+	},
+
+	completeProcessingJob(
+		jobId,
+		body
+	) {
+		return post(
+			`${BASE}/processing-jobs/${requireId(
+				jobId,
+				"Processing job ID"
+			)}/complete`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * PRODUCTION CONSUMPTION
+	 * ===================================================== */
+
+	createProductionConsumption(body) {
+		return post(
+			`${BASE}/production-consumptions`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * MATERIAL RETURNS
+	 * ===================================================== */
+
+	listMaterialReturns(params = {}) {
+		return get(
+			`${BASE}/material-returns`,
+			params
+		);
+	},
+
+	getMaterialReturn(returnId) {
+		return get(
+			`${BASE}/material-returns/${requireId(
+				returnId,
+				"Material return ID"
+			)}`
+		);
+	},
+
+	createMaterialReturn(body) {
+		return post(
+			`${BASE}/material-returns`,
+			body
+		);
+	},
+
+	dispatchMaterialReturn(
+		returnId,
+		body
+	) {
+		return post(
+			`${BASE}/material-returns/${requireId(
+				returnId,
+				"Material return ID"
+			)}/dispatch`,
+			body
+		);
+	},
+
+	receiveMaterialReturn(
+		returnId,
+		body
+	) {
+		return post(
+			`${BASE}/material-returns/${requireId(
+				returnId,
+				"Material return ID"
+			)}/receive`,
 			body
 		);
 	},
@@ -241,69 +732,71 @@ export const readMatFlowError = (
 	error,
 	fallback = "The MatFlow request failed."
 ) => {
-	const data = error?.response?.data;
+	const data =
+		error?.response?.data;
+
+	const requestId =
+		error?.response?.headers?.[
+		"x-request-id"
+		];
+
+	let message = "";
 
 	if (typeof data === "string") {
-		return data;
+		message = data;
+	} else {
+		message =
+			data?.message ||
+			data?.detail ||
+			data?.error ||
+			error?.message ||
+			fallback;
 	}
 
-	return (
-		data?.message ||
-		data?.detail ||
-		data?.error ||
-		error?.message ||
-		fallback
-	);
+	if (requestId) {
+		return `${message} Request ID: ${requestId}`;
+	}
+
+	return message;
 };
 
 export const extractMatFlowPage = (
 	responseData
 ) => {
-	if (Array.isArray(responseData)) {
+	const data =
+		responseData?.data ??
+		responseData;
+
+	if (Array.isArray(data)) {
 		return {
-			rows: responseData,
+			rows: data,
 			page: 0,
-			size: responseData.length,
-			totalElements: responseData.length,
-			totalPages: 1,
+			size: data.length,
+			totalElements: data.length,
+			totalPages:
+				data.length > 0 ? 1 : 0,
 		};
 	}
 
-	if (
-		Array.isArray(
-			responseData?.content
-		)
-	) {
+	if (Array.isArray(data?.content)) {
 		return {
-			rows: responseData.content,
+			rows: data.content,
+
 			page:
-				responseData.number ??
-				responseData.page ??
+				data.page ??
+				data.number ??
 				0,
-			size:
-				responseData.size ??
-				responseData.content.length,
-			totalElements:
-				responseData.totalElements ??
-				responseData.content.length,
-			totalPages:
-				responseData.totalPages ??
-				1,
-		};
-	}
 
-	if (Array.isArray(responseData?.data)) {
-		return {
-			rows: responseData.data,
-			page: responseData.page ?? 0,
 			size:
-				responseData.size ??
-				responseData.data.length,
+				data.size ??
+				data.content.length,
+
 			totalElements:
-				responseData.totalElements ??
-				responseData.data.length,
+				data.totalElements ??
+				data.content.length,
+
 			totalPages:
-				responseData.totalPages ??
+				data.totalPages ??
 				1,
 		};
 	}
@@ -316,3 +809,5 @@ export const extractMatFlowPage = (
 		totalPages: 0,
 	};
 };
+
+export default matflowApi;

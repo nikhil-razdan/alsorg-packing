@@ -1,26 +1,38 @@
-import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 
 import {
+	Alert,
 	Box,
 	Button,
+	Checkbox,
 	Chip,
-	TextField,
-	MenuItem,
+	CircularProgress,
 	Dialog,
-	DialogTitle,
-	DialogContent,
 	DialogActions,
+	DialogContent,
+	DialogTitle,
+	Divider,
+	Drawer,
+	InputAdornment,
+	ListItemText,
+	MenuItem,
+	Snackbar,
 	Switch,
+	TextField,
+	Tooltip,
+	Typography,
 } from "@mui/material";
 
-import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
-import Drawer from "@mui/material/Drawer";
-import { useAuth } from "../auth/AuthContext";
+import { useNavigate } from "react-router-dom";
+
 import AppsIcon from "@mui/icons-material/Apps";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import LogoutIcon from "@mui/icons-material/Logout";
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import LockResetIcon from "@mui/icons-material/LockReset";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -28,745 +40,1083 @@ import EditIcon from "@mui/icons-material/Edit";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
-import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
+import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
+import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
+import SupervisorAccountOutlinedIcon from "@mui/icons-material/SupervisorAccountOutlined";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
+import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+
+import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
 
-function UsersPage() {
+/* =========================================================
+ * ACCESS CONFIGURATION
+ * ========================================================= */
 
+const MODULE_KEYS = Object.freeze({
+	PACKFLOW: "PACKFLOW",
+	BOMFLOW: "BOMFLOW",
+	MATFLOW: "MATFLOW",
+});
+
+const ACCESS_GROUPS = [
+	{
+		key: "ADMIN",
+		label: "Platform Administrator",
+		shortLabel: "Administrator",
+		description:
+			"Full access to PackFlow, BOMFlow, MatFlow and user administration.",
+		accent: "#f59e0b",
+		icon: <AdminPanelSettingsIcon />,
+		defaultRole: "ADMIN",
+		roles: [
+			{
+				value: "ADMIN",
+				label: "Administrator",
+				description:
+					"Complete FlowSuite access across all plants and modules.",
+			},
+		],
+	},
+	{
+		key: MODULE_KEYS.PACKFLOW,
+		label: "PackFlow",
+		shortLabel: "PackFlow",
+		description:
+			"Packing, hardware packets, warehouse, dispatch and logistics operations.",
+		accent: "#3b82f6",
+		icon: <InventoryIcon />,
+		defaultRole: "PACKING",
+		roles: [
+			{
+				value: "PACKING",
+				label: "Packing",
+				description:
+					"Create and manage normal packing records and stickers.",
+			},
+			{
+				value: "HARDWARE_PACKING",
+				label: "Hardware Packing",
+				description:
+					"Manage isolated hardware packets and hardware stickers.",
+			},
+			{
+				value: "WAREHOUSE",
+				label: "Warehouse",
+				description:
+					"Manage warehouse stock movement and warehouse approvals.",
+			},
+			{
+				value: "DISPATCH",
+				label: "Dispatch",
+				description:
+					"Manage dispatch preparation, challans and trip operations.",
+			},
+			{
+				value: "LOGISTICS",
+				label: "Logistics",
+				description:
+					"Manage logistics, vehicles, drivers and trip coordination.",
+			},
+			{
+				value: "DRIVER",
+				label: "Driver",
+				description:
+					"Mobile driver access linked to one driver profile.",
+			},
+		],
+	},
+	{
+		key: MODULE_KEYS.BOMFLOW,
+		label: "BOMFlow",
+		shortLabel: "BOMFlow",
+		description:
+			"Product costing, costing BOM revisions, rates and commercial approvals.",
+		accent: "#8b5cf6",
+		icon: <AccountTreeOutlinedIcon />,
+		defaultRole: "BOMFLOW_EDITOR",
+		roles: [
+			{
+				value: "BOMFLOW_EDITOR",
+				label: "BOM Editor",
+				description:
+					"Create products and prepare costing BOM revisions.",
+			},
+			{
+				value: "BOMFLOW_REVIEWER",
+				label: "BOM Reviewer",
+				description:
+					"Review and verify submitted costing BOM revisions.",
+			},
+			{
+				value: "BOMFLOW_APPROVER",
+				label: "BOM Approver",
+				description:
+					"Approve verified costing BOM revisions.",
+			},
+			{
+				value: "BOMFLOW_MANAGER",
+				label: "BOMFlow Manager",
+				description:
+					"Manage BOMFlow workflow, costing records and reports.",
+			},
+		],
+	},
+	{
+		key: MODULE_KEYS.MATFLOW,
+		label: "MatFlow",
+		shortLabel: "MatFlow",
+		description:
+			"Operational BOM, stock reservation, purchase, QC, issue and consumption.",
+		accent: "#14b8a6",
+		icon: <LayersOutlinedIcon />,
+		defaultRole: "MATFLOW_ENGINEERING",
+		roles: [
+			{
+				value: "MATFLOW_MANAGER",
+				label: "MatFlow Manager",
+				description:
+					"Monitor and manage the complete material workflow.",
+			},
+			{
+				value: "MATFLOW_ENGINEERING",
+				label: "Engineering",
+				description:
+					"Create, revise and submit operational material BOMs.",
+			},
+			{
+				value: "MATFLOW_STORE",
+				label: "Stores",
+				description:
+					"Verify stock, reserve, receive and issue material.",
+			},
+			{
+				value: "MATFLOW_PURCHASE",
+				label: "Purchase",
+				description:
+					"Process material indents and purchase tracking.",
+			},
+			{
+				value: "MATFLOW_PROCESSING",
+				label: "Material Processing",
+				description:
+					"Receive, process and dispatch material through internal or external processing units.",
+			},
+			{
+				value: "MATFLOW_PRODUCTION",
+				label: "Production",
+				description:
+					"Raise requisitions, record consumption and complete production.",
+			},
+			{
+				value: "MATFLOW_QC",
+				label: "Quality Control",
+				description:
+					"Inspect received material and record acceptance or rejection.",
+			},
+			{
+				value: "MATFLOW_DIRECTOR",
+				label: "Director",
+				description:
+					"Approve controlled MatFlow decisions and review reports.",
+			},
+		],
+	},
+];
+
+const ROLE_META = ACCESS_GROUPS.reduce(
+	(result, group) => {
+		group.roles.forEach((role) => {
+			result[role.value] = {
+				...role,
+				groupKey: group.key,
+				moduleKey:
+					group.key === "ADMIN"
+						? null
+						: group.key,
+				groupLabel: group.label,
+				accent: group.accent,
+			};
+		});
+
+		return result;
+	},
+	{}
+);
+
+const DEFAULT_FORM = {
+	username: "",
+	password: "",
+	role: "PACKING",
+	plantCodes: [],
+	driverId: "",
+	warehouseAccess: false,
+};
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+/* =========================================================
+ * HELPERS
+ * ========================================================= */
+
+const normalizeRole = (value) => {
+	return String(value || "")
+		.replace("ROLE_", "")
+		.trim()
+		.toUpperCase();
+};
+
+const normalizeArray = (value) => {
+	if (Array.isArray(value)) {
+		return Array.from(
+			new Set(
+				value
+					.map((item) =>
+						String(item || "")
+							.trim()
+							.toUpperCase()
+					)
+					.filter(Boolean)
+			)
+		);
+	}
+
+	if (!value) {
+		return [];
+	}
+
+	return Array.from(
+		new Set(
+			String(value)
+				.split(",")
+				.map((item) =>
+					item
+						.trim()
+						.toUpperCase()
+				)
+				.filter(Boolean)
+		)
+	);
+};
+
+const readError = (
+	error,
+	fallback = "The operation could not be completed."
+) => {
+	const data = error?.response?.data;
+
+	if (typeof data === "string") {
+		return data;
+	}
+
+	return (
+		data?.message ||
+		data?.error ||
+		error?.message ||
+		fallback
+	);
+};
+
+const roleMeta = (role) => {
+	const cleanRole =
+		normalizeRole(role);
+
+	return (
+		ROLE_META[cleanRole] || {
+			value: cleanRole,
+			label:
+				cleanRole || "Unknown Role",
+			description:
+				"Unknown or legacy role assignment.",
+			groupKey: "UNKNOWN",
+			moduleKey: null,
+			groupLabel: "Unknown",
+			accent: "#64748b",
+		}
+	);
+};
+
+const accessGroupForRole = (role) => {
+	const meta =
+		roleMeta(role);
+
+	return ACCESS_GROUPS.find(
+		(group) =>
+			group.key === meta.groupKey
+	);
+};
+
+const modulesForRole = (role) => {
+	const cleanRole =
+		normalizeRole(role);
+
+	if (cleanRole === "ADMIN") {
+		return [
+			MODULE_KEYS.PACKFLOW,
+			MODULE_KEYS.BOMFLOW,
+			MODULE_KEYS.MATFLOW,
+		];
+	}
+
+	const moduleKey =
+		roleMeta(cleanRole).moduleKey;
+
+	return moduleKey
+		? [moduleKey]
+		: [];
+};
+
+const roleRequiresPlantAccess = (role) => {
+	const cleanRole =
+		normalizeRole(role);
+
+	if (
+		cleanRole === "ADMIN" ||
+		cleanRole === "DRIVER"
+	) {
+		return false;
+	}
+
+	if (
+		cleanRole.startsWith(
+			"BOMFLOW_"
+		)
+	) {
+		return false;
+	}
+
+	return true;
+};
+
+const roleRequiresDriver = (role) => {
+	return (
+		normalizeRole(role) ===
+		"DRIVER"
+	);
+};
+
+const roleSupportsWarehouseToggle = (role) => {
+	const cleanRole =
+		normalizeRole(role);
+
+	return [
+		"PACKING",
+		"DISPATCH",
+		"LOGISTICS",
+	].includes(cleanRole);
+};
+
+const resolveWarehouseAccess = (
+	role,
+	requestedValue
+) => {
+	const cleanRole =
+		normalizeRole(role);
+
+	if (
+		cleanRole === "ADMIN" ||
+		cleanRole === "WAREHOUSE"
+	) {
+		return true;
+	}
+
+	if (
+		cleanRole === "DRIVER" ||
+		cleanRole ===
+		"HARDWARE_PACKING" ||
+		!roleSupportsWarehouseToggle(
+			cleanRole
+		)
+	) {
+		return false;
+	}
+
+	return requestedValue === true;
+};
+
+const userPlantCodes = (user) => {
+	if (
+		Array.isArray(user?.plantCodes) &&
+		user.plantCodes.length > 0
+	) {
+		return normalizeArray(
+			user.plantCodes
+		);
+	}
+
+	return normalizeArray(
+		user?.plantCode
+	);
+};
+
+const userModules = (user) => {
+	if (
+		Array.isArray(user?.modules) &&
+		user.modules.length > 0
+	) {
+		return normalizeArray(
+			user.modules
+		);
+	}
+
+	return modulesForRole(
+		user?.role
+	);
+};
+
+const readWarehouseAccess = (user) => {
+	const cleanRole =
+		normalizeRole(user?.role);
+
+	if (
+		cleanRole === "ADMIN" ||
+		cleanRole === "WAREHOUSE"
+	) {
+		return true;
+	}
+
+	return user?.warehouseAccess === true;
+};
+
+/* =========================================================
+ * PAGE
+ * ========================================================= */
+
+export default function UsersPage() {
 	const navigate = useNavigate();
 
 	const {
-		user,
 		role: currentRole,
 		modules: currentModules = [],
 		logout: authLogout,
 	} = useAuth();
 
 	const safeCurrentModules =
-		Array.isArray(currentModules)
-			? currentModules
-			: [];
+		normalizeArray(currentModules);
+
+	const normalizedCurrentRole =
+		normalizeRole(currentRole);
+
+	const canOpenPackFlow =
+		normalizedCurrentRole === "ADMIN" ||
+		safeCurrentModules.includes(
+			MODULE_KEYS.PACKFLOW
+		);
 
 	const canOpenBOMFlow =
-		safeCurrentModules.includes("BOMFLOW");
-
-	const canOpenVenFlow =
-		safeCurrentModules.includes("VENFLOW");
-
-	const goToModules = () => {
-		navigate("/modules");
-	};
-
-	const goToPackFlow = () => {
-		navigate("/packflow/dashboard");
-	};
-
-	const goToBOMFlow = () => {
-		navigate("/bomflow/dashboard");
-	};
-
-	const goToVenFlow = () => {
-		navigate("/venflow/dashboard");
-	};
-
-	const logout = async () => {
-		await authLogout();
-		navigate("/login", { replace: true });
-	};
-
-	const [users, setUsers] = useState([]);
-	const [loading, setLoading] = useState(false);
-
-	const [pageNo, setPageNo] = useState(1);
-	const [pageSize, setPageSize] = useState(25);
-
-	const [username, setUsername] = useState("");
-	const [password, setPassword] = useState("");
-	const [role, setRole] = useState("PACKING");
-
-	const [search, setSearch] = useState("");
-
-	const [editId, setEditId] = useState(null);
-	const [editUsername, setEditUsername] = useState("");
-	const [editRole, setEditRole] = useState("");
-
-	const [resetOpen, setResetOpen] = useState(false);
-	const [resetUser, setResetUser] = useState(null);
-	const [newPassword, setNewPassword] = useState("");
-	const [snackOpen, setSnackOpen] = useState(false);
-	const [snackMsg, setSnackMsg] = useState("");
-	const [snackType, setSnackType] = useState("success");
-	const [deleteOpen, setDeleteOpen] = useState(false);
-	const [deleteUserId, setDeleteUserId] = useState(null);
-	const [createOpen, setCreateOpen] = useState(false);
-	const [plants, setPlants] = useState([]);
-
-	const [plantCodes, setPlantCodes] = useState([]);
-
-	const [editPlantCodes, setEditPlantCodes] = useState([]);
-
-	const [drivers, setDrivers] = useState([]);
-
-	const [driverId, setDriverId] = useState("");
-
-	const [editDriverId, setEditDriverId] = useState("");
-	const [warehouseAccess, setWarehouseAccess] = useState(false);
-	const [editWarehouseAccess, setEditWarehouseAccess] = useState(false);
-	const [modules, setModules] = useState(["PACKFLOW"]);
-	const [editModules, setEditModules] = useState([]);
-	const splitPlantCodes = (value) => {
-		if (!value) return [];
-
-		return value
-			.split(",")
-			.map((x) => x.trim())
-			.filter(Boolean);
-	};
-
-	const joinPlantCodes = (value) => {
-		return Array.isArray(value) ? value.join(",") : "";
-	};
-
-	const plantName = (code) => {
-		const plant = plants.find((p) => p.plantCode === code);
-
-		if (!plant) return code;
-
-		return `${plant.plantCode} | ${plant.packedAreaCode} → ${plant.fgAreaCode}`;
-	};
-
-	const normalizeUserRole = (value) => {
-		return String(value || "")
-			.replace("ROLE_", "")
-			.trim()
-			.toUpperCase();
-	};
-
-	const readBoolean = (value) => {
-		if (value === true) return true;
-		if (value === 1) return true;
-
-		const text = String(value || "")
-			.trim()
-			.toLowerCase();
-
-		return (
-			text === "true" ||
-			text === "yes" ||
-			text === "1" ||
-			text === "enabled"
-		);
-	};
-
-	const getWarehouseAccessValue = (u) => {
-		return readBoolean(
-			u?.warehouseAccess ??
-			u?.warehousePageAccess ??
-			u?.hasWarehouseAccess ??
-			u?.canOpenWarehousePage ??
-			u?.warehouse
-		);
-	};
-
-	const getSafeModulesForSave = (
-		selectedRole,
-		selectedModules,
-		selectedWarehouseAccess
-	) => {
-		const cleanRole =
-			normalizeUserRole(
-				selectedRole
-			);
-
-		const nextModules =
-			Array.from(
-				new Set(
-					Array.isArray(
-						selectedModules
-					)
-						? selectedModules
-							.filter(Boolean)
-						: []
-				)
-			);
-
-		const isPackFlowRole =
-			cleanRole === "ADMIN" ||
-			cleanRole === "PACKING" ||
-			cleanRole ===
-			"HARDWARE_PACKING" ||
-			cleanRole === "WAREHOUSE" ||
-			cleanRole === "DISPATCH" ||
-			cleanRole === "LOGISTICS" ||
-			cleanRole === "DRIVER";
-
-		const effectiveWarehouseAccess =
-			cleanRole ===
-				"HARDWARE_PACKING"
-				? false
-				: selectedWarehouseAccess;
-
-		if (
-			isPackFlowRole ||
-			effectiveWarehouseAccess ||
-			cleanRole === "WAREHOUSE"
-		) {
-			if (
-				!nextModules.includes(
-					"PACKFLOW"
-				)
-			) {
-				nextModules.unshift(
-					"PACKFLOW"
-				);
-			}
-		}
-
-		if (cleanRole === "ADMIN") {
-			return [
-				"PACKFLOW",
-				"BOMFLOW",
-				"VENFLOW",
-			];
-		}
-
-		return nextModules;
-	};
-
-	const roles = [
-		"ADMIN",
-
-		"PACKING",
-		"HARDWARE_PACKING",
-		"WAREHOUSE",
-		"DISPATCH",
-		"LOGISTICS",
-		"DRIVER",
-
-		"BOMFLOW_EDITOR",
-		"BOMFLOW_REVIEWER",
-		"BOMFLOW_APPROVER",
-		"BOMFLOW_MANAGER",
-
-		"VENFLOW_ENGINEERING",
-		"VENFLOW_STORE",
-		"VENFLOW_PURCHASE",
-		"VENFLOW_PRODUCTION",
-		"VENFLOW_SUPERVISOR",
-		"VENFLOW_MANAGER",
-	];
-
-	const moduleOptions = [
-		{
-			key: "PACKFLOW",
-			label: "PackFlow",
-		},
-		{
-			key: "BOMFLOW",
-			label: "BOMFlow",
-		},
-		{
-			key: "VENFLOW",
-			label: "VenFlow",
-		},
-	];
-
-	const roleRequiresPlantAccess = (
-		selectedRole
-	) => {
-		const cleanRole =
-			normalizeUserRole(selectedRole);
-
-		if (cleanRole === "ADMIN") {
-			return false;
-		}
-
-		if (cleanRole === "DRIVER") {
-			return false;
-		}
-
-		if (
-			cleanRole.startsWith(
-				"BOMFLOW_"
-			)
-		) {
-			return false;
-		}
-
-		if (
-			cleanRole ===
-			"VENFLOW_MANAGER"
-		) {
-			return false;
-		}
-
-		return true;
-	};
-
-	const defaultModulesForRole = (
-		nextRole
-	) => {
-		const cleanRole =
-			normalizeUserRole(nextRole);
-
-		if (cleanRole === "ADMIN") {
-			return [
-				"PACKFLOW",
-				"BOMFLOW",
-				"VENFLOW",
-			];
-		}
-
-		if (
-			cleanRole === "PACKING" ||
-			cleanRole === "HARDWARE_PACKING" ||
-			cleanRole === "WAREHOUSE" ||
-			cleanRole === "DISPATCH" ||
-			cleanRole === "LOGISTICS" ||
-			cleanRole === "DRIVER"
-		) {
-			return ["PACKFLOW"];
-		}
-
-		if (
-			cleanRole.startsWith(
-				"BOMFLOW_"
-			)
-		) {
-			return ["BOMFLOW"];
-		}
-
-		if (
-			cleanRole.startsWith(
-				"VENFLOW_"
-			)
-		) {
-			return ["VENFLOW"];
-		}
-
-		return [];
-	};
-
-	const normalizeArray = (value) => {
-		if (Array.isArray(value)) {
-			return value.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
-		}
-
-		if (!value) {
-			return [];
-		}
-
-		return String(value)
-			.split(",")
-			.map((x) => x.trim())
-			.filter(Boolean);
-	};
-
-	const normalizeUserPlantCodes = (user) => {
-		if (Array.isArray(user?.plantCodes) && user.plantCodes.length > 0) {
-			return normalizeArray(user.plantCodes);
-		}
-
-		return normalizeArray(user?.plantCode);
-	};
-
-	const normalizeUserModules = (user) => {
-		if (Array.isArray(user?.modules) && user.modules.length > 0) {
-			return normalizeArray(user.modules);
-		}
-
-		return defaultModulesForRole(user?.role || "");
-	};
-
-	const moduleLabel = (key) => {
-		const option = moduleOptions.find((item) => item.key === key);
-		return option ? option.label : key;
-	};
-
-	const driverName = (id) => {
-		if (!id) return "Not Linked";
-
-		const driver = drivers.find(
-			(d) => String(d.id) === String(id)
+		normalizedCurrentRole === "ADMIN" ||
+		safeCurrentModules.includes(
+			MODULE_KEYS.BOMFLOW
 		);
 
-		if (!driver) {
-			return String(id).slice(0, 8) + "...";
-		}
+	const canOpenMatFlow =
+		normalizedCurrentRole === "ADMIN" ||
+		safeCurrentModules.includes(
+			MODULE_KEYS.MATFLOW
+		);
 
-		return driver.phone
-			? `${driver.name} • ${driver.phone}`
-			: driver.name;
-	};
+	const [users, setUsers] =
+		useState([]);
 
-	useEffect(() => {
-		const fetchUsers = async () => {
+	const [plants, setPlants] =
+		useState([]);
+
+	const [drivers, setDrivers] =
+		useState([]);
+
+	const [loading, setLoading] =
+		useState(true);
+
+	const [saving, setSaving] =
+		useState(false);
+
+	const [search, setSearch] =
+		useState("");
+
+	const [pageNo, setPageNo] =
+		useState(1);
+
+	const [pageSize, setPageSize] =
+		useState(25);
+
+	const [drawerOpen, setDrawerOpen] =
+		useState(false);
+
+	const [drawerMode, setDrawerMode] =
+		useState("create");
+
+	const [editingUserId, setEditingUserId] =
+		useState(null);
+
+	const [form, setForm] =
+		useState(DEFAULT_FORM);
+
+	const [resetOpen, setResetOpen] =
+		useState(false);
+
+	const [resetUser, setResetUser] =
+		useState(null);
+
+	const [newPassword, setNewPassword] =
+		useState("");
+
+	const [deleteOpen, setDeleteOpen] =
+		useState(false);
+
+	const [deleteUser, setDeleteUser] =
+		useState(null);
+
+	const [snackbar, setSnackbar] =
+		useState({
+			open: false,
+			message: "",
+			severity: "success",
+		});
+
+	const showMessage = useCallback(
+		(
+			message,
+			severity = "success"
+		) => {
+			setSnackbar({
+				open: true,
+				message,
+				severity,
+			});
+		},
+		[]
+	);
+
+	const loadUsers = useCallback(
+		async () => {
+			const response =
+				await API.get("/users");
+
+			const data =
+				Array.isArray(response.data)
+					? response.data
+					: [];
+
+			setUsers(data);
+		},
+		[]
+	);
+
+	const loadPageData = useCallback(
+		async () => {
 			setLoading(true);
 
-			try {
-				const res = await API.get("/users");
-				setUsers(res.data.map((u) => ({ ...u, id: u.id })));
-			} catch (err) {
-				console.error("Failed to load users", err);
+			const [
+				usersResult,
+				plantsResult,
+				driversResult,
+			] = await Promise.allSettled([
+				API.get("/users"),
+				API.get("/plants"),
+				API.get(
+					"/logistics/drivers"
+				),
+			]);
+
+			if (
+				usersResult.status ===
+				"fulfilled"
+			) {
+				setUsers(
+					Array.isArray(
+						usersResult.value.data
+					)
+						? usersResult.value.data
+						: []
+				);
+			} else {
+				setUsers([]);
+
+				showMessage(
+					readError(
+						usersResult.reason,
+						"Unable to load users."
+					),
+					"error"
+				);
+			}
+
+			if (
+				plantsResult.status ===
+				"fulfilled"
+			) {
+				setPlants(
+					Array.isArray(
+						plantsResult.value.data
+					)
+						? plantsResult.value.data
+						: []
+				);
+			} else {
+				setPlants([]);
+			}
+
+			if (
+				driversResult.status ===
+				"fulfilled"
+			) {
+				setDrivers(
+					Array.isArray(
+						driversResult.value.data
+					)
+						? driversResult.value.data
+						: []
+				);
+			} else {
+				setDrivers([]);
 			}
 
 			setLoading(false);
-		};
+		},
+		[showMessage]
+	);
 
-		const fetchPlants = async () => {
-			try {
-				const res = await API.get("/plants");
-				setPlants(Array.isArray(res.data) ? res.data : []);
-			} catch (err) {
-				console.error("Failed to load plants", err);
-				setPlants([]);
-			}
-		};
+	useEffect(() => {
+		loadPageData();
+	}, [loadPageData]);
 
-		const fetchDrivers = async () => {
-			try {
-				const res = await API.get("/logistics/drivers");
-
-				setDrivers(
-					Array.isArray(res.data) ? res.data : []
+	const plantName = useCallback(
+		(code) => {
+			const plant =
+				plants.find(
+					(item) =>
+						String(
+							item?.plantCode ||
+							""
+						)
+							.trim()
+							.toUpperCase() ===
+						String(code || "")
+							.trim()
+							.toUpperCase()
 				);
-			} catch (err) {
-				console.error("Failed to load drivers", err);
-				setDrivers([]);
-			}
-		};
 
-		fetchUsers();
-		fetchPlants();
-		fetchDrivers();
-	}, []);
-
-	const createUser = async () => {
-		try {
-			if (!username.trim()) {
-				setSnackMsg("Username is required");
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
+			if (!plant) {
+				return code;
 			}
 
-			if (!password.trim()) {
-				setSnackMsg("Password is required");
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
+			return (
+				plant.plantName
+					? `${plant.plantCode} — ${plant.plantName}`
+					: plant.plantCode
+			);
+		},
+		[plants]
+	);
+
+	const driverName = useCallback(
+		(driverId) => {
+			if (!driverId) {
+				return "Not linked";
 			}
 
-			if (role === "DRIVER" && !driverId) {
-				setSnackMsg("Please select a driver profile for DRIVER user");
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
+			const driver =
+				drivers.find(
+					(item) =>
+						String(item?.id) ===
+						String(driverId)
+				);
+
+			if (!driver) {
+				return `${String(driverId).slice(
+					0,
+					8
+				)}…`;
+			}
+
+			return driver.phone
+				? `${driver.name} • ${driver.phone}`
+				: driver.name;
+		},
+		[drivers]
+	);
+
+	const openCreateDrawer = () => {
+		setDrawerMode("create");
+		setEditingUserId(null);
+		setForm(DEFAULT_FORM);
+		setDrawerOpen(true);
+	};
+
+	const openEditDrawer = (user) => {
+		const cleanRole =
+			normalizeRole(user.role);
+
+		setDrawerMode("edit");
+		setEditingUserId(user.id);
+
+		setForm({
+			username:
+				user.username || "",
+			password: "",
+			role: cleanRole,
+			plantCodes:
+				userPlantCodes(user),
+			driverId:
+				cleanRole === "DRIVER"
+					? user.driverId || ""
+					: "",
+			warehouseAccess:
+				readWarehouseAccess(user),
+		});
+
+		setDrawerOpen(true);
+	};
+
+	const closeDrawer = () => {
+		if (saving) {
+			return;
+		}
+
+		setDrawerOpen(false);
+		setEditingUserId(null);
+		setForm(DEFAULT_FORM);
+	};
+
+	const updateForm = (
+		key,
+		value
+	) => {
+		setForm((previous) => ({
+			...previous,
+			[key]: value,
+		}));
+	};
+
+	const handleRoleChange = (
+		nextRole
+	) => {
+		const cleanRole =
+			normalizeRole(nextRole);
+
+		setForm((previous) => {
+			const next = {
+				...previous,
+				role: cleanRole,
+			};
+
+			if (
+				roleRequiresDriver(
+					cleanRole
+				)
+			) {
+				next.plantCodes = [];
+				next.warehouseAccess = false;
+			} else {
+				next.driverId = "";
 			}
 
 			if (
-				roleRequiresPlantAccess(role) &&
-				plantCodes.length === 0
+				!roleRequiresPlantAccess(
+					cleanRole
+				)
 			) {
-				setSnackMsg(
-					"Please select at least one plant"
-				);
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
+				next.plantCodes = [];
 			}
 
-			const cleanSelectedRole =
-				normalizeUserRole(role);
-
-			const finalWarehouseAccess =
-				cleanSelectedRole ===
-					"HARDWARE_PACKING"
-					? false
-					: cleanSelectedRole ===
-					"WAREHOUSE" ||
-					cleanSelectedRole ===
-					"ADMIN" ||
-					warehouseAccess;
-
-			const finalModules =
-				getSafeModulesForSave(
-					role,
-					modules,
-					finalWarehouseAccess
+			next.warehouseAccess =
+				resolveWarehouseAccess(
+					cleanRole,
+					previous.warehouseAccess
 				);
 
-			await API.post("/users", {
-				username: username.trim(),
-				password,
-				role,
-				plantCodes:
-					role === "DRIVER"
-						? []
-						: plantCodes,
-				driverId:
-					role === "DRIVER"
-						? driverId
-						: null,
-				warehouseAccess: finalWarehouseAccess,
-				modules: finalModules,
-			});
+			return next;
+		});
+	};
 
-			setUsername("");
-			setPassword("");
-			setRole("PACKING");
-			setPlantCodes([]);
-			setDriverId("");
-			setWarehouseAccess(false);
-			setModules(["PACKFLOW"]);
+	const validateForm = () => {
+		if (!form.username.trim()) {
+			return "Username is required.";
+		}
 
-			const res = await API.get("/users");
+		if (
+			drawerMode === "create" &&
+			!form.password
+		) {
+			return "Password is required.";
+		}
 
-			setUsers(
-				res.data.map((u) => ({
-					...u,
-					id: u.id,
-				}))
+		if (
+			drawerMode === "create" &&
+			form.password.length < 8
+		) {
+			return "Password must be at least 8 characters.";
+		}
+
+		if (!ROLE_META[form.role]) {
+			return "Select a valid access role.";
+		}
+
+		if (
+			roleRequiresDriver(
+				form.role
+			) &&
+			!form.driverId
+		) {
+			return "Select a linked driver profile.";
+		}
+
+		if (
+			roleRequiresPlantAccess(
+				form.role
+			) &&
+			form.plantCodes.length === 0
+		) {
+			return "Select at least one plant.";
+		}
+
+		return "";
+	};
+
+	const buildPayload = () => {
+		const cleanRole =
+			normalizeRole(form.role);
+
+		return {
+			username:
+				form.username.trim(),
+
+			...(drawerMode === "create"
+				? {
+					password:
+						form.password,
+				}
+				: {}),
+
+			role: cleanRole,
+
+			plantCodes:
+				roleRequiresPlantAccess(
+					cleanRole
+				)
+					? normalizeArray(
+						form.plantCodes
+					)
+					: [],
+
+			driverId:
+				cleanRole === "DRIVER"
+					? form.driverId
+					: null,
+
+			warehouseAccess:
+				resolveWarehouseAccess(
+					cleanRole,
+					form.warehouseAccess
+				),
+
+			/*
+			 * Modules are generated from the selected access
+			 * profile. Users cannot create invalid role/module
+			 * combinations from the UI.
+			 */
+			modules:
+				modulesForRole(
+					cleanRole
+				),
+		};
+	};
+
+	const saveUser = async () => {
+		const validationError =
+			validateForm();
+
+		if (validationError) {
+			showMessage(
+				validationError,
+				"error"
 			);
 
-			setCreateOpen(false);
-
-			setSnackMsg("User created successfully");
-			setSnackType("success");
-			setSnackOpen(true);
-		} catch (err) {
-			console.error("User creation failed", err);
-
-			setSnackMsg(
-				err?.response?.data?.message ||
-				err?.response?.data ||
-				"User creation failed"
-			);
-
-			setSnackType("error");
-			setSnackOpen(true);
+			return;
 		}
-	};
 
-	const startEdit = (u) => {
-		setEditId(u.id);
-		setEditUsername(u.username);
-		setEditRole(normalizeUserRole(u.role));
-		setEditWarehouseAccess(getWarehouseAccessValue(u));
-		setEditModules(normalizeUserModules(u));
+		setSaving(true);
 
-		if (u.role === "DRIVER") {
-			setEditPlantCodes([]);
-			setEditDriverId(u.driverId || "");
-		} else {
-			setEditPlantCodes(normalizeUserPlantCodes(u));
-			setEditDriverId("");
-		}
-	};
-
-	const cancelEdit = () => {
-		setEditId(null);
-		setEditPlantCodes([]);
-		setEditDriverId("");
-		setEditWarehouseAccess(false);
-		setEditModules([]);
-	};
-
-	const saveEdit = async () => {
 		try {
-			if (!editUsername.trim()) {
-				setSnackMsg("Username is required");
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
-			}
-
-			if (editRole === "DRIVER" && !editDriverId) {
-				setSnackMsg("Please select a driver profile for DRIVER user");
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
-			}
+			const payload =
+				buildPayload();
 
 			if (
-				roleRequiresPlantAccess(editRole) &&
-				editPlantCodes.length === 0
+				drawerMode === "create"
 			) {
-				setSnackMsg(
-					"Please select at least one plant"
+				await API.post(
+					"/users",
+					payload
 				);
-				setSnackType("error");
-				setSnackOpen(true);
-				return;
+			} else {
+				await API.put(
+					`/users/${editingUserId}`,
+					payload
+				);
 			}
 
-			const cleanSelectedRole =
-				normalizeUserRole(editRole);
+			await loadUsers();
 
-			const finalWarehouseAccess =
-				cleanSelectedRole ===
-					"HARDWARE_PACKING"
-					? false
-					: cleanSelectedRole ===
-					"WAREHOUSE" ||
-					cleanSelectedRole ===
-					"ADMIN" ||
-					editWarehouseAccess;
-
-			const finalModules =
-				getSafeModulesForSave(
-					editRole,
-					editModules,
-					finalWarehouseAccess
-				);
-
-			await API.put(`/users/${editId}`, {
-				username: editUsername.trim(),
-				role: editRole,
-				plantCodes:
-					editRole === "DRIVER"
-						? []
-						: editPlantCodes,
-				driverId:
-					editRole === "DRIVER"
-						? editDriverId
-						: null,
-				warehouseAccess: finalWarehouseAccess,
-				modules: finalModules,
-			});
-
-			const res = await API.get("/users");
-
-			setUsers(
-				res.data.map((u) => ({
-					...u,
-					id: u.id,
-				}))
+			showMessage(
+				drawerMode === "create"
+					? "User created successfully."
+					: "User updated successfully."
 			);
 
-			setEditId(null);
-			setEditDriverId("");
-			setEditPlantCodes([]);
-			setEditWarehouseAccess(false);
-			setEditModules([]);
-
-			setSnackMsg("User updated successfully");
-			setSnackType("success");
-			setSnackOpen(true);
-		} catch (err) {
-			console.error("User update failed", err);
-
-			setSnackMsg(
-				err?.response?.data?.message ||
-				err?.response?.data ||
-				"User update failed"
+			setDrawerOpen(false);
+			setEditingUserId(null);
+			setForm(DEFAULT_FORM);
+		} catch (error) {
+			showMessage(
+				readError(
+					error,
+					drawerMode === "create"
+						? "User creation failed."
+						: "User update failed."
+				),
+				"error"
 			);
-
-			setSnackType("error");
-			setSnackOpen(true);
+		} finally {
+			setSaving(false);
 		}
 	};
 
-	const deleteUser = (id) => {
-		setDeleteUserId(id);
-		setDeleteOpen(true);
-	};
-
-	const hasWarehouseAccess = (u) => {
-		const cleanRole = normalizeUserRole(u?.role);
-
-		return (
-			cleanRole === "ADMIN" ||
-			cleanRole === "WAREHOUSE" ||
-			getWarehouseAccessValue(u)
-		);
-	};
-
-	const confirmDelete = async () => {
-
-		try {
-
-			await API.delete(`/users/${deleteUserId}`);
-
-			const res = await API.get("/users");
-			setUsers(res.data.map(u => ({ ...u, id: u.id })));
-
-			setSnackMsg("User disabled successfully");
-			setSnackType("success");
-			setSnackOpen(true);
-
-		} catch (err) {
-
-			console.error("Delete failed", err);
-
-			setSnackMsg("Delete failed");
-			setSnackType("error");
-			setSnackOpen(true);
-
-		}
-
-		setDeleteOpen(false);
-	};
-
-	const openReset = (user) => {
+	const openResetDialog = (user) => {
 		setResetUser(user);
 		setNewPassword("");
 		setResetOpen(true);
 	};
 
 	const resetPassword = async () => {
+		if (
+			!resetUser?.id
+		) {
+			return;
+		}
+
+		if (
+			newPassword.length < 8
+		) {
+			showMessage(
+				"Password must be at least 8 characters.",
+				"error"
+			);
+
+			return;
+		}
 
 		try {
-
 			await API.put(
 				`/users/${resetUser.id}/password`,
 				{
-					password: newPassword
+					password:
+						newPassword,
 				}
 			);
 
 			setResetOpen(false);
+			setResetUser(null);
+			setNewPassword("");
 
-			setSnackMsg(
-				"Password reset successful"
+			showMessage(
+				"Password reset successfully."
 			);
-
-			setSnackType("success");
-
-			setSnackOpen(true);
-
-		} catch (err) {
-
-			console.error(
-				"Password reset failed:",
-				err
+		} catch (error) {
+			showMessage(
+				readError(
+					error,
+					"Password reset failed."
+				),
+				"error"
 			);
-
-			setSnackMsg(
-				"Password reset failed"
-			);
-
-			setSnackType("error");
-
-			setSnackOpen(true);
 		}
 	};
 
-	const normalizedCurrentRole =
-		normalizeUserRole(
-			currentRole
-		);
+	const openDisableDialog = (user) => {
+		setDeleteUser(user);
+		setDeleteOpen(true);
+	};
+
+	const confirmDisable = async () => {
+		if (!deleteUser?.id) {
+			return;
+		}
+
+		try {
+			await API.delete(
+				`/users/${deleteUser.id}`
+			);
+
+			await loadUsers();
+
+			setDeleteOpen(false);
+			setDeleteUser(null);
+
+			showMessage(
+				"User disabled successfully."
+			);
+		} catch (error) {
+			showMessage(
+				readError(
+					error,
+					"Unable to disable user."
+				),
+				"error"
+			);
+		}
+	};
 
 	const filteredRows = useMemo(() => {
-		return users.filter(u =>
-			u.username.toLowerCase().includes(search.toLowerCase())
-		);
+		const query =
+			search
+				.trim()
+				.toLowerCase();
+
+		if (!query) {
+			return users;
+		}
+
+		return users.filter((user) => {
+			const plantsText =
+				userPlantCodes(user)
+					.join(" ")
+					.toLowerCase();
+
+			const modulesText =
+				userModules(user)
+					.join(" ")
+					.toLowerCase();
+
+			const roleText =
+				normalizeRole(user.role)
+					.toLowerCase();
+
+			return (
+				String(user.username || "")
+					.toLowerCase()
+					.includes(query) ||
+				roleText.includes(query) ||
+				plantsText.includes(query) ||
+				modulesText.includes(query)
+			);
+		});
 	}, [users, search]);
 
 	const totalPages = Math.max(
 		1,
-		Math.ceil(filteredRows.length / pageSize)
+		Math.ceil(
+			filteredRows.length /
+			pageSize
+		)
 	);
 
 	const currentPage = Math.min(
@@ -775,9 +1125,13 @@ function UsersPage() {
 	);
 
 	const paginatedRows = useMemo(() => {
+		const start =
+			(currentPage - 1) *
+			pageSize;
+
 		return filteredRows.slice(
-			(currentPage - 1) * pageSize,
-			currentPage * pageSize
+			start,
+			start + pageSize
 		);
 	}, [
 		filteredRows,
@@ -785,1806 +1139,2077 @@ function UsersPage() {
 		pageSize,
 	]);
 
-	const roleIcon = (role) => {
-		if (role === "ADMIN") {
-			return <AdminPanelSettingsIcon fontSize="small" />;
-		}
+	const stats = useMemo(() => {
+		const enabled =
+			users.filter(
+				(user) =>
+					user.enabled === true
+			).length;
 
-		if (role?.startsWith("BOMFLOW_")) {
-			return <AccountTreeOutlinedIcon fontSize="small" />;
-		}
+		const matFlowUsers =
+			users.filter((user) =>
+				normalizeRole(
+					user.role
+				).startsWith(
+					"MATFLOW_"
+				)
+			).length;
 
-		if (role?.startsWith("VENFLOW_")) {
-			return <LayersOutlinedIcon fontSize="small" />;
-		}
+		const bomFlowUsers =
+			users.filter((user) =>
+				normalizeRole(
+					user.role
+				).startsWith(
+					"BOMFLOW_"
+				)
+			).length;
 
-		if (
-			role === "DISPATCH" ||
-			role === "LOGISTICS" ||
-			role === "DRIVER"
-		) {
-			return <LocalShippingIcon fontSize="small" />;
-		}
+		return {
+			total: users.length,
+			enabled,
+			disabled:
+				users.length - enabled,
+			matFlowUsers,
+			bomFlowUsers,
+		};
+	}, [users]);
 
-		if (role === "WAREHOUSE") {
-			return <InventoryIcon fontSize="small" />;
-		}
+	const logout = async () => {
+		await authLogout();
 
-		if (
-			role === "HARDWARE_PACKING"
-		) {
-			return (
-				<InventoryIcon
-					fontSize="small"
-				/>
-			);
-		}
-
-		return <InventoryIcon fontSize="small" />;
-	};
-
-	const roleChip = (role) => {
-		if (role === "ADMIN") return adminChip;
-
-		if (role === "DISPATCH") return dispatchChip;
-
-		if (role === "LOGISTICS") return logisticsChip;
-
-		if (role === "DRIVER") return driverChip;
-
-		if (role === "WAREHOUSE") return warehouseChip;
-
-		if (
-			role === "HARDWARE_PACKING"
-		) {
-			return packingChip;
-		}
-
-
-		if (role?.startsWith("BOMFLOW_")) return bomFlowChip;
-
-		if (role?.startsWith("VENFLOW_")) return venFlowChip;
-
-		return packingChip;
+		navigate(
+			"/login",
+			{
+				replace: true,
+			}
+		);
 	};
 
 	return (
+		<Box sx={pageSx}>
+			<Box sx={contentSx}>
+				<PageHeader
+					canOpenPackFlow={
+						canOpenPackFlow
+					}
+					canOpenBOMFlow={
+						canOpenBOMFlow
+					}
+					canOpenMatFlow={
+						canOpenMatFlow
+					}
+					onModules={() =>
+						navigate("/modules")
+					}
+					onPackFlow={() =>
+						navigate(
+							"/packflow/dashboard"
+						)
+					}
+					onBOMFlow={() =>
+						navigate(
+							"/bomflow/dashboard"
+						)
+					}
+					onMatFlow={() =>
+						navigate(
+							"/matflow/dashboard"
+						)
+					}
+					onLogout={logout}
+					onCreate={
+						openCreateDrawer
+					}
+				/>
 
-		<div style={page}>
-			<div style={content}>
-				<div style={globalHeader}>
-					<div style={globalHeaderLeft}>
-						<div style={brandBlock}>
-							<div style={brandIcon}>
-								A
-							</div>
+				<Box sx={breadcrumbSx}>
+					<Button
+						startIcon={
+							<ArrowBackIcon />
+						}
+						onClick={() =>
+							navigate("/modules")
+						}
+						sx={secondaryButtonSx}
+					>
+						Module Hub
+					</Button>
 
-							<div>
-								<div style={suiteTitle}>
-									FlowSuite
-								</div>
+					<Typography
+						sx={breadcrumbTextSx}
+					>
+						FlowSuite / Administration /
+						User Management
+					</Typography>
 
-								<div style={suiteSub}>
-									Global User & Access Control
-								</div>
-							</div>
-						</div>
-
-						<div style={pageTitleBlock}>
-							<div style={logo}>
-								👥 User Management
-							</div>
-
-							<div style={subtitle}>
-								Manage users, roles, plant access, warehouse access and platform permissions.
-							</div>
-						</div>
-					</div>
-
-					<div style={globalHeaderActions}>
-						<button
-							style={navButton}
-							onClick={goToModules}
-						>
-							<AppsIcon fontSize="small" />
-							All Modules
-						</button>
-
-						<button
-							style={navButton}
-							onClick={goToPackFlow}
-						>
-							<InventoryIcon fontSize="small" />
-							PackFlow
-						</button>
-
-						{canOpenBOMFlow && (
-							<button
-								style={navButton}
-								onClick={goToBOMFlow}
-							>
-								<AccountTreeOutlinedIcon fontSize="small" />
-								BOMFlow
-							</button>
-						)}
-
-						{canOpenVenFlow && (
-							<button
-								style={navButton}
-								onClick={goToVenFlow}
-							>
-								<LayersOutlinedIcon fontSize="small" />
-								VenFlow
-							</button>
-						)}
-
-						<button
-							style={logoutNavButton}
-							onClick={logout}
-						>
-							<LogoutIcon fontSize="small" />
-							Logout
-						</button>
-
-						<button
-							style={moduleButton}
-							onClick={() => {
-								setUsername("");
-								setPassword("");
-								setRole("PACKING");
-								setPlantCodes([]);
-								setDriverId("");
-								setWarehouseAccess(false);
-								setModules(["PACKFLOW"]);
-								setCreateOpen(true);
-							}}
-						>
-							+ Create User
-						</button>
-					</div>
-				</div>
-				<div style={breadcrumbRow}>
-					<button style={breadcrumbButton} onClick={goToModules}>
-						<ArrowBackIcon fontSize="small" />
-						Back to Module Hub
-					</button>
-
-					<div style={breadcrumbText}>
-						FlowSuite / Administration / User Management
-					</div>
-
-					{normalizedCurrentRole ===
-						"ADMIN" && (
-							<Chip
-								size="small"
-								label="ADMIN ACCESS"
-								sx={adminAccessChip}
-							/>
-						)}
-				</div>
-
-				<Box sx={searchPanel}>
-					<SearchIcon
-						sx={{
-							color: "rgba(255,255,255,.45)",
-						}}
-					/>
-
-					<TextField
-						variant="standard"
-						placeholder="Search users..."
-						value={search}
-						onChange={(e) => {
-							setSearch(e.target.value);
-							setPageNo(1);
-						}}
-						InputProps={{
-							disableUnderline: true
-						}}
-						sx={searchInput}
+					<Chip
+						label="ADMIN ACCESS"
+						size="small"
+						sx={adminAccessChipSx}
 					/>
 				</Box>
 
-				<div style={wrap}>
-					<div style={tableWrapper}>
-						<div style={tableHeader}>
-							<div>Username</div>
-							<div>Role</div>
-							<div>Module Access</div>
-							<div>Driver Profile</div>
-							<div>Plant Access</div>
-							<div>Warehouse Access</div>
-							<div>Actions</div>
-						</div>
+				<Box sx={statsGridSx}>
+					<StatCard
+						label="Total Users"
+						value={stats.total}
+						accent="#3b82f6"
+						icon={
+							<SupervisorAccountOutlinedIcon />
+						}
+					/>
 
-						<div style={tableBody}>
+					<StatCard
+						label="Enabled"
+						value={stats.enabled}
+						accent="#22c55e"
+						icon={
+							<CheckCircleOutlineOutlinedIcon />
+						}
+					/>
 
-							{paginatedRows.map((u) => (
+					<StatCard
+						label="Disabled"
+						value={stats.disabled}
+						accent="#ef4444"
+						icon={
+							<BlockOutlinedIcon />
+						}
+					/>
 
-								<div
-									key={u.id}
-									style={tableRow}
-								>
+					<StatCard
+						label="MatFlow Users"
+						value={
+							stats.matFlowUsers
+						}
+						accent="#14b8a6"
+						icon={
+							<LayersOutlinedIcon />
+						}
+					/>
 
-									{/* USER COLUMN */}
+					<StatCard
+						label="BOMFlow Users"
+						value={
+							stats.bomFlowUsers
+						}
+						accent="#8b5cf6"
+						icon={
+							<AccountTreeOutlinedIcon />
+						}
+					/>
+				</Box>
 
-									<div>
-
-										<div style={userInfo}>
-											<div style={avatar}>
-												{u.username
-													.charAt(0)
-													.toUpperCase()}
-											</div>
-
-											{editId === u.id ? (
-
-												<TextField
-													value={editUsername}
-													size="small"
-													onChange={(e) =>
-														setEditUsername(
-															e.target.value
-														)
-													}
-													sx={inlineInput}
-												/>
-
-											) : (
-
-												<span
-													style={{
-														color: "#ffffff",
-
-														fontWeight: 500,
-
-														fontSize: 15,
-
-														letterSpacing: 0.2,
-													}}
-												>
-													{u.username}
-												</span>
-
-											)}
-										</div>
-
-									</div>
-
-									{/* ROLE COLUMN */}
-
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-										}}
-									>
-
-										{editId === u.id ? (
-
-											<TextField
-												select
-												size="small"
-												value={editRole}
-												onChange={(e) => {
-													const nextRole = e.target.value;
-
-													setEditRole(nextRole);
-													setEditModules(defaultModulesForRole(nextRole));
-
-													if (nextRole === "DRIVER") {
-														setEditPlantCodes([]);
-													} else {
-														setEditDriverId("");
-													}
-
-													if (nextRole === "ADMIN" || nextRole === "WAREHOUSE") {
-														setEditWarehouseAccess(true);
-													} else {
-														setEditWarehouseAccess(false);
-													}
-												}}
-												sx={inlineInput}
-											>
-												{roles.map((r) => (
-													<MenuItem
-														key={r}
-														value={r}
-													>
-														{r}
-													</MenuItem>
-												))}
-											</TextField>
-
-										) : (
-
-											<Chip
-												icon={roleIcon(u.role)}
-												label={u.role}
-												size="small"
-												sx={roleChip(u.role)}
-											/>
-
-										)}
-									</div>
-
-
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											minWidth: 0,
-										}}
-									>
-										{editId === u.id ? (
-											<TextField
-												select
-												size="small"
-												value={editModules}
-												onChange={(e) => {
-													const value = e.target.value;
-
-													setEditModules(
-														typeof value === "string"
-															? value.split(",")
-															: value
-													);
-												}}
-												sx={inlineInput}
-												SelectProps={{
-													multiple: true,
-													renderValue: (selected) =>
-														selected.length
-															? selected.map(moduleLabel).join(", ")
-															: "Select Modules",
-												}}
-											>
-												{moduleOptions.map((module) => (
-													<MenuItem
-														key={module.key}
-														value={module.key}
-													>
-														{module.label}
-													</MenuItem>
-												))}
-											</TextField>
-										) : (
-											<Box
-												sx={{
-													display: "flex",
-													gap: 0.7,
-													flexWrap: "wrap",
-												}}
-											>
-												{normalizeUserModules(u).length === 0 ? (
-													<Chip
-														size="small"
-														label="No Modules"
-														sx={noWarehouseAccessChip}
-													/>
-												) : (
-													normalizeUserModules(u).map((module) => (
-														<Chip
-															key={module}
-															size="small"
-															label={moduleLabel(module)}
-															sx={moduleAccessChip}
-														/>
-													))
-												)}
-											</Box>
-										)}
-									</div>
-
-									{/* DRIVER PROFILE COLUMN */}
-
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											minWidth: 0,
-										}}
-									>
-										{editId === u.id ? (
-											editRole === "DRIVER" ? (
-												<TextField
-													select
-													size="small"
-													value={editDriverId}
-													onChange={(e) =>
-														setEditDriverId(e.target.value)
-													}
-													sx={inlineInput}
-												>
-													{drivers.map((driver) => (
-														<MenuItem
-															key={driver.id}
-															value={driver.id}
-														>
-															{driver.phone
-																? `${driver.name} • ${driver.phone}`
-																: driver.name}
-														</MenuItem>
-													))}
-												</TextField>
-											) : (
-												<Chip
-													size="small"
-													label="Not Required"
-													sx={notRequiredChip}
-												/>
-											)
-										) : u.role === "DRIVER" ? (
-											<Chip
-												size="small"
-												label={driverName(u.driverId)}
-												sx={driverProfileChip}
-											/>
-										) : (
-											<Chip
-												size="small"
-												label="Not Required"
-												sx={notRequiredChip}
-											/>
-										)}
-									</div>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											minWidth: 0,
-										}}
-									>
-										{editId === u.id ? (
-											editRole === "DRIVER" ? (
-												<Chip
-													size="small"
-													label="Not Required"
-													sx={notRequiredChip}
-												/>
-											) : (
-												<TextField
-													select
-													size="small"
-													value={editPlantCodes}
-													onChange={(e) => {
-														const value = e.target.value;
-
-														setEditPlantCodes(
-															typeof value === "string"
-																? value.split(",")
-																: value
-														);
-													}}
-													sx={inlineInput}
-													SelectProps={{
-														multiple: true,
-														renderValue: (selected) =>
-															selected.length
-																? selected.join(", ")
-																: "Select Plant",
-													}}
-												>
-													{plants.map((plant) => (
-														<MenuItem
-															key={plant.plantCode}
-															value={plant.plantCode}
-														>
-															{plantName(plant.plantCode)}
-														</MenuItem>
-													))}
-												</TextField>
-											)
-										) : u.role === "DRIVER" ? (
-											<Chip
-												size="small"
-												label="Not Required"
-												sx={notRequiredChip}
-											/>
-										) : (
-											<Box
-												sx={{
-													display: "flex",
-													gap: 0.7,
-													flexWrap: "wrap",
-												}}
-											>
-												{normalizeUserPlantCodes(u).length === 0 ? (
-													<Chip
-														size="small"
-														label={u.role === "ADMIN" ? "All Plants" : "No Plant Assigned"}
-														sx={legacyPlantChip}
-													/>
-												) : (
-													normalizeUserPlantCodes(u).map((code) => (
-														<Chip
-															key={code}
-															size="small"
-															label={code}
-															sx={plantChip}
-														/>
-													))
-												)}
-											</Box>
-										)}
-									</div>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											minWidth: 0,
-										}}
-									>
-										{editId === u.id ? (
-											<Box
-												sx={{
-													display: "flex",
-													alignItems: "center",
-													gap: 1,
-												}}
-											>
-												<Switch
-													checked={
-														editRole === "ADMIN" ||
-														editRole === "WAREHOUSE" ||
-														(
-															editRole !==
-															"HARDWARE_PACKING" &&
-															editWarehouseAccess
-														)
-													}
-													disabled={
-														editRole === "ADMIN" ||
-														editRole === "WAREHOUSE" ||
-														editRole ===
-														"HARDWARE_PACKING"
-													}
-													onChange={(e) => {
-														if (editRole === "ADMIN" || editRole === "WAREHOUSE") {
-															setEditWarehouseAccess(true);
-															return;
-														}
-
-														setEditWarehouseAccess(e.target.checked);
-													}}
-													sx={{
-														"& .MuiSwitch-switchBase.Mui-checked": {
-															color: "#fbbf24",
-														},
-														"& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-															backgroundColor: "#f59e0b",
-														},
-													}}
-												/>
-
-												<Chip
-													size="small"
-													label={
-														editRole === "ADMIN" || editRole === "WAREHOUSE" || editWarehouseAccess
-															? "Enabled"
-															: "No Access"
-													}
-													sx={
-														editRole === "ADMIN" || editRole === "WAREHOUSE" || editWarehouseAccess
-															? warehouseAccessChip
-															: noWarehouseAccessChip
-													}
-												/>
-											</Box>
-										) : (
-											<Chip
-												size="small"
-												label={hasWarehouseAccess(u) ? "Enabled" : "No Access"}
-												sx={hasWarehouseAccess(u) ? warehouseAccessChip : noWarehouseAccessChip}
-											/>
-										)}
-									</div>
-
-									{/* ACTIONS */}
-
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-										}}
-									>
-
-										{editId === u.id ? (
-
-											<Box sx={actionContainer}>
-
-												<Button
-													size="small"
-													sx={actionPrimary}
-													onClick={saveEdit}
-												>
-													Save
-												</Button>
-
-												<Button
-													size="small"
-													sx={actionSecondary}
-													onClick={cancelEdit}
-												>
-													Cancel
-												</Button>
-
-											</Box>
-
-										) : (
-
-											<Box sx={actionContainer}>
-
-												<Button
-													startIcon={<EditIcon />}
-													size="small"
-													sx={actionSecondary}
-													onClick={() =>
-														startEdit(u)
-													}
-												>
-													Edit
-												</Button>
-
-												<Button
-													startIcon={
-														<LockResetIcon />
-													}
-													size="small"
-													sx={actionPrimary}
-													onClick={() =>
-														openReset(u)
-													}
-												>
-													Reset
-												</Button>
-
-												<Button
-													startIcon={<DeleteIcon />}
-													size="small"
-													sx={actionDanger}
-													onClick={() =>
-														deleteUser(u.id)
-													}
-												>
-													Delete
-												</Button>
-
-											</Box>
-
-										)}
-
-									</div>
-
-								</div>
-
-							))}
-
-						</div>
-					</div>
-
-					<Box
-						sx={{
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "center",
-							mt: 4,
-							gap: 2,
-							flexWrap: "wrap",
+				<Box sx={searchPanelSx}>
+					<TextField
+						fullWidth
+						value={search}
+						onChange={(event) => {
+							setSearch(
+								event.target.value
+							);
+							setPageNo(1);
 						}}
+						placeholder="Search by username, role, module or plant..."
+						size="small"
+						sx={fieldSx}
+						InputProps={{
+							startAdornment: (
+								<InputAdornment position="start">
+									<SearchIcon
+										sx={{
+											color: "#64748b",
+										}}
+									/>
+								</InputAdornment>
+							),
+						}}
+					/>
+
+					<Button
+						startIcon={
+							<AddOutlinedIcon />
+						}
+						onClick={
+							openCreateDrawer
+						}
+						sx={primaryButtonSx}
 					>
-						{/* LEFT SIDE */}
-						<Box
-							sx={{
-								display: "flex",
-								alignItems: "center",
-								gap: 2,
-							}}
-						>
-							<Box
-								sx={{
-									color: "#94a3b8",
-									fontWeight: 600,
-									fontSize: 14,
-								}}
-							>
-								Show
-							</Box>
+						Create User
+					</Button>
+				</Box>
+
+				<Box sx={tablePanelSx}>
+					<Box sx={tableHeaderSx}>
+						<Box>User</Box>
+						<Box>Access Profile</Box>
+						<Box>Plant Access</Box>
+						<Box>Operational Access</Box>
+						<Box>Status</Box>
+						<Box>Actions</Box>
+					</Box>
+
+					{loading ? (
+						<Box sx={loadingSx}>
+							<CircularProgress />
+						</Box>
+					) : (
+						<Box>
+							{paginatedRows.map(
+								(user) => (
+									<UserRow
+										key={user.id}
+										user={user}
+										plantName={
+											plantName
+										}
+										driverName={
+											driverName
+										}
+										onEdit={() =>
+											openEditDrawer(
+												user
+											)
+										}
+										onReset={() =>
+											openResetDialog(
+												user
+											)
+										}
+										onDisable={() =>
+											openDisableDialog(
+												user
+											)
+										}
+									/>
+								)
+							)}
+
+							{paginatedRows.length ===
+								0 && (
+									<Box sx={emptyStateSx}>
+										No users match the
+										current search.
+									</Box>
+								)}
+						</Box>
+					)}
+
+					<Box sx={paginationSx}>
+						<Box sx={pageSizeSx}>
+							<Typography sx={mutedTextSx}>
+								Rows per page
+							</Typography>
 
 							<TextField
 								select
 								size="small"
 								value={pageSize}
-								onChange={(e) => {
-									setPageSize(Number(e.target.value));
+								onChange={(event) => {
+									setPageSize(
+										Number(
+											event.target
+												.value
+										)
+									);
 									setPageNo(1);
 								}}
 								sx={{
-									width: 110,
-
-									"& .MuiOutlinedInput-root": {
-										height: 36,
-										borderRadius: "12px",
-										background:
-											"rgba(255,255,255,.04)",
-										color: "#fff",
-
-										"& fieldset": {
-											borderColor:
-												"rgba(255,255,255,.08)",
-										},
-
-										"&:hover fieldset": {
-											borderColor:
-												"rgba(59,130,246,.35)",
-										},
-									},
-
-									"& .MuiSvgIcon-root": {
-										color: "#94a3b8",
-									},
+									...fieldSx,
+									width: 92,
 								}}
 							>
-								<MenuItem value={25}>25</MenuItem>
-								<MenuItem value={50}>50</MenuItem>
-							</TextField>
-
-							<Box
-								sx={{
-									color: "#94a3b8",
-									fontSize: 14,
-								}}
-							>
-								items per page
-							</Box>
-						</Box>
-
-						{/* CENTER PAGINATION */}
-						<Box
-							sx={{
-								display: "flex",
-								alignItems: "center",
-								gap: 3,
-							}}
-						>
-							<Button
-								disabled={currentPage === 1}
-								onClick={() =>
-									setPageNo(currentPage - 1)
-								}
-								sx={{
-									minWidth: 100,
-									height: 30,
-									borderRadius: "12px",
-									background:
-										"linear-gradient(180deg,#1e293b,#0f172a)",
-									color: "#fff",
-									border:
-										"1px solid rgba(255,255,255,.08)",
-
-									fontSize: 10,
-									fontWeight: 500,
-
-									"&:disabled": {
-										opacity: 0.45,
-										color: "#94a3b8",
-									},
-								}}
-							>
-								◀ Previous
-							</Button>
-
-							<Box
-								sx={{
-									px: 2.5,
-									height: 30,
-									display: "flex",
-									alignItems: "center",
-									borderRadius: "12px",
-									background:
-										"linear-gradient(180deg,#0f172a,#111827)",
-									color: "#cbd5e1",
-									border:
-										"1px solid rgba(255,255,255,.06)",
-
-									fontSize: 10,
-									fontWeight: 500,
-								}}
-							>
-								Page
-
-								<Box
-									component="span"
-									sx={{
-										mx: 1,
-										color: "#60a5fa",
-									}}
-								>
-									{currentPage}
-								</Box>
-
-								of {totalPages}
-							</Box>
-
-							<Button
-								disabled={currentPage === totalPages}
-								onClick={() =>
-									setPageNo(currentPage + 1)
-								}
-								sx={{
-									minWidth: 100,
-									height: 30,
-									borderRadius: "12px",
-									background:
-										"linear-gradient(180deg,#2563eb,#1d4ed8)",
-									color: "#fff",
-
-									fontSize: 10,
-									fontWeight: 500,
-
-									"&:disabled": {
-										opacity: 0.45,
-										color: "#cbd5e1",
-									},
-								}}
-							>
-								Next ▶
-							</Button>
-						</Box>
-
-						{/* RIGHT SIDE COUNT */}
-						<Box
-							sx={{
-								color: "#94a3b8",
-								fontSize: 13,
-								fontWeight: 600,
-							}}
-						>
-							Total: {filteredRows.length}
-						</Box>
-					</Box>
-				</div>
-
-				<Drawer
-					anchor="right"
-					open={createOpen}
-					onClose={() => setCreateOpen(false)}
-					PaperProps={{
-						sx: {
-							width: 380,
-
-							background:
-								"linear-gradient(180deg,#020617,#0f172a)",
-
-							color: "#fff",
-
-							borderTopLeftRadius: 24,
-							borderBottomLeftRadius: 24,
-							borderLeft:
-								"1px solid rgba(255,255,255,.06)",
-							p: 3,
-						},
-					}}
-				>
-					<Box
-						sx={{
-							display: "flex",
-							flexDirection: "column",
-							height: "100%",
-						}}
-					>
-
-						<Box sx={{ mb: 3 }}>
-							<Box
-								sx={{
-									fontSize: 24,
-									fontWeight: 800,
-									mb: 0.5,
-								}}
-							>
-								Create User
-							</Box>
-
-							<Box
-								sx={{
-									fontSize: 13,
-
-									color
-										: "#6b7280",
-								}}
-							>
-								Add new system user and permissions
-							</Box>
-						</Box>
-
-						<Box
-							sx={{
-								display: "flex",
-								flexDirection: "column",
-								gap: 2,
-							}}
-						>
-
-							<TextField
-								label="Username"
-								value={username}
-								onChange={(e) => setUsername(e.target.value)}
-								fullWidth
-								sx={formFieldSx}
-							/>
-
-							<TextField
-								label="Password"
-								type="password"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								fullWidth
-								sx={formFieldSx}
-							/>
-
-							<TextField
-								select
-								label="Role"
-								value={role}
-								onChange={(e) => {
-									const nextRole = e.target.value;
-
-									setRole(nextRole);
-									setModules(defaultModulesForRole(nextRole));
-
-									if (nextRole === "DRIVER") {
-										setPlantCodes([]);
-									} else {
-										setDriverId("");
-									}
-
-									if (nextRole === "ADMIN" || nextRole === "WAREHOUSE") {
-										setWarehouseAccess(true);
-									} else {
-										setWarehouseAccess(false);
-									}
-								}}
-								fullWidth
-								sx={formFieldSx}
-								slotProps={{
-									select: {
-										MenuProps: {
-											PaperProps: {
-												sx: {
-													mt: 1,
-													borderRadius: "18px",
-
-													background:
-														"linear-gradient(180deg,#0f172a,#111827)",
-
-													color: "#fff",
-
-													border:
-														"1px solid rgba(255,255,255,.06)",
-
-													"& .MuiMenuItem-root": {
-														color: "#fff",
-													},
-
-													"& .Mui-selected": {
-														background:
-															"rgba(59,130,246,.18) !important",
-
-														color: "#fff",
-													},
-												},
-											},
-										},
-									},
-								}}
-							>
-								{roles.map((r) => (
-									<MenuItem
-										key={r}
-										value={r}
-									>
-										{r}
-									</MenuItem>
-								))}
-							</TextField>
-
-							<TextField
-								select
-								label="Module Access"
-								value={modules}
-								onChange={(e) => {
-									const value = e.target.value;
-
-									setModules(
-										typeof value === "string"
-											? value.split(",")
-											: value
-									);
-								}}
-								fullWidth
-								sx={formFieldSx}
-								SelectProps={{
-									multiple: true,
-									renderValue: (selected) =>
-										selected.length
-											? selected.map(moduleLabel).join(", ")
-											: "Select Modules",
-								}}
-								slotProps={{
-									select: {
-										MenuProps: {
-											PaperProps: {
-												sx: {
-													mt: 1,
-													borderRadius: "18px",
-													background: "linear-gradient(180deg,#0f172a,#111827)",
-													color: "#fff",
-													border: "1px solid rgba(255,255,255,.06)",
-													"& .MuiMenuItem-root": {
-														color: "#fff",
-													},
-													"& .Mui-selected": {
-														background: "rgba(59,130,246,.18) !important",
-														color: "#fff",
-													},
-												},
-											},
-										},
-									},
-								}}
-							>
-								{moduleOptions.map((module) => (
-									<MenuItem
-										key={module.key}
-										value={module.key}
-									>
-										{module.label}
-									</MenuItem>
-								))}
-							</TextField>
-
-							{role === "DRIVER" && (
-								<TextField
-									select
-									label="Linked Driver Profile"
-									value={driverId}
-									onChange={(e) =>
-										setDriverId(e.target.value)
-									}
-									fullWidth
-									sx={formFieldSx}
-									slotProps={{
-										select: {
-											MenuProps: {
-												PaperProps: {
-													sx: {
-														mt: 1,
-														borderRadius: "18px",
-														background:
-															"linear-gradient(180deg,#0f172a,#111827)",
-														color: "#fff",
-														border:
-															"1px solid rgba(255,255,255,.06)",
-
-														"& .MuiMenuItem-root": {
-															color: "#fff",
-														},
-
-														"& .Mui-selected": {
-															background:
-																"rgba(16,185,129,.18) !important",
-															color: "#fff",
-														},
-													},
-												},
-											},
-										},
-									}}
-								>
-									{drivers.map((driver) => (
+								{PAGE_SIZE_OPTIONS.map(
+									(option) => (
 										<MenuItem
-											key={driver.id}
-											value={driver.id}
+											key={option}
+											value={option}
 										>
-											{driver.phone
-												? `${driver.name} • ${driver.phone}`
-												: driver.name}
+											{option}
 										</MenuItem>
-									))}
-								</TextField>
-							)}
-							{role !== "DRIVER" && (
-								<TextField
-									select
-									label="Plant Access"
-									value={plantCodes}
-									onChange={(e) => {
-										const value = e.target.value;
-										setPlantCodes(
-											typeof value === "string" ? value.split(",") : value
-										);
-									}}
-									fullWidth
-									sx={formFieldSx}
-									SelectProps={{
-										multiple: true,
-										renderValue: (selected) =>
-											selected.length ? selected.join(", ") : "Select Plant",
-									}}
-									slotProps={{
-										select: {
-											MenuProps: {
-												PaperProps: {
-													sx: {
-														mt: 1,
-														borderRadius: "18px",
-														background:
-															"linear-gradient(180deg,#0f172a,#111827)",
-														color: "#fff",
-														border:
-															"1px solid rgba(255,255,255,.06)",
-
-														"& .MuiMenuItem-root": {
-															color: "#fff",
-														},
-
-														"& .Mui-selected": {
-															background:
-																"rgba(59,130,246,.18) !important",
-															color: "#fff",
-														},
-													},
-												},
-											},
-										},
-									}}
-								>
-									{plants.map((plant) => (
-										<MenuItem key={plant.plantCode} value={plant.plantCode}>
-											{plantName(plant.plantCode)}
-										</MenuItem>
-									))}
-								</TextField>
-							)}
-
-						</Box>
-						{role !== "DRIVER" && (
-							<Box sx={permissionCardSx}>
-								<Box>
-									<Box
-										sx={{
-											color: "#fff",
-											fontWeight: 900,
-											fontSize: 14,
-										}}
-									>
-										Warehouse Page Access
-									</Box>
-
-									<Box
-										sx={{
-											color: "#94a3b8",
-											fontSize: 12,
-											fontWeight: 600,
-											mt: 0.4,
-											lineHeight: 1.4,
-										}}
-									>
-										{role === "HARDWARE_PACKING"
-											? "Hardware packing users are restricted to their own hardware packet workspace."
-											: "Allow this user to open Warehouse page and view warehouse data based on selected plant access."}
-									</Box>
-								</Box>
-
-								<Switch
-									checked={
-										role === "ADMIN" ||
-										role === "WAREHOUSE" ||
-										(
-											role !== "HARDWARE_PACKING" &&
-											warehouseAccess
-										)
-									}
-									disabled={
-										role === "ADMIN" ||
-										role === "WAREHOUSE" ||
-										role === "HARDWARE_PACKING"
-									}
-									onChange={(e) => setWarehouseAccess(e.target.checked)}
-									sx={{
-										"& .MuiSwitch-switchBase.Mui-checked": {
-											color: "#fbbf24",
-										},
-										"& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-											backgroundColor: "#f59e0b",
-										},
-									}}
-								/>
-							</Box>
-						)}
-						<Box sx={{ flex: 1 }} />
-
-						<Box
-							sx={{
-								display: "flex",
-								gap: 1.5,
-
-								mt: 4,
-								pt: 2,
-
-								borderTop:
-									"1px solid rgba(255,255,255,.06)",
-							}}
-						>
-
-							<Button
-								fullWidth
-								variant="outlined"
-								onClick={() => setCreateOpen(false)}
-								sx={{
-									borderRadius: "14px",
-
-									fontWeight: 700,
-
-									color
-										: "#fff"
-									,
-
-									borderColor
-										: "rgba(0,0,0,0.12)",
-
-									background
-										: "rgba(255,255,255,.04)",
-
-									"&:hover": {
-										borderColor
-											: "#111827",
-
-										background
-											: "#f9fafb",
-									},
-								}}
-							>
-								Cancel
-							</Button>
-
-							<Button
-								fullWidth
-								onClick={createUser}
-								sx={actionPrimary}
-							>
-								Create
-							</Button>
-
+									)
+								)}
+							</TextField>
 						</Box>
 
+						<Box sx={pageControlsSx}>
+							<Button
+								disabled={
+									currentPage <= 1
+								}
+								onClick={() =>
+									setPageNo(
+										currentPage -
+										1
+									)
+								}
+								sx={secondaryButtonSx}
+							>
+								Previous
+							</Button>
+
+							<Chip
+								label={`Page ${currentPage} of ${totalPages}`}
+								sx={pageChipSx}
+							/>
+
+							<Button
+								disabled={
+									currentPage >=
+									totalPages
+								}
+								onClick={() =>
+									setPageNo(
+										currentPage +
+										1
+									)
+								}
+								sx={primaryButtonSx}
+							>
+								Next
+							</Button>
+						</Box>
+
+						<Typography sx={mutedTextSx}>
+							{filteredRows.length} user
+							{filteredRows.length === 1
+								? ""
+								: "s"}
+						</Typography>
 					</Box>
-				</Drawer>
-				<Dialog open={resetOpen} onClose={() => setResetOpen(false)}
-					PaperProps={{
-						sx: {
-							background:
-								"linear-gradient(180deg,#0f172a,#111827)",
+				</Box>
+			</Box>
 
-							color: "#fff",
+			<UserEditorDrawer
+				open={drawerOpen}
+				mode={drawerMode}
+				form={form}
+				plants={plants}
+				drivers={drivers}
+				saving={saving}
+				onClose={closeDrawer}
+				onSave={saveUser}
+				onUpdate={updateForm}
+				onRoleChange={
+					handleRoleChange
+				}
+				plantName={plantName}
+			/>
 
-							borderRadius: "24px",
+			<PasswordResetDialog
+				open={resetOpen}
+				user={resetUser}
+				password={newPassword}
+				onPasswordChange={
+					setNewPassword
+				}
+				onClose={() => {
+					setResetOpen(false);
+					setResetUser(null);
+					setNewPassword("");
+				}}
+				onReset={resetPassword}
+			/>
 
-							border:
-								"1px solid rgba(255,255,255,.06)",
-						}
-					}}>
-					<DialogTitle>Reset Password</DialogTitle>
+			<DisableUserDialog
+				open={deleteOpen}
+				user={deleteUser}
+				onClose={() => {
+					setDeleteOpen(false);
+					setDeleteUser(null);
+				}}
+				onConfirm={confirmDisable}
+			/>
 
-					<DialogContent>
-
-						<TextField
-							label="New Password"
-							type="password"
-							value={newPassword}
-							onChange={(e) => setNewPassword(e.target.value)}
-							fullWidth
-							sx={formFieldSx}
-						/>
-
-					</DialogContent>
-
-					<DialogActions>
-
-						<Button onClick={() => setResetOpen(false)}
-							sx={actionSecondary}>
-							Cancel
-						</Button>
-
-						<Button onClick={resetPassword}
-							sx={actionPrimary}>
-							Reset
-						</Button>
-
-					</DialogActions>
-
-				</Dialog>
-				<Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}
-					PaperProps={{
-						sx: {
-							background:
-								"linear-gradient(180deg,#0f172a,#111827)",
-
-							color: "#fff",
-
-							borderRadius: "24px",
-
-							border:
-								"1px solid rgba(255,255,255,.06)",
-						}
-					}}>
-
-					<DialogTitle>
-						Disable User
-					</DialogTitle>
-
-					<DialogContent>
-						Are you sure you want to disable this user?
-					</DialogContent>
-
-					<DialogActions>
-
-						<Button onClick={() => setDeleteOpen(false)}
-							sx={actionSecondary}>
-							Cancel
-						</Button>
-
-						<Button
-							sx={actionDanger}
-							onClick={confirmDelete}
-						>
-							Disable
-						</Button>
-
-					</DialogActions>
-
-				</Dialog>
-				<Snackbar
-					open={snackOpen}
-					autoHideDuration={3000}
-					onClose={() => setSnackOpen(false)}
-					anchorOrigin={{ vertical: "top", horizontal: "center" }}
+			<Snackbar
+				open={snackbar.open}
+				autoHideDuration={3500}
+				onClose={() =>
+					setSnackbar((previous) => ({
+						...previous,
+						open: false,
+					}))
+				}
+				anchorOrigin={{
+					vertical: "top",
+					horizontal: "center",
+				}}
+			>
+				<Alert
+					severity={
+						snackbar.severity
+					}
+					variant="filled"
+					onClose={() =>
+						setSnackbar(
+							(previous) => ({
+								...previous,
+								open: false,
+							})
+						)
+					}
 				>
-
-					<Alert
-						severity={snackType}
-						variant="filled"
-						onClose={() => setSnackOpen(false)}
-					>
-						{snackMsg}
-					</Alert>
-
-				</Snackbar>
-			</div>
-		</div>
-
+					{snackbar.message}
+				</Alert>
+			</Snackbar>
+		</Box>
 	);
 }
 
-/* ===== ENHANCED GLASS STYLE ===== */
+/* =========================================================
+ * HEADER
+ * ========================================================= */
 
-const globalHeader = {
+function PageHeader({
+	canOpenPackFlow,
+	canOpenBOMFlow,
+	canOpenMatFlow,
+	onModules,
+	onPackFlow,
+	onBOMFlow,
+	onMatFlow,
+	onLogout,
+	onCreate,
+}) {
+	return (
+		<Box sx={headerSx}>
+			<Box>
+				<Box sx={brandRowSx}>
+					<Box sx={brandMarkSx}>
+						A
+					</Box>
+
+					<Box>
+						<Typography
+							sx={suiteTitleSx}
+						>
+							FlowSuite
+						</Typography>
+
+						<Typography
+							sx={suiteSubSx}
+						>
+							Global User & Access Control
+						</Typography>
+					</Box>
+				</Box>
+
+				<Typography sx={pageTitleSx}>
+					User Management
+				</Typography>
+
+				<Typography sx={pageSubtitleSx}>
+					Create users and assign one controlled
+					access profile with its required module,
+					role, plants and operational permissions.
+				</Typography>
+			</Box>
+
+			<Box sx={headerActionsSx}>
+				<Button
+					startIcon={<AppsIcon />}
+					onClick={onModules}
+					sx={secondaryButtonSx}
+				>
+					Modules
+				</Button>
+
+				{canOpenPackFlow && (
+					<Button
+						startIcon={
+							<InventoryIcon />
+						}
+						onClick={onPackFlow}
+						sx={secondaryButtonSx}
+					>
+						PackFlow
+					</Button>
+				)}
+
+				{canOpenBOMFlow && (
+					<Button
+						startIcon={
+							<AccountTreeOutlinedIcon />
+						}
+						onClick={onBOMFlow}
+						sx={secondaryButtonSx}
+					>
+						BOMFlow
+					</Button>
+				)}
+
+				{canOpenMatFlow && (
+					<Button
+						startIcon={
+							<LayersOutlinedIcon />
+						}
+						onClick={onMatFlow}
+						sx={secondaryButtonSx}
+					>
+						MatFlow
+					</Button>
+				)}
+
+				<Button
+					startIcon={
+						<LogoutIcon />
+					}
+					onClick={onLogout}
+					sx={dangerOutlineButtonSx}
+				>
+					Logout
+				</Button>
+
+				<Button
+					startIcon={
+						<AddOutlinedIcon />
+					}
+					onClick={onCreate}
+					sx={primaryButtonSx}
+				>
+					Create User
+				</Button>
+			</Box>
+		</Box>
+	);
+}
+
+/* =========================================================
+ * USER ROW
+ * ========================================================= */
+
+function UserRow({
+	user,
+	plantName,
+	driverName,
+	onEdit,
+	onReset,
+	onDisable,
+}) {
+	const cleanRole =
+		normalizeRole(user.role);
+
+	const meta =
+		roleMeta(cleanRole);
+
+	const plants =
+		userPlantCodes(user);
+
+	const modules =
+		userModules(user);
+
+	const warehouseAccess =
+		readWarehouseAccess(user);
+
+	const enabled =
+		user.enabled === true;
+
+	return (
+		<Box
+			sx={{
+				...tableRowSx,
+				opacity: enabled ? 1 : 0.58,
+			}}
+		>
+			<Box sx={userCellSx}>
+				<Box sx={avatarSx(meta.accent)}>
+					{String(
+						user.username || "U"
+					)
+						.charAt(0)
+						.toUpperCase()}
+				</Box>
+
+				<Box sx={{ minWidth: 0 }}>
+					<Typography sx={usernameSx}>
+						{user.username}
+					</Typography>
+
+					<Typography sx={smallMutedSx}>
+						User ID: {user.id}
+					</Typography>
+				</Box>
+			</Box>
+
+			<Box sx={{ minWidth: 0 }}>
+				<Chip
+					icon={roleIcon(cleanRole)}
+					label={meta.label}
+					size="small"
+					sx={roleChipSx(
+						meta.accent
+					)}
+				/>
+
+				<Box sx={moduleChipRowSx}>
+					{modules.map((module) => (
+						<Chip
+							key={module}
+							size="small"
+							label={module}
+							sx={moduleChipSx}
+						/>
+					))}
+				</Box>
+			</Box>
+
+			<Box sx={chipWrapSx}>
+				{cleanRole === "ADMIN" ? (
+					<Chip
+						label="All Plants"
+						size="small"
+						sx={allPlantChipSx}
+					/>
+				) : cleanRole === "DRIVER" ? (
+					<Chip
+						label="Not Required"
+						size="small"
+						sx={neutralChipSx}
+					/>
+				) : plants.length === 0 ? (
+					<Chip
+						label="No Plant Assigned"
+						size="small"
+						sx={warningChipSx}
+					/>
+				) : (
+					plants.map((plant) => (
+						<Tooltip
+							key={plant}
+							title={
+								plantName(plant)
+							}
+						>
+							<Chip
+								label={plant}
+								size="small"
+								sx={plantChipSx}
+							/>
+						</Tooltip>
+					))
+				)}
+			</Box>
+
+			<Box sx={operationalCellSx}>
+				{cleanRole === "DRIVER" ? (
+					<Chip
+						label={driverName(
+							user.driverId
+						)}
+						size="small"
+						sx={driverChipSx}
+					/>
+				) : (
+					<Chip
+						icon={
+							<WarehouseOutlinedIcon />
+						}
+						label={
+							warehouseAccess
+								? "Warehouse Enabled"
+								: "No Warehouse Access"
+						}
+						size="small"
+						sx={
+							warehouseAccess
+								? warehouseChipSx
+								: neutralChipSx
+						}
+					/>
+				)}
+			</Box>
+
+			<Box>
+				<Chip
+					icon={
+						enabled ? (
+							<CheckCircleOutlineOutlinedIcon />
+						) : (
+							<BlockOutlinedIcon />
+						)
+					}
+					label={
+						enabled
+							? "Enabled"
+							: "Disabled"
+					}
+					size="small"
+					sx={
+						enabled
+							? enabledChipSx
+							: disabledChipSx
+					}
+				/>
+			</Box>
+
+			<Box sx={actionsSx}>
+				<Button
+					startIcon={<EditIcon />}
+					onClick={onEdit}
+					disabled={!enabled}
+					sx={secondaryButtonSx}
+				>
+					Edit
+				</Button>
+
+				<Button
+					startIcon={
+						<LockResetIcon />
+					}
+					onClick={onReset}
+					disabled={!enabled}
+					sx={primaryButtonSx}
+				>
+					Reset
+				</Button>
+
+				<Button
+					startIcon={<DeleteIcon />}
+					onClick={onDisable}
+					disabled={!enabled}
+					sx={dangerButtonSx}
+				>
+					Disable
+				</Button>
+			</Box>
+		</Box>
+	);
+}
+
+/* =========================================================
+ * USER EDITOR DRAWER
+ * ========================================================= */
+
+function UserEditorDrawer({
+	open,
+	mode,
+	form,
+	plants,
+	drivers,
+	saving,
+	onClose,
+	onSave,
+	onUpdate,
+	onRoleChange,
+	plantName,
+}) {
+	const selectedMeta =
+		roleMeta(form.role);
+
+	const selectedModules =
+		modulesForRole(form.role);
+
+	const requiresPlants =
+		roleRequiresPlantAccess(
+			form.role
+		);
+
+	const requiresDriver =
+		roleRequiresDriver(
+			form.role
+		);
+
+	const supportsWarehouse =
+		roleSupportsWarehouseToggle(
+			form.role
+		);
+
+	const resolvedWarehouseAccess =
+		resolveWarehouseAccess(
+			form.role,
+			form.warehouseAccess
+		);
+
+	return (
+		<Drawer
+			anchor="right"
+			open={open}
+			onClose={onClose}
+			PaperProps={{
+				sx: drawerPaperSx,
+			}}
+		>
+			<Box sx={drawerHeaderSx}>
+				<Box>
+					<Typography
+						sx={drawerTitleSx}
+					>
+						{mode === "create"
+							? "Create User"
+							: "Edit User"}
+					</Typography>
+
+					<Typography sx={drawerSubSx}>
+						Assign a controlled module-role
+						access profile.
+					</Typography>
+				</Box>
+
+				<Button
+					onClick={onClose}
+					disabled={saving}
+					sx={closeButtonSx}
+				>
+					<CloseOutlinedIcon />
+				</Button>
+			</Box>
+
+			<Divider sx={dividerSx} />
+
+			<Box sx={drawerBodySx}>
+				<Box sx={sectionSx}>
+					<Typography
+						sx={sectionTitleSx}
+					>
+						Account Details
+					</Typography>
+
+					<TextField
+						fullWidth
+						label="Username"
+						value={form.username}
+						onChange={(event) =>
+							onUpdate(
+								"username",
+								event.target.value
+							)
+						}
+						sx={fieldSx}
+					/>
+
+					{mode === "create" && (
+						<TextField
+							fullWidth
+							label="Password"
+							type="password"
+							value={form.password}
+							onChange={(event) =>
+								onUpdate(
+									"password",
+									event.target
+										.value
+								)
+							}
+							helperText="Minimum 8 characters"
+							sx={fieldSx}
+						/>
+					)}
+				</Box>
+
+				<Box sx={sectionSx}>
+					<Box>
+						<Typography
+							sx={sectionTitleSx}
+						>
+							Access Profile
+						</Typography>
+
+						<Typography
+							sx={sectionDescriptionSx}
+						>
+							Choose the module first, then
+							select the user’s responsibility
+							inside that module.
+						</Typography>
+					</Box>
+
+					<AccessProfileSelector
+						role={form.role}
+						onRoleChange={
+							onRoleChange
+						}
+					/>
+				</Box>
+
+				<Box sx={accessSummarySx}>
+					<Box sx={summaryIconSx(
+						selectedMeta.accent
+					)}>
+						{accessGroupForRole(
+							form.role
+						)?.icon || (
+								<AdminPanelSettingsIcon />
+							)}
+					</Box>
+
+					<Box sx={{ minWidth: 0 }}>
+						<Typography
+							sx={summaryTitleSx}
+						>
+							{selectedMeta.label}
+						</Typography>
+
+						<Typography
+							sx={summaryDescriptionSx}
+						>
+							{selectedMeta.description}
+						</Typography>
+
+						<Box sx={moduleChipRowSx}>
+							{selectedModules.map(
+								(module) => (
+									<Chip
+										key={module}
+										label={module}
+										size="small"
+										sx={moduleChipSx}
+									/>
+								)
+							)}
+						</Box>
+					</Box>
+				</Box>
+
+				{requiresDriver && (
+					<Box sx={sectionSx}>
+						<Typography
+							sx={sectionTitleSx}
+						>
+							Driver Profile
+						</Typography>
+
+						<TextField
+							select
+							fullWidth
+							label="Linked Driver"
+							value={form.driverId}
+							onChange={(event) =>
+								onUpdate(
+									"driverId",
+									event.target
+										.value
+								)
+							}
+							sx={fieldSx}
+						>
+							{drivers.map(
+								(driver) => (
+									<MenuItem
+										key={driver.id}
+										value={driver.id}
+									>
+										{driver.phone
+											? `${driver.name} • ${driver.phone}`
+											: driver.name}
+									</MenuItem>
+								)
+							)}
+						</TextField>
+					</Box>
+				)}
+
+				{requiresPlants && (
+					<Box sx={sectionSx}>
+						<Typography
+							sx={sectionTitleSx}
+						>
+							Plant Access
+						</Typography>
+
+						<TextField
+							select
+							fullWidth
+							label="Allowed Plants"
+							value={form.plantCodes}
+							onChange={(event) => {
+								const value =
+									event.target.value;
+
+								onUpdate(
+									"plantCodes",
+									typeof value ===
+										"string"
+										? value.split(",")
+										: value
+								);
+							}}
+							sx={fieldSx}
+							SelectProps={{
+								multiple: true,
+								renderValue: (
+									selected
+								) =>
+									selected.length
+										? selected.join(
+											", "
+										)
+										: "Select plants",
+							}}
+						>
+							{plants.map((plant) => {
+								const code =
+									plant.plantCode;
+
+								return (
+									<MenuItem
+										key={code}
+										value={code}
+									>
+										<Checkbox
+											checked={form.plantCodes.includes(
+												code
+											)}
+										/>
+
+										<ListItemText
+											primary={plantName(
+												code
+											)}
+										/>
+									</MenuItem>
+								);
+							})}
+						</TextField>
+					</Box>
+				)}
+
+				{supportsWarehouse && (
+					<Box sx={permissionCardSx}>
+						<Box>
+							<Typography
+								sx={permissionTitleSx}
+							>
+								Warehouse Page Access
+							</Typography>
+
+							<Typography
+								sx={permissionSubSx}
+							>
+								Allow this PackFlow user to
+								open warehouse screens within
+								their assigned plants.
+							</Typography>
+						</Box>
+
+						<Switch
+							checked={
+								resolvedWarehouseAccess
+							}
+							onChange={(event) =>
+								onUpdate(
+									"warehouseAccess",
+									event.target
+										.checked
+								)
+							}
+						/>
+					</Box>
+				)}
+
+				{form.role === "WAREHOUSE" && (
+					<Alert
+						severity="info"
+						sx={infoAlertSx}
+					>
+						Warehouse access is automatically
+						enabled for the Warehouse role.
+					</Alert>
+				)}
+
+				{form.role ===
+					"HARDWARE_PACKING" && (
+						<Alert
+							severity="info"
+							sx={infoAlertSx}
+						>
+							Hardware Packing users remain
+							restricted to their own hardware
+							packet workspace.
+						</Alert>
+					)}
+
+				{form.role === "ADMIN" && (
+					<Alert
+						severity="warning"
+						sx={infoAlertSx}
+					>
+						Administrators automatically receive
+						all modules, all plants and warehouse
+						access.
+					</Alert>
+				)}
+			</Box>
+
+			<Box sx={drawerFooterSx}>
+				<Button
+					fullWidth
+					onClick={onClose}
+					disabled={saving}
+					sx={secondaryButtonSx}
+				>
+					Cancel
+				</Button>
+
+				<Button
+					fullWidth
+					onClick={onSave}
+					disabled={saving}
+					sx={primaryButtonSx}
+				>
+					{saving
+						? "Saving..."
+						: mode === "create"
+							? "Create User"
+							: "Save Changes"}
+				</Button>
+			</Box>
+		</Drawer>
+	);
+}
+
+/* =========================================================
+ * ACCESS PROFILE SELECTOR
+ * ========================================================= */
+
+function AccessProfileSelector({
+	role,
+	onRoleChange,
+}) {
+	const selectedMeta =
+		roleMeta(role);
+
+	return (
+		<Box sx={accessGridSx}>
+			{ACCESS_GROUPS.map((group) => {
+				const selected =
+					selectedMeta.groupKey ===
+					group.key;
+
+				return (
+					<Box
+						key={group.key}
+						role="button"
+						tabIndex={0}
+						onClick={() => {
+							if (!selected) {
+								onRoleChange(
+									group.defaultRole
+								);
+							}
+						}}
+						onKeyDown={(event) => {
+							if (
+								event.key ===
+								"Enter" ||
+								event.key === " "
+							) {
+								onRoleChange(
+									group.defaultRole
+								);
+							}
+						}}
+						sx={accessCardSx(
+							group.accent,
+							selected
+						)}
+					>
+						<Box sx={accessCardHeaderSx}>
+							<Box
+								sx={accessCardIconSx(
+									group.accent
+								)}
+							>
+								{group.icon}
+							</Box>
+
+							<Box sx={{ minWidth: 0 }}>
+								<Typography
+									sx={accessCardTitleSx}
+								>
+									{group.label}
+								</Typography>
+
+								<Typography
+									sx={accessCardSubSx}
+								>
+									{group.description}
+								</Typography>
+							</Box>
+
+							<Box
+								sx={selectionDotSx(
+									group.accent,
+									selected
+								)}
+							>
+								{selected ? "✓" : ""}
+							</Box>
+						</Box>
+
+						{selected && (
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="Role"
+								value={role}
+								onClick={(event) =>
+									event.stopPropagation()
+								}
+								onChange={(event) =>
+									onRoleChange(
+										event.target
+											.value
+									)
+								}
+								sx={{
+									...fieldSx,
+									mt: 1.5,
+								}}
+							>
+								{group.roles.map(
+									(roleOption) => (
+										<MenuItem
+											key={
+												roleOption.value
+											}
+											value={
+												roleOption.value
+											}
+										>
+											<Box>
+												<Typography
+													sx={{
+														fontWeight: 850,
+														fontSize: 13,
+													}}
+												>
+													{
+														roleOption.label
+													}
+												</Typography>
+
+												<Typography
+													sx={{
+														color: "#64748b",
+														fontSize: 11,
+													}}
+												>
+													{
+														roleOption.description
+													}
+												</Typography>
+											</Box>
+										</MenuItem>
+									)
+								)}
+							</TextField>
+						)}
+					</Box>
+				);
+			})}
+		</Box>
+	);
+}
+
+/* =========================================================
+ * DIALOGS
+ * ========================================================= */
+
+function PasswordResetDialog({
+	open,
+	user,
+	password,
+	onPasswordChange,
+	onClose,
+	onReset,
+}) {
+	return (
+		<Dialog
+			open={open}
+			onClose={onClose}
+			PaperProps={{
+				sx: dialogPaperSx,
+			}}
+		>
+			<DialogTitle>
+				Reset Password
+			</DialogTitle>
+
+			<DialogContent>
+				<Typography sx={dialogTextSx}>
+					Set a new password for{" "}
+					<strong>
+						{user?.username || "this user"}
+					</strong>
+					.
+				</Typography>
+
+				<TextField
+					fullWidth
+					type="password"
+					label="New Password"
+					value={password}
+					onChange={(event) =>
+						onPasswordChange(
+							event.target.value
+						)
+					}
+					helperText="Minimum 8 characters"
+					sx={{
+						...fieldSx,
+						mt: 2,
+					}}
+				/>
+			</DialogContent>
+
+			<DialogActions sx={dialogActionsSx}>
+				<Button
+					onClick={onClose}
+					sx={secondaryButtonSx}
+				>
+					Cancel
+				</Button>
+
+				<Button
+					onClick={onReset}
+					sx={primaryButtonSx}
+				>
+					Reset Password
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+function DisableUserDialog({
+	open,
+	user,
+	onClose,
+	onConfirm,
+}) {
+	return (
+		<Dialog
+			open={open}
+			onClose={onClose}
+			PaperProps={{
+				sx: dialogPaperSx,
+			}}
+		>
+			<DialogTitle>
+				Disable User
+			</DialogTitle>
+
+			<DialogContent>
+				<Typography sx={dialogTextSx}>
+					Disable{" "}
+					<strong>
+						{user?.username || "this user"}
+					</strong>
+					? Their existing session will stop
+					working after the backend security update.
+				</Typography>
+			</DialogContent>
+
+			<DialogActions sx={dialogActionsSx}>
+				<Button
+					onClick={onClose}
+					sx={secondaryButtonSx}
+				>
+					Cancel
+				</Button>
+
+				<Button
+					onClick={onConfirm}
+					sx={dangerButtonSx}
+				>
+					Disable User
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+/* =========================================================
+ * SMALL COMPONENTS
+ * ========================================================= */
+
+function StatCard({
+	label,
+	value,
+	accent,
+	icon,
+}) {
+	return (
+		<Box sx={statCardSx(accent)}>
+			<Box sx={statIconSx(accent)}>
+				{icon}
+			</Box>
+
+			<Box>
+				<Typography sx={statLabelSx}>
+					{label}
+				</Typography>
+
+				<Typography sx={statValueSx}>
+					{value}
+				</Typography>
+			</Box>
+		</Box>
+	);
+}
+
+function roleIcon(role) {
+	const cleanRole =
+		normalizeRole(role);
+
+	if (cleanRole === "ADMIN") {
+		return (
+			<AdminPanelSettingsIcon />
+		);
+	}
+
+	if (
+		cleanRole.startsWith(
+			"BOMFLOW_"
+		)
+	) {
+		return (
+			<AccountTreeOutlinedIcon />
+		);
+	}
+
+	if (
+		cleanRole.startsWith(
+			"MATFLOW_"
+		)
+	) {
+		if (
+			cleanRole ===
+			"MATFLOW_ENGINEERING"
+		) {
+			return <EngineeringOutlinedIcon />;
+		}
+
+		if (
+			cleanRole ===
+			"MATFLOW_STORE"
+		) {
+			return <StorefrontOutlinedIcon />;
+		}
+
+		if (
+			cleanRole ===
+			"MATFLOW_PURCHASE"
+		) {
+			return <ShoppingCartOutlinedIcon />;
+		}
+
+		if (
+			cleanRole ===
+			"MATFLOW_PRODUCTION"
+		) {
+			return (
+				<PrecisionManufacturingOutlinedIcon />
+			);
+		}
+
+		if (
+			cleanRole ===
+			"MATFLOW_QC"
+		) {
+			return <FactCheckOutlinedIcon />;
+		}
+
+		if (
+			cleanRole ===
+			"MATFLOW_DIRECTOR"
+		) {
+			return <GavelOutlinedIcon />;
+		}
+
+		return <LayersOutlinedIcon />;
+	}
+
+	if (
+		[
+			"DISPATCH",
+			"LOGISTICS",
+			"DRIVER",
+		].includes(cleanRole)
+	) {
+		return <LocalShippingIcon />;
+	}
+
+	return <InventoryIcon />;
+}
+
+/* =========================================================
+ * STYLES
+ * ========================================================= */
+
+const pageSx = {
+	minHeight: "100vh",
+	background: `
+		radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 24%),
+		radial-gradient(circle at bottom right, rgba(20,184,166,.10), transparent 24%),
+		linear-gradient(135deg,#020617 0%,#0f172a 48%,#111827 100%)
+	`,
+	color: "#fff",
+};
+
+const contentSx = {
+	width: "100%",
+	maxWidth: 1600,
+	mx: "auto",
+	p: {
+		xs: 2,
+		md: 3,
+	},
 	display: "flex",
-	alignItems: "flex-start",
+	flexDirection: "column",
+	gap: 2,
+	boxSizing: "border-box",
+};
+
+const headerSx = {
+	p: {
+		xs: 2,
+		md: 3,
+	},
+	borderRadius: "24px",
+	display: "flex",
 	justifyContent: "space-between",
-	gap: 24,
-	padding: 24,
-	borderRadius: 26,
+	alignItems: "flex-start",
+	gap: 2,
+	flexWrap: "wrap",
 	background:
-		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	boxShadow: "0 30px 80px rgba(2,6,23,.42)",
-	position: "relative",
-	overflow: "hidden",
+		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.82))",
+	border:
+		"1px solid rgba(255,255,255,.08)",
+	boxShadow:
+		"0 28px 70px rgba(2,6,23,.38)",
 };
 
-const globalHeaderLeft = {
-	display: "flex",
-	flexDirection: "column",
-	gap: 24,
-	minWidth: 0,
-};
-
-const brandBlock = {
+const brandRowSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 14,
+	gap: 1.5,
+	mb: 2,
 };
 
-const brandIcon = {
-	width: 48,
-	height: 48,
-	borderRadius: 16,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	color: "#fff",
-	fontWeight: 900,
-	fontSize: 20,
-	boxShadow: "0 12px 28px rgba(37,99,235,.35)",
-};
-
-const suiteTitle = {
-	color: "#fff",
+const brandMarkSx = {
+	width: 46,
+	height: 46,
+	borderRadius: "14px",
+	display: "grid",
+	placeItems: "center",
+	background:
+		"linear-gradient(135deg,#2563eb,#3b82f6)",
+	fontWeight: 950,
 	fontSize: 18,
-	fontWeight: 900,
-	letterSpacing: 0.6,
+	boxShadow:
+		"0 12px 28px rgba(37,99,235,.35)",
 };
 
-const suiteSub = {
+const suiteTitleSx = {
+	fontSize: 17,
+	fontWeight: 950,
+};
+
+const suiteSubSx = {
+	mt: 0.3,
 	color: "rgba(255,255,255,.52)",
-	fontSize: 12,
-	marginTop: 3,
-	fontWeight: 600,
+	fontSize: 11.5,
+	fontWeight: 700,
 };
 
-const pageTitleBlock = {
-	display: "flex",
-	flexDirection: "column",
-	gap: 4,
+const pageTitleSx = {
+	fontSize: {
+		xs: 25,
+		md: 34,
+	},
+	fontWeight: 950,
+	letterSpacing: "-.04em",
 };
 
-const globalHeaderActions = {
+const pageSubtitleSx = {
+	mt: 0.8,
+	maxWidth: 760,
+	color: "rgba(255,255,255,.62)",
+	fontSize: 13,
+	fontWeight: 650,
+	lineHeight: 1.6,
+};
+
+const headerActionsSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "flex-end",
-	gap: 10,
+	gap: 1,
 	flexWrap: "wrap",
 };
 
-const navButton = {
-	height: 42,
-	padding: "0 14px",
-	borderRadius: 14,
-	border: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(255,255,255,.04)",
-	color: "#fff",
-	fontWeight: 800,
-	cursor: "pointer",
-	display: "inline-flex",
-	alignItems: "center",
-	gap: 8,
-};
-
-const logoutNavButton = {
-	...navButton,
-	color: "#fca5a5",
-	background: "rgba(239,68,68,.10)",
-	border: "1px solid rgba(239,68,68,.18)",
-};
-
-const breadcrumbRow = {
+const breadcrumbSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 14,
+	gap: 1.5,
 	flexWrap: "wrap",
-	padding: "0 4px",
+	px: 0.5,
 };
 
-const breadcrumbButton = {
-	height: 38,
-	padding: "0 14px",
-	borderRadius: 12,
-	border: "1px solid rgba(255,255,255,.08)",
-	background: "rgba(255,255,255,.04)",
-	color: "#cbd5e1",
-	fontWeight: 800,
-	cursor: "pointer",
-	display: "inline-flex",
-	alignItems: "center",
-	gap: 8,
-};
-
-const breadcrumbText = {
+const breadcrumbTextSx = {
 	color: "#94a3b8",
-	fontSize: 13,
-	fontWeight: 700,
+	fontSize: 12.5,
+	fontWeight: 750,
 };
 
-const adminAccessChip = {
-	fontWeight: 900,
-	color: "#93c5fd",
-	background: "rgba(59,130,246,.12)",
-	border: "1px solid rgba(59,130,246,.22)",
-};
-
-const page = {
-	minHeight: "100vh",
-	position: "relative",
-	overflow: "hidden",
-	background: `
-		radial-gradient(circle at top left, rgba(59,130,246,0.14), transparent 22%),
-		radial-gradient(circle at bottom right, rgba(14,165,233,0.10), transparent 24%),
-		linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)
-	`,
-};
-
-const content = {
-	padding: 28,
-	display: "flex",
-	flexDirection: "column",
-	gap: 22,
-	maxWidth: 1500,
-	margin: "0 auto",
-};
-
-const wrap = {
-	background:
-		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(17,24,39,.92))",
-	borderRadius: 26,
-	padding: 28,
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 24px 70px rgba(2,6,23,.35)",
-};
-
-const moduleButton = {
-	height: 44,
-	padding: "0 18px",
-	borderRadius: 14,
-	border: "1px solid rgba(59,130,246,.35)",
-	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	color: "#fff",
-	fontWeight: 900,
-	cursor: "pointer",
-	boxShadow: "0 14px 34px rgba(37,99,235,.35)",
-};
-
-const logisticsChip = {
-	fontWeight: 700,
-	color: "#a78bfa",
-	background: "rgba(139,92,246,.12)",
-	border: "1px solid rgba(139,92,246,.18)",
-};
-
-const driverChip = {
-	fontWeight: 700,
-	color: "#6ee7b7",
-	background: "rgba(16,185,129,.12)",
-	border: "1px solid rgba(16,185,129,.18)",
-};
-
-const driverProfileChip = {
-	fontWeight: 800,
-	color: "#6ee7b7",
-	background: "rgba(16,185,129,.12)",
-	border: "1px solid rgba(16,185,129,.18)",
-};
-
-const notRequiredChip = {
-	fontWeight: 800,
-	color: "#94a3b8",
-	background: "rgba(148,163,184,.10)",
-	border: "1px solid rgba(148,163,184,.14)",
-};
-
-const searchPanel = {
-	display: "flex",
-
-	alignItems: "center",
-
-	gap: 14,
-
-	padding: "10px 18px",
-
-	borderRadius: 18,
-
-	background:
-		"rgba(15,23,42,.72)",
-
-	border:
-		"1px solid rgba(255,255,255,.06)",
-
-	backdropFilter: "blur(18px)",
-
-	boxShadow:
-		"0 10px 30px rgba(0,0,0,.25)",
-};
-
-const searchInput = {
-	flex: 1,
-
-	"& .MuiInputBase-root": {
-		color: "#fff",
-
-		fontSize: 14,
-	},
-
-	"& input::placeholder": {
-		color: "rgba(255,255,255,.42)",
-		opacity: 1,
-	},
-};
-
-const logo = {
-	color: "#fff",
-
-	fontSize: 32,
-
-	fontWeight: 900,
-
-	marginBottom: 8,
-};
-
-const subtitle = {
-	color: "#94a3b8",
-	fontSize: 14,
-};
-
-const tableWrapper = {
-	width: "100%",
-	overflowX: "auto",
-	borderRadius: 24,
-};
-
-const avatar = {
-	width: 28,
-	height: 28,
-	borderRadius: 10,
-	background: "linear-gradient(135deg,#6366f1,#4f46e5)",
-	color: "#fff",
-	fontWeight: 700,
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-};
-
-const bomFlowChip = {
-	background: "rgba(99,102,241,.16)",
-	color: "#c4b5fd",
-	border: "1px solid rgba(129,140,248,.35)",
-	fontWeight: 900,
-};
-
-const venFlowChip = {
-	background: "rgba(146,64,14,.18)",
-	color: "#fdba74",
-	border: "1px solid rgba(251,146,60,.35)",
-	fontWeight: 900,
-};
-
-const moduleAccessChip = {
-	background: "rgba(14,165,233,.15)",
-	color: "#7dd3fc",
-	border: "1px solid rgba(14,165,233,.28)",
-	fontWeight: 900,
-};
-
-const adminChip = {
-	fontWeight: 700,
-	color: "#cbd5e1",
-	background:
-		"rgba(148,163,184,.12)",
-	border:
-		"1px solid rgba(148,163,184,.18)",
-};
-
-const dispatchChip = {
-	fontWeight: 700,
-	color: "#4ade80",
-	background:
-		"rgba(34,197,94,.12)",
-	border:
-		"1px solid rgba(34,197,94,.18)",
-};
-
-const warehouseChip = {
-	fontWeight: 700,
+const adminAccessChipSx = {
 	color: "#fbbf24",
-	background:
-		"rgba(251,191,36,.12)",
+	background: "rgba(245,158,11,.12)",
 	border:
-		"1px solid rgba(251,191,36,.18)",
+		"1px solid rgba(245,158,11,.24)",
+	fontWeight: 900,
 };
 
-const packingChip = {
-	fontWeight: 700,
-	color: "#60a5fa",
-	background:
-		"rgba(59,130,246,.12)",
-	border:
-		"1px solid rgba(59,130,246,.18)",
+const statsGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		sm: "repeat(2,minmax(0,1fr))",
+		lg: "repeat(5,minmax(0,1fr))",
+	},
+	gap: 1.2,
 };
 
-const actionContainer = {
+const statCardSx = (accent) => ({
+	p: 1.6,
+	minHeight: 78,
+	borderRadius: "16px",
 	display: "flex",
 	alignItems: "center",
-	justifyContent: "flex-start",
-	gap: 1,
+	gap: 1.3,
+	background:
+		"linear-gradient(180deg,rgba(30,41,59,.76),rgba(15,23,42,.80))",
+	border: `1px solid ${accent}30`,
+	boxShadow:
+		"0 16px 32px rgba(2,6,23,.28)",
+});
+
+const statIconSx = (accent) => ({
+	width: 40,
+	height: 40,
+	borderRadius: "12px",
+	display: "grid",
+	placeItems: "center",
+	color: accent,
+	background: `${accent}16`,
+	border: `1px solid ${accent}30`,
+});
+
+const statLabelSx = {
+	color: "rgba(255,255,255,.58)",
+	fontSize: 10.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".06em",
+};
+
+const statValueSx = {
+	mt: 0.3,
+	fontSize: 23,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const searchPanelSx = {
+	p: 1.2,
+	borderRadius: "18px",
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+	background: "rgba(15,23,42,.78)",
+	border:
+		"1px solid rgba(255,255,255,.07)",
+	boxShadow:
+		"0 18px 38px rgba(2,6,23,.28)",
+};
+
+const tablePanelSx = {
+	borderRadius: "22px",
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.94),rgba(17,24,39,.92))",
+	border:
+		"1px solid rgba(255,255,255,.07)",
+	boxShadow:
+		"0 24px 64px rgba(2,6,23,.34)",
+	overflowX: "auto",
+};
+
+const tableHeaderSx = {
+	minWidth: 1260,
+	display: "grid",
+	gridTemplateColumns:
+		"1.15fr 1.45fr 1.2fr 1.2fr .7fr 310px",
+	gap: 2,
+	alignItems: "center",
+	p: "15px 20px",
+	color: "#93c5fd",
+	background: "rgba(2,6,23,.34)",
+	borderBottom:
+		"1px solid rgba(255,255,255,.08)",
+	fontSize: 10.5,
+	fontWeight: 950,
+	textTransform: "uppercase",
+	letterSpacing: ".07em",
+};
+
+const tableRowSx = {
+	minWidth: 1260,
+	display: "grid",
+	gridTemplateColumns:
+		"1.15fr 1.45fr 1.2fr 1.2fr .7fr 310px",
+	gap: 2,
+	alignItems: "center",
+	p: "15px 20px",
+	borderBottom:
+		"1px solid rgba(255,255,255,.06)",
+	transition: "background .2s ease",
+
+	"&:hover": {
+		background:
+			"rgba(59,130,246,.055)",
+	},
+};
+
+const userCellSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+	minWidth: 0,
+};
+
+const avatarSx = (accent) => ({
+	width: 38,
+	height: 38,
+	borderRadius: "12px",
+	display: "grid",
+	placeItems: "center",
+	background: `${accent}22`,
+	color: accent,
+	border: `1px solid ${accent}35`,
+	fontWeight: 950,
+	flexShrink: 0,
+});
+
+const usernameSx = {
+	color: "#fff",
+	fontSize: 13.5,
+	fontWeight: 900,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const smallMutedSx = {
+	mt: 0.3,
+	color: "rgba(255,255,255,.42)",
+	fontSize: 10.5,
+	fontWeight: 650,
+};
+
+const chipWrapSx = {
+	display: "flex",
+	gap: 0.6,
+	flexWrap: "wrap",
+	alignItems: "center",
+};
+
+const operationalCellSx = {
+	display: "flex",
+	alignItems: "center",
+	minWidth: 0,
+};
+
+const actionsSx = {
+	display: "flex",
+	gap: 0.7,
+	alignItems: "center",
 	flexWrap: "nowrap",
-	minWidth: 240,
 
 	"& .MuiButton-root": {
-		whiteSpace: "nowrap",
 		minWidth: "auto",
+		whiteSpace: "nowrap",
+		fontSize: 11,
 	},
 };
 
-const actionPrimary = {
-	borderRadius: 12,
+const moduleChipRowSx = {
+	mt: 0.7,
+	display: "flex",
+	gap: 0.5,
+	flexWrap: "wrap",
+};
 
+const moduleChipSx = {
+	height: 20,
+	color: "#7dd3fc",
+	background: "rgba(14,165,233,.12)",
+	border:
+		"1px solid rgba(14,165,233,.24)",
+	fontWeight: 900,
+	fontSize: 9.5,
+};
+
+const roleChipSx = (accent) => ({
+	height: 27,
+	color: accent,
+	background: `${accent}17`,
+	border: `1px solid ${accent}32`,
+	fontWeight: 900,
+	fontSize: 10.5,
+
+	"& .MuiChip-icon": {
+		color: accent,
+	},
+});
+
+const plantChipSx = {
+	height: 23,
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.12)",
+	border:
+		"1px solid rgba(59,130,246,.22)",
+	fontWeight: 850,
+	fontSize: 10,
+};
+
+const allPlantChipSx = {
+	...plantChipSx,
+	color: "#4ade80",
+	background: "rgba(34,197,94,.12)",
+	border:
+		"1px solid rgba(34,197,94,.22)",
+};
+
+const neutralChipSx = {
+	height: 23,
+	color: "#94a3b8",
+	background: "rgba(148,163,184,.09)",
+	border:
+		"1px solid rgba(148,163,184,.14)",
+	fontWeight: 800,
+	fontSize: 10,
+
+	"& .MuiChip-icon": {
+		color: "#94a3b8",
+	},
+};
+
+const warningChipSx = {
+	height: 23,
+	color: "#fbbf24",
+	background: "rgba(245,158,11,.12)",
+	border:
+		"1px solid rgba(245,158,11,.22)",
+	fontWeight: 850,
+	fontSize: 10,
+};
+
+const warehouseChipSx = {
+	height: 23,
+	color: "#fbbf24",
+	background: "rgba(245,158,11,.12)",
+	border:
+		"1px solid rgba(245,158,11,.22)",
+	fontWeight: 850,
+	fontSize: 10,
+
+	"& .MuiChip-icon": {
+		color: "#fbbf24",
+	},
+};
+
+const driverChipSx = {
+	height: 23,
+	color: "#6ee7b7",
+	background: "rgba(16,185,129,.12)",
+	border:
+		"1px solid rgba(16,185,129,.22)",
+	fontWeight: 850,
+	fontSize: 10,
+};
+
+const enabledChipSx = {
+	height: 24,
+	color: "#4ade80",
+	background: "rgba(34,197,94,.12)",
+	border:
+		"1px solid rgba(34,197,94,.22)",
+	fontWeight: 900,
+	fontSize: 10,
+
+	"& .MuiChip-icon": {
+		color: "#4ade80",
+	},
+};
+
+const disabledChipSx = {
+	height: 24,
+	color: "#f87171",
+	background: "rgba(239,68,68,.12)",
+	border:
+		"1px solid rgba(239,68,68,.22)",
+	fontWeight: 900,
+	fontSize: 10,
+
+	"& .MuiChip-icon": {
+		color: "#f87171",
+	},
+};
+
+const loadingSx = {
+	minWidth: 1260,
+	minHeight: 340,
+	display: "grid",
+	placeItems: "center",
+
+	"& .MuiCircularProgress-root": {
+		color: "#60a5fa",
+	},
+};
+
+const emptyStateSx = {
+	minWidth: 1260,
+	p: 5,
+	textAlign: "center",
+	color: "#94a3b8",
+	fontWeight: 750,
+};
+
+const paginationSx = {
+	minWidth: 1000,
+	p: 1.5,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+	flexWrap: "wrap",
+	background: "rgba(2,6,23,.26)",
+};
+
+const pageSizeSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+};
+
+const pageControlsSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+};
+
+const pageChipSx = {
+	color: "#cbd5e1",
+	background: "rgba(255,255,255,.05)",
+	border:
+		"1px solid rgba(255,255,255,.08)",
+	fontWeight: 850,
+};
+
+const mutedTextSx = {
+	color: "#94a3b8",
+	fontSize: 11.5,
+	fontWeight: 750,
+};
+
+const primaryButtonSx = {
+	minHeight: 36,
+	borderRadius: "11px",
+	px: 1.6,
 	textTransform: "none",
-
-	fontWeight: 700,
-
+	fontWeight: 850,
+	color: "#fff",
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
-
-	color: "#fff",
-
 	border:
-		"1px solid rgba(59,130,246,.35)",
-
+		"1px solid rgba(59,130,246,.34)",
 	boxShadow:
-		"0 10px 24px rgba(37,99,235,.35)",
+		"0 8px 20px rgba(37,99,235,.24)",
 
 	"&:hover": {
 		background:
 			"linear-gradient(135deg,#1d4ed8,#2563eb)",
 	},
+
+	"&.Mui-disabled": {
+		color: "rgba(255,255,255,.28)",
+		background: "rgba(255,255,255,.04)",
+	},
 };
 
-const actionSecondary = {
-	borderRadius: 12,
-
+const secondaryButtonSx = {
+	minHeight: 36,
+	borderRadius: "11px",
+	px: 1.5,
 	textTransform: "none",
-
-	fontWeight: 700,
-
-	background:
-		"rgba(255,255,255,.04)",
-
-	color: "#fff",
-
+	fontWeight: 800,
+	color: "#cbd5e1",
+	background: "rgba(255,255,255,.04)",
 	border:
 		"1px solid rgba(255,255,255,.08)",
 
 	"&:hover": {
 		background:
-			"rgba(255,255,255,.08)",
+			"rgba(59,130,246,.12)",
+		borderColor:
+			"rgba(59,130,246,.28)",
+	},
+
+	"&.Mui-disabled": {
+		color: "rgba(255,255,255,.25)",
 	},
 };
 
-const actionDanger = {
-	borderRadius: 12,
-
+const dangerButtonSx = {
+	minHeight: 36,
+	borderRadius: "11px",
+	px: 1.5,
 	textTransform: "none",
-
-	fontWeight: 700,
-
+	fontWeight: 850,
+	color: "#fff",
 	background:
 		"linear-gradient(135deg,#dc2626,#ef4444)",
-
-	color: "#fff",
-
 	boxShadow:
-		"0 10px 24px rgba(239,68,68,.28)",
-};
+		"0 8px 20px rgba(239,68,68,.22)",
 
-const formFieldSx = {
-	"& .MuiFormLabel-root": {
-		color: "rgba(255,255,255,.62)",
+	"&:hover": {
+		background:
+			"linear-gradient(135deg,#b91c1c,#dc2626)",
 	},
 
-	"& .MuiFormLabel-root.Mui-focused": {
+	"&.Mui-disabled": {
+		color: "rgba(255,255,255,.25)",
+		background: "rgba(255,255,255,.04)",
+	},
+};
+
+const dangerOutlineButtonSx = {
+	...secondaryButtonSx,
+	color: "#fca5a5",
+	background: "rgba(239,68,68,.08)",
+	border:
+		"1px solid rgba(239,68,68,.18)",
+};
+
+const fieldSx = {
+	"& .MuiInputLabel-root": {
+		color: "rgba(255,255,255,.55)",
+		fontSize: 12,
+		fontWeight: 750,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
 		color: "#60a5fa",
 	},
 
 	"& .MuiOutlinedInput-root": {
-		borderRadius: "16px",
-
-		background:
-			"rgba(255,255,255,.04)",
-
 		color: "#fff",
-
-		transition: "all .22s ease",
+		background: "rgba(255,255,255,.04)",
+		borderRadius: "13px",
+		fontSize: 13,
 
 		"& fieldset": {
 			borderColor:
@@ -2593,15 +3218,13 @@ const formFieldSx = {
 
 		"&:hover fieldset": {
 			borderColor:
-				"rgba(59,130,246,.45)",
+				"rgba(59,130,246,.36)",
 		},
 
 		"&.Mui-focused fieldset": {
-			borderColor:
-				"#3b82f6",
-
+			borderColor: "#3b82f6",
 			boxShadow:
-				"0 0 0 3px rgba(59,130,246,.14)",
+				"0 0 0 3px rgba(59,130,246,.10)",
 		},
 	},
 
@@ -2609,123 +3232,279 @@ const formFieldSx = {
 		color: "#fff",
 	},
 
+	"& .MuiFormHelperText-root": {
+		color: "#64748b",
+	},
+
 	"& .MuiSvgIcon-root": {
 		color: "#94a3b8",
 	},
 };
 
-const tableHeader = {
-	minWidth: 1500,
-	display: "grid",
-	gridTemplateColumns: "1.15fr .95fr 1.25fr 1.15fr 1.35fr 1.15fr 250px",
-	alignItems: "center",
-	gap: 18,
-	padding: "18px 24px",
-	color: "#93c5fd",
-	fontSize: 13,
-	fontWeight: 900,
-	borderBottom: "1px solid rgba(255,255,255,.08)",
+const drawerPaperSx = {
+	width: {
+		xs: "100%",
+		sm: 600,
+		md: 680,
+	},
+	maxWidth: "100vw",
+	background:
+		"linear-gradient(180deg,#020617,#0f172a)",
+	color: "#fff",
+	borderLeft:
+		"1px solid rgba(255,255,255,.08)",
 };
 
-const tableBody = {
+const drawerHeaderSx = {
+	p: 2.5,
 	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+};
 
+const drawerTitleSx = {
+	fontSize: 24,
+	fontWeight: 950,
+};
+
+const drawerSubSx = {
+	mt: 0.5,
+	color: "#64748b",
+	fontSize: 12.5,
+	fontWeight: 650,
+};
+
+const closeButtonSx = {
+	minWidth: 38,
+	width: 38,
+	height: 38,
+	borderRadius: "12px",
+	color: "#cbd5e1",
+	background: "rgba(255,255,255,.04)",
+	border:
+		"1px solid rgba(255,255,255,.08)",
+};
+
+const dividerSx = {
+	borderColor:
+		"rgba(255,255,255,.08)",
+};
+
+const drawerBodySx = {
+	flex: 1,
+	overflowY: "auto",
+	p: 2.5,
+	display: "flex",
 	flexDirection: "column",
+	gap: 2.2,
 };
 
-const tableRow = {
-	minWidth: 1500,
-	display: "grid",
-	gridTemplateColumns: "1.15fr .95fr 1.25fr 1.15fr 1.35fr 1.15fr 250px",
-	alignItems: "center",
-	gap: 18,
-	padding: "20px 24px",
-	borderBottom: "1px solid rgba(255,255,255,.07)",
-};
-
-const userInfo = {
+const sectionSx = {
 	display: "flex",
+	flexDirection: "column",
+	gap: 1.3,
+};
 
-	alignItems: "center",
+const sectionTitleSx = {
+	fontSize: 14,
+	fontWeight: 950,
+};
 
-	gap: 14,
+const sectionDescriptionSx = {
+	mt: 0.4,
+	color: "#64748b",
+	fontSize: 11.5,
+	fontWeight: 650,
+	lineHeight: 1.5,
+};
+
+const accessGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2,minmax(0,1fr))",
+	},
+	gap: 1,
+};
+
+const accessCardSx = (
+	accent,
+	selected
+) => ({
+	p: 1.4,
+	borderRadius: "15px",
+	cursor: "pointer",
+	background: selected
+		? `${accent}12`
+		: "rgba(255,255,255,.025)",
+	border: selected
+		? `1px solid ${accent}55`
+		: "1px solid rgba(255,255,255,.07)",
+	transition: "all .2s ease",
+	outline: "none",
+
+	"&:hover": {
+		borderColor: `${accent}45`,
+		background: `${accent}0d`,
+	},
+});
+
+const accessCardHeaderSx = {
+	display: "grid",
+	gridTemplateColumns: "38px 1fr 22px",
+	gap: 1,
+	alignItems: "start",
+};
+
+const accessCardIconSx = (accent) => ({
+	width: 38,
+	height: 38,
+	borderRadius: "11px",
+	display: "grid",
+	placeItems: "center",
+	color: accent,
+	background: `${accent}16`,
+	border: `1px solid ${accent}30`,
+});
+
+const accessCardTitleSx = {
+	color: "#fff",
+	fontSize: 12.5,
+	fontWeight: 900,
+};
+
+const accessCardSubSx = {
+	mt: 0.3,
+	color: "#64748b",
+	fontSize: 10.5,
+	fontWeight: 650,
+	lineHeight: 1.4,
+};
+
+const selectionDotSx = (
+	accent,
+	selected
+) => ({
+	width: 21,
+	height: 21,
+	borderRadius: "50%",
+	display: "grid",
+	placeItems: "center",
+	color: "#fff",
+	background: selected
+		? accent
+		: "transparent",
+	border: selected
+		? `1px solid ${accent}`
+		: "1px solid rgba(255,255,255,.16)",
+	fontSize: 11,
+	fontWeight: 950,
+});
+
+const accessSummarySx = {
+	p: 1.5,
+	borderRadius: "15px",
+	display: "flex",
+	alignItems: "flex-start",
+	gap: 1.3,
+	background: "rgba(255,255,255,.035)",
+	border:
+		"1px solid rgba(255,255,255,.07)",
+};
+
+const summaryIconSx = (accent) => ({
+	width: 42,
+	height: 42,
+	borderRadius: "12px",
+	display: "grid",
+	placeItems: "center",
+	color: accent,
+	background: `${accent}16`,
+	border: `1px solid ${accent}30`,
+	flexShrink: 0,
+});
+
+const summaryTitleSx = {
+	fontSize: 14,
+	fontWeight: 950,
+};
+
+const summaryDescriptionSx = {
+	mt: 0.3,
+	color: "#64748b",
+	fontSize: 11.5,
+	fontWeight: 650,
+	lineHeight: 1.5,
 };
 
 const permissionCardSx = {
+	p: 1.5,
+	borderRadius: "15px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 2,
-
-	p: 1.6,
-	borderRadius: "16px",
-
-	background: "rgba(255,255,255,.04)",
-
-	border: "1px solid rgba(255,255,255,.08)",
+	background: "rgba(255,255,255,.035)",
+	border:
+		"1px solid rgba(255,255,255,.07)",
 };
 
-const warehouseAccessChip = {
-	fontWeight: 800,
-	color: "#fbbf24",
-	background: "rgba(251,191,36,.12)",
-	border: "1px solid rgba(251,191,36,.18)",
+const permissionTitleSx = {
+	fontSize: 13,
+	fontWeight: 900,
 };
 
-const noWarehouseAccessChip = {
-	fontWeight: 800,
+const permissionSubSx = {
+	mt: 0.4,
+	color: "#64748b",
+	fontSize: 11,
+	fontWeight: 650,
+	lineHeight: 1.5,
+};
+
+const infoAlertSx = {
+	borderRadius: "14px",
+	background: "rgba(59,130,246,.08)",
+	color: "#bfdbfe",
+	border:
+		"1px solid rgba(59,130,246,.18)",
+
+	"& .MuiAlert-icon": {
+		color: "#60a5fa",
+	},
+};
+
+const drawerFooterSx = {
+	p: 2,
+	display: "grid",
+	gridTemplateColumns: "1fr 1fr",
+	gap: 1.2,
+	borderTop:
+		"1px solid rgba(255,255,255,.08)",
+	background: "rgba(2,6,23,.65)",
+};
+
+const dialogPaperSx = {
+	minWidth: {
+		xs: "calc(100vw - 32px)",
+		sm: 440,
+	},
+	background:
+		"linear-gradient(180deg,#0f172a,#111827)",
+	color: "#fff",
+	borderRadius: "20px",
+	border:
+		"1px solid rgba(255,255,255,.08)",
+};
+
+const dialogTextSx = {
 	color: "#94a3b8",
-	background: "rgba(148,163,184,.10)",
-	border: "1px solid rgba(148,163,184,.14)",
+	fontSize: 13,
+	lineHeight: 1.6,
 };
 
-const inlineInput = {
-	minWidth: 180,
-
-	"& .MuiOutlinedInput-root": {
-		borderRadius: "14px",
-
-		background:
-			"rgba(255,255,255,.04)",
-
-		color: "#fff",
-
-		"& fieldset": {
-			borderColor:
-				"rgba(255,255,255,.08)",
-		},
-
-		"&:hover fieldset": {
-			borderColor:
-				"rgba(59,130,246,.45)",
-		},
-
-		"&.Mui-focused fieldset": {
-			borderColor: "#3b82f6",
-		},
-	},
-
-	"& input": {
-		color: "#fff",
-	},
-
-	"& .MuiSvgIcon-root": {
-		color: "#94a3b8",
-	},
+const dialogActionsSx = {
+	p: 2,
+	gap: 1,
 };
-
-const plantChip = {
-	fontWeight: 800,
-	color: "#93c5fd",
-	background: "rgba(59,130,246,.12)",
-	border: "1px solid rgba(59,130,246,.18)",
-};
-
-const legacyPlantChip = {
-	fontWeight: 800,
-	color: "#fbbf24",
-	background: "rgba(251,191,36,.12)",
-	border: "1px solid rgba(251,191,36,.18)",
-};
-
-export default UsersPage;

@@ -9,8 +9,8 @@ const unwrap = (response) => {
 };
 
 const ENDPOINTS = Object.freeze({
-	products: "/api/bomflow/products",
-	revisions: "/api/bomflow/revisions",
+	products: "/bomflow/products",
+	revisions: "/bomflow/revisions",
 });
 
 export const bomFlowApi = {
@@ -184,20 +184,6 @@ export const bomFlowApi = {
 			`${ENDPOINTS.revisions}/${revisionId}/approve`,
 			{
 				remarks: remarks || null,
-				rowVersion,
-			}
-		);
-
-		return unwrap(response);
-	},
-
-	async releaseToMatFlow(
-		revisionId,
-		rowVersion
-	) {
-		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/release-to-matflow`,
-			{
 				rowVersion,
 			}
 		);

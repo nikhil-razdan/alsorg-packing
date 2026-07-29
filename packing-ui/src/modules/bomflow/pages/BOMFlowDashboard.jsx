@@ -68,14 +68,6 @@ const dashboardStats = [
 		accent: "#ef4444",
 		icon: <WarningAmberOutlinedIcon />,
 	},
-	{
-		key: "released",
-		title: "MatFlow Releases",
-		value: "0",
-		subtle: "Approved BOM releases",
-		accent: "#8b5cf6",
-		icon: <RuleOutlinedIcon />,
-	},
 ];
 
 const quickActions = [

@@ -106,7 +106,7 @@ export default function ModuleHub() {
 			key: MODULE_KEYS.BOMFLOW,
 			title: "BOMFlow",
 			subtitle:
-				"Product master, BOM revisions, costing, engineering review, approval and MatFlow release.",
+				"Product master, BOM revisions, costing, engineering review and approval.",
 			icon: (
 				<AccountTreeOutlinedIcon
 					fontSize="large"
@@ -116,7 +116,7 @@ export default function ModuleHub() {
 			tags: [
 				"Product Master",
 				"BOM Builder",
-				"Review",
+				"Costing",
 				"Approval",
 			],
 			visible: canAccess(
@@ -128,18 +128,18 @@ export default function ModuleHub() {
 			key: MODULE_KEYS.MATFLOW,
 			title: "MatFlow",
 			subtitle:
-				"Approved BOM releases, production requisitions, store blocking, material indents and procurement workflow.",
+				"Operational BOMs, production requisitions, stock reservation, transfers, purchase, QC, processing and returns.",
 			icon: (
 				<LayersOutlinedIcon
 					fontSize="large"
 				/>
 			),
-			path: "/matflow",
+			path: "/matflow/dashboard",
 			tags: [
-				"BOM Releases",
+				"Operational BOM",
 				"Production",
 				"Store",
-				"Purchase",
+				"Purchase & QC",
 			],
 			visible: canAccess(
 				MODULE_KEYS.MATFLOW

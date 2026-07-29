@@ -4,18 +4,6 @@ export const MODULE_KEYS = Object.freeze({
 	MATFLOW: "MATFLOW",
 });
 
-/*
- * Temporary compatibility only.
- *
- * MATFLOW accepts legacy VENFLOW module assignment while users
- * are migrated in the database.
- *
- * Remove this alias after all users have MATFLOW assigned.
- */
-const LEGACY_MODULE_ALIASES = Object.freeze({
-	[MODULE_KEYS.MATFLOW]: ["VENFLOW"],
-});
-
 const normalizeModuleKey = (value) => {
 	return String(value || "")
 		.trim()
@@ -27,28 +15,13 @@ const normalizeModules = (modules) => {
 		return [];
 	}
 
-	return modules
-		.filter(Boolean)
-		.map(normalizeModuleKey)
-		.filter(Boolean);
-};
-
-const acceptedKeysFor = (moduleKey) => {
-	const normalizedKey =
-		normalizeModuleKey(moduleKey);
-
-	if (!normalizedKey) {
-		return [];
-	}
-
-	return [
-		normalizedKey,
-		...(
-			LEGACY_MODULE_ALIASES[
-				normalizedKey
-			] || []
-		),
-	].map(normalizeModuleKey);
+	return Array.from(
+		new Set(
+			modules
+				.map(normalizeModuleKey)
+				.filter(Boolean)
+		)
+	);
 };
 
 export function hasModuleAccessFromUser(
@@ -62,14 +35,9 @@ export function hasModuleAccessFromUser(
 		return false;
 	}
 
-	const role = normalizeModuleKey(
-		user?.role
-	);
+	const role =
+		normalizeModuleKey(user?.role);
 
-	/*
-	 * Admin can access every application module even if the
-	 * modules array is empty.
-	 */
 	if (role === "ADMIN") {
 		return true;
 	}
@@ -77,20 +45,11 @@ export function hasModuleAccessFromUser(
 	const assignedModules =
 		normalizeModules(user?.modules);
 
-	const acceptedKeys =
-		acceptedKeysFor(requestedKey);
-
-	return acceptedKeys.some((key) =>
-		assignedModules.includes(key)
+	return assignedModules.includes(
+		requestedKey
 	);
 }
 
-/*
- * Compatibility export.
- *
- * Correct usage:
- * hasModuleAccess(user, MODULE_KEYS.MATFLOW)
- */
 export function hasModuleAccess(
 	user,
 	moduleKey

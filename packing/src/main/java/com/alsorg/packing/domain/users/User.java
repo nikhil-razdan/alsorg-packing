@@ -1,7 +1,18 @@
 package com.alsorg.packing.domain.users;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import jakarta.persistence.*;
+
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -15,33 +26,60 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    @Column(
+            unique = true,
+            nullable = false
+    )
     private String username;
 
     @JsonIgnore
+    @Column(nullable = false)
     private String password;
 
     @Column(nullable = false)
     private String role;
 
+    @Column(nullable = false)
     private boolean enabled = true;
 
     @Column(name = "plant_code")
     private String plantCode;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_plant_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
-            @UniqueConstraint(name = "uk_user_plant_access", columnNames = { "user_id", "plant_code" })
-    })
+    @CollectionTable(
+            name = "user_plant_access",
+            joinColumns = @JoinColumn(name = "user_id"),
+            uniqueConstraints = {
+                    @UniqueConstraint(
+                            name = "uk_user_plant_access",
+                            columnNames = {
+                                    "user_id",
+                                    "plant_code"
+                            }
+                    )
+            }
+    )
     @Column(name = "plant_code")
-    private Set<String> plantCodes = new LinkedHashSet<>();
+    private Set<String> plantCodes =
+            new LinkedHashSet<>();
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_module_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
-            @UniqueConstraint(name = "uk_user_module_access", columnNames = { "user_id", "module_key" })
-    })
+    @CollectionTable(
+            name = "user_module_access",
+            joinColumns = @JoinColumn(name = "user_id"),
+            uniqueConstraints = {
+                    @UniqueConstraint(
+                            name = "uk_user_module_access",
+                            columnNames = {
+                                    "user_id",
+                                    "module_key"
+                            }
+                    )
+            }
+    )
     @Column(name = "module_key")
-    private Set<String> modules = new LinkedHashSet<>();
+    private Set<String> modules =
+            new LinkedHashSet<>();
 
     private String packedAreaCode;
 
@@ -51,7 +89,10 @@ public class User {
 
     private UUID driverId;
 
-    @Column(name = "warehouse_access", nullable = false)
+    @Column(
+            name = "warehouse_access",
+            nullable = false
+    )
     private boolean warehouseAccess = false;
 
     public Long getId() {
@@ -62,15 +103,20 @@ public class User {
         return username;
     }
 
-    public void setUsername(String username) {
-        this.username = username == null ? null : username.trim();
+    public void setUsername(
+            String username
+    ) {
+        this.username =
+                cleanText(username);
     }
 
     public String getPassword() {
         return password;
     }
 
-    public void setPassword(String password) {
+    public void setPassword(
+            String password
+    ) {
         this.password = password;
     }
 
@@ -78,15 +124,20 @@ public class User {
         return role;
     }
 
-    public void setRole(String role) {
-        this.role = role == null ? null : role.trim().toUpperCase();
+    public void setRole(
+            String role
+    ) {
+        this.role =
+                normalizeUpper(role);
     }
 
     public boolean isEnabled() {
         return enabled;
     }
 
-    public void setEnabled(boolean enabled) {
+    public void setEnabled(
+            boolean enabled
+    ) {
         this.enabled = enabled;
     }
 
@@ -94,76 +145,113 @@ public class User {
         return plantCode;
     }
 
-    public void setPlantCode(String plantCode) {
-        this.plantCode = plantCode == null ? null : plantCode.trim();
+    public void setPlantCode(
+            String plantCode
+    ) {
+        this.plantCode =
+                normalizeUpper(plantCode);
     }
 
     public Set<String> getPlantCodes() {
         return plantCodes;
     }
 
-    public void setPlantCodes(Set<String> plantCodes) {
-        this.plantCodes = plantCodes == null
-                ? new LinkedHashSet<>()
-                : new LinkedHashSet<>(plantCodes);
+    public void setPlantCodes(
+            Set<String> plantCodes
+    ) {
+        this.plantCodes =
+                normalizeValues(plantCodes);
     }
 
     public Set<String> getEffectivePlantCodes() {
-        if (plantCodes != null && !plantCodes.isEmpty()) {
-            return plantCodes;
+        Set<String> effective =
+                new LinkedHashSet<>();
+
+        if (
+                plantCodes != null &&
+                !plantCodes.isEmpty()
+        ) {
+            effective.addAll(
+                    normalizeValues(plantCodes)
+            );
+
+            return effective;
         }
 
-        Set<String> fallback = new LinkedHashSet<>();
+        String fallback =
+                normalizeUpper(plantCode);
 
-        if (plantCode != null && !plantCode.isBlank()) {
-            fallback.add(plantCode.trim());
+        if (fallback != null) {
+            effective.add(fallback);
         }
 
-        return fallback;
+        return effective;
     }
 
     public Set<String> getModules() {
         return modules;
     }
 
-    public void setModules(Set<String> modules) {
-        this.modules = modules == null
-                ? new LinkedHashSet<>()
-                : new LinkedHashSet<>(modules);
+    public void setModules(
+            Set<String> modules
+    ) {
+        this.modules =
+                normalizeValues(modules);
     }
 
+    /**
+     * Explicit module assignments are preferred.
+     *
+     * Role-based values are only a compatibility fallback for users
+     * created before module assignments were introduced.
+     */
     public Set<String> getEffectiveModules() {
-        Set<String> effective = new LinkedHashSet<>();
+        Set<String> effective =
+                new LinkedHashSet<>();
 
-        if (modules != null && !modules.isEmpty()) {
-            effective.addAll(modules);
+        if (
+                modules != null &&
+                !modules.isEmpty()
+        ) {
+            effective.addAll(
+                    normalizeValues(modules)
+            );
+
             return effective;
         }
 
-        String r = role == null ? "" : role.trim().toUpperCase();
+        String cleanRole =
+                normalizeUpper(role);
 
-        if ("ADMIN".equals(r)) {
-            effective.add("PACKFLOW");
-            effective.add("BOMFLOW");
-            effective.add("VENFLOW");
+        if (cleanRole == null) {
             return effective;
         }
 
-        if ("PACKING".equals(r)
-                || "HARDWARE_PACKING".equals(r)
-                || "WAREHOUSE".equals(r)
-                || "DISPATCH".equals(r)
-                || "LOGISTICS".equals(r)
-                || "DRIVER".equals(r)) {
+        if ("ADMIN".equals(cleanRole)) {
+            effective.add("PACKFLOW");
+            effective.add("BOMFLOW");
+            effective.add("MATFLOW");
+
+            return effective;
+        }
+
+        if (
+                "PACKING".equals(cleanRole) ||
+                "HARDWARE_PACKING".equals(cleanRole) ||
+                "WAREHOUSE".equals(cleanRole) ||
+                "DISPATCH".equals(cleanRole) ||
+                "LOGISTICS".equals(cleanRole) ||
+                "DRIVER".equals(cleanRole)
+        ) {
             effective.add("PACKFLOW");
         }
 
-        if (r.startsWith("BOMFLOW_")) {
+        if (cleanRole.startsWith("BOMFLOW_")) {
             effective.add("BOMFLOW");
         }
 
-        if (r.startsWith("VENFLOW_")) {
-            effective.add("VENFLOW");
+        if (cleanRole.startsWith("MATFLOW_")) {
+            effective.add("MATFLOW");
         }
 
         return effective;
@@ -173,31 +261,42 @@ public class User {
         return packedAreaCode;
     }
 
-    public void setPackedAreaCode(String packedAreaCode) {
-        this.packedAreaCode = packedAreaCode;
+    public void setPackedAreaCode(
+            String packedAreaCode
+    ) {
+        this.packedAreaCode =
+                cleanText(packedAreaCode);
     }
 
     public String getFgAreaCode() {
         return fgAreaCode;
     }
 
-    public void setFgAreaCode(String fgAreaCode) {
-        this.fgAreaCode = fgAreaCode;
+    public void setFgAreaCode(
+            String fgAreaCode
+    ) {
+        this.fgAreaCode =
+                cleanText(fgAreaCode);
     }
 
     public String getAllowedWarehouseCodes() {
         return allowedWarehouseCodes;
     }
 
-    public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
-        this.allowedWarehouseCodes = allowedWarehouseCodes;
+    public void setAllowedWarehouseCodes(
+            String allowedWarehouseCodes
+    ) {
+        this.allowedWarehouseCodes =
+                cleanText(allowedWarehouseCodes);
     }
 
     public UUID getDriverId() {
         return driverId;
     }
 
-    public void setDriverId(UUID driverId) {
+    public void setDriverId(
+            UUID driverId
+    ) {
         this.driverId = driverId;
     }
 
@@ -205,7 +304,64 @@ public class User {
         return warehouseAccess;
     }
 
-    public void setWarehouseAccess(boolean warehouseAccess) {
-        this.warehouseAccess = warehouseAccess;
+    public void setWarehouseAccess(
+            boolean warehouseAccess
+    ) {
+        this.warehouseAccess =
+                warehouseAccess;
+    }
+
+    private static Set<String> normalizeValues(
+            Set<String> values
+    ) {
+        Set<String> normalized =
+                new LinkedHashSet<>();
+
+        if (values == null) {
+            return normalized;
+        }
+
+        for (String value : values) {
+            String clean =
+                    normalizeUpper(value);
+
+            if (clean != null) {
+                normalized.add(clean);
+            }
+        }
+
+        return normalized;
+    }
+
+    private static String normalizeUpper(
+            String value
+    ) {
+        String clean =
+                cleanText(value);
+
+        return clean == null
+                ? null
+                : clean.toUpperCase();
+    }
+
+    private static String cleanText(
+            String value
+    ) {
+        if (value == null) {
+            return null;
+        }
+
+        String clean =
+                value.trim();
+
+        if (
+                clean.isBlank() ||
+                "null".equalsIgnoreCase(clean) ||
+                "undefined".equalsIgnoreCase(clean)
+        ) {
+            return null;
+        }
+
+        return clean;
     }
 }

@@ -1,32 +1,47 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
-function RequireAuth({ children }) {
-	const { isLoggedIn, authLoading } = useAuth();
+function AuthLoadingScreen() {
+	return (
+		<div
+			style={{
+				height: "100vh",
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				background:
+					"linear-gradient(135deg,#020617,#0f172a,#111827)",
+				color: "#fff",
+				fontWeight: 800,
+				fontFamily:
+					"Inter, system-ui, sans-serif",
+			}}
+		>
+			Loading session...
+		</div>
+	);
+}
+
+export default function RequireAuth({
+	children,
+}) {
+	const {
+		isLoggedIn,
+		authLoading,
+	} = useAuth();
 
 	if (authLoading) {
-		return (
-			<div
-				style={{
-					height: "100vh",
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "center",
-					background: "#0f172a",
-					color: "#fff",
-					fontWeight: 700,
-				}}
-			>
-				Loading...
-			</div>
-		);
+		return <AuthLoadingScreen />;
 	}
 
 	if (!isLoggedIn) {
-		return <Navigate to="/login" replace />;
+		return (
+			<Navigate
+				to="/login"
+				replace
+			/>
+		);
 	}
 
 	return children;
 }
-
-export default RequireAuth;

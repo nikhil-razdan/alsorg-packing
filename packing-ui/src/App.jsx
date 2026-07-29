@@ -213,18 +213,6 @@ function App() {
 						}
 					/>
 
-					<Route
-						path="/venflow/*"
-						element={
-							<RequireAuth>
-								<Navigate
-									to="/matflow"
-									replace
-								/>
-							</RequireAuth>
-						}
-					/>
-
 					<Route path="/" element={<Navigate to="/modules" replace />} />
 
 					<Route path="/dashboard" element={<Navigate to="/packflow/dashboard" replace />} />

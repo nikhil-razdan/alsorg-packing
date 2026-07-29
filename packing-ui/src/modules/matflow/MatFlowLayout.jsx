@@ -1,4 +1,4 @@
-import React, {
+import {
     useMemo,
     useState,
 } from "react";
@@ -9,6 +9,8 @@ import {
     Chip,
     Divider,
     IconButton,
+    MenuItem,
+    TextField,
     Tooltip,
     Typography,
 } from "@mui/material";
@@ -20,7 +22,8 @@ import {
     useNavigate,
 } from "react-router-dom";
 
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth }
+    from "../../auth/AuthContext";
 
 import {
     canAccessMatFlowScreen,
@@ -28,20 +31,39 @@ import {
     matFlowRoleLabel,
 } from "../../utils/matflowAccess";
 
+import { useMatFlow }
+    from "./MatFlowContext";
+
 import DashboardOutlinedIcon
     from "@mui/icons-material/DashboardOutlined";
-import LayersOutlinedIcon
-    from "@mui/icons-material/LayersOutlined";
+import FolderOutlinedIcon
+    from "@mui/icons-material/FolderOutlined";
+import Inventory2OutlinedIcon
+    from "@mui/icons-material/Inventory2Outlined";
+import AccountTreeOutlinedIcon
+    from "@mui/icons-material/AccountTreeOutlined";
+import ApprovalOutlinedIcon
+    from "@mui/icons-material/ApprovalOutlined";
 import EngineeringOutlinedIcon
     from "@mui/icons-material/EngineeringOutlined";
 import StorefrontOutlinedIcon
     from "@mui/icons-material/StorefrontOutlined";
+import SwapHorizOutlinedIcon
+    from "@mui/icons-material/SwapHorizOutlined";
 import DescriptionOutlinedIcon
     from "@mui/icons-material/DescriptionOutlined";
 import ShoppingCartOutlinedIcon
     from "@mui/icons-material/ShoppingCartOutlined";
-import ApprovalOutlinedIcon
-    from "@mui/icons-material/ApprovalOutlined";
+import LocalShippingOutlinedIcon
+    from "@mui/icons-material/LocalShippingOutlined";
+import FactCheckOutlinedIcon
+    from "@mui/icons-material/FactCheckOutlined";
+import PrecisionManufacturingOutlinedIcon
+    from "@mui/icons-material/PrecisionManufacturingOutlined";
+import KeyboardReturnOutlinedIcon
+    from "@mui/icons-material/KeyboardReturnOutlined";
+import ReceiptLongOutlinedIcon
+    from "@mui/icons-material/ReceiptLongOutlined";
 import AssessmentOutlinedIcon
     from "@mui/icons-material/AssessmentOutlined";
 import MenuIcon
@@ -62,31 +84,55 @@ const navItems = [
         icon: <DashboardOutlinedIcon />,
     },
     {
-        label: "BOM Releases",
-        path: "/matflow/releases",
-        screen: "releases",
-        icon: <LayersOutlinedIcon />,
+        label: "Projects",
+        path: "/matflow/projects",
+        screen: "projects",
+        icon: <FolderOutlinedIcon />,
     },
     {
-        label: "Production Desk",
+        label: "Materials",
+        path: "/matflow/materials",
+        screen: "materials",
+        icon: <Inventory2OutlinedIcon />,
+    },
+    {
+        label: "Operational BOMs",
+        path: "/matflow/boms",
+        screen: "boms",
+        icon: <AccountTreeOutlinedIcon />,
+    },
+    {
+        label: "BOM Approvals",
+        path: "/matflow/bom-approvals",
+        screen: "bom-approval",
+        icon: <ApprovalOutlinedIcon />,
+    },
+    {
+        label: "Production",
         path: "/matflow/production",
         screen: "production",
         icon: <EngineeringOutlinedIcon />,
     },
     {
-        label: "Store Desk",
+        label: "Store",
         path: "/matflow/store",
         screen: "store",
         icon: <StorefrontOutlinedIcon />,
     },
     {
-        label: "Material Indents",
+        label: "Transfers",
+        path: "/matflow/transfers",
+        screen: "transfers",
+        icon: <SwapHorizOutlinedIcon />,
+    },
+    {
+        label: "Indents",
         path: "/matflow/indents",
         screen: "indents",
         icon: <DescriptionOutlinedIcon />,
     },
     {
-        label: "Purchase Desk",
+        label: "Purchase",
         path: "/matflow/purchase",
         screen: "purchase",
         icon: <ShoppingCartOutlinedIcon />,
@@ -98,6 +144,36 @@ const navItems = [
         icon: <ApprovalOutlinedIcon />,
     },
     {
+        label: "Receiving",
+        path: "/matflow/receiving",
+        screen: "receiving",
+        icon: <LocalShippingOutlinedIcon />,
+    },
+    {
+        label: "Quality Control",
+        path: "/matflow/qc",
+        screen: "qc",
+        icon: <FactCheckOutlinedIcon />,
+    },
+    {
+        label: "Processing",
+        path: "/matflow/processing",
+        screen: "processing",
+        icon: <PrecisionManufacturingOutlinedIcon />,
+    },
+    {
+        label: "Returns",
+        path: "/matflow/returns",
+        screen: "returns",
+        icon: <KeyboardReturnOutlinedIcon />,
+    },
+    {
+        label: "Stock Ledger",
+        path: "/matflow/ledger",
+        screen: "ledger",
+        icon: <ReceiptLongOutlinedIcon />,
+    },
+    {
         label: "Reports",
         path: "/matflow/reports",
         screen: "reports",
@@ -105,102 +181,115 @@ const navItems = [
     },
 ];
 
-const getHeaderMeta = (pathname) => {
-    if (
-        pathname.includes("/releases/")
-    ) {
-        return {
-            title: "MatFlow Release",
-            subtitle:
-                "Immutable approved BOM material snapshot",
-        };
-    }
-
-    if (
-        pathname.includes("/releases")
-    ) {
-        return {
-            title: "BOM Releases",
-            subtitle:
-                "Approved BOM revisions released into MatFlow",
-        };
-    }
-
-    if (
-        pathname.includes("/production")
-    ) {
-        return {
-            title: "Production Desk",
-            subtitle:
-                "Material requisition planning and submission",
-        };
-    }
-
-    if (
-        pathname.includes("/store")
-    ) {
-        return {
-            title: "Store Desk",
-            subtitle:
-                "Stock review, blocking and shortage control",
-        };
-    }
-
-    if (
-        pathname.includes("/indents")
-    ) {
-        return {
-            title: "Material Indents",
-            subtitle:
-                "Shortage consolidation for procurement",
-        };
-    }
-
-    if (
-        pathname.includes("/purchase-orders")
-    ) {
-        return {
-            title: "Purchase Order",
-            subtitle:
-                "Purchase order review and approval",
-        };
-    }
-
-    if (
-        pathname.includes("/purchase")
-    ) {
-        return {
-            title: "Purchase Desk",
-            subtitle:
-                "Quotation and purchase order control",
-        };
-    }
-
-    if (
-        pathname.includes("/approvals")
-    ) {
-        return {
-            title: "PO Approvals",
-            subtitle:
-                "Purchase order approval queue",
-        };
-    }
-
-    if (
-        pathname.includes("/reports")
-    ) {
-        return {
-            title: "MatFlow Reports",
-            subtitle:
-                "Material planning and procurement reports",
-        };
-    }
-
-    return {
-        title: "MatFlow Dashboard",
+const headerMeta = [
+    {
+        match: "/projects",
+        title: "Projects and Drawings",
         subtitle:
-            "Material planning and procurement control",
-    };
+            "Project, PD and drawing material control",
+    },
+    {
+        match: "/materials",
+        title: "Material Master",
+        subtitle:
+            "Material codes, units and specifications",
+    },
+    {
+        match: "/bom-approvals",
+        title: "BOM Approvals",
+        subtitle:
+            "Operational BOM review and approval",
+    },
+    {
+        match: "/boms",
+        title: "Operational BOMs",
+        subtitle:
+            "Project-specific material planning",
+    },
+    {
+        match: "/production",
+        title: "Production Requisitions",
+        subtitle:
+            "Material demand, issue and consumption",
+    },
+    {
+        match: "/store",
+        title: "Store and Reservations",
+        subtitle:
+            "Stock commitment and material issue",
+    },
+    {
+        match: "/transfers",
+        title: "Material Transfers",
+        subtitle:
+            "Plant, QC and processing movement",
+    },
+    {
+        match: "/indents",
+        title: "Material Indents",
+        subtitle:
+            "Shortage and procurement demand",
+    },
+    {
+        match: "/approvals",
+        title: "PO Approvals",
+        subtitle:
+            "Director commercial approval queue",
+    },
+    {
+        match: "/purchase",
+        title: "Purchase and Vendors",
+        subtitle:
+            "Purchase orders and vendor control",
+    },
+    {
+        match: "/receiving",
+        title: "GRN and Receiving",
+        subtitle:
+            "Purchased material receipt",
+    },
+    {
+        match: "/qc",
+        title: "Quality Control",
+        subtitle:
+            "Incoming and transfer inspection",
+    },
+    {
+        match: "/processing",
+        title: "Material Processing",
+        subtitle:
+            "Input, output, yield and wastage",
+    },
+    {
+        match: "/returns",
+        title: "Material Returns",
+        subtitle:
+            "Return dispatch and receipt",
+    },
+    {
+        match: "/ledger",
+        title: "Stock Ledger",
+        subtitle:
+            "Immutable material movement history",
+    },
+    {
+        match: "/reports",
+        title: "MatFlow Reports",
+        subtitle:
+            "Material operations and shortage reporting",
+    },
+];
+
+const getHeaderMeta = (pathname) => {
+    return (
+        headerMeta.find((item) =>
+            pathname.includes(item.match)
+        ) || {
+            title: "MatFlow Dashboard",
+            subtitle:
+                "Material operations control center",
+        }
+    );
 };
 
 export default function MatFlowLayout() {
@@ -213,6 +302,12 @@ export default function MatFlowLayout() {
         logout,
     } = useAuth();
 
+    const {
+        availablePlants,
+        selectedPlantCode,
+        setSelectedPlantCode,
+    } = useMatFlow();
+
     const [collapsed, setCollapsed] =
         useState(() => {
             return (
@@ -222,27 +317,31 @@ export default function MatFlowLayout() {
             );
         });
 
-    const cleanRole = getMatFlowRole(role);
+    const cleanRole =
+        getMatFlowRole(role);
 
     const username =
-        user?.username ||
-        localStorage.getItem("username") ||
-        "User";
+        user?.username || "User";
 
-    const visibleItems = useMemo(() => {
-        return navItems.filter((item) => {
-            return canAccessMatFlowScreen(
-                item.screen,
-                cleanRole
+    const visibleItems =
+        useMemo(() => {
+            return navItems.filter(
+                (item) =>
+                    canAccessMatFlowScreen(
+                        item.screen,
+                        cleanRole
+                    )
             );
-        });
-    }, [cleanRole]);
+        }, [cleanRole]);
 
-    const headerMeta = useMemo(() => {
-        return getHeaderMeta(
-            location.pathname
+    const pageHeader =
+        useMemo(
+            () =>
+                getHeaderMeta(
+                    location.pathname
+                ),
+            [location.pathname]
         );
-    }, [location.pathname]);
 
     const toggleSidebar = () => {
         setCollapsed((current) => {
@@ -260,16 +359,17 @@ export default function MatFlowLayout() {
     const handleLogout = async () => {
         await logout();
 
-        navigate("/login", {
-            replace: true,
-        });
+        navigate(
+            "/login",
+            {
+                replace: true,
+            }
+        );
     };
 
     return (
         <Box sx={shellSx}>
             <Box sx={sidebarSx(collapsed)}>
-                <Box sx={sidebarGlowSx} />
-
                 <Box sx={logoRowSx(collapsed)}>
                     <Box sx={logoMarkSx}>
                         M
@@ -325,8 +425,6 @@ export default function MatFlowLayout() {
                     ))}
                 </Box>
 
-                <Box sx={{ flex: 1 }} />
-
                 <Box sx={userCardSx(collapsed)}>
                     <Box sx={avatarSx}>
                         {username
@@ -362,18 +460,45 @@ export default function MatFlowLayout() {
 
                         <Box>
                             <Typography sx={headerTitleSx}>
-                                {headerMeta.title}
+                                {pageHeader.title}
                             </Typography>
 
                             <Typography sx={headerSubSx}>
-                                {headerMeta.subtitle}
+                                {pageHeader.subtitle}
                             </Typography>
                         </Box>
                     </Box>
 
                     <Box sx={headerActionsSx}>
+                        <TextField
+                            select
+                            value={selectedPlantCode}
+                            onChange={(event) =>
+                                setSelectedPlantCode(
+                                    event.target.value
+                                )
+                            }
+                            size="small"
+                            sx={plantFieldSx}
+                        >
+                            <MenuItem value="ALL">
+                                All Allowed Plants
+                            </MenuItem>
+
+                            {availablePlants.map(
+                                (plant) => (
+                                    <MenuItem
+                                        key={plant}
+                                        value={plant}
+                                    >
+                                        {plant}
+                                    </MenuItem>
+                                )
+                            )}
+                        </TextField>
+
                         <Chip
-                            label="● System Active"
+                            label="● Session Active"
                             sx={healthChipSx}
                         />
 
@@ -417,7 +542,7 @@ const shellSx = {
 };
 
 const sidebarSx = (collapsed) => ({
-    width: collapsed ? "78px" : "238px",
+    width: collapsed ? "78px" : "244px",
     height: "100vh",
     position: "sticky",
     top: 0,
@@ -437,24 +562,9 @@ const sidebarSx = (collapsed) => ({
     flexShrink: 0,
     transition:
         "width .24s ease, padding .24s ease",
-
-    "@media (max-width: 700px)": {
-        width: "72px",
-        p: "14px 7px",
-    },
 });
 
-const sidebarGlowSx = {
-    position: "absolute",
-    inset: "0 0 auto 0",
-    height: "120px",
-    background:
-        "linear-gradient(180deg,rgba(14,165,233,.18),transparent)",
-    pointerEvents: "none",
-};
-
 const logoRowSx = (collapsed) => ({
-    position: "relative",
     display: "flex",
     alignItems: "center",
     justifyContent:
@@ -475,8 +585,6 @@ const logoMarkSx = {
     fontWeight: 950,
     background:
         "linear-gradient(135deg,#0284c7,#0ea5e9)",
-    boxShadow:
-        "0 10px 24px rgba(14,165,233,.28)",
     flexShrink: 0,
 };
 
@@ -495,24 +603,40 @@ const logoSubSx = {
 };
 
 const dividerSx = {
-    borderColor: "rgba(255,255,255,.07)",
+    borderColor:
+        "rgba(255,255,255,.07)",
 };
 
 const navListSx = {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: "5px",
     mt: "14px",
+    overflowY: "auto",
+    overflowX: "hidden",
+    flex: 1,
+    pr: "2px",
+
+    "&::-webkit-scrollbar": {
+        width: "5px",
+    },
+
+    "&::-webkit-scrollbar-thumb": {
+        background:
+            "rgba(148,163,184,.20)",
+        borderRadius: 999,
+    },
 };
 
 const navLinkStyle = (
     active,
     collapsed
 ) => ({
-    minHeight: 42,
-    padding: collapsed
-        ? "0"
-        : "0 11px",
+    minHeight: 40,
+    padding:
+        collapsed
+            ? "0"
+            : "0 10px",
     borderRadius: 10,
     display: "flex",
     alignItems: "center",
@@ -520,20 +644,24 @@ const navLinkStyle = (
         collapsed
             ? "center"
             : "flex-start",
-    gap: collapsed ? 0 : 10,
+    gap:
+        collapsed ? 0 : 10,
     textDecoration: "none",
-    color: active
-        ? "#fff"
-        : "rgba(255,255,255,.62)",
-    background: active
-        ? "linear-gradient(135deg,rgba(2,132,199,.28),rgba(14,165,233,.14))"
-        : "transparent",
-    border: active
-        ? "1px solid rgba(14,165,233,.28)"
-        : "1px solid transparent",
-    fontSize: 12,
+    color:
+        active
+            ? "#fff"
+            : "rgba(255,255,255,.62)",
+    background:
+        active
+            ? "linear-gradient(135deg,rgba(2,132,199,.28),rgba(14,165,233,.14))"
+            : "transparent",
+    border:
+        active
+            ? "1px solid rgba(14,165,233,.28)"
+            : "1px solid transparent",
+    fontSize: 11.5,
     fontWeight: 850,
-    transition: "all .2s ease",
+    flexShrink: 0,
 });
 
 const navIconStyle = {
@@ -545,9 +673,11 @@ const navIconStyle = {
 
 const userCardSx = (collapsed) => ({
     minHeight: "54px",
-    p: collapsed
-        ? "8px 5px"
-        : "8px 9px",
+    mt: "10px",
+    p:
+        collapsed
+            ? "8px 5px"
+            : "8px 9px",
     borderRadius: "12px",
     display: "flex",
     alignItems: "center",
@@ -556,8 +686,10 @@ const userCardSx = (collapsed) => ({
             ? "center"
             : "flex-start",
     gap: "9px",
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.07)",
+    background:
+        "rgba(255,255,255,.04)",
+    border:
+        "1px solid rgba(255,255,255,.07)",
 });
 
 const avatarSx = {
@@ -616,8 +748,6 @@ const headerSx = {
         "linear-gradient(180deg,rgba(6,17,31,.98),rgba(8,22,41,.96))",
     borderBottom:
         "1px solid rgba(255,255,255,.06)",
-    boxShadow:
-        "0 10px 28px rgba(2,6,23,.28)",
 };
 
 const headerLeftSx = {
@@ -646,19 +776,42 @@ const iconButtonSx = {
     height: "38px",
     borderRadius: "10px",
     color: "#cbd5e1",
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.07)",
+    background:
+        "rgba(255,255,255,.04)",
+    border:
+        "1px solid rgba(255,255,255,.07)",
 };
 
 const headerActionsSx = {
     display: "flex",
     alignItems: "center",
     gap: "7px",
+};
 
-    "@media (max-width: 850px)": {
-        "& .MuiButton-root": {
-            display: "none",
+const plantFieldSx = {
+    minWidth: "175px",
+
+    "& .MuiOutlinedInput-root": {
+        height: "34px",
+        borderRadius: "9px",
+        color: "#fff",
+        fontSize: "11px",
+        fontWeight: 800,
+        background:
+            "rgba(255,255,255,.04)",
+
+        "& fieldset": {
+            borderColor:
+                "rgba(255,255,255,.08)",
         },
+    },
+
+    "& .MuiSvgIcon-root": {
+        color: "#94a3b8",
+    },
+
+    "@media (max-width: 900px)": {
+        display: "none",
     },
 };
 
@@ -666,10 +819,16 @@ const healthChipSx = {
     height: "28px",
     borderRadius: 999,
     color: "#86efac",
-    background: "rgba(34,197,94,.12)",
-    border: "1px solid rgba(34,197,94,.22)",
+    background:
+        "rgba(34,197,94,.12)",
+    border:
+        "1px solid rgba(34,197,94,.22)",
     fontSize: "10px",
     fontWeight: 900,
+
+    "@media (max-width: 720px)": {
+        display: "none",
+    },
 };
 
 const headerButtonSx = {
@@ -679,8 +838,14 @@ const headerButtonSx = {
     color: "#fff",
     fontSize: "11px",
     fontWeight: 850,
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.07)",
+    background:
+        "rgba(255,255,255,.04)",
+    border:
+        "1px solid rgba(255,255,255,.07)",
+
+    "@media (max-width: 850px)": {
+        display: "none",
+    },
 };
 
 const contentSx = {

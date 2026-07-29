@@ -1,74 +1,34 @@
 package com.alsorg.packing.repository.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
 
-import jakarta.persistence.LockModeType;
+import java.util.Set;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowRequisitionLineRepository
         extends JpaRepository<MatFlowRequisitionLine, UUID> {
 
-    List<MatFlowRequisitionLine> findByRequisitionIdAndActiveTrueOrderBySourceLineNoAsc(
+    List<MatFlowRequisitionLine> findByRequisition_IdOrderByLineNoAsc(
             UUID requisitionId);
 
-    boolean existsByRequisitionIdAndMatFlowLineIdAndActiveTrue(
-            UUID requisitionId,
-            UUID matFlowLineId);
+    List<MatFlowRequisitionLine> findByBomLine_Id(
+            UUID bomLineId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select line
             from MatFlowRequisitionLine line
-            where line.requisitionId = :requisitionId
-              and line.active = true
-            order by line.sourceLineNo asc
+            where line.shortageQty > 0
+              and line.requisition.status not in :excludedStatuses
+            order by line.requisition.createdAt asc,
+                     line.lineNo asc
             """)
-    List<MatFlowRequisitionLine> findActiveForUpdate(
-            @Param("requisitionId") UUID requisitionId);
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select line
-            from MatFlowRequisitionLine line
-            where line.id = :lineId
-              and line.requisitionId = :requisitionId
-              and line.active = true
-            """)
-    Optional<MatFlowRequisitionLine> findActiveLineForUpdate(
-            @Param("requisitionId") UUID requisitionId,
-            @Param("lineId") UUID lineId);
-
-    /*
-     * Total active requested quantity for a MatFlow line across
-     * requisitions that have not been cancelled.
-     *
-     * We will still recalculate more carefully in the service,
-     * but this query is useful for validation and reporting.
-     */
-    @Query("""
-            select coalesce(sum(line.requestedQty), 0)
-            from MatFlowRequisitionLine line
-            join MatFlowRequisition requisition
-              on requisition.id = line.requisitionId
-            where line.matFlowLineId = :matFlowLineId
-              and line.active = true
-              and requisition.status
-                  <> com.alsorg.packing.domain.matflow.MatFlowRequisitionStatus.CANCELLED
-            """)
-    BigDecimal sumActiveRequestedQtyByMatFlowLineId(
-            @Param("matFlowLineId") UUID matFlowLineId);
-
-    Optional<MatFlowRequisitionLine> findByRequisitionIdAndMatFlowLineIdAndActiveTrue(
-            UUID requisitionId,
-            UUID matFlowLineId);
-
+    List<MatFlowRequisitionLine> findOpenShortages(
+            @Param("excludedStatuses") Set<RequisitionStatus> excludedStatuses);
 }

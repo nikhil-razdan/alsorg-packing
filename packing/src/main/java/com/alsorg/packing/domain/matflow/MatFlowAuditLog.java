@@ -2,9 +2,6 @@ package com.alsorg.packing.domain.matflow;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -13,45 +10,128 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "mat_flow_audit_logs", indexes = {
-        @Index(name = "idx_mat_flow_audit_release", columnList = "release_id,changed_at"),
-
-        @Index(name = "idx_mat_flow_audit_entity", columnList = "entity_type,entity_id")
+@Table(name = "mf_audit_logs", indexes = {
+        @Index(name = "idx_mf_audit_entity", columnList = "entity_type, entity_id"),
+        @Index(name = "idx_mf_audit_action", columnList = "action"),
+        @Index(name = "idx_mf_audit_plant", columnList = "plant_code"),
+        @Index(name = "idx_mf_audit_project", columnList = "project_code, drawing_no"),
+        @Index(name = "idx_mf_audit_action_at", columnList = "action_at")
 })
-public class MatFlowAuditLog {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    public UUID id;
-
-    @Column(name = "release_id", nullable = false)
-    public UUID releaseId;
+public class MatFlowAuditLog
+        extends MatFlowBaseEntity {
 
     @Column(name = "entity_type", nullable = false, length = 100)
-    public String entityType;
+    private String entityType;
 
-    @Column(name = "entity_id")
-    public UUID entityId;
+    @Column(name = "entity_id", nullable = false)
+    private UUID entityId;
 
-    @Column(name = "action", nullable = false, length = 150)
-    public String action;
+    @Column(name = "action", nullable = false, length = 120)
+    private String action;
 
-    @Column(name = "old_value", length = 4000)
-    public String oldValue;
+    @Column(name = "details_json", columnDefinition = "text")
+    private String detailsJson;
 
-    @Column(name = "new_value", length = 4000)
-    public String newValue;
+    @Column(name = "actor", nullable = false, length = 150)
+    private String actor;
 
-    @Column(name = "changed_by", nullable = false, length = 150)
-    public String changedBy;
+    @Column(name = "plant_code", length = 100)
+    private String plantCode;
 
-    @Column(name = "changed_at", nullable = false)
-    public LocalDateTime changedAt;
+    @Column(name = "project_code", length = 150)
+    private String projectCode;
+
+    @Column(name = "drawing_no", length = 150)
+    private String drawingNo;
+
+    @Column(name = "action_at", nullable = false)
+    private LocalDateTime actionAt;
 
     @PrePersist
-    public void prePersist() {
-        if (changedAt == null) {
-            changedAt = LocalDateTime.now();
+    private void initialiseAuditTimestamp() {
+        if (actionAt == null) {
+            actionAt = LocalDateTime.now();
         }
+    }
+
+    public String getEntityType() {
+        return entityType;
+    }
+
+    public void setEntityType(
+            String entityType) {
+        this.entityType = entityType;
+    }
+
+    public UUID getEntityId() {
+        return entityId;
+    }
+
+    public void setEntityId(
+            UUID entityId) {
+        this.entityId = entityId;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public void setAction(
+            String action) {
+        this.action = action;
+    }
+
+    public String getDetailsJson() {
+        return detailsJson;
+    }
+
+    public void setDetailsJson(
+            String detailsJson) {
+        this.detailsJson = detailsJson;
+    }
+
+    public String getActor() {
+        return actor;
+    }
+
+    public void setActor(
+            String actor) {
+        this.actor = actor;
+    }
+
+    public String getPlantCode() {
+        return plantCode;
+    }
+
+    public void setPlantCode(
+            String plantCode) {
+        this.plantCode = plantCode;
+    }
+
+    public String getProjectCode() {
+        return projectCode;
+    }
+
+    public void setProjectCode(
+            String projectCode) {
+        this.projectCode = projectCode;
+    }
+
+    public String getDrawingNo() {
+        return drawingNo;
+    }
+
+    public void setDrawingNo(
+            String drawingNo) {
+        this.drawingNo = drawingNo;
+    }
+
+    public LocalDateTime getActionAt() {
+        return actionAt;
+    }
+
+    public void setActionAt(
+            LocalDateTime actionAt) {
+        this.actionAt = actionAt;
     }
 }

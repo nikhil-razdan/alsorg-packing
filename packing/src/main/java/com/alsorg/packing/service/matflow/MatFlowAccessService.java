@@ -1,280 +1,446 @@
 package com.alsorg.packing.service.matflow;
 
 import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.repository.UserRepository;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-
-import java.util.LinkedHashSet;
+import com.alsorg.packing.service.CurrentUserService;
+import com.alsorg.packing.domain.matflow.MatFlowLocation;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import java.util.Set;
+
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
 
 @Service
 public class MatFlowAccessService {
 
-    private final UserRepository userRepo;
+        private final CurrentUserService currentUserService;
 
-    public MatFlowAccessService(
-            UserRepository userRepo) {
-
-        this.userRepo = userRepo;
-    }
-
-    public User currentUser() {
-
-        Authentication auth = SecurityContextHolder
-                .getContext()
-                .getAuthentication();
-
-        if (auth == null
-                || !auth.isAuthenticated()
-                || auth instanceof AnonymousAuthenticationToken
-                || auth.getName() == null
-                || auth.getName().isBlank()
-                || "anonymousUser".equalsIgnoreCase(
-                        auth.getName())) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "User not authenticated.");
+        public MatFlowAccessService(
+                        CurrentUserService currentUserService) {
+                this.currentUserService = currentUserService;
         }
 
-        User user = userRepo
-                .findByUsernameIgnoreCase(
-                        auth.getName().trim())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "User not found."));
+        public User currentUser() {
+                User user = currentUserService
+                                .requireCurrentUser();
 
-        if (!user.isEnabled()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "User is disabled.");
-        }
-
-        return user;
-    }
-
-    public String currentUsername() {
-        return currentUser()
-                .getUsername();
-    }
-
-    public String currentRole() {
-
-        String role = currentUser().getRole();
-
-        return role == null
-                ? ""
-                : role.trim().toUpperCase();
-    }
-
-    /*
-     * ADMIN and MATFLOW_MANAGER receive broad operational access.
-     *
-     * VENFLOW_MANAGER remains temporarily accepted during the
-     * transition from VenFlow to MatFlow.
-     */
-    public boolean isAdminOrManager() {
-
-        String role = currentRole();
-
-        return "ADMIN".equals(role)
-                || "MATFLOW_MANAGER".equals(role)
-                || "VENFLOW_MANAGER".equals(role);
-    }
-
-    public boolean isProduction() {
-
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "MATFLOW_PRODUCTION".equals(role)
-                || "VENFLOW_PRODUCTION".equals(role);
-    }
-
-    public boolean isStore() {
-
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "MATFLOW_STORE".equals(role)
-                || "VENFLOW_STORE".equals(role);
-    }
-
-    public boolean isPurchase() {
-
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "MATFLOW_PURCHASE".equals(role)
-                || "VENFLOW_PURCHASE".equals(role);
-    }
-
-    public boolean isQc() {
-
-        String role = currentRole();
-
-        return isAdminOrManager()
-                || "MATFLOW_QC".equals(role)
-                || "VENFLOW_QC".equals(role)
-                || "MATFLOW_STORE".equals(role)
-                || "VENFLOW_STORE".equals(role);
-    }
-
-    public boolean isDirector() {
-
-        String role = currentRole();
-
-        return "ADMIN".equals(role)
-                || "MATFLOW_DIRECTOR".equals(role)
-                || "VENFLOW_DIRECTOR".equals(role);
-    }
-
-    public boolean hasMatFlowAccess() {
-
-        String role = currentRole();
-
-        return switch (role) {
-            case "ADMIN",
-                    "MATFLOW_MANAGER",
-                    "MATFLOW_ENGINEERING",
-                    "MATFLOW_PRODUCTION",
-                    "MATFLOW_STORE",
-                    "MATFLOW_PURCHASE",
-                    "MATFLOW_QC",
-                    "MATFLOW_DIRECTOR",
-                    "MATFLOW_APPROVER",
-
-                    /*
-                     * Temporary compatibility aliases.
-                     */
-                    "VENFLOW_MANAGER",
-                    "VENFLOW_ENGINEERING",
-                    "VENFLOW_PRODUCTION",
-                    "VENFLOW_STORE",
-                    "VENFLOW_PURCHASE",
-                    "VENFLOW_QC",
-                    "VENFLOW_DIRECTOR" ->
-                true;
-
-            default -> false;
-        };
-    }
-
-    public void requireMatFlowAccess() {
-
-        if (!hasMatFlowAccess()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "MatFlow module access required.");
-        }
-    }
-
-    public void requireProduction() {
-
-        if (!isProduction()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "MatFlow Production access required.");
-        }
-    }
-
-    public void requireStore() {
-
-        if (!isStore()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "MatFlow Store access required.");
-        }
-    }
-
-    public void requirePurchase() {
-
-        if (!isPurchase()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "MatFlow Purchase access required.");
-        }
-    }
-
-    public Set<String> allowedPlantCodes() {
-
-        User user = currentUser();
-
-        Set<String> plants = new LinkedHashSet<>();
-
-        if (user.getEffectivePlantCodes() != null) {
-
-            for (String code : user.getEffectivePlantCodes()) {
-
-                if (code != null
-                        && !code.isBlank()) {
-
-                    plants.add(
-                            code.trim().toUpperCase());
+                if (!"ADMIN".equalsIgnoreCase(
+                                user.getRole()) &&
+                                !currentUserService.hasModule(
+                                                user,
+                                                "MATFLOW")) {
+                        throw new AccessDeniedException(
+                                        "MatFlow module access required");
                 }
-            }
+
+                return user;
         }
 
-        return plants;
-    }
-
-    public void assertPlantAccess(
-            String plantCode) {
-
-        String cleanPlant = plantCode == null
-                ? ""
-                : plantCode
-                        .trim()
-                        .toUpperCase();
-
-        if (cleanPlant.isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Plant code is required.");
+        public String actor() {
+                return currentUser()
+                                .getUsername();
         }
 
-        if (isDirector()) {
-            return;
+        public void requireRead() {
+                User user = currentUser();
+
+                if (isAdmin(user) ||
+                                roleStartsWith(user, "MATFLOW_")) {
+                        return;
+                }
+
+                throw new AccessDeniedException(
+                                "MatFlow access required");
         }
 
-        Set<String> allowed = allowedPlantCodes();
+        public void requireMaterialMasterWrite() {
+                User user = currentUser();
 
-        if (isAdminOrManager()
-                && allowed.isEmpty()) {
-            return;
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE",
+                                "MATFLOW_PURCHASE");
         }
 
-        if (!allowed.contains(cleanPlant)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "No access for plant: "
-                            + cleanPlant);
+        public void requireProjectWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_ENGINEERING");
         }
-    }
 
-    public boolean isPurchaseApprover() {
+        public void requireEngineeringWrite() {
+                User user = currentUser();
 
-        String role = currentRole();
-
-        return "ADMIN".equals(role)
-                || "MATFLOW_MANAGER".equals(role)
-                || "MATFLOW_APPROVER".equals(role)
-                || "MATFLOW_DIRECTOR".equals(role)
-                || "VENFLOW_DIRECTOR".equals(role);
-    }
-
-    public void requirePurchaseApprover() {
-
-        if (!isPurchaseApprover()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "MatFlow Purchase approval access required.");
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_ENGINEERING");
         }
-    }
+
+        public void requireApproval() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_DIRECTOR");
+        }
+
+        public void requirePlantAccess(
+                        String plantCode) {
+                User user = currentUser();
+
+                if (!currentUserService.canAccessPlant(
+                                user,
+                                plantCode)) {
+                        throw new AccessDeniedException(
+                                        "No access to plant: " +
+                                                        plantCode);
+                }
+        }
+
+        public Set<String> allowedPlants() {
+                return currentUserService.allowedPlants(
+                                currentUser());
+        }
+
+        public boolean canAccessPlant(
+                        String plantCode) {
+                return currentUserService.canAccessPlant(
+                                currentUser(),
+                                plantCode);
+        }
+
+        private void requireRole(
+                        User user,
+                        String... roles) {
+                String currentRole = normalize(user.getRole());
+
+                for (String role : roles) {
+                        if (currentRole.equals(
+                                        normalize(role))) {
+                                return;
+                        }
+                }
+
+                throw new AccessDeniedException(
+                                "You do not have permission to perform this MatFlow action");
+        }
+
+        private boolean isAdmin(User user) {
+                return "ADMIN".equals(
+                                normalize(user.getRole()));
+        }
+
+        private boolean roleStartsWith(
+                        User user,
+                        String prefix) {
+                return normalize(user.getRole())
+                                .startsWith(
+                                                normalize(prefix));
+        }
+
+        private String normalize(String value) {
+                return value == null
+                                ? ""
+                                : value.trim()
+                                                .toUpperCase()
+                                                .replace("ROLE_", "");
+        }
+
+        public void requireLocationWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireStockWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireProductionRequest() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PRODUCTION");
+        }
+
+        public void requireMaterialPlanning() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireIndentRead() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE",
+                                "MATFLOW_PURCHASE");
+        }
+
+        public void requireTransferDispatch(
+                        MatFlowLocation source) {
+                if (source == null) {
+                        throw new AccessDeniedException(
+                                        "Transfer source is missing");
+                }
+
+                requirePlantAccess(
+                                source.plantCode);
+
+                User user = currentUser();
+
+                if (isAnyRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER")) {
+                        return;
+                }
+
+                LocationType type = source.locationType;
+
+                if (type == LocationType.STORE &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_STORE")) {
+                        return;
+                }
+
+                if ((type == LocationType.PROCESSING ||
+                                type == LocationType.EXTERNAL_PROCESSOR) &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_PROCESSING")) {
+                        return;
+                }
+
+                if (type == LocationType.QC &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_QC")) {
+                        return;
+                }
+
+                if (type == LocationType.PRODUCTION &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_PRODUCTION")) {
+                        return;
+                }
+
+                throw new AccessDeniedException(
+                                "You cannot dispatch material from location: " +
+                                                source.locationCode);
+        }
+
+        public void requireTransferReceive(
+                        MatFlowLocation destination) {
+                if (destination == null) {
+                        throw new AccessDeniedException(
+                                        "Transfer destination is missing");
+                }
+
+                requirePlantAccess(
+                                destination.plantCode);
+
+                User user = currentUser();
+
+                if (isAnyRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER")) {
+                        return;
+                }
+
+                LocationType type = destination.locationType;
+
+                if (type == LocationType.STORE &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_STORE")) {
+                        return;
+                }
+
+                if ((type == LocationType.PROCESSING ||
+                                type == LocationType.EXTERNAL_PROCESSOR) &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_PROCESSING")) {
+                        return;
+                }
+
+                if (type == LocationType.QC &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_QC")) {
+                        return;
+                }
+
+                if (type == LocationType.PRODUCTION &&
+                                isAnyRole(
+                                                user,
+                                                "MATFLOW_PRODUCTION")) {
+                        return;
+                }
+
+                throw new AccessDeniedException(
+                                "You cannot receive material at location: " +
+                                                destination.locationCode);
+        }
+
+        private boolean isAnyRole(
+                        User user,
+                        String... roles) {
+                String userRole = normalize(user == null
+                                ? null
+                                : user.getRole());
+
+                for (String role : roles) {
+                        if (userRole.equals(
+                                        normalize(role))) {
+                                return true;
+                        }
+                }
+
+                return false;
+        }
+
+        public void requireVendorWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PURCHASE");
+        }
+
+        public void requirePurchaseOrderWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PURCHASE");
+        }
+
+        public void requireGoodsReceiptWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireQcWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_QC");
+        }
+
+        public void requireVendorReturnWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE",
+                                "MATFLOW_PURCHASE");
+        }
+
+        public void requireProcessingWrite() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PROCESSING");
+        }
+
+        public void requireReservationRelease() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireRequisitionCancel() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PRODUCTION");
+        }
+
+        public void requireProductionReturnCreate() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PRODUCTION");
+        }
+
+        public void requireQcDisposition() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_QC");
+        }
+
+        public void requireIntegrityRead() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_DIRECTOR");
+        }
 }

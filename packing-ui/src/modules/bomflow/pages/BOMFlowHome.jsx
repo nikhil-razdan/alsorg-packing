@@ -16,7 +16,6 @@ import * as styles from "../styles/bomStyles.js";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import PriceChangeOutlinedIcon from "@mui/icons-material/PriceChangeOutlined";
-import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -27,7 +26,7 @@ const modules = [
 	{
 		title: "Dashboard",
 		subtitle:
-			"View live products, revisions, approvals, missing rates and MatFlow releases.",
+			"View live products, revisions, approvals and missing rates",
 		icon: <AssessmentOutlinedIcon />,
 		status: "Available",
 		action: "Open Dashboard",
@@ -73,16 +72,6 @@ const modules = [
 		action: "View Costing",
 		path: "/bomflow/costing",
 		enabled: false,
-	},
-	{
-		title: "MatFlow Releases",
-		subtitle:
-			"View approved BOM revisions released for production material planning.",
-		icon: <EngineeringOutlinedIcon />,
-		status: "Available",
-		action: "Open MatFlow",
-		path: "/matflow/releases",
-		enabled: true,
 	},
 ];
 
