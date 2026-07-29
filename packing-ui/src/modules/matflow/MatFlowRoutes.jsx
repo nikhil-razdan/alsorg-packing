@@ -28,6 +28,21 @@ import MatFlowDashboard
 import MatFlowPlaceholder
 	from "./pages/MatFlowPlaceHolder";
 
+import MatFlowMaterialMaster
+	from "./pages/MatFlowMaterialMaster";
+
+import MatFlowProjectMaster
+	from "./pages/MatFlowProjectMaster";
+
+import MatFlowBomList
+	from "./pages/MatFlowBomList";
+
+import MatFlowBomCreate
+	from "./pages/MatFlowBomCreate";
+
+import MatFlowBomDetail
+	from "./pages/MatFlowBomDetail";
+
 function MatFlowHomeRedirect() {
 	const {
 		role,
@@ -90,68 +105,59 @@ export default function MatFlowRoutes() {
 
 				<Route
 					path="projects"
-					element={guarded(
-						"projects",
-						<MatFlowPlaceholder
-							title="Projects and Drawings"
-							subtitle="Manage PD, project and drawing records used by operational MatFlow BOMs."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="projects">
+							<MatFlowProjectMaster />
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
 					path="projects/:projectDrawingId"
-					element={guarded(
-						"tracking",
-						<MatFlowPlaceholder
-							title="Project Material Tracking"
-							subtitle="Track BOM revisions, requisitions, shortages, purchasing, QC, processing and production movement."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="tracking">
+							<MatFlowPlaceholder
+								title="Project Material Tracking"
+								subtitle="The complete project timeline will be connected after requisition, transfer, purchase, QC and processing workspaces are implemented."
+							/>
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
 					path="materials"
-					element={guarded(
-						"materials",
-						<MatFlowPlaceholder
-							title="Material Master"
-							subtitle="Maintain MatFlow material codes, units, specifications and reorder information."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="materials">
+							<MatFlowMaterialMaster />
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
 					path="boms"
-					element={guarded(
-						"boms",
-						<MatFlowPlaceholder
-							title="Operational BOMs"
-							subtitle="Create and control project-specific operational BOM revisions inside MatFlow."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="boms">
+							<MatFlowBomList />
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
 					path="boms/new"
-					element={guarded(
-						"bom-create",
-						<MatFlowPlaceholder
-							title="Create Operational BOM"
-							subtitle="Prepare an operational project BOM with quantities, wastage and plant routing."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="bom-create">
+							<MatFlowBomCreate />
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
 					path="boms/:bomId"
-					element={guarded(
-						"bom-detail",
-						<MatFlowPlaceholder
-							title="Operational BOM Detail"
-							subtitle="Review BOM lines, route steps, revision history and approval status."
-						/>
-					)}
+					element={
+						<MatFlowRouteGuard screen="bom-detail">
+							<MatFlowBomDetail />
+						</MatFlowRouteGuard>
+					}
 				/>
 
 				<Route
