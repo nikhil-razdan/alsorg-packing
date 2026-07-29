@@ -67,7 +67,6 @@ export default function MatFlowBomCreate() {
     const [form, setForm] =
         useState({
             projectDrawingId: "",
-            bomNumber: "",
             remarks: "",
         });
 
@@ -79,19 +78,18 @@ export default function MatFlowBomCreate() {
             setError("");
 
             try {
-                const data =
+                const response =
                     await matflowApi.listProjects({
-                        page: 0,
-                        size: 250,
+                        active: true,
                     });
 
                 const result =
-                    extractMatFlowPage(data);
+                    extractMatFlowPage(
+                        response?.data
+                    );
 
                 if (active) {
-                    setProjects(
-                        result.rows
-                    );
+                    setProjects(result.rows);
                 }
             } catch (requestError) {
                 if (active) {
@@ -146,21 +144,9 @@ export default function MatFlowBomCreate() {
                 form.projectDrawingId || ""
             ).trim();
 
-        const bomNumber =
-            clean(
-                form.bomNumber
-            ).toUpperCase();
-
         if (!projectDrawingId) {
             setError(
                 "Select a valid project and drawing."
-            );
-            return;
-        }
-
-        if (!bomNumber) {
-            setError(
-                "BOM number is required."
             );
             return;
         }
@@ -172,35 +158,33 @@ export default function MatFlowBomCreate() {
             return;
         }
 
+        const body = {
+            projectDrawingId,
+            remarks:
+                String(
+                    form.remarks || ""
+                ).trim() || null,
+        };
+
         setSaving(true);
         setError("");
 
-        const body = {
-            projectDrawingId,
-            bomNumber,
-            remarks:
-                clean(
-                    form.remarks
-                ) || null,
-        };
-
         try {
-            const created =
+            const response =
                 await matflowApi
                     .createBom(body);
 
-            const createdId =
-                created?.id ||
-                created?.data?.id;
+            const created =
+                response?.data;
 
-            if (!createdId) {
+            if (!created?.id) {
                 throw new Error(
-                    "The created operational BOM ID was not returned."
+                    "The created BOM ID was not returned."
                 );
             }
 
             navigate(
-                `/matflow/boms/${createdId}`,
+                `/matflow/boms/${created.id}`,
                 {
                     replace: true,
                 }
@@ -298,20 +282,6 @@ export default function MatFlowBomCreate() {
                             </MenuItem>
                         ))}
                     </TextField>
-
-                    <TextField
-                        label="BOM Number *"
-                        placeholder="e.g. MFBOM-PD-001"
-                        value={form.bomNumber}
-                        disabled={saving}
-                        onChange={(event) =>
-                            updateForm(
-                                "bomNumber",
-                                event.target.value
-                            )
-                        }
-                        sx={fieldSx}
-                    />
 
                     <TextField
                         label="Remarks"

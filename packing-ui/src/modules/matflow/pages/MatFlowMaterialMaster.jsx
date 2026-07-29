@@ -71,8 +71,12 @@ import {
 const EMPTY_FORM = {
     materialCode: "",
     materialName: "",
+    category: "",
+    specification: "",
     uom: "",
-    description: "",
+    preferredSupplier: "",
+    minimumStock: "0",
+    reorderLevel: "0",
     active: true,
 };
 
@@ -84,10 +88,16 @@ const clean = (value) => {
 };
 
 export default function MatFlowMaterialMaster() {
-    const { role } = useAuth();
+    const {
+        role,
+        user,
+    } = useAuth();
 
     const cleanRole =
-        getMatFlowRole(role);
+        getMatFlowRole(
+            role ||
+            user?.role
+        );
 
     const canManage = [
         MATFLOW_ROLES.ADMIN,
@@ -131,34 +141,68 @@ export default function MatFlowMaterialMaster() {
     const size = 25;
 
     const load = useCallback(async (
-        targetPage = page,
-        targetSearch = search
+        targetPage = 0,
+        targetSearch = ""
     ) => {
         setLoading(true);
         setError("");
 
         try {
-            const data =
+            const response =
                 await matflowApi.listMaterials({
-                    page: targetPage,
-                    size,
                     search:
                         clean(targetSearch) ||
                         undefined,
                 });
 
             const result =
-                extractMatFlowPage(data);
+                extractMatFlowPage(
+                    response?.data
+                );
 
-            setRows(result.rows);
-            setTotalPages(
-                result.totalPages
+            const calculatedTotalPages =
+                result.rows.length === 0
+                    ? 0
+                    : Math.ceil(
+                        result.rows.length /
+                        size
+                    );
+
+            const safePage =
+                calculatedTotalPages === 0
+                    ? 0
+                    : Math.min(
+                        Math.max(
+                            targetPage,
+                            0
+                        ),
+                        calculatedTotalPages - 1
+                    );
+
+            const startIndex =
+                safePage * size;
+
+            setRows(
+                result.rows.slice(
+                    startIndex,
+                    startIndex + size
+                )
             );
+
+            setPage(safePage);
+
             setTotalElements(
-                result.totalElements
+                result.rows.length
+            );
+
+            setTotalPages(
+                calculatedTotalPages
             );
         } catch (requestError) {
             setRows([]);
+            setPage(0);
+            setTotalPages(0);
+            setTotalElements(0);
 
             setError(
                 readMatFlowError(
@@ -169,17 +213,14 @@ export default function MatFlowMaterialMaster() {
         } finally {
             setLoading(false);
         }
-    }, [
-        page,
-        search,
-    ]);
+    }, [size]);
 
     useEffect(() => {
-        load(page, search);
-    }, [
-        load,
-        page,
-    ]);
+        load(
+            0,
+            ""
+        );
+    }, [load]);
 
     const openCreate = () => {
         setEditingRow(null);
@@ -194,14 +235,32 @@ export default function MatFlowMaterialMaster() {
         setForm({
             materialCode:
                 row.materialCode || "",
+
             materialName:
                 row.materialName || "",
+
+            category:
+                row.category || "",
+
+            specification:
+                row.specification || "",
+
             uom:
                 row.uom || "",
-            description:
-                row.description ||
-                row.specification ||
-                "",
+
+            preferredSupplier:
+                row.preferredSupplier || "",
+
+            minimumStock:
+                String(
+                    row.minimumStock ?? 0
+                ),
+
+            reorderLevel:
+                String(
+                    row.reorderLevel ?? 0
+                ),
+
             active:
                 row.active !== false,
         });
@@ -239,8 +298,40 @@ export default function MatFlowMaterialMaster() {
             return "Material name is required.";
         }
 
+        if (!clean(form.category)) {
+            return "Material category is required.";
+        }
+
         if (!clean(form.uom)) {
             return "Material unit is required.";
+        }
+
+        const minimumStock =
+            Number(
+                form.minimumStock || 0
+            );
+
+        if (
+            !Number.isFinite(
+                minimumStock
+            ) ||
+            minimumStock < 0
+        ) {
+            return "Minimum stock must be zero or greater.";
+        }
+
+        const reorderLevel =
+            Number(
+                form.reorderLevel || 0
+            );
+
+        if (
+            !Number.isFinite(
+                reorderLevel
+            ) ||
+            reorderLevel < 0
+        ) {
+            return "Reorder level must be zero or greater.";
         }
 
         return "";
@@ -255,9 +346,6 @@ export default function MatFlowMaterialMaster() {
             return;
         }
 
-        setSaving(true);
-        setError("");
-
         const body = {
             materialCode:
                 clean(
@@ -269,15 +357,35 @@ export default function MatFlowMaterialMaster() {
                     form.materialName
                 ),
 
+            category:
+                clean(
+                    form.category
+                ).toUpperCase(),
+
+            specification:
+                clean(
+                    form.specification
+                ) || null,
+
             uom:
                 clean(
                     form.uom
                 ).toUpperCase(),
 
-            description:
+            preferredSupplier:
                 clean(
-                    form.description
+                    form.preferredSupplier
                 ) || null,
+
+            minimumStock:
+                Number(
+                    form.minimumStock || 0
+                ),
+
+            reorderLevel:
+                Number(
+                    form.reorderLevel || 0
+                ),
 
             active:
                 form.active === true,
@@ -287,22 +395,42 @@ export default function MatFlowMaterialMaster() {
                 null,
         };
 
+        setSaving(true);
+        setError("");
+
         try {
+            let response;
+
             if (editingRow?.id) {
-                await matflowApi
-                    .updateMaterial(
-                        editingRow.id,
-                        body
-                    );
+                response =
+                    await matflowApi
+                        .updateMaterial(
+                            editingRow.id,
+                            body
+                        );
             } else {
-                await matflowApi
-                    .createMaterial(body);
+                response =
+                    await matflowApi
+                        .createMaterial(body);
             }
 
-            closeDialog();
+            const savedMaterial =
+                response?.data;
 
-            setPage(0);
-            await load(0, search);
+            if (!savedMaterial?.id) {
+                throw new Error(
+                    "Material ID was not returned."
+                );
+            }
+
+            setDialogOpen(false);
+            setEditingRow(null);
+            setForm(EMPTY_FORM);
+
+            await load(
+                0,
+                search
+            );
         } catch (requestError) {
             setError(
                 readMatFlowError(
@@ -388,10 +516,12 @@ export default function MatFlowMaterialMaster() {
                     <Box sx={toolbarActionsSx}>
                         <Button
                             startIcon={<SearchIcon />}
-                            onClick={() => {
-                                setPage(0);
-                                load(0, search);
-                            }}
+                            onClick={() =>
+                                load(
+                                    0,
+                                    search
+                                )
+                            }
                             sx={primaryBtnSx}
                         >
                             Search
@@ -400,7 +530,10 @@ export default function MatFlowMaterialMaster() {
                         <Button
                             startIcon={<RefreshIcon />}
                             onClick={() =>
-                                load(page, search)
+                                load(
+                                    page,
+                                    search
+                                )
                             }
                             sx={secondaryBtnSx}
                         >
@@ -450,7 +583,7 @@ export default function MatFlowMaterialMaster() {
                             </Box>
 
                             <Box sx={tableCellSx}>
-                                Description
+                                Category / Specification
                             </Box>
 
                             <Box sx={tableCellSx}>
@@ -495,9 +628,20 @@ export default function MatFlowMaterialMaster() {
                                     </Box>
 
                                     <Box sx={tableCellSx}>
-                                        {row.description ||
-                                            row.specification ||
-                                            "-"}
+                                        <Typography sx={mainTextSx}>
+                                            {row.category || "-"}
+                                        </Typography>
+
+                                        <Typography
+                                            sx={{
+                                                mt: "2px",
+                                                color:
+                                                    "rgba(255,255,255,.47)",
+                                                fontSize: "10px",
+                                            }}
+                                        >
+                                            {row.specification || "-"}
+                                        </Typography>
                                     </Box>
 
                                     <Box sx={tableCellSx}>
@@ -545,12 +689,12 @@ export default function MatFlowMaterialMaster() {
                             page <= 0
                         }
                         onClick={() =>
-                            setPage(
-                                (current) =>
-                                    Math.max(
-                                        current - 1,
-                                        0
-                                    )
+                            load(
+                                Math.max(
+                                    page - 1,
+                                    0
+                                ),
+                                search
                             )
                         }
                         sx={secondaryBtnSx}
@@ -570,9 +714,9 @@ export default function MatFlowMaterialMaster() {
                             totalPages
                         }
                         onClick={() =>
-                            setPage(
-                                (current) =>
-                                    current + 1
+                            load(
+                                page + 1,
+                                search
                             )
                         }
                         sx={secondaryBtnSx}
@@ -664,21 +808,84 @@ export default function MatFlowMaterialMaster() {
                         />
 
                         <TextField
-                            label="Description"
-                            multiline
-                            minRows={3}
-                            value={form.description}
+                            label="Category *"
+                            value={form.category}
                             disabled={saving}
                             onChange={(event) =>
                                 updateForm(
-                                    "description",
+                                    "category",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Preferred Supplier"
+                            value={
+                                form.preferredSupplier
+                            }
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "preferredSupplier",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Minimum Stock"
+                            type="number"
+                            value={form.minimumStock}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "minimumStock",
+                                    event.target.value
+                                )
+                            }
+                            inputProps={{
+                                min: 0,
+                                step: 0.001,
+                            }}
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Reorder Level"
+                            type="number"
+                            value={form.reorderLevel}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "reorderLevel",
+                                    event.target.value
+                                )
+                            }
+                            inputProps={{
+                                min: 0,
+                                step: 0.001,
+                            }}
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Specification"
+                            multiline
+                            minRows={3}
+                            value={form.specification}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "specification",
                                     event.target.value
                                 )
                             }
                             sx={{
                                 ...fieldSx,
-                                gridColumn:
-                                    "1 / -1",
+                                gridColumn: "1 / -1",
                             }}
                         />
 

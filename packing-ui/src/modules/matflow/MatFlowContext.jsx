@@ -40,25 +40,61 @@ export function MatFlowProvider({
     children,
 }) {
     const {
+        user,
+        role,
         plantCode,
         plantCodes,
     } = useAuth();
 
     const availablePlants =
         useMemo(() => {
-            return normalizePlants([
-                ...(
-                    Array.isArray(
-                        plantCodes
-                    )
-                        ? plantCodes
-                        : []
-                ),
-                plantCode,
-            ]);
+            const assigned =
+                normalizePlants([
+                    ...(
+                        Array.isArray(plantCodes)
+                            ? plantCodes
+                            : []
+                    ),
+
+                    ...(
+                        Array.isArray(
+                            user?.plantCodes
+                        )
+                            ? user.plantCodes
+                            : []
+                    ),
+
+                    plantCode,
+                    user?.plantCode,
+                ]);
+
+            const cleanRole =
+                String(
+                    role ||
+                    user?.role ||
+                    ""
+                )
+                    .trim()
+                    .toUpperCase();
+
+            if (
+                assigned.length === 0 &&
+                cleanRole === "ADMIN"
+            ) {
+                return [
+                    "AKG PLANT",
+                    "SOFA PLANT",
+                    "KW PLANT",
+                    "PLANT 4",
+                ];
+            }
+
+            return assigned;
         }, [
             plantCode,
             plantCodes,
+            role,
+            user,
         ]);
 
     const [

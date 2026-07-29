@@ -39,52 +39,68 @@ import ArrowForwardIcon
 
 const stages = [
 	{
-		title: "Approved BOM Releases",
+		title: "Projects and Drawings",
 		subtitle:
-			"Immutable material demand released by BOMFlow.",
-		path: "/matflow/releases",
-		icon: <LayersOutlinedIcon />,
+			"Create project, PD, drawing and plant context.",
+		path: "/matflow/projects",
+		icon: <FolderOutlinedIcon />,
 		accent: "#38bdf8",
 	},
 	{
-		title: "Production Requisitions",
+		title: "Material Master",
 		subtitle:
-			"Production raises controlled material requirements.",
-		path: "/matflow/production",
-		icon: <EngineeringOutlinedIcon />,
+			"Maintain standardized materials, units and specifications.",
+		path: "/matflow/materials",
+		icon: <Inventory2OutlinedIcon />,
 		accent: "#60a5fa",
 	},
 	{
-		title: "Store Review",
+		title: "Operational BOMs",
 		subtitle:
-			"Store checks stock, blocks materials and records shortages.",
-		path: "/matflow/store",
-		icon: <StorefrontOutlinedIcon />,
+			"Prepare and approve project-specific operational BOM revisions.",
+		path: "/matflow/boms",
+		icon: <AccountTreeOutlinedIcon />,
 		accent: "#22c55e",
 	},
 	{
-		title: "Material Indents",
+		title: "Production Planning",
 		subtitle:
-			"Store consolidates shortages for Purchase.",
-		path: "/matflow/indents",
-		icon: <DescriptionOutlinedIcon />,
+			"Raise production material requisitions against effective BOMs.",
+		path: "/matflow/production",
+		icon: <EngineeringOutlinedIcon />,
 		accent: "#f59e0b",
 	},
 	{
-		title: "Purchase Processing",
+		title: "Store and Reservations",
 		subtitle:
-			"Purchase compares quotations and prepares orders.",
-		path: "/matflow/purchase",
-		icon: <ShoppingCartOutlinedIcon />,
+			"Check stock, reserve material and identify shortages.",
+		path: "/matflow/store",
+		icon: <StorefrontOutlinedIcon />,
 		accent: "#a78bfa",
 	},
 	{
-		title: "PO Approval",
+		title: "Transfers",
 		subtitle:
-			"Authorized approvers review submitted purchase orders.",
-		path: "/matflow/approvals",
-		icon: <ApprovalOutlinedIcon />,
+			"Move material between stores, plants, QC and processing.",
+		path: "/matflow/transfers",
+		icon: <SwapHorizOutlinedIcon />,
 		accent: "#f472b6",
+	},
+	{
+		title: "Purchase",
+		subtitle:
+			"Process shortages through indents, vendors, POs and receiving.",
+		path: "/matflow/purchase",
+		icon: <ShoppingCartOutlinedIcon />,
+		accent: "#fb7185",
+	},
+	{
+		title: "Quality Control",
+		subtitle:
+			"Inspect received and transferred materials before use.",
+		path: "/matflow/qc",
+		icon: <FactCheckOutlinedIcon />,
+		accent: "#2dd4bf",
 	},
 ];
 
@@ -104,10 +120,10 @@ export default function MatFlowDashboard() {
 				</Typography>
 
 				<Typography sx={heroSubSx}>
-					Control the complete material lifecycle from an approved
-					BOMFlow revision through Production requisition, Store
-					blocking, material indent, vendor quotation, purchase order,
-					receiving and final issue.
+					Control the complete operational material lifecycle from
+					project and drawing registration through BOM approval,
+					stock planning, reservations, procurement, QC, transfers,
+					production consumption and returns.
 				</Typography>
 			</Box>
 
@@ -160,10 +176,9 @@ export default function MatFlowDashboard() {
 				</Typography>
 
 				<Typography sx={panelSubSx}>
-					BOMFlow remains responsible for product BOM preparation,
-					revision approval and release. MatFlow starts only after an
-					approved BOM revision has been released. MatFlow must not
-					allow its users to edit the source BOM snapshot.
+					MatFlow maintains its own project-specific operational BOM.
+					BOMFlow remains an independent product BOM and costing
+					module. No automatic BOMFlow-to-MatFlow release is required.
 				</Typography>
 			</Card>
 		</Box>

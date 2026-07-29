@@ -92,7 +92,10 @@ export default function MatFlowRouteGuard({
 	}
 
 	const cleanRole =
-		getMatFlowRole(role);
+		getMatFlowRole(
+			role ||
+			user?.role
+		);
 
 	if (
 		!canAccessMatFlowScreen(

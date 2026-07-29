@@ -32,9 +32,6 @@ import SendOutlinedIcon
 import UndoOutlinedIcon
     from "@mui/icons-material/UndoOutlined";
 
-import MatFlowBomLineEditor
-    from "../components/MatFlowBomLineEditor";
-
 import {
     useNavigate,
     useParams,
@@ -53,6 +50,9 @@ import {
     readMatFlowError,
 } from "../api/matflowApi";
 
+import MatFlowBomLineEditor
+    from "../components/MatFlowBomLineEditor";
+
 import MatFlowStatusChip
     from "../components/MatFlowStatusChip";
 
@@ -68,21 +68,13 @@ import {
     panelSx,
     primaryBtnSx,
     secondaryBtnSx,
-    tableCellSx,
-    tableHeaderSx,
-    tableRowSx,
-    tableShellSx,
 } from "../matflowTheme";
 
 export default function MatFlowBomDetail() {
-    const { bomId } =
-        useParams();
+    const { bomId } = useParams();
+    const navigate = useNavigate();
 
-    const navigate =
-        useNavigate();
-
-    const { role } =
-        useAuth();
+    const { role } = useAuth();
 
     const cleanRole =
         getMatFlowRole(role);
@@ -119,6 +111,8 @@ export default function MatFlowBomDetail() {
 
     const load = useCallback(async () => {
         if (!bomId) {
+            setBom(null);
+            setLoading(false);
             return;
         }
 
@@ -126,12 +120,14 @@ export default function MatFlowBomDetail() {
         setError("");
 
         try {
-            const data =
+            const response =
                 await matflowApi.getBom(
                     bomId
                 );
 
-            setBom(data || null);
+            setBom(
+                response?.data || null
+            );
         } catch (requestError) {
             setBom(null);
 
@@ -165,42 +161,47 @@ export default function MatFlowBomDetail() {
             );
         }, [bom]);
 
+    const project =
+        useMemo(() => {
+            return (
+                bom?.projectDrawing ||
+                bom?.project ||
+                bom?.projectContext ||
+                {}
+            );
+        }, [bom]);
+
     const status =
         String(
             bom?.status || ""
         ).toUpperCase();
 
-    const canSubmit =
+    const canSubmitCurrent =
         canEdit &&
-        status === "DRAFT" &&
+        [
+            "DRAFT",
+            "RETURNED",
+        ].includes(status) &&
         lines.length > 0;
 
     const canApproveCurrent =
         canApprove &&
-        [
-            "SUBMITTED",
-            "UNDER_REVIEW",
-        ].includes(status);
+        status === "SUBMITTED";
 
     const canReturnCurrent =
         canApprove &&
-        [
-            "SUBMITTED",
-            "UNDER_REVIEW",
-        ].includes(status);
+        status === "SUBMITTED";
 
     const canCreateRevision =
         canEdit &&
-        (
-            bom?.effective === true ||
-            status === "APPROVED"
-        );
+        [
+            "APPROVED",
+            "SUPERSEDED",
+        ].includes(status);
 
-    const openAction = (
-        action
-    ) => {
-        setRemarks("");
+    const openAction = (action) => {
         setActionDialog(action);
+        setRemarks("");
         setError("");
     };
 
@@ -214,13 +215,18 @@ export default function MatFlowBomDetail() {
     };
 
     const executeAction = async () => {
-        if (!bom?.id) {
+        if (!bom?.id || !actionDialog) {
             return;
         }
 
+        const cleanedRemarks =
+            String(
+                remarks || ""
+            ).trim();
+
         if (
             actionDialog === "RETURN" &&
-            !remarks.trim()
+            !cleanedRemarks
         ) {
             setError(
                 "Return remarks are required."
@@ -228,69 +234,73 @@ export default function MatFlowBomDetail() {
             return;
         }
 
-        setWorking(true);
-        setError("");
-
         const body = {
             rowVersion:
                 bom.rowVersion,
 
             remarks:
-                remarks.trim() ||
-                null,
+                cleanedRemarks || null,
         };
 
+        setWorking(true);
+        setError("");
+
         try {
-            let updated = null;
+            let response;
 
-            if (
-                actionDialog === "SUBMIT"
-            ) {
-                updated =
-                    await matflowApi
-                        .submitBom(
-                            bom.id,
-                            body
-                        );
+            switch (actionDialog) {
+                case "SUBMIT":
+                    response =
+                        await matflowApi
+                            .submitBom(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                case "APPROVE":
+                    response =
+                        await matflowApi
+                            .approveBom(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                case "RETURN":
+                    response =
+                        await matflowApi
+                            .returnBom(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                case "REVISION":
+                    response =
+                        await matflowApi
+                            .createBomRevision(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                default:
+                    return;
             }
 
-            if (
-                actionDialog === "APPROVE"
-            ) {
-                updated =
-                    await matflowApi
-                        .approveBom(
-                            bom.id,
-                            body
-                        );
-            }
+            const updated =
+                response?.data;
+
+            const completedAction =
+                actionDialog;
+
+            setActionDialog(null);
+            setRemarks("");
 
             if (
-                actionDialog === "RETURN"
-            ) {
-                updated =
-                    await matflowApi
-                        .returnBom(
-                            bom.id,
-                            body
-                        );
-            }
-
-            if (
-                actionDialog === "REVISION"
-            ) {
-                updated =
-                    await matflowApi
-                        .createBomRevision(
-                            bom.id,
-                            body
-                        );
-            }
-
-            closeAction();
-
-            if (
-                actionDialog === "REVISION" &&
+                completedAction ===
+                "REVISION" &&
                 updated?.id
             ) {
                 navigate(
@@ -303,11 +313,11 @@ export default function MatFlowBomDetail() {
                 return;
             }
 
-            setBom(
-                updated || bom
-            );
-
-            await load();
+            if (updated?.id) {
+                setBom(updated);
+            } else {
+                await load();
+            }
         } catch (requestError) {
             setError(
                 readMatFlowError(
@@ -340,7 +350,6 @@ export default function MatFlowBomDetail() {
 
                         <Typography sx={heroTitleSx}>
                             {bom?.bomNumber ||
-                                bom?.bomNo ||
                                 "Operational BOM"}
                         </Typography>
 
@@ -348,26 +357,32 @@ export default function MatFlowBomDetail() {
                             Revision{" "}
                             {bom?.revisionNo ?? "-"}
                             {" · "}
-                            {bom?.projectCode ||
-                                bom?.pdNo ||
+                            {project.projectCode ||
+                                bom?.projectCode ||
                                 "No Project"}
                             {" · "}
-                            {bom?.drawingNo ||
+                            {project.drawingNo ||
+                                bom?.drawingNo ||
                                 "No Drawing"}
                         </Typography>
                     </Box>
 
                     <Box sx={headerActionsSx}>
                         <Button
-                            startIcon={<RefreshIcon />}
+                            startIcon={
+                                <RefreshIcon />
+                            }
                             onClick={load}
+                            disabled={working}
                             sx={secondaryBtnSx}
                         >
                             Refresh
                         </Button>
 
                         <Button
-                            startIcon={<ArrowBackIcon />}
+                            startIcon={
+                                <ArrowBackIcon />
+                            }
                             onClick={() =>
                                 navigate(
                                     "/matflow/boms"
@@ -405,8 +420,7 @@ export default function MatFlowBomDetail() {
                                 value={
                                     <MatFlowStatusChip
                                         status={
-                                            bom.effective ===
-                                                true
+                                            bom.effective
                                                 ? "ACTIVE"
                                                 : "INACTIVE"
                                         }
@@ -417,8 +431,7 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Latest Revision"
                                 value={
-                                    bom.latestRevision ===
-                                        true
+                                    bom.latestRevision
                                         ? "Yes"
                                         : "No"
                                 }
@@ -427,7 +440,7 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Plant"
                                 value={
-                                    bom.owningPlantCode ||
+                                    project.plantCode ||
                                     bom.plantCode
                                 }
                             />
@@ -435,6 +448,7 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Product"
                                 value={
+                                    project.productName ||
                                     bom.productName
                                 }
                             />
@@ -442,27 +456,24 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Client"
                                 value={
+                                    project.clientName ||
                                     bom.clientName
                                 }
                             />
 
                             <Detail
                                 label="Prepared By"
-                                value={
-                                    bom.createdBy
-                                }
+                                value={bom.createdBy}
                             />
 
                             <Detail
                                 label="Row Version"
-                                value={
-                                    bom.rowVersion
-                                }
+                                value={bom.rowVersion}
                             />
                         </Box>
 
                         <Box sx={workflowActionsSx}>
-                            {canSubmit && (
+                            {canSubmitCurrent && (
                                 <Button
                                     startIcon={
                                         <SendOutlinedIcon />
@@ -472,6 +483,7 @@ export default function MatFlowBomDetail() {
                                             "SUBMIT"
                                         )
                                     }
+                                    disabled={working}
                                     sx={primaryBtnSx}
                                 >
                                     Submit BOM
@@ -488,6 +500,7 @@ export default function MatFlowBomDetail() {
                                             "APPROVE"
                                         )
                                     }
+                                    disabled={working}
                                     sx={primaryBtnSx}
                                 >
                                     Approve BOM
@@ -504,6 +517,7 @@ export default function MatFlowBomDetail() {
                                             "RETURN"
                                         )
                                     }
+                                    disabled={working}
                                     sx={secondaryBtnSx}
                                 >
                                     Return to Engineering
@@ -520,6 +534,7 @@ export default function MatFlowBomDetail() {
                                             "REVISION"
                                         )
                                     }
+                                    disabled={working}
                                     sx={secondaryBtnSx}
                                 >
                                     Create New Revision
@@ -532,6 +547,7 @@ export default function MatFlowBomDetail() {
                         <MatFlowBomLineEditor
                             bom={bom}
                             lines={lines}
+                            canEdit={canEdit}
                             onChanged={load}
                             onError={setError}
                         />
@@ -570,6 +586,7 @@ export default function MatFlowBomDetail() {
                         }
                         multiline
                         minRows={3}
+                        fullWidth
                         value={remarks}
                         disabled={working}
                         onChange={(event) =>
@@ -630,16 +647,16 @@ function actionTitle(action) {
 function actionMessage(action) {
     switch (action) {
         case "SUBMIT":
-            return "The draft will become read-only for Engineering until it is approved or returned.";
+            return "The BOM will be submitted for authorized review.";
 
         case "APPROVE":
             return "This revision will become the effective operational BOM.";
 
         case "RETURN":
-            return "The revision will be returned to Engineering for correction.";
+            return "The BOM will be returned to Engineering for correction.";
 
         case "REVISION":
-            return "A new draft revision will be created while the current approved revision remains effective.";
+            return "A new draft revision will be created while the approved revision remains effective.";
 
         default:
             return "";
@@ -715,59 +732,6 @@ const workflowActionsSx = {
     pt: "14px",
     borderTop:
         "1px solid rgba(255,255,255,.07)",
-};
-
-const sectionHeaderSx = {
-    mb: "12px",
-};
-
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
-const sectionSubSx = {
-    mt: "3px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 700,
-};
-
-const lineColumns =
-    "60px minmax(210px,1.2fr) minmax(230px,1.4fr) 100px 90px 110px 80px minmax(180px,1fr)";
-
-const lineHeaderSx = {
-    ...tableHeaderSx,
-    gridTemplateColumns:
-        lineColumns,
-};
-
-const lineRowSx = {
-    ...tableRowSx,
-    gridTemplateColumns:
-        lineColumns,
-};
-
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color: "rgba(255,255,255,.47)",
-    fontSize: "10px",
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color: "rgba(255,255,255,.50)",
-    fontSize: "12px",
-    fontWeight: 750,
 };
 
 const dialogPaperSx = {

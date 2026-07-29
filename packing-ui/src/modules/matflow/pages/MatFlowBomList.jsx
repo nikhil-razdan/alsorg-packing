@@ -141,8 +141,24 @@ export default function MatFlowBomList() {
                         undefined,
                 });
 
+            const response =
+                await matflowApi.listBoms({
+                    search:
+                        targetFilters.search ||
+                        undefined,
+
+                    status:
+                        targetFilters.status ||
+                        undefined,
+
+                    latestOnly:
+                        true,
+                });
+
             const result =
-                extractMatFlowPage(data);
+                extractMatFlowPage(
+                    response?.data
+                );
 
             setRows(result.rows);
             setTotalPages(

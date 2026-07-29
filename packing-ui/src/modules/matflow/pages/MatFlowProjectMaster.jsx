@@ -19,6 +19,8 @@ import {
     MenuItem,
     TextField,
     Typography,
+    FormControlLabel,
+    Switch
 } from "@mui/material";
 
 import AddIcon
@@ -70,10 +72,10 @@ import {
 } from "../matflowTheme";
 
 const DEFAULT_PLANTS = [
-    "AKG PLANT",
-    "SOFA PLANT",
-    "KW PLANT",
-    "PLANT 4",
+    "AL-P1",
+    "AL-P2",
+    "AL-P3",
+    "AL-P4",
 ];
 
 const EMPTY_FORM = {
@@ -81,10 +83,12 @@ const EMPTY_FORM = {
     projectName: "",
     clientName: "",
     drawingNo: "",
-    drawingRevision: "",
+    drawingRevision: "0",
     productName: "",
-    owningPlantCode: "",
+    plantCode: "",
+    requiredDate: "",
     remarks: "",
+    active: true,
 };
 
 const clean = (value) => {
@@ -103,7 +107,10 @@ export default function MatFlowProjectMaster() {
     } = useAuth();
 
     const cleanRole =
-        getMatFlowRole(role);
+        getMatFlowRole(
+            role ||
+            user?.role
+        );
 
     const canManage = [
         MATFLOW_ROLES.ADMIN,
@@ -151,12 +158,7 @@ export default function MatFlowProjectMaster() {
                 cleanRole ===
                 MATFLOW_ROLES.ADMIN
             ) {
-                return [
-                    "AKG PLANT",
-                    "SOFA PLANT",
-                    "KW PLANT",
-                    "PLANT 4",
-                ];
+                return [...DEFAULT_PLANTS];
             }
 
             return [];
@@ -206,36 +208,88 @@ export default function MatFlowProjectMaster() {
     const size = 25;
 
     const load = useCallback(async (
-        targetPage = page
+        targetPage = 0,
+        targetSearch = "",
+        targetPlant = ""
     ) => {
         setLoading(true);
         setError("");
 
         try {
-            const data =
+            const response =
                 await matflowApi.listProjects({
-                    page: targetPage,
-                    size,
                     search:
-                        clean(search) ||
-                        undefined,
-                    plantCode:
-                        clean(plantFilter) ||
+                        clean(targetSearch) ||
                         undefined,
                 });
 
             const result =
-                extractMatFlowPage(data);
+                extractMatFlowPage(
+                    response?.data
+                );
 
-            setRows(result.rows);
-            setTotalPages(
-                result.totalPages
-            );
+            const normalizedPlant =
+                clean(
+                    targetPlant
+                ).toUpperCase();
+
+            const filteredRows =
+                normalizedPlant
+                    ? result.rows.filter(
+                        (project) =>
+                            String(
+                                project.plantCode ||
+                                ""
+                            )
+                                .trim()
+                                .toUpperCase() ===
+                            normalizedPlant
+                    )
+                    : result.rows;
+
+            const calculatedTotalPages =
+                filteredRows.length === 0
+                    ? 0
+                    : Math.ceil(
+                        filteredRows.length /
+                        size
+                    );
+
+            const safePage =
+                calculatedTotalPages === 0
+                    ? 0
+                    : Math.min(
+                        Math.max(
+                            targetPage,
+                            0
+                        ),
+                        calculatedTotalPages - 1
+                    );
+
+            const startIndex =
+                safePage * size;
+
+            const visibleRows =
+                filteredRows.slice(
+                    startIndex,
+                    startIndex + size
+                );
+
+            setRows(visibleRows);
+            setPage(safePage);
+
             setTotalElements(
-                result.totalElements
+                filteredRows.length
+            );
+
+            setTotalPages(
+                calculatedTotalPages
             );
         } catch (requestError) {
             setRows([]);
+            setPage(0);
+            setTotalElements(0);
+            setTotalPages(0);
 
             setError(
                 readMatFlowError(
@@ -246,25 +300,22 @@ export default function MatFlowProjectMaster() {
         } finally {
             setLoading(false);
         }
-    }, [
-        page,
-        plantFilter,
-        search,
-    ]);
+    }, [size]);
 
     useEffect(() => {
-        load(page);
-    }, [
-        load,
-        page,
-    ]);
+        load(
+            0,
+            "",
+            ""
+        );
+    }, [load]);
 
     const openCreate = () => {
         setEditingRow(null);
 
         setForm({
             ...EMPTY_FORM,
-            owningPlantCode:
+            plantCode:
                 availablePlants[0] || "",
         });
 
@@ -278,28 +329,38 @@ export default function MatFlowProjectMaster() {
         setForm({
             projectCode:
                 row.projectCode || "",
+
             projectName:
                 row.projectName || "",
+
             clientName:
                 row.clientName || "",
+
             drawingNo:
                 row.drawingNo || "",
+
             drawingRevision:
-                row.drawingRevision || "",
+                row.drawingRevision || "0",
+
             productName:
                 row.productName || "",
-            owningPlantCode:
-                row.owningPlantCode ||
-                row.plantCode ||
-                "",
+
+            plantCode:
+                row.plantCode || "",
+
+            requiredDate:
+                row.requiredDate || "",
+
             remarks:
                 row.remarks || "",
+
+            active:
+                row.active !== false,
         });
 
         setDialogOpen(true);
         setError("");
     };
-
     const closeDialog = () => {
         if (saving) {
             return;
@@ -325,6 +386,10 @@ export default function MatFlowProjectMaster() {
             return "Project or PD code is required.";
         }
 
+        if (!clean(form.projectName)) {
+            return "Project name is required.";
+        }
+
         if (!clean(form.drawingNo)) {
             return "Drawing number is required.";
         }
@@ -333,8 +398,8 @@ export default function MatFlowProjectMaster() {
             return "Product name is required.";
         }
 
-        if (!clean(form.owningPlantCode)) {
-            return "Owning plant is required.";
+        if (!clean(form.plantCode)) {
+            return "Plant is required.";
         }
 
         return "";
@@ -349,9 +414,6 @@ export default function MatFlowProjectMaster() {
             return;
         }
 
-        setSaving(true);
-        setError("");
-
         const body = {
             projectCode:
                 clean(
@@ -361,7 +423,7 @@ export default function MatFlowProjectMaster() {
             projectName:
                 clean(
                     form.projectName
-                ) || null,
+                ),
 
             clientName:
                 clean(
@@ -376,44 +438,71 @@ export default function MatFlowProjectMaster() {
             drawingRevision:
                 clean(
                     form.drawingRevision
-                ) || null,
+                ).toUpperCase() || "0",
 
             productName:
                 clean(
                     form.productName
                 ),
 
-            owningPlantCode:
+            plantCode:
                 clean(
-                    form.owningPlantCode
+                    form.plantCode
                 ).toUpperCase(),
+
+            requiredDate:
+                form.requiredDate || null,
 
             remarks:
                 clean(
                     form.remarks
                 ) || null,
 
+            active:
+                form.active !== false,
+
             rowVersion:
                 editingRow?.rowVersion ??
                 null,
         };
 
+        setSaving(true);
+        setError("");
+
         try {
+            let response;
+
             if (editingRow?.id) {
-                await matflowApi
-                    .updateProject(
-                        editingRow.id,
-                        body
-                    );
+                response =
+                    await matflowApi
+                        .updateProject(
+                            editingRow.id,
+                            body
+                        );
             } else {
-                await matflowApi
-                    .createProject(body);
+                response =
+                    await matflowApi
+                        .createProject(body);
             }
 
-            closeDialog();
+            const savedProject =
+                response?.data;
 
-            setPage(0);
-            await load(0);
+            if (!savedProject?.id) {
+                throw new Error(
+                    "Project ID was not returned."
+                );
+            }
+
+            setDialogOpen(false);
+            setEditingRow(null);
+            setForm(EMPTY_FORM);
+
+            await load(
+                0,
+                search,
+                plantFilter
+            );
         } catch (requestError) {
             setError(
                 readMatFlowError(
@@ -504,10 +593,13 @@ export default function MatFlowProjectMaster() {
                     <Box sx={toolbarActionsSx}>
                         <Button
                             startIcon={<SearchIcon />}
-                            onClick={() => {
-                                setPage(0);
-                                load(0);
-                            }}
+                            onClick={() =>
+                                load(
+                                    0,
+                                    search,
+                                    plantFilter
+                                )
+                            }
                             sx={primaryBtnSx}
                         >
                             Search
@@ -516,7 +608,11 @@ export default function MatFlowProjectMaster() {
                         <Button
                             startIcon={<RefreshIcon />}
                             onClick={() =>
-                                load(page)
+                                load(
+                                    page,
+                                    search,
+                                    plantFilter
+                                )
                             }
                             sx={secondaryBtnSx}
                         >
@@ -679,12 +775,13 @@ export default function MatFlowProjectMaster() {
                             page <= 0
                         }
                         onClick={() =>
-                            setPage(
-                                (current) =>
-                                    Math.max(
-                                        current - 1,
-                                        0
-                                    )
+                            load(
+                                Math.max(
+                                    page - 1,
+                                    0
+                                ),
+                                search,
+                                plantFilter
                             )
                         }
                         sx={secondaryBtnSx}
@@ -704,9 +801,10 @@ export default function MatFlowProjectMaster() {
                             totalPages
                         }
                         onClick={() =>
-                            setPage(
-                                (current) =>
-                                    current + 1
+                            load(
+                                page + 1,
+                                search,
+                                plantFilter
                             )
                         }
                         sx={secondaryBtnSx}
@@ -749,6 +847,27 @@ export default function MatFlowProjectMaster() {
                 </DialogTitle>
 
                 <DialogContent sx={dialogContentSx}>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={
+                                    form.active === true
+                                }
+                                disabled={saving}
+                                onChange={(event) =>
+                                    updateForm(
+                                        "active",
+                                        event.target.checked
+                                    )
+                                }
+                            />
+                        }
+                        label="Project drawing is active"
+                        sx={{
+                            color:
+                                "rgba(255,255,255,.72)",
+                        }}
+                    />
                     <Box sx={formGridSx}>
                         <TextField
                             label="PD / Project Code *"
@@ -764,7 +883,7 @@ export default function MatFlowProjectMaster() {
                         />
 
                         <TextField
-                            label="Project Name"
+                            label="Project Name *"
                             value={form.projectName}
                             disabled={saving}
                             onChange={(event) =>
@@ -833,13 +952,11 @@ export default function MatFlowProjectMaster() {
                         <TextField
                             select
                             label="Owning Plant *"
-                            value={
-                                form.owningPlantCode
-                            }
+                            value={form.plantCode}
                             disabled={saving}
                             onChange={(event) =>
                                 updateForm(
-                                    "owningPlantCode",
+                                    "plantCode",
                                     event.target.value
                                 )
                             }
@@ -866,6 +983,23 @@ export default function MatFlowProjectMaster() {
                             onChange={(event) =>
                                 updateForm(
                                     "remarks",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            type="date"
+                            label="Required Date"
+                            value={form.requiredDate}
+                            disabled={saving}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            onChange={(event) =>
+                                updateForm(
+                                    "requiredDate",
                                     event.target.value
                                 )
                             }

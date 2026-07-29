@@ -2,274 +2,885 @@ import API from "../../../services/api";
 
 const BASE = "/matflow";
 
-/*
- * The project controller may use either:
- *
- * /api/matflow/project-drawings
- * /api/matflow/projects
- *
- * The first path matches the MatFlowProjectDrawing
- * domain name. The second path is retained only as a
- * frontend compatibility fallback.
- */
-const PROJECT_PATHS = [
-	`${BASE}/project-drawings`,
-	`${BASE}/projects`,
-];
-
-const cleanText = (value) => {
-	const result =
-		String(value ?? "").trim();
-
-	return result || "";
-};
-
 const cleanParams = (params = {}) => {
 	return Object.fromEntries(
-		Object.entries(params).filter(([, value]) => {
-			return (
+		Object.entries(params).filter(
+			([, value]) =>
 				value !== undefined &&
 				value !== null &&
 				value !== ""
-			);
-		})
+		)
 	);
 };
 
-const unwrap = (response) => {
-	return (
-		response?.data?.data ??
-		response?.data ??
-		null
-	);
+const localListResponse = (rows = []) => {
+	return Promise.resolve({
+		data: rows,
+	});
 };
 
 /*
- * Existing MatFlow pages are currently inconsistent:
+ * Backend release detail shape:
  *
- * some use:
- *     response.data
+ * {
+ *     release: { ...release header },
+ *     lines: [ ...material lines ]
+ * }
  *
- * while some use:
- *     response.id
+ * Existing frontend pages expect:
  *
- * This adapter supports both until every page is
- * migrated to one response style.
+ * {
+ *     ...release header,
+ *     lines: [...]
+ * }
  */
-const adaptResponse = (response) => {
-	const payload = unwrap(response);
+const normalizeReleaseDetail = (
+	response
+) => {
+	const payload = response?.data;
 
-	if (Array.isArray(payload)) {
+	if (
+		payload?.release &&
+		typeof payload.release === "object"
+	) {
 		return {
-			data: payload,
+			...response,
+			data: {
+				...payload.release,
+				lines: Array.isArray(
+					payload.lines
+				)
+					? payload.lines
+					: [],
+			},
 		};
 	}
 
-	if (
-		payload !== null &&
-		typeof payload === "object"
-	) {
+	return response;
+};
+
+const normalizeReleaseList = (
+	response
+) => {
+	const payload = response?.data;
+
+	if (!Array.isArray(payload)) {
 		return {
-			...payload,
-			data: payload,
+			...response,
+			data: [],
 		};
 	}
 
 	return {
-		data: payload,
-		value: payload,
+		...response,
+		data: payload.map((entry) => {
+			if (
+				entry?.release &&
+				typeof entry.release === "object"
+			) {
+				return {
+					...entry.release,
+					lines: Array.isArray(
+						entry.lines
+					)
+						? entry.lines
+						: [],
+				};
+			}
+
+			return entry;
+		}),
 	};
 };
 
-const statusOf = (error) => {
-	return Number(
-		error?.response?.status || 0
-	);
-};
+export const matflowApi = {
 
-const canTryAlternatePath = (error) => {
-	return [404, 405].includes(
-		statusOf(error)
-	);
-};
+	/* =====================================================
+ * MATERIAL MASTER
+ * Backend: MatFlowMasterController
+ * ===================================================== */
 
-const projectRequest = async ({
-	method,
-	suffix = "",
-	body,
-	params,
-}) => {
-	let previousError = null;
+	listMaterials(params = {}) {
+		return API.get(
+			`${BASE}/materials`,
+			{
+				params: cleanParams(params),
+			}
+		);
+	},
 
-	for (
-		let index = 0;
-		index < PROJECT_PATHS.length;
-		index += 1
+	async getMaterial(materialId) {
+		if (!materialId) {
+			throw new Error(
+				"Material ID is required."
+			);
+		}
+
+		/*
+		 * The current backend has no:
+		 * GET /materials/{id}
+		 *
+		 * Therefore obtain the master list and locate
+		 * the requested record locally.
+		 */
+		const response =
+			await API.get(
+				`${BASE}/materials`
+			);
+
+		const rows =
+			Array.isArray(response.data)
+				? response.data
+				: [];
+
+		const material =
+			rows.find(
+				(row) =>
+					String(row.id) ===
+					String(materialId)
+			);
+
+		if (!material) {
+			const error =
+				new Error(
+					"Material not found."
+				);
+
+			error.response = {
+				status: 404,
+				data: {
+					message:
+						"Material not found.",
+				},
+			};
+
+			throw error;
+		}
+
+		return {
+			...response,
+			data: material,
+		};
+	},
+
+	createMaterial(body) {
+		return API.post(
+			`${BASE}/materials`,
+			body
+		);
+	},
+
+	updateMaterial(
+		materialId,
+		body
 	) {
-		const path =
-			`${PROJECT_PATHS[index]}${suffix}`;
+		return API.put(
+			`${BASE}/materials/${materialId}`,
+			body
+		);
+	},
 
-		try {
-			let response;
+	/* =====================================================
+	 * PROJECT / DRAWING MASTER
+	 * Exact backend endpoint: /projects
+	 * ===================================================== */
 
-			if (method === "get") {
-				response = await API.get(
-					path,
-					{
-						params:
-							cleanParams(
-								params
-							),
-					}
-				);
-			} else if (method === "post") {
-				response = await API.post(
-					path,
-					body
-				);
-			} else if (method === "put") {
-				response = await API.put(
-					path,
-					body
-				);
-			} else {
-				throw new Error(
-					`Unsupported request method: ${method}`
-				);
+	listProjects(params = {}) {
+		return API.get(
+			`${BASE}/projects`,
+			{
+				params: cleanParams(params),
 			}
+		);
+	},
 
-			return adaptResponse(response);
-		} catch (error) {
-			previousError = error;
+	async getProject(projectId) {
+		if (!projectId) {
+			throw new Error(
+				"Project ID is required."
+			);
+		}
 
-			const lastPath =
-				index ===
-				PROJECT_PATHS.length - 1;
+		/*
+		 * The current backend has no:
+		 * GET /projects/{id}
+		 *
+		 * Use the list endpoint and locate the project.
+		 */
+		const response =
+			await API.get(
+				`${BASE}/projects`
+			);
 
-			if (
-				lastPath ||
-				!canTryAlternatePath(error)
-			) {
-				throw error;
+		const rows =
+			Array.isArray(response.data)
+				? response.data
+				: [];
+
+		const project =
+			rows.find(
+				(row) =>
+					String(row.id) ===
+					String(projectId)
+			);
+
+		if (!project) {
+			const error =
+				new Error(
+					"Project drawing not found."
+				);
+
+			error.response = {
+				status: 404,
+				data: {
+					message:
+						"Project drawing not found.",
+				},
+			};
+
+			throw error;
+		}
+
+		return {
+			...response,
+			data: project,
+		};
+	},
+
+	createProject(body) {
+		return API.post(
+			`${BASE}/projects`,
+			body
+		);
+	},
+
+	updateProject(
+		projectId,
+		body
+	) {
+		return API.put(
+			`${BASE}/projects/${projectId}`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * MATFLOW OPERATIONAL BOM
+	 * ===================================================== */
+
+	listBoms(params = {}) {
+		return API.get(
+			`${BASE}/boms`,
+			{
+				params: cleanParams(params),
 			}
-		}
-	}
+		);
+	},
 
-	throw previousError;
-};
+	getBom(bomId) {
+		return API.get(
+			`${BASE}/boms/${bomId}`
+		);
+	},
 
-const normalGet = async (
-	path,
-	params = {}
-) => {
-	const response = await API.get(
-		path,
-		{
-			params:
-				cleanParams(params),
-		}
-	);
+	createBom(body) {
+		return API.post(
+			`${BASE}/boms`,
+			body
+		);
+	},
 
-	return adaptResponse(response);
-};
-
-const normalPost = async (
-	path,
-	body = {}
-) => {
-	const response = await API.post(
-		path,
+	updateBom(
+		bomId,
 		body
-	);
+	) {
+		return API.put(
+			`${BASE}/boms/${bomId}`,
+			body
+		);
+	},
 
-	return adaptResponse(response);
-};
-
-const normalPut = async (
-	path,
-	body = {}
-) => {
-	const response = await API.put(
-		path,
+	addBomLine(
+		bomId,
 		body
-	);
+	) {
+		return API.post(
+			`${BASE}/boms/${bomId}/lines`,
+			body
+		);
+	},
 
-	return adaptResponse(response);
-};
+	updateBomLine(
+		bomId,
+		lineId,
+		body
+	) {
+		return API.put(
+			`${BASE}/boms/${bomId}/lines/${lineId}`,
+			body
+		);
+	},
 
-const normalDelete = async (
-	path,
-	body = {}
-) => {
-	const response = await API.delete(
-		path,
-		{
-			data: body,
+	deleteBomLine(
+		bomId,
+		lineId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/boms/${bomId}/lines/${lineId}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+	submitBom(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${bomId}/submit`,
+			body
+		);
+	},
+
+	returnBom(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${bomId}/return`,
+			body
+		);
+	},
+
+	approveBom(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${bomId}/approve`,
+			body
+		);
+	},
+
+	createBomRevision(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${bomId}/revisions`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * INVENTORY
+	 * Exact backend: MatFlowInventoryController
+	 * ===================================================== */
+
+	listLocations(params = {}) {
+		return API.get(
+			`${BASE}/locations`,
+			{
+				params: cleanParams(params),
+			}
+		);
+	},
+
+	createLocation(body) {
+		return API.post(
+			`${BASE}/locations`,
+			body
+		);
+	},
+
+	updateLocation(
+		locationId,
+		body
+	) {
+		return API.put(
+			`${BASE}/locations/${locationId}`,
+			body
+		);
+	},
+
+	listStock(params = {}) {
+		return API.get(
+			`${BASE}/stock`,
+			{
+				params: cleanParams(params),
+			}
+		);
+	},
+
+	adjustStock(body) {
+		return API.post(
+			`${BASE}/stock/adjustments`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * CONTROL ACTIONS
+	 * Exact backend: MatFlowControlController
+	 * ===================================================== */
+
+	releaseReservation(
+		reservationId,
+		body
+	) {
+		return API.post(
+			`${BASE}/reservations/${reservationId}/release`,
+			body
+		);
+	},
+	/* =====================================================
+	 * MATFLOW RELEASES
+	 * ===================================================== */
+
+	async getRelease(releaseId) {
+		const response = await API.get(
+			`${BASE}/releases/${releaseId}`
+		);
+
+		return normalizeReleaseDetail(
+			response
+		);
+	},
+
+	async getReleaseBySourceRevision(
+		revisionId
+	) {
+		const response = await API.get(
+			`${BASE}/releases/by-source-revision/${revisionId}`
+		);
+
+		return normalizeReleaseDetail(
+			response
+		);
+	},
+
+	async listReleases(params = {}) {
+		const sourceBomId =
+			params.sourceBomId;
+
+		/*
+		 * Current backend does not have a global release-list
+		 * endpoint. Its GET /releases endpoint requires
+		 * sourceBomId.
+		 *
+		 * Returning an empty local list prevents unnecessary
+		 * 400 errors until a source BOM is supplied.
+		 */
+		if (!sourceBomId) {
+			return localListResponse([]);
 		}
-	);
 
-	return adaptResponse(response);
-};
+		const response = await API.get(
+			`${BASE}/releases`,
+			{
+				params: {
+					sourceBomId,
+				},
+			}
+		);
 
-const normalizeFieldErrors = (errors) => {
-	if (!errors) {
-		return [];
-	}
+		return normalizeReleaseList(
+			response
+		);
+	},
 
-	if (Array.isArray(errors)) {
-		return errors
-			.map((entry) => {
-				if (
-					typeof entry === "string"
-				) {
-					return entry;
-				}
+	getReleaseAudit(releaseId) {
+		return API.get(
+			`${BASE}/releases/${releaseId}/audit`
+		);
+	},
 
-				const field =
-					entry?.field ||
-					entry?.property ||
-					entry?.path ||
-					"Field";
+	/* =====================================================
+	 * PRODUCTION REQUISITIONS
+	 * ===================================================== */
 
-				const message =
-					entry?.message ||
-					entry?.defaultMessage ||
-					entry?.reason ||
-					"Invalid value";
+	createRequisition(body) {
+		return API.post(
+			`${BASE}/requisitions`,
+			body
+		);
+	},
 
-				return `${field}: ${message}`;
-			})
-			.filter(Boolean);
-	}
+	getRequisition(requisitionId) {
+		return API.get(
+			`${BASE}/requisitions/${requisitionId}`
+		);
+	},
 
-	if (typeof errors === "object") {
-		return Object.entries(errors)
-			.flatMap(([field, value]) => {
-				if (Array.isArray(value)) {
-					return value.map(
-						(message) =>
-							`${field}: ${message}`
-					);
-				}
+	listRequisitionsByRelease(
+		releaseId
+	) {
+		return API.get(
+			`${BASE}/requisitions/by-release/${releaseId}`
+		);
+	},
 
-				if (
-					value &&
-					typeof value === "object"
-				) {
-					return [
-						`${field}: ${value.message ||
-						JSON.stringify(value)
-						}`,
-					];
-				}
+	listRequisitions(params = {}) {
+		/*
+		 * There is no global requisition list endpoint in the
+		 * currently deployed controller.
+		 */
+		if (!params.releaseId) {
+			return localListResponse([]);
+		}
 
-				return [
-					`${field}: ${String(value)}`,
-				];
-			});
-	}
+		return API.get(
+			`${BASE}/requisitions/by-release/${params.releaseId}`
+		);
+	},
 
-	return [String(errors)];
+	updateRequisition(
+		requisitionId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/requisitions/${requisitionId}`,
+			body
+		);
+	},
+
+	saveRequisitionLine(
+		requisitionId,
+		body
+	) {
+		return API.post(
+			`${BASE}/requisitions/${requisitionId}/lines`,
+			body
+		);
+	},
+
+	removeRequisitionLine(
+		requisitionId,
+		lineId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/requisitions/${requisitionId}/lines/${lineId}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+	submitRequisition(
+		requisitionId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/requisitions/${requisitionId}/submit-to-store`,
+			body
+		);
+	},
+
+	cancelRequisition(
+		requisitionId,
+		body
+	) {
+		return API.post(
+			`${BASE}/requisitions/${requisitionId}/cancel`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * STORE REVIEW
+	 * ===================================================== */
+
+	listStoreQueue(params = {}) {
+		return API.get(
+			`${BASE}/store/requisitions/pending`,
+			{
+				params:
+					cleanParams(params),
+			}
+		);
+	},
+
+	getStoreReview(requisitionId) {
+		return API.get(
+			`${BASE}/store/requisitions/${requisitionId}`
+		);
+	},
+
+	submitStoreReview(
+		requisitionId,
+		body
+	) {
+		return API.post(
+			`${BASE}/store/requisitions/${requisitionId}/review`,
+			body
+		);
+	},
+
+	returnRequisitionToProduction(
+		requisitionId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/store/requisitions/${requisitionId}/return-to-production`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * MATERIAL INDENTS
+	 * ===================================================== */
+
+	createIndent(body) {
+		return API.post(
+			`${BASE}/indents`,
+			body
+		);
+	},
+
+	getIndent(indentId) {
+		return API.get(
+			`${BASE}/indents/${indentId}`
+		);
+	},
+
+	listIndentsByRequisition(
+		requisitionId
+	) {
+		return API.get(
+			`${BASE}/indents/by-requisition/${requisitionId}`
+		);
+	},
+
+	listIndents(params = {}) {
+		if (!params.requisitionId) {
+			return localListResponse([]);
+		}
+
+		return API.get(
+			`${BASE}/indents/by-requisition/${params.requisitionId}`
+		);
+	},
+
+	saveIndentLine(
+		indentId,
+		body
+	) {
+		return API.post(
+			`${BASE}/indents/${indentId}/lines`,
+			body
+		);
+	},
+
+	removeIndentLine(
+		indentId,
+		lineId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/indents/${indentId}/lines/${lineId}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+	submitIndent(
+		indentId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/indents/${indentId}/submit-to-purchase`,
+			body
+		);
+	},
+
+	cancelIndent(
+		indentId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/indents/${indentId}/cancel`,
+			body
+		);
+	},
+
+	/* =====================================================
+	 * PURCHASE QUEUE
+	 * ===================================================== */
+
+	listPurchaseQueue(params = {}) {
+		return API.get(
+			`${BASE}/purchase/indents/pending`,
+			{
+				params:
+					cleanParams(params),
+			}
+		);
+	},
+
+	/* =====================================================
+	 * VENDOR QUOTATIONS
+	 * ===================================================== */
+
+	createVendorQuote(body) {
+		return API.post(
+			`${BASE}/purchase/quotes`,
+			body
+		);
+	},
+
+	getVendorQuote(quoteId) {
+		return API.get(
+			`${BASE}/purchase/quotes/${quoteId}`
+		);
+	},
+
+	saveVendorQuoteLine(
+		quoteId,
+		body
+	) {
+		return API.post(
+			`${BASE}/purchase/quotes/${quoteId}/lines`,
+			body
+		);
+	},
+
+	submitVendorQuote(
+		quoteId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/quotes/${quoteId}/submit`,
+			body
+		);
+	},
+
+	cancelVendorQuote(
+		quoteId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/quotes/${quoteId}/cancel`,
+			body
+		);
+	},
+
+	getQuoteComparison(indentId) {
+		return API.get(
+			`${BASE}/purchase/indents/${indentId}/quote-comparison`
+		);
+	},
+
+	/* =====================================================
+	 * PURCHASE ORDERS
+	 * ===================================================== */
+
+	createPurchaseOrder(body) {
+		return API.post(
+			`${BASE}/purchase/orders`,
+			body
+		);
+	},
+
+	getPurchaseOrder(
+		purchaseOrderId
+	) {
+		return API.get(
+			`${BASE}/purchase/orders/${purchaseOrderId}`
+		);
+	},
+
+	listPurchaseOrdersByIndent(
+		indentId
+	) {
+		return API.get(
+			`${BASE}/purchase/orders/by-indent/${indentId}`
+		);
+	},
+
+	listPurchaseOrders(params = {}) {
+		if (!params.indentId) {
+			return localListResponse([]);
+		}
+
+		return API.get(
+			`${BASE}/purchase/orders/by-indent/${params.indentId}`
+		);
+	},
+
+	savePurchaseOrderLine(
+		purchaseOrderId,
+		body
+	) {
+		return API.post(
+			`${BASE}/purchase/orders/${purchaseOrderId}/lines`,
+			body
+		);
+	},
+
+	removePurchaseOrderLine(
+		purchaseOrderId,
+		lineId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/purchase/orders/${purchaseOrderId}/lines/${lineId}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+	submitPurchaseOrder(
+		purchaseOrderId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/orders/${purchaseOrderId}/submit-for-approval`,
+			body
+		);
+	},
+
+	approvePurchaseOrder(
+		purchaseOrderId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/orders/${purchaseOrderId}/approve`,
+			body
+		);
+	},
+
+	returnPurchaseOrder(
+		purchaseOrderId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/orders/${purchaseOrderId}/return`,
+			body
+		);
+	},
+
+	cancelPurchaseOrder(
+		purchaseOrderId,
+		body
+	) {
+		return API.patch(
+			`${BASE}/purchase/orders/${purchaseOrderId}/cancel`,
+			body
+		);
+	},
 };
 
 export const readMatFlowError = (
@@ -283,17 +894,16 @@ export const readMatFlowError = (
 		return data;
 	}
 
-	const fieldMessages = [
-		...normalizeFieldErrors(
-			data?.fieldErrors
-		),
-		...normalizeFieldErrors(
-			data?.validationErrors
-		),
-		...normalizeFieldErrors(
-			data?.violations
-		),
-	];
+	const validationErrors =
+		data?.validationErrors &&
+			typeof data.validationErrors === "object"
+			? Object.entries(
+				data.validationErrors
+			).map(
+				([field, message]) =>
+					`${field}: ${message}`
+			)
+			: [];
 
 	const mainMessage =
 		data?.message ||
@@ -302,35 +912,26 @@ export const readMatFlowError = (
 		error?.message ||
 		fallback;
 
-	if (fieldMessages.length > 0) {
-		return [
+	return validationErrors.length > 0
+		? [
 			mainMessage,
-			...fieldMessages,
-		].join(" | ");
-	}
-
-	return mainMessage;
+			...validationErrors,
+		].join(" | ")
+		: mainMessage;
 };
 
 export const extractMatFlowPage = (
 	responseData
 ) => {
-	/*
-	 * Support the compatibility API response.
-	 */
-	const source =
-		responseData?.data ??
-		responseData;
-
-	if (Array.isArray(source)) {
+	if (Array.isArray(responseData)) {
 		return {
-			rows: source,
+			rows: responseData,
 			page: 0,
-			size: source.length,
+			size: responseData.length,
 			totalElements:
-				source.length,
+				responseData.length,
 			totalPages:
-				source.length > 0
+				responseData.length > 0
 					? 1
 					: 0,
 		};
@@ -338,54 +939,58 @@ export const extractMatFlowPage = (
 
 	if (
 		Array.isArray(
-			source?.content
+			responseData?.content
 		)
 	) {
 		return {
 			rows:
-				source.content,
+				responseData.content,
 
 			page:
-				source.number ??
-				source.page ??
+				responseData.number ??
+				responseData.page ??
 				0,
 
 			size:
-				source.size ??
-				source.content.length,
+				responseData.size ??
+				responseData.content
+					.length,
 
 			totalElements:
-				source.totalElements ??
-				source.content.length,
+				responseData.totalElements ??
+				responseData.content
+					.length,
 
 			totalPages:
-				source.totalPages ??
+				responseData.totalPages ??
 				1,
 		};
 	}
 
 	if (
 		Array.isArray(
-			source?.data
+			responseData?.data
 		)
 	) {
 		return {
 			rows:
-				source.data,
+				responseData.data,
 
 			page:
-				source.page ?? 0,
+				responseData.page ?? 0,
 
 			size:
-				source.size ??
-				source.data.length,
+				responseData.size ??
+				responseData.data
+					.length,
 
 			totalElements:
-				source.totalElements ??
-				source.data.length,
+				responseData.totalElements ??
+				responseData.data
+					.length,
 
 			totalPages:
-				source.totalPages ??
+				responseData.totalPages ??
 				1,
 		};
 	}
@@ -397,325 +1002,6 @@ export const extractMatFlowPage = (
 		totalElements: 0,
 		totalPages: 0,
 	};
-};
-
-export const matflowApi = {
-	/* =====================================================
-	 * MATERIAL MASTER
-	 * ===================================================== */
-
-	listMaterials(params = {}) {
-		return normalGet(
-			`${BASE}/materials`,
-			params
-		);
-	},
-
-	getMaterial(materialId) {
-		return normalGet(
-			`${BASE}/materials/${materialId}`
-		);
-	},
-
-	createMaterial(body) {
-		return normalPost(
-			`${BASE}/materials`,
-			body
-		);
-	},
-
-	updateMaterial(
-		materialId,
-		body
-	) {
-		return normalPut(
-			`${BASE}/materials/${materialId}`,
-			body
-		);
-	},
-
-	/* =====================================================
-	 * PROJECT / DRAWING MASTER
-	 * ===================================================== */
-
-	listProjects(params = {}) {
-		return projectRequest({
-			method: "get",
-			params,
-		});
-	},
-
-	getProject(projectDrawingId) {
-		return projectRequest({
-			method: "get",
-			suffix:
-				`/${projectDrawingId}`,
-		});
-	},
-
-	createProject(body) {
-		return projectRequest({
-			method: "post",
-			body,
-		});
-	},
-
-	updateProject(
-		projectDrawingId,
-		body
-	) {
-		return projectRequest({
-			method: "put",
-			suffix:
-				`/${projectDrawingId}`,
-			body,
-		});
-	},
-
-	/* =====================================================
-	 * OPERATIONAL BOM
-	 * ===================================================== */
-
-	listBoms(params = {}) {
-		return normalGet(
-			`${BASE}/boms`,
-			params
-		);
-	},
-
-	getBom(bomId) {
-		return normalGet(
-			`${BASE}/boms/${bomId}`
-		);
-	},
-
-	createBom(body) {
-		return normalPost(
-			`${BASE}/boms`,
-			body
-		);
-	},
-
-	updateBom(
-		bomId,
-		body
-	) {
-		return normalPut(
-			`${BASE}/boms/${bomId}`,
-			body
-		);
-	},
-
-	submitBom(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/boms/${bomId}/submit`,
-			body
-		);
-	},
-
-	approveBom(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/boms/${bomId}/approve`,
-			body
-		);
-	},
-
-	returnBom(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/boms/${bomId}/return`,
-			body
-		);
-	},
-
-	createBomRevision(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/boms/${bomId}/revisions`,
-			body
-		);
-	},
-
-	/* =====================================================
-	 * OPERATIONAL BOM LINES
-	 * ===================================================== */
-
-	addBomLine(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/boms/${bomId}/lines`,
-			body
-		);
-	},
-
-	updateBomLine(
-		bomId,
-		lineId,
-		body
-	) {
-		return normalPut(
-			`${BASE}/boms/${bomId}/lines/${lineId}`,
-			body
-		);
-	},
-
-	deleteBomLine(
-		bomId,
-		lineId,
-		rowVersion
-	) {
-		return normalDelete(
-			`${BASE}/boms/${bomId}/lines/${lineId}`,
-			{
-				rowVersion,
-			}
-		);
-	},
-
-	/* =====================================================
-	 * LOCATIONS
-	 * ===================================================== */
-
-	listLocations(params = {}) {
-		return normalGet(
-			`${BASE}/locations`,
-			params
-		);
-	},
-
-	/* =====================================================
-	 * EXISTING PLANNING / EXECUTION
-	 * ===================================================== */
-
-	listRequisitions(params = {}) {
-		return normalGet(
-			`${BASE}/requisitions`,
-			params
-		);
-	},
-
-	getRequisition(requisitionId) {
-		return normalGet(
-			`${BASE}/requisitions/${requisitionId}`
-		);
-	},
-
-	createRequisition(
-		bomId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/requisitions/bom/${bomId}`,
-			body
-		);
-	},
-
-	submitRequisition(
-		requisitionId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/requisitions/${requisitionId}/submit`,
-			body
-		);
-	},
-
-	saveRequisitionLine(
-		requisitionId,
-		body
-	) {
-		return normalPost(
-			`${BASE}/requisitions/${requisitionId}/lines`,
-			body
-		);
-	},
-
-	listIndents(params = {}) {
-		return normalGet(
-			`${BASE}/indents`,
-			params
-		);
-	},
-
-	getIndent(indentId) {
-		return normalGet(
-			`${BASE}/indents/${indentId}`
-		);
-	},
-
-	listPurchaseOrders(params = {}) {
-		return normalGet(
-			`${BASE}/purchase-orders`,
-			params
-		);
-	},
-
-	getPurchaseOrder(
-		purchaseOrderId
-	) {
-		return normalGet(
-			`${BASE}/purchase-orders/${purchaseOrderId}`
-		);
-	},
-
-	listTransfers(params = {}) {
-		return normalGet(
-			`${BASE}/transfers`,
-			params
-		);
-	},
-
-	getTransfer(transferId) {
-		return normalGet(
-			`${BASE}/transfers/${transferId}`
-		);
-	},
-
-	listQcInspections(params = {}) {
-		return normalGet(
-			`${BASE}/qc/inspections`,
-			params
-		);
-	},
-
-	listProcessingJobs(params = {}) {
-		return normalGet(
-			`${BASE}/processing/jobs`,
-			params
-		);
-	},
-
-	/* =====================================================
-	 * LEGACY RELEASE COMPATIBILITY
-	 * ===================================================== */
-
-	listReleases(params = {}) {
-		return normalGet(
-			`${BASE}/boms`,
-			{
-				...params,
-				effective: true,
-			}
-		);
-	},
-
-	getRelease(releaseId) {
-		return normalGet(
-			`${BASE}/boms/${releaseId}`
-		);
-	},
 };
 
 export default matflowApi;
