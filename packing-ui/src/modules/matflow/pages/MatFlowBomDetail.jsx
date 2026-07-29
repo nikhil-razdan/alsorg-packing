@@ -32,6 +32,9 @@ import SendOutlinedIcon
 import UndoOutlinedIcon
     from "@mui/icons-material/UndoOutlined";
 
+import MatFlowBomLineEditor
+    from "../components/MatFlowBomLineEditor";
+
 import {
     useNavigate,
     useParams,
@@ -526,126 +529,12 @@ export default function MatFlowBomDetail() {
                     </Card>
 
                     <Card sx={panelSx}>
-                        <Box sx={sectionHeaderSx}>
-                            <Box>
-                                <Typography sx={sectionTitleSx}>
-                                    Material Lines
-                                </Typography>
-
-                                <Typography sx={sectionSubSx}>
-                                    {lines.length} operational
-                                    material lines
-                                </Typography>
-                            </Box>
-                        </Box>
-
-                        <Box sx={tableShellSx}>
-                            <Box sx={lineHeaderSx}>
-                                <Box sx={tableCellSx}>
-                                    Line
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Material
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Description
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Base Qty
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Wastage
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Net Required
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Unit
-                                </Box>
-
-                                <Box sx={tableCellSx}>
-                                    Remarks
-                                </Box>
-                            </Box>
-
-                            {lines.length === 0 ? (
-                                <Box sx={emptySx}>
-                                    This draft does not yet contain
-                                    operational material lines.
-                                </Box>
-                            ) : (
-                                lines.map(
-                                    (line, index) => (
-                                        <Box
-                                            key={
-                                                line.id ||
-                                                index
-                                            }
-                                            sx={lineRowSx}
-                                        >
-                                            <Box sx={tableCellSx}>
-                                                {line.lineNo ??
-                                                    index + 1}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                <Typography sx={mainTextSx}>
-                                                    {line.materialName ||
-                                                        line.material?.materialName ||
-                                                        "-"}
-                                                </Typography>
-
-                                                <Typography sx={subTextSx}>
-                                                    {line.materialCode ||
-                                                        line.material?.materialCode ||
-                                                        "-"}
-                                                </Typography>
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.description ||
-                                                    line.specification ||
-                                                    "-"}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.baseRequiredQty ??
-                                                    line.requiredQty ??
-                                                    "-"}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.wastagePercent ??
-                                                    line.wastageQty ??
-                                                    "-"}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.netRequiredQty ??
-                                                    "-"}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.uom ||
-                                                    line.material?.uom ||
-                                                    "-"}
-                                            </Box>
-
-                                            <Box sx={tableCellSx}>
-                                                {line.remarks ||
-                                                    "-"}
-                                            </Box>
-                                        </Box>
-                                    )
-                                )
-                            )}
-                        </Box>
+                        <MatFlowBomLineEditor
+                            bom={bom}
+                            lines={lines}
+                            onChanged={load}
+                            onError={setError}
+                        />
                     </Card>
                 </>
             )}

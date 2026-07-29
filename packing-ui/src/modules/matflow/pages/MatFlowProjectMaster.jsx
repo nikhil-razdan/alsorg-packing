@@ -97,6 +97,7 @@ export default function MatFlowProjectMaster() {
 
     const {
         role,
+        user,
         plantCode,
         plantCodes,
     } = useAuth();
@@ -112,32 +113,58 @@ export default function MatFlowProjectMaster() {
 
     const availablePlants =
         useMemo(() => {
-            const source = [
+            const assignedPlants = [
                 ...(Array.isArray(plantCodes)
                     ? plantCodes
                     : []),
+
+                ...(Array.isArray(
+                    user?.plantCodes
+                )
+                    ? user.plantCodes
+                    : []),
+
                 plantCode,
+                user?.plantCode,
             ]
                 .map((value) =>
-                    clean(value).toUpperCase()
+                    String(value || "")
+                        .trim()
+                        .toUpperCase()
                 )
                 .filter(Boolean);
 
+            if (assignedPlants.length > 0) {
+                return Array.from(
+                    new Set(
+                        assignedPlants
+                    )
+                ).sort();
+            }
+
+            /*
+             * Admin can operate across all company plants.
+             * These names must correspond to the plant codes
+             * accepted by your backend.
+             */
             if (
-                source.length === 0 &&
                 cleanRole ===
                 MATFLOW_ROLES.ADMIN
             ) {
-                return DEFAULT_PLANTS;
+                return [
+                    "AKG PLANT",
+                    "SOFA PLANT",
+                    "KW PLANT",
+                    "PLANT 4",
+                ];
             }
 
-            return Array.from(
-                new Set(source)
-            ).sort();
+            return [];
         }, [
             cleanRole,
             plantCode,
             plantCodes,
+            user,
         ]);
 
     const [rows, setRows] =

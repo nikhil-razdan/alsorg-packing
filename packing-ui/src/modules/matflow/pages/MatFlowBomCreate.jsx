@@ -141,16 +141,33 @@ export default function MatFlowBomCreate() {
     };
 
     const save = async () => {
-        if (!form.projectDrawingId) {
+        const projectDrawingId =
+            String(
+                form.projectDrawingId || ""
+            ).trim();
+
+        const bomNumber =
+            clean(
+                form.bomNumber
+            ).toUpperCase();
+
+        if (!projectDrawingId) {
             setError(
-                "Select a project drawing."
+                "Select a valid project and drawing."
             );
             return;
         }
 
-        if (!clean(form.bomNumber)) {
+        if (!bomNumber) {
             setError(
                 "BOM number is required."
+            );
+            return;
+        }
+
+        if (!selectedProject?.id) {
+            setError(
+                "The selected project record is no longer available."
             );
             return;
         }
@@ -158,31 +175,32 @@ export default function MatFlowBomCreate() {
         setSaving(true);
         setError("");
 
+        const body = {
+            projectDrawingId,
+            bomNumber,
+            remarks:
+                clean(
+                    form.remarks
+                ) || null,
+        };
+
         try {
             const created =
-                await matflowApi.createBom({
-                    projectDrawingId:
-                        form.projectDrawingId,
+                await matflowApi
+                    .createBom(body);
 
-                    bomNumber:
-                        clean(
-                            form.bomNumber
-                        ).toUpperCase(),
+            const createdId =
+                created?.id ||
+                created?.data?.id;
 
-                    remarks:
-                        clean(
-                            form.remarks
-                        ) || null,
-                });
-
-            if (!created?.id) {
+            if (!createdId) {
                 throw new Error(
-                    "The created BOM ID was not returned."
+                    "The created operational BOM ID was not returned."
                 );
             }
 
             navigate(
-                `/matflow/boms/${created.id}`,
+                `/matflow/boms/${createdId}`,
                 {
                     replace: true,
                 }
