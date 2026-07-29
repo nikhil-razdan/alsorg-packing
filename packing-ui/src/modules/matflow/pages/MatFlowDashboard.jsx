@@ -22,6 +22,8 @@ import {
 	primaryBtnSx,
 } from "../matflowTheme";
 
+import FolderOutlinedIcon
+	from "@mui/icons-material/FolderOutlined";
 import LayersOutlinedIcon
 	from "@mui/icons-material/LayersOutlined";
 import EngineeringOutlinedIcon
