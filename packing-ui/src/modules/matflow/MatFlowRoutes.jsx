@@ -26,7 +26,7 @@ import MatFlowDashboard
 	from "./pages/MatFlowDashboard";
 
 import MatFlowPlaceholder
-	from "./pages/MatFlowPlaceholder";
+	from "./pages/MatFlowPlaceHolder";
 
 function MatFlowHomeRedirect() {
 	const {
