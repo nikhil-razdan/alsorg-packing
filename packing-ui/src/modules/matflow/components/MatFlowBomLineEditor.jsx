@@ -356,12 +356,15 @@ export default function MatFlowBomLineEditor({
             setLocalError(
                 validationError
             );
+            onError?.(
+                validationError
+            );
             return;
         }
 
         if (!editable) {
             const message =
-                "This BOM revision is no longer editable. Refresh the BOM.";
+                "This BOM revision is not editable.";
 
             setLocalError(message);
             onError?.(message);
@@ -394,29 +397,40 @@ export default function MatFlowBomLineEditor({
             return;
         }
 
+        const requiredQty =
+            Number(
+                form.requiredQty
+            );
+
+        const wastagePercent =
+            Number(
+                form.wastagePercent ||
+                0
+            );
+
         const body = {
             materialId:
-                form.materialId,
+                String(
+                    form.materialId
+                ).trim(),
 
-            requiredQty:
-                Number(
-                    form.requiredQty
-                ),
+            requiredQty,
 
-            wastagePercent:
-                Number(
-                    form.wastagePercent ||
-                    0
-                ),
+            wastagePercent,
 
             remarks:
                 clean(
                     form.remarks
                 ) || null,
 
+            /*
+             * New lines do not need a row version.
+             * Existing lines do.
+             */
             rowVersion:
-                editingLine?.rowVersion ??
-                null,
+                editingLine?.id
+                    ? editingLine.rowVersion
+                    : null,
         };
 
         setWorking(true);
@@ -424,45 +438,26 @@ export default function MatFlowBomLineEditor({
         onError?.("");
 
         try {
-            let response;
-
             if (editingLine?.id) {
-                response =
-                    await matflowApi
-                        .updateBomLine(
-                            bom.id,
-                            editingLine.id,
-                            body
-                        );
+                await matflowApi
+                    .updateBomLine(
+                        bom.id,
+                        editingLine.id,
+                        body
+                    );
             } else {
-                response =
-                    await matflowApi
-                        .addBomLine(
-                            bom.id,
-                            body
-                        );
+                await matflowApi
+                    .addBomLine(
+                        bom.id,
+                        body
+                    );
             }
 
             setDialogOpen(false);
             setEditingLine(null);
             setForm(EMPTY_FORM);
 
-            try {
-                await onChanged?.(
-                    response?.data
-                );
-            } catch {
-                const refreshMessage =
-                    "The material line was saved, but the BOM could not be refreshed. Use the Refresh button before trying again.";
-
-                setLocalError(
-                    refreshMessage
-                );
-
-                onError?.(
-                    refreshMessage
-                );
-            }
+            await onChanged?.();
         } catch (requestError) {
             const message =
                 readMatFlowError(
@@ -488,7 +483,7 @@ export default function MatFlowBomLineEditor({
 
         if (!bom?.id) {
             const message =
-                "The BOM ID is missing. Refresh the page and try again.";
+                "The BOM ID is missing. Refresh the BOM and try again.";
 
             setLocalError(message);
             onError?.(message);
@@ -534,20 +529,7 @@ export default function MatFlowBomLineEditor({
                     line.rowVersion
                 );
 
-            try {
-                await onChanged?.();
-            } catch {
-                const refreshMessage =
-                    "The material line was removed, but the BOM could not be refreshed. Use the Refresh button before continuing.";
-
-                setLocalError(
-                    refreshMessage
-                );
-
-                onError?.(
-                    refreshMessage
-                );
-            }
+            await onChanged?.();
         } catch (requestError) {
             const message =
                 readMatFlowError(
