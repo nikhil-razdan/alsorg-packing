@@ -39,6 +39,11 @@ import ApprovalOutlinedIcon
 import ArrowForwardIcon
 	from "@mui/icons-material/ArrowForward";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import AccountTreeOutlinedIcon
+	from "@mui/icons-material/AccountTreeOutlined";
+import SwapHorizOutlinedIcon
+	from "@mui/icons-material/SwapHorizOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 
 const stages = [
 	{
