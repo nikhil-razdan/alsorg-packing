@@ -45,1017 +45,1026 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MatFlowTransferExecutionService {
 
-    private final MatFlowTransferOrderRepository transferRepository;
-    private final MatFlowTransferLineRepository transferLineRepository;
-    private final MatFlowStockBalanceRepository stockRepository;
-    private final MatFlowStockLedgerRepository ledgerRepository;
-    private final MatFlowReservationRepository reservationRepository;
-    private final MatFlowRequisitionLineRepository requisitionLineRepository;
-    private final MatFlowMaterialRequisitionRepository requisitionRepository;
-    private final MatFlowAccessService accessService;
-    private final MatFlowQcInspectionRepository qcRepository;
-    private final MatFlowAuditService auditService;
+        private final MatFlowTransferOrderRepository transferRepository;
+        private final MatFlowTransferLineRepository transferLineRepository;
+        private final MatFlowStockBalanceRepository stockRepository;
+        private final MatFlowStockLedgerRepository ledgerRepository;
+        private final MatFlowReservationRepository reservationRepository;
+        private final MatFlowRequisitionLineRepository requisitionLineRepository;
+        private final MatFlowMaterialRequisitionRepository requisitionRepository;
+        private final MatFlowAccessService accessService;
+        private final MatFlowQcInspectionRepository qcRepository;
+        private final MatFlowAuditService auditService;
 
-    public MatFlowTransferExecutionService(
-            MatFlowTransferOrderRepository transferRepository,
-            MatFlowTransferLineRepository transferLineRepository,
-            MatFlowStockBalanceRepository stockRepository,
-            MatFlowStockLedgerRepository ledgerRepository,
-            MatFlowReservationRepository reservationRepository,
-            MatFlowRequisitionLineRepository requisitionLineRepository,
-            MatFlowMaterialRequisitionRepository requisitionRepository,
-            MatFlowAccessService accessService,
-            MatFlowQcInspectionRepository qcRepository,
-            MatFlowAuditService auditService) {
-        this.transferRepository = transferRepository;
+        public MatFlowTransferExecutionService(
+                        MatFlowTransferOrderRepository transferRepository,
+                        MatFlowTransferLineRepository transferLineRepository,
+                        MatFlowStockBalanceRepository stockRepository,
+                        MatFlowStockLedgerRepository ledgerRepository,
+                        MatFlowReservationRepository reservationRepository,
+                        MatFlowRequisitionLineRepository requisitionLineRepository,
+                        MatFlowMaterialRequisitionRepository requisitionRepository,
+                        MatFlowAccessService accessService,
+                        MatFlowQcInspectionRepository qcRepository,
+                        MatFlowAuditService auditService) {
+                this.transferRepository = transferRepository;
 
-        this.transferLineRepository = transferLineRepository;
+                this.transferLineRepository = transferLineRepository;
 
-        this.stockRepository = stockRepository;
+                this.stockRepository = stockRepository;
 
-        this.ledgerRepository = ledgerRepository;
+                this.ledgerRepository = ledgerRepository;
 
-        this.reservationRepository = reservationRepository;
+                this.reservationRepository = reservationRepository;
 
-        this.requisitionLineRepository = requisitionLineRepository;
+                this.requisitionLineRepository = requisitionLineRepository;
 
-        this.requisitionRepository = requisitionRepository;
+                this.requisitionRepository = requisitionRepository;
 
-        this.accessService = accessService;
+                this.accessService = accessService;
 
-        this.qcRepository = qcRepository;
+                this.qcRepository = qcRepository;
 
-        this.auditService = auditService;
-    }
-
-    @Transactional(readOnly = true)
-    public List<TransferResponse> list(
-            TransferStatus status,
-            String plantCode) {
-        accessService.requireRead();
-
-        String cleanPlant = cleanUpper(plantCode);
-
-        if (cleanPlant != null) {
-            accessService.requirePlantAccess(
-                    cleanPlant);
+                this.auditService = auditService;
         }
 
-        return transferRepository
-                .findAllByOrderByUpdatedAtDesc()
-                .stream()
-                .filter(transfer -> accessService.canAccessPlant(
-                        transfer.fromLocation.plantCode) ||
-                        accessService.canAccessPlant(
-                                transfer.toLocation.plantCode))
-                .filter(transfer -> status == null ||
-                        transfer.status == status)
-                .filter(transfer -> cleanPlant == null ||
-                        transfer.fromLocation.plantCode
-                                .equalsIgnoreCase(cleanPlant)
-                        ||
-                        transfer.toLocation.plantCode
-                                .equalsIgnoreCase(cleanPlant))
-                .map(this::toResponse)
-                .toList();
-    }
+        @Transactional(readOnly = true)
+        public List<TransferResponse> list(
+                        TransferStatus status,
+                        String plantCode) {
+                accessService.requireRead();
 
-    @Transactional(readOnly = true)
-    public TransferResponse get(
-            UUID id) {
-        accessService.requireRead();
+                String cleanPlant = cleanUpper(plantCode);
 
-        MatFlowTransferOrder transfer = requireVisibleTransfer(id);
+                if (cleanPlant != null) {
+                        accessService.requirePlantAccess(
+                                        cleanPlant);
+                }
 
-        return toResponse(transfer);
-    }
-
-    @Transactional
-    public TransferResponse dispatch(
-            UUID id,
-            TransferActionRequest request) {
-        MatFlowTransferOrder transfer = requireTransfer(id);
-
-        accessService.requireTransferDispatch(
-                transfer.fromLocation);
-
-        if (transfer.status != TransferStatus.READY &&
-                transfer.status != TransferStatus.PARTIALLY_DISPATCHED) {
-            throw conflict(
-                    "Only a Ready or Partially Dispatched transfer can be dispatched");
+                return transferRepository
+                                .findAllByOrderByUpdatedAtDesc()
+                                .stream()
+                                .filter(transfer -> accessService.canAccessPlant(
+                                                transfer.fromLocation.plantCode) ||
+                                                accessService.canAccessPlant(
+                                                                transfer.toLocation.plantCode))
+                                .filter(transfer -> status == null ||
+                                                transfer.status == status)
+                                .filter(transfer -> cleanPlant == null ||
+                                                transfer.fromLocation.plantCode
+                                                                .equalsIgnoreCase(cleanPlant)
+                                                ||
+                                                transfer.toLocation.plantCode
+                                                                .equalsIgnoreCase(cleanPlant))
+                                .map(this::toResponse)
+                                .toList();
         }
 
-        assertVersion(
-                request == null
-                        ? null
-                        : request.rowVersion(),
-                transfer.getRowVersion(),
-                "Transfer");
+        @Transactional(readOnly = true)
+        public TransferResponse get(
+                        UUID id) {
+                accessService.requireRead();
 
-        validatePredecessor(transfer);
+                MatFlowTransferOrder transfer = requireVisibleTransfer(id);
 
-        MatFlowTransferLine transferLine = requireTransferLine(
-                transfer.getId());
-
-        BigDecimal remainingToDispatch = transferLine.plannedQty
-                .subtract(
-                        transferLine.dispatchedQty);
-
-        BigDecimal quantity = positiveQuantity(
-                request == null
-                        ? null
-                        : request.quantity(),
-                remainingToDispatch,
-                "Dispatch quantity");
-
-        MatFlowStockBalance sourceBalance = stockRepository
-                .lockBalance(
-                        transferLine.material.getId(),
-                        transfer.fromLocation.getId())
-                .orElseThrow(() -> conflict(
-                        "No stock balance exists at the transfer source"));
-
-        /*
-         * Transfer stock is reserved at every active source:
-         *
-         * 1. Initial source is reserved during planning.
-         * 2. Intermediate destination is reserved when the
-         * preceding transfer is received.
-         */
-        if (sourceBalance.reservedQty
-                .compareTo(quantity) < 0) {
-            throw conflict(
-                    "Insufficient reserved stock at source location");
+                return toResponse(transfer);
         }
 
-        BigDecimal usablePhysicalQty = sourceBalance.onHandQty
-                .subtract(
-                        sourceBalance.blockedQty);
-
-        if (usablePhysicalQty
-                .compareTo(quantity) < 0) {
-            throw conflict(
-                    "Insufficient usable physical stock at source location");
-        }
-
-        String actor = accessService.actor();
-
-        sourceBalance.onHandQty = scale(
-                sourceBalance.onHandQty
-                        .subtract(quantity));
-
-        sourceBalance.reservedQty = scale(
-                sourceBalance.reservedQty
-                        .subtract(quantity));
-
-        sourceBalance.inTransitQty = scale(
-                sourceBalance.inTransitQty
-                        .add(quantity));
-
-        sourceBalance.setUpdatedBy(actor);
-
-        sourceBalance = stockRepository.save(
-                sourceBalance);
-
-        transferLine.dispatchedQty = scale(
-                transferLine.dispatchedQty
-                        .add(quantity));
-
-        transferLine.setUpdatedBy(actor);
-
-        transferLineRepository.save(
-                transferLine);
-
-        if (transferLine.dispatchedQty
-                .compareTo(
-                        transferLine.plannedQty) < 0) {
-            transfer.status = TransferStatus.PARTIALLY_DISPATCHED;
-        } else {
-            transfer.status = TransferStatus.IN_TRANSIT;
-        }
-
-        transfer.setUpdatedBy(actor);
-
-        transfer = transferRepository.save(
-                transfer);
-
-        if (transfer.predecessorTransferId == null &&
-                transferLine.dispatchedQty
-                        .compareTo(
-                                transferLine.plannedQty) >= 0) {
-            MatFlowReservation reservation = transfer.reservation;
-
-            reservation.status = ReservationStatus.RELEASED;
-
-            reservation.setUpdatedBy(actor);
-
-            reservationRepository.save(
-                    reservation);
-        }
-
-        auditService.record(
-                "TRANSFER",
-                transfer.getId(),
-                "DISPATCHED",
-                transfer.fromLocation.plantCode,
-                transfer.requisition.projectDrawing
-                        .getProjectCode(),
-                transfer.requisition.projectDrawing
-                        .getDrawingNo(),
-                auditService.details(
-                        "transferNumber",
-                        transfer.transferNumber,
-                        "fromLocation",
-                        transfer.fromLocation.locationCode,
-                        "toLocation",
-                        transfer.toLocation.locationCode,
-                        "quantity",
-                        quantity,
-                        "status",
-                        transfer.status));
-
-        saveLedger(
-                sourceBalance,
-                MovementType.TRANSFER_OUT,
-
-                quantity.negate(),
-                quantity.negate(),
-                BigDecimal.ZERO,
-                quantity,
-
-                transfer,
-                request == null
-                        ? null
-                        : request.batchNo(),
-                request == null
-                        ? null
-                        : request.remarks(),
-                actor);
-
-        return toResponse(transfer);
-    }
-
-    @Transactional
-    public TransferResponse receive(
-            UUID id,
-            TransferActionRequest request) {
-        MatFlowTransferOrder transfer = requireTransfer(id);
-
-        accessService.requireTransferReceive(
-                transfer.toLocation);
-
-        if (transfer.status != TransferStatus.IN_TRANSIT &&
-                transfer.status != TransferStatus.PARTIALLY_DISPATCHED &&
-                transfer.status != TransferStatus.PARTIALLY_RECEIVED) {
-            throw conflict(
-                    "Transfer is not available for receipt");
-        }
-
-        assertVersion(
-                request == null
-                        ? null
-                        : request.rowVersion(),
-                transfer.getRowVersion(),
-                "Transfer");
-
-        MatFlowTransferLine transferLine = requireTransferLine(
-                transfer.getId());
-
-        BigDecimal outstandingReceipt = transferLine.dispatchedQty
-                .subtract(
-                        transferLine.receivedQty);
-
-        BigDecimal quantity = positiveQuantity(
-                request == null
-                        ? null
-                        : request.quantity(),
-                outstandingReceipt,
-                "Received quantity");
-
-        String actor = accessService.actor();
-
-        MatFlowStockBalance sourceBalance = stockRepository
-                .lockBalance(
-                        transferLine.material.getId(),
-                        transfer.fromLocation.getId())
-                .orElseThrow(() -> conflict(
-                        "Source stock balance not found"));
-
-        if (sourceBalance.inTransitQty
-                .compareTo(quantity) < 0) {
-            throw conflict(
-                    "Received quantity exceeds source in-transit quantity");
-        }
-
-        sourceBalance.inTransitQty = scale(
-                sourceBalance.inTransitQty
-                        .subtract(quantity));
-
-        sourceBalance.setUpdatedBy(actor);
-
-        sourceBalance = stockRepository.save(
-                sourceBalance);
-
-        MatFlowStockBalance destinationBalance = lockOrCreateDestinationBalance(
-                transferLine.material,
-                transfer.toLocation,
-                actor);
-
-        destinationBalance.onHandQty = scale(
-                destinationBalance.onHandQty
-                        .add(quantity));
-
-        boolean qcDestination = transfer.toLocation.locationType == LocationType.QC;
-
-        boolean hasSuccessor = transferRepository
-                .existsByPredecessorTransferId(
-                        transfer.getId());
-
-        boolean dispositionTransfer = transfer.purpose == TransferPurpose.QC_TO_REWORK ||
-                transfer.purpose == TransferPurpose.RETURN_TO_SOURCE;
-
-        BigDecimal blockedAdded = BigDecimal.ZERO;
-
-        BigDecimal reservedAdded = BigDecimal.ZERO;
-
-        if (qcDestination) {
-            /*
-             * QC stock is physically received but unavailable
-             * until an inspection releases it.
-             */
-            destinationBalance.blockedQty = scale(
-                    destinationBalance.blockedQty
-                            .add(quantity));
-
-            blockedAdded = quantity;
-
-        } else if (hasSuccessor ||
-                dispositionTransfer) {
-            /*
-             * Intermediate stock remains reserved for the next
-             * route leg and cannot be allocated elsewhere.
-             */
-            destinationBalance.reservedQty = scale(
-                    destinationBalance.reservedQty
-                            .add(quantity));
-
-            reservedAdded = quantity;
-        }
-
-        destinationBalance.setUpdatedBy(actor);
-
-        destinationBalance = stockRepository.save(
-                destinationBalance);
-
-        if (qcDestination) {
-            registerTransferQc(
-                    transfer,
-                    transferLine,
-                    quantity,
-                    actor);
-        }
-
-        transferLine.receivedQty = scale(
-                transferLine.receivedQty
-                        .add(quantity));
-
-        transferLine.setUpdatedBy(actor);
-
-        transferLineRepository.save(
-                transferLine);
-
-        boolean fullyReceived = transferLine.receivedQty
-                .compareTo(
-                        transferLine.plannedQty) >= 0;
-
-        if (fullyReceived) {
-            transfer.status = TransferStatus.RECEIVED;
-        } else if (transferLine.receivedQty
-                .compareTo(
-                        transferLine.dispatchedQty) < 0) {
-            transfer.status = TransferStatus.PARTIALLY_RECEIVED;
-        } else {
-            transfer.status = TransferStatus.PARTIALLY_DISPATCHED;
-        }
-
-        transfer.setUpdatedBy(actor);
-
-        transfer = transferRepository.save(
-                transfer);
-
-        saveLedger(
-                sourceBalance,
-                MovementType.TRANSFER_RECEIPT_CLEAR,
-
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                quantity.negate(),
-
-                transfer,
-                request == null
-                        ? null
-                        : request.batchNo(),
-                "Transit quantity cleared on receipt",
-                actor);
-
-        saveLedger(
-                destinationBalance,
-                MovementType.TRANSFER_IN,
-
-                quantity,
-                reservedAdded,
-                blockedAdded,
-                BigDecimal.ZERO,
-
-                transfer,
-                request == null
-                        ? null
-                        : request.batchNo(),
-                request == null
-                        ? null
-                        : request.remarks(),
-                actor);
-
-        if (fullyReceived) {
-            boolean processingDestination = transfer.toLocation.locationType == LocationType.PROCESSING ||
-                    transfer.toLocation.locationType == LocationType.EXTERNAL_PROCESSOR;
-
-            qcDestination = transfer.toLocation.locationType == LocationType.QC;
-
-            /*
-             * Processing and QC must complete before the next
-             * transfer leg can become Ready.
-             */
-            if (hasSuccessor &&
-                    !processingDestination &&
-                    !qcDestination) {
-                activateSuccessor(
-                        transfer,
-                        actor);
-            }
-
-            if (!hasSuccessor &&
-                    transfer.toLocation.locationType == LocationType.PRODUCTION) {
-                recordProductionIssue(
-                        transfer,
-                        transferLine,
-                        actor);
-            }
-        }
-
-        return toResponse(transfer);
-    }
-
-    @Transactional
-    public ReservationResponse issueDirectReservation(
-            UUID reservationId,
-            TransferActionRequest request) {
-        MatFlowReservation reservation = reservationRepository
-                .findById(reservationId)
-                .orElseThrow(() -> notFound(
-                        "Reservation not found"));
-
-        if (transferRepository
-                .existsByReservation_Id(
-                        reservationId)) {
-            throw conflict(
-                    "Reservation has a transfer route and cannot be issued directly");
-        }
-
-        if (!reservation.sourceLocation
-                .getId()
-                .equals(
-                        reservation.firstDestinationLocation
-                                .getId())
-                ||
-                reservation.sourceLocation.locationType != LocationType.PRODUCTION) {
-            throw conflict(
-                    "Direct issue is only available when stock is already at the production destination");
-        }
-
-        accessService.requireTransferReceive(
-                reservation.sourceLocation);
-
-        assertVersion(
-                request == null
-                        ? null
-                        : request.rowVersion(),
-                reservation.getRowVersion(),
-                "Reservation");
-
-        if (reservation.status != ReservationStatus.ACTIVE) {
-            throw conflict(
-                    "Only an active reservation can be issued");
-        }
-
-        BigDecimal quantity = request != null &&
-                request.quantity() != null
-                        ? positiveQuantity(
-                                request.quantity(),
-                                reservation.reservedQty,
-                                "Issue quantity")
-                        : reservation.reservedQty;
-
-        if (quantity.compareTo(
-                reservation.reservedQty) != 0) {
-            throw badRequest(
-                    "Direct issue must issue the complete reservation");
-        }
-
-        MatFlowStockBalance balance = stockRepository
-                .lockBalance(
-                        reservation.material.getId(),
-                        reservation.sourceLocation.getId())
-                .orElseThrow(() -> conflict(
-                        "Reserved production stock balance not found"));
-
-        if (balance.reservedQty
-                .compareTo(quantity) < 0) {
-            throw conflict(
-                    "Reserved stock is no longer available");
-        }
-
-        String actor = accessService.actor();
-
-        balance.reservedQty = scale(
-                balance.reservedQty
-                        .subtract(quantity));
-
-        balance.setUpdatedBy(actor);
-
-        balance = stockRepository.save(balance);
-
-        MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
-
-        requisitionLine.issuedQty = scale(
-                requisitionLine.issuedQty
-                        .add(quantity));
-
-        requisitionLine.setUpdatedBy(actor);
-
-        requisitionLine.issuedMaterial = reservation.material;
-
-        requisitionLineRepository.save(
-                requisitionLine);
-
-        reservation.status = ReservationStatus.ISSUED;
-
-        reservation.setUpdatedBy(actor);
-
-        reservation = reservationRepository.save(
-                reservation);
-
-        saveLedger(
-                balance,
-                MovementType.ISSUE_TO_PRODUCTION,
-
-                BigDecimal.ZERO,
-                quantity.negate(),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-
-                null,
-                request == null
-                        ? null
-                        : request.batchNo(),
-                "Reserved stock handed over to production at the same location",
-                actor);
-
-        refreshRequisitionStatus(
-                requisitionLine.requisition,
-                actor);
-
-        return new ReservationResponse(
-                reservation.getId(),
-                reservation.requisitionLine.getId(),
-                reservation.material.getMaterialCode(),
-
-                reservation.sourceLocation.getId(),
-                reservation.sourceLocation.locationCode,
-                reservation.sourceLocation.plantCode,
-
-                reservation.firstDestinationLocation.getId(),
-                reservation.firstDestinationLocation.locationCode,
-
-                reservation.demandPlantCode,
-                reservation.reservedQty,
-                reservation.status,
-                reservation.getRowVersion());
-    }
-
-    private void activateSuccessor(
-            MatFlowTransferOrder transfer,
-            String actor) {
-        transferRepository
-                .findByPredecessorTransferId(
-                        transfer.getId())
-                .ifPresent(successor -> {
-                    if (successor.status == TransferStatus.PLANNED) {
-                        successor.status = TransferStatus.READY;
-
-                        successor.setUpdatedBy(actor);
-
-                        transferRepository.save(
-                                successor);
-                    }
-                });
-    }
-
-    private void recordProductionIssue(
-            MatFlowTransferOrder transfer,
-            MatFlowTransferLine transferLine,
-            String actor) {
-        MatFlowReservation reservation = transfer.reservation;
-
-        MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
-
-        BigDecimal totalReceived = transferLine.receivedQty;
-
-        BigDecimal alreadyIssuedFromReservation = reservation.status == ReservationStatus.ISSUED
-                ? reservation.reservedQty
-                : BigDecimal.ZERO;
-
-        BigDecimal issueNow = totalReceived
-                .subtract(
-                        alreadyIssuedFromReservation)
-                .max(BigDecimal.ZERO);
-
-        if (issueNow.compareTo(
-                BigDecimal.ZERO) > 0) {
-            requisitionLine.issuedQty = scale(
-                    requisitionLine.issuedQty
-                            .add(issueNow));
-
-            requisitionLine.issuedMaterial = transferLine.material;
-
-            requisitionLine.setUpdatedBy(actor);
-
-            requisitionLineRepository.save(
-                    requisitionLine);
-        }
-
-        reservation.status = ReservationStatus.ISSUED;
-
-        reservation.setUpdatedBy(actor);
-
-        reservationRepository.save(
-                reservation);
-
-        refreshRequisitionStatus(
-                transfer.requisition,
-                actor);
-    }
-
-    private void refreshRequisitionStatus(
-            MatFlowMaterialRequisition requisition,
-            String actor) {
-        List<MatFlowRequisitionLine> lines = requisitionLineRepository
-                .findByRequisition_IdOrderByLineNoAsc(
-                        requisition.getId());
-
-        boolean allIssued = !lines.isEmpty() &&
-                lines.stream()
-                        .allMatch(line -> line.issuedQty
+        @Transactional
+        public TransferResponse dispatch(
+                        UUID id,
+                        TransferActionRequest request) {
+                MatFlowTransferOrder transfer = requireTransfer(id);
+
+                accessService.requireTransferDispatch(
+                                transfer.fromLocation);
+
+                if (transfer.status != TransferStatus.READY &&
+                                transfer.status != TransferStatus.PARTIALLY_DISPATCHED) {
+                        throw conflict(
+                                        "Only a Ready or Partially Dispatched transfer can be dispatched");
+                }
+
+                assertVersion(
+                                request == null
+                                                ? null
+                                                : request.rowVersion(),
+                                transfer.getRowVersion(),
+                                "Transfer");
+
+                validatePredecessor(transfer);
+
+                MatFlowTransferLine transferLine = requireTransferLine(
+                                transfer.getId());
+
+                BigDecimal remainingToDispatch = transferLine.plannedQty
+                                .subtract(
+                                                transferLine.dispatchedQty);
+
+                BigDecimal quantity = positiveQuantity(
+                                request == null
+                                                ? null
+                                                : request.quantity(),
+                                remainingToDispatch,
+                                "Dispatch quantity");
+
+                MatFlowStockBalance sourceBalance = stockRepository
+                                .lockBalance(
+                                                transferLine.material.getId(),
+                                                transfer.fromLocation.getId())
+                                .orElseThrow(() -> conflict(
+                                                "No stock balance exists at the transfer source"));
+
+                /*
+                 * Transfer stock is reserved at every active source:
+                 *
+                 * 1. Initial source is reserved during planning.
+                 * 2. Intermediate destination is reserved when the
+                 * preceding transfer is received.
+                 */
+                if (sourceBalance.reservedQty
+                                .compareTo(quantity) < 0) {
+                        throw conflict(
+                                        "Insufficient reserved stock at source location");
+                }
+
+                BigDecimal usablePhysicalQty = sourceBalance.onHandQty
+                                .subtract(
+                                                sourceBalance.blockedQty);
+
+                if (usablePhysicalQty
+                                .compareTo(quantity) < 0) {
+                        throw conflict(
+                                        "Insufficient usable physical stock at source location");
+                }
+
+                String actor = accessService.actor();
+
+                sourceBalance.onHandQty = scale(
+                                sourceBalance.onHandQty
+                                                .subtract(quantity));
+
+                sourceBalance.reservedQty = scale(
+                                sourceBalance.reservedQty
+                                                .subtract(quantity));
+
+                sourceBalance.inTransitQty = scale(
+                                sourceBalance.inTransitQty
+                                                .add(quantity));
+
+                sourceBalance.setUpdatedBy(actor);
+
+                sourceBalance = stockRepository.save(
+                                sourceBalance);
+
+                transferLine.dispatchedQty = scale(
+                                transferLine.dispatchedQty
+                                                .add(quantity));
+
+                transferLine.setUpdatedBy(actor);
+
+                transferLineRepository.save(
+                                transferLine);
+
+                if (transferLine.dispatchedQty
                                 .compareTo(
-                                        line.requestedQty) >= 0);
+                                                transferLine.plannedQty) < 0) {
+                        transfer.status = TransferStatus.PARTIALLY_DISPATCHED;
+                } else {
+                        transfer.status = TransferStatus.IN_TRANSIT;
+                }
 
-        if (allIssued) {
-            requisition.status = RequisitionStatus.ISSUED;
+                transfer.setUpdatedBy(actor);
 
-            requisition.setUpdatedBy(actor);
+                transfer = transferRepository.save(
+                                transfer);
 
-            requisitionRepository.save(
-                    requisition);
-        }
-    }
+                if (transfer.predecessorTransferId == null &&
+                                transferLine.dispatchedQty
+                                                .compareTo(
+                                                                transferLine.plannedQty) >= 0) {
+                        MatFlowReservation reservation = transfer.reservation;
 
-    private MatFlowStockBalance lockOrCreateDestinationBalance(
-            MatFlowMaterial material,
-            MatFlowLocation location,
-            String actor) {
-        MatFlowStockBalance existing = stockRepository
-                .lockBalance(
-                        material.getId(),
-                        location.getId())
-                .orElse(null);
+                        reservation.status = ReservationStatus.RELEASED;
 
-        if (existing != null) {
-            return existing;
-        }
+                        reservation.setUpdatedBy(actor);
 
-        MatFlowStockBalance created = new MatFlowStockBalance();
+                        reservationRepository.save(
+                                        reservation);
+                }
 
-        created.material = material;
-        created.location = location;
-        created.onHandQty = BigDecimal.ZERO;
-        created.reservedQty = BigDecimal.ZERO;
-        created.blockedQty = BigDecimal.ZERO;
-        created.inTransitQty = BigDecimal.ZERO;
+                auditService.record(
+                                "TRANSFER",
+                                transfer.getId(),
+                                "DISPATCHED",
+                                transfer.fromLocation.plantCode,
+                                transfer.requisition.projectDrawing
+                                                .getProjectCode(),
+                                transfer.requisition.projectDrawing
+                                                .getDrawingNo(),
+                                auditService.details(
+                                                "transferNumber",
+                                                transfer.transferNumber,
+                                                "fromLocation",
+                                                transfer.fromLocation.locationCode,
+                                                "toLocation",
+                                                transfer.toLocation.locationCode,
+                                                "quantity",
+                                                quantity,
+                                                "status",
+                                                transfer.status));
 
-        created.setCreatedBy(actor);
-        created.setUpdatedBy(actor);
+                saveLedger(
+                                sourceBalance,
+                                MovementType.TRANSFER_OUT,
 
-        return stockRepository.saveAndFlush(
-                created);
-    }
+                                quantity.negate(),
+                                quantity.negate(),
+                                BigDecimal.ZERO,
+                                quantity,
 
-    private void validatePredecessor(
-            MatFlowTransferOrder transfer) {
-        if (transfer.predecessorTransferId == null) {
-            return;
-        }
+                                transfer,
+                                request == null
+                                                ? null
+                                                : request.batchNo(),
+                                request == null
+                                                ? null
+                                                : request.remarks(),
+                                actor);
 
-        MatFlowTransferOrder predecessor = transferRepository
-                .findById(
-                        transfer.predecessorTransferId)
-                .orElseThrow(() -> conflict(
-                        "Previous route transfer does not exist"));
-
-        if (predecessor.status != TransferStatus.RECEIVED) {
-            throw conflict(
-                    "Previous route transfer must be fully received first");
-        }
-    }
-
-    private MatFlowTransferOrder requireTransfer(
-            UUID id) {
-        return transferRepository
-                .findById(id)
-                .orElseThrow(() -> notFound(
-                        "Transfer order not found"));
-    }
-
-    private MatFlowTransferOrder requireVisibleTransfer(
-            UUID id) {
-        MatFlowTransferOrder transfer = requireTransfer(id);
-
-        if (!accessService.canAccessPlant(
-                transfer.fromLocation.plantCode) &&
-                !accessService.canAccessPlant(
-                        transfer.toLocation.plantCode)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "No access to this transfer");
+                return toResponse(transfer);
         }
 
-        return transfer;
-    }
+        @Transactional
+        public TransferResponse receive(
+                        UUID id,
+                        TransferActionRequest request) {
+                MatFlowTransferOrder transfer = requireTransfer(id);
 
-    private MatFlowTransferLine requireTransferLine(
-            UUID transferId) {
-        return transferLineRepository
-                .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
-                        transferId)
-                .orElseThrow(() -> conflict(
-                        "Transfer has no material line"));
-    }
+                accessService.requireTransferReceive(
+                                transfer.toLocation);
 
-    private void saveLedger(
-            MatFlowStockBalance balance,
-            MovementType movementType,
+                if (transfer.status != TransferStatus.IN_TRANSIT &&
+                                transfer.status != TransferStatus.PARTIALLY_DISPATCHED &&
+                                transfer.status != TransferStatus.PARTIALLY_RECEIVED) {
+                        throw conflict(
+                                        "Transfer is not available for receipt");
+                }
 
-            BigDecimal quantityChange,
-            BigDecimal reservedChange,
-            BigDecimal blockedChange,
-            BigDecimal inTransitChange,
+                assertVersion(
+                                request == null
+                                                ? null
+                                                : request.rowVersion(),
+                                transfer.getRowVersion(),
+                                "Transfer");
 
-            MatFlowTransferOrder transfer,
-            String batchNo,
-            String remarks,
-            String actor) {
-        MatFlowStockLedger ledger = new MatFlowStockLedger();
+                MatFlowTransferLine transferLine = requireTransferLine(
+                                transfer.getId());
 
-        ledger.material = balance.material;
+                BigDecimal outstandingReceipt = transferLine.dispatchedQty
+                                .subtract(
+                                                transferLine.receivedQty);
 
-        ledger.location = balance.location;
+                BigDecimal quantity = positiveQuantity(
+                                request == null
+                                                ? null
+                                                : request.quantity(),
+                                outstandingReceipt,
+                                "Received quantity");
 
-        ledger.movementType = movementType;
+                String actor = accessService.actor();
 
-        ledger.quantityChange = scale(quantityChange);
+                MatFlowStockBalance sourceBalance = stockRepository
+                                .lockBalance(
+                                                transferLine.material.getId(),
+                                                transfer.fromLocation.getId())
+                                .orElseThrow(() -> conflict(
+                                                "Source stock balance not found"));
 
-        ledger.reservedChange = scale(reservedChange);
+                if (sourceBalance.inTransitQty
+                                .compareTo(quantity) < 0) {
+                        throw conflict(
+                                        "Received quantity exceeds source in-transit quantity");
+                }
 
-        ledger.blockedChange = scale(blockedChange);
+                sourceBalance.inTransitQty = scale(
+                                sourceBalance.inTransitQty
+                                                .subtract(quantity));
 
-        ledger.inTransitChange = scale(inTransitChange);
+                sourceBalance.setUpdatedBy(actor);
 
-        ledger.onHandAfter = balance.onHandQty;
+                sourceBalance = stockRepository.save(
+                                sourceBalance);
 
-        ledger.reservedAfter = balance.reservedQty;
+                MatFlowStockBalance destinationBalance = lockOrCreateDestinationBalance(
+                                transferLine.material,
+                                transfer.toLocation,
+                                actor);
 
-        ledger.blockedAfter = balance.blockedQty;
+                destinationBalance.onHandQty = scale(
+                                destinationBalance.onHandQty
+                                                .add(quantity));
 
-        ledger.inTransitAfter = balance.inTransitQty;
+                boolean qcDestination = transfer.toLocation.locationType == LocationType.QC;
 
-        ledger.referenceType = transfer == null
-                ? "MATFLOW_DIRECT_ISSUE"
-                : "MATFLOW_TRANSFER";
+                boolean hasSuccessor = transferRepository
+                                .existsByPredecessorTransferId(
+                                                transfer.getId());
 
-        ledger.referenceId = transfer == null
-                ? null
-                : transfer.getId();
+                boolean dispositionTransfer = transfer.purpose == TransferPurpose.QC_TO_REWORK ||
+                                transfer.purpose == TransferPurpose.RETURN_TO_SOURCE;
 
-        ledger.referenceNumber = transfer == null
-                ? null
-                : transfer.transferNumber;
+                BigDecimal blockedAdded = BigDecimal.ZERO;
 
-        if (transfer != null) {
-            ledger.projectCode = transfer.requisition.projectDrawing
-                    .getProjectCode();
+                BigDecimal reservedAdded = BigDecimal.ZERO;
 
-            ledger.drawingNo = transfer.requisition.projectDrawing
-                    .getDrawingNo();
+                if (qcDestination) {
+                        /*
+                         * QC stock is physically received but unavailable
+                         * until an inspection releases it.
+                         */
+                        destinationBalance.blockedQty = scale(
+                                        destinationBalance.blockedQty
+                                                        .add(quantity));
+
+                        blockedAdded = quantity;
+
+                } else if (hasSuccessor ||
+                                dispositionTransfer) {
+                        /*
+                         * Intermediate stock remains reserved for the next
+                         * route leg and cannot be allocated elsewhere.
+                         */
+                        destinationBalance.reservedQty = scale(
+                                        destinationBalance.reservedQty
+                                                        .add(quantity));
+
+                        reservedAdded = quantity;
+                }
+
+                destinationBalance.setUpdatedBy(actor);
+
+                destinationBalance = stockRepository.save(
+                                destinationBalance);
+
+                if (qcDestination) {
+                        registerTransferQc(
+                                        transfer,
+                                        transferLine,
+                                        quantity,
+                                        actor);
+                }
+
+                transferLine.receivedQty = scale(
+                                transferLine.receivedQty
+                                                .add(quantity));
+
+                transferLine.setUpdatedBy(actor);
+
+                transferLineRepository.save(
+                                transferLine);
+
+                boolean fullyReceived = transferLine.receivedQty
+                                .compareTo(
+                                                transferLine.plannedQty) >= 0;
+
+                if (fullyReceived) {
+                        transfer.status = TransferStatus.RECEIVED;
+                } else if (transferLine.receivedQty
+                                .compareTo(
+                                                transferLine.dispatchedQty) < 0) {
+                        transfer.status = TransferStatus.PARTIALLY_RECEIVED;
+                } else {
+                        transfer.status = TransferStatus.PARTIALLY_DISPATCHED;
+                }
+
+                transfer.setUpdatedBy(actor);
+
+                transfer = transferRepository.save(
+                                transfer);
+
+                saveLedger(
+                                sourceBalance,
+                                MovementType.TRANSFER_RECEIPT_CLEAR,
+
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                quantity.negate(),
+
+                                transfer,
+                                request == null
+                                                ? null
+                                                : request.batchNo(),
+                                "Transit quantity cleared on receipt",
+                                actor);
+
+                saveLedger(
+                                destinationBalance,
+                                MovementType.TRANSFER_IN,
+
+                                quantity,
+                                reservedAdded,
+                                blockedAdded,
+                                BigDecimal.ZERO,
+
+                                transfer,
+                                request == null
+                                                ? null
+                                                : request.batchNo(),
+                                request == null
+                                                ? null
+                                                : request.remarks(),
+                                actor);
+
+                if (fullyReceived) {
+                        boolean processingDestination = transfer.toLocation.locationType == LocationType.PROCESSING ||
+                                        transfer.toLocation.locationType == LocationType.EXTERNAL_PROCESSOR;
+
+                        qcDestination = transfer.toLocation.locationType == LocationType.QC;
+
+                        /*
+                         * Processing and QC must complete before the next
+                         * transfer leg can become Ready.
+                         */
+                        if (hasSuccessor &&
+                                        !processingDestination &&
+                                        !qcDestination) {
+                                activateSuccessor(
+                                                transfer,
+                                                actor);
+                        }
+
+                        if (!hasSuccessor &&
+                                        transfer.toLocation.locationType == LocationType.PRODUCTION) {
+                                recordProductionIssue(
+                                                transfer,
+                                                transferLine,
+                                                actor);
+                        }
+                }
+
+                return toResponse(transfer);
         }
 
-        ledger.batchNo = clean(batchNo);
+        @Transactional
+        public ReservationResponse issueDirectReservation(
+                        UUID reservationId,
+                        TransferActionRequest request) {
+                MatFlowReservation reservation = reservationRepository
+                                .findById(reservationId)
+                                .orElseThrow(() -> notFound(
+                                                "Reservation not found"));
 
-        ledger.remarks = clean(remarks);
+                if (transferRepository
+                                .existsByReservation_Id(
+                                                reservationId)) {
+                        throw conflict(
+                                        "Reservation has a transfer route and cannot be issued directly");
+                }
 
-        ledger.actor = actor;
+                if (!reservation.sourceLocation
+                                .getId()
+                                .equals(
+                                                reservation.firstDestinationLocation
+                                                                .getId())
+                                ||
+                                reservation.sourceLocation.locationType != LocationType.PRODUCTION) {
+                        throw conflict(
+                                        "Direct issue is only available when stock is already at the production destination");
+                }
 
-        ledgerRepository.save(ledger);
-    }
+                accessService.requireTransferReceive(
+                                reservation.sourceLocation);
 
-    private TransferResponse toResponse(
-            MatFlowTransferOrder transfer) {
-        MatFlowTransferLine line = requireTransferLine(
-                transfer.getId());
+                assertVersion(
+                                request == null
+                                                ? null
+                                                : request.rowVersion(),
+                                reservation.getRowVersion(),
+                                "Reservation");
 
-        return new TransferResponse(
-                transfer.getId(),
-                transfer.transferNumber,
-                transfer.reservation.getId(),
+                if (reservation.status != ReservationStatus.ACTIVE) {
+                        throw conflict(
+                                        "Only an active reservation can be issued");
+                }
 
-                transfer.fromLocation.getId(),
-                transfer.fromLocation.locationCode,
-                transfer.fromLocation.plantCode,
+                BigDecimal quantity = request != null &&
+                                request.quantity() != null
+                                                ? positiveQuantity(
+                                                                request.quantity(),
+                                                                reservation.reservedQty,
+                                                                "Issue quantity")
+                                                : reservation.reservedQty;
 
-                transfer.toLocation.getId(),
-                transfer.toLocation.locationCode,
-                transfer.toLocation.plantCode,
+                if (quantity.compareTo(
+                                reservation.reservedQty) != 0) {
+                        throw badRequest(
+                                        "Direct issue must issue the complete reservation");
+                }
 
-                transfer.routeSequenceNo,
-                transfer.predecessorTransferId,
+                MatFlowStockBalance balance = stockRepository
+                                .lockBalance(
+                                                reservation.material.getId(),
+                                                reservation.sourceLocation.getId())
+                                .orElseThrow(() -> conflict(
+                                                "Reserved production stock balance not found"));
 
-                transfer.purpose,
-                transfer.status,
+                if (balance.reservedQty
+                                .compareTo(quantity) < 0) {
+                        throw conflict(
+                                        "Reserved stock is no longer available");
+                }
 
-                line.material.getMaterialCode(),
-                line.plannedQty,
-                line.dispatchedQty,
-                line.receivedQty,
-                line.uom,
+                String actor = accessService.actor();
 
-                transfer.getRowVersion());
-    }
+                balance.reservedQty = scale(
+                                balance.reservedQty
+                                                .subtract(quantity));
 
-    private BigDecimal positiveQuantity(
-            BigDecimal requested,
-            BigDecimal maximum,
-            String field) {
-        if (requested == null ||
-                requested.compareTo(
-                        BigDecimal.ZERO) <= 0) {
-            throw badRequest(
-                    field +
-                            " must be greater than zero");
+                balance.setUpdatedBy(actor);
+
+                balance = stockRepository.save(balance);
+
+                MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
+
+                requisitionLine.issuedQty = scale(
+                                requisitionLine.issuedQty
+                                                .add(quantity));
+
+                requisitionLine.setUpdatedBy(actor);
+
+                requisitionLine.issuedMaterial = reservation.material;
+
+                requisitionLineRepository.save(
+                                requisitionLine);
+
+                reservation.status = ReservationStatus.ISSUED;
+
+                reservation.setUpdatedBy(actor);
+
+                reservation = reservationRepository.save(
+                                reservation);
+
+                saveLedger(
+                                balance,
+                                MovementType.ISSUE_TO_PRODUCTION,
+
+                                BigDecimal.ZERO,
+                                quantity.negate(),
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+
+                                null,
+                                request == null
+                                                ? null
+                                                : request.batchNo(),
+                                "Reserved stock handed over to production at the same location",
+                                actor);
+
+                refreshRequisitionStatus(
+                                requisitionLine.requisition,
+                                actor);
+
+                return new ReservationResponse(
+                                reservation.getId(),
+                                reservation.requisitionLine.getId(),
+                                reservation.material.getMaterialCode(),
+
+                                reservation.sourceLocation.getId(),
+                                reservation.sourceLocation.locationCode,
+                                reservation.sourceLocation.plantCode,
+
+                                reservation.firstDestinationLocation.getId(),
+                                reservation.firstDestinationLocation.locationCode,
+
+                                reservation.demandPlantCode,
+                                reservation.reservedQty,
+                                reservation.status,
+                                reservation.getRowVersion());
         }
 
-        BigDecimal quantity = scale(requested);
+        private void activateSuccessor(
+                        MatFlowTransferOrder transfer,
+                        String actor) {
+                transferRepository
+                                .findByPredecessorTransferId(
+                                                transfer.getId())
+                                .ifPresent(successor -> {
+                                        if (successor.status == TransferStatus.PLANNED) {
+                                                successor.status = TransferStatus.READY;
 
-        if (quantity.compareTo(
-                maximum) > 0) {
-            throw conflict(
-                    field +
-                            " exceeds the outstanding quantity");
+                                                successor.setUpdatedBy(actor);
+
+                                                transferRepository.save(
+                                                                successor);
+                                        }
+                                });
         }
 
-        return quantity;
-    }
+        private void recordProductionIssue(
+                        MatFlowTransferOrder transfer,
+                        MatFlowTransferLine transferLine,
+                        String actor) {
+                MatFlowReservation reservation = transfer.reservation;
 
-    private void assertVersion(
-            Long requested,
-            Long current,
-            String entity) {
-        if (requested == null) {
-            throw badRequest(
-                    entity +
-                            " rowVersion is required");
+                MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
+
+                BigDecimal totalReceived = transferLine.receivedQty;
+
+                BigDecimal alreadyIssuedFromReservation = reservation.status == ReservationStatus.ISSUED
+                                ? reservation.reservedQty
+                                : BigDecimal.ZERO;
+
+                BigDecimal issueNow = totalReceived
+                                .subtract(
+                                                alreadyIssuedFromReservation)
+                                .max(BigDecimal.ZERO);
+
+                if (issueNow.compareTo(
+                                BigDecimal.ZERO) > 0) {
+                        requisitionLine.issuedQty = scale(
+                                        requisitionLine.issuedQty
+                                                        .add(issueNow));
+
+                        requisitionLine.issuedMaterial = transferLine.material;
+
+                        requisitionLine.setUpdatedBy(actor);
+
+                        requisitionLineRepository.save(
+                                        requisitionLine);
+                }
+
+                reservation.status = ReservationStatus.ISSUED;
+
+                reservation.setUpdatedBy(actor);
+
+                reservationRepository.save(
+                                reservation);
+
+                refreshRequisitionStatus(
+                                transfer.requisition,
+                                actor);
         }
 
-        if (!requested.equals(current)) {
-            throw conflict(
-                    entity +
-                            " was modified by another user. Refresh and retry.");
-        }
-    }
+        private void refreshRequisitionStatus(
+                        MatFlowMaterialRequisition requisition,
+                        String actor) {
+                List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                                .findByRequisition_IdOrderByLineNoAsc(
+                                                requisition.getId());
 
-    private BigDecimal scale(
-            BigDecimal value) {
-        return value == null
-                ? BigDecimal.ZERO
-                : value.setScale(
-                        3,
-                        RoundingMode.HALF_UP);
-    }
+                boolean allIssued = !lines.isEmpty() &&
+                                lines.stream()
+                                                .allMatch(line -> line.issuedQty
+                                                                .compareTo(
+                                                                                line.requestedQty) >= 0);
 
-    private String clean(
-            String value) {
-        if (value == null) {
-            return null;
-        }
+                if (allIssued) {
+                        requisition.status = RequisitionStatus.ISSUED;
 
-        String result = value.trim();
+                        requisition.setUpdatedBy(actor);
 
-        return result.isBlank()
-                ? null
-                : result;
-    }
-
-    private String cleanUpper(
-            String value) {
-        String result = clean(value);
-
-        return result == null
-                ? null
-                : result.toUpperCase();
-    }
-
-    private ResponseStatusException badRequest(
-            String message) {
-        return new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                message);
-    }
-
-    private ResponseStatusException conflict(
-            String message) {
-        return new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                message);
-    }
-
-    private ResponseStatusException notFound(
-            String message) {
-        return new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                message);
-    }
-
-    private void registerTransferQc(
-            MatFlowTransferOrder transfer,
-            MatFlowTransferLine transferLine,
-            BigDecimal quantity,
-            String actor) {
-        MatFlowQcInspection inspection = qcRepository
-                .findBySourceTypeAndSourceLineId(
-                        QcSourceType.TRANSFER_RECEIPT,
-                        transferLine.getId())
-                .orElse(null);
-
-        if (inspection == null) {
-            inspection = new MatFlowQcInspection();
-
-            inspection.inspectionNumber = "MFQ-" +
-                    LocalDate.now().getYear() +
-                    "-" +
-                    UUID.randomUUID()
-                            .toString()
-                            .replace("-", "")
-                            .substring(0, 8)
-                            .toUpperCase();
-
-            inspection.sourceType = QcSourceType.TRANSFER_RECEIPT;
-
-            inspection.sourceId = transfer.getId();
-
-            inspection.sourceLineId = transferLine.getId();
-
-            inspection.material = transferLine.material;
-
-            inspection.location = transfer.toLocation;
-
-            inspection.inspectionQty = BigDecimal.ZERO;
-
-            inspection.acceptedQty = BigDecimal.ZERO;
-
-            inspection.rejectedQty = BigDecimal.ZERO;
-
-            inspection.status = QcInspectionStatus.PENDING;
-
-            inspection.setCreatedBy(actor);
-        } else if (inspection.status != QcInspectionStatus.PENDING) {
-            throw conflict(
-                    "Additional material cannot be received after QC completion");
+                        requisitionRepository.save(
+                                        requisition);
+                }
         }
 
-        inspection.inspectionQty = scale(
-                inspection.inspectionQty
-                        .add(quantity));
+        private MatFlowStockBalance lockOrCreateDestinationBalance(
+                        MatFlowMaterial material,
+                        MatFlowLocation location,
+                        String actor) {
+                MatFlowStockBalance existing = stockRepository
+                                .lockBalance(
+                                                material.getId(),
+                                                location.getId())
+                                .orElse(null);
 
-        inspection.setUpdatedBy(actor);
+                if (existing != null) {
+                        return existing;
+                }
 
-        qcRepository.save(inspection);
-    }
+                MatFlowStockBalance created = new MatFlowStockBalance();
+
+                created.material = material;
+                created.location = location;
+                created.onHandQty = BigDecimal.ZERO;
+                created.reservedQty = BigDecimal.ZERO;
+                created.blockedQty = BigDecimal.ZERO;
+                created.inTransitQty = BigDecimal.ZERO;
+
+                created.setCreatedBy(actor);
+                created.setUpdatedBy(actor);
+
+                return stockRepository.saveAndFlush(
+                                created);
+        }
+
+        private void validatePredecessor(
+                        MatFlowTransferOrder transfer) {
+                if (transfer.predecessorTransferId == null) {
+                        return;
+                }
+
+                MatFlowTransferOrder predecessor = transferRepository
+                                .findById(
+                                                transfer.predecessorTransferId)
+                                .orElseThrow(() -> conflict(
+                                                "Previous route transfer does not exist"));
+
+                if (predecessor.status != TransferStatus.RECEIVED) {
+                        throw conflict(
+                                        "Previous route transfer must be fully received first");
+                }
+        }
+
+        private MatFlowTransferOrder requireTransfer(
+                        UUID id) {
+                return transferRepository
+                                .findById(id)
+                                .orElseThrow(() -> notFound(
+                                                "Transfer order not found"));
+        }
+
+        private MatFlowTransferOrder requireVisibleTransfer(
+                        UUID id) {
+                MatFlowTransferOrder transfer = requireTransfer(id);
+
+                if (!accessService.canAccessPlant(
+                                transfer.fromLocation.plantCode) &&
+                                !accessService.canAccessPlant(
+                                                transfer.toLocation.plantCode)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "No access to this transfer");
+                }
+
+                return transfer;
+        }
+
+        private MatFlowTransferLine requireTransferLine(
+                        UUID transferId) {
+                return transferLineRepository
+                                .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
+                                                transferId)
+                                .orElseThrow(() -> conflict(
+                                                "Transfer has no material line"));
+        }
+
+        private void saveLedger(
+                        MatFlowStockBalance balance,
+                        MovementType movementType,
+
+                        BigDecimal quantityChange,
+                        BigDecimal reservedChange,
+                        BigDecimal blockedChange,
+                        BigDecimal inTransitChange,
+
+                        MatFlowTransferOrder transfer,
+                        String batchNo,
+                        String remarks,
+                        String actor) {
+                MatFlowStockLedger ledger = new MatFlowStockLedger();
+
+                ledger.material = balance.material;
+
+                ledger.location = balance.location;
+
+                ledger.movementType = movementType;
+
+                ledger.quantityChange = scale(quantityChange);
+
+                ledger.reservedChange = scale(reservedChange);
+
+                ledger.blockedChange = scale(blockedChange);
+
+                ledger.inTransitChange = scale(inTransitChange);
+
+                ledger.onHandAfter = balance.onHandQty;
+
+                ledger.reservedAfter = balance.reservedQty;
+
+                ledger.blockedAfter = balance.blockedQty;
+
+                ledger.inTransitAfter = balance.inTransitQty;
+
+                ledger.referenceType = transfer == null
+                                ? "MATFLOW_DIRECT_ISSUE"
+                                : "MATFLOW_TRANSFER";
+
+                ledger.referenceId = transfer == null
+                                ? null
+                                : transfer.getId();
+
+                ledger.referenceNumber = transfer == null
+                                ? null
+                                : transfer.transferNumber;
+
+                if (transfer != null) {
+                        ledger.projectCode = transfer.requisition.projectDrawing
+                                        .getProjectCode();
+
+                        ledger.drawingNo = transfer.requisition.projectDrawing
+                                        .getDrawingNo();
+                }
+
+                ledger.batchNo = clean(batchNo);
+
+                ledger.remarks = clean(remarks);
+
+                ledger.actor = actor;
+
+                ledgerRepository.save(ledger);
+        }
+
+        private TransferResponse toResponse(
+                        MatFlowTransferOrder transfer) {
+                MatFlowTransferLine line = requireTransferLine(
+                                transfer.getId());
+
+                return new TransferResponse(
+                                transfer.getId(),
+                                transfer.transferNumber,
+
+                                transfer.reservation.getId(),
+
+                                transfer.reservation.requisitionLine == null
+                                                ? null
+                                                : transfer.reservation.requisitionLine.getId(),
+
+                                transfer.fromLocation.getId(),
+                                transfer.fromLocation.getLocationCode(),
+                                transfer.fromLocation.getPlantCode(),
+
+                                transfer.toLocation.getId(),
+                                transfer.toLocation.getLocationCode(),
+                                transfer.toLocation.getPlantCode(),
+
+                                transfer.routeSequenceNo,
+                                transfer.predecessorTransferId,
+
+                                transfer.purpose,
+                                transfer.status,
+
+                                line.material.getId(),
+                                line.material.getMaterialCode(),
+                                line.material.getMaterialName(),
+
+                                zero(line.plannedQty),
+                                zero(line.dispatchedQty),
+                                zero(line.receivedQty),
+
+                                line.uom,
+
+                                transfer.getRowVersion());
+        }
+
+        private BigDecimal positiveQuantity(
+                        BigDecimal requested,
+                        BigDecimal maximum,
+                        String field) {
+                if (requested == null ||
+                                requested.compareTo(
+                                                BigDecimal.ZERO) <= 0) {
+                        throw badRequest(
+                                        field +
+                                                        " must be greater than zero");
+                }
+
+                BigDecimal quantity = scale(requested);
+
+                if (quantity.compareTo(
+                                maximum) > 0) {
+                        throw conflict(
+                                        field +
+                                                        " exceeds the outstanding quantity");
+                }
+
+                return quantity;
+        }
+
+        private void assertVersion(
+                        Long requested,
+                        Long current,
+                        String entity) {
+                if (requested == null) {
+                        throw badRequest(
+                                        entity +
+                                                        " rowVersion is required");
+                }
+
+                if (!requested.equals(current)) {
+                        throw conflict(
+                                        entity +
+                                                        " was modified by another user. Refresh and retry.");
+                }
+        }
+
+        private BigDecimal scale(
+                        BigDecimal value) {
+                return value == null
+                                ? BigDecimal.ZERO
+                                : value.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+        }
+
+        private String clean(
+                        String value) {
+                if (value == null) {
+                        return null;
+                }
+
+                String result = value.trim();
+
+                return result.isBlank()
+                                ? null
+                                : result;
+        }
+
+        private String cleanUpper(
+                        String value) {
+                String result = clean(value);
+
+                return result == null
+                                ? null
+                                : result.toUpperCase();
+        }
+
+        private ResponseStatusException badRequest(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                message);
+        }
+
+        private ResponseStatusException conflict(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.CONFLICT,
+                                message);
+        }
+
+        private ResponseStatusException notFound(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                message);
+        }
+
+        private void registerTransferQc(
+                        MatFlowTransferOrder transfer,
+                        MatFlowTransferLine transferLine,
+                        BigDecimal quantity,
+                        String actor) {
+                MatFlowQcInspection inspection = qcRepository
+                                .findBySourceTypeAndSourceLineId(
+                                                QcSourceType.TRANSFER_RECEIPT,
+                                                transferLine.getId())
+                                .orElse(null);
+
+                if (inspection == null) {
+                        inspection = new MatFlowQcInspection();
+
+                        inspection.inspectionNumber = "MFQ-" +
+                                        LocalDate.now().getYear() +
+                                        "-" +
+                                        UUID.randomUUID()
+                                                        .toString()
+                                                        .replace("-", "")
+                                                        .substring(0, 8)
+                                                        .toUpperCase();
+
+                        inspection.sourceType = QcSourceType.TRANSFER_RECEIPT;
+
+                        inspection.sourceId = transfer.getId();
+
+                        inspection.sourceLineId = transferLine.getId();
+
+                        inspection.material = transferLine.material;
+
+                        inspection.location = transfer.toLocation;
+
+                        inspection.inspectionQty = BigDecimal.ZERO;
+
+                        inspection.acceptedQty = BigDecimal.ZERO;
+
+                        inspection.rejectedQty = BigDecimal.ZERO;
+
+                        inspection.status = QcInspectionStatus.PENDING;
+
+                        inspection.setCreatedBy(actor);
+                } else if (inspection.status != QcInspectionStatus.PENDING) {
+                        throw conflict(
+                                        "Additional material cannot be received after QC completion");
+                }
+
+                inspection.inspectionQty = scale(
+                                inspection.inspectionQty
+                                                .add(quantity));
+
+                inspection.setUpdatedBy(actor);
+
+                qcRepository.save(inspection);
+        }
 }

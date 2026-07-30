@@ -233,11 +233,17 @@ public final class MatFlowPlanningDtos {
 
         public record IndentLineResponse(
                         UUID id,
+
+                        UUID requisitionLineId,
+
+                        UUID materialId,
                         String materialCode,
                         String materialName,
+
                         BigDecimal requiredQty,
                         BigDecimal orderedQty,
                         BigDecimal receivedQty,
+
                         String uom) {
         }
 
@@ -256,7 +262,9 @@ public final class MatFlowPlanningDtos {
         public record TransferResponse(
                         UUID id,
                         String transferNumber,
+
                         UUID reservationId,
+                        UUID requisitionLineId,
 
                         UUID fromLocationId,
                         String fromLocationCode,
@@ -272,12 +280,15 @@ public final class MatFlowPlanningDtos {
                         TransferPurpose purpose,
                         TransferStatus status,
 
+                        UUID materialId,
                         String materialCode,
+                        String materialName,
+
                         BigDecimal plannedQty,
                         BigDecimal dispatchedQty,
                         BigDecimal receivedQty,
-                        String uom,
 
+                        String uom,
                         Long rowVersion) {
         }
 

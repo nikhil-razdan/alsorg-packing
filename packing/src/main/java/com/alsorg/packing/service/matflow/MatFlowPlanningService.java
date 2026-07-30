@@ -1801,20 +1801,17 @@ public class MatFlowPlanningService {
                                         return new IndentLineResponse(
                                                         line.getId(),
 
-                                                        line.material
-                                                                        .getMaterialCode(),
+                                                        line.requisitionLine == null
+                                                                        ? null
+                                                                        : line.requisitionLine.getId(),
 
-                                                        line.material
-                                                                        .getMaterialName(),
+                                                        line.material.getId(),
+                                                        line.material.getMaterialCode(),
+                                                        line.material.getMaterialName(),
 
-                                                        zero(
-                                                                        line.requiredQty),
-
-                                                        zero(
-                                                                        line.orderedQty),
-
-                                                        zero(
-                                                                        line.receivedQty),
+                                                        zero(line.requiredQty),
+                                                        zero(line.orderedQty),
+                                                        zero(line.receivedQty),
 
                                                         line.uom);
                                 })
@@ -1868,26 +1865,19 @@ public class MatFlowPlanningService {
                                 transfer.getId(),
                                 transfer.transferNumber,
 
-                                transfer.reservation
-                                                .getId(),
+                                transfer.reservation.getId(),
 
-                                transfer.fromLocation
-                                                .getId(),
+                                transfer.reservation.requisitionLine == null
+                                                ? null
+                                                : transfer.reservation.requisitionLine.getId(),
 
-                                transfer.fromLocation
-                                                .getLocationCode(),
+                                transfer.fromLocation.getId(),
+                                transfer.fromLocation.getLocationCode(),
+                                transfer.fromLocation.getPlantCode(),
 
-                                transfer.fromLocation
-                                                .getPlantCode(),
-
-                                transfer.toLocation
-                                                .getId(),
-
-                                transfer.toLocation
-                                                .getLocationCode(),
-
-                                transfer.toLocation
-                                                .getPlantCode(),
+                                transfer.toLocation.getId(),
+                                transfer.toLocation.getLocationCode(),
+                                transfer.toLocation.getPlantCode(),
 
                                 transfer.routeSequenceNo,
                                 transfer.predecessorTransferId,
@@ -1895,17 +1885,13 @@ public class MatFlowPlanningService {
                                 transfer.purpose,
                                 transfer.status,
 
-                                line.material
-                                                .getMaterialCode(),
+                                line.material.getId(),
+                                line.material.getMaterialCode(),
+                                line.material.getMaterialName(),
 
-                                zero(
-                                                line.plannedQty),
-
-                                zero(
-                                                line.dispatchedQty),
-
-                                zero(
-                                                line.receivedQty),
+                                zero(line.plannedQty),
+                                zero(line.dispatchedQty),
+                                zero(line.receivedQty),
 
                                 line.uom,
 

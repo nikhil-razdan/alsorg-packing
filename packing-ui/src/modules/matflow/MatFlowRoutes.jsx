@@ -143,13 +143,12 @@ export default function MatFlowRoutes() {
 
 				<Route
 					path="projects/:projectDrawingId"
-					element={guarded(
-						"tracking",
-						<MatFlowPlaceholder
-							title="Project Material Tracking"
-							subtitle="The complete project timeline will be connected after requisition, transfer, purchase, QC and processing workspaces are implemented."
+					element={
+						<Navigate
+							to="/matflow/tracker"
+							replace
 						/>
-					)}
+					}
 				/>
 
 				<Route
