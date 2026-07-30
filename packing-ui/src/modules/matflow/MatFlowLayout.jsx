@@ -74,6 +74,8 @@ import LogoutIcon
     from "@mui/icons-material/Logout";
 import LocationOnOutlinedIcon
     from "@mui/icons-material/LocationOnOutlined";
+import TrackChangesOutlinedIcon
+    from "@mui/icons-material/TrackChangesOutlined";
 
 const SIDEBAR_KEY =
     "matflowSidebarCollapsed";
@@ -85,6 +87,13 @@ const navItems = [
         screen: "dashboard",
         icon: <DashboardOutlinedIcon />,
     },
+    {
+        key: "tracker",
+        label: "Control Tower",
+        path: "/matflow/tracker",
+        screen: "tracking",
+        icon: <TrackChangesOutlinedIcon />,
+    }
     {
         label: "Projects",
         path: "/matflow/projects",

@@ -378,6 +378,16 @@ export default function MatFlowStorePlanningDetail() {
             sourceOptions,
         ]);
 
+    const hasAnyActiveLocation =
+        locations.some(
+            (location) =>
+                Boolean(location?.id) &&
+                location.active !== false
+        );
+
+    const hasSourceLocation =
+        sourceOptions.length > 0;
+
     const selectedSources =
         useMemo(() => {
             return selectedSourceIds
@@ -516,6 +526,7 @@ export default function MatFlowStorePlanningDetail() {
             }
         );
     };
+
 
     const planRequisition =
         async () => {
@@ -771,24 +782,36 @@ export default function MatFlowStorePlanningDetail() {
                                 stock by plant and available
                                 quantity.
                             </Typography>
+                            {!hasSourceLocation && (
+                                <Box sx={errorBoxSx}>
+                                    {hasAnyActiveLocation
+                                        ? "No active stock-supporting Store, Processing or External Processor location is configured. Production locations cannot be used as material sources."
+                                        : "No active MatFlow locations are available for this user."}
+                                </Box>
+                            )}
 
                             <Box sx={planningGridSx}>
                                 <TextField
                                     select
                                     label="Add Preferred Source"
                                     value={sourceToAdd}
+                                    disabled={
+                                        planning ||
+                                        sourceOptions.length === 0
+                                    }
                                     onChange={(event) => {
                                         const value =
                                             event.target.value;
-
-                                        setSourceToAdd(
-                                            value
-                                        );
 
                                         addPreferredSource(
                                             value
                                         );
                                     }}
+                                    helperText={
+                                        sourceOptions.length === 0
+                                            ? "Create an active STORE, PROCESSING or EXTERNAL_PROCESSOR location with Supports Stock enabled."
+                                            : `${sourceOptions.length} eligible source location${sourceOptions.length === 1 ? "" : "s"} available.`
+                                    }
                                     sx={fieldSx}
                                 >
                                     {remainingSources.length ===

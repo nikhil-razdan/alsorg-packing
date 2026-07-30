@@ -62,6 +62,9 @@ import MatFlowStorePlanningQueue
 import MatFlowStorePlanningDetail
 	from "./pages/MatFlowStorePlanningDetail";
 
+import MatFlowTracker
+	from "./pages/MatFlowTracker";
+
 function MatFlowHomeRedirect() {
 	const {
 		role,
@@ -119,6 +122,14 @@ export default function MatFlowRoutes() {
 					element={guarded(
 						"dashboard",
 						<MatFlowDashboard />
+					)}
+				/>
+
+				<Route
+					path="tracker"
+					element={guarded(
+						"tracking",
+						<MatFlowTracker />
 					)}
 				/>
 

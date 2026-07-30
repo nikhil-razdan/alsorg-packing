@@ -95,6 +95,21 @@ const normalizeReleaseList = (
 
 export const matflowApi = {
 
+
+	/* =====================================================
+ * MATFLOW PROFESSIONAL TRACKER
+ * ===================================================== */
+
+	getTracker(params = {}) {
+		return API.get(
+			`${BASE}/tracker`,
+			{
+				params:
+					cleanParams(params),
+			}
+		);
+	},
+
 	/* =====================================================
  * MATERIAL MASTER
  * Backend: MatFlowMasterController
@@ -162,6 +177,7 @@ export const matflowApi = {
 			data: material,
 		};
 	},
+
 
 	createMaterial(body) {
 		return API.post(
