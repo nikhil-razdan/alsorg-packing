@@ -1,11 +1,10 @@
 package com.alsorg.packing.controller.matflow;
 
-import static com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
-
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.service.matflow.MatFlowPlanningService;
 
 import jakarta.validation.Valid;
@@ -23,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/matflow/requisitions")
+@RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowPlanningController {
 
@@ -35,27 +34,29 @@ public class MatFlowPlanningController {
         this.service = service;
     }
 
-    /*
-     * The service must still apply plant/module access restrictions.
-     */
-    @GetMapping
+    @GetMapping("/requisitions")
     public List<RequisitionResponse> list() {
 
         return service.listRequisitions();
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/requisitions/{id}")
     public RequisitionResponse get(
             @PathVariable UUID id) {
 
-        return service.getRequisition(id);
+        return service.getRequisition(
+                id);
     }
 
-    /*
-     * Production creates the complete draft:
-     * header + all selected BOM lines.
-     */
-    @PostMapping
+    @GetMapping("/requisitions/{id}/planning")
+    public PlanningResponse getPlanningSnapshot(
+            @PathVariable UUID id) {
+
+        return service.getPlanningSnapshot(
+                id);
+    }
+
+    @PostMapping("/requisitions")
     @PreAuthorize("""
             hasAnyAuthority(
                 'ADMIN',
@@ -70,10 +71,7 @@ public class MatFlowPlanningController {
                 request);
     }
 
-    /*
-     * Production submits a completed draft to Store.
-     */
-    @PostMapping("/{id}/submit")
+    @PostMapping("/requisitions/{id}/submit")
     @PreAuthorize("""
             hasAnyAuthority(
                 'ADMIN',
@@ -91,10 +89,7 @@ public class MatFlowPlanningController {
                 request);
     }
 
-    /*
-     * Store performs reservation, shortage and transfer planning.
-     */
-    @PostMapping("/{id}/plan")
+    @PostMapping("/requisitions/{id}/plan")
     @PreAuthorize("""
             hasAnyAuthority(
                 'ADMIN',

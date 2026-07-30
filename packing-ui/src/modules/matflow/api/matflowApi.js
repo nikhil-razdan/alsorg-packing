@@ -502,11 +502,8 @@ export const matflowApi = {
 	/* =====================================================
  * PRODUCTION MATERIAL REQUISITIONS
  *
- * Backend:
+ * Exact backend:
  * MatFlowPlanningController
- *
- * Base:
- * /api/matflow/requisitions
  * ===================================================== */
 
 	listRequisitions() {
@@ -525,7 +522,25 @@ export const matflowApi = {
 		}
 
 		return API.get(
-			`${BASE}/requisitions/${requisitionId}`
+			`${BASE}/requisitions/${encodeURIComponent(
+				String(requisitionId)
+			)}`
+		);
+	},
+
+	getRequisitionPlanning(
+		requisitionId
+	) {
+		if (!requisitionId) {
+			throw new Error(
+				"Requisition ID is required."
+			);
+		}
+
+		return API.get(
+			`${BASE}/requisitions/${encodeURIComponent(
+				String(requisitionId)
+			)}/planning`
 		);
 	},
 
@@ -547,7 +562,9 @@ export const matflowApi = {
 		}
 
 		return API.post(
-			`${BASE}/requisitions/${requisitionId}/submit`,
+			`${BASE}/requisitions/${encodeURIComponent(
+				String(requisitionId)
+			)}/submit`,
 			body
 		);
 	},
@@ -563,7 +580,9 @@ export const matflowApi = {
 		}
 
 		return API.post(
-			`${BASE}/requisitions/${requisitionId}/plan`,
+			`${BASE}/requisitions/${encodeURIComponent(
+				String(requisitionId)
+			)}/plan`,
 			body
 		);
 	},

@@ -187,6 +187,59 @@ public class MatFlowPlanningService {
                                 requisition);
         }
 
+        @Transactional(readOnly = true)
+        public PlanningResponse getPlanningSnapshot(
+                        UUID id) {
+
+                accessService.requireRead();
+
+                MatFlowMaterialRequisition requisition = requireRequisition(id);
+
+                return toPlanningResponse(
+                                requisition);
+        }
+
+        private PlanningResponse toPlanningResponse(
+                        MatFlowMaterialRequisition requisition) {
+
+                if (requisition == null ||
+                                requisition.getId() == null) {
+
+                        throw conflict(
+                                        "Material requisition is required for planning response");
+                }
+
+                UUID requisitionId = requisition.getId();
+
+                return new PlanningResponse(
+                                toRequisitionResponse(
+                                                requisition),
+
+                                reservationRepository
+                                                .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(
+                                                                requisitionId)
+                                                .stream()
+                                                .map(
+                                                                this::toReservationResponse)
+                                                .toList(),
+
+                                indentRepository
+                                                .findByRequisition_IdOrderByCreatedAtAsc(
+                                                                requisitionId)
+                                                .stream()
+                                                .map(
+                                                                this::toIndentResponse)
+                                                .toList(),
+
+                                transferRepository
+                                                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                                                requisitionId)
+                                                .stream()
+                                                .map(
+                                                                this::toTransferResponse)
+                                                .toList());
+        }
+
         /*
          * =====================================================
          * REQUISITION CREATE
@@ -964,33 +1017,8 @@ public class MatFlowPlanningService {
                                                 "preferredSourceCount",
                                                 preferredSourceIds.size()));
 
-                return new PlanningResponse(
-                                toRequisitionResponse(
-                                                requisition),
-
-                                reservationRepository
-                                                .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(
-                                                                requisition.getId())
-                                                .stream()
-                                                .map(
-                                                                this::toReservationResponse)
-                                                .toList(),
-
-                                indentRepository
-                                                .findByRequisition_IdOrderByCreatedAtAsc(
-                                                                requisition.getId())
-                                                .stream()
-                                                .map(
-                                                                this::toIndentResponse)
-                                                .toList(),
-
-                                transferRepository
-                                                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                                                                requisition.getId())
-                                                .stream()
-                                                .map(
-                                                                this::toTransferResponse)
-                                                .toList());
+                return toPlanningResponse(
+                                requisition);
         }
 
         /*

@@ -4,8 +4,9 @@ import {
 	Routes,
 } from "react-router-dom";
 
-import { useAuth }
-	from "../../auth/AuthContext";
+import {
+	useAuth,
+} from "../../auth/AuthContext";
 
 import {
 	defaultMatFlowPathForRole,
@@ -54,6 +55,12 @@ import MatFlowRequisitionDetail
 
 import MatFlowProductionLocationMaster
 	from "./pages/MatFlowProductionLocationMaster";
+
+import MatFlowStorePlanningQueue
+	from "./pages/MatFlowStorePlanningQueue";
+
+import MatFlowStorePlanningDetail
+	from "./pages/MatFlowStorePlanningDetail";
 
 function MatFlowHomeRedirect() {
 	const {
@@ -117,59 +124,57 @@ export default function MatFlowRoutes() {
 
 				<Route
 					path="projects"
-					element={
-						<MatFlowRouteGuard screen="projects">
-							<MatFlowProjectMaster />
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"projects",
+						<MatFlowProjectMaster />
+					)}
 				/>
 
 				<Route
 					path="projects/:projectDrawingId"
-					element={
-						<MatFlowRouteGuard screen="tracking">
-							<MatFlowPlaceholder
-								title="Project Material Tracking"
-								subtitle="The complete project timeline will be connected after requisition, transfer, purchase, QC and processing workspaces are implemented."
-							/>
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"tracking",
+						<MatFlowPlaceholder
+							title="Project Material Tracking"
+							subtitle="The complete project timeline will be connected after requisition, transfer, purchase, QC and processing workspaces are implemented."
+						/>
+					)}
 				/>
 
 				<Route
 					path="materials"
-					element={
-						<MatFlowRouteGuard screen="materials">
-							<MatFlowMaterialMaster />
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"materials",
+						<MatFlowMaterialMaster />
+					)}
 				/>
 
 				<Route
 					path="boms"
-					element={
-						<MatFlowRouteGuard screen="boms">
-							<MatFlowBomList />
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"boms",
+						<MatFlowBomList />
+					)}
 				/>
 
+				{/*
+				 * Keep the static "new" route before
+				 * the dynamic ":bomId" route.
+				 */}
 				<Route
 					path="boms/new"
-					element={
-						<MatFlowRouteGuard screen="bom-create">
-							<MatFlowBomCreate />
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"bom-create",
+						<MatFlowBomCreate />
+					)}
 				/>
 
 				<Route
 					path="boms/:bomId"
-					element={
-						<MatFlowRouteGuard screen="bom-detail">
-							<MatFlowBomDetail />
-						</MatFlowRouteGuard>
-					}
+					element={guarded(
+						"bom-detail",
+						<MatFlowBomDetail />
+					)}
 				/>
 
 				<Route
@@ -183,6 +188,9 @@ export default function MatFlowRoutes() {
 					)}
 				/>
 
+				{/*
+				 * Production requisition workspace.
+				 */}
 				<Route
 					path="production"
 					element={guarded(
@@ -199,6 +207,10 @@ export default function MatFlowRoutes() {
 					)}
 				/>
 
+				{/*
+				 * Keep "requisitions/new" before the
+				 * dynamic requisition-detail route.
+				 */}
 				<Route
 					path="requisitions/new"
 					element={guarded(
@@ -215,14 +227,25 @@ export default function MatFlowRoutes() {
 					)}
 				/>
 
+				{/*
+				 * Store Planning workspace.
+				 *
+				 * These paths are relative because this
+				 * router is already mounted at /matflow/*.
+				 */}
 				<Route
 					path="store"
 					element={guarded(
 						"store",
-						<MatFlowPlaceholder
-							title="Store and Reservations"
-							subtitle="Review available stock, reservations, direct issues and material commitments."
-						/>
+						<MatFlowStorePlanningQueue />
+					)}
+				/>
+
+				<Route
+					path="store/requisitions/:requisitionId"
+					element={guarded(
+						"store",
+						<MatFlowStorePlanningDetail />
 					)}
 				/>
 
@@ -337,8 +360,8 @@ export default function MatFlowRoutes() {
 				/>
 
 				{/*
-				 * Compatibility redirects for the obsolete
-				 * release-based frontend.
+				 * Compatibility redirects for the
+				 * obsolete release-based frontend.
 				 */}
 				<Route
 					path="releases"
