@@ -57,7 +57,7 @@ import MatFlowProductionLocationMaster
 	from "./pages/MatFlowProductionLocationMaster";
 
 import MatFlowStorePlanningQueue
-	from "./pages/MatFlowStorePlanningQueue";
+	from "./pages/MatFlowPlanningQueue";
 
 import MatFlowStorePlanningDetail
 	from "./pages/MatFlowStorePlanningDetail";
@@ -240,6 +240,7 @@ export default function MatFlowRoutes() {
 						<MatFlowStorePlanningQueue />
 					)}
 				/>
+
 
 				<Route
 					path="store/requisitions/:requisitionId"
