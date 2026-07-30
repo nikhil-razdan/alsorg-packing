@@ -919,6 +919,18 @@ public class MatFlowTransferExecutionService {
                                 transfer.getRowVersion());
         }
 
+        private BigDecimal zero(
+                        BigDecimal value) {
+
+                return value == null
+                                ? BigDecimal.ZERO.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP)
+                                : value.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+        }
+
         private BigDecimal positiveQuantity(
                         BigDecimal requested,
                         BigDecimal maximum,
