@@ -5,7 +5,10 @@ import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.domain.matflow.MatFlowLocation;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import java.util.Set;
+import java.util.Locale;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -95,14 +98,31 @@ public class MatFlowAccessService {
 
         public void requirePlantAccess(
                         String plantCode) {
+
+                String normalizedPlant = plantCode == null
+                                ? null
+                                : plantCode
+                                                .trim()
+                                                .toUpperCase(
+                                                                Locale.ROOT);
+
+                if (normalizedPlant == null ||
+                                normalizedPlant.isBlank()) {
+
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "Plant code is missing from the requested MatFlow record");
+                }
+
                 User user = currentUser();
 
                 if (!currentUserService.canAccessPlant(
                                 user,
-                                plantCode)) {
+                                normalizedPlant)) {
+
                         throw new AccessDeniedException(
                                         "No access to plant: " +
-                                                        plantCode);
+                                                        normalizedPlant);
                 }
         }
 
