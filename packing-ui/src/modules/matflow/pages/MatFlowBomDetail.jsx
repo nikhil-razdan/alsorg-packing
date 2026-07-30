@@ -194,10 +194,9 @@ export default function MatFlowBomDetail() {
 
     const canCreateRevision =
         canEdit &&
-        [
-            "APPROVED",
-            "SUPERSEDED",
-        ].includes(status);
+        status === "APPROVED" &&
+        bom?.effective === true &&
+        bom?.latestRevision === true;
 
     const openAction = (action) => {
         setActionDialog(action);
@@ -543,15 +542,13 @@ export default function MatFlowBomDetail() {
                         </Box>
                     </Card>
 
-                    <Card sx={panelSx}>
-                        <MatFlowBomLineEditor
-                            bom={bom}
-                            lines={lines}
-                            canEdit={canEdit}
-                            onChanged={load}
-                            onError={setError}
-                        />
-                    </Card>
+                    <MatFlowBomLineEditor
+                        bom={bom}
+                        lines={lines}
+                        canEdit={canEdit}
+                        onChanged={load}
+                        onError={setError}
+                    />
                 </>
             )}
 

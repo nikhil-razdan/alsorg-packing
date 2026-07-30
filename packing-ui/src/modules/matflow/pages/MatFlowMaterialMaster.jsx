@@ -22,6 +22,13 @@ import {
     Typography,
 } from "@mui/material";
 
+
+import {
+    getMatFlowCategoryMeta,
+    MATFLOW_MATERIAL_CATEGORIES,
+    normalizeMatFlowCategory,
+} from "../utils/matflowMaterialCategories";
+
 import AddIcon
     from "@mui/icons-material/Add";
 import CloseIcon
@@ -311,15 +318,6 @@ export default function MatFlowMaterialMaster() {
                 form.minimumStock || 0
             );
 
-        if (
-            !Number.isFinite(
-                minimumStock
-            ) ||
-            minimumStock < 0
-        ) {
-            return "Minimum stock must be zero or greater.";
-        }
-
         const reorderLevel =
             Number(
                 form.reorderLevel || 0
@@ -327,11 +325,20 @@ export default function MatFlowMaterialMaster() {
 
         if (
             !Number.isFinite(
+                minimumStock
+            ) ||
+            minimumStock < 0
+        ) {
+            return "Minimum stock cannot be negative.";
+        }
+
+        if (
+            !Number.isFinite(
                 reorderLevel
             ) ||
             reorderLevel < 0
         ) {
-            return "Reorder level must be zero or greater.";
+            return "Reorder level cannot be negative.";
         }
 
         return "";
@@ -358,9 +365,9 @@ export default function MatFlowMaterialMaster() {
                 ),
 
             category:
-                clean(
+                normalizeMatFlowCategory(
                     form.category
-                ).toUpperCase(),
+                ),
 
             specification:
                 clean(
@@ -576,6 +583,38 @@ export default function MatFlowMaterialMaster() {
 
                             <Box sx={tableCellSx}>
                                 Material Name
+                            </Box>
+
+                            <Box sx={tableCellSx}>
+                                <Chip
+                                    label={
+                                        getMatFlowCategoryMeta(
+                                            row.category
+                                        ).label
+                                    }
+                                    size="small"
+                                    sx={{
+                                        height: "22px",
+                                        color:
+                                            getMatFlowCategoryMeta(
+                                                row.category
+                                            ).color,
+                                        background:
+                                            `${getMatFlowCategoryMeta(
+                                                row.category
+                                            ).color}16`,
+                                        border:
+                                            `1px solid ${getMatFlowCategoryMeta(
+                                                row.category
+                                            ).color}30`,
+                                        fontSize: "9px",
+                                        fontWeight: 900,
+                                    }}
+                                />
+                            </Box>
+
+                            <Box sx={tableCellSx}>
+                                Category
                             </Box>
 
                             <Box sx={tableCellSx}>
@@ -807,7 +846,9 @@ export default function MatFlowMaterialMaster() {
                             }}
                         />
 
+
                         <TextField
+                            select
                             label="Category *"
                             value={form.category}
                             disabled={saving}
@@ -818,7 +859,18 @@ export default function MatFlowMaterialMaster() {
                                 )
                             }
                             sx={fieldSx}
-                        />
+                        >
+                            {MATFLOW_MATERIAL_CATEGORIES.map(
+                                (category) => (
+                                    <MenuItem
+                                        key={category.value}
+                                        value={category.value}
+                                    >
+                                        {category.label}
+                                    </MenuItem>
+                                )
+                            )}
+                        </TextField>
 
                         <TextField
                             label="Preferred Supplier"
@@ -976,7 +1028,7 @@ const sectionSubSx = {
 };
 
 const materialColumns =
-    "145px minmax(220px,1.3fr) 90px minmax(260px,1.6fr) 110px 80px 100px";
+    "145px minmax(210px,1.25fr) 135px 80px minmax(250px,1.5fr) 105px 75px 100px";
 
 const materialHeaderSx = {
     ...tableHeaderSx,

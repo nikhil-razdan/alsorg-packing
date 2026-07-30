@@ -104,6 +104,23 @@ export default function MatFlowBomList() {
             status: "",
         });
 
+    const [
+        appliedFilters,
+        setAppliedFilters,
+    ] = useState({
+        search: "",
+        plantCode: "",
+        status: "",
+    });
+
+    const STATUS_OPTIONS = [
+        "",
+        "DRAFT",
+        "SUBMITTED",
+        "APPROVED",
+        "RETURNED",
+    ];
+
     const [page, setPage] =
         useState(0);
 
@@ -115,44 +132,33 @@ export default function MatFlowBomList() {
 
     const size = 25;
 
-    const load = useCallback(async (
-        targetPage = page,
-        targetFilters = filters
-    ) => {
+    const load = useCallback(async () => {
         setLoading(true);
         setError("");
 
         try {
-            const data =
+            const response =
                 await matflowApi.listBoms({
-                    page: targetPage,
+                    page,
                     size,
 
                     search:
-                        targetFilters.search ||
+                        appliedFilters.search ||
                         undefined,
 
                     plantCode:
-                        targetFilters.plantCode ||
+                        appliedFilters.plantCode ||
                         undefined,
 
                     status:
-                        targetFilters.status ||
-                        undefined,
-                });
-
-            const response =
-                await matflowApi.listBoms({
-                    search:
-                        targetFilters.search ||
+                        appliedFilters.status ||
                         undefined,
 
-                    status:
-                        targetFilters.status ||
-                        undefined,
-
-                    latestOnly:
-                        true,
+                    /*
+                     * The main register should display one
+                     * current revision per BOM/project.
+                     */
+                    latestOnly: true,
                 });
 
             const result =
@@ -161,14 +167,19 @@ export default function MatFlowBomList() {
                 );
 
             setRows(result.rows);
+
             setTotalPages(
                 result.totalPages
             );
+
             setTotalElements(
                 result.totalElements
             );
         } catch (requestError) {
             setRows([]);
+
+            setTotalPages(0);
+            setTotalElements(0);
 
             setError(
                 readMatFlowError(
@@ -180,16 +191,13 @@ export default function MatFlowBomList() {
             setLoading(false);
         }
     }, [
-        filters,
+        appliedFilters,
         page,
     ]);
 
     useEffect(() => {
-        load(page, filters);
-    }, [
-        load,
-        page,
-    ]);
+        load();
+    }, [load]);
 
     const updateFilter = (
         key,
@@ -203,7 +211,27 @@ export default function MatFlowBomList() {
 
     const applyFilters = () => {
         setPage(0);
-        load(0, filters);
+
+        setAppliedFilters({
+            search:
+                String(
+                    filters.search || ""
+                ).trim(),
+
+            plantCode:
+                String(
+                    filters.plantCode || ""
+                )
+                    .trim()
+                    .toUpperCase(),
+
+            status:
+                String(
+                    filters.status || ""
+                )
+                    .trim()
+                    .toUpperCase(),
+        });
     };
 
     const resetFilters = () => {
@@ -214,8 +242,8 @@ export default function MatFlowBomList() {
         };
 
         setFilters(cleared);
+        setAppliedFilters(cleared);
         setPage(0);
-        load(0, cleared);
     };
 
     return (
@@ -355,9 +383,7 @@ export default function MatFlowBomList() {
 
                     <Button
                         startIcon={<RefreshIcon />}
-                        onClick={() =>
-                            load(page, filters)
-                        }
+                        onClick={load}
                         sx={secondaryBtnSx}
                     >
                         Refresh
