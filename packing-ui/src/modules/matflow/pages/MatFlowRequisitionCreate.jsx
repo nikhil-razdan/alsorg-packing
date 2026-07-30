@@ -81,6 +81,15 @@ const formatQty = (value) => {
     );
 };
 
+const normalizeLocationType = (
+    value
+) => {
+    return String(value ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+};
+
 const lineMaterialName = (line) => {
     return (
         line.materialName ||
@@ -162,6 +171,11 @@ export default function MatFlowRequisitionCreate() {
         useState("");
 
     const [
+        locationError,
+        setLocationError,
+    ] = useState("");
+
+    const [
         lineInputs,
         setLineInputs,
     ] = useState({});
@@ -214,11 +228,6 @@ export default function MatFlowRequisitionCreate() {
                             bomResponse?.data
                         );
 
-                    const locationResult =
-                        extractMatFlowPage(
-                            locationResponse?.data
-                        );
-
                     const approvedBoms =
                         bomResult.rows.filter(
                             (bom) => {
@@ -234,20 +243,70 @@ export default function MatFlowRequisitionCreate() {
                             }
                         );
 
-                    const productionLocations =
-                        locationResult.rows.filter(
+                    const locationResult =
+                        extractMatFlowPage(
+                            locationResponse?.data ??
+                            locationResponse
+                        );
+
+                    const allLocationRows =
+                        Array.isArray(
+                            locationResult.rows
+                        )
+                            ? locationResult.rows
+                            : [];
+
+                    const activeLocations =
+                        allLocationRows.filter(
                             (location) => {
                                 return (
-                                    String(
-                                        location.locationType ||
-                                        ""
-                                    ).toUpperCase() ===
-                                    "PRODUCTION" &&
-                                    location.active !==
-                                    false
+                                    Boolean(location?.id) &&
+                                    location.active !== false
                                 );
                             }
                         );
+
+                    const productionLocations =
+                        activeLocations.filter(
+                            (location) => {
+                                return (
+                                    normalizeLocationType(
+                                        location.locationType
+                                    ) ===
+                                    "PRODUCTION"
+                                );
+                            }
+                        );
+
+                    if (
+                        productionLocations.length === 0
+                    ) {
+                        const returnedTypes =
+                            Array.from(
+                                new Set(
+                                    activeLocations
+                                        .map((location) =>
+                                            normalizeLocationType(
+                                                location.locationType
+                                            )
+                                        )
+                                        .filter(Boolean)
+                                )
+                            );
+
+                        const typeMessage =
+                            returnedTypes.length > 0
+                                ? ` Available active location types: ${returnedTypes.join(
+                                    ", "
+                                )}.`
+                                : "";
+
+                        throw new Error(
+                            "No active MatFlow Production destination location is configured." +
+                            typeMessage
+                        );
+                    }
+
 
                     if (active) {
                         setBoms(
@@ -416,27 +475,95 @@ export default function MatFlowRequisitionCreate() {
 
     const destinationOptions =
         useMemo(() => {
+            const activeProductionLocations =
+                locations.filter(
+                    (location) => {
+                        return (
+                            Boolean(
+                                location?.id
+                            ) &&
+                            location.active !==
+                            false &&
+                            normalizeLocationType(
+                                location.locationType
+                            ) ===
+                            "PRODUCTION"
+                        );
+                    }
+                );
+
             if (!bomPlantCode) {
-                return locations;
+                return activeProductionLocations;
             }
 
-            const samePlant =
-                locations.filter(
-                    (location) =>
+            return activeProductionLocations.filter(
+                (location) => {
+                    return (
                         String(
                             location.plantCode ||
                             ""
-                        ).toUpperCase() ===
+                        )
+                            .trim()
+                            .toUpperCase() ===
                         bomPlantCode
-                );
-
-            return samePlant.length > 0
-                ? samePlant
-                : locations;
+                    );
+                }
+            );
         }, [
             bomPlantCode,
             locations,
         ]);
+
+    useEffect(() => {
+        if (
+            !selectedBom ||
+            bomLoading
+        ) {
+            setLocationError("");
+            return;
+        }
+
+        if (
+            destinationOptions.length === 0
+        ) {
+            setDestinationLocationId("");
+
+            setLocationError(
+                bomPlantCode
+                    ? `No active PRODUCTION location is configured for plant ${bomPlantCode}. Create the Production location in MatFlow Location Master first.`
+                    : "No active PRODUCTION location is configured in MatFlow."
+            );
+
+            return;
+        }
+
+        setLocationError("");
+
+        const currentlySelectedExists =
+            destinationOptions.some(
+                (location) =>
+                    String(location.id) ===
+                    String(
+                        destinationLocationId
+                    )
+            );
+
+        if (
+            !currentlySelectedExists
+        ) {
+            setDestinationLocationId(
+                destinationOptions.length === 1
+                    ? destinationOptions[0].id
+                    : ""
+            );
+        }
+    }, [
+        selectedBom,
+        bomLoading,
+        bomPlantCode,
+        destinationOptions,
+        destinationLocationId,
+    ]);
 
     const sections =
         useMemo(() => {
@@ -829,30 +956,41 @@ export default function MatFlowRequisitionCreate() {
                         }
                         disabled={
                             saving ||
-                            !selectedBom
+                            bomLoading ||
+                            !selectedBom ||
+                            destinationOptions.length === 0
                         }
                         onChange={(event) =>
                             setDestinationLocationId(
                                 event.target.value
                             )
                         }
+                        helperText={
+                            !selectedBom
+                                ? "Select an approved BOM first."
+                                : destinationOptions.length === 0
+                                    ? "No matching active Production location is configured."
+                                    : `${destinationOptions.length} Production destination${destinationOptions.length === 1
+                                        ? ""
+                                        : "s"
+                                    } available.`
+                        }
                         sx={fieldSx}
                     >
                         {destinationOptions.map(
                             (location) => (
                                 <MenuItem
-                                    key={
-                                        location.id
-                                    }
-                                    value={
-                                        location.id
-                                    }
+                                    key={location.id}
+                                    value={location.id}
                                 >
-                                    {location.locationCode}
+                                    {location.locationCode ||
+                                        "-"}
                                     {" · "}
-                                    {location.locationName}
+                                    {location.locationName ||
+                                        "-"}
                                     {" · "}
-                                    {location.plantCode}
+                                    {location.plantCode ||
+                                        "-"}
                                 </MenuItem>
                             )
                         )}
@@ -877,6 +1015,11 @@ export default function MatFlowRequisitionCreate() {
                     />
                 </Box>
             </Card>
+            {locationError && (
+                <Box sx={errorBoxSx}>
+                    {locationError}
+                </Box>
+            )}
 
             {bomLoading && (
                 <Box sx={loadingSx}>
@@ -1165,9 +1308,11 @@ export default function MatFlowRequisitionCreate() {
                             }
                             disabled={
                                 saving ||
-                                selectedRequestLines.length ===
-                                0 ||
-                                !destinationLocationId
+                                bomLoading ||
+                                !selectedBom?.id ||
+                                selectedRequestLines.length === 0 ||
+                                !destinationLocationId ||
+                                destinationOptions.length === 0
                             }
                             sx={primaryBtnSx}
                         >
