@@ -1,14 +1,5 @@
 package com.alsorg.packing.service.matflow;
 
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ApprovalHistoryResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomActionRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomCreateRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomDetailResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomLineRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomLineResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomSummaryResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomUpdateRequest;
-
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ApprovalHistoryResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomCreateRequest;
@@ -440,11 +431,19 @@ public class MatFlowBomService {
                 saveAudit(
                                 bom,
                                 "BOM_LINE_UPDATED",
-                                Map.of(
+                                auditDetails(
                                                 "lineId",
                                                 line.getId(),
+
+                                                "materialId",
+                                                material.getId(),
+
                                                 "materialCode",
                                                 material.getMaterialCode(),
+
+                                                "materialCategory",
+                                                line.getMaterialCategorySnapshot(),
+
                                                 "netRequiredQty",
                                                 line.getNetRequiredQty()),
                                 actor);
@@ -720,10 +719,12 @@ public class MatFlowBomService {
 
                 MatFlowBom source = requireBom(id);
 
-                if (source.getStatus() != MatFlowBomStatus.APPROVED &&
-                                source.getStatus() != MatFlowBomStatus.SUPERSEDED) {
+                if (source.getStatus() != MatFlowBomStatus.APPROVED ||
+                                !source.isEffective() ||
+                                !source.isLatestRevision()) {
+
                         throw conflict(
-                                        "A new revision can only be created from an approved BOM");
+                                        "A new revision can only be created from the latest effective approved BOM");
                 }
 
                 assertActionVersion(
@@ -796,6 +797,25 @@ public class MatFlowBomService {
                         copied.setMaterialNameSnapshot(
                                         sourceLine
                                                         .getMaterialNameSnapshot());
+                        String copiedCategory = clean(
+                                        sourceLine
+                                                        .getMaterialCategorySnapshot());
+
+                        if (copiedCategory == null &&
+                                        sourceLine.getMaterial() != null) {
+
+                                copiedCategory = normalizeMaterialCategory(
+                                                sourceLine
+                                                                .getMaterial()
+                                                                .getCategory());
+                        }
+
+                        if (copiedCategory == null) {
+                                copiedCategory = "MISCELLANEOUS";
+                        }
+
+                        copied.setMaterialCategorySnapshot(
+                                        copiedCategory);
                         copied.setSpecificationSnapshot(
                                         sourceLine
                                                         .getSpecificationSnapshot());
@@ -845,6 +865,7 @@ public class MatFlowBomService {
                         MatFlowBomLine line,
                         MatFlowMaterial material,
                         BomLineRequest request) {
+
                 BigDecimal requiredQty = request.requiredQty();
 
                 BigDecimal wastage = request.wastagePercent() == null
@@ -854,6 +875,7 @@ public class MatFlowBomService {
                 if (requiredQty == null ||
                                 requiredQty.compareTo(
                                                 BigDecimal.ZERO) <= 0) {
+
                         throw badRequest(
                                         "Required quantity must be greater than zero");
                 }
@@ -862,9 +884,40 @@ public class MatFlowBomService {
                                 BigDecimal.ZERO) < 0 ||
                                 wastage.compareTo(
                                                 new BigDecimal("1000")) > 0) {
+
                         throw badRequest(
                                         "Wastage percentage must be between 0 and 1000");
                 }
+
+                String materialCode = clean(
+                                material.getMaterialCode());
+
+                String materialName = clean(
+                                material.getMaterialName());
+
+                String materialUom = clean(
+                                material.getUom());
+
+                if (materialCode == null) {
+                        throw conflict(
+                                        "Selected material has no material code. " +
+                                                        "Correct the material master and try again.");
+                }
+
+                if (materialName == null) {
+                        throw conflict(
+                                        "Selected material has no material name. " +
+                                                        "Correct the material master and try again.");
+                }
+
+                if (materialUom == null) {
+                        throw conflict(
+                                        "Selected material has no UOM. " +
+                                                        "Correct the material master and try again.");
+                }
+
+                String materialCategory = normalizeMaterialCategory(
+                                material.getCategory());
 
                 BigDecimal wastageQuantity = requiredQty
                                 .multiply(wastage)
@@ -874,32 +927,47 @@ public class MatFlowBomService {
                                                 RoundingMode.HALF_UP);
 
                 BigDecimal netRequiredQty = requiredQty
-                                .add(wastageQuantity)
+                                .add(
+                                                wastageQuantity)
                                 .setScale(
                                                 3,
                                                 RoundingMode.HALF_UP);
 
                 line.setMaterial(material);
+
                 line.setMaterialCodeSnapshot(
-                                material.getMaterialCode());
+                                materialCode);
+
                 line.setMaterialNameSnapshot(
-                                material.getMaterialName());
+                                materialName);
+
+                line.setMaterialCategorySnapshot(
+                                materialCategory);
+
                 line.setSpecificationSnapshot(
-                                material.getSpecification());
+                                clean(
+                                                material.getSpecification()));
+
                 line.setUomSnapshot(
-                                material.getUom());
+                                materialUom.toUpperCase(
+                                                Locale.ROOT));
+
                 line.setRequiredQty(
                                 requiredQty.setScale(
                                                 3,
                                                 RoundingMode.HALF_UP));
+
                 line.setWastagePercent(
                                 wastage.setScale(
                                                 3,
                                                 RoundingMode.HALF_UP));
+
                 line.setNetRequiredQty(
                                 netRequiredQty);
+
                 line.setRemarks(
-                                request.remarks());
+                                clean(
+                                                request.remarks()));
         }
 
         private void validateLineRequest(
@@ -1181,13 +1249,19 @@ public class MatFlowBomService {
 
         private BomLineResponse toLineResponse(
                         MatFlowBomLine line) {
+
                 return new BomLineResponse(
                                 line.getId(),
                                 line.getLineNo(),
-                                line.getMaterial()
-                                                .getId(),
+
+                                line.getMaterial() == null
+                                                ? null
+                                                : line.getMaterial()
+                                                                .getId(),
+
                                 line.getMaterialCodeSnapshot(),
                                 line.getMaterialNameSnapshot(),
+                                line.getMaterialCategorySnapshot(),
                                 line.getSpecificationSnapshot(),
                                 line.getUomSnapshot(),
                                 line.getRequiredQty(),
@@ -1195,6 +1269,36 @@ public class MatFlowBomService {
                                 line.getNetRequiredQty(),
                                 line.getRemarks(),
                                 line.getRowVersion());
+        }
+
+        private String normalizeMaterialCategory(
+                        String value) {
+
+                String normalized = clean(value);
+
+                if (normalized == null) {
+                        throw conflict(
+                                        "Selected material has no category. " +
+                                                        "Correct the material master and try again.");
+                }
+
+                normalized = normalized
+                                .toUpperCase(
+                                                Locale.ROOT)
+                                .replaceAll(
+                                                "[^A-Z0-9]+",
+                                                "_")
+                                .replaceAll(
+                                                "^_+|_+$",
+                                                "");
+
+                if (normalized.isBlank()) {
+                        throw conflict(
+                                        "Selected material has no valid category. " +
+                                                        "Correct the material master and try again.");
+                }
+
+                return normalized;
         }
 
         private String clean(String value) {

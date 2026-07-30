@@ -72,6 +72,8 @@ import AppsIcon
     from "@mui/icons-material/Apps";
 import LogoutIcon
     from "@mui/icons-material/Logout";
+import LocationOnOutlinedIcon
+    from "@mui/icons-material/LocationOnOutlined";
 
 const SIDEBAR_KEY =
     "matflowSidebarCollapsed";
@@ -112,6 +114,12 @@ const navItems = [
         path: "/matflow/production",
         screen: "production",
         icon: <EngineeringOutlinedIcon />,
+    },
+    {
+        label: "Locations",
+        path: "/matflow/locations",
+        screen: "store",
+        icon: <LocationOnOutlinedIcon />,
     },
     {
         label: "Store",

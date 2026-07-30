@@ -125,11 +125,15 @@ const lineRequiredQty = (line) => {
     );
 };
 
-const lineCategory = (line) => {
+const lineCategory = (
+    line
+) => {
     return normalizeMatFlowCategory(
-        line.category ||
-        line.categorySnapshot ||
-        line.material?.category ||
+        line?.materialCategorySnapshot ||
+        line?.categorySnapshot ||
+        line?.materialCategory ||
+        line?.category ||
+        line?.material?.category ||
         "MISCELLANEOUS"
     );
 };
@@ -233,12 +237,11 @@ export default function MatFlowRequisitionCreate() {
                             (bom) => {
                                 return (
                                     String(
-                                        bom.status ||
-                                        ""
+                                        bom.status || ""
                                     ).toUpperCase() ===
                                     "APPROVED" &&
-                                    bom.effective !==
-                                    false
+                                    bom.effective === true &&
+                                    bom.latestRevision === true
                                 );
                             }
                         );
@@ -277,36 +280,6 @@ export default function MatFlowRequisitionCreate() {
                                 );
                             }
                         );
-
-                    if (
-                        productionLocations.length === 0
-                    ) {
-                        const returnedTypes =
-                            Array.from(
-                                new Set(
-                                    activeLocations
-                                        .map((location) =>
-                                            normalizeLocationType(
-                                                location.locationType
-                                            )
-                                        )
-                                        .filter(Boolean)
-                                )
-                            );
-
-                        const typeMessage =
-                            returnedTypes.length > 0
-                                ? ` Available active location types: ${returnedTypes.join(
-                                    ", "
-                                )}.`
-                                : "";
-
-                        throw new Error(
-                            "No active MatFlow Production destination location is configured." +
-                            typeMessage
-                        );
-                    }
-
 
                     if (active) {
                         setBoms(
@@ -391,14 +364,47 @@ export default function MatFlowRequisitionCreate() {
                         loadedBom
                     );
 
-                    setLineInputs({});
-
                     const lines =
-                        Array.isArray(
-                            loadedBom?.lines
-                        )
-                            ? loadedBom.lines
-                            : [];
+                        [
+                            loadedBom?.lines,
+                            loadedBom?.bomLines,
+                            loadedBom?.items,
+                        ].find(
+                            Array.isArray
+                        ) || [];
+
+                    const initialLineInputs = {};
+
+                    lines.forEach((line) => {
+                        if (!line?.id) {
+                            return;
+                        }
+
+                        const bomQuantity =
+                            lineRequiredQty(
+                                line
+                            );
+
+                        initialLineInputs[
+                            String(line.id)
+                        ] = {
+                            requestedQty:
+                                Number.isFinite(
+                                    bomQuantity
+                                ) &&
+                                    bomQuantity > 0
+                                    ? String(
+                                        bomQuantity
+                                    )
+                                    : "",
+
+                            remarks: "",
+                        };
+                    });
+
+                    setLineInputs(
+                        initialLineInputs
+                    );
 
                     const sections = {};
 
@@ -454,6 +460,76 @@ export default function MatFlowRequisitionCreate() {
                 ) || []
             );
         }, [selectedBom]);
+
+    const requestFullBom = () => {
+        const next = {};
+
+        bomLines.forEach((line) => {
+            if (!line?.id) {
+                return;
+            }
+
+            const quantity =
+                lineRequiredQty(
+                    line
+                );
+
+            next[
+                String(line.id)
+            ] = {
+                requestedQty:
+                    Number.isFinite(
+                        quantity
+                    ) &&
+                        quantity > 0
+                        ? String(
+                            quantity
+                        )
+                        : "",
+
+                remarks:
+                    lineInputs[
+                        String(line.id)
+                    ]?.remarks ||
+                    "",
+            };
+        });
+
+        setLineInputs(next);
+    };
+
+    const clearRequestedQuantities = () => {
+        setLineInputs(
+            (current) => {
+                const next = {};
+
+                bomLines.forEach(
+                    (line) => {
+                        if (!line?.id) {
+                            return;
+                        }
+
+                        next[
+                            String(line.id)
+                        ] = {
+                            requestedQty:
+                                "",
+
+                            remarks:
+                                current[
+                                    String(
+                                        line.id
+                                    )
+                                ]?.remarks ||
+                                "",
+                        };
+                    }
+                );
+
+                return next;
+            }
+        );
+    };
 
     const project =
         useMemo(() => {
@@ -688,6 +764,38 @@ export default function MatFlowRequisitionCreate() {
                 0
             );
         }, [selectedRequestLines]);
+
+    const createDisabledReason =
+        useMemo(() => {
+            if (!selectedBom?.id) {
+                return "Select an approved operational BOM.";
+            }
+
+            if (
+                destinationOptions.length ===
+                0
+            ) {
+                return "No Production destination is configured.";
+            }
+
+            if (!destinationLocationId) {
+                return "Select a Production destination.";
+            }
+
+            if (
+                selectedRequestLines.length ===
+                0
+            ) {
+                return "Enter a quantity under Request Now for at least one material.";
+            }
+
+            return "";
+        }, [
+            destinationLocationId,
+            destinationOptions.length,
+            selectedBom,
+            selectedRequestLines.length,
+        ]);
 
     const toggleSection = (
         key
@@ -1087,6 +1195,45 @@ export default function MatFlowRequisitionCreate() {
                         </Box>
                     </Card>
 
+                    <Card sx={panelSx}>
+                        <Box sx={quantityActionRowSx}>
+                            <Box>
+                                <Typography sx={quantityActionTitleSx}>
+                                    Requisition Quantities
+                                </Typography>
+
+                                <Typography sx={quantityActionSubSx}>
+                                    Request the complete BOM or enter only
+                                    the quantities currently required.
+                                </Typography>
+                            </Box>
+
+                            <Box sx={quantityButtonsSx}>
+                                <Button
+                                    onClick={clearRequestedQuantities}
+                                    disabled={
+                                        saving ||
+                                        bomLines.length === 0
+                                    }
+                                    sx={secondaryBtnSx}
+                                >
+                                    Clear Quantities
+                                </Button>
+
+                                <Button
+                                    onClick={requestFullBom}
+                                    disabled={
+                                        saving ||
+                                        bomLines.length === 0
+                                    }
+                                    sx={primaryBtnSx}
+                                >
+                                    Request Full BOM
+                                </Button>
+                            </Box>
+                        </Box>
+                    </Card>
+
                     <Box sx={sectionListSx}>
                         {sections.map(
                             (section) => {
@@ -1297,8 +1444,13 @@ export default function MatFlowRequisitionCreate() {
                             }
                         )}
                     </Box>
+                    <Box sx={actionAreaSx}>
+                        {createDisabledReason && (
+                            <Typography sx={disabledReasonSx}>
+                                {createDisabledReason}
+                            </Typography>
+                        )}
 
-                    <Box sx={actionRowSx}>
                         <Button
                             startIcon={
                                 <SaveOutlinedIcon />
@@ -1309,10 +1461,9 @@ export default function MatFlowRequisitionCreate() {
                             disabled={
                                 saving ||
                                 bomLoading ||
-                                !selectedBom?.id ||
-                                selectedRequestLines.length === 0 ||
-                                !destinationLocationId ||
-                                destinationOptions.length === 0
+                                Boolean(
+                                    createDisabledReason
+                                )
                             }
                             sx={primaryBtnSx}
                         >
@@ -1378,6 +1529,20 @@ const detailBoxSx = {
         "rgba(2,6,23,.34)",
     border:
         "1px solid rgba(255,255,255,.06)",
+};
+
+const actionAreaSx = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "6px",
+};
+
+const disabledReasonSx = {
+    color:
+        "rgba(255,255,255,.54)",
+    fontSize: "10.5px",
+    fontWeight: 700,
 };
 
 const detailLabelSx = {
@@ -1517,7 +1682,30 @@ const lineRemarksSx = {
     },
 };
 
-const actionRowSx = {
+const quantityActionRowSx = {
     display: "flex",
-    justifyContent: "flex-end",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    flexWrap: "wrap",
+};
+
+const quantityActionTitleSx = {
+    color: "#fff",
+    fontSize: "15px",
+    fontWeight: 950,
+};
+
+const quantityActionSubSx = {
+    mt: "3px",
+    color:
+        "rgba(255,255,255,.50)",
+    fontSize: "10.5px",
+    fontWeight: 650,
+};
+
+const quantityButtonsSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
 };

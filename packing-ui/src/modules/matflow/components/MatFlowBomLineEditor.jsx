@@ -113,10 +113,10 @@ const resolveLineCategory = (
     line
 ) => {
     return normalizeMatFlowCategory(
-        line?.categorySnapshot ||
         line?.materialCategorySnapshot ||
-        line?.category ||
+        line?.categorySnapshot ||
         line?.materialCategory ||
+        line?.category ||
         line?.material?.category ||
         "MISCELLANEOUS"
     );
@@ -288,8 +288,8 @@ const sectionQuantityText = (
         return `${formatQty(
             quantity
         )} ${uom === "UNSPECIFIED"
-                ? ""
-                : uom
+            ? ""
+            : uom
             }`.trim();
     }
 
@@ -1492,9 +1492,9 @@ export default function MatFlowBomLineEditor({
 
                                                 <Chip
                                                     label={`${section.rows.length} ${section.rows.length ===
-                                                            1
-                                                            ? "ITEM"
-                                                            : "ITEMS"
+                                                        1
+                                                        ? "ITEM"
+                                                        : "ITEMS"
                                                         }`}
                                                     size="small"
                                                     sx={sectionCountSx}
@@ -1900,7 +1900,7 @@ export default function MatFlowBomLineEditor({
                             value={`${formatQty(
                                 calculatedNetQty
                             )} ${selectedMaterial?.uom ||
-                                ""
+                            ""
                                 }`.trim()}
                             emphasis
                         />

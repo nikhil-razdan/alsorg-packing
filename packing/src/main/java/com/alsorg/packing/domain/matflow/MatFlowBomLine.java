@@ -44,6 +44,9 @@ public class MatFlowBomLine
     @Column(name = "specification_snapshot", columnDefinition = "text")
     private String specificationSnapshot;
 
+    @Column(name = "material_category_snapshot", nullable = false, length = 100)
+    public String materialCategorySnapshot;
+
     @Column(name = "uom_snapshot", nullable = false, length = 40)
     private String uomSnapshot;
 
@@ -155,5 +158,15 @@ public class MatFlowBomLine
 
     public void setRemarks(String remarks) {
         this.remarks = clean(remarks);
+    }
+
+    public String getMaterialCategorySnapshot() {
+        return materialCategorySnapshot;
+    }
+
+    public void setMaterialCategorySnapshot(
+            String materialCategorySnapshot) {
+
+        this.materialCategorySnapshot = materialCategorySnapshot;
     }
 }

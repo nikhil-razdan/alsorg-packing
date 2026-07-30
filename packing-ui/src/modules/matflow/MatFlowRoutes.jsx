@@ -52,6 +52,9 @@ import MatFlowRequisitionCreate
 import MatFlowRequisitionDetail
 	from "./pages/MatFlowRequisitionDetail";
 
+import MatFlowProductionLocationMaster
+	from "./pages/MatFlowProductionLocationMaster";
+
 function MatFlowHomeRedirect() {
 	const {
 		role,
@@ -185,6 +188,14 @@ export default function MatFlowRoutes() {
 					element={guarded(
 						"production",
 						<MatFlowProductionRequisitionList />
+					)}
+				/>
+
+				<Route
+					path="locations"
+					element={guarded(
+						"store",
+						<MatFlowProductionLocationMaster />
 					)}
 				/>
 
