@@ -38,7 +38,7 @@ export default function BOMFlowRoutes() {
 
 				<Route
 					path="products/new"
-					element={<BOMFlowProductMaster />}
+					element={<BOMFlowBOMBuilder />}
 				/>
 
 				<Route
