@@ -156,6 +156,7 @@ public final class MatFlowPlanningDtos {
                         UUID materialId,
                         String materialCode,
                         String materialName,
+                        String materialCategory,
 
                         UUID issuedMaterialId,
                         String issuedMaterialCode,

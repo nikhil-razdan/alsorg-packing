@@ -1598,6 +1598,11 @@ public class MatFlowPlanningService {
                                         "Material requisition response cannot be created");
                 }
 
+                if (requisition.getId() == null) {
+                        throw conflict(
+                                        "Material requisition ID is missing");
+                }
+
                 if (requisition.projectDrawing == null ||
                                 requisition.bom == null ||
                                 requisition.destinationLocation == null) {
@@ -1611,6 +1616,12 @@ public class MatFlowPlanningService {
                                                 requisition.getId())
                                 .stream()
                                 .map(line -> {
+
+                                        if (line == null) {
+                                                throw conflict(
+                                                                "Material requisition contains an empty line");
+                                        }
+
                                         if (line.material == null ||
                                                         line.bomLine == null) {
 
@@ -1621,10 +1632,21 @@ public class MatFlowPlanningService {
                                         MatFlowMaterial issuedMaterial = line.issuedMaterial;
 
                                         String responseUom = issuedMaterial == null
-                                                        ? line.material
-                                                                        .getUom()
-                                                        : issuedMaterial
-                                                                        .getUom();
+                                                        ? line.material.getUom()
+                                                        : issuedMaterial.getUom();
+
+                                        /*
+                                         * The category must come from the approved
+                                         * BOM-line snapshot so later Material Master
+                                         * edits do not change historical requisitions.
+                                         */
+                                        String materialCategory = clean(
+                                                        line.bomLine
+                                                                        .getMaterialCategorySnapshot());
+
+                                        if (materialCategory == null) {
+                                                materialCategory = "MISCELLANEOUS";
+                                        }
 
                                         return new RequisitionLineResponse(
                                                         line.getId(),
@@ -1635,25 +1657,28 @@ public class MatFlowPlanningService {
                                                         line.material.getMaterialCode(),
                                                         line.material.getMaterialName(),
 
-                                                        issuedMaterial == null
-                                                                        ? null
-                                                                        : issuedMaterial
-                                                                                        .getId(),
+                                                        /*
+                                                         * Newly added DTO field.
+                                                         */
+                                                        materialCategory,
 
                                                         issuedMaterial == null
                                                                         ? null
-                                                                        : issuedMaterial
-                                                                                        .getMaterialCode(),
+                                                                        : issuedMaterial.getId(),
 
                                                         issuedMaterial == null
                                                                         ? null
-                                                                        : issuedMaterial
-                                                                                        .getMaterialName(),
+                                                                        : issuedMaterial.getMaterialCode(),
+
+                                                        issuedMaterial == null
+                                                                        ? null
+                                                                        : issuedMaterial.getMaterialName(),
 
                                                         responseUom,
 
-                                                        line.bomLine
-                                                                        .getNetRequiredQty(),
+                                                        zero(
+                                                                        line.bomLine
+                                                                                        .getNetRequiredQty()),
 
                                                         zero(
                                                                         line.requestedQty),

@@ -298,6 +298,114 @@ const statusMeta = (value) => {
     }
 };
 
+const clampPercent = (
+    value
+) => {
+    return Math.min(
+        100,
+        Math.max(
+            0,
+            Math.round(
+                numeric(value)
+            )
+        )
+    );
+};
+
+const percentage = (
+    value,
+    total
+) => {
+    const safeTotal =
+        numeric(total);
+
+    if (safeTotal <= 0) {
+        return 0;
+    }
+
+    return clampPercent(
+        (
+            numeric(value) /
+            safeTotal
+        ) *
+        100
+    );
+};
+
+const materialCategory = (
+    line
+) => {
+    return normalize(
+        line?.materialCategory ||
+        line?.materialCategorySnapshot ||
+        "MISCELLANEOUS"
+    );
+};
+
+const readableCategory = (
+    value
+) => {
+    const normalized =
+        normalize(value);
+
+    if (!normalized) {
+        return "Miscellaneous";
+    }
+
+    return normalized
+        .toLowerCase()
+        .split("_")
+        .map(
+            (part) =>
+                part.charAt(0)
+                    .toUpperCase() +
+                part.slice(1)
+        )
+        .join(" ");
+};
+
+const materialCoverage = (
+    line
+) => {
+    const requested =
+        numeric(
+            line?.requestedQty
+        );
+
+    const reserved =
+        numeric(
+            line?.reservedQty
+        );
+
+    const issued =
+        numeric(
+            line?.issuedQty
+        );
+
+    const consumed =
+        numeric(
+            line?.consumedQty
+        );
+
+    const returned =
+        numeric(
+            line?.returnedQty
+        );
+
+    const operationallyCovered =
+        Math.max(
+            reserved,
+            issued,
+            consumed +
+            returned
+        );
+
+    return Math.min(
+        requested,
+        operationallyCovered
+    );
+};
+
 const openTransferStatuses =
     new Set([
         "PLANNED",
@@ -981,6 +1089,508 @@ export default function MatFlowTracker() {
                 );
         }, [requisitions]);
 
+    const analytics =
+        useMemo(() => {
+            const materialRows = [];
+
+            const categoryMap =
+                new Map();
+
+            const projectMap =
+                new Map();
+
+            const health = {
+                ready: 0,
+                partial: 0,
+                shortage: 0,
+                waiting: 0,
+                inProcess: 0,
+            };
+
+            let totalRequested = 0;
+            let totalCovered = 0;
+            let totalReserved = 0;
+            let totalShortage = 0;
+            let totalIssued = 0;
+            let totalConsumed = 0;
+            let totalReturned = 0;
+
+            for (
+                const requisition
+                of requisitions
+            ) {
+                const projectKey =
+                    String(
+                        requisition
+                            ?.projectDrawingId ||
+                        requisition
+                            ?.projectCode ||
+                        "UNASSIGNED"
+                    );
+
+                const project =
+                    projectMap.get(
+                        projectKey
+                    ) || {
+                        projectKey,
+                        projectCode:
+                            requisition
+                                ?.projectCode ||
+                            "Unassigned",
+                        drawingNo:
+                            requisition
+                                ?.drawingNo ||
+                            "-",
+                        plantCode:
+                            requisition
+                                ?.destinationPlantCode ||
+                            "-",
+                        requested: 0,
+                        covered: 0,
+                        reserved: 0,
+                        shortage: 0,
+                        issued: 0,
+                        consumed: 0,
+                        materialCount: 0,
+                        attentionCount: 0,
+                        lastActivity: null,
+                    };
+
+                const activity =
+                    requisition
+                        ?.plannedAt ||
+                    requisition
+                        ?.submittedAt ||
+                    requisition
+                        ?.requestedAt ||
+                    null;
+
+                if (
+                    activity &&
+                    (
+                        !project.lastActivity ||
+                        new Date(
+                            activity
+                        ).getTime() >
+                        new Date(
+                            project.lastActivity
+                        ).getTime()
+                    )
+                ) {
+                    project.lastActivity =
+                        activity;
+                }
+
+                for (
+                    const line
+                    of lineArray(
+                        requisition
+                    )
+                ) {
+                    const requested =
+                        numeric(
+                            line
+                                ?.requestedQty
+                        );
+
+                    const covered =
+                        materialCoverage(
+                            line
+                        );
+
+                    const reserved =
+                        numeric(
+                            line
+                                ?.reservedQty
+                        );
+
+                    const shortage =
+                        numeric(
+                            line
+                                ?.shortageQty
+                        );
+
+                    const issued =
+                        numeric(
+                            line
+                                ?.issuedQty
+                        );
+
+                    const consumed =
+                        numeric(
+                            line
+                                ?.consumedQty
+                        );
+
+                    const returned =
+                        numeric(
+                            line
+                                ?.returnedQty
+                        );
+
+                    const status =
+                        normalize(
+                            requisition
+                                ?.status
+                        );
+
+                    let healthKey =
+                        "inProcess";
+
+                    if (
+                        (
+                            status ===
+                            "DRAFT" ||
+                            status ===
+                            "SUBMITTED"
+                        ) &&
+                        reserved === 0 &&
+                        shortage === 0
+                    ) {
+                        healthKey =
+                            "waiting";
+                    } else if (
+                        shortage > 0 &&
+                        covered > 0
+                    ) {
+                        healthKey =
+                            "partial";
+                    } else if (
+                        shortage > 0
+                    ) {
+                        healthKey =
+                            "shortage";
+                    } else if (
+                        requested > 0 &&
+                        covered >=
+                        requested
+                    ) {
+                        healthKey =
+                            "ready";
+                    }
+
+                    health[
+                        healthKey
+                    ] += 1;
+
+                    totalRequested +=
+                        requested;
+
+                    totalCovered +=
+                        covered;
+
+                    totalReserved +=
+                        reserved;
+
+                    totalShortage +=
+                        shortage;
+
+                    totalIssued +=
+                        issued;
+
+                    totalConsumed +=
+                        consumed;
+
+                    totalReturned +=
+                        returned;
+
+                    project.requested +=
+                        requested;
+
+                    project.covered +=
+                        covered;
+
+                    project.reserved +=
+                        reserved;
+
+                    project.shortage +=
+                        shortage;
+
+                    project.issued +=
+                        issued;
+
+                    project.consumed +=
+                        consumed;
+
+                    project.materialCount +=
+                        1;
+
+                    if (
+                        healthKey ===
+                        "waiting" ||
+                        healthKey ===
+                        "partial" ||
+                        healthKey ===
+                        "shortage"
+                    ) {
+                        project.attentionCount +=
+                            1;
+                    }
+
+                    const category =
+                        materialCategory(
+                            line
+                        );
+
+                    const categoryRow =
+                        categoryMap.get(
+                            category
+                        ) || {
+                            category,
+                            materialCount: 0,
+                            requested: 0,
+                            covered: 0,
+                            shortage: 0,
+                        };
+
+                    categoryRow
+                        .materialCount +=
+                        1;
+
+                    categoryRow
+                        .requested +=
+                        requested;
+
+                    categoryRow.covered +=
+                        covered;
+
+                    categoryRow.shortage +=
+                        shortage;
+
+                    categoryMap.set(
+                        category,
+                        categoryRow
+                    );
+
+                    materialRows.push({
+                        requisitionId:
+                            requisition.id,
+
+                        requisitionNumber:
+                            requisition
+                                .requisitionNumber,
+
+                        projectCode:
+                            requisition
+                                .projectCode,
+
+                        drawingNo:
+                            requisition
+                                .drawingNo,
+
+                        materialId:
+                            line.materialId,
+
+                        materialCode:
+                            line.materialCode,
+
+                        materialName:
+                            line.materialName,
+
+                        category,
+
+                        requested,
+                        covered,
+                        reserved,
+                        shortage,
+                        issued,
+                        consumed,
+                        returned,
+
+                        healthKey,
+                    });
+                }
+
+                projectMap.set(
+                    projectKey,
+                    project
+                );
+            }
+
+            const categories =
+                Array.from(
+                    categoryMap.values()
+                )
+                    .map(
+                        (category) => ({
+                            ...category,
+
+                            readinessPercent:
+                                percentage(
+                                    category
+                                        .covered,
+                                    category
+                                        .requested
+                                ),
+
+                            shortagePercent:
+                                percentage(
+                                    category
+                                        .shortage,
+                                    category
+                                        .requested
+                                ),
+                        })
+                    )
+                    .sort(
+                        (
+                            left,
+                            right
+                        ) =>
+                            right.requested -
+                            left.requested
+                    );
+
+            const projectHealth =
+                Array.from(
+                    projectMap.values()
+                )
+                    .map(
+                        (project) => ({
+                            ...project,
+
+                            readinessPercent:
+                                percentage(
+                                    project
+                                        .covered,
+                                    project
+                                        .requested
+                                ),
+
+                            shortagePercent:
+                                percentage(
+                                    project
+                                        .shortage,
+                                    project
+                                        .requested
+                                ),
+                        })
+                    )
+                    .sort(
+                        (
+                            left,
+                            right
+                        ) => {
+                            if (
+                                left.attentionCount !==
+                                right.attentionCount
+                            ) {
+                                return (
+                                    right.attentionCount -
+                                    left.attentionCount
+                                );
+                            }
+
+                            return (
+                                left.readinessPercent -
+                                right.readinessPercent
+                            );
+                        }
+                    );
+
+            const topShortages =
+                materialRows
+                    .filter(
+                        (row) =>
+                            row.shortage >
+                            0
+                    )
+                    .sort(
+                        (
+                            left,
+                            right
+                        ) =>
+                            right.shortage -
+                            left.shortage
+                    )
+                    .slice(
+                        0,
+                        6
+                    );
+
+            const staleProjects =
+                projectHealth.filter(
+                    (project) => {
+                        if (
+                            !project
+                                .lastActivity ||
+                            project
+                                .readinessPercent >=
+                            100
+                        ) {
+                            return false;
+                        }
+
+                        const age =
+                            Date.now() -
+                            new Date(
+                                project
+                                    .lastActivity
+                            ).getTime();
+
+                        return (
+                            age >
+                            48 *
+                            60 *
+                            60 *
+                            1000
+                        );
+                    }
+                ).length;
+
+            return {
+                materialRows,
+                categories,
+                projectHealth,
+                topShortages,
+                health,
+
+                materialCount:
+                    materialRows.length,
+
+                attentionCount:
+                    health.waiting +
+                    health.partial +
+                    health.shortage,
+
+                staleProjects,
+
+                totalRequested,
+                totalCovered,
+                totalReserved,
+                totalShortage,
+                totalIssued,
+                totalConsumed,
+                totalReturned,
+
+                readinessPercent:
+                    percentage(
+                        totalCovered,
+                        totalRequested
+                    ),
+
+                reservationPercent:
+                    percentage(
+                        totalReserved,
+                        totalRequested
+                    ),
+
+                shortagePercent:
+                    percentage(
+                        totalShortage,
+                        totalRequested
+                    ),
+
+                executionPercent:
+                    percentage(
+                        totalConsumed,
+                        totalRequested
+                    ),
+            };
+        }, [
+            requisitions,
+        ]);
+
     const plantOptions =
         useMemo(
             () =>
@@ -1241,6 +1851,21 @@ export default function MatFlowTracker() {
                 </Box>
             )}
 
+            <ExecutiveAnalytics
+                analytics={analytics}
+            />
+
+            <TrackerInsights
+                analytics={analytics}
+                onOpenMaterial={(
+                    row
+                ) =>
+                    navigate(
+                        `/matflow/requisitions/${row.requisitionId}`
+                    )
+                }
+            />
+
             <Box sx={kpiGridSx}>
                 <Kpi
                     label="Projects"
@@ -1461,6 +2086,641 @@ export default function MatFlowTracker() {
                     )
                 )}
             </Box>
+        </Box>
+    );
+}
+
+function TrackerInsights({
+    analytics,
+    onOpenMaterial,
+}) {
+    return (
+        <Box sx={insightGridSx}>
+            <Card sx={insightCardSx}>
+                <Box sx={insightHeaderSx}>
+                    <Box>
+                        <Typography sx={insightTitleSx}>
+                            Shortage Hotspots
+                        </Typography>
+
+                        <Typography sx={insightSubSx}>
+                            Highest individual material
+                            shortages requiring immediate
+                            Store or Purchase action.
+                        </Typography>
+                    </Box>
+
+                    <Chip
+                        label={`${analytics.topShortages.length} PRIORITIES`}
+                        size="small"
+                        sx={warningChipSx}
+                    />
+                </Box>
+
+                <Box sx={insightListSx}>
+                    {analytics
+                        .topShortages
+                        .length ===
+                        0 ? (
+                        <Box sx={positiveEmptySx}>
+                            No material shortage is
+                            currently recorded.
+                        </Box>
+                    ) : (
+                        analytics
+                            .topShortages
+                            .map(
+                                (
+                                    row,
+                                    index
+                                ) => (
+                                    <Box
+                                        key={`${row.requisitionId}-${row.materialId}-${index}`}
+                                        sx={hotspotRowSx}
+                                    >
+                                        <Box sx={rankSx}>
+                                            {index +
+                                                1}
+                                        </Box>
+
+                                        <Box sx={hotspotIdentitySx}>
+                                            <Typography sx={hotspotTitleSx}>
+                                                {row.materialName ||
+                                                    row.materialCode ||
+                                                    "-"}
+                                            </Typography>
+
+                                            <Typography sx={hotspotSubSx}>
+                                                {row.materialCode ||
+                                                    "-"}
+                                                {" · "}
+                                                {row.projectCode ||
+                                                    "-"}
+                                                {" · "}
+                                                {row.drawingNo ||
+                                                    "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={hotspotQtySx}>
+                                            <Typography sx={hotspotQtyValueSx}>
+                                                {formatQty(
+                                                    row.shortage
+                                                )}
+                                            </Typography>
+
+                                            <Typography sx={hotspotQtyLabelSx}>
+                                                SHORT
+                                            </Typography>
+                                        </Box>
+
+                                        <Button
+                                            onClick={() =>
+                                                onOpenMaterial(
+                                                    row
+                                                )
+                                            }
+                                            sx={miniActionSx}
+                                        >
+                                            Open
+                                        </Button>
+                                    </Box>
+                                )
+                            )
+                    )}
+                </Box>
+            </Card>
+
+            <Card sx={insightCardSx}>
+                <Typography sx={insightTitleSx}>
+                    Category Readiness
+                </Typography>
+
+                <Typography sx={insightSubSx}>
+                    Material coverage and shortage by
+                    BOM category.
+                </Typography>
+
+                <Box sx={categoryListSx}>
+                    {analytics.categories
+                        .slice(
+                            0,
+                            7
+                        )
+                        .map(
+                            (category) => (
+                                <Box
+                                    key={
+                                        category.category
+                                    }
+                                    sx={categoryRowSx}
+                                >
+                                    <Box sx={categoryHeadSx}>
+                                        <Typography sx={categoryNameSx}>
+                                            {readableCategory(
+                                                category.category
+                                            )}
+                                        </Typography>
+
+                                        <Typography sx={categoryValueSx}>
+                                            {category.readinessPercent}
+                                            %
+                                        </Typography>
+                                    </Box>
+
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={
+                                            category
+                                                .readinessPercent
+                                        }
+                                        sx={categoryProgressSx(
+                                            category.shortage >
+                                                0
+                                                ? "#f59e0b"
+                                                : "#22c55e"
+                                        )}
+                                    />
+
+                                    <Box sx={categoryFootSx}>
+                                        <Typography sx={categoryNoteSx}>
+                                            {category.materialCount}
+                                            {" material"}
+                                            {category.materialCount ===
+                                                1
+                                                ? ""
+                                                : "s"}
+                                        </Typography>
+
+                                        <Typography sx={categoryNoteSx}>
+                                            Short{" "}
+                                            {formatQty(
+                                                category.shortage
+                                            )}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            )
+                        )}
+                </Box>
+            </Card>
+
+            <Card sx={insightCardSx}>
+                <Typography sx={insightTitleSx}>
+                    Project Health Ranking
+                </Typography>
+
+                <Typography sx={insightSubSx}>
+                    Projects with the greatest attention
+                    requirement appear first.
+                </Typography>
+
+                <Box sx={projectHealthListSx}>
+                    {analytics
+                        .projectHealth
+                        .slice(
+                            0,
+                            6
+                        )
+                        .map(
+                            (project) => {
+                                const healthColor =
+                                    project
+                                        .shortage >
+                                        0
+                                        ? "#f59e0b"
+                                        : project
+                                            .readinessPercent >=
+                                            90
+                                            ? "#22c55e"
+                                            : "#60a5fa";
+
+                                return (
+                                    <Box
+                                        key={
+                                            project.projectKey
+                                        }
+                                        sx={projectHealthRowSx}
+                                    >
+                                        <Box sx={projectHealthIdentitySx}>
+                                            <Typography sx={projectHealthTitleSx}>
+                                                {project.projectCode}
+                                            </Typography>
+
+                                            <Typography sx={projectHealthSubSx}>
+                                                {project.drawingNo}
+                                                {" · "}
+                                                {project.plantCode}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={projectHealthProgressSx}>
+                                            <Box sx={projectHealthProgressHeadSx}>
+                                                <Typography sx={projectHealthNoteSx}>
+                                                    Readiness
+                                                </Typography>
+
+                                                <Typography
+                                                    sx={{
+                                                        ...projectHealthPercentSx,
+                                                        color:
+                                                            healthColor,
+                                                    }}
+                                                >
+                                                    {project.readinessPercent}
+                                                    %
+                                                </Typography>
+                                            </Box>
+
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={
+                                                    project.readinessPercent
+                                                }
+                                                sx={categoryProgressSx(
+                                                    healthColor
+                                                )}
+                                            />
+                                        </Box>
+
+                                        <Box sx={attentionBadgeSx}>
+                                            <Typography sx={attentionValueSx}>
+                                                {project.attentionCount}
+                                            </Typography>
+
+                                            <Typography sx={attentionLabelSx}>
+                                                ATTENTION
+                                            </Typography>
+                                        </Box>
+                                    </Box>
+                                );
+                            }
+                        )}
+                </Box>
+            </Card>
+        </Box>
+    );
+}
+
+function ExecutiveAnalytics({
+    analytics,
+}) {
+    const healthItems = [
+        {
+            key: "ready",
+            label: "Ready",
+            value:
+                analytics.health
+                    .ready,
+            color: "#22c55e",
+        },
+        {
+            key: "partial",
+            label: "Partial",
+            value:
+                analytics.health
+                    .partial,
+            color: "#fb923c",
+        },
+        {
+            key: "shortage",
+            label: "Shortage",
+            value:
+                analytics.health
+                    .shortage,
+            color: "#ef4444",
+        },
+        {
+            key: "waiting",
+            label: "Waiting",
+            value:
+                analytics.health
+                    .waiting,
+            color: "#60a5fa",
+        },
+        {
+            key: "inProcess",
+            label: "In Process",
+            value:
+                analytics.health
+                    .inProcess,
+            color: "#a78bfa",
+        },
+    ];
+
+    const healthTotal =
+        healthItems.reduce(
+            (total, item) =>
+                total +
+                item.value,
+            0
+        );
+
+    return (
+        <Box sx={executiveGridSx}>
+            <Card sx={executiveCardSx}>
+                <Typography sx={cardEyebrowSx}>
+                    Overall Readiness
+                </Typography>
+
+                <Box sx={ringLayoutSx}>
+                    <ProgressRing
+                        value={
+                            analytics
+                                .readinessPercent
+                        }
+                        color="#22c55e"
+                    />
+
+                    <Box>
+                        <Typography sx={ringTitleSx}>
+                            Material Coverage
+                        </Typography>
+
+                        <Typography sx={ringSubSx}>
+                            {formatQty(
+                                analytics
+                                    .totalCovered
+                            )}
+                            {" of "}
+                            {formatQty(
+                                analytics
+                                    .totalRequested
+                            )}
+                            {" covered"}
+                        </Typography>
+
+                        <Typography sx={ringNoteSx}>
+                            Uses reserved, issued,
+                            consumed and returned
+                            quantities without double
+                            counting.
+                        </Typography>
+                    </Box>
+                </Box>
+            </Card>
+
+            <Card sx={executiveCardSx}>
+                <Typography sx={cardEyebrowSx}>
+                    Material Flow Position
+                </Typography>
+
+                <FlowProgress
+                    label="Reservation Coverage"
+                    value={
+                        analytics
+                            .reservationPercent
+                    }
+                    quantity={`${formatQty(
+                        analytics
+                            .totalReserved
+                    )} reserved`}
+                    color="#60a5fa"
+                />
+
+                <FlowProgress
+                    label="Production Execution"
+                    value={
+                        analytics
+                            .executionPercent
+                    }
+                    quantity={`${formatQty(
+                        analytics
+                            .totalConsumed
+                    )} consumed`}
+                    color="#22d3ee"
+                />
+
+                <FlowProgress
+                    label="Shortage Exposure"
+                    value={
+                        analytics
+                            .shortagePercent
+                    }
+                    quantity={`${formatQty(
+                        analytics
+                            .totalShortage
+                    )} short`}
+                    color="#f59e0b"
+                />
+            </Card>
+
+            <Card sx={executiveCardSx}>
+                <Typography sx={cardEyebrowSx}>
+                    Material Health
+                </Typography>
+
+                <Box sx={healthBarSx}>
+                    {healthItems.map(
+                        (item) => {
+                            const width =
+                                healthTotal >
+                                    0
+                                    ? (
+                                        item.value /
+                                        healthTotal
+                                    ) *
+                                    100
+                                    : 0;
+
+                            return (
+                                <Tooltip
+                                    key={
+                                        item.key
+                                    }
+                                    title={`${item.label}: ${item.value}`}
+                                >
+                                    <Box
+                                        sx={{
+                                            width:
+                                                `${width}%`,
+                                            minWidth:
+                                                item.value >
+                                                    0
+                                                    ? "5px"
+                                                    : 0,
+                                            background:
+                                                item.color,
+                                        }}
+                                    />
+                                </Tooltip>
+                            );
+                        }
+                    )}
+                </Box>
+
+                <Box sx={healthLegendSx}>
+                    {healthItems.map(
+                        (item) => (
+                            <Box
+                                key={
+                                    item.key
+                                }
+                                sx={healthLegendItemSx}
+                            >
+                                <Box
+                                    sx={{
+                                        ...legendDotSx,
+                                        background:
+                                            item.color,
+                                    }}
+                                />
+
+                                <Box>
+                                    <Typography sx={legendValueSx}>
+                                        {item.value}
+                                    </Typography>
+
+                                    <Typography sx={legendLabelSx}>
+                                        {item.label}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        )
+                    )}
+                </Box>
+            </Card>
+
+            <Card sx={exceptionCardSx}>
+                <Typography sx={cardEyebrowSx}>
+                    Exception Centre
+                </Typography>
+
+                <ExceptionMetric
+                    label="Materials Need Attention"
+                    value={
+                        analytics
+                            .attentionCount
+                    }
+                    color="#f59e0b"
+                />
+
+                <ExceptionMetric
+                    label="Projects Inactive > 48 Hours"
+                    value={
+                        analytics
+                            .staleProjects
+                    }
+                    color="#f87171"
+                />
+
+                <ExceptionMetric
+                    label="Shortage Material Lines"
+                    value={
+                        analytics.health
+                            .shortage +
+                        analytics.health
+                            .partial
+                    }
+                    color="#fb923c"
+                />
+
+                <ExceptionMetric
+                    label="Waiting for Store Planning"
+                    value={
+                        analytics.health
+                            .waiting
+                    }
+                    color="#60a5fa"
+                />
+            </Card>
+        </Box>
+    );
+}
+
+function ProgressRing({
+    value,
+    color,
+}) {
+    const safeValue =
+        clampPercent(value);
+
+    return (
+        <Box
+            sx={progressRingSx(
+                safeValue,
+                color
+            )}
+        >
+            <Box sx={progressRingInnerSx}>
+                <Typography sx={progressRingValueSx}>
+                    {safeValue}%
+                </Typography>
+
+                <Typography sx={progressRingLabelSx}>
+                    READY
+                </Typography>
+            </Box>
+        </Box>
+    );
+}
+
+function FlowProgress({
+    label,
+    value,
+    quantity,
+    color,
+}) {
+    return (
+        <Box sx={flowProgressSx}>
+            <Box sx={flowProgressHeadSx}>
+                <Typography sx={flowLabelSx}>
+                    {label}
+                </Typography>
+
+                <Typography sx={flowValueSx}>
+                    {value}%
+                </Typography>
+            </Box>
+
+            <LinearProgress
+                variant="determinate"
+                value={
+                    clampPercent(
+                        value
+                    )
+                }
+                sx={executiveProgressSx(
+                    color
+                )}
+            />
+
+            <Typography sx={flowQuantitySx}>
+                {quantity}
+            </Typography>
+        </Box>
+    );
+}
+
+function ExceptionMetric({
+    label,
+    value,
+    color,
+}) {
+    return (
+        <Box sx={exceptionMetricSx}>
+            <Box
+                sx={{
+                    ...exceptionIndicatorSx,
+                    background:
+                        color,
+                    boxShadow:
+                        `0 0 16px ${color}65`,
+                }}
+            />
+
+            <Typography sx={exceptionLabelSx}>
+                {label}
+            </Typography>
+
+            <Typography
+                sx={{
+                    ...exceptionValueSx,
+                    color,
+                }}
+            >
+                {value}
+            </Typography>
         </Box>
     );
 }
@@ -2456,6 +3716,535 @@ const metricLabelSx = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: ".04em",
+};
+
+const executiveGridSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(4,minmax(0,1fr))",
+    gap: "10px",
+
+    "@media (max-width: 1200px)": {
+        gridTemplateColumns:
+            "repeat(2,minmax(0,1fr))",
+    },
+
+    "@media (max-width: 700px)": {
+        gridTemplateColumns:
+            "1fr",
+    },
+};
+
+const executiveCardSx = {
+    ...panelSx,
+    minHeight: "190px",
+    position: "relative",
+    overflow: "hidden",
+
+    "&::after": {
+        content: '""',
+        position: "absolute",
+        width: "130px",
+        height: "130px",
+        right: "-55px",
+        top: "-55px",
+        borderRadius: "50%",
+        background:
+            "radial-gradient(circle,rgba(96,165,250,.14),transparent 68%)",
+    },
+};
+
+const exceptionCardSx = {
+    ...executiveCardSx,
+    background:
+        "linear-gradient(145deg,rgba(69,10,10,.42),rgba(15,23,42,.86))",
+    border:
+        "1px solid rgba(248,113,113,.18)",
+};
+
+const cardEyebrowSx = {
+    color:
+        "rgba(255,255,255,.50)",
+    fontSize: "9px",
+    fontWeight: 950,
+    textTransform: "uppercase",
+    letterSpacing: ".08em",
+};
+
+const ringLayoutSx = {
+    mt: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "17px",
+};
+
+const progressRingSx = (
+    value,
+    color
+) => ({
+    width: "112px",
+    height: "112px",
+    flex: "0 0 auto",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "50%",
+    background:
+        `conic-gradient(${color} ${value * 3.6}deg,rgba(255,255,255,.075) 0deg)`,
+    boxShadow:
+        `0 0 28px ${color}22`,
+});
+
+const progressRingInnerSx = {
+    width: "82px",
+    height: "82px",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    borderRadius: "50%",
+    background:
+        "linear-gradient(145deg,#111827,#020617)",
+    border:
+        "1px solid rgba(255,255,255,.08)",
+};
+
+const progressRingValueSx = {
+    color: "#fff",
+    fontSize: "22px",
+    fontWeight: 950,
+};
+
+const progressRingLabelSx = {
+    color:
+        "rgba(255,255,255,.43)",
+    fontSize: "8px",
+    fontWeight: 900,
+    letterSpacing: ".10em",
+};
+
+const ringTitleSx = {
+    color: "#fff",
+    fontSize: "14px",
+    fontWeight: 900,
+};
+
+const ringSubSx = {
+    mt: "5px",
+    color:
+        "rgba(255,255,255,.62)",
+    fontSize: "10px",
+    fontWeight: 750,
+};
+
+const ringNoteSx = {
+    mt: "8px",
+    maxWidth: "185px",
+    color:
+        "rgba(255,255,255,.38)",
+    fontSize: "8.5px",
+    lineHeight: 1.5,
+};
+
+const flowProgressSx = {
+    mt: "15px",
+};
+
+const flowProgressHeadSx = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+};
+
+const flowLabelSx = {
+    color:
+        "rgba(255,255,255,.68)",
+    fontSize: "9.5px",
+    fontWeight: 850,
+};
+
+const flowValueSx = {
+    color: "#fff",
+    fontSize: "10px",
+    fontWeight: 950,
+};
+
+const flowQuantitySx = {
+    mt: "4px",
+    color:
+        "rgba(255,255,255,.38)",
+    fontSize: "8.5px",
+};
+
+const executiveProgressSx = (
+    color
+) => ({
+    mt: "6px",
+    height: "7px",
+    borderRadius: 999,
+    background:
+        "rgba(255,255,255,.075)",
+
+    "& .MuiLinearProgress-bar": {
+        background:
+            `linear-gradient(90deg,${color},${color}aa)`,
+        borderRadius: 999,
+    },
+});
+
+const healthBarSx = {
+    mt: "22px",
+    height: "15px",
+    display: "flex",
+    overflow: "hidden",
+    borderRadius: 999,
+    background:
+        "rgba(255,255,255,.06)",
+    border:
+        "1px solid rgba(255,255,255,.06)",
+};
+
+const healthLegendSx = {
+    mt: "20px",
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(3,minmax(0,1fr))",
+    gap: "12px",
+};
+
+const healthLegendItemSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+};
+
+const legendDotSx = {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+};
+
+const legendValueSx = {
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: 950,
+};
+
+const legendLabelSx = {
+    color:
+        "rgba(255,255,255,.42)",
+    fontSize: "8px",
+    fontWeight: 800,
+};
+
+const exceptionMetricSx = {
+    mt: "13px",
+    display: "grid",
+    gridTemplateColumns:
+        "8px minmax(0,1fr) auto",
+    alignItems: "center",
+    gap: "9px",
+};
+
+const exceptionIndicatorSx = {
+    width: "7px",
+    height: "7px",
+    borderRadius: "50%",
+};
+
+const exceptionLabelSx = {
+    color:
+        "rgba(255,255,255,.65)",
+    fontSize: "9.5px",
+    fontWeight: 750,
+};
+
+const exceptionValueSx = {
+    fontSize: "15px",
+    fontWeight: 950,
+};
+
+const insightGridSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "1.25fr 1fr 1fr",
+    gap: "10px",
+
+    "@media (max-width: 1180px)": {
+        gridTemplateColumns:
+            "1fr 1fr",
+    },
+
+    "@media (max-width: 760px)": {
+        gridTemplateColumns:
+            "1fr",
+    },
+};
+
+const insightCardSx = {
+    ...panelSx,
+    minHeight: "300px",
+};
+
+const insightHeaderSx = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "10px",
+};
+
+const insightTitleSx = {
+    color: "#fff",
+    fontSize: "14px",
+    fontWeight: 950,
+};
+
+const insightSubSx = {
+    mt: "3px",
+    color:
+        "rgba(255,255,255,.42)",
+    fontSize: "8.5px",
+    lineHeight: 1.5,
+};
+
+const warningChipSx = {
+    color: "#f59e0b",
+    background:
+        "rgba(245,158,11,.10)",
+    border:
+        "1px solid rgba(245,158,11,.25)",
+    fontSize: "8px",
+    fontWeight: 900,
+};
+
+const insightListSx = {
+    mt: "14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "7px",
+};
+
+const hotspotRowSx = {
+    p: "8px",
+    display: "grid",
+    gridTemplateColumns:
+        "27px minmax(0,1fr) 65px 52px",
+    alignItems: "center",
+    gap: "8px",
+    borderRadius: "8px",
+    background:
+        "rgba(2,6,23,.34)",
+    border:
+        "1px solid rgba(255,255,255,.055)",
+};
+
+const rankSx = {
+    width: "25px",
+    height: "25px",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "7px",
+    color: "#f59e0b",
+    background:
+        "rgba(245,158,11,.10)",
+    fontSize: "9px",
+    fontWeight: 950,
+};
+
+const hotspotIdentitySx = {
+    minWidth: 0,
+};
+
+const hotspotTitleSx = {
+    color: "#fff",
+    fontSize: "10px",
+    fontWeight: 850,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+};
+
+const hotspotSubSx = {
+    mt: "2px",
+    color:
+        "rgba(255,255,255,.38)",
+    fontSize: "8px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+};
+
+const hotspotQtySx = {
+    textAlign: "right",
+};
+
+const hotspotQtyValueSx = {
+    color: "#f59e0b",
+    fontSize: "11px",
+    fontWeight: 950,
+};
+
+const hotspotQtyLabelSx = {
+    color:
+        "rgba(255,255,255,.33)",
+    fontSize: "7px",
+    fontWeight: 900,
+};
+
+const miniActionSx = {
+    minWidth: "46px",
+    height: "25px",
+    color: "#60a5fa",
+    fontSize: "8px",
+    fontWeight: 900,
+    border:
+        "1px solid rgba(96,165,250,.24)",
+};
+
+const positiveEmptySx = {
+    p: "20px",
+    color: "#34d399",
+    textAlign: "center",
+    fontSize: "10px",
+    borderRadius: "9px",
+    background:
+        "rgba(52,211,153,.06)",
+    border:
+        "1px dashed rgba(52,211,153,.20)",
+};
+
+const categoryListSx = {
+    mt: "16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+};
+
+const categoryRowSx = {
+    minWidth: 0,
+};
+
+const categoryHeadSx = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+};
+
+const categoryNameSx = {
+    color:
+        "rgba(255,255,255,.72)",
+    fontSize: "9.5px",
+    fontWeight: 850,
+};
+
+const categoryValueSx = {
+    color: "#fff",
+    fontSize: "9.5px",
+    fontWeight: 950,
+};
+
+const categoryProgressSx = (
+    color
+) => ({
+    mt: "6px",
+    height: "6px",
+    borderRadius: 999,
+    background:
+        "rgba(255,255,255,.07)",
+
+    "& .MuiLinearProgress-bar": {
+        backgroundColor:
+            color,
+        borderRadius: 999,
+    },
+});
+
+const categoryFootSx = {
+    mt: "4px",
+    display: "flex",
+    justifyContent: "space-between",
+};
+
+const categoryNoteSx = {
+    color:
+        "rgba(255,255,255,.35)",
+    fontSize: "7.5px",
+};
+
+const projectHealthListSx = {
+    mt: "14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+};
+
+const projectHealthRowSx = {
+    p: "8px",
+    display: "grid",
+    gridTemplateColumns:
+        "minmax(95px,.8fr) minmax(100px,1fr) 54px",
+    alignItems: "center",
+    gap: "9px",
+    borderRadius: "8px",
+    background:
+        "rgba(2,6,23,.32)",
+    border:
+        "1px solid rgba(255,255,255,.05)",
+};
+
+const projectHealthIdentitySx = {
+    minWidth: 0,
+};
+
+const projectHealthTitleSx = {
+    color: "#fff",
+    fontSize: "10px",
+    fontWeight: 900,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+};
+
+const projectHealthSubSx = {
+    mt: "2px",
+    color:
+        "rgba(255,255,255,.36)",
+    fontSize: "7.5px",
+};
+
+const projectHealthProgressSx = {
+    minWidth: 0,
+};
+
+const projectHealthProgressHeadSx = {
+    display: "flex",
+    justifyContent: "space-between",
+};
+
+const projectHealthNoteSx = {
+    color:
+        "rgba(255,255,255,.36)",
+    fontSize: "7.5px",
+};
+
+const projectHealthPercentSx = {
+    fontSize: "8px",
+    fontWeight: 950,
+};
+
+const attentionBadgeSx = {
+    textAlign: "center",
+};
+
+const attentionValueSx = {
+    color: "#f59e0b",
+    fontSize: "12px",
+    fontWeight: 950,
+};
+
+const attentionLabelSx = {
+    color:
+        "rgba(255,255,255,.30)",
+    fontSize: "6.5px",
+    fontWeight: 900,
 };
 
 const metricValueSx = {
