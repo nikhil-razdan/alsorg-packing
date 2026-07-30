@@ -587,34 +587,6 @@ export default function MatFlowMaterialMaster() {
                             </Box>
 
                             <Box sx={tableCellSx}>
-                                <Chip
-                                    label={
-                                        getMatFlowCategoryMeta(
-                                            row.category
-                                        ).label
-                                    }
-                                    size="small"
-                                    sx={{
-                                        height: "22px",
-                                        color:
-                                            getMatFlowCategoryMeta(
-                                                row.category
-                                            ).color,
-                                        background:
-                                            `${getMatFlowCategoryMeta(
-                                                row.category
-                                            ).color}16`,
-                                        border:
-                                            `1px solid ${getMatFlowCategoryMeta(
-                                                row.category
-                                            ).color}30`,
-                                        fontSize: "9px",
-                                        fontWeight: 900,
-                                    }}
-                                />
-                            </Box>
-
-                            <Box sx={tableCellSx}>
                                 Category
                             </Box>
 
@@ -623,7 +595,7 @@ export default function MatFlowMaterialMaster() {
                             </Box>
 
                             <Box sx={tableCellSx}>
-                                Category / Specification
+                                Specification
                             </Box>
 
                             <Box sx={tableCellSx}>
@@ -644,80 +616,120 @@ export default function MatFlowMaterialMaster() {
                                 No material records were found.
                             </Box>
                         ) : (
-                            rows.map((row) => (
-                                <Box
-                                    key={row.id}
-                                    sx={materialRowSx}
-                                >
-                                    <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>
-                                            {row.materialCode ||
-                                                "-"}
-                                        </Typography>
-                                    </Box>
+                            rows.map((row) => {
+                                const categoryMeta =
+                                    getMatFlowCategoryMeta(
+                                        row.category
+                                    );
 
-                                    <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>
-                                            {row.materialName ||
-                                                "-"}
-                                        </Typography>
-                                    </Box>
+                                return (
+                                    <Box
+                                        key={row.id}
+                                        sx={materialRowSx}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {row.materialCode || "-"}
+                                            </Typography>
+                                        </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.uom || "-"}
-                                    </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {row.materialName || "-"}
+                                            </Typography>
 
-                                    <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>
-                                            {row.category || "-"}
-                                        </Typography>
+                                            {row.preferredSupplier && (
+                                                <Typography sx={subTextSx}>
+                                                    Preferred:{" "}
+                                                    {row.preferredSupplier}
+                                                </Typography>
+                                            )}
+                                        </Box>
 
-                                        <Typography
-                                            sx={{
-                                                mt: "2px",
-                                                color:
-                                                    "rgba(255,255,255,.47)",
-                                                fontSize: "10px",
-                                            }}
-                                        >
-                                            {row.specification || "-"}
-                                        </Typography>
-                                    </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Chip
+                                                label={categoryMeta.label}
+                                                size="small"
+                                                sx={{
+                                                    height: "22px",
+                                                    maxWidth: "125px",
+                                                    color:
+                                                        categoryMeta.color,
+                                                    background:
+                                                        `${categoryMeta.color}16`,
+                                                    border:
+                                                        `1px solid ${categoryMeta.color}30`,
+                                                    fontSize: "9px",
+                                                    fontWeight: 900,
 
-                                    <Box sx={tableCellSx}>
-                                        <MatFlowStatusChip
-                                            status={
-                                                row.active === false
-                                                    ? "INACTIVE"
-                                                    : "ACTIVE"
-                                            }
-                                        />
-                                    </Box>
+                                                    "& .MuiChip-label": {
+                                                        overflow: "hidden",
+                                                        textOverflow:
+                                                            "ellipsis",
+                                                        whiteSpace:
+                                                            "nowrap",
+                                                    },
+                                                }}
+                                            />
+                                        </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.rowVersion ??
-                                            "-"}
-                                    </Box>
+                                        <Box sx={tableCellSx}>
+                                            {row.uom || "-"}
+                                        </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {canManage ? (
-                                            <Button
-                                                startIcon={
-                                                    <EditOutlinedIcon />
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={specificationTextSx}>
+                                                {row.specification || "-"}
+                                            </Typography>
+
+                                            {(
+                                                row.minimumStock !== null &&
+                                                row.minimumStock !== undefined
+                                            ) && (
+                                                    <Typography sx={subTextSx}>
+                                                        Min stock:{" "}
+                                                        {row.minimumStock}
+                                                        {" · "}
+                                                        Reorder:{" "}
+                                                        {row.reorderLevel ?? 0}
+                                                    </Typography>
+                                                )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <MatFlowStatusChip
+                                                status={
+                                                    row.active === false
+                                                        ? "INACTIVE"
+                                                        : "ACTIVE"
                                                 }
-                                                onClick={() =>
-                                                    openEdit(row)
-                                                }
-                                                sx={secondaryBtnSx}
-                                            >
-                                                Edit
-                                            </Button>
-                                        ) : (
-                                            "-"
-                                        )}
+                                            />
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {row.rowVersion ?? "-"}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {canManage ? (
+                                                <Button
+                                                    startIcon={
+                                                        <EditOutlinedIcon />
+                                                    }
+                                                    onClick={() =>
+                                                        openEdit(row)
+                                                    }
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    Edit
+                                                </Button>
+                                            ) : (
+                                                "-"
+                                            )}
+                                        </Box>
                                     </Box>
-                                </Box>
-                            ))
+                                );
+                            })
                         )}
                     </Box>
                 )}
@@ -1035,12 +1047,34 @@ const materialHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         materialColumns,
+    minWidth: "1120px",
 };
 
 const materialRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         materialColumns,
+    minWidth: "1120px",
+};
+
+const subTextSx = {
+    mt: "3px",
+    color:
+        "rgba(255,255,255,.47)",
+    fontSize: "9.5px",
+    fontWeight: 650,
+};
+
+const specificationTextSx = {
+    color:
+        "rgba(255,255,255,.76)",
+    fontSize: "11px",
+    fontWeight: 700,
+    lineHeight: 1.4,
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
 };
 
 const mainTextSx = {
