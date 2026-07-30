@@ -93,7 +93,7 @@ const navItems = [
         path: "/matflow/tracker",
         screen: "tracking",
         icon: <TrackChangesOutlinedIcon />,
-    }
+    },
     {
         label: "Projects",
         path: "/matflow/projects",
