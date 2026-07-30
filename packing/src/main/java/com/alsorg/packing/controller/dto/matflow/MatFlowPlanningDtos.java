@@ -8,272 +8,290 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferPurpose;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import jakarta.validation.Valid;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public final class MatFlowPlanningDtos {
 
-    private MatFlowPlanningDtos() {
-    }
+        private MatFlowPlanningDtos() {
+        }
 
-    public record LocationRequest(
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            Boolean supportsStock,
-            String address,
-            String contactPerson,
-            String contactPhone,
-            Boolean active,
-            Long rowVersion) {
-    }
+        public record LocationRequest(
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+                        OwnershipType ownershipType,
+                        Boolean supportsStock,
+                        String address,
+                        String contactPerson,
+                        String contactPhone,
+                        Boolean active,
+                        Long rowVersion) {
+        }
 
-    public record LocationResponse(
-            UUID id,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            boolean supportsStock,
-            String address,
-            String contactPerson,
-            String contactPhone,
-            boolean active,
-            Long rowVersion) {
-    }
+        public record LocationResponse(
+                        UUID id,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+                        OwnershipType ownershipType,
+                        boolean supportsStock,
+                        String address,
+                        String contactPerson,
+                        String contactPhone,
+                        boolean active,
+                        Long rowVersion) {
+        }
 
-    public record RouteStepRequest(
-            Integer sequenceNo,
-            RouteStepType stepType,
-            UUID locationId,
-            String processCode,
-            BigDecimal expectedYieldPercent,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record RouteStepRequest(
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        UUID locationId,
+                        String processCode,
+                        BigDecimal expectedYieldPercent,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    public record RouteStepResponse(
-            UUID id,
-            UUID bomId,
-            UUID bomLineId,
-            Integer bomLineNo,
-            Integer sequenceNo,
-            RouteStepType stepType,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            String processCode,
-            BigDecimal expectedYieldPercent,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record RouteStepResponse(
+                        UUID id,
+                        UUID bomId,
+                        UUID bomLineId,
+                        Integer bomLineNo,
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        UUID locationId,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+                        OwnershipType ownershipType,
+                        String processCode,
+                        BigDecimal expectedYieldPercent,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    public record StockAdjustmentRequest(
-            UUID materialId,
-            UUID locationId,
-            BigDecimal adjustmentQty,
-            String batchNo,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record StockAdjustmentRequest(
+                        UUID materialId,
+                        UUID locationId,
+                        BigDecimal adjustmentQty,
+                        String batchNo,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    public record StockBalanceResponse(
-            UUID id,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            String uom,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            BigDecimal onHandQty,
-            BigDecimal reservedQty,
-            BigDecimal blockedQty,
-            BigDecimal inTransitQty,
-            BigDecimal availableQty,
-            Long rowVersion) {
-    }
+        public record StockBalanceResponse(
+                        UUID id,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        String uom,
+                        UUID locationId,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+                        BigDecimal onHandQty,
+                        BigDecimal reservedQty,
+                        BigDecimal blockedQty,
+                        BigDecimal inTransitQty,
+                        BigDecimal availableQty,
+                        Long rowVersion) {
+        }
 
-    public record RequisitionLineRequest(
-            UUID bomLineId,
-            BigDecimal requestedQty,
-            String remarks) {
-    }
+        public record RequisitionLineRequest(
 
-    public record RequisitionCreateRequest(
-            UUID projectDrawingId,
-            UUID bomId,
-            UUID destinationLocationId,
-            String remarks,
-            List<RequisitionLineRequest> lines) {
-    }
+                        @NotNull(message = "BOM line ID is required.") UUID bomLineId,
 
-    public record RequisitionActionRequest(
-            Long rowVersion,
-            String remarks) {
-    }
+                        @NotNull(message = "Requested quantity is required.") @DecimalMin(value = "0.001", inclusive = true, message = "Requested quantity must be greater than zero.") BigDecimal requestedQty,
 
-    public record PlanningRequest(
-            Long rowVersion,
-            List<UUID> preferredSourceLocationIds,
-            String remarks) {
-    }
+                        @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
+        }
 
-    public record RequisitionLineResponse(
-            UUID id,
-            Integer lineNo,
-            UUID bomLineId,
+        public record RequisitionCreateRequest(
 
-            UUID materialId,
-            String materialCode,
-            String materialName,
+                        @NotNull(message = "Project drawing ID is required.") UUID projectDrawingId,
 
-            UUID issuedMaterialId,
-            String issuedMaterialCode,
-            String issuedMaterialName,
+                        @NotNull(message = "Operational BOM ID is required.") UUID bomId,
 
-            String uom,
+                        @NotNull(message = "Production destination location is required.") UUID destinationLocationId,
 
-            BigDecimal bomRequiredQty,
-            BigDecimal requestedQty,
-            BigDecimal reservedQty,
-            BigDecimal shortageQty,
-            BigDecimal issuedQty,
-            BigDecimal consumedQty,
-            BigDecimal returnedQty,
+                        @Size(max = 2000, message = "Requisition remarks cannot exceed 2000 characters.") String remarks,
 
-            String remarks,
-            Long rowVersion) {
-    }
+                        @NotEmpty(message = "At least one material line is required.") List<@Valid RequisitionLineRequest> lines) {
+        }
 
-    public record RequisitionResponse(
-            UUID id,
-            String requisitionNumber,
+        public record RequisitionActionRequest(
 
-            UUID projectDrawingId,
-            String projectCode,
-            String drawingNo,
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
 
-            UUID bomId,
-            String bomNumber,
-            Integer bomRevisionNo,
+                        @Size(max = 2000, message = "Action remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-            UUID destinationLocationId,
-            String destinationLocationCode,
-            String destinationLocationName,
-            String destinationPlantCode,
+        public record PlanningRequest(
 
-            RequisitionStatus status,
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
 
-            String requestedBy,
-            LocalDateTime requestedAt,
+                        List<UUID> preferredSourceLocationIds,
 
-            String submittedBy,
-            LocalDateTime submittedAt,
+                        @Size(max = 2000, message = "Planning remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-            String plannedBy,
-            LocalDateTime plannedAt,
+        public record RequisitionLineResponse(
+                        UUID id,
+                        Integer lineNo,
+                        UUID bomLineId,
 
-            String remarks,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
 
-            String cancelledBy,
-            LocalDateTime cancelledAt,
-            String cancellationReason,
+                        UUID issuedMaterialId,
+                        String issuedMaterialCode,
+                        String issuedMaterialName,
 
-            Long rowVersion,
-            List<RequisitionLineResponse> lines) {
-    }
+                        String uom,
 
-    public record ReservationResponse(
-            UUID id,
-            UUID requisitionLineId,
-            String materialCode,
+                        BigDecimal bomRequiredQty,
+                        BigDecimal requestedQty,
+                        BigDecimal reservedQty,
+                        BigDecimal shortageQty,
+                        BigDecimal issuedQty,
+                        BigDecimal consumedQty,
+                        BigDecimal returnedQty,
 
-            UUID sourceLocationId,
-            String sourceLocationCode,
-            String sourcePlantCode,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-            UUID firstDestinationLocationId,
-            String firstDestinationLocationCode,
+        public record RequisitionResponse(
+                        UUID id,
+                        String requisitionNumber,
 
-            String demandPlantCode,
-            BigDecimal reservedQty,
-            ReservationStatus status,
-            Long rowVersion) {
-    }
+                        UUID projectDrawingId,
+                        String projectCode,
+                        String drawingNo,
 
-    public record IndentLineResponse(
-            UUID id,
-            String materialCode,
-            String materialName,
-            BigDecimal requiredQty,
-            BigDecimal orderedQty,
-            BigDecimal receivedQty,
-            String uom) {
-    }
+                        UUID bomId,
+                        String bomNumber,
+                        Integer bomRevisionNo,
 
-    public record IndentResponse(
-            UUID id,
-            String indentNumber,
-            UUID deliverToLocationId,
-            String deliverToLocationCode,
-            String deliverToPlantCode,
-            IndentStatus status,
-            boolean autoGenerated,
-            Long rowVersion,
-            List<IndentLineResponse> lines) {
-    }
+                        UUID destinationLocationId,
+                        String destinationLocationCode,
+                        String destinationLocationName,
+                        String destinationPlantCode,
 
-    public record TransferResponse(
-            UUID id,
-            String transferNumber,
-            UUID reservationId,
+                        RequisitionStatus status,
 
-            UUID fromLocationId,
-            String fromLocationCode,
-            String fromPlantCode,
+                        String requestedBy,
+                        LocalDateTime requestedAt,
 
-            UUID toLocationId,
-            String toLocationCode,
-            String toPlantCode,
+                        String submittedBy,
+                        LocalDateTime submittedAt,
 
-            Integer routeSequenceNo,
-            UUID predecessorTransferId,
+                        String plannedBy,
+                        LocalDateTime plannedAt,
 
-            TransferPurpose purpose,
-            TransferStatus status,
+                        String remarks,
 
-            String materialCode,
-            BigDecimal plannedQty,
-            BigDecimal dispatchedQty,
-            BigDecimal receivedQty,
-            String uom,
+                        String cancelledBy,
+                        LocalDateTime cancelledAt,
+                        String cancellationReason,
 
-            Long rowVersion) {
-    }
+                        Long rowVersion,
+                        List<RequisitionLineResponse> lines) {
+        }
 
-    public record PlanningResponse(
-            RequisitionResponse requisition,
-            List<ReservationResponse> reservations,
-            List<IndentResponse> indents,
-            List<TransferResponse> transfers) {
-    }
+        public record ReservationResponse(
+                        UUID id,
+                        UUID requisitionLineId,
+                        String materialCode,
 
-    public record TransferActionRequest(
-            Long rowVersion,
-            BigDecimal quantity,
-            String batchNo,
-            String remarks) {
-    }
+                        UUID sourceLocationId,
+                        String sourceLocationCode,
+                        String sourcePlantCode,
+
+                        UUID firstDestinationLocationId,
+                        String firstDestinationLocationCode,
+
+                        String demandPlantCode,
+                        BigDecimal reservedQty,
+                        ReservationStatus status,
+                        Long rowVersion) {
+        }
+
+        public record IndentLineResponse(
+                        UUID id,
+                        String materialCode,
+                        String materialName,
+                        BigDecimal requiredQty,
+                        BigDecimal orderedQty,
+                        BigDecimal receivedQty,
+                        String uom) {
+        }
+
+        public record IndentResponse(
+                        UUID id,
+                        String indentNumber,
+                        UUID deliverToLocationId,
+                        String deliverToLocationCode,
+                        String deliverToPlantCode,
+                        IndentStatus status,
+                        boolean autoGenerated,
+                        Long rowVersion,
+                        List<IndentLineResponse> lines) {
+        }
+
+        public record TransferResponse(
+                        UUID id,
+                        String transferNumber,
+                        UUID reservationId,
+
+                        UUID fromLocationId,
+                        String fromLocationCode,
+                        String fromPlantCode,
+
+                        UUID toLocationId,
+                        String toLocationCode,
+                        String toPlantCode,
+
+                        Integer routeSequenceNo,
+                        UUID predecessorTransferId,
+
+                        TransferPurpose purpose,
+                        TransferStatus status,
+
+                        String materialCode,
+                        BigDecimal plannedQty,
+                        BigDecimal dispatchedQty,
+                        BigDecimal receivedQty,
+                        String uom,
+
+                        Long rowVersion) {
+        }
+
+        public record PlanningResponse(
+                        RequisitionResponse requisition,
+                        List<ReservationResponse> reservations,
+                        List<IndentResponse> indents,
+                        List<TransferResponse> transfers) {
+        }
+
+        public record TransferActionRequest(
+                        Long rowVersion,
+                        BigDecimal quantity,
+                        String batchNo,
+                        String remarks) {
+        }
 }

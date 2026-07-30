@@ -65,15 +65,15 @@ const stages = [
 	{
 		title: "Operational BOMs",
 		subtitle:
-			"Prepare and approve project-specific operational BOM revisions.",
+			"Create, revise and approve project-specific MatFlow material structures.",
 		path: "/matflow/boms",
-		icon: <AccountTreeOutlinedIcon />,
-		accent: "#22c55e",
+		icon: <LayersOutlinedIcon />,
+		accent: "#38bdf8",
 	},
 	{
 		title: "Production Planning",
 		subtitle:
-			"Raise production material requisitions against effective BOMs.",
+			"Raise controlled material requisitions against approved and effective operational BOMs.",
 		path: "/matflow/production",
 		icon: <EngineeringOutlinedIcon />,
 		accent: "#f59e0b",
@@ -184,9 +184,13 @@ export default function MatFlowDashboard() {
 				</Typography>
 
 				<Typography sx={panelSubSx}>
-					MatFlow maintains its own project-specific operational BOM.
-					BOMFlow remains an independent product BOM and costing
-					module. No automatic BOMFlow-to-MatFlow release is required.
+					Engineering creates project-specific operational BOMs
+					inside MatFlow. An approved revision becomes the effective
+					planning baseline. Production then raises material
+					requisitions against that effective revision, after which
+					Store performs reservation, shortage and transfer planning.
+					BOMFlow remains an independent product-costing module and
+					does not release or control MatFlow operational BOMs.
 				</Typography>
 			</Card>
 		</Box>

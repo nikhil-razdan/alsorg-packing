@@ -43,6 +43,15 @@ import MatFlowBomCreate
 import MatFlowBomDetail
 	from "./pages/MatFlowBomDetail";
 
+import MatFlowProductionRequisitionList
+	from "./pages/MatFlowProductionRequisitionList";
+
+import MatFlowRequisitionCreate
+	from "./pages/MatFlowRequisitionCreate";
+
+import MatFlowRequisitionDetail
+	from "./pages/MatFlowRequisitionDetail";
+
 function MatFlowHomeRedirect() {
 	const {
 		role,
@@ -175,10 +184,15 @@ export default function MatFlowRoutes() {
 					path="production"
 					element={guarded(
 						"production",
-						<MatFlowPlaceholder
-							title="Production Requisitions"
-							subtitle="Raise material requisitions against effective MatFlow operational BOMs."
-						/>
+						<MatFlowProductionRequisitionList />
+					)}
+				/>
+
+				<Route
+					path="requisitions/new"
+					element={guarded(
+						"production",
+						<MatFlowRequisitionCreate />
 					)}
 				/>
 
@@ -186,10 +200,7 @@ export default function MatFlowRoutes() {
 					path="requisitions/:requisitionId"
 					element={guarded(
 						"requisition-detail",
-						<MatFlowPlaceholder
-							title="Material Requisition Detail"
-							subtitle="Review planning, reservation, shortage, issue, consumption and return quantities."
-						/>
+						<MatFlowRequisitionDetail />
 					)}
 				/>
 

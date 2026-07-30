@@ -500,8 +500,34 @@ export const matflowApi = {
 	},
 
 	/* =====================================================
-	 * PRODUCTION REQUISITIONS
-	 * ===================================================== */
+ * PRODUCTION MATERIAL REQUISITIONS
+ *
+ * Backend:
+ * MatFlowPlanningController
+ *
+ * Base:
+ * /api/matflow/requisitions
+ * ===================================================== */
+
+	listRequisitions() {
+		return API.get(
+			`${BASE}/requisitions`
+		);
+	},
+
+	getRequisition(
+		requisitionId
+	) {
+		if (!requisitionId) {
+			throw new Error(
+				"Requisition ID is required."
+			);
+		}
+
+		return API.get(
+			`${BASE}/requisitions/${requisitionId}`
+		);
+	},
 
 	createRequisition(body) {
 		return API.post(
@@ -510,85 +536,34 @@ export const matflowApi = {
 		);
 	},
 
-	getRequisition(requisitionId) {
-		return API.get(
-			`${BASE}/requisitions/${requisitionId}`
-		);
-	},
-
-	listRequisitionsByRelease(
-		releaseId
-	) {
-		return API.get(
-			`${BASE}/requisitions/by-release/${releaseId}`
-		);
-	},
-
-	listRequisitions(params = {}) {
-		/*
-		 * There is no global requisition list endpoint in the
-		 * currently deployed controller.
-		 */
-		if (!params.releaseId) {
-			return localListResponse([]);
-		}
-
-		return API.get(
-			`${BASE}/requisitions/by-release/${params.releaseId}`
-		);
-	},
-
-	updateRequisition(
-		requisitionId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/requisitions/${requisitionId}`,
-			body
-		);
-	},
-
-	saveRequisitionLine(
-		requisitionId,
-		body
-	) {
-		return API.post(
-			`${BASE}/requisitions/${requisitionId}/lines`,
-			body
-		);
-	},
-
-	removeRequisitionLine(
-		requisitionId,
-		lineId,
-		rowVersion
-	) {
-		return API.delete(
-			`${BASE}/requisitions/${requisitionId}/lines/${lineId}`,
-			{
-				params: {
-					rowVersion,
-				},
-			}
-		);
-	},
-
 	submitRequisition(
 		requisitionId,
 		body
 	) {
-		return API.patch(
-			`${BASE}/requisitions/${requisitionId}/submit-to-store`,
+		if (!requisitionId) {
+			throw new Error(
+				"Requisition ID is required."
+			);
+		}
+
+		return API.post(
+			`${BASE}/requisitions/${requisitionId}/submit`,
 			body
 		);
 	},
 
-	cancelRequisition(
+	planRequisition(
 		requisitionId,
 		body
 	) {
+		if (!requisitionId) {
+			throw new Error(
+				"Requisition ID is required."
+			);
+		}
+
 		return API.post(
-			`${BASE}/requisitions/${requisitionId}/cancel`,
+			`${BASE}/requisitions/${requisitionId}/plan`,
 			body
 		);
 	},

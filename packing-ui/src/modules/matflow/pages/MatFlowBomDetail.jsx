@@ -31,6 +31,8 @@ import SendOutlinedIcon
     from "@mui/icons-material/SendOutlined";
 import UndoOutlinedIcon
     from "@mui/icons-material/UndoOutlined";
+import PlaylistAddOutlinedIcon
+    from "@mui/icons-material/PlaylistAddOutlined";
 
 import {
     useNavigate,
@@ -197,6 +199,14 @@ export default function MatFlowBomDetail() {
         status === "APPROVED" &&
         bom?.effective === true &&
         bom?.latestRevision === true;
+
+    const canRaiseRequisition =
+        canAccessMatFlowScreen(
+            "production",
+            cleanRole
+        ) &&
+        status === "APPROVED" &&
+        bom?.effective === true;
 
     const openAction = (action) => {
         setActionDialog(action);
@@ -537,6 +547,23 @@ export default function MatFlowBomDetail() {
                                     sx={secondaryBtnSx}
                                 >
                                     Create New Revision
+                                </Button>
+                            )}
+
+                            {canRaiseRequisition && (
+                                <Button
+                                    startIcon={
+                                        <PlaylistAddOutlinedIcon />
+                                    }
+                                    onClick={() =>
+                                        navigate(
+                                            `/matflow/requisitions/new?bomId=${bom.id}`
+                                        )
+                                    }
+                                    disabled={working}
+                                    sx={primaryBtnSx}
+                                >
+                                    Raise Production Requisition
                                 </Button>
                             )}
                         </Box>
