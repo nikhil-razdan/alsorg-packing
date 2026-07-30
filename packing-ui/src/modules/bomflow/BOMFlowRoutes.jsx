@@ -38,7 +38,7 @@ export default function BOMFlowRoutes() {
 
 				<Route
 					path="products/new"
-					element={<BOMFlowProductMaster />}
+					element={<BOMFlowBOMBuilder />}
 				/>
 
 				<Route
@@ -52,7 +52,21 @@ export default function BOMFlowRoutes() {
 					element={<BOMFlowBOMBuilder />}
 				/>
 
-				
+				{/*
+				 * Legacy route.
+				 *
+				 * A BOM cannot safely open without knowing which
+				 * revision is being edited.
+				 */}
+				<Route
+					path="bom-builder"
+					element={
+						<Navigate
+							to="/bomflow/products"
+							replace
+						/>
+					}
+				/>
 
 				<Route
 					path="rate-master"
