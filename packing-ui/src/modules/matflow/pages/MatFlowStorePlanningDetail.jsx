@@ -9,31 +9,36 @@ import {
     Box,
     Button,
     Card,
+    Checkbox,
     Chip,
     CircularProgress,
-    IconButton,
+    LinearProgress,
+    ListItemText,
     MenuItem,
     TextField,
     Typography,
 } from "@mui/material";
 
-import ArrowBackIcon
-    from "@mui/icons-material/ArrowBack";
+import ArrowBackOutlinedIcon
+    from "@mui/icons-material/ArrowBackOutlined";
 
 import RefreshOutlinedIcon
     from "@mui/icons-material/RefreshOutlined";
 
-import PlayArrowOutlinedIcon
-    from "@mui/icons-material/PlayArrowOutlined";
+import AutoFixHighOutlinedIcon
+    from "@mui/icons-material/AutoFixHighOutlined";
 
-import KeyboardArrowUpIcon
-    from "@mui/icons-material/KeyboardArrowUp";
+import Inventory2OutlinedIcon
+    from "@mui/icons-material/Inventory2Outlined";
 
-import KeyboardArrowDownIcon
-    from "@mui/icons-material/KeyboardArrowDown";
+import WarningAmberOutlinedIcon
+    from "@mui/icons-material/WarningAmberOutlined";
 
-import DeleteOutlineIcon
-    from "@mui/icons-material/DeleteOutline";
+import LocalShippingOutlinedIcon
+    from "@mui/icons-material/LocalShippingOutlined";
+
+import OutputOutlinedIcon
+    from "@mui/icons-material/OutputOutlined";
 
 import {
     useNavigate,
@@ -41,7 +46,6 @@ import {
 } from "react-router-dom";
 
 import {
-    extractMatFlowPage,
     matflowApi,
     readMatFlowError,
 } from "../api/matflowApi";
@@ -64,72 +68,189 @@ import {
     tableShellSx,
 } from "../matflowTheme";
 
-const SOURCE_TYPES = new Set([
-    "STORE",
-    "PROCESSING",
-    "EXTERNAL_PROCESSOR",
-]);
+const ELIGIBLE_SOURCE_TYPES =
+    new Set([
+        "STORE",
+        "PROCESSING",
+        "EXTERNAL_PROCESSOR",
+    ]);
 
-const clean = (value) => {
-    return String(value ?? "")
-        .trim();
-};
+const PLANNABLE_STATUSES =
+    new Set([
+        "SUBMITTED",
+        "PLANNED",
+        "SHORTAGE_PENDING",
+    ]);
 
-const normalizeValue = (value) => {
-    return clean(value)
+const clean = (value) =>
+    String(value ?? "").trim();
+
+const normalize = (value) =>
+    clean(value)
         .toUpperCase()
         .replace(/[\s-]+/g, "_");
-};
 
-const formatQty = (value) => {
+const numeric = (value) => {
     const number =
         Number(value);
 
-    if (!Number.isFinite(number)) {
-        return "0";
-    }
+    return Number.isFinite(number)
+        ? number
+        : 0;
+};
 
-    return number.toLocaleString(
+const formatQty = (value) =>
+    numeric(value).toLocaleString(
         "en-IN",
         {
             maximumFractionDigits: 3,
         }
     );
+
+const asArray = (value) => {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (
+        Array.isArray(
+            value?.content
+        )
+    ) {
+        return value.content;
+    }
+
+    if (
+        Array.isArray(
+            value?.rows
+        )
+    ) {
+        return value.rows;
+    }
+
+    return [];
 };
 
-const sumLines = (
-    lines,
-    field
-) => {
-    return lines.reduce(
-        (
-            total,
-            line
-        ) => {
-            const amount =
-                Number(
-                    line?.[field] ??
-                    0
-                );
+const readable = (value) =>
+    normalize(value)
+        .toLowerCase()
+        .split("_")
+        .filter(Boolean)
+        .map(
+            (part) =>
+                part.charAt(0)
+                    .toUpperCase() +
+                part.slice(1)
+        )
+        .join(" ");
 
-            return total +
+const lineStatus = (line) => {
+    const requested =
+        numeric(
+            line?.requestedQty
+        );
+
+    const reserved =
+        numeric(
+            line?.reservedQty
+        );
+
+    const shortage =
+        numeric(
+            line?.shortageQty
+        );
+
+    const issued =
+        numeric(
+            line?.issuedQty
+        );
+
+    if (
+        requested > 0 &&
+        issued >= requested
+    ) {
+        return {
+            label:
+                "Issued",
+            color:
+                "#16a34a",
+        };
+    }
+
+    if (
+        shortage > 0 &&
+        reserved > 0
+    ) {
+        return {
+            label:
+                "Partially Reserved",
+            color:
+                "#ea580c",
+        };
+    }
+
+    if (shortage > 0) {
+        return {
+            label:
+                "Shortage",
+            color:
+                "#dc2626",
+        };
+    }
+
+    if (
+        requested > 0 &&
+        reserved >= requested
+    ) {
+        return {
+            label:
+                "Fully Reserved",
+            color:
+                "#16a34a",
+        };
+    }
+
+    return {
+        label:
+            "Awaiting Planning",
+        color:
+            "#2563eb",
+    };
+};
+
+const lineProgress = (line) => {
+    const requested =
+        numeric(
+            line?.requestedQty
+        );
+
+    if (requested <= 0) {
+        return 0;
+    }
+
+    const covered =
+        Math.max(
+            numeric(
+                line?.reservedQty
+            ),
+            numeric(
+                line?.issuedQty
+            )
+        );
+
+    return Math.min(
+        100,
+        Math.max(
+            0,
+            Math.round(
                 (
-                    Number.isFinite(
-                        amount
-                    )
-                        ? amount
-                        : 0
-                );
-        },
-        0
+                    covered /
+                    requested
+                ) *
+                100
+            )
+        )
     );
-};
-
-const emptySnapshot = {
-    requisition: null,
-    reservations: [],
-    indents: [],
-    transfers: [],
 };
 
 export default function MatFlowStorePlanningDetail() {
@@ -143,9 +264,7 @@ export default function MatFlowStorePlanningDetail() {
     const [
         snapshot,
         setSnapshot,
-    ] = useState(
-        emptySnapshot
-    );
+    ] = useState(null);
 
     const [
         locations,
@@ -158,377 +277,244 @@ export default function MatFlowStorePlanningDetail() {
     ] = useState([]);
 
     const [
-        sourceToAdd,
-        setSourceToAdd,
+        remarks,
+        setRemarks,
     ] = useState("");
 
-    const [remarks, setRemarks] =
-        useState("");
+    const [
+        loading,
+        setLoading,
+    ] = useState(true);
 
-    const [loading, setLoading] =
-        useState(true);
+    const [
+        planning,
+        setPlanning,
+    ] = useState(false);
 
-    const [planning, setPlanning] =
-        useState(false);
+    const [
+        issuingReservationId,
+        setIssuingReservationId,
+    ] = useState("");
 
-    const [error, setError] =
-        useState("");
+    const [
+        error,
+        setError,
+    ] = useState("");
 
-    const loadPage =
-        useCallback(
-            async () => {
-                if (!requisitionId) {
-                    setError(
-                        "Requisition ID is missing."
-                    );
-                    setLoading(false);
-                    return;
-                }
+    const load = useCallback(
+        async () => {
+            if (!requisitionId) {
+                setSnapshot(null);
+                setLoading(false);
+                setError(
+                    "Requisition ID is missing."
+                );
+                return;
+            }
 
-                setLoading(true);
-                setError("");
+            setLoading(true);
+            setError("");
 
-                try {
-                    const [
-                        planningResponse,
-                        locationResponse,
-                    ] =
-                        await Promise.all([
-                            matflowApi
-                                .getRequisitionPlanning(
-                                    requisitionId
-                                ),
+            try {
+                const [
+                    planningResponse,
+                    locationResponse,
+                ] =
+                    await Promise.all([
+                        matflowApi
+                            .getRequisitionPlanning(
+                                requisitionId
+                            ),
 
-                            matflowApi
-                                .listLocations({
-                                    active:
-                                        true,
-                                }),
-                        ]);
+                        matflowApi
+                            .listLocations({
+                                active: true,
+                            }),
+                    ]);
 
-                    const payload =
-                        planningResponse?.data ||
-                        {};
+                setSnapshot(
+                    planningResponse?.data ||
+                    null
+                );
 
-                    setSnapshot({
-                        requisition:
-                            payload.requisition ||
-                            null,
+                setLocations(
+                    asArray(
+                        locationResponse?.data
+                    )
+                );
+            } catch (
+            requestError
+            ) {
+                setSnapshot(null);
 
-                        reservations:
-                            Array.isArray(
-                                payload.reservations
-                            )
-                                ? payload.reservations
-                                : [],
-
-                        indents:
-                            Array.isArray(
-                                payload.indents
-                            )
-                                ? payload.indents
-                                : [],
-
-                        transfers:
-                            Array.isArray(
-                                payload.transfers
-                            )
-                                ? payload.transfers
-                                : [],
-                    });
-
-                    const locationResult =
-                        extractMatFlowPage(
-                            locationResponse?.data
-                        );
-
-                    setLocations(
-                        locationResult.rows
-                    );
-                } catch (
-                requestError
-                ) {
-                    setError(
-                        readMatFlowError(
-                            requestError,
-                            "Unable to load the Store planning detail."
-                        )
-                    );
-                } finally {
-                    setLoading(false);
-                }
-            },
-            [requisitionId]
-        );
+                setError(
+                    readMatFlowError(
+                        requestError,
+                        "Unable to load the Store planning workbench."
+                    )
+                );
+            } finally {
+                setLoading(false);
+            }
+        },
+        [requisitionId]
+    );
 
     useEffect(() => {
-        loadPage();
-    }, [loadPage]);
+        load();
+    }, [load]);
 
     const requisition =
-        snapshot.requisition;
+        snapshot?.requisition ||
+        null;
 
     const lines =
-        useMemo(() => {
-            return Array.isArray(
-                requisition?.lines
-            )
-                ? requisition.lines
-                : [];
-        }, [requisition]);
+        useMemo(
+            () =>
+                Array.isArray(
+                    requisition?.lines
+                )
+                    ? requisition.lines
+                    : [],
+            [requisition]
+        );
+
+    const reservations =
+        useMemo(
+            () =>
+                Array.isArray(
+                    snapshot?.reservations
+                )
+                    ? snapshot.reservations
+                    : [],
+            [snapshot]
+        );
+
+    const indents =
+        useMemo(
+            () =>
+                Array.isArray(
+                    snapshot?.indents
+                )
+                    ? snapshot.indents
+                    : [],
+            [snapshot]
+        );
+
+    const transfers =
+        useMemo(
+            () =>
+                Array.isArray(
+                    snapshot?.transfers
+                )
+                    ? snapshot.transfers
+                    : [],
+            [snapshot]
+        );
 
     const sourceOptions =
         useMemo(() => {
             return locations
                 .filter(
-                    (location) => {
-                        return (
-                            Boolean(
-                                location?.id
-                            ) &&
-                            location.active !==
-                            false &&
-                            location.supportsStock ===
-                            true &&
-                            SOURCE_TYPES.has(
-                                normalizeValue(
-                                    location.locationType
-                                )
+                    (location) =>
+                        Boolean(
+                            location?.id
+                        ) &&
+                        location.active !==
+                        false &&
+                        location.supportsStock ===
+                        true &&
+                        ELIGIBLE_SOURCE_TYPES.has(
+                            normalize(
+                                location.locationType
                             )
-                        );
-                    }
+                        )
                 )
                 .sort(
-                    (
-                        left,
-                        right
-                    ) => {
-                        const leftSamePlant =
-                            clean(
-                                left.plantCode
-                            ).toUpperCase() ===
-                            clean(
-                                requisition?.destinationPlantCode
-                            ).toUpperCase();
-
-                        const rightSamePlant =
-                            clean(
-                                right.plantCode
-                            ).toUpperCase() ===
-                            clean(
-                                requisition?.destinationPlantCode
-                            ).toUpperCase();
-
-                        if (
-                            leftSamePlant !==
-                            rightSamePlant
-                        ) {
-                            return leftSamePlant
-                                ? -1
-                                : 1;
-                        }
-
-                        return clean(
-                            left.locationCode
+                    (left, right) =>
+                        String(
+                            left.locationCode ||
+                            ""
                         ).localeCompare(
-                            clean(
-                                right.locationCode
+                            String(
+                                right.locationCode ||
+                                ""
                             )
+                        )
+                );
+        }, [locations]);
+
+    const totals =
+        useMemo(() => {
+            return lines.reduce(
+                (result, line) => {
+                    result.requested +=
+                        numeric(
+                            line.requestedQty
                         );
-                    }
-                );
-        }, [
-            locations,
-            requisition,
-        ]);
 
-    const sourceById =
-        useMemo(() => {
-            return new Map(
-                sourceOptions.map(
-                    (location) => [
-                        String(
-                            location.id
-                        ),
-                        location,
-                    ]
-                )
+                    result.reserved +=
+                        numeric(
+                            line.reservedQty
+                        );
+
+                    result.shortage +=
+                        numeric(
+                            line.shortageQty
+                        );
+
+                    result.issued +=
+                        numeric(
+                            line.issuedQty
+                        );
+
+                    return result;
+                },
+                {
+                    requested: 0,
+                    reserved: 0,
+                    shortage: 0,
+                    issued: 0,
+                }
             );
-        }, [sourceOptions]);
-
-    const remainingSources =
-        useMemo(() => {
-            const selected =
-                new Set(
-                    selectedSourceIds.map(
-                        String
-                    )
-                );
-
-            return sourceOptions.filter(
-                (location) =>
-                    !selected.has(
-                        String(
-                            location.id
-                        )
-                    )
-            );
-        }, [
-            selectedSourceIds,
-            sourceOptions,
-        ]);
-
-    const hasAnyActiveLocation =
-        locations.some(
-            (location) =>
-                Boolean(location?.id) &&
-                location.active !== false
-        );
-
-    const hasSourceLocation =
-        sourceOptions.length > 0;
-
-    const selectedSources =
-        useMemo(() => {
-            return selectedSourceIds
-                .map(
-                    (id) =>
-                        sourceById.get(
-                            String(id)
-                        )
-                )
-                .filter(Boolean);
-        }, [
-            selectedSourceIds,
-            sourceById,
-        ]);
+        }, [lines]);
 
     const status =
-        normalizeValue(
+        normalize(
             requisition?.status
         );
 
     const canPlan =
-        status ===
-        "SUBMITTED";
-
-    const totals =
-        useMemo(() => {
-            return {
-                requested:
-                    sumLines(
-                        lines,
-                        "requestedQty"
-                    ),
-
-                reserved:
-                    sumLines(
-                        lines,
-                        "reservedQty"
-                    ),
-
-                shortage:
-                    sumLines(
-                        lines,
-                        "shortageQty"
-                    ),
-
-                issued:
-                    sumLines(
-                        lines,
-                        "issuedQty"
-                    ),
-            };
-        }, [lines]);
-
-    const addPreferredSource = (
-        locationId
-    ) => {
-        if (!locationId) {
-            return;
-        }
-
-        setSelectedSourceIds(
-            (current) => {
-                if (
-                    current.some(
-                        (id) =>
-                            String(id) ===
-                            String(
-                                locationId
-                            )
-                    )
-                ) {
-                    return current;
-                }
-
-                return [
-                    ...current,
-                    locationId,
-                ];
-            }
+        Boolean(
+            requisition?.id
+        ) &&
+        Boolean(
+            requisition?.rowVersion !==
+            null &&
+            requisition?.rowVersion !==
+            undefined
+        ) &&
+        PLANNABLE_STATUSES.has(
+            status
         );
 
-        setSourceToAdd("");
-    };
-
-    const removePreferredSource = (
-        locationId
+    const updateSelectedSources = (
+        event
     ) => {
+        const value =
+            event.target.value;
+
         setSelectedSourceIds(
-            (current) =>
-                current.filter(
-                    (id) =>
-                        String(id) !==
-                        String(
-                            locationId
-                        )
-                )
+            typeof value ===
+                "string"
+                ? value
+                    .split(",")
+                    .filter(Boolean)
+                : value.map(String)
         );
     };
 
-    const movePreferredSource = (
-        index,
-        direction
-    ) => {
-        setSelectedSourceIds(
-            (current) => {
-                const target =
-                    index +
-                    direction;
-
-                if (
-                    target < 0 ||
-                    target >=
-                    current.length
-                ) {
-                    return current;
-                }
-
-                const next =
-                    [...current];
-
-                const [
-                    moved,
-                ] =
-                    next.splice(
-                        index,
-                        1
-                    );
-
-                next.splice(
-                    target,
-                    0,
-                    moved
-                );
-
-                return next;
-            }
-        );
-    };
-
-
-    const planRequisition =
+    const executePlanning =
         async () => {
             if (
                 !requisition?.id
@@ -541,31 +527,28 @@ export default function MatFlowStorePlanningDetail() {
 
             if (!canPlan) {
                 setError(
-                    "Only a Submitted requisition can be planned."
+                    `Requisition status ${readable(
+                        requisition.status
+                    )} cannot be planned.`
                 );
                 return;
             }
 
-            if (
-                requisition.rowVersion ===
-                undefined ||
-                requisition.rowVersion ===
-                null
-            ) {
-                setError(
-                    "Requisition rowVersion is missing. Refresh and retry."
-                );
-                return;
-            }
+            const body = {
+                rowVersion:
+                    requisition.rowVersion,
 
-            const confirmed =
-                window.confirm(
-                    "Plan this requisition against the current available stock? Reservations, shortage indents and transfer orders may be created."
-                );
+                /*
+                 * An empty list means automatic source selection.
+                 * A populated list is an ordered source preference.
+                 */
+                preferredSourceLocationIds:
+                    selectedSourceIds,
 
-            if (!confirmed) {
-                return;
-            }
+                remarks:
+                    clean(remarks) ||
+                    null,
+            };
 
             setPlanning(true);
             setError("");
@@ -575,60 +558,86 @@ export default function MatFlowStorePlanningDetail() {
                     await matflowApi
                         .planRequisition(
                             requisition.id,
-                            {
-                                rowVersion:
-                                    requisition.rowVersion,
-
-                                preferredSourceLocationIds:
-                                    selectedSourceIds,
-
-                                remarks:
-                                    clean(remarks) ||
-                                    null,
-                            }
+                            body
                         );
 
-                const payload =
-                    response?.data ||
-                    {};
+                if (
+                    response?.data
+                        ?.requisition
+                ) {
+                    setSnapshot(
+                        response.data
+                    );
+                } else {
+                    await load();
+                }
 
-                setSnapshot({
-                    requisition:
-                        payload.requisition ||
-                        null,
-
-                    reservations:
-                        Array.isArray(
-                            payload.reservations
-                        )
-                            ? payload.reservations
-                            : [],
-
-                    indents:
-                        Array.isArray(
-                            payload.indents
-                        )
-                            ? payload.indents
-                            : [],
-
-                    transfers:
-                        Array.isArray(
-                            payload.transfers
-                        )
-                            ? payload.transfers
-                            : [],
-                });
+                setRemarks("");
             } catch (
             requestError
             ) {
                 setError(
                     readMatFlowError(
                         requestError,
-                        "Unable to plan the material requisition."
+                        "Unable to perform Store planning."
                     )
                 );
             } finally {
                 setPlanning(false);
+            }
+        };
+
+    const issueDirect =
+        async (
+            reservation
+        ) => {
+            if (
+                !reservation?.id
+            ) {
+                return;
+            }
+
+            setIssuingReservationId(
+                reservation.id
+            );
+
+            setError("");
+
+            try {
+                await matflowApi
+                    .issueDirectReservation(
+                        reservation.id,
+                        {
+                            rowVersion:
+                                reservation.rowVersion,
+
+                            quantity:
+                                numeric(
+                                    reservation.reservedQty
+                                ),
+
+                            batchNo:
+                                null,
+
+                            remarks:
+                                "Direct issue from stock already available at Production.",
+                        }
+                    );
+
+                await load();
+            } catch (
+            requestError
+            ) {
+                setError(
+                    readMatFlowError(
+                        requestError,
+                        "Unable to issue the reservation directly to Production."
+                    )
+                );
+            } finally {
+                setIssuingReservationId(
+                    ""
+                );
             }
         };
 
@@ -646,7 +655,7 @@ export default function MatFlowStorePlanningDetail() {
                 <Box sx={heroRowSx}>
                     <Box>
                         <Chip
-                            label="STORE PLANNING DETAIL"
+                            label="STORE PLANNING WORKBENCH"
                             sx={heroBadgeSx}
                         />
 
@@ -656,10 +665,17 @@ export default function MatFlowStorePlanningDetail() {
                         </Typography>
 
                         <Typography sx={heroSubSx}>
-                            Review material demand,
-                            prioritize source locations and
-                            create reservations, transfers
-                            and shortage indents.
+                            {requisition?.projectCode ||
+                                "-"}
+                            {" · "}
+                            {requisition?.drawingNo ||
+                                "-"}
+                            {" · "}
+                            {requisition?.destinationLocationCode ||
+                                "-"}
+                            {" · "}
+                            {requisition?.destinationPlantCode ||
+                                "-"}
                         </Typography>
                     </Box>
 
@@ -668,8 +684,10 @@ export default function MatFlowStorePlanningDetail() {
                             startIcon={
                                 <RefreshOutlinedIcon />
                             }
-                            onClick={loadPage}
-                            disabled={planning}
+                            onClick={load}
+                            disabled={
+                                planning
+                            }
                             sx={secondaryBtnSx}
                         >
                             Refresh
@@ -677,7 +695,7 @@ export default function MatFlowStorePlanningDetail() {
 
                         <Button
                             startIcon={
-                                <ArrowBackIcon />
+                                <ArrowBackOutlinedIcon />
                             }
                             onClick={() =>
                                 navigate(
@@ -698,678 +716,718 @@ export default function MatFlowStorePlanningDetail() {
                 </Box>
             )}
 
-            {requisition && (
-                <>
-                    <Box sx={contextGridSx}>
-                        <Detail
-                            label="Status"
-                            value={
-                                requisition.status
-                            }
-                        />
+            <Box sx={kpiGridSx}>
+                <Kpi
+                    label="Material Lines"
+                    value={lines.length}
+                    color="#2563eb"
+                    icon={
+                        <Inventory2OutlinedIcon />
+                    }
+                />
 
-                        <Detail
-                            label="Project / PD"
-                            value={
-                                requisition.projectCode
-                            }
-                        />
+                <Kpi
+                    label="Requested"
+                    value={formatQty(
+                        totals.requested
+                    )}
+                    color="#0284c7"
+                />
 
-                        <Detail
-                            label="Drawing"
-                            value={
-                                requisition.drawingNo
-                            }
-                        />
+                <Kpi
+                    label="Reserved"
+                    value={formatQty(
+                        totals.reserved
+                    )}
+                    color="#16a34a"
+                />
 
-                        <Detail
-                            label="BOM"
-                            value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`}
-                        />
+                <Kpi
+                    label="Shortage"
+                    value={formatQty(
+                        totals.shortage
+                    )}
+                    color="#dc2626"
+                    icon={
+                        <WarningAmberOutlinedIcon />
+                    }
+                />
 
-                        <Detail
-                            label="Production Destination"
-                            value={
-                                requisition.destinationLocationCode
-                            }
-                        />
+                <Kpi
+                    label="Transfers"
+                    value={
+                        transfers.length
+                    }
+                    color="#7c3aed"
+                    icon={
+                        <LocalShippingOutlinedIcon />
+                    }
+                />
 
-                        <Detail
-                            label="Plant"
-                            value={
-                                requisition.destinationPlantCode
-                            }
-                        />
+                <Kpi
+                    label="Indents"
+                    value={indents.length}
+                    color="#d97706"
+                />
+            </Box>
 
-                        <Detail
-                            label="Requested"
-                            value={
-                                formatQty(
-                                    totals.requested
-                                )
-                            }
-                        />
+            <Card sx={panelSx}>
+                <Box sx={planningHeaderSx}>
+                    <Box>
+                        <Typography sx={sectionTitleSx}>
+                            Store Planning Action
+                        </Typography>
 
-                        <Detail
-                            label="Reserved"
-                            value={
-                                formatQty(
-                                    totals.reserved
-                                )
-                            }
-                        />
-
-                        <Detail
-                            label="Shortage"
-                            value={
-                                formatQty(
-                                    totals.shortage
-                                )
-                            }
-                        />
+                        <Typography sx={sectionSubSx}>
+                            MatFlow will check available
+                            stock, create reservations,
+                            generate transfers for remote
+                            stock and create shortage
+                            indents where required.
+                        </Typography>
                     </Box>
 
-                    {canPlan && (
-                        <Card sx={panelSx}>
-                            <Typography sx={sectionTitleSx}>
-                                Planning Priorities
-                            </Typography>
+                    <Chip
+                        label={readable(
+                            requisition?.status
+                        )}
+                        sx={headerStatusChipSx(
+                            status
+                        )}
+                    />
+                </Box>
 
-                            <Typography sx={sectionSubSx}>
-                                Preferred source locations
-                                are optional. When none are
-                                selected, the backend ranks
-                                stock by plant and available
-                                quantity.
-                            </Typography>
-                            {!hasSourceLocation && (
-                                <Box sx={errorBoxSx}>
-                                    {hasAnyActiveLocation
-                                        ? "No active stock-supporting Store, Processing or External Processor location is configured. Production locations cannot be used as material sources."
-                                        : "No active MatFlow locations are available for this user."}
-                                </Box>
-                            )}
+                <Box sx={planningFormSx}>
+                    <TextField
+                        select
+                        label="Preferred Source Priority"
+                        value={
+                            selectedSourceIds
+                        }
+                        disabled={
+                            planning ||
+                            !canPlan
+                        }
+                        onChange={
+                            updateSelectedSources
+                        }
+                        helperText={
+                            sourceOptions.length ===
+                                0
+                                ? "No eligible stock-supporting source locations are configured."
+                                : "Leave blank for automatic source selection. Selected locations are tried first."
+                        }
+                        SelectProps={{
+                            multiple: true,
 
-                            <Box sx={planningGridSx}>
-                                <TextField
-                                    select
-                                    label="Add Preferred Source"
-                                    value={sourceToAdd}
-                                    disabled={
-                                        planning ||
-                                        sourceOptions.length === 0
-                                    }
-                                    onChange={(event) => {
-                                        const value =
-                                            event.target.value;
-
-                                        addPreferredSource(
-                                            value
-                                        );
-                                    }}
-                                    helperText={
-                                        sourceOptions.length === 0
-                                            ? "Create an active STORE, PROCESSING or EXTERNAL_PROCESSOR location with Supports Stock enabled."
-                                            : `${sourceOptions.length} eligible source location${sourceOptions.length === 1 ? "" : "s"} available.`
-                                    }
-                                    sx={fieldSx}
-                                >
-                                    {remainingSources.length ===
-                                        0 ? (
-                                        <MenuItem
-                                            value=""
-                                            disabled
-                                        >
-                                            No additional stock
-                                            locations available
-                                        </MenuItem>
-                                    ) : (
-                                        remainingSources.map(
-                                            (location) => (
-                                                <MenuItem
-                                                    key={
-                                                        location.id
-                                                    }
-                                                    value={
-                                                        location.id
-                                                    }
-                                                >
-                                                    {location.locationCode}
-                                                    {" · "}
-                                                    {location.locationName}
-                                                    {" · "}
-                                                    {location.plantCode}
-                                                    {" · "}
-                                                    {location.locationType}
-                                                </MenuItem>
-                                            )
-                                        )
-                                    )}
-                                </TextField>
-
-                                <TextField
-                                    label="Store Planning Remarks"
-                                    multiline
-                                    minRows={3}
-                                    value={remarks}
-                                    disabled={planning}
-                                    onChange={(event) =>
-                                        setRemarks(
-                                            event.target.value
-                                        )
-                                    }
-                                    sx={fieldSx}
-                                />
-                            </Box>
-
-                            <Box sx={priorityListSx}>
-                                {selectedSources.length ===
-                                    0 ? (
-                                    <Box sx={emptyPrioritySx}>
-                                        Automatic stock ranking
-                                        will be used.
-                                    </Box>
-                                ) : (
-                                    selectedSources.map(
-                                        (
-                                            location,
-                                            index
-                                        ) => (
-                                            <Box
-                                                key={
-                                                    location.id
-                                                }
-                                                sx={priorityRowSx}
-                                            >
-                                                <Chip
-                                                    label={
-                                                        index +
-                                                        1
-                                                    }
-                                                    size="small"
-                                                    sx={priorityNumberSx}
-                                                />
-
-                                                <Box sx={priorityContentSx}>
-                                                    <Typography sx={priorityTitleSx}>
-                                                        {location.locationCode}
-                                                        {" · "}
-                                                        {location.locationName}
-                                                    </Typography>
-
-                                                    <Typography sx={prioritySubSx}>
-                                                        {location.plantCode}
-                                                        {" · "}
-                                                        {location.locationType}
-                                                    </Typography>
-                                                </Box>
-
-                                                <IconButton
-                                                    disabled={
-                                                        index ===
-                                                        0 ||
-                                                        planning
-                                                    }
-                                                    onClick={() =>
-                                                        movePreferredSource(
-                                                            index,
-                                                            -1
-                                                        )
-                                                    }
-                                                    sx={iconBtnSx}
-                                                >
-                                                    <KeyboardArrowUpIcon />
-                                                </IconButton>
-
-                                                <IconButton
-                                                    disabled={
-                                                        index ===
-                                                        selectedSources.length -
-                                                        1 ||
-                                                        planning
-                                                    }
-                                                    onClick={() =>
-                                                        movePreferredSource(
-                                                            index,
-                                                            1
-                                                        )
-                                                    }
-                                                    sx={iconBtnSx}
-                                                >
-                                                    <KeyboardArrowDownIcon />
-                                                </IconButton>
-
-                                                <IconButton
-                                                    disabled={
-                                                        planning
-                                                    }
-                                                    onClick={() =>
-                                                        removePreferredSource(
-                                                            location.id
-                                                        )
-                                                    }
-                                                    sx={iconBtnSx}
-                                                >
-                                                    <DeleteOutlineIcon />
-                                                </IconButton>
-                                            </Box>
-                                        )
-                                    )
-                                )}
-                            </Box>
-
-                            <Box sx={planActionSx}>
-                                <Button
-                                    startIcon={
-                                        <PlayArrowOutlinedIcon />
-                                    }
-                                    onClick={
-                                        planRequisition
-                                    }
-                                    disabled={
-                                        planning ||
-                                        lines.length ===
+                            renderValue:
+                                (selected) => {
+                                    if (
+                                        selected.length ===
                                         0
+                                    ) {
+                                        return "Automatic Selection";
                                     }
-                                    sx={primaryBtnSx}
+
+                                    return selected
+                                        .map(
+                                            (id) =>
+                                                sourceOptions.find(
+                                                    (location) =>
+                                                        String(
+                                                            location.id
+                                                        ) ===
+                                                        String(
+                                                            id
+                                                        )
+                                                )
+                                                    ?.locationCode ||
+                                                id
+                                        )
+                                        .join(
+                                            " → "
+                                        );
+                                },
+                        }}
+                        sx={fieldSx}
+                    >
+                        {sourceOptions.map(
+                            (location) => (
+                                <MenuItem
+                                    key={
+                                        location.id
+                                    }
+                                    value={String(
+                                        location.id
+                                    )}
                                 >
-                                    {planning
-                                        ? "Planning..."
-                                        : "Plan Requisition"}
-                                </Button>
-                            </Box>
-                        </Card>
+                                    <Checkbox
+                                        checked={selectedSourceIds.includes(
+                                            String(
+                                                location.id
+                                            )
+                                        )}
+                                    />
+
+                                    <ListItemText
+                                        primary={`${location.locationCode} · ${location.locationName}`}
+                                        secondary={`${location.plantCode} · ${readable(
+                                            location.locationType
+                                        )}`}
+                                    />
+                                </MenuItem>
+                            )
+                        )}
+                    </TextField>
+
+                    <TextField
+                        label="Planning Remarks"
+                        value={remarks}
+                        disabled={
+                            planning ||
+                            !canPlan
+                        }
+                        onChange={(event) =>
+                            setRemarks(
+                                event.target.value
+                            )
+                        }
+                        multiline
+                        minRows={3}
+                        sx={fieldSx}
+                    />
+                </Box>
+
+                <Box sx={planningActionSx}>
+                    {!canPlan && (
+                        <Typography sx={disabledNoteSx}>
+                            This requisition cannot be
+                            planned in its current status.
+                        </Typography>
                     )}
 
-                    <MaterialDemandTable
-                        lines={lines}
-                    />
+                    <Button
+                        startIcon={
+                            <AutoFixHighOutlinedIcon />
+                        }
+                        onClick={
+                            executePlanning
+                        }
+                        disabled={
+                            planning ||
+                            !canPlan
+                        }
+                        sx={primaryBtnSx}
+                    >
+                        {planning
+                            ? "Planning Materials..."
+                            : status ===
+                                "SUBMITTED"
+                                ? "Plan Requisition"
+                                : "Re-run Planning"}
+                    </Button>
+                </Box>
+            </Card>
 
-                    <PlanningResults
-                        snapshot={snapshot}
-                    />
-                </>
-            )}
-        </Box>
-    );
-}
+            <Card sx={panelSx}>
+                <Box sx={sectionHeaderSx}>
+                    <Box>
+                        <Typography sx={sectionTitleSx}>
+                            Material Planning Lines
+                        </Typography>
 
-function MaterialDemandTable({
-    lines,
-}) {
-    return (
-        <Card sx={panelSx}>
-            <Typography sx={sectionTitleSx}>
-                Material Demand
-            </Typography>
-
-            <Box sx={tableShellSx}>
-                <Box sx={materialHeaderSx}>
-                    <Box sx={tableCellSx}>
-                        Line
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        Material
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        UOM
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        BOM Qty
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        Requested
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        Reserved
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        Shortage
-                    </Box>
-
-                    <Box sx={tableCellSx}>
-                        Issued
+                        <Typography sx={sectionSubSx}>
+                            Each material is evaluated
+                            against available stock and
+                            shortage requirements.
+                        </Typography>
                     </Box>
                 </Box>
 
-                {lines.map(
-                    (
-                        line,
-                        index
-                    ) => (
-                        <Box
-                            key={
-                                line.id ||
-                                index
-                            }
-                            sx={materialRowSx}
-                        >
-                            <Box sx={tableCellSx}>
-                                {line.lineNo ??
-                                    index +
-                                    1}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                <Typography sx={mainTextSx}>
-                                    {line.materialName ||
-                                        "-"}
-                                </Typography>
-
-                                <Typography sx={subTextSx}>
-                                    {line.materialCode ||
-                                        "-"}
-                                </Typography>
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {line.uom ||
-                                    "-"}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {formatQty(
-                                    line.bomRequiredQty
-                                )}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {formatQty(
-                                    line.requestedQty
-                                )}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {formatQty(
-                                    line.reservedQty
-                                )}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {formatQty(
-                                    line.shortageQty
-                                )}
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                {formatQty(
-                                    line.issuedQty
-                                )}
-                            </Box>
+                <Box sx={tableShellSx}>
+                    <Box sx={materialHeaderSx}>
+                        <Box sx={tableCellSx}>
+                            Material
                         </Box>
+
+                        <Box sx={tableCellSx}>
+                            Category
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            BOM Qty
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Requested
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Reserved
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Shortage
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Issued
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Coverage
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Status
+                        </Box>
+                    </Box>
+
+                    {lines.length === 0 ? (
+                        <Box sx={emptySx}>
+                            This requisition contains no
+                            material lines.
+                        </Box>
+                    ) : (
+                        lines.map(
+                            (line) => {
+                                const meta =
+                                    lineStatus(
+                                        line
+                                    );
+
+                                const progress =
+                                    lineProgress(
+                                        line
+                                    );
+
+                                return (
+                                    <Box
+                                        key={
+                                            line.id
+                                        }
+                                        sx={materialRowSx}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {line.materialName ||
+                                                    "-"}
+                                            </Typography>
+
+                                            <Typography sx={subTextSx}>
+                                                {line.materialCode ||
+                                                    "-"}
+                                                {" · "}
+                                                {line.uom ||
+                                                    "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {readable(
+                                                line.materialCategory
+                                            ) ||
+                                                "-"}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {formatQty(
+                                                line.bomRequiredQty
+                                            )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {formatQty(
+                                                line.requestedQty
+                                            )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={reservedQtySx}>
+                                                {formatQty(
+                                                    line.reservedQty
+                                                )}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography
+                                                sx={
+                                                    numeric(
+                                                        line.shortageQty
+                                                    ) >
+                                                        0
+                                                        ? shortageQtySx
+                                                        : normalQtySx
+                                                }
+                                            >
+                                                {formatQty(
+                                                    line.shortageQty
+                                                )}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {formatQty(
+                                                line.issuedQty
+                                            )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Box sx={progressHeadSx}>
+                                                <Typography sx={progressTextSx}>
+                                                    {progress}%
+                                                </Typography>
+                                            </Box>
+
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={
+                                                    progress
+                                                }
+                                                sx={progressBarSx(
+                                                    meta.color
+                                                )}
+                                            />
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Chip
+                                                label={
+                                                    meta.label
+                                                }
+                                                size="small"
+                                                sx={statusChipSx(
+                                                    meta.color
+                                                )}
+                                            />
+                                        </Box>
+                                    </Box>
+                                );
+                            }
+                        )
+                    )}
+                </Box>
+            </Card>
+
+            <PlanningResults
+                reservations={
+                    reservations
+                }
+                indents={indents}
+                transfers={
+                    transfers
+                }
+                issuingReservationId={
+                    issuingReservationId
+                }
+                onIssueDirect={
+                    issueDirect
+                }
+                onOpenTransfer={(
+                    transfer
+                ) =>
+                    navigate(
+                        `/matflow/transfers/${transfer.id}`
                     )
-                )}
-            </Box>
-        </Card>
+                }
+            />
+        </Box>
     );
 }
 
 function PlanningResults({
-    snapshot,
-}) {
-    const {
-        reservations,
-        indents,
-        transfers,
-    } = snapshot;
-
-    return (
-        <>
-            <ResultSection
-                title="Reservations"
-                count={
-                    reservations.length
-                }
-            >
-                {reservations.map(
-                    (reservation) => (
-                        <Box
-                            key={
-                                reservation.id
-                            }
-                            sx={resultRowSx}
-                        >
-                            <ResultValue
-                                label="Material"
-                                value={
-                                    reservation.materialCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="Source"
-                                value={
-                                    reservation.sourceLocationCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="First Destination"
-                                value={
-                                    reservation.firstDestinationLocationCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="Reserved"
-                                value={
-                                    formatQty(
-                                        reservation.reservedQty
-                                    )
-                                }
-                            />
-
-                            <ResultValue
-                                label="Status"
-                                value={
-                                    reservation.status
-                                }
-                            />
-                        </Box>
-                    )
-                )}
-            </ResultSection>
-
-            <ResultSection
-                title="Shortage Indents"
-                count={indents.length}
-            >
-                {indents.map(
-                    (indent) => (
-                        <Box
-                            key={indent.id}
-                            sx={resultRowSx}
-                        >
-                            <ResultValue
-                                label="Indent"
-                                value={
-                                    indent.indentNumber
-                                }
-                            />
-
-                            <ResultValue
-                                label="Deliver To"
-                                value={
-                                    indent.deliverToLocationCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="Plant"
-                                value={
-                                    indent.deliverToPlantCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="Lines"
-                                value={
-                                    Array.isArray(
-                                        indent.lines
-                                    )
-                                        ? indent.lines
-                                            .length
-                                        : 0
-                                }
-                            />
-
-                            <ResultValue
-                                label="Status"
-                                value={
-                                    indent.status
-                                }
-                            />
-                        </Box>
-                    )
-                )}
-            </ResultSection>
-
-            <ResultSection
-                title="Transfer Chain"
-                count={
-                    transfers.length
-                }
-            >
-                {transfers.map(
-                    (transfer) => (
-                        <Box
-                            key={transfer.id}
-                            sx={resultRowSx}
-                        >
-                            <ResultValue
-                                label="Transfer"
-                                value={
-                                    transfer.transferNumber
-                                }
-                            />
-
-                            <ResultValue
-                                label="From"
-                                value={
-                                    transfer.fromLocationCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="To"
-                                value={
-                                    transfer.toLocationCode
-                                }
-                            />
-
-                            <ResultValue
-                                label="Planned"
-                                value={
-                                    formatQty(
-                                        transfer.plannedQty
-                                    )
-                                }
-                            />
-
-                            <ResultValue
-                                label="Status"
-                                value={
-                                    transfer.status
-                                }
-                            />
-                        </Box>
-                    )
-                )}
-            </ResultSection>
-        </>
-    );
-}
-
-function ResultSection({
-    title,
-    count,
-    children,
+    reservations,
+    indents,
+    transfers,
+    issuingReservationId,
+    onIssueDirect,
+    onOpenTransfer,
 }) {
     return (
-        <Card sx={panelSx}>
-            <Box sx={resultHeaderSx}>
+        <Box sx={resultsGridSx}>
+            <Card sx={panelSx}>
                 <Typography sx={sectionTitleSx}>
-                    {title}
+                    Reservations
                 </Typography>
 
-                <Chip
-                    label={`${count} RECORD${count === 1 ? "" : "S"}`}
-                    size="small"
-                    sx={resultChipSx}
-                />
-            </Box>
+                <Typography sx={sectionSubSx}>
+                    Stock committed against the
+                    requisition.
+                </Typography>
 
-            {count === 0 ? (
-                <Box sx={emptyPrioritySx}>
-                    No {title.toLowerCase()} have
-                    been created.
-                </Box>
-            ) : (
                 <Box sx={resultListSx}>
-                    {children}
+                    {reservations.length ===
+                        0 ? (
+                        <Box sx={smallEmptySx}>
+                            No reservations created.
+                        </Box>
+                    ) : (
+                        reservations.map(
+                            (reservation) => {
+                                const directIssue =
+                                    String(
+                                        reservation.sourceLocationId
+                                    ) ===
+                                    String(
+                                        reservation.firstDestinationLocationId
+                                    ) &&
+                                    normalize(
+                                        reservation.status
+                                    ) ===
+                                    "ACTIVE";
+
+                                return (
+                                    <Box
+                                        key={
+                                            reservation.id
+                                        }
+                                        sx={resultRowSx}
+                                    >
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={resultMainSx}>
+                                                {reservation.materialCode ||
+                                                    "-"}
+                                            </Typography>
+
+                                            <Typography sx={resultSubSx}>
+                                                {reservation.sourceLocationCode ||
+                                                    "-"}
+                                                {" → "}
+                                                {reservation.firstDestinationLocationCode ||
+                                                    "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Typography sx={resultQtySx}>
+                                            {formatQty(
+                                                reservation.reservedQty
+                                            )}
+                                        </Typography>
+
+                                        {directIssue ? (
+                                            <Button
+                                                startIcon={
+                                                    <OutputOutlinedIcon />
+                                                }
+                                                onClick={() =>
+                                                    onIssueDirect(
+                                                        reservation
+                                                    )
+                                                }
+                                                disabled={
+                                                    issuingReservationId ===
+                                                    reservation.id
+                                                }
+                                                sx={miniPrimarySx}
+                                            >
+                                                {issuingReservationId ===
+                                                    reservation.id
+                                                    ? "Issuing..."
+                                                    : "Issue Direct"}
+                                            </Button>
+                                        ) : (
+                                            <Chip
+                                                label={readable(
+                                                    reservation.status
+                                                )}
+                                                size="small"
+                                                sx={smallStatusSx}
+                                            />
+                                        )}
+                                    </Box>
+                                );
+                            }
+                        )
+                    )}
                 </Box>
-            )}
-        </Card>
-    );
-}
+            </Card>
 
-function Detail({
-    label,
-    value,
-}) {
-    return (
-        <Card sx={panelSx}>
-            <Typography sx={detailLabelSx}>
-                {label}
-            </Typography>
+            <Card sx={panelSx}>
+                <Typography sx={sectionTitleSx}>
+                    Transfers
+                </Typography>
 
-            <Typography sx={detailValueSx}>
-                {value ?? "-"}
-            </Typography>
-        </Card>
-    );
-}
+                <Typography sx={sectionSubSx}>
+                    Physical movements generated from
+                    remote stock reservations.
+                </Typography>
 
-function ResultValue({
-    label,
-    value,
-}) {
-    return (
-        <Box>
-            <Typography sx={resultLabelSx}>
-                {label}
-            </Typography>
+                <Box sx={resultListSx}>
+                    {transfers.length ===
+                        0 ? (
+                        <Box sx={smallEmptySx}>
+                            No transfer is required or
+                            no remote stock was reserved.
+                        </Box>
+                    ) : (
+                        transfers.map(
+                            (transfer) => (
+                                <Box
+                                    key={
+                                        transfer.id
+                                    }
+                                    sx={resultRowSx}
+                                >
+                                    <Box sx={{ minWidth: 0 }}>
+                                        <Typography sx={resultMainSx}>
+                                            {transfer.transferNumber ||
+                                                "-"}
+                                        </Typography>
 
-            <Typography sx={resultValueSx}>
-                {value ?? "-"}
-            </Typography>
+                                        <Typography sx={resultSubSx}>
+                                            {transfer.fromLocationCode ||
+                                                "-"}
+                                            {" → "}
+                                            {transfer.toLocationCode ||
+                                                "-"}
+                                        </Typography>
+                                    </Box>
+
+                                    <Typography sx={resultQtySx}>
+                                        {formatQty(
+                                            transfer.plannedQty
+                                        )}
+                                    </Typography>
+
+                                    <Button
+                                        onClick={() =>
+                                            onOpenTransfer(
+                                                transfer
+                                            )
+                                        }
+                                        sx={miniPrimarySx}
+                                    >
+                                        Open
+                                    </Button>
+                                </Box>
+                            )
+                        )
+                    )}
+                </Box>
+            </Card>
+
+            <Card sx={panelSx}>
+                <Typography sx={sectionTitleSx}>
+                    Shortage Indents
+                </Typography>
+
+                <Typography sx={sectionSubSx}>
+                    Material demand passed to
+                    Procurement.
+                </Typography>
+
+                <Box sx={resultListSx}>
+                    {indents.length ===
+                        0 ? (
+                        <Box sx={smallEmptySx}>
+                            No shortage indent created.
+                        </Box>
+                    ) : (
+                        indents.map(
+                            (indent) => (
+                                <Box
+                                    key={
+                                        indent.id
+                                    }
+                                    sx={indentBoxSx}
+                                >
+                                    <Box sx={indentHeaderSx}>
+                                        <Typography sx={resultMainSx}>
+                                            {indent.indentNumber ||
+                                                "-"}
+                                        </Typography>
+
+                                        <Chip
+                                            label={readable(
+                                                indent.status
+                                            )}
+                                            size="small"
+                                            sx={smallStatusSx}
+                                        />
+                                    </Box>
+
+                                    {asArray(
+                                        indent.lines
+                                    ).map(
+                                        (line) => (
+                                            <Box
+                                                key={
+                                                    line.id
+                                                }
+                                                sx={indentLineSx}
+                                            >
+                                                <Typography sx={resultSubSx}>
+                                                    {line.materialCode ||
+                                                        "-"}
+                                                </Typography>
+
+                                                <Typography sx={resultQtySx}>
+                                                    {formatQty(
+                                                        line.requiredQty
+                                                    )}
+                                                    {" "}
+                                                    {line.uom ||
+                                                        ""}
+                                                </Typography>
+                                            </Box>
+                                        )
+                                    )}
+                                </Box>
+                            )
+                        )
+                    )}
+                </Box>
+            </Card>
         </Box>
     );
 }
 
-const materialColumns =
-    "65px minmax(240px,1.4fr) 80px 100px 105px 105px 105px 100px";
+function Kpi({
+    label,
+    value,
+    color,
+    icon,
+}) {
+    return (
+        <Card
+            sx={{
+                ...kpiCardSx,
+                borderTop:
+                    `3px solid ${color}`,
+            }}
+        >
+            {icon && (
+                <Box
+                    sx={{
+                        ...kpiIconSx,
+                        color,
+                        background:
+                            `${color}14`,
+                        border:
+                            `1px solid ${color}30`,
+                    }}
+                >
+                    {icon}
+                </Box>
+            )}
 
-const materialHeaderSx = {
-    ...tableHeaderSx,
-    gridTemplateColumns:
-        materialColumns,
-};
+            <Box>
+                <Typography sx={kpiLabelSx}>
+                    {label}
+                </Typography>
 
-const materialRowSx = {
-    ...tableRowSx,
-    gridTemplateColumns:
-        materialColumns,
-};
+                <Typography sx={kpiValueSx}>
+                    {value}
+                </Typography>
+            </Box>
+        </Card>
+    );
+}
 
 const heroRowSx = {
     display: "flex",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: "14px",
     flexWrap: "wrap",
@@ -1381,18 +1439,69 @@ const headerActionsSx = {
     flexWrap: "wrap",
 };
 
-const contextGridSx = {
+const kpiGridSx = {
     display: "grid",
     gridTemplateColumns:
-        "repeat(auto-fit,minmax(165px,1fr))",
+        "repeat(6,minmax(0,1fr))",
+    gap: "10px",
+
+    "@media (max-width: 1150px)": {
+        gridTemplateColumns:
+            "repeat(3,minmax(0,1fr))",
+    },
+
+    "@media (max-width: 650px)": {
+        gridTemplateColumns:
+            "1fr",
+    },
+};
+
+const kpiCardSx = {
+    ...panelSx,
+    minHeight: "86px",
+    display: "flex",
+    alignItems: "center",
     gap: "10px",
 };
 
-const planningGridSx = {
-    mt: "13px",
+const kpiIconSx = {
+    width: "38px",
+    height: "38px",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "10px",
+    flexShrink: 0,
+};
+
+const kpiLabelSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "9px",
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+};
+
+const kpiValueSx = {
+    mt: "4px",
+    color:
+        "var(--mf-text)",
+    fontSize: "21px",
+    fontWeight: 950,
+};
+
+const planningHeaderSx = {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "12px",
+};
+
+const planningFormSx = {
+    mt: "15px",
     display: "grid",
     gridTemplateColumns:
-        "minmax(260px,1fr) minmax(300px,1.25fr)",
+        "minmax(0,1.2fr) minmax(0,1fr)",
     gap: "12px",
 
     "@media (max-width: 760px)": {
@@ -1401,167 +1510,272 @@ const planningGridSx = {
     },
 };
 
+const planningActionSx = {
+    mt: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "10px",
+    flexWrap: "wrap",
+};
+
+const disabledNoteSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "10px",
+    fontWeight: 700,
+};
+
+const sectionHeaderSx = {
+    display: "flex",
+    justifyContent: "space-between",
+    mb: "12px",
+};
+
 const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "16px",
+    color:
+        "var(--mf-text)",
+    fontSize: "17px",
     fontWeight: 950,
 };
 
 const sectionSubSx = {
     mt: "3px",
     color:
-        "rgba(255,255,255,.52)",
+        "var(--mf-text-muted)",
     fontSize: "10.5px",
+    fontWeight: 650,
+    lineHeight: 1.45,
 };
 
-const priorityListSx = {
-    mt: "12px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "7px",
+const headerStatusChipSx = (
+    status
+) => {
+    const color =
+        status ===
+            "SHORTAGE_PENDING"
+            ? "#dc2626"
+            : status ===
+                "PLANNED"
+                ? "#16a34a"
+                : "#2563eb";
+
+    return {
+        color,
+        background:
+            `${color}14`,
+        border:
+            `1px solid ${color}32`,
+        fontSize: "9px",
+        fontWeight: 900,
+    };
 };
 
-const priorityRowSx = {
-    p: "9px",
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    borderRadius: "9px",
-    background:
-        "rgba(2,6,23,.34)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+const materialColumns =
+    "minmax(230px,1.4fr) 145px 95px 95px 95px 95px 95px 150px 150px";
+
+const materialHeaderSx = {
+    ...tableHeaderSx,
+    gridTemplateColumns:
+        materialColumns,
+    minWidth: "1160px",
 };
 
-const priorityContentSx = {
-    flex: 1,
-    minWidth: 0,
-};
-
-const priorityTitleSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const prioritySubSx = {
-    mt: "2px",
-    color:
-        "rgba(255,255,255,.48)",
-    fontSize: "10px",
-};
-
-const priorityNumberSx = {
-    minWidth: "28px",
-    color: "#60a5fa",
-    background:
-        "rgba(96,165,250,.14)",
-    border:
-        "1px solid rgba(96,165,250,.34)",
-    fontWeight: 950,
-};
-
-const iconBtnSx = {
-    color: "#94a3b8",
-    border:
-        "1px solid rgba(255,255,255,.07)",
-};
-
-const emptyPrioritySx = {
-    p: "14px",
-    borderRadius: "9px",
-    color:
-        "rgba(255,255,255,.50)",
-    background:
-        "rgba(2,6,23,.28)",
-    border:
-        "1px dashed rgba(255,255,255,.10)",
-    fontSize: "11px",
-};
-
-const planActionSx = {
-    mt: "13px",
-    display: "flex",
-    justifyContent: "flex-end",
+const materialRowSx = {
+    ...tableRowSx,
+    gridTemplateColumns:
+        materialColumns,
+    minWidth: "1160px",
 };
 
 const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
+    color:
+        "var(--mf-text)",
+    fontSize: "11.5px",
     fontWeight: 850,
 };
 
 const subTextSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.48)",
-    fontSize: "10px",
-};
-
-const detailLabelSx = {
-    color:
-        "rgba(255,255,255,.48)",
-    fontSize: "9.5px",
-    fontWeight: 900,
-    textTransform: "uppercase",
-};
-
-const detailValueSx = {
-    mt: "5px",
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const resultHeaderSx = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-};
-
-const resultChipSx = {
-    color: "#60a5fa",
-    background:
-        "rgba(96,165,250,.12)",
-    border:
-        "1px solid rgba(96,165,250,.28)",
-    fontWeight: 900,
+        "var(--mf-text-muted)",
     fontSize: "9px",
+    fontWeight: 650,
+};
+
+const reservedQtySx = {
+    color: "#16a34a",
+    fontWeight: 900,
+};
+
+const shortageQtySx = {
+    color: "#dc2626",
+    fontWeight: 900,
+};
+
+const normalQtySx = {
+    color:
+        "var(--mf-text-secondary)",
+    fontWeight: 800,
+};
+
+const progressHeadSx = {
+    display: "flex",
+    justifyContent: "flex-end",
+};
+
+const progressTextSx = {
+    color:
+        "var(--mf-text-secondary)",
+    fontSize: "8px",
+    fontWeight: 900,
+};
+
+const progressBarSx = (
+    color
+) => ({
+    mt: "5px",
+    height: "6px",
+    borderRadius: 999,
+    background:
+        "var(--mf-surface-strong)",
+
+    "& .MuiLinearProgress-bar": {
+        backgroundColor:
+            color,
+        borderRadius: 999,
+    },
+});
+
+const statusChipSx = (
+    color
+) => ({
+    height: "23px",
+    color,
+    background:
+        `${color}14`,
+    border:
+        `1px solid ${color}32`,
+    fontSize: "8px",
+    fontWeight: 900,
+});
+
+const resultsGridSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(3,minmax(0,1fr))",
+    gap: "10px",
+
+    "@media (max-width: 1000px)": {
+        gridTemplateColumns:
+            "1fr",
+    },
 };
 
 const resultListSx = {
-    mt: "11px",
+    mt: "13px",
     display: "flex",
     flexDirection: "column",
     gap: "7px",
 };
 
 const resultRowSx = {
-    p: "10px",
+    p: "9px",
     display: "grid",
     gridTemplateColumns:
-        "repeat(5,minmax(130px,1fr))",
-    gap: "10px",
+        "minmax(0,1fr) auto auto",
+    alignItems: "center",
+    gap: "8px",
     borderRadius: "9px",
     background:
-        "rgba(2,6,23,.34)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.07)",
-    overflowX: "auto",
+        "1px solid var(--mf-border)",
 };
 
-const resultLabelSx = {
+const resultMainSx = {
     color:
-        "rgba(255,255,255,.45)",
-    fontSize: "9px",
+        "var(--mf-text)",
+    fontSize: "10.5px",
     fontWeight: 900,
-    textTransform: "uppercase",
 };
 
-const resultValueSx = {
-    mt: "4px",
+const resultSubSx = {
+    mt: "2px",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "8.5px",
+    fontWeight: 650,
+};
+
+const resultQtySx = {
+    color:
+        "var(--mf-text)",
+    fontSize: "10px",
+    fontWeight: 900,
+};
+
+const miniPrimarySx = {
+    minWidth: "60px",
+    height: "28px",
+    borderRadius: "8px",
+    textTransform: "none",
     color: "#fff",
-    fontSize: "11px",
-    fontWeight: 800,
+    background: "#0284c7",
+    fontSize: "8px",
+    fontWeight: 900,
+};
+
+const smallStatusSx = {
+    height: "22px",
+    color: "#0284c7",
+    background:
+        "rgba(2,132,199,.10)",
+    border:
+        "1px solid rgba(2,132,199,.22)",
+    fontSize: "8px",
+    fontWeight: 900,
+};
+
+const indentBoxSx = {
+    p: "9px",
+    borderRadius: "9px",
+    background:
+        "var(--mf-surface-soft)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const indentHeaderSx = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+};
+
+const indentLineSx = {
+    mt: "6px",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "8px",
+};
+
+const smallEmptySx = {
+    p: "18px",
+    textAlign: "center",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "9.5px",
+    borderRadius: "9px",
+    border:
+        "1px dashed var(--mf-border)",
+};
+
+const emptySx = {
+    minHeight: "170px",
+    display: "grid",
+    placeItems: "center",
+    color:
+        "var(--mf-text-muted)",
+       fontSize: "11px",
 };

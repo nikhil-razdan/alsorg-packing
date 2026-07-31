@@ -280,12 +280,24 @@ export default function MatFlowTransferList() {
                                 activePlant,
                         });
 
+                const responseData =
+                    response?.data;
+
+                const transferRows =
+                    Array.isArray(responseData)
+                        ? responseData
+                        : Array.isArray(
+                            responseData?.content
+                        )
+                            ? responseData.content
+                            : Array.isArray(
+                                responseData?.rows
+                            )
+                                ? responseData.rows
+                                : [];
+
                 setRows(
-                    Array.isArray(
-                        response?.data
-                    )
-                        ? response.data
-                        : []
+                    transferRows
                 );
             } catch (
             requestError
@@ -587,8 +599,32 @@ export default function MatFlowTransferList() {
                         {filteredRows.length ===
                             0 ? (
                             <Box sx={emptySx}>
-                                No transfers match the
-                                selected filters.
+                                <Typography sx={emptyTitleSx}>
+                                    No material transfers exist
+                                </Typography>
+
+                                <Typography sx={emptySubSx}>
+                                    Open a submitted requisition in the Store
+                                    Planning queue and run material planning.
+                                    A transfer is created only when reserved
+                                    stock must move from another location.
+                                    Shortages create indents, while stock already
+                                    at Production creates a direct reservation.
+                                </Typography>
+
+                                <Button
+                                    onClick={() =>
+                                        navigate(
+                                            "/matflow/store"
+                                        )
+                                    }
+                                    sx={{
+                                        ...primaryBtnSx,
+                                        mt: "12px",
+                                    }}
+                                >
+                                    Open Store Planning
+                                </Button>
                             </Box>
                         ) : (
                             filteredRows.map(
@@ -930,11 +966,27 @@ const statusChipSx = (
 });
 
 const emptySx = {
-    minHeight: "180px",
-    display: "grid",
-    placeItems: "center",
+    minHeight: "220px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    p: "24px",
+};
+
+const emptyTitleSx = {
+    color:
+        "var(--mf-text)",
+    fontSize: "14px",
+    fontWeight: 950,
+};
+
+const emptySubSx = {
+    mt: "6px",
+    maxWidth: "560px",
     color:
         "var(--mf-text-muted)",
-    fontSize: "12px",
-    fontWeight: 700,
+    fontSize: "10.5px",
+    lineHeight: 1.55,
 };

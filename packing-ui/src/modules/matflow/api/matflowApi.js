@@ -448,8 +448,23 @@ export const matflowApi = {
 		reservationId,
 		body
 	) {
+		const id =
+			String(
+				reservationId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Reservation ID is required."
+				)
+			);
+		}
+
 		return API.post(
-			`${BASE}/reservations/${reservationId}/release`,
+			`${BASE}/reservations/${encodeURIComponent(
+				id
+			)}/release`,
 			body
 		);
 	},
@@ -516,30 +531,40 @@ export const matflowApi = {
 	},
 
 	/* =====================================================
- * PRODUCTION MATERIAL REQUISITIONS
- *
- * Exact backend:
- * MatFlowPlanningController
- * ===================================================== */
+	 * PRODUCTION REQUISITIONS AND STORE PLANNING
+	 *
+	 * Exact backend:
+	 * MatFlowPlanningController
+	 * MatFlowControlController
+	 * ===================================================== */
 
-	listRequisitions() {
+	listRequisitions(params = {}) {
 		return API.get(
-			`${BASE}/requisitions`
+			`${BASE}/requisitions`,
+			{
+				params:
+					cleanParams(params),
+			}
 		);
 	},
 
-	getRequisition(
-		requisitionId
-	) {
-		if (!requisitionId) {
-			throw new Error(
-				"Requisition ID is required."
+	getRequisition(requisitionId) {
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
 			);
 		}
 
 		return API.get(
 			`${BASE}/requisitions/${encodeURIComponent(
-				String(requisitionId)
+				id
 			)}`
 		);
 	},
@@ -547,15 +572,22 @@ export const matflowApi = {
 	getRequisitionPlanning(
 		requisitionId
 	) {
-		if (!requisitionId) {
-			throw new Error(
-				"Requisition ID is required."
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
 			);
 		}
 
 		return API.get(
 			`${BASE}/requisitions/${encodeURIComponent(
-				String(requisitionId)
+				id
 			)}/planning`
 		);
 	},
@@ -571,15 +603,22 @@ export const matflowApi = {
 		requisitionId,
 		body
 	) {
-		if (!requisitionId) {
-			throw new Error(
-				"Requisition ID is required."
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
 			);
 		}
 
 		return API.post(
 			`${BASE}/requisitions/${encodeURIComponent(
-				String(requisitionId)
+				id
 			)}/submit`,
 			body
 		);
@@ -589,16 +628,48 @@ export const matflowApi = {
 		requisitionId,
 		body
 	) {
-		if (!requisitionId) {
-			throw new Error(
-				"Requisition ID is required."
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
 			);
 		}
 
 		return API.post(
 			`${BASE}/requisitions/${encodeURIComponent(
-				String(requisitionId)
+				id
 			)}/plan`,
+			body
+		);
+	},
+
+	cancelRequisition(
+		requisitionId,
+		body
+	) {
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/requisitions/${encodeURIComponent(
+				id
+			)}/cancel`,
 			body
 		);
 	},
@@ -892,23 +963,30 @@ export const matflowApi = {
 		);
 	},
 
-	// =====================================================
-	// TRANSFER EXECUTION
-	// =====================================================
+	/* =====================================================
+ * TRANSFER EXECUTION
+ *
+ * Exact backend:
+ * MatFlowTransferController
+ * ===================================================== */
 
-	listTransfers: (params = {}) =>
-		API.get(
+	listTransfers(params = {}) {
+		return API.get(
 			`${BASE}/transfers`,
 			{
-				params,
+				params:
+					cleanParams(params),
 			}
-		),
+		);
+	},
 
-	getTransfer: (id) => {
-		const transferId =
-			String(id ?? "").trim();
+	getTransfer(transferId) {
+		const id =
+			String(
+				transferId ?? ""
+			).trim();
 
-		if (!transferId) {
+		if (!id) {
 			return Promise.reject(
 				new Error(
 					"Transfer ID is required."
@@ -918,19 +996,21 @@ export const matflowApi = {
 
 		return API.get(
 			`${BASE}/transfers/${encodeURIComponent(
-				transferId
+				id
 			)}`
 		);
 	},
 
-	dispatchTransfer: (
-		id,
+	dispatchTransfer(
+		transferId,
 		body
-	) => {
-		const transferId =
-			String(id ?? "").trim();
+	) {
+		const id =
+			String(
+				transferId ?? ""
+			).trim();
 
-		if (!transferId) {
+		if (!id) {
 			return Promise.reject(
 				new Error(
 					"Transfer ID is required."
@@ -940,20 +1020,22 @@ export const matflowApi = {
 
 		return API.post(
 			`${BASE}/transfers/${encodeURIComponent(
-				transferId
+				id
 			)}/dispatch`,
 			body
 		);
 	},
 
-	receiveTransfer: (
-		id,
+	receiveTransfer(
+		transferId,
 		body
-	) => {
-		const transferId =
-			String(id ?? "").trim();
+	) {
+		const id =
+			String(
+				transferId ?? ""
+			).trim();
 
-		if (!transferId) {
+		if (!id) {
 			return Promise.reject(
 				new Error(
 					"Transfer ID is required."
@@ -963,20 +1045,22 @@ export const matflowApi = {
 
 		return API.post(
 			`${BASE}/transfers/${encodeURIComponent(
-				transferId
+				id
 			)}/receive`,
 			body
 		);
 	},
 
-	issueDirectReservation: (
-		id,
+	issueDirectReservation(
+		reservationId,
 		body
-	) => {
-		const reservationId =
-			String(id ?? "").trim();
+	) {
+		const id =
+			String(
+				reservationId ?? ""
+			).trim();
 
-		if (!reservationId) {
+		if (!id) {
 			return Promise.reject(
 				new Error(
 					"Reservation ID is required."
@@ -986,7 +1070,7 @@ export const matflowApi = {
 
 		return API.post(
 			`${BASE}/reservations/${encodeURIComponent(
-				reservationId
+				id
 			)}/issue-direct`,
 			body
 		);
@@ -1102,6 +1186,39 @@ export const extractMatFlowPage = (
 			totalPages:
 				responseData.totalPages ??
 				1,
+		};
+	}
+
+	if (
+		Array.isArray(
+			responseData?.rows
+		)
+	) {
+		return {
+			rows:
+				responseData.rows,
+
+			page:
+				responseData.page ??
+				responseData.number ??
+				0,
+
+			size:
+				responseData.size ??
+				responseData.rows.length,
+
+			totalElements:
+				responseData.totalElements ??
+				responseData.rows.length,
+
+			totalPages:
+				responseData.totalPages ??
+				(
+					responseData.rows.length >
+						0
+						? 1
+						: 0
+				),
 		};
 	}
 
