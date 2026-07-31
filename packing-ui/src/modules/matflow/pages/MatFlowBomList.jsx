@@ -61,6 +61,12 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    emptySx,
+    mainTextSx,
+    pageTextSx,
+    sectionSubSx,
+    sectionTitleSx,
+    subTextSx,
 } from "../matflowTheme";
 
 const STATUS_OPTIONS = [
@@ -112,14 +118,6 @@ export default function MatFlowBomList() {
         plantCode: "",
         status: "",
     });
-
-    const STATUS_OPTIONS = [
-        "",
-        "DRAFT",
-        "SUBMITTED",
-        "APPROVED",
-        "RETURNED",
-    ];
 
     const [page, setPage] =
         useState(0);
@@ -609,19 +607,6 @@ const resultHeaderSx = {
     mb: "12px",
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
-const sectionSubSx = {
-    mt: "3px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 700,
-};
-
 const bomColumns =
     "155px 165px minmax(220px,1.3fr) 110px 70px 140px 110px 100px";
 
@@ -637,38 +622,10 @@ const bomRowSx = {
         bomColumns,
 };
 
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color: "rgba(255,255,255,.47)",
-    fontSize: "10px",
-    fontWeight: 650,
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color: "rgba(255,255,255,.50)",
-    fontSize: "12px",
-    fontWeight: 750,
-};
-
 const paginationSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: "9px",
     mt: "12px",
-};
-
-const pageTextSx = {
-    color: "rgba(255,255,255,.62)",
-    fontSize: "11px",
-    fontWeight: 750,
 };

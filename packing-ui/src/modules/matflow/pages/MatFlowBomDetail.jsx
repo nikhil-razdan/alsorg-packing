@@ -70,6 +70,14 @@ import {
     panelSx,
     primaryBtnSx,
     secondaryBtnSx,
+    detailBoxSx,
+    detailLabelSx,
+    detailValueSx,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogMessageSx,
+    dialogPaperSx,
+    dialogTitleSx,
 } from "../matflowTheme";
 
 export default function MatFlowBomDetail() {
@@ -724,29 +732,6 @@ const summaryGridSx = {
     gap: "9px",
 };
 
-const detailBoxSx = {
-    p: "11px",
-    borderRadius: "9px",
-    background: "rgba(2,6,23,.34)",
-    border:
-        "1px solid rgba(255,255,255,.06)",
-};
-
-const detailLabelSx = {
-    color: "rgba(255,255,255,.48)",
-    fontSize: "9.5px",
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: ".07em",
-};
-
-const detailValueSx = {
-    mt: "5px",
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 800,
-};
-
 const workflowActionsSx = {
     display: "flex",
     justifyContent: "flex-end",
@@ -755,37 +740,6 @@ const workflowActionsSx = {
     mt: "14px",
     pt: "14px",
     borderTop:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
 };
 
-const dialogPaperSx = {
-    borderRadius: "14px",
-    color: "#fff",
-    background:
-        "linear-gradient(180deg,#0f172a,#111827)",
-    border:
-        "1px solid rgba(255,255,255,.08)",
-};
-
-const dialogTitleSx = {
-    color: "#fff",
-    fontWeight: 950,
-    borderBottom:
-        "1px solid rgba(255,255,255,.07)",
-};
-
-const dialogContentSx = {
-    pt: "18px !important",
-};
-
-const dialogMessageSx = {
-    color: "rgba(255,255,255,.65)",
-    fontSize: "12px",
-    lineHeight: 1.55,
-};
-
-const dialogActionsSx = {
-    p: "14px 24px 20px",
-    borderTop:
-        "1px solid rgba(255,255,255,.07)",
-};

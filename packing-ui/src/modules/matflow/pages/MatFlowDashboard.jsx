@@ -243,9 +243,12 @@ const stageIconSx = (accent) => ({
 const stepChipSx = {
 	height: "22px",
 	borderRadius: 999,
-	color: "#94a3b8",
-	background: "rgba(255,255,255,.05)",
-	border: "1px solid rgba(255,255,255,.08)",
+	color:
+		"var(--mf-text-muted)",
+	background:
+		"var(--mf-surface-soft)",
+	border:
+		"1px solid var(--mf-border)",
 	fontSize: "9px",
 	fontWeight: 900,
 };

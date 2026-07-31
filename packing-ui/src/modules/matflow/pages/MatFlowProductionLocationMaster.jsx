@@ -64,6 +64,15 @@ import {
     tableCellSx,
     tableHeaderSx,
     tableRowSx,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogPaperSx,
+    dialogTitleSx,
+    emptySx,
+    mainTextSx,
+    sectionTitleSx,
+    subTextSx,
+    switchLabelSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -557,24 +566,28 @@ export default function MatFlowProductionLocationMaster() {
                 onClose={closeDialog}
                 fullWidth
                 maxWidth="sm"
+                PaperProps={{
+                    sx: dialogPaperSx,
+                }}
             >
-                <DialogTitle>
-                    {editingRow
-                        ? "Edit Production Location"
-                        : "Create Production Location"}
+                <DialogTitle sx={dialogTitleSx}>
+                    <Box>
+                        <Typography sx={sectionTitleSx}>
+                            {editingRow
+                                ? "Edit Production Location"
+                                : "Create Production Location"}
+                        </Typography>
+                    </Box>
 
                     <IconButton
                         onClick={closeDialog}
                         disabled={saving}
-                        sx={{
-                            float: "right",
-                        }}
                     >
                         <CloseIcon />
                     </IconButton>
                 </DialogTitle>
 
-                <DialogContent>
+                <DialogContent sx={dialogContentSx}>
                     <Box sx={formGridSx}>
                         <TextField
                             label="Location Code *"
@@ -717,7 +730,7 @@ export default function MatFlowProductionLocationMaster() {
                     </Box>
                 </DialogContent>
 
-                <DialogActions>
+                <DialogActions sx={dialogActionsSx}>
                     <Button
                         onClick={closeDialog}
                         disabled={saving}

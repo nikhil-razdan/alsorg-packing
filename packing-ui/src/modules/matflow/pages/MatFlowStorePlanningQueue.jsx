@@ -49,6 +49,9 @@ import {
     tableCellSx,
     tableHeaderSx,
     tableRowSx,
+    emptySx,
+    mainTextSx,
+    subTextSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -702,7 +705,7 @@ const filterGridSx = {
 
 const kpiLabelSx = {
     color:
-        "rgba(255,255,255,.52)",
+        "var(--mf-text-muted)",
     fontSize: "10px",
     fontWeight: 900,
     textTransform: "uppercase",
@@ -711,22 +714,10 @@ const kpiLabelSx = {
 
 const kpiValueSx = {
     mt: "5px",
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "26px",
     fontWeight: 950,
-};
-
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color:
-        "rgba(255,255,255,.48)",
-    fontSize: "10px",
 };
 
 const statusChipSx = (
@@ -741,11 +732,3 @@ const statusChipSx = (
     fontWeight: 900,
     fontSize: "9px",
 });
-
-const emptySx = {
-    p: "26px",
-    textAlign: "center",
-    color:
-        "rgba(255,255,255,.52)",
-    fontSize: "12px",
-};

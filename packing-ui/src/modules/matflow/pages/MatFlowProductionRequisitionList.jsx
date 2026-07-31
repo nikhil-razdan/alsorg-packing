@@ -65,6 +65,12 @@ import {
     tableCellSx,
     tableHeaderSx,
     tableRowSx,
+    emptySx,
+    mainTextSx,
+    pageTextSx,
+    sectionSubSx,
+    sectionTitleSx,
+    subTextSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -747,19 +753,6 @@ const resultHeaderSx = {
     mb: "12px",
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
-const sectionSubSx = {
-    mt: "3px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 700,
-};
-
 const columns =
     "155px 155px 145px minmax(210px,1.2fr) 65px 145px 175px 105px";
 
@@ -775,38 +768,10 @@ const rowTableSx = {
         columns,
 };
 
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color: "rgba(255,255,255,.47)",
-    fontSize: "10px",
-    fontWeight: 650,
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color: "rgba(255,255,255,.50)",
-    fontSize: "12px",
-    fontWeight: 750,
-};
-
 const paginationSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: "9px",
     mt: "12px",
-};
-
-const pageTextSx = {
-    color: "rgba(255,255,255,.62)",
-    fontSize: "11px",
-    fontWeight: 750,
 };

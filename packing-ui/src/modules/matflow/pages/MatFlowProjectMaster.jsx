@@ -68,6 +68,20 @@ import {
     tableCellSx,
     tableHeaderSx,
     tableRowSx,
+    closeButtonSx,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogHeadingSx,
+    dialogPaperSx,
+    dialogSubSx,
+    dialogTitleSx,
+    emptySx,
+    mainTextSx,
+    pageTextSx,
+    sectionSubSx,
+    sectionTitleSx,
+    subTextSx,
+    switchLabelSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -863,10 +877,7 @@ export default function MatFlowProjectMaster() {
                             />
                         }
                         label="Project drawing is active"
-                        sx={{
-                            color:
-                                "rgba(255,255,255,.72)",
-                        }}
+                        sx={switchLabelSx}
                     />
                     <Box sx={formGridSx}>
                         <TextField
@@ -1061,19 +1072,6 @@ const resultHeaderSx = {
     mb: "12px",
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
-const sectionSubSx = {
-    mt: "3px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 700,
-};
-
 const projectColumns =
     "170px 150px minmax(220px,1.3fr) 180px 125px 70px 200px";
 
@@ -1089,32 +1087,10 @@ const projectRowSx = {
         projectColumns,
 };
 
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color: "rgba(255,255,255,.47)",
-    fontSize: "10px",
-    fontWeight: 650,
-};
-
 const actionCellSx = {
     ...tableCellSx,
     display: "flex",
     gap: "6px",
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color: "rgba(255,255,255,.50)",
-    fontSize: "12px",
-    fontWeight: 750,
 };
 
 const paginationSx = {
@@ -1125,48 +1101,6 @@ const paginationSx = {
     mt: "12px",
 };
 
-const pageTextSx = {
-    color: "rgba(255,255,255,.62)",
-    fontSize: "11px",
-    fontWeight: 750,
-};
-
-const dialogPaperSx = {
-    borderRadius: "14px",
-    color: "#fff",
-    background:
-        "linear-gradient(180deg,#0f172a,#111827)",
-    border:
-        "1px solid rgba(255,255,255,.08)",
-};
-
-const dialogTitleSx = {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    borderBottom:
-        "1px solid rgba(255,255,255,.07)",
-};
-
-const dialogHeadingSx = {
-    color: "#fff",
-    fontSize: "19px",
-    fontWeight: 950,
-};
-
-const dialogSubSx = {
-    mt: "4px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-};
-
-const closeButtonSx = {
-    color: "#94a3b8",
-};
-
-const dialogContentSx = {
-    pt: "18px !important",
-};
 
 const formGridSx = {
     display: "grid",
@@ -1177,10 +1111,4 @@ const formGridSx = {
     "@media (max-width: 700px)": {
         gridTemplateColumns: "1fr",
     },
-};
-
-const dialogActionsSx = {
-    p: "14px 24px 20px",
-    borderTop:
-        "1px solid rgba(255,255,255,.07)",
 };

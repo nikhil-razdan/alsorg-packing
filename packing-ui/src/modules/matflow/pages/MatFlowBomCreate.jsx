@@ -42,6 +42,10 @@ import {
     panelSx,
     primaryBtnSx,
     secondaryBtnSx,
+    detailBoxSx,
+    detailLabelSx,
+    detailValueSx,
+    sectionTitleSx,
 } from "../matflowTheme";
 
 const clean = (value) => {
@@ -405,41 +409,12 @@ const formGridSx = {
     },
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
 const contextGridSx = {
     mt: "12px",
     display: "grid",
     gridTemplateColumns:
         "repeat(auto-fit,minmax(180px,1fr))",
     gap: "9px",
-};
-
-const detailBoxSx = {
-    p: "11px",
-    borderRadius: "9px",
-    background: "rgba(2,6,23,.34)",
-    border:
-        "1px solid rgba(255,255,255,.06)",
-};
-
-const detailLabelSx = {
-    color: "rgba(255,255,255,.48)",
-    fontSize: "9.5px",
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: ".07em",
-};
-
-const detailValueSx = {
-    mt: "5px",
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 800,
 };
 
 const actionRowSx = {

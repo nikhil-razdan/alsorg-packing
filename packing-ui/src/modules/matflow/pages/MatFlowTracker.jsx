@@ -3539,7 +3539,7 @@ function ProjectMetric({
                     color:
                         alert
                             ? "#f59e0b"
-                            : "#fff",
+                            : "var(--mf-text)",
                 }}
             >
                 {value}
@@ -3565,7 +3565,7 @@ function QtyPair({
                     color:
                         alert
                             ? "#f59e0b"
-                            : "#fff",
+                            : "var(--mf-text)",
                 }}
             >
                 {formatQty(value)}
@@ -3588,12 +3588,17 @@ const kpiGridSx = {
         "repeat(6,minmax(0,1fr))",
     gap: "9px",
 
-    "@media (max-width: 1150px)": {
+    "@media (max-width: 1250px)": {
         gridTemplateColumns:
             "repeat(3,minmax(0,1fr))",
     },
 
-    "@media (max-width: 650px)": {
+    "@media (max-width: 760px)": {
+        gridTemplateColumns:
+            "repeat(2,minmax(0,1fr))",
+    },
+
+    "@media (max-width: 480px)": {
         gridTemplateColumns:
             "1fr",
     },
@@ -3601,29 +3606,42 @@ const kpiGridSx = {
 
 const kpiCardSx = {
     ...panelSx,
+    minHeight: "82px",
     display: "flex",
     alignItems: "center",
     gap: "10px",
+    transition:
+        "transform .18s ease, border-color .18s ease",
+
+    "&:hover": {
+        transform:
+            "translateY(-1px)",
+        borderColor:
+            "var(--mf-border-strong)",
+    },
 };
 
 const kpiIconSx = {
-    width: "36px",
-    height: "36px",
+    width: "38px",
+    height: "38px",
+    flexShrink: 0,
     display: "grid",
     placeItems: "center",
     borderRadius: "10px",
-    color: "#60a5fa",
+    color: "#2563eb",
     background:
-        "rgba(96,165,250,.12)",
+        "rgba(59,130,246,.11)",
     border:
-        "1px solid rgba(96,165,250,.25)",
+        "1px solid rgba(59,130,246,.24)",
 };
 
 const kpiValueSx = {
     mt: "3px",
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontWeight: 950,
     fontSize: "21px",
+    lineHeight: 1.1,
 };
 
 const filterGridSx = {
@@ -3633,21 +3651,32 @@ const filterGridSx = {
     gap: "11px",
     alignItems: "center",
 
-    "@media (max-width: 900px)": {
+    "@media (max-width: 1050px)": {
+        gridTemplateColumns:
+            "1fr 1fr",
+    },
+
+    "@media (max-width: 700px)": {
         gridTemplateColumns:
             "1fr",
     },
 };
 
 const attentionSwitchSx = {
+    minHeight: "44px",
     display: "flex",
     alignItems: "center",
-    minHeight: "48px",
+    px: "6px",
+    borderRadius: "9px",
+    background:
+        "var(--mf-surface-soft)",
+    border:
+        "1px solid var(--mf-border)",
 };
 
 const switchLabelSx = {
     color:
-        "rgba(255,255,255,.70)",
+        "var(--mf-text-secondary)",
     fontSize: "11px",
     fontWeight: 800,
 };
@@ -3662,9 +3691,11 @@ const projectCardSx = {
     ...panelSx,
     p: 0,
     overflow: "hidden",
+    backgroundImage: "none",
 };
 
 const projectHeaderSx = {
+    minWidth: "1220px",
     p: "12px",
     display: "grid",
     gridTemplateColumns:
@@ -3672,12 +3703,28 @@ const projectHeaderSx = {
     alignItems: "center",
     gap: "10px",
     overflowX: "auto",
+    background:
+        "var(--mf-panel-bg)",
 };
 
 const expandButtonSx = {
-    color: "#94a3b8",
+    width: "34px",
+    height: "34px",
+    color:
+        "var(--mf-text-muted)",
+    background:
+        "var(--mf-field-bg)",
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid var(--mf-border)",
+
+    "&:hover": {
+        color:
+            "var(--mf-text)",
+        background:
+            "var(--mf-hover)",
+        borderColor:
+            "var(--mf-border-strong)",
+    },
 };
 
 const projectIdentitySx = {
@@ -3685,16 +3732,23 @@ const projectIdentitySx = {
 };
 
 const projectTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "15px",
     fontWeight: 950,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const projectSubSx = {
     mt: "3px",
     color:
-        "rgba(255,255,255,.48)",
+        "var(--mf-text-muted)",
     fontSize: "9.5px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const projectProgressSx = {
@@ -3711,11 +3765,19 @@ const metricBoxSx = {
 
 const metricLabelSx = {
     color:
-        "rgba(255,255,255,.42)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: ".04em",
+};
+
+const metricValueSx = {
+    mt: "3px",
+    color:
+        "var(--mf-text)",
+    fontSize: "11px",
+    fontWeight: 900,
 };
 
 const executiveGridSx = {
@@ -3750,21 +3812,22 @@ const executiveCardSx = {
         top: "-55px",
         borderRadius: "50%",
         background:
-            "radial-gradient(circle,rgba(96,165,250,.14),transparent 68%)",
+            "radial-gradient(circle,rgba(59,130,246,.14),transparent 68%)",
+        pointerEvents: "none",
     },
 };
 
 const exceptionCardSx = {
     ...executiveCardSx,
     background:
-        "linear-gradient(145deg,rgba(69,10,10,.42),rgba(15,23,42,.86))",
+        "linear-gradient(145deg,rgba(239,68,68,.07),var(--mf-panel-bg))",
     border:
-        "1px solid rgba(248,113,113,.18)",
+        "1px solid rgba(239,68,68,.20)",
 };
 
 const cardEyebrowSx = {
     color:
-        "rgba(255,255,255,.50)",
+        "var(--mf-text-muted)",
     fontSize: "9px",
     fontWeight: 950,
     textTransform: "uppercase",
@@ -3776,23 +3839,42 @@ const ringLayoutSx = {
     display: "flex",
     alignItems: "center",
     gap: "17px",
+
+    "@media (max-width: 430px)": {
+        alignItems: "flex-start",
+        flexDirection: "column",
+    },
 };
 
 const progressRingSx = (
     value,
     color
-) => ({
-    width: "112px",
-    height: "112px",
-    flex: "0 0 auto",
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "50%",
-    background:
-        `conic-gradient(${color} ${value * 3.6}deg,rgba(255,255,255,.075) 0deg)`,
-    boxShadow:
-        `0 0 28px ${color}22`,
-});
+) => {
+    const angle =
+        Math.min(
+            360,
+            Math.max(
+                0,
+                value * 3.6
+            )
+        );
+
+    return {
+        width: "112px",
+        height: "112px",
+        flex: "0 0 auto",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: "50%",
+        background:
+            `conic-gradient(
+				${color} 0deg ${angle}deg,
+				var(--mf-surface-strong) ${angle}deg 360deg
+			)`,
+        boxShadow:
+            `0 0 28px ${color}22`,
+    };
+};
 
 const progressRingInnerSx = {
     width: "82px",
@@ -3802,27 +3884,29 @@ const progressRingInnerSx = {
     alignContent: "center",
     borderRadius: "50%",
     background:
-        "linear-gradient(145deg,#111827,#020617)",
+        "var(--mf-panel-bg-solid)",
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid var(--mf-border)",
 };
 
 const progressRingValueSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "22px",
     fontWeight: 950,
 };
 
 const progressRingLabelSx = {
     color:
-        "rgba(255,255,255,.43)",
+        "var(--mf-text-muted)",
     fontSize: "8px",
     fontWeight: 900,
     letterSpacing: ".10em",
 };
 
 const ringTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "14px",
     fontWeight: 900,
 };
@@ -3830,7 +3914,7 @@ const ringTitleSx = {
 const ringSubSx = {
     mt: "5px",
     color:
-        "rgba(255,255,255,.62)",
+        "var(--mf-text-secondary)",
     fontSize: "10px",
     fontWeight: 750,
 };
@@ -3839,7 +3923,7 @@ const ringNoteSx = {
     mt: "8px",
     maxWidth: "185px",
     color:
-        "rgba(255,255,255,.38)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     lineHeight: 1.5,
 };
@@ -3852,17 +3936,19 @@ const flowProgressHeadSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: "8px",
 };
 
 const flowLabelSx = {
     color:
-        "rgba(255,255,255,.68)",
+        "var(--mf-text-secondary)",
     fontSize: "9.5px",
     fontWeight: 850,
 };
 
 const flowValueSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "10px",
     fontWeight: 950,
 };
@@ -3870,7 +3956,7 @@ const flowValueSx = {
 const flowQuantitySx = {
     mt: "4px",
     color:
-        "rgba(255,255,255,.38)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
 };
 
@@ -3881,7 +3967,7 @@ const executiveProgressSx = (
     height: "7px",
     borderRadius: 999,
     background:
-        "rgba(255,255,255,.075)",
+        "var(--mf-surface-strong)",
 
     "& .MuiLinearProgress-bar": {
         background:
@@ -3897,9 +3983,9 @@ const healthBarSx = {
     overflow: "hidden",
     borderRadius: 999,
     background:
-        "rgba(255,255,255,.06)",
+        "var(--mf-surface-strong)",
     border:
-        "1px solid rgba(255,255,255,.06)",
+        "1px solid var(--mf-border)",
 };
 
 const healthLegendSx = {
@@ -3908,6 +3994,11 @@ const healthLegendSx = {
     gridTemplateColumns:
         "repeat(3,minmax(0,1fr))",
     gap: "12px",
+
+    "@media (max-width: 430px)": {
+        gridTemplateColumns:
+            "repeat(2,minmax(0,1fr))",
+    },
 };
 
 const healthLegendItemSx = {
@@ -3919,18 +4010,20 @@ const healthLegendItemSx = {
 const legendDotSx = {
     width: "8px",
     height: "8px",
+    flexShrink: 0,
     borderRadius: "50%",
 };
 
 const legendValueSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "13px",
     fontWeight: 950,
 };
 
 const legendLabelSx = {
     color:
-        "rgba(255,255,255,.42)",
+        "var(--mf-text-muted)",
     fontSize: "8px",
     fontWeight: 800,
 };
@@ -3952,7 +4045,7 @@ const exceptionIndicatorSx = {
 
 const exceptionLabelSx = {
     color:
-        "rgba(255,255,255,.65)",
+        "var(--mf-text-secondary)",
     fontSize: "9.5px",
     fontWeight: 750,
 };
@@ -3982,6 +4075,7 @@ const insightGridSx = {
 const insightCardSx = {
     ...panelSx,
     minHeight: "300px",
+    overflow: "hidden",
 };
 
 const insightHeaderSx = {
@@ -3992,7 +4086,8 @@ const insightHeaderSx = {
 };
 
 const insightTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "14px",
     fontWeight: 950,
 };
@@ -4000,13 +4095,15 @@ const insightTitleSx = {
 const insightSubSx = {
     mt: "3px",
     color:
-        "rgba(255,255,255,.42)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     lineHeight: 1.5,
 };
 
 const warningChipSx = {
-    color: "#f59e0b",
+    height: "23px",
+    flexShrink: 0,
+    color: "#d97706",
     background:
         "rgba(245,158,11,.10)",
     border:
@@ -4031,9 +4128,19 @@ const hotspotRowSx = {
     gap: "8px",
     borderRadius: "8px",
     background:
-        "rgba(2,6,23,.34)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.055)",
+        "1px solid var(--mf-border)",
+
+    "@media (max-width: 460px)": {
+        gridTemplateColumns:
+            "27px minmax(0,1fr) 55px",
+
+        "& .MuiButton-root": {
+            gridColumn: "2 / -1",
+            justifySelf: "flex-end",
+        },
+    },
 };
 
 const rankSx = {
@@ -4042,7 +4149,7 @@ const rankSx = {
     display: "grid",
     placeItems: "center",
     borderRadius: "7px",
-    color: "#f59e0b",
+    color: "#d97706",
     background:
         "rgba(245,158,11,.10)",
     fontSize: "9px",
@@ -4054,7 +4161,8 @@ const hotspotIdentitySx = {
 };
 
 const hotspotTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "10px",
     fontWeight: 850,
     overflow: "hidden",
@@ -4065,7 +4173,7 @@ const hotspotTitleSx = {
 const hotspotSubSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.38)",
+        "var(--mf-text-muted)",
     fontSize: "8px",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -4077,14 +4185,14 @@ const hotspotQtySx = {
 };
 
 const hotspotQtyValueSx = {
-    color: "#f59e0b",
+    color: "#d97706",
     fontSize: "11px",
     fontWeight: 950,
 };
 
 const hotspotQtyLabelSx = {
     color:
-        "rgba(255,255,255,.33)",
+        "var(--mf-text-muted)",
     fontSize: "7px",
     fontWeight: 900,
 };
@@ -4092,23 +4200,32 @@ const hotspotQtyLabelSx = {
 const miniActionSx = {
     minWidth: "46px",
     height: "25px",
-    color: "#60a5fa",
+    px: "8px",
+    color: "#0284c7",
     fontSize: "8px",
     fontWeight: 900,
+    background:
+        "var(--mf-field-bg)",
     border:
-        "1px solid rgba(96,165,250,.24)",
+        "1px solid rgba(2,132,199,.25)",
+
+    "&:hover": {
+        background:
+            "rgba(2,132,199,.09)",
+    },
 };
 
 const positiveEmptySx = {
     p: "20px",
-    color: "#34d399",
+    color: "#16a34a",
     textAlign: "center",
     fontSize: "10px",
+    fontWeight: 750,
     borderRadius: "9px",
     background:
-        "rgba(52,211,153,.06)",
+        "rgba(34,197,94,.07)",
     border:
-        "1px dashed rgba(52,211,153,.20)",
+        "1px dashed rgba(34,197,94,.22)",
 };
 
 const categoryListSx = {
@@ -4126,17 +4243,22 @@ const categoryHeadSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: "8px",
 };
 
 const categoryNameSx = {
     color:
-        "rgba(255,255,255,.72)",
+        "var(--mf-text-secondary)",
     fontSize: "9.5px",
     fontWeight: 850,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const categoryValueSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "9.5px",
     fontWeight: 950,
 };
@@ -4148,7 +4270,7 @@ const categoryProgressSx = (
     height: "6px",
     borderRadius: 999,
     background:
-        "rgba(255,255,255,.07)",
+        "var(--mf-surface-strong)",
 
     "& .MuiLinearProgress-bar": {
         backgroundColor:
@@ -4161,11 +4283,12 @@ const categoryFootSx = {
     mt: "4px",
     display: "flex",
     justifyContent: "space-between",
+    gap: "8px",
 };
 
 const categoryNoteSx = {
     color:
-        "rgba(255,255,255,.35)",
+        "var(--mf-text-muted)",
     fontSize: "7.5px",
 };
 
@@ -4185,9 +4308,9 @@ const projectHealthRowSx = {
     gap: "9px",
     borderRadius: "8px",
     background:
-        "rgba(2,6,23,.32)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.05)",
+        "1px solid var(--mf-border)",
 };
 
 const projectHealthIdentitySx = {
@@ -4195,7 +4318,8 @@ const projectHealthIdentitySx = {
 };
 
 const projectHealthTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "10px",
     fontWeight: 900,
     overflow: "hidden",
@@ -4206,8 +4330,11 @@ const projectHealthTitleSx = {
 const projectHealthSubSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.36)",
+        "var(--mf-text-muted)",
     fontSize: "7.5px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const projectHealthProgressSx = {
@@ -4217,11 +4344,12 @@ const projectHealthProgressSx = {
 const projectHealthProgressHeadSx = {
     display: "flex",
     justifyContent: "space-between",
+    gap: "6px",
 };
 
 const projectHealthNoteSx = {
     color:
-        "rgba(255,255,255,.36)",
+        "var(--mf-text-muted)",
     fontSize: "7.5px",
 };
 
@@ -4235,28 +4363,21 @@ const attentionBadgeSx = {
 };
 
 const attentionValueSx = {
-    color: "#f59e0b",
+    color: "#d97706",
     fontSize: "12px",
     fontWeight: 950,
 };
 
 const attentionLabelSx = {
     color:
-        "rgba(255,255,255,.30)",
+        "var(--mf-text-muted)",
     fontSize: "6.5px",
-    fontWeight: 900,
-};
-
-const metricValueSx = {
-    mt: "3px",
-    color: "#fff",
-    fontSize: "11px",
     fontWeight: 900,
 };
 
 const progressLabelSx = {
     color:
-        "rgba(255,255,255,.42)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     fontWeight: 900,
     textTransform: "uppercase",
@@ -4264,7 +4385,8 @@ const progressLabelSx = {
 
 const progressValueSx = {
     mt: "2px",
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "10px",
     fontWeight: 900,
 };
@@ -4276,7 +4398,7 @@ const progressBarSx = (
     height: "6px",
     borderRadius: 999,
     background:
-        "rgba(255,255,255,.07)",
+        "var(--mf-surface-strong)",
 
     "& .MuiLinearProgress-bar": {
         backgroundColor:
@@ -4297,6 +4419,12 @@ const statusChipSx = (
         `1px solid ${color}38`,
     fontSize: "8.5px",
     fontWeight: 900,
+
+    "& .MuiChip-label": {
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+    },
 });
 
 const requisitionListSx = {
@@ -4305,18 +4433,21 @@ const requisitionListSx = {
     display: "flex",
     flexDirection: "column",
     gap: "8px",
+    background:
+        "var(--mf-panel-bg)",
 };
 
 const requisitionCardSx = {
     borderRadius: "10px",
     background:
-        "rgba(2,6,23,.34)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
     overflow: "hidden",
 };
 
 const requisitionHeaderSx = {
+    minWidth: "940px",
     p: "10px",
     display: "grid",
     gridTemplateColumns:
@@ -4327,7 +4458,21 @@ const requisitionHeaderSx = {
 };
 
 const smallExpandSx = {
-    color: "#94a3b8",
+    width: "32px",
+    height: "32px",
+    color:
+        "var(--mf-text-muted)",
+    border:
+        "1px solid transparent",
+
+    "&:hover": {
+        color:
+            "var(--mf-text)",
+        background:
+            "var(--mf-hover)",
+        borderColor:
+            "var(--mf-border)",
+    },
 };
 
 const requisitionIdentitySx = {
@@ -4335,16 +4480,23 @@ const requisitionIdentitySx = {
 };
 
 const requisitionTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "12px",
     fontWeight: 900,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const requisitionSubSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.45)",
+        "var(--mf-text-muted)",
     fontSize: "9px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const requisitionActionsSx = {
@@ -4370,9 +4522,11 @@ const materialHeaderSx = {
     gap: "10px",
     p: "9px",
     color:
-        "rgba(255,255,255,.45)",
+        "var(--mf-text-muted)",
     background:
-        "rgba(15,23,42,.72)",
+        "var(--mf-surface-strong)",
+    border:
+        "1px solid var(--mf-border)",
     borderRadius: "8px 8px 0 0",
     fontSize: "8.5px",
     fontWeight: 900,
@@ -4388,30 +4542,46 @@ const materialRowSx = {
     gap: "10px",
     p: "10px 9px",
     alignItems: "start",
-    borderBottom:
-        "1px solid rgba(255,255,255,.055)",
+    color:
+        "var(--mf-text-secondary)",
     background:
-        "rgba(2,6,23,.24)",
+        "var(--mf-panel-bg)",
+    borderLeft:
+        "1px solid var(--mf-border)",
+    borderRight:
+        "1px solid var(--mf-border)",
+    borderBottom:
+        "1px solid var(--mf-border)",
+
+    "&:hover": {
+        background:
+            "var(--mf-hover)",
+    },
 };
 
 const attentionRowSx = {
     background:
-        "rgba(245,158,11,.055)",
+        "rgba(245,158,11,.065)",
     borderLeft:
-        "3px solid rgba(245,158,11,.75)",
+        "3px solid rgba(245,158,11,.78)",
 };
 
 const materialNameSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "11.5px",
     fontWeight: 900,
+    lineHeight: 1.35,
+    overflowWrap: "anywhere",
 };
 
 const materialCodeSx = {
     mt: "3px",
     color:
-        "rgba(255,255,255,.45)",
+        "var(--mf-text-muted)",
     fontSize: "9px",
+    lineHeight: 1.4,
+    overflowWrap: "anywhere",
 };
 
 const qtyPairSx = {
@@ -4424,13 +4594,14 @@ const qtyPairSx = {
 
 const qtyLabelSx = {
     color:
-        "rgba(255,255,255,.42)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     fontWeight: 850,
 };
 
 const qtyValueSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "10px",
     fontWeight: 900,
 };
@@ -4438,17 +4609,18 @@ const qtyValueSx = {
 const smallNoteSx = {
     mt: "4px",
     color:
-        "rgba(255,255,255,.43)",
+        "var(--mf-text-muted)",
     fontSize: "8.5px",
     lineHeight: 1.4,
+    overflowWrap: "anywhere",
 };
 
 const routeTextSx = {
     mt: "3px",
-    color:
-        "rgba(167,139,250,.90)",
+    color: "#8b5cf6",
     fontSize: "8.5px",
     fontWeight: 750,
+    lineHeight: 1.35,
 };
 
 const lineProgressHeadSx = {
@@ -4463,7 +4635,7 @@ const inlineLoadingSx = {
     alignItems: "center",
     gap: "9px",
     color:
-        "rgba(255,255,255,.55)",
+        "var(--mf-text-muted)",
     fontSize: "10px",
 };
 
@@ -4472,5 +4644,5 @@ const emptySx = {
     p: "30px",
     textAlign: "center",
     color:
-        "rgba(255,255,255,.52)",
+        "var(--mf-text-muted)",
 };

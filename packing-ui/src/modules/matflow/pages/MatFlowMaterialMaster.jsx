@@ -74,6 +74,20 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    closeButtonSx,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogHeadingSx,
+    dialogPaperSx,
+    dialogSubSx,
+    dialogTitleSx,
+    emptySx,
+    mainTextSx,
+    pageTextSx,
+    sectionSubSx,
+    sectionTitleSx,
+    subTextSx,
+    switchLabelSx,
 } from "../matflowTheme";
 
 const EMPTY_FORM = {
@@ -1027,19 +1041,6 @@ const resultHeaderSx = {
     mb: "12px",
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
-const sectionSubSx = {
-    mt: "3px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 700,
-};
-
 const materialColumns =
     "145px minmax(210px,1.25fr) 135px 80px minmax(250px,1.5fr) 105px 75px 100px";
 
@@ -1057,17 +1058,9 @@ const materialRowSx = {
     minWidth: "1120px",
 };
 
-const subTextSx = {
-    mt: "3px",
-    color:
-        "rgba(255,255,255,.47)",
-    fontSize: "9.5px",
-    fontWeight: 650,
-};
-
 const specificationTextSx = {
     color:
-        "rgba(255,255,255,.76)",
+        "var(--mf-text-secondary)",
     fontSize: "11px",
     fontWeight: 700,
     lineHeight: 1.4,
@@ -1077,72 +1070,12 @@ const specificationTextSx = {
     WebkitBoxOrient: "vertical",
 };
 
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color: "rgba(255,255,255,.50)",
-    fontSize: "12px",
-    fontWeight: 750,
-};
-
 const paginationSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: "9px",
     mt: "12px",
-};
-
-const pageTextSx = {
-    color: "rgba(255,255,255,.62)",
-    fontSize: "11px",
-    fontWeight: 750,
-};
-
-const dialogPaperSx = {
-    borderRadius: "14px",
-    color: "#fff",
-    background:
-        "linear-gradient(180deg,#0f172a,#111827)",
-    border:
-        "1px solid rgba(255,255,255,.08)",
-};
-
-const dialogTitleSx = {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "12px",
-    borderBottom:
-        "1px solid rgba(255,255,255,.07)",
-};
-
-const dialogHeadingSx = {
-    color: "#fff",
-    fontSize: "19px",
-    fontWeight: 950,
-};
-
-const dialogSubSx = {
-    mt: "4px",
-    color: "rgba(255,255,255,.52)",
-    fontSize: "11px",
-    fontWeight: 650,
-};
-
-const closeButtonSx = {
-    color: "#94a3b8",
-};
-
-const dialogContentSx = {
-    pt: "18px !important",
 };
 
 const formGridSx = {
@@ -1154,15 +1087,4 @@ const formGridSx = {
     "@media (max-width: 620px)": {
         gridTemplateColumns: "1fr",
     },
-};
-
-const switchLabelSx = {
-    color: "rgba(255,255,255,.72)",
-    fontSize: "12px",
-};
-
-const dialogActionsSx = {
-    p: "14px 24px 20px",
-    borderTop:
-        "1px solid rgba(255,255,255,.07)",
 };

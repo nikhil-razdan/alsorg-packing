@@ -22,8 +22,9 @@ import {
     useNavigate,
 } from "react-router-dom";
 
-import { useAuth }
-    from "../../auth/AuthContext";
+import {
+    useAuth,
+} from "../../auth/AuthContext";
 
 import {
     canAccessMatFlowScreen,
@@ -31,8 +32,12 @@ import {
     matFlowRoleLabel,
 } from "../../utils/matflowAccess";
 
-import { useMatFlow }
-    from "./MatFlowContext";
+import {
+    useMatFlow,
+} from "./MatFlowContext";
+
+import MatFlowThemeToggle
+    from "./MatFlowThemeToggle";
 
 import DashboardOutlinedIcon
     from "@mui/icons-material/DashboardOutlined";
@@ -79,6 +84,31 @@ import TrackChangesOutlinedIcon
 
 const SIDEBAR_KEY =
     "matflowSidebarCollapsed";
+
+const readSidebarState = () => {
+    try {
+        return (
+            window.localStorage.getItem(
+                SIDEBAR_KEY
+            ) === "true"
+        );
+    } catch {
+        return false;
+    }
+};
+
+const saveSidebarState = (
+    value
+) => {
+    try {
+        window.localStorage.setItem(
+            SIDEBAR_KEY,
+            String(value)
+        );
+    } catch {
+        // Storage may be unavailable in restricted browsing.
+    }
+};
 
 const navItems = [
     {
@@ -200,107 +230,149 @@ const navItems = [
 
 const headerMeta = [
     {
-        match: "/projects",
+        match: "/matflow/tracker",
+        title: "Project & Material Control Tower",
+        subtitle:
+            "Project health, readiness, shortages and material movement",
+    },
+    {
+        match: "/matflow/projects",
         title: "Projects and Drawings",
         subtitle:
             "Project, PD and drawing material control",
     },
     {
-        match: "/materials",
+        match: "/matflow/materials",
         title: "Material Master",
         subtitle:
             "Material codes, units and specifications",
     },
     {
-        match: "/bom-approvals",
+        match: "/matflow/bom-approvals",
         title: "BOM Approvals",
         subtitle:
             "Operational BOM review and approval",
     },
     {
-        match: "/boms",
+        match: "/matflow/boms",
         title: "Operational BOMs",
         subtitle:
             "Project-specific material planning",
     },
     {
-        match: "/production",
+        match: "/matflow/requisitions/new",
+        title: "New Production Requisition",
+        subtitle:
+            "Raise material demand against an effective operational BOM",
+    },
+    {
+        match: "/matflow/requisitions",
+        title: "Material Requisition",
+        subtitle:
+            "Demand, reservation, shortage and issue tracking",
+    },
+    {
+        match: "/matflow/production",
         title: "Production Requisitions",
         subtitle:
             "Material demand, issue and consumption",
     },
     {
-        match: "/store",
-        title: "Store and Reservations",
+        match: "/matflow/locations",
+        title: "MatFlow Locations",
         subtitle:
-            "Stock commitment and material issue",
+            "Production, store, processing and movement destinations",
     },
     {
-        match: "/transfers",
+        match: "/matflow/store",
+        title: "Store and Reservations",
+        subtitle:
+            "Stock commitment, shortage and source planning",
+    },
+    {
+        match: "/matflow/transfers",
         title: "Material Transfers",
         subtitle:
             "Plant, QC and processing movement",
     },
     {
-        match: "/indents",
+        match: "/matflow/indents",
         title: "Material Indents",
         subtitle:
             "Shortage and procurement demand",
     },
     {
-        match: "/approvals",
+        match: "/matflow/approvals",
         title: "PO Approvals",
         subtitle:
             "Director commercial approval queue",
     },
     {
-        match: "/purchase",
+        match: "/matflow/purchase",
         title: "Purchase and Vendors",
         subtitle:
             "Purchase orders and vendor control",
     },
     {
-        match: "/receiving",
+        match: "/matflow/receiving",
         title: "GRN and Receiving",
         subtitle:
             "Purchased material receipt",
     },
     {
-        match: "/qc",
+        match: "/matflow/qc",
         title: "Quality Control",
         subtitle:
             "Incoming and transfer inspection",
     },
     {
-        match: "/processing",
+        match: "/matflow/processing",
         title: "Material Processing",
         subtitle:
             "Input, output, yield and wastage",
     },
     {
-        match: "/returns",
+        match: "/matflow/returns",
         title: "Material Returns",
         subtitle:
             "Return dispatch and receipt",
     },
     {
-        match: "/ledger",
+        match: "/matflow/ledger",
         title: "Stock Ledger",
         subtitle:
             "Immutable material movement history",
     },
     {
-        match: "/reports",
+        match: "/matflow/reports",
         title: "MatFlow Reports",
         subtitle:
             "Material operations and shortage reporting",
     },
 ];
 
-const getHeaderMeta = (pathname) => {
+const matchesPath = (
+    pathname,
+    match
+) => {
     return (
-        headerMeta.find((item) =>
-            pathname.includes(item.match)
+        pathname === match ||
+        pathname.startsWith(
+            `${match}/`
+        )
+    );
+};
+
+const getHeaderMeta = (
+    pathname
+) => {
+    return (
+        headerMeta.find(
+            (item) =>
+                matchesPath(
+                    pathname,
+                    item.match
+                )
         ) || {
             title: "MatFlow Dashboard",
             subtitle:
@@ -310,8 +382,11 @@ const getHeaderMeta = (pathname) => {
 };
 
 export default function MatFlowLayout() {
-    const location = useLocation();
-    const navigate = useNavigate();
+    const location =
+        useLocation();
+
+    const navigate =
+        useNavigate();
 
     const {
         user,
@@ -325,31 +400,33 @@ export default function MatFlowLayout() {
         setSelectedPlantCode,
     } = useMatFlow();
 
-    const [collapsed, setCollapsed] =
-        useState(() => {
-            return (
-                localStorage.getItem(
-                    SIDEBAR_KEY
-                ) === "true"
-            );
-        });
+    const [
+        collapsed,
+        setCollapsed,
+    ] = useState(
+        readSidebarState
+    );
 
     const cleanRole =
         getMatFlowRole(role);
 
     const username =
-        user?.username || "User";
+        user?.username ||
+        user?.name ||
+        "User";
 
     const visibleItems =
-        useMemo(() => {
-            return navItems.filter(
-                (item) =>
-                    canAccessMatFlowScreen(
-                        item.screen,
-                        cleanRole
-                    )
-            );
-        }, [cleanRole]);
+        useMemo(
+            () =>
+                navItems.filter(
+                    (item) =>
+                        canAccessMatFlowScreen(
+                            item.screen,
+                            cleanRole
+                        )
+                ),
+            [cleanRole]
+        );
 
     const pageHeader =
         useMemo(
@@ -361,33 +438,45 @@ export default function MatFlowLayout() {
         );
 
     const toggleSidebar = () => {
-        setCollapsed((current) => {
-            const next = !current;
+        setCollapsed(
+            (current) => {
+                const next =
+                    !current;
 
-            localStorage.setItem(
-                SIDEBAR_KEY,
-                String(next)
-            );
+                saveSidebarState(
+                    next
+                );
 
-            return next;
-        });
-    };
-
-    const handleLogout = async () => {
-        await logout();
-
-        navigate(
-            "/login",
-            {
-                replace: true,
+                return next;
             }
         );
     };
 
+    const handleLogout =
+        async () => {
+            await logout();
+
+            navigate(
+                "/login",
+                {
+                    replace: true,
+                }
+            );
+        };
+
     return (
         <Box sx={shellSx}>
-            <Box sx={sidebarSx(collapsed)}>
-                <Box sx={logoRowSx(collapsed)}>
+            <Box
+                component="aside"
+                sx={sidebarSx(
+                    collapsed
+                )}
+            >
+                <Box
+                    sx={logoRowSx(
+                        collapsed
+                    )}
+                >
                     <Box sx={logoMarkSx}>
                         M
                     </Box>
@@ -407,42 +496,55 @@ export default function MatFlowLayout() {
 
                 <Divider sx={dividerSx} />
 
-                <Box sx={navListSx}>
-                    {visibleItems.map((item) => (
-                        <Tooltip
-                            key={item.path}
-                            title={
-                                collapsed
-                                    ? item.label
-                                    : ""
-                            }
-                            placement="right"
-                            arrow
-                        >
-                            <NavLink
-                                to={item.path}
-                                style={({ isActive }) =>
-                                    navLinkStyle(
-                                        isActive,
-                                        collapsed
-                                    )
+                <Box
+                    component="nav"
+                    sx={navListSx}
+                >
+                    {visibleItems.map(
+                        (item) => (
+                            <Tooltip
+                                key={item.path}
+                                title={
+                                    collapsed
+                                        ? item.label
+                                        : ""
                                 }
+                                placement="right"
+                                arrow
                             >
-                                <span style={navIconStyle}>
-                                    {item.icon}
-                                </span>
-
-                                {!collapsed && (
-                                    <span>
-                                        {item.label}
+                                <NavLink
+                                    to={item.path}
+                                    style={({
+                                        isActive,
+                                    }) =>
+                                        navLinkStyle(
+                                            isActive,
+                                            collapsed
+                                        )
+                                    }
+                                >
+                                    <span
+                                        style={navIconStyle}
+                                    >
+                                        {item.icon}
                                     </span>
-                                )}
-                            </NavLink>
-                        </Tooltip>
-                    ))}
+
+                                    {!collapsed && (
+                                        <span>
+                                            {item.label}
+                                        </span>
+                                    )}
+                                </NavLink>
+                            </Tooltip>
+                        )
+                    )}
                 </Box>
 
-                <Box sx={userCardSx(collapsed)}>
+                <Box
+                    sx={userCardSx(
+                        collapsed
+                    )}
+                >
                     <Box sx={avatarSx}>
                         {username
                             .charAt(0)
@@ -466,16 +568,24 @@ export default function MatFlowLayout() {
             </Box>
 
             <Box sx={mainSx}>
-                <Box sx={headerSx}>
+                <Box
+                    component="header"
+                    sx={headerSx}
+                >
                     <Box sx={headerLeftSx}>
                         <IconButton
                             onClick={toggleSidebar}
+                            aria-label={
+                                collapsed
+                                    ? "Expand MatFlow navigation"
+                                    : "Collapse MatFlow navigation"
+                            }
                             sx={iconButtonSx}
                         >
                             <MenuIcon />
                         </IconButton>
 
-                        <Box>
+                        <Box sx={{ minWidth: 0 }}>
                             <Typography sx={headerTitleSx}>
                                 {pageHeader.title}
                             </Typography>
@@ -489,13 +599,17 @@ export default function MatFlowLayout() {
                     <Box sx={headerActionsSx}>
                         <TextField
                             select
-                            value={selectedPlantCode}
+                            value={
+                                selectedPlantCode ||
+                                "ALL"
+                            }
                             onChange={(event) =>
                                 setSelectedPlantCode(
                                     event.target.value
                                 )
                             }
                             size="small"
+                            aria-label="Selected MatFlow plant"
                             sx={plantFieldSx}
                         >
                             <MenuItem value="ALL">
@@ -514,6 +628,30 @@ export default function MatFlowLayout() {
                             )}
                         </TextField>
 
+                        <Box
+                            sx={{
+                                display: {
+                                    xs: "none",
+                                    sm: "block",
+                                },
+                            }}
+                        >
+                            <MatFlowThemeToggle />
+                        </Box>
+
+                        <Box
+                            sx={{
+                                display: {
+                                    xs: "block",
+                                    sm: "none",
+                                },
+                            }}
+                        >
+                            <MatFlowThemeToggle
+                                compact
+                            />
+                        </Box>
+
                         <Chip
                             label="● Session Active"
                             sx={healthChipSx}
@@ -522,7 +660,9 @@ export default function MatFlowLayout() {
                         <Button
                             startIcon={<AppsIcon />}
                             onClick={() =>
-                                navigate("/modules")
+                                navigate(
+                                    "/modules"
+                                )
                             }
                             sx={headerButtonSx}
                         >
@@ -534,7 +674,8 @@ export default function MatFlowLayout() {
                             onClick={handleLogout}
                             sx={{
                                 ...headerButtonSx,
-                                color: "#fca5a5",
+                                color:
+                                    "var(--mf-danger-text)",
                             }}
                         >
                             Logout
@@ -542,7 +683,10 @@ export default function MatFlowLayout() {
                     </Box>
                 </Box>
 
-                <Box sx={contentSx}>
+                <Box
+                    component="main"
+                    sx={contentSx}
+                >
                     <Outlet />
                 </Box>
             </Box>
@@ -555,39 +699,60 @@ const shellSx = {
     width: "100%",
     minHeight: "100vh",
     background:
-        "linear-gradient(135deg,#020617 0%,#0f172a 52%,#111827 100%)",
+        "var(--mf-page-bg)",
+    color:
+        "var(--mf-text)",
+    transition:
+        "background-color .22s ease, color .22s ease",
 };
 
-const sidebarSx = (collapsed) => ({
-    width: collapsed ? "78px" : "244px",
-    height: "100vh",
+const sidebarSx = (
+    collapsed
+) => ({
+    width:
+        collapsed
+            ? "78px"
+            : "244px",
+
+    height: "100dvh",
     position: "sticky",
     top: 0,
     display: "flex",
     flexDirection: "column",
-    p: collapsed
-        ? "16px 8px"
-        : "16px 12px",
+
+    p:
+        collapsed
+            ? "16px 8px"
+            : "16px 12px",
+
     boxSizing: "border-box",
     background:
-        "linear-gradient(180deg,#06111f 0%,#081629 100%)",
+        "var(--mf-sidebar-bg)",
+
     borderRight:
-        "1px solid rgba(255,255,255,.06)",
+        "1px solid var(--mf-border)",
+
     boxShadow:
-        "8px 0 30px rgba(2,6,23,.42)",
+        "var(--mf-shadow)",
+
     overflow: "hidden",
     flexShrink: 0,
+
     transition:
-        "width .24s ease, padding .24s ease",
+        "width .24s ease, padding .24s ease, background .22s ease",
 });
 
-const logoRowSx = (collapsed) => ({
+const logoRowSx = (
+    collapsed
+) => ({
     display: "flex",
     alignItems: "center",
+
     justifyContent:
         collapsed
             ? "center"
             : "flex-start",
+
     gap: "11px",
     mb: "15px",
 });
@@ -598,15 +763,18 @@ const logoMarkSx = {
     borderRadius: "11px",
     display: "grid",
     placeItems: "center",
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: 950,
     background:
         "linear-gradient(135deg,#0284c7,#0ea5e9)",
     flexShrink: 0,
+    boxShadow:
+        "0 8px 18px rgba(14,165,233,.24)",
 };
 
 const logoTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-sidebar-text)",
     fontSize: "18px",
     fontWeight: 950,
     lineHeight: 1,
@@ -614,14 +782,15 @@ const logoTitleSx = {
 
 const logoSubSx = {
     mt: "4px",
-    color: "rgba(255,255,255,.48)",
+    color:
+        "var(--mf-sidebar-muted)",
     fontSize: "10px",
     fontWeight: 750,
 };
 
 const dividerSx = {
     borderColor:
-        "rgba(255,255,255,.07)",
+        "var(--mf-divider)",
 };
 
 const navListSx = {
@@ -640,7 +809,7 @@ const navListSx = {
 
     "&::-webkit-scrollbar-thumb": {
         background:
-            "rgba(148,163,184,.20)",
+            "var(--mf-scroll-thumb)",
         borderRadius: 999,
     },
 };
@@ -650,35 +819,49 @@ const navLinkStyle = (
     collapsed
 ) => ({
     minHeight: 40,
+
     padding:
         collapsed
             ? "0"
             : "0 10px",
+
     borderRadius: 10,
     display: "flex",
     alignItems: "center",
+
     justifyContent:
         collapsed
             ? "center"
             : "flex-start",
+
     gap:
-        collapsed ? 0 : 10,
+        collapsed
+            ? 0
+            : 10,
+
     textDecoration: "none",
+
     color:
         active
-            ? "#fff"
-            : "rgba(255,255,255,.62)",
+            ? "var(--mf-sidebar-text)"
+            : "var(--mf-sidebar-muted)",
+
     background:
         active
-            ? "linear-gradient(135deg,rgba(2,132,199,.28),rgba(14,165,233,.14))"
+            ? "var(--mf-sidebar-active-bg)"
             : "transparent",
+
     border:
         active
-            ? "1px solid rgba(14,165,233,.28)"
+            ? "1px solid var(--mf-sidebar-active-border)"
             : "1px solid transparent",
+
     fontSize: 11.5,
     fontWeight: 850,
     flexShrink: 0,
+
+    transition:
+        "background .16s ease, color .16s ease, border-color .16s ease",
 });
 
 const navIconStyle = {
@@ -688,25 +871,33 @@ const navIconStyle = {
     justifyContent: "center",
 };
 
-const userCardSx = (collapsed) => ({
+const userCardSx = (
+    collapsed
+) => ({
     minHeight: "54px",
     mt: "10px",
+
     p:
         collapsed
             ? "8px 5px"
             : "8px 9px",
+
     borderRadius: "12px",
     display: "flex",
     alignItems: "center",
+
     justifyContent:
         collapsed
             ? "center"
             : "flex-start",
+
     gap: "9px",
+
     background:
-        "rgba(255,255,255,.04)",
+        "var(--mf-surface-soft)",
+
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
 });
 
 const avatarSx = {
@@ -715,7 +906,7 @@ const avatarSx = {
     borderRadius: "10px",
     display: "grid",
     placeItems: "center",
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: 950,
     background:
         "linear-gradient(135deg,#0284c7,#0ea5e9)",
@@ -723,7 +914,8 @@ const avatarSx = {
 };
 
 const userNameSx = {
-    color: "#fff",
+    color:
+        "var(--mf-sidebar-text)",
     fontSize: "12px",
     fontWeight: 900,
     overflow: "hidden",
@@ -733,7 +925,8 @@ const userNameSx = {
 
 const userRoleSx = {
     mt: "2px",
-    color: "rgba(255,255,255,.48)",
+    color:
+        "var(--mf-sidebar-muted)",
     fontSize: "9.5px",
     fontWeight: 700,
     overflow: "hidden",
@@ -750,21 +943,32 @@ const mainSx = {
 
 const headerSx = {
     minHeight: "66px",
+
     px: {
-        xs: "12px",
+        xs: "10px",
         md: "20px",
     },
+
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: "12px",
+
     position: "sticky",
     top: 0,
     zIndex: 40,
+
     background:
-        "linear-gradient(180deg,rgba(6,17,31,.98),rgba(8,22,41,.96))",
+        "var(--mf-header-bg)",
+
     borderBottom:
-        "1px solid rgba(255,255,255,.06)",
+        "1px solid var(--mf-border)",
+
+    boxShadow:
+        "0 8px 22px rgba(15,23,42,.05)",
+
+    transition:
+        "background .22s ease, border-color .22s ease",
 };
 
 const headerLeftSx = {
@@ -775,59 +979,81 @@ const headerLeftSx = {
 };
 
 const headerTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "17px",
     fontWeight: 950,
     lineHeight: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const headerSubSx = {
     mt: "4px",
-    color: "#7dd3fc",
+    color: "#0284c7",
     fontSize: "10px",
     fontWeight: 800,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
 };
 
 const iconButtonSx = {
     width: "38px",
     height: "38px",
     borderRadius: "10px",
-    color: "#cbd5e1",
+    color:
+        "var(--mf-text-secondary)",
     background:
-        "rgba(255,255,255,.04)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
+
+    "&:hover": {
+        background:
+            "var(--mf-hover)",
+    },
 };
 
 const headerActionsSx = {
     display: "flex",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: "7px",
+    minWidth: 0,
 };
 
 const plantFieldSx = {
     minWidth: "175px",
 
     "& .MuiOutlinedInput-root": {
-        height: "34px",
+        height: "36px",
         borderRadius: "9px",
-        color: "#fff",
+        color:
+            "var(--mf-text)",
         fontSize: "11px",
         fontWeight: 800,
         background:
-            "rgba(255,255,255,.04)",
+            "var(--mf-field-bg)",
 
         "& fieldset": {
             borderColor:
-                "rgba(255,255,255,.08)",
+                "var(--mf-border)",
+        },
+
+        "&:hover fieldset": {
+            borderColor:
+                "var(--mf-border-strong)",
         },
     },
 
     "& .MuiSvgIcon-root": {
-        color: "#94a3b8",
+        color:
+            "var(--mf-text-muted)",
     },
 
-    "@media (max-width: 900px)": {
+    "@media (max-width: 1000px)": {
         display: "none",
     },
 };
@@ -835,45 +1061,54 @@ const plantFieldSx = {
 const healthChipSx = {
     height: "28px",
     borderRadius: 999,
-    color: "#86efac",
+    color: "#16a34a",
     background:
-        "rgba(34,197,94,.12)",
+        "rgba(34,197,94,.10)",
     border:
         "1px solid rgba(34,197,94,.22)",
     fontSize: "10px",
     fontWeight: 900,
 
-    "@media (max-width: 720px)": {
+    "@media (max-width: 800px)": {
         display: "none",
     },
 };
 
 const headerButtonSx = {
-    height: "34px",
+    height: "36px",
     borderRadius: "9px",
     textTransform: "none",
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "11px",
     fontWeight: 850,
     background:
-        "rgba(255,255,255,.04)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
 
-    "@media (max-width: 850px)": {
+    "&:hover": {
+        background:
+            "var(--mf-hover)",
+    },
+
+    "@media (max-width: 900px)": {
         display: "none",
     },
 };
 
 const contentSx = {
     flex: 1,
+
     p: {
-        xs: "12px",
+        xs: "10px",
         md: "18px",
     },
+
     overflow: "auto",
-    background: `
-		radial-gradient(circle at top left, rgba(14,165,233,.10), transparent 26%),
-		radial-gradient(circle at bottom right, rgba(59,130,246,.07), transparent 25%)
-	`,
+    background:
+        "var(--mf-content-bg)",
+
+    transition:
+        "background .22s ease",
 };

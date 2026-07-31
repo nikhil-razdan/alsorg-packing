@@ -57,6 +57,13 @@ import {
     tableCellSx,
     tableHeaderSx,
     tableRowSx,
+    detailBoxSx,
+    detailLabelSx,
+    detailValueSx,
+    mainTextSx,
+    sectionSubSx,
+    sectionTitleSx,
+    subTextSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -1510,8 +1517,7 @@ const headerFormGridSx = {
     gap: "12px",
 
     "@media (max-width: 760px)": {
-        gridTemplateColumns:
-            "1fr",
+        gridTemplateColumns: "1fr",
     },
 };
 
@@ -1523,31 +1529,27 @@ const contextGridSx = {
 };
 
 const detailBoxSx = {
+    minWidth: 0,
     p: "11px",
     borderRadius: "9px",
     background:
-        "rgba(2,6,23,.34)",
+        "var(--mf-surface-soft)",
     border:
-        "1px solid rgba(255,255,255,.06)",
-};
+        "1px solid var(--mf-border)",
+    transition:
+        "background .18s ease, border-color .18s ease",
 
-const actionAreaSx = {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "6px",
-};
-
-const disabledReasonSx = {
-    color:
-        "rgba(255,255,255,.54)",
-    fontSize: "10.5px",
-    fontWeight: 700,
+    "&:hover": {
+        background:
+            "var(--mf-hover)",
+        borderColor:
+            "var(--mf-border-strong)",
+    },
 };
 
 const detailLabelSx = {
     color:
-        "rgba(255,255,255,.48)",
+        "var(--mf-text-muted)",
     fontSize: "9.5px",
     fontWeight: 900,
     textTransform: "uppercase",
@@ -1556,9 +1558,41 @@ const detailLabelSx = {
 
 const detailValueSx = {
     mt: "5px",
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "12px",
     fontWeight: 850,
+    overflowWrap: "anywhere",
+};
+
+const actionAreaSx = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "7px",
+    pt: "2px",
+
+    "@media (max-width: 600px)": {
+        alignItems: "stretch",
+
+        "& .MuiButton-root": {
+            width: "100%",
+        },
+    },
+};
+
+const disabledReasonSx = {
+    maxWidth: "620px",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "10.5px",
+    fontWeight: 700,
+    lineHeight: 1.45,
+    textAlign: "right",
+
+    "@media (max-width: 600px)": {
+        textAlign: "left",
+    },
 };
 
 const sectionListSx = {
@@ -1572,12 +1606,24 @@ const sectionCardSx = (
 ) => ({
     overflow: "hidden",
     borderRadius: "11px",
+    color:
+        "var(--mf-text)",
     background:
-        "rgba(15,23,42,.82)",
+        "var(--mf-panel-bg)",
     border:
         `1px solid ${color}38`,
     borderLeft:
         `3px solid ${color}`,
+    boxShadow:
+        "var(--mf-shadow)",
+    backgroundImage: "none",
+    transition:
+        "background .18s ease, border-color .18s ease, transform .18s ease",
+
+    "&:hover": {
+        borderColor:
+            `${color}58`,
+    },
 });
 
 const sectionHeaderSx = {
@@ -1589,35 +1635,56 @@ const sectionHeaderSx = {
     justifyContent: "space-between",
     gap: "12px",
     background:
-        "rgba(2,6,23,.28)",
+        "var(--mf-surface-soft)",
+    borderBottom:
+        "1px solid var(--mf-border)",
+
+    "@media (max-width: 600px)": {
+        alignItems: "flex-start",
+    },
 };
 
 const sectionLeftSx = {
     display: "flex",
     alignItems: "center",
     gap: "9px",
+    minWidth: 0,
 };
 
 const expandButtonSx = {
     width: "31px",
     height: "31px",
-    color: "#94a3b8",
+    flexShrink: 0,
+    color:
+        "var(--mf-text-muted)",
     background:
-        "rgba(255,255,255,.04)",
+        "var(--mf-field-bg)",
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid var(--mf-border)",
+
+    "&:hover": {
+        color:
+            "var(--mf-text)",
+        background:
+            "var(--mf-hover)",
+        borderColor:
+            "var(--mf-border-strong)",
+    },
 };
 
 const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
+    color:
+        "var(--mf-text)",
+    fontSize: "15px",
     fontWeight: 950,
+    lineHeight: 1.2,
+    overflowWrap: "anywhere",
 };
 
 const sectionSubSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.50)",
+        "var(--mf-text-muted)",
     fontSize: "10.5px",
     fontWeight: 650,
 };
@@ -1626,6 +1693,7 @@ const categoryChipSx = (
     color
 ) => ({
     height: "22px",
+    flexShrink: 0,
     borderRadius: 999,
     color,
     background:
@@ -1634,6 +1702,10 @@ const categoryChipSx = (
         `1px solid ${color}30`,
     fontSize: "9px",
     fontWeight: 900,
+
+    "& .MuiChip-label": {
+        px: "9px",
+    },
 });
 
 const lineColumns =
@@ -1643,42 +1715,120 @@ const lineHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         lineColumns,
+    minWidth: "1120px",
 };
 
 const lineRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         lineColumns,
+    minWidth: "1120px",
+
+    "&:last-child": {
+        borderBottom: 0,
+    },
 };
 
 const mainTextSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "12px",
     fontWeight: 850,
+    lineHeight: 1.35,
+    overflowWrap: "anywhere",
+    whiteSpace: "normal",
 };
 
 const subTextSx = {
     mt: "2px",
     color:
-        "rgba(255,255,255,.47)",
+        "var(--mf-text-muted)",
     fontSize: "10px",
+    fontWeight: 650,
+    lineHeight: 1.35,
+    overflowWrap: "anywhere",
+    whiteSpace: "normal",
 };
 
 const quantityFieldSx = {
     minWidth: "105px",
 
-    "& input": {
-        color: "#fff",
+    "& .MuiOutlinedInput-root": {
+        height: "36px",
+        borderRadius: "8px",
+        color:
+            "var(--mf-text)",
+        background:
+            "var(--mf-field-bg)",
         fontSize: "12px",
+        fontWeight: 800,
+
+        "& fieldset": {
+            borderColor:
+                "var(--mf-border)",
+        },
+
+        "&:hover fieldset": {
+            borderColor:
+                "var(--mf-border-strong)",
+        },
+
+        "&.Mui-focused fieldset": {
+            borderColor: "#0284c7",
+        },
+    },
+
+    "& .MuiInputBase-input": {
+        py: "8px",
+        color:
+            "var(--mf-text)",
+        fontSize: "12px",
+        fontWeight: 800,
+    },
+
+    "& .MuiInputBase-input.Mui-disabled": {
+        WebkitTextFillColor:
+            "var(--mf-text-muted)",
     },
 };
 
 const lineRemarksSx = {
     minWidth: "165px",
 
-    "& input": {
-        color: "#fff",
+    "& .MuiOutlinedInput-root": {
+        height: "36px",
+        borderRadius: "8px",
+        color:
+            "var(--mf-text)",
+        background:
+            "var(--mf-field-bg)",
         fontSize: "11px",
+
+        "& fieldset": {
+            borderColor:
+                "var(--mf-border)",
+        },
+
+        "&:hover fieldset": {
+            borderColor:
+                "var(--mf-border-strong)",
+        },
+
+        "&.Mui-focused fieldset": {
+            borderColor: "#0284c7",
+        },
+    },
+
+    "& .MuiInputBase-input": {
+        py: "8px",
+        color:
+            "var(--mf-text)",
+        fontSize: "11px",
+    },
+
+    "& .MuiInputBase-input.Mui-disabled": {
+        WebkitTextFillColor:
+            "var(--mf-text-muted)",
     },
 };
 
@@ -1691,21 +1841,35 @@ const quantityActionRowSx = {
 };
 
 const quantityActionTitleSx = {
-    color: "#fff",
+    color:
+        "var(--mf-text)",
     fontSize: "15px",
     fontWeight: 950,
 };
 
 const quantityActionSubSx = {
     mt: "3px",
+    maxWidth: "660px",
     color:
-        "rgba(255,255,255,.50)",
+        "var(--mf-text-muted)",
     fontSize: "10.5px",
     fontWeight: 650,
+    lineHeight: 1.5,
 };
 
 const quantityButtonsSx = {
     display: "flex",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: "8px",
+    flexWrap: "wrap",
+
+    "@media (max-width: 520px)": {
+        width: "100%",
+
+        "& .MuiButton-root": {
+            flex: 1,
+            minWidth: "150px",
+        },
+    },
 };

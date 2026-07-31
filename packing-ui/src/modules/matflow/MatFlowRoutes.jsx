@@ -57,13 +57,17 @@ import MatFlowProductionLocationMaster
 	from "./pages/MatFlowProductionLocationMaster";
 
 import MatFlowStorePlanningQueue
-	from "./pages/MatFlowPlanningQueue";
+	from "./pages/MatFlowStorePlanningQueue";
 
 import MatFlowStorePlanningDetail
 	from "./pages/MatFlowStorePlanningDetail";
 
 import MatFlowTracker
 	from "./pages/MatFlowTracker";
+
+import {
+	MatFlowThemeProvider,
+} from "./MatFlowThemeProvider";
 
 function MatFlowHomeRedirect() {
 	const {
@@ -87,9 +91,11 @@ function MatFlowHomeRedirect() {
 
 function MatFlowRoot() {
 	return (
-		<MatFlowProvider>
-			<MatFlowLayout />
-		</MatFlowProvider>
+		<MatFlowThemeProvider>
+			<MatFlowProvider>
+				<MatFlowLayout />
+			</MatFlowProvider>
+		</MatFlowThemeProvider>
 	);
 }
 

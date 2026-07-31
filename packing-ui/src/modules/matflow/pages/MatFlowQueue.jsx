@@ -40,6 +40,9 @@ import {
 	tableCellSx,
 	tableHeaderSx,
 	tableRowSx,
+	emptySx,
+	mainTextSx,
+	subTextSx,
 	tableShellSx,
 } from "../matflowTheme";
 
@@ -315,7 +318,7 @@ export default function MatFlowQueue({
 							displayedRows.map((row) => {
 								const documentNo =
 									row[
-										config.numberField
+									config.numberField
 									] ||
 									row.documentNo ||
 									row.poNo ||
@@ -379,9 +382,9 @@ export default function MatFlowQueue({
 										<Box sx={tableCellSx}>
 											{formatDate(
 												row[
-													config.dateField
+												config.dateField
 												] ||
-													row.createdAt
+												row.createdAt
 											)}
 										</Box>
 
@@ -437,26 +440,4 @@ const queueHeaderSx = {
 const queueRowSx = {
 	...tableRowSx,
 	gridTemplateColumns: queueColumns,
-};
-
-const mainTextSx = {
-	color: "#fff",
-	fontSize: "12px",
-	fontWeight: 850,
-};
-
-const subTextSx = {
-	mt: "2px",
-	color: "rgba(255,255,255,.46)",
-	fontSize: "9.5px",
-	fontWeight: 650,
-};
-
-const emptySx = {
-	minHeight: "180px",
-	display: "grid",
-	placeItems: "center",
-	color: "rgba(255,255,255,.50)",
-	fontSize: "12px",
-	fontWeight: 700,
 };
