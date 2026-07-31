@@ -1675,27 +1675,6 @@ const lineRowSx = {
     },
 };
 
-const mainTextSx = {
-    color:
-        "var(--mf-text)",
-    fontSize: "12px",
-    fontWeight: 850,
-    lineHeight: 1.35,
-    overflowWrap: "anywhere",
-    whiteSpace: "normal",
-};
-
-const subTextSx = {
-    mt: "2px",
-    color:
-        "var(--mf-text-muted)",
-    fontSize: "10px",
-    fontWeight: 650,
-    lineHeight: 1.35,
-    overflowWrap: "anywhere",
-    whiteSpace: "normal",
-};
-
 const quantityFieldSx = {
     minWidth: "105px",
 
