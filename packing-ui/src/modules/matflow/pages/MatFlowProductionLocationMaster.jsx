@@ -768,12 +768,6 @@ const resultHeaderSx = {
     mb: "12px",
 };
 
-const sectionTitleSx = {
-    color: "#fff",
-    fontSize: "17px",
-    fontWeight: 950,
-};
-
 const locationColumns =
     "210px 110px 120px 110px minmax(170px,1fr) 110px 100px";
 
@@ -787,27 +781,6 @@ const locationRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         locationColumns,
-};
-
-const mainTextSx = {
-    color: "#fff",
-    fontSize: "12px",
-    fontWeight: 850,
-};
-
-const subTextSx = {
-    mt: "2px",
-    color:
-        "rgba(255,255,255,.47)",
-    fontSize: "10px",
-};
-
-const emptySx = {
-    minHeight: "170px",
-    display: "grid",
-    placeItems: "center",
-    color:
-        "rgba(255,255,255,.50)",
 };
 
 const formGridSx = {
