@@ -65,6 +65,12 @@ import MatFlowStorePlanningDetail
 import MatFlowTracker
 	from "./pages/MatFlowTracker";
 
+import MatFlowTransferList
+	from "./pages/MatFlowTransferList";
+
+import MatFlowTransferDetail
+	from "./pages/MatFlowTransferDetail";
+
 import {
 	MatFlowThemeProvider,
 } from "./MatFlowThemeProvider";
@@ -270,10 +276,15 @@ export default function MatFlowRoutes() {
 					path="transfers"
 					element={guarded(
 						"transfers",
-						<MatFlowPlaceholder
-							title="Material Transfers"
-							subtitle="Dispatch and receive inter-plant, processing, QC and production transfers."
-						/>
+						<MatFlowTransferList />
+					)}
+				/>
+
+				<Route
+					path="transfers/:transferId"
+					element={guarded(
+						"transfers",
+						<MatFlowTransferDetail />
 					)}
 				/>
 

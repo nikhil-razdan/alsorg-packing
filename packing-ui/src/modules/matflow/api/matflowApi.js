@@ -891,6 +891,106 @@ export const matflowApi = {
 			body
 		);
 	},
+
+	// =====================================================
+	// TRANSFER EXECUTION
+	// =====================================================
+
+	listTransfers: (params = {}) =>
+		API.get(
+			`${BASE}/transfers`,
+			{
+				params,
+			}
+		),
+
+	getTransfer: (id) => {
+		const transferId =
+			String(id ?? "").trim();
+
+		if (!transferId) {
+			return Promise.reject(
+				new Error(
+					"Transfer ID is required."
+				)
+			);
+		}
+
+		return API.get(
+			`${BASE}/transfers/${encodeURIComponent(
+				transferId
+			)}`
+		);
+	},
+
+	dispatchTransfer: (
+		id,
+		body
+	) => {
+		const transferId =
+			String(id ?? "").trim();
+
+		if (!transferId) {
+			return Promise.reject(
+				new Error(
+					"Transfer ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/transfers/${encodeURIComponent(
+				transferId
+			)}/dispatch`,
+			body
+		);
+	},
+
+	receiveTransfer: (
+		id,
+		body
+	) => {
+		const transferId =
+			String(id ?? "").trim();
+
+		if (!transferId) {
+			return Promise.reject(
+				new Error(
+					"Transfer ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/transfers/${encodeURIComponent(
+				transferId
+			)}/receive`,
+			body
+		);
+	},
+
+	issueDirectReservation: (
+		id,
+		body
+	) => {
+		const reservationId =
+			String(id ?? "").trim();
+
+		if (!reservationId) {
+			return Promise.reject(
+				new Error(
+					"Reservation ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/reservations/${encodeURIComponent(
+				reservationId
+			)}/issue-direct`,
+			body
+		);
+	},
 };
 
 export const readMatFlowError = (
@@ -1013,5 +1113,6 @@ export const extractMatFlowPage = (
 		totalPages: 0,
 	};
 };
+
 
 export default matflowApi;

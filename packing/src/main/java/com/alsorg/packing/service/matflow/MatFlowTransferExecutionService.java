@@ -265,7 +265,7 @@ public class MatFlowTransferExecutionService {
                 transfer.setUpdatedBy(
                                 actor);
 
-                transfer = transferRepository.save(
+                transfer = transferRepository.saveAndFlush(
                                 transfer);
 
                 /*
@@ -492,7 +492,7 @@ public class MatFlowTransferExecutionService {
                 transfer.setUpdatedBy(
                                 actor);
 
-                transfer = transferRepository.save(
+                transfer = transferRepository.saveAndFlush(
                                 transfer);
 
                 saveTransferLedger(
@@ -730,7 +730,7 @@ public class MatFlowTransferExecutionService {
                 reservation.setUpdatedBy(
                                 actor);
 
-                reservation = reservationRepository.save(
+                reservation = reservationRepository.saveAndFlush(
                                 reservation);
 
                 saveDirectIssueLedger(
