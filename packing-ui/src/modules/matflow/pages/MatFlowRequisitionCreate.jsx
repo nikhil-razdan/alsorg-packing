@@ -1528,43 +1528,6 @@ const contextGridSx = {
     gap: "9px",
 };
 
-const detailBoxSx = {
-    minWidth: 0,
-    p: "11px",
-    borderRadius: "9px",
-    background:
-        "var(--mf-surface-soft)",
-    border:
-        "1px solid var(--mf-border)",
-    transition:
-        "background .18s ease, border-color .18s ease",
-
-    "&:hover": {
-        background:
-            "var(--mf-hover)",
-        borderColor:
-            "var(--mf-border-strong)",
-    },
-};
-
-const detailLabelSx = {
-    color:
-        "var(--mf-text-muted)",
-    fontSize: "9.5px",
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: ".07em",
-};
-
-const detailValueSx = {
-    mt: "5px",
-    color:
-        "var(--mf-text)",
-    fontSize: "12px",
-    fontWeight: 850,
-    overflowWrap: "anywhere",
-};
-
 const actionAreaSx = {
     display: "flex",
     flexDirection: "column",
@@ -1670,23 +1633,6 @@ const expandButtonSx = {
         borderColor:
             "var(--mf-border-strong)",
     },
-};
-
-const sectionTitleSx = {
-    color:
-        "var(--mf-text)",
-    fontSize: "15px",
-    fontWeight: 950,
-    lineHeight: 1.2,
-    overflowWrap: "anywhere",
-};
-
-const sectionSubSx = {
-    mt: "2px",
-    color:
-        "var(--mf-text-muted)",
-    fontSize: "10.5px",
-    fontWeight: 650,
 };
 
 const categoryChipSx = (
