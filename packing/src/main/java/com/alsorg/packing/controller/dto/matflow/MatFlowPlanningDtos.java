@@ -301,9 +301,20 @@ public final class MatFlowPlanningDtos {
         }
 
         public record TransferActionRequest(
-                        Long rowVersion,
-                        BigDecimal quantity,
-                        String batchNo,
-                        String remarks) {
+
+                        @NotNull(message = "Row version is required.") Long rowVersion,
+
+                        /*
+                         * Quantity remains nullable because direct issue may
+                         * default to the complete reservation quantity.
+                         *
+                         * Dispatch and receipt explicitly require it inside
+                         * their service methods.
+                         */
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Quantity must be greater than zero.") BigDecimal quantity,
+
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+
+                        @Size(max = 2000, message = "Remarks cannot exceed 2000 characters.") String remarks) {
         }
 }

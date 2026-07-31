@@ -6,9 +6,12 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ReservationResponse;
 import com.alsorg.packing.service.matflow.MatFlowControlService;
 
+import jakarta.validation.Valid;
+
 import java.util.UUID;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,13 +27,16 @@ public class MatFlowControlController {
 
     public MatFlowControlController(
             MatFlowControlService service) {
+
         this.service = service;
     }
 
     @PostMapping("/reservations/{id}/release")
     public ReservationResponse releaseReservation(
             @PathVariable UUID id,
-            @RequestBody ReservationReleaseRequest request) {
+
+            @Valid @RequestBody ReservationReleaseRequest request) {
+
         return service.releaseReservation(
                 id,
                 request);
@@ -39,7 +45,9 @@ public class MatFlowControlController {
     @PostMapping("/requisitions/{id}/cancel")
     public RequisitionResponse cancelRequisition(
             @PathVariable UUID id,
-            @RequestBody RequisitionCancelRequest request) {
+
+            @Valid @RequestBody RequisitionCancelRequest request) {
+
         return service.cancelRequisition(
                 id,
                 request);

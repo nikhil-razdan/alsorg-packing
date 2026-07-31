@@ -2,33 +2,48 @@ package com.alsorg.packing.repository.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowTransferOrder;
 
+import jakarta.persistence.LockModeType;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+
+import org.springframework.data.repository.query.Param;
 
 public interface MatFlowTransferOrderRepository
-        extends JpaRepository<MatFlowTransferOrder, UUID> {
+                extends JpaRepository<MatFlowTransferOrder, UUID> {
 
-    List<MatFlowTransferOrder> findAllByOrderByUpdatedAtDesc();
+        List<MatFlowTransferOrder> findAllByOrderByUpdatedAtDesc();
 
-    List<MatFlowTransferOrder> findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-            UUID requisitionId);
+        List<MatFlowTransferOrder> findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                        UUID requisitionId);
 
-    Optional<MatFlowTransferOrder> findByPredecessorTransferId(
-            UUID predecessorTransferId);
+        Optional<MatFlowTransferOrder> findByPredecessorTransferId(
+                        UUID predecessorTransferId);
 
-    boolean existsByPredecessorTransferId(
-            UUID predecessorTransferId);
+        boolean existsByPredecessorTransferId(
+                        UUID predecessorTransferId);
 
-    boolean existsByReservation_Id(
-            UUID reservationId);
+        boolean existsByReservation_Id(
+                        UUID reservationId);
 
-    List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAsc(
-            UUID reservationId);
+        List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAsc(
+                        UUID reservationId);
 
-    Optional<MatFlowTransferOrder> findFirstByReservation_IdAndFromLocation_IdOrderByRouteSequenceNoAsc(
-            UUID reservationId,
-            UUID fromLocationId);
+        Optional<MatFlowTransferOrder> findFirstByReservation_IdAndFromLocation_IdOrderByRouteSequenceNoAsc(
+                        UUID reservationId,
+                        UUID fromLocationId);
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                        select transfer
+                        from MatFlowTransferOrder transfer
+                        where transfer.id = :id
+                        """)
+        Optional<MatFlowTransferOrder> lockById(
+                        @Param("id") UUID id);
 }

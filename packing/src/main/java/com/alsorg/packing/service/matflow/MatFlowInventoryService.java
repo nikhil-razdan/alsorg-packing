@@ -66,30 +66,33 @@ public class MatFlowInventoryService {
                                                 accessService.allowedPlants())
                                 .stream()
                                 .filter(location -> active == null ||
-                                                location.active == active)
-                                .filter(location -> query.isBlank() ||
+                                                location.isActive() == active)
+                                .filter(location -> query.isBlank()
+                                                ||
                                                 contains(
-                                                                location.locationCode,
+                                                                location.getLocationCode(),
                                                                 query)
                                                 ||
                                                 contains(
-                                                                location.locationName,
+                                                                location.getLocationName(),
                                                                 query)
                                                 ||
                                                 contains(
-                                                                location.plantCode,
+                                                                location.getPlantCode(),
                                                                 query)
                                                 ||
                                                 contains(
-                                                                location.locationType == null
+                                                                location.getLocationType() == null
                                                                                 ? null
-                                                                                : location.locationType.name(),
+                                                                                : location.getLocationType()
+                                                                                                .name(),
                                                                 query)
                                                 ||
                                                 contains(
-                                                                location.ownershipType == null
+                                                                location.getOwnershipType() == null
                                                                                 ? null
-                                                                                : location.ownershipType.name(),
+                                                                                : location.getOwnershipType()
+                                                                                                .name(),
                                                                 query))
                                 .map(this::toLocationResponse)
                                 .toList();
@@ -205,7 +208,7 @@ public class MatFlowInventoryService {
                                                                 .getId()
                                                                 .equals(locationId))
                                 .filter(balance -> normalizedPlant == null ||
-                                                balance.location.plantCode
+                                                balance.location.getPlantCode()
                                                                 .equalsIgnoreCase(
                                                                                 normalizedPlant))
                                 .map(this::toStockResponse)
@@ -249,7 +252,7 @@ public class MatFlowInventoryService {
                 MatFlowLocation location = requireLocation(
                                 request.locationId());
 
-                if (!location.supportsStock) {
+                if (!location.isSupportsStock()) {
                         throw badRequest(
                                         "Selected location does not support stock");
                 }
@@ -342,7 +345,7 @@ public class MatFlowInventoryService {
                                                 "Location not found"));
 
                 accessService.requirePlantAccess(
-                                location.plantCode);
+                                location.getPlantCode());
 
                 return location;
         }
@@ -352,42 +355,58 @@ public class MatFlowInventoryService {
                         LocationRequest request,
                         boolean creating) {
 
-                location.locationCode = upper(
-                                request.locationCode());
+                location.setLocationCode(
+                                upper(
+                                                request.locationCode()));
 
-                location.locationName = clean(
-                                request.locationName());
+                location.setLocationName(
+                                clean(
+                                                request.locationName()));
 
-                location.plantCode = upper(
-                                request.plantCode());
+                location.setPlantCode(
+                                upper(
+                                                request.plantCode()));
 
-                location.locationType = request.locationType();
+                location.setLocationType(
+                                request.locationType());
 
                 if (request.ownershipType() != null) {
-                        location.ownershipType = request.ownershipType();
+                        location.setOwnershipType(
+                                        request.ownershipType());
+
                 } else if (creating) {
-                        location.ownershipType = OwnershipType.INTERNAL;
+                        location.setOwnershipType(
+                                        OwnershipType.INTERNAL);
                 }
 
                 if (request.supportsStock() != null) {
-                        location.supportsStock = request.supportsStock();
+                        location.setSupportsStock(
+                                        request.supportsStock());
+
                 } else if (creating) {
-                        location.supportsStock = true;
+                        location.setSupportsStock(
+                                        true);
                 }
 
-                location.address = clean(
-                                request.address());
+                location.setAddress(
+                                clean(
+                                                request.address()));
 
-                location.contactPerson = clean(
-                                request.contactPerson());
+                location.setContactPerson(
+                                clean(
+                                                request.contactPerson()));
 
-                location.contactPhone = clean(
-                                request.contactPhone());
+                location.setContactPhone(
+                                clean(
+                                                request.contactPhone()));
 
                 if (request.active() != null) {
-                        location.active = request.active();
+                        location.setActive(
+                                        request.active());
+
                 } else if (creating) {
-                        location.active = true;
+                        location.setActive(
+                                        true);
                 }
         }
 
@@ -468,43 +487,75 @@ public class MatFlowInventoryService {
 
         private LocationResponse toLocationResponse(
                         MatFlowLocation location) {
+
                 return new LocationResponse(
                                 location.getId(),
-                                location.locationCode,
-                                location.locationName,
-                                location.plantCode,
-                                location.locationType,
-                                location.ownershipType,
-                                location.supportsStock,
-                                location.address,
-                                location.contactPerson,
-                                location.contactPhone,
-                                location.active,
+                                location.getLocationCode(),
+                                location.getLocationName(),
+                                location.getPlantCode(),
+                                location.getLocationType(),
+                                location.getOwnershipType(),
+                                location.isSupportsStock(),
+                                location.getAddress(),
+                                location.getContactPerson(),
+                                location.getContactPhone(),
+                                location.isActive(),
                                 location.getRowVersion());
         }
 
         private StockBalanceResponse toStockResponse(
                         MatFlowStockBalance balance) {
+
                 return new StockBalanceResponse(
                                 balance.getId(),
-                                balance.material.getId(),
+
+                                balance.material
+                                                .getId(),
+
                                 balance.material
                                                 .getMaterialCode(),
+
                                 balance.material
                                                 .getMaterialName(),
+
                                 balance.material
                                                 .getUom(),
-                                balance.location.getId(),
-                                balance.location.locationCode,
-                                balance.location.locationName,
-                                balance.location.plantCode,
-                                balance.location.locationType,
-                                balance.onHandQty,
-                                balance.reservedQty,
-                                balance.blockedQty,
-                                balance.inTransitQty,
+
+                                balance.location
+                                                .getId(),
+
+                                balance.location
+                                                .getLocationCode(),
+
+                                balance.location
+                                                .getLocationName(),
+
+                                balance.location
+                                                .getPlantCode(),
+
+                                balance.location
+                                                .getLocationType(),
+
+                                zero(balance.onHandQty),
+                                zero(balance.reservedQty),
+                                zero(balance.blockedQty),
+                                zero(balance.inTransitQty),
+
                                 balance.availableQty(),
+
                                 balance.getRowVersion());
+        }
+
+        private BigDecimal zero(
+                        BigDecimal value) {
+
+                return value == null
+                                ? BigDecimal.ZERO.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP)
+                                : value.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
         }
 
         private void assertVersion(
