@@ -77,6 +77,21 @@ public class MatFlowBom extends MatFlowBaseEntity {
     @Column(name = "return_remarks", columnDefinition = "text")
     private String returnRemarks;
 
+    @Column(name = "hod_approved_by", length = 150)
+    private String hodApprovedBy;
+
+    @Column(name = "hod_approved_at")
+    private LocalDateTime hodApprovedAt;
+
+    @Column(name = "production_reviewed_by", length = 150)
+    private String productionReviewedBy;
+
+    @Column(name = "production_reviewed_at")
+    private LocalDateTime productionReviewedAt;
+
+    @Column(name = "production_review_remarks", columnDefinition = "text")
+    private String productionReviewRemarks;
+
     public String getBomNumber() {
         return bomNumber;
     }
@@ -209,5 +224,47 @@ public class MatFlowBom extends MatFlowBaseEntity {
     public void setReturnRemarks(
             String returnRemarks) {
         this.returnRemarks = clean(returnRemarks);
+    }
+
+    public String getHodApprovedBy() {
+        return hodApprovedBy;
+    }
+
+    public void setHodApprovedBy(String hodApprovedBy) {
+        this.hodApprovedBy = hodApprovedBy;
+    }
+
+    public LocalDateTime getHodApprovedAt() {
+        return hodApprovedAt;
+    }
+
+    public void setHodApprovedAt(LocalDateTime hodApprovedAt) {
+        this.hodApprovedAt = hodApprovedAt;
+    }
+
+    public String getProductionReviewedBy() {
+        return productionReviewedBy;
+    }
+
+    public void setProductionReviewedBy(String productionReviewedBy) {
+        this.productionReviewedBy = productionReviewedBy;
+    }
+
+    public LocalDateTime getProductionReviewedAt() {
+        return productionReviewedAt;
+    }
+
+    public void setProductionReviewedAt(
+            LocalDateTime productionReviewedAt) {
+        this.productionReviewedAt = productionReviewedAt;
+    }
+
+    public String getProductionReviewRemarks() {
+        return productionReviewRemarks;
+    }
+
+    public void setProductionReviewRemarks(
+            String productionReviewRemarks) {
+        this.productionReviewRemarks = productionReviewRemarks;
     }
 }

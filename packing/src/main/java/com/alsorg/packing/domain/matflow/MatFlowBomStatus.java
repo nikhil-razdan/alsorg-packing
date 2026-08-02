@@ -6,6 +6,8 @@ public enum MatFlowBomStatus {
 
     SUBMITTED,
 
+    PRODUCTION_REVIEW_PENDING,
+
     RETURNED,
 
     APPROVED,

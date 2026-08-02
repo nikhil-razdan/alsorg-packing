@@ -676,22 +676,148 @@ public class MatFlowBomService {
                                                                         bom.getRevisionNo(),
                                                         actor);
                                 });
+                MatFlowBomStatus previous = bom.getStatus();
 
                 bom.setStatus(
-                                MatFlowBomStatus.APPROVED);
+                                MatFlowBomStatus.PRODUCTION_REVIEW_PENDING);
 
-                bom.setEffective(true);
-                bom.setApprovedBy(actor);
-                bom.setApprovedAt(
+                bom.setEffective(false);
+
+                bom.setHodApprovedBy(
+                                actor);
+
+                bom.setHodApprovedAt(
                                 LocalDateTime.now());
+
+                bom.setUpdatedBy(
+                                actor);
+
+                MatFlowBom reviewedBom = bomRepository.saveAndFlush(
+                                bom);
                 bom.setUpdatedBy(actor);
 
                 MatFlowBom approvedBom = bomRepository.save(bom);
 
                 saveHistory(
+                                reviewedBom,
+                                MatFlowApprovalAction.HOD_APPROVED,
+                                previous,
+                                MatFlowBomStatus.PRODUCTION_REVIEW_PENDING,
+                                request == null
+                                                ? null
+                                                : request.remarks(),
+                                actor);
+
+                saveAudit(
+                                reviewedBom,
+                                "BOM_HOD_APPROVED",
+                                auditDetails(
+                                                "revisionNo",
+                                                reviewedBom.getRevisionNo(),
+
+                                                "nextStatus",
+                                                MatFlowBomStatus.PRODUCTION_REVIEW_PENDING),
+
+                                actor);
+
+                return toDetail(reviewedBom);
+        }
+
+        @Transactional
+        public BomDetailResponse productionApprove(
+                        UUID id,
+                        BomActionRequest request) {
+
+                accessService
+                                .requireProductionBomReview();
+
+                MatFlowBom bom = requireBom(id);
+
+                if (bom.getStatus() != MatFlowBomStatus.PRODUCTION_REVIEW_PENDING) {
+
+                        throw conflict(
+                                        "Only a BOM awaiting Production review can be approved");
+                }
+
+                assertActionVersion(
+                                request,
+                                bom);
+
+                String actor = accessService.actor();
+
+                /*
+                 * The previous effective revision is superseded only
+                 * when Production grants final approval.
+                 */
+                bomRepository
+                                .findFirstByRevisionGroupIdAndEffectiveTrue(
+                                                bom.getRevisionGroupId())
+                                .filter(previous -> !previous.getId()
+                                                .equals(
+                                                                bom.getId()))
+                                .ifPresent(previous -> {
+                                        previous.setEffective(
+                                                        false);
+
+                                        previous.setStatus(
+                                                        MatFlowBomStatus.SUPERSEDED);
+
+                                        previous.setLatestRevision(
+                                                        false);
+
+                                        previous.setUpdatedBy(
+                                                        actor);
+
+                                        bomRepository.save(
+                                                        previous);
+
+                                        saveHistory(
+                                                        previous,
+                                                        MatFlowApprovalAction.SUPERSEDED,
+                                                        MatFlowBomStatus.APPROVED,
+                                                        MatFlowBomStatus.SUPERSEDED,
+                                                        "Superseded by revision " +
+                                                                        bom.getRevisionNo(),
+                                                        actor);
+                                });
+
+                bom.setStatus(
+                                MatFlowBomStatus.APPROVED);
+
+                bom.setEffective(
+                                true);
+
+                bom.setProductionReviewedBy(
+                                actor);
+
+                bom.setProductionReviewedAt(
+                                LocalDateTime.now());
+
+                bom.setProductionReviewRemarks(
+                                request == null
+                                                ? null
+                                                : clean(
+                                                                request.remarks()));
+
+                /*
+                 * These remain the final effective approval fields.
+                 */
+                bom.setApprovedBy(
+                                actor);
+
+                bom.setApprovedAt(
+                                LocalDateTime.now());
+
+                bom.setUpdatedBy(
+                                actor);
+
+                MatFlowBom approvedBom = bomRepository.saveAndFlush(
+                                bom);
+
+                saveHistory(
                                 approvedBom,
-                                MatFlowApprovalAction.APPROVED,
-                                MatFlowBomStatus.SUBMITTED,
+                                MatFlowApprovalAction.PRODUCTION_APPROVED,
+                                MatFlowBomStatus.PRODUCTION_REVIEW_PENDING,
                                 MatFlowBomStatus.APPROVED,
                                 request == null
                                                 ? null
@@ -700,15 +826,100 @@ public class MatFlowBomService {
 
                 saveAudit(
                                 approvedBom,
-                                "BOM_APPROVED",
+                                "BOM_PRODUCTION_APPROVED",
                                 auditDetails(
                                                 "revisionNo",
                                                 approvedBom.getRevisionNo(),
+
                                                 "effective",
                                                 true),
+
                                 actor);
 
-                return toDetail(approvedBom);
+                return toDetail(
+                                approvedBom);
+        }
+
+        @Transactional
+        public BomDetailResponse productionReturn(
+                        UUID id,
+                        BomActionRequest request) {
+
+                accessService
+                                .requireProductionBomReview();
+
+                MatFlowBom bom = requireBom(id);
+
+                if (bom.getStatus() != MatFlowBomStatus.PRODUCTION_REVIEW_PENDING) {
+
+                        throw conflict(
+                                        "Only a BOM awaiting Production review can be returned");
+                }
+
+                assertActionVersion(
+                                request,
+                                bom);
+
+                String remarks = request == null
+                                ? null
+                                : clean(
+                                                request.remarks());
+
+                if (remarks == null) {
+                        throw badRequest(
+                                        "Production return remarks are required");
+                }
+
+                String actor = accessService.actor();
+
+                bom.setStatus(
+                                MatFlowBomStatus.RETURNED);
+
+                bom.setEffective(
+                                false);
+
+                bom.setReturnedBy(
+                                actor);
+
+                bom.setReturnedAt(
+                                LocalDateTime.now());
+
+                bom.setReturnRemarks(
+                                remarks);
+
+                bom.setProductionReviewedBy(
+                                actor);
+
+                bom.setProductionReviewedAt(
+                                LocalDateTime.now());
+
+                bom.setProductionReviewRemarks(
+                                remarks);
+
+                bom.setUpdatedBy(
+                                actor);
+
+                bom = bomRepository.saveAndFlush(
+                                bom);
+
+                saveHistory(
+                                bom,
+                                MatFlowApprovalAction.PRODUCTION_RETURNED,
+                                MatFlowBomStatus.PRODUCTION_REVIEW_PENDING,
+                                MatFlowBomStatus.RETURNED,
+                                remarks,
+                                actor);
+
+                saveAudit(
+                                bom,
+                                "BOM_RETURNED_BY_PRODUCTION",
+                                auditDetails(
+                                                "remarks",
+                                                remarks),
+                                actor);
+
+                return toDetail(
+                                bom);
         }
 
         @Transactional

@@ -83,6 +83,7 @@ public class MatFlowPlanningService {
 
         private static final Set<LocationType> PLANNING_SOURCE_TYPES = EnumSet.of(
                         LocationType.STORE,
+                        LocationType.PRODUCTION,
                         LocationType.PROCESSING,
                         LocationType.EXTERNAL_PROCESSOR);
 

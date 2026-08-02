@@ -18,6 +18,12 @@ public enum MatFlowApprovalAction {
 
     APPROVED,
 
+    HOD_APPROVED,
+
+    PRODUCTION_APPROVED,
+
+    PRODUCTION_RETURNED,
+
     REVISION_CREATED,
 
     SUPERSEDED

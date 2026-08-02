@@ -272,6 +272,11 @@ export default function MatFlowStorePlanningDetail() {
     ] = useState([]);
 
     const [
+        availability,
+        setAvailability,
+    ] = useState([]);
+
+    const [
         selectedSourceIds,
         setSelectedSourceIds,
     ] = useState([]);
@@ -305,10 +310,14 @@ export default function MatFlowStorePlanningDetail() {
         async () => {
             if (!requisitionId) {
                 setSnapshot(null);
+                setAvailability([]);
+                setLocations([]);
                 setLoading(false);
+
                 setError(
                     "Requisition ID is missing."
                 );
+
                 return;
             }
 
@@ -318,23 +327,31 @@ export default function MatFlowStorePlanningDetail() {
             try {
                 const [
                     planningResponse,
+                    availabilityResponse,
                     locationResponse,
-                ] =
-                    await Promise.all([
-                        matflowApi
-                            .getRequisitionPlanning(
-                                requisitionId
-                            ),
+                ] = await Promise.all([
+                    matflowApi.getStoreReview(
+                        requisitionId
+                    ),
 
-                        matflowApi
-                            .listLocations({
-                                active: true,
-                            }),
-                    ]);
+                    matflowApi.getStoreAvailability(
+                        requisitionId
+                    ),
+
+                    matflowApi.listLocations({
+                        active: true,
+                    }),
+                ]);
 
                 setSnapshot(
                     planningResponse?.data ||
                     null
+                );
+
+                setAvailability(
+                    asArray(
+                        availabilityResponse?.data
+                    )
                 );
 
                 setLocations(
@@ -342,15 +359,15 @@ export default function MatFlowStorePlanningDetail() {
                         locationResponse?.data
                     )
                 );
-            } catch (
-            requestError
-            ) {
+            } catch (requestError) {
                 setSnapshot(null);
+                setAvailability([]);
+                setLocations([]);
 
                 setError(
                     readMatFlowError(
                         requestError,
-                        "Unable to load the Store planning workbench."
+                        "Unable to load the Store requisition review."
                     )
                 );
             } finally {
@@ -359,16 +376,6 @@ export default function MatFlowStorePlanningDetail() {
         },
         [requisitionId]
     );
-
-    const canConfirmStoreReview =
-        Boolean(
-            requisition?.id
-        ) &&
-        STORE_REVIEWABLE_STATUSES.has(
-            normalize(
-                requisition?.status
-            )
-        );
 
     useEffect(() => {
         load();
@@ -421,6 +428,31 @@ export default function MatFlowStorePlanningDetail() {
                     : [],
             [snapshot]
         );
+
+    const availabilityByLineId =
+        useMemo(() => {
+            const result =
+                new Map();
+
+            availability.forEach(
+                (entry) => {
+                    const lineId =
+                        String(
+                            entry?.requisitionLineId ??
+                            ""
+                        );
+
+                    if (lineId) {
+                        result.set(
+                            lineId,
+                            entry
+                        );
+                    }
+                }
+            );
+
+            return result;
+        }, [availability]);
 
     const sourceOptions =
         useMemo(() => {
@@ -494,19 +526,26 @@ export default function MatFlowStorePlanningDetail() {
             requisition?.status
         );
 
-    const canPlan =
+    const hasValidRowVersion =
+        requisition?.rowVersion !==
+        null &&
+        requisition?.rowVersion !==
+        undefined;
+
+    const canConfirmStoreReview =
         Boolean(
             requisition?.id
         ) &&
-        Boolean(
-            requisition?.rowVersion !==
-            null &&
-            requisition?.rowVersion !==
-            undefined
-        ) &&
-        PLANNABLE_STATUSES.has(
+        hasValidRowVersion &&
+        STORE_REVIEWABLE_STATUSES.has(
             status
         );
+
+    const storeReviewCompleted =
+        Boolean(
+            requisition?.id
+        ) &&
+        !canConfirmStoreReview;
 
     const updateSelectedSources = (
         event
@@ -524,23 +563,31 @@ export default function MatFlowStorePlanningDetail() {
         );
     };
 
-    const executePlanning =
+    const confirmStoreReview =
         async () => {
-            if (
-                !requisition?.id
-            ) {
+            if (!requisition?.id) {
                 setError(
                     "Requisition data is unavailable."
                 );
+
                 return;
             }
 
-            if (!canPlan) {
+            if (!hasValidRowVersion) {
+                setError(
+                    "Requisition row version is missing. Refresh the page and retry."
+                );
+
+                return;
+            }
+
+            if (!canConfirmStoreReview) {
                 setError(
                     `Requisition status ${readable(
                         requisition.status
-                    )} cannot be planned.`
+                    )} cannot be reviewed again.`
                 );
+
                 return;
             }
 
@@ -549,8 +596,8 @@ export default function MatFlowStorePlanningDetail() {
                     requisition.rowVersion,
 
                 /*
-                 * An empty list means automatic source selection.
-                 * A populated list is an ordered source preference.
+                 * Empty means automatic location ranking.
+                 * Selected IDs are treated as preferred priority.
                  */
                 preferredSourceLocationIds:
                     selectedSourceIds,
@@ -566,7 +613,7 @@ export default function MatFlowStorePlanningDetail() {
             try {
                 const response =
                     await matflowApi
-                        .planRequisition(
+                        .submitStoreReview(
                             requisition.id,
                             body
                         );
@@ -578,18 +625,23 @@ export default function MatFlowStorePlanningDetail() {
                     setSnapshot(
                         response.data
                     );
+
+                    /*
+                     * Stock balances and availability change after
+                     * reservation, so reload the complete workbench.
+                     */
+                    await load();
                 } else {
                     await load();
                 }
 
                 setRemarks("");
-            } catch (
-            requestError
-            ) {
+                setSelectedSourceIds([]);
+            } catch (requestError) {
                 setError(
                     readMatFlowError(
                         requestError,
-                        "Unable to perform Store planning."
+                        "Unable to confirm the Store review and reserve materials."
                     )
                 );
             } finally {
@@ -816,7 +868,7 @@ export default function MatFlowStorePlanningDetail() {
                         }
                         disabled={
                             planning ||
-                            !canPlan
+                            !canConfirmStoreReview
                         }
                         onChange={
                             updateSelectedSources
@@ -891,11 +943,11 @@ export default function MatFlowStorePlanningDetail() {
                     </TextField>
 
                     <TextField
-                        label="Planning Remarks"
+                        label="Store Review Remarks"
                         value={remarks}
                         disabled={
                             planning ||
-                            !canPlan
+                            !canConfirmStoreReview
                         }
                         onChange={(event) =>
                             setRemarks(
@@ -909,30 +961,32 @@ export default function MatFlowStorePlanningDetail() {
                 </Box>
 
                 <Box sx={planningActionSx}>
-                    {!canPlan && (
+                    {!canConfirmStoreReview && (
                         <Typography sx={disabledNoteSx}>
-                            This requisition cannot be
-                            planned in its current status.
+                            {storeReviewCompleted
+                                ? "Store review is already completed. Use the generated reservation, transfer and indent actions below."
+                                : "This requisition cannot be reviewed in its current status."}
                         </Typography>
                     )}
 
-                    <Button
-                        startIcon={
-                            <AutoFixHighOutlinedIcon />
-                        }
-                        onClick={
-                            confirmStoreReview
-                        }
-                        disabled={
-                            working ||
-                            !canConfirmStoreReview
-                        }
-                        sx={primaryBtnSx}
-                    >
-                        {working
-                            ? "Reserving Materials..."
-                            : "Confirm Store Review & Reserve"}
-                    </Button>
+                    {canConfirmStoreReview && (
+                        <Button
+                            startIcon={
+                                <AutoFixHighOutlinedIcon />
+                            }
+                            onClick={
+                                confirmStoreReview
+                            }
+                            disabled={
+                                planning
+                            }
+                            sx={primaryBtnSx}
+                        >
+                            {planning
+                                ? "Reserving Materials..."
+                                : "Confirm Store Review & Reserve"}
+                        </Button>
+                    )}
                 </Box>
             </Card>
 
@@ -940,13 +994,14 @@ export default function MatFlowStorePlanningDetail() {
                 <Box sx={sectionHeaderSx}>
                     <Box>
                         <Typography sx={sectionTitleSx}>
-                            Material Planning Lines
+                            Store Material Review
                         </Typography>
 
                         <Typography sx={sectionSubSx}>
-                            Each material is evaluated
-                            against available stock and
-                            shortage requirements.
+                            Review actual stock availability for every requested
+                            material. On confirmation, MatFlow reserves available
+                            stock, creates transfers where movement is required,
+                            and creates shortage indents for unavailable quantities.
                         </Typography>
                     </Box>
                 </Box>
@@ -967,6 +1022,14 @@ export default function MatFlowStorePlanningDetail() {
 
                         <Box sx={tableCellSx}>
                             Requested
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Available Stock
+                        </Box>
+
+                        <Box sx={tableCellSx}>
+                            Approved Route
                         </Box>
 
                         <Box sx={tableCellSx}>
@@ -1008,6 +1071,26 @@ export default function MatFlowStorePlanningDetail() {
                                         line
                                     );
 
+                                const availabilityEntry =
+                                    availabilityByLineId.get(
+                                        String(line.id)
+                                    );
+
+                                const stockOptions =
+                                    asArray(
+                                        availabilityEntry?.stockOptions
+                                    );
+
+                                const totalAvailable =
+                                    stockOptions.reduce(
+                                        (sum, option) =>
+                                            sum +
+                                            numeric(
+                                                option.availableQty
+                                            ),
+                                        0
+                                    );
+
                                 return (
                                     <Box
                                         key={
@@ -1047,6 +1130,68 @@ export default function MatFlowStorePlanningDetail() {
                                             {formatQty(
                                                 line.requestedQty
                                             )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={availableTotalSx}>
+                                                {formatQty(
+                                                    totalAvailable
+                                                )}
+                                                {" "}
+                                                {line.uom || ""}
+                                            </Typography>
+
+                                            {stockOptions.length === 0 ? (
+                                                <Typography sx={subTextSx}>
+                                                    No available stock
+                                                </Typography>
+                                            ) : (
+                                                <Box sx={stockOptionListSx}>
+                                                    {stockOptions
+                                                        .filter(
+                                                            (option) =>
+                                                                numeric(
+                                                                    option.availableQty
+                                                                ) > 0
+                                                        )
+                                                        .slice(0, 3)
+                                                        .map(
+                                                            (option) => (
+                                                                <Typography
+                                                                    key={
+                                                                        option.locationId
+                                                                    }
+                                                                    sx={stockOptionTextSx}
+                                                                >
+                                                                    {option.locationCode}
+                                                                    {": "}
+                                                                    {formatQty(
+                                                                        option.availableQty
+                                                                    )}
+                                                                </Typography>
+                                                            )
+                                                        )}
+                                                </Box>
+                                            )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={routeTextSx}>
+                                                {availabilityEntry
+                                                    ?.approvedRoute ||
+                                                    requisition
+                                                        ?.destinationLocationCode ||
+                                                    "-"}
+                                            </Typography>
+
+                                            <Typography sx={subTextSx}>
+                                                First destination:{" "}
+                                                {availabilityEntry
+                                                    ?.firstDestinationLocationCode ||
+                                                    requisition
+                                                        ?.destinationLocationCode ||
+                                                    "-"}
+                                            </Typography>
                                         </Box>
 
                                         <Box sx={tableCellSx}>
@@ -1118,9 +1263,11 @@ export default function MatFlowStorePlanningDetail() {
             </Card>
 
             <PlanningResults
-                reservations={
-                    reservations
+                destinationLocationId={
+                    requisition
+                        ?.destinationLocationId
                 }
+                reservations={reservations}
                 indents={indents}
                 transfers={
                     transfers
@@ -1144,6 +1291,7 @@ export default function MatFlowStorePlanningDetail() {
 }
 
 function PlanningResults({
+    destinationLocationId,
     reservations,
     indents,
     transfers,
@@ -1173,16 +1321,24 @@ function PlanningResults({
                         reservations.map(
                             (reservation) => {
                                 const directIssue =
+                                    normalize(
+                                        reservation.status
+                                    ) ===
+                                    "ACTIVE" &&
+
                                     String(
                                         reservation.sourceLocationId
                                     ) ===
                                     String(
                                         reservation.firstDestinationLocationId
                                     ) &&
-                                    normalize(
-                                        reservation.status
+
+                                    String(
+                                        reservation.firstDestinationLocationId
                                     ) ===
-                                    "ACTIVE";
+                                    String(
+                                        destinationLocationId
+                                    );
 
                                 return (
                                     <Box
@@ -1579,20 +1735,20 @@ const headerStatusChipSx = (
 };
 
 const materialColumns =
-    "minmax(230px,1.4fr) 145px 95px 95px 95px 95px 95px 150px 150px";
+    "minmax(230px,1.4fr) 130px 90px 90px minmax(220px,1.2fr) minmax(180px,1fr) 90px 90px 90px 140px 145px";
 
 const materialHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         materialColumns,
-    minWidth: "1160px",
+    minWidth: "1560px",
 };
 
 const materialRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         materialColumns,
-    minWidth: "1160px",
+    minWidth: "1560px",
 };
 
 const mainTextSx = {
@@ -1624,6 +1780,33 @@ const normalQtySx = {
     color:
         "var(--mf-text-secondary)",
     fontWeight: 800,
+};
+
+const availableTotalSx = {
+    color: "#16a34a",
+    fontSize: "11px",
+    fontWeight: 950,
+};
+
+const stockOptionListSx = {
+    mt: "3px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+};
+
+const stockOptionTextSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "8.5px",
+    fontWeight: 700,
+};
+
+const routeTextSx = {
+    color: "#7c3aed",
+    fontSize: "9.5px",
+    fontWeight: 850,
+    lineHeight: 1.4,
 };
 
 const progressHeadSx = {

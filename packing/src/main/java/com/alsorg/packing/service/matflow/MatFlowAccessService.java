@@ -194,6 +194,16 @@ public class MatFlowAccessService {
                                                 "");
         }
 
+        public void requireProductionBomReview() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_PRODUCTION");
+        }
+
         public void requireLocationWrite() {
                 User user = currentUser();
 

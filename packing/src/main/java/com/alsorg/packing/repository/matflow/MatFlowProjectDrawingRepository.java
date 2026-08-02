@@ -10,35 +10,90 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface MatFlowProjectDrawingRepository
-                extends JpaRepository<MatFlowProjectDrawing, UUID> {
+    extends JpaRepository<MatFlowProjectDrawing, UUID> {
 
-        @Query("""
-                        select case when count(p) > 0 then true else false end
-                        from MatFlowProjectDrawing p
-                        where upper(p.projectCode) = upper(:projectCode)
-                          and upper(p.drawingNo) = upper(:drawingNo)
-                          and upper(p.drawingRevision) = upper(:drawingRevision)
-                        """)
-        boolean existsDuplicate(
-                        @Param("projectCode") String projectCode,
-                        @Param("drawingNo") String drawingNo,
-                        @Param("drawingRevision") String drawingRevision);
+  /*
+   * Checks whether the exact Product/Drawing revision
+   * already exists inside the same plant and project.
+   */
+  @Query("""
+      select case
+          when count(projectDrawing) > 0
+          then true
+          else false
+      end
+      from MatFlowProjectDrawing projectDrawing
+      where upper(projectDrawing.plantCode) =
+            upper(:plantCode)
 
-        @Query("""
-                        select case when count(p) > 0 then true else false end
-                        from MatFlowProjectDrawing p
-                        where upper(p.projectCode) = upper(:projectCode)
-                          and upper(p.drawingNo) = upper(:drawingNo)
-                          and upper(p.drawingRevision) = upper(:drawingRevision)
-                          and p.id <> :id
-                        """)
-        boolean existsDuplicateExcludingId(
-                        @Param("projectCode") String projectCode,
-                        @Param("drawingNo") String drawingNo,
-                        @Param("drawingRevision") String drawingRevision,
-                        @Param("id") UUID id);
+        and upper(projectDrawing.projectCode) =
+            upper(:projectCode)
 
-        List<MatFlowProjectDrawing> findByProjectCodeIgnoreCaseAndDrawingNoIgnoreCaseOrderByDrawingRevisionDesc(
-                        String projectCode,
-                        String drawingNo);
+        and upper(projectDrawing.drawingNo) =
+            upper(:drawingNo)
+
+        and upper(projectDrawing.drawingRevision) =
+            upper(:drawingRevision)
+      """)
+  boolean existsDuplicate(
+      @Param("plantCode") String plantCode,
+
+      @Param("projectCode") String projectCode,
+
+      @Param("drawingNo") String drawingNo,
+
+      @Param("drawingRevision") String drawingRevision);
+
+  /*
+   * Same duplicate check during edit while excluding
+   * the Product/Drawing currently being edited.
+   */
+  @Query("""
+      select case
+          when count(projectDrawing) > 0
+          then true
+          else false
+      end
+      from MatFlowProjectDrawing projectDrawing
+      where upper(projectDrawing.plantCode) =
+            upper(:plantCode)
+
+        and upper(projectDrawing.projectCode) =
+            upper(:projectCode)
+
+        and upper(projectDrawing.drawingNo) =
+            upper(:drawingNo)
+
+        and upper(projectDrawing.drawingRevision) =
+            upper(:drawingRevision)
+
+        and projectDrawing.id <> :id
+      """)
+  boolean existsDuplicateExcludingId(
+      @Param("plantCode") String plantCode,
+
+      @Param("projectCode") String projectCode,
+
+      @Param("drawingNo") String drawingNo,
+
+      @Param("drawingRevision") String drawingRevision,
+
+      @Param("id") UUID id);
+
+  /*
+   * Returns every Product/Drawing belonging to one
+   * logical Project / PD.
+   */
+  List<MatFlowProjectDrawing> findByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseOrderByProductNameAscDrawingNoAscDrawingRevisionDesc(
+      String plantCode,
+      String projectCode);
+
+  /*
+   * Returns revision history for one drawing inside
+   * one plant and project.
+   */
+  List<MatFlowProjectDrawing> findByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndDrawingNoIgnoreCaseOrderByDrawingRevisionDesc(
+      String plantCode,
+      String projectCode,
+      String drawingNo);
 }

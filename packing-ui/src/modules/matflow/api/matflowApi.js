@@ -392,6 +392,30 @@ export const matflowApi = {
 		);
 	},
 
+	productionApproveBom(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(bomId)
+			)}/production-approve`,
+			body
+		);
+	},
+
+	productionReturnBom(
+		bomId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(bomId)
+			)}/production-return`,
+			body
+		);
+	},
+
 	/* =====================================================
 	 * INVENTORY
 	 * Exact backend: MatFlowInventoryController

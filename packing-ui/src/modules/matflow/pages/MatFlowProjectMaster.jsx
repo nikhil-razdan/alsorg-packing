@@ -15,32 +15,39 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControlLabel,
     IconButton,
     MenuItem,
+    Switch,
     TextField,
     Typography,
-    FormControlLabel,
-    Switch
 } from "@mui/material";
 
 import AddIcon
     from "@mui/icons-material/Add";
+
 import CloseIcon
     from "@mui/icons-material/Close";
+
 import EditOutlinedIcon
     from "@mui/icons-material/EditOutlined";
+
 import RefreshIcon
     from "@mui/icons-material/Refresh";
+
 import SearchIcon
     from "@mui/icons-material/Search";
+
 import VisibilityOutlinedIcon
     from "@mui/icons-material/VisibilityOutlined";
 
-import { useNavigate }
-    from "react-router-dom";
+import {
+    useNavigate,
+} from "react-router-dom";
 
-import { useAuth }
-    from "../../../auth/AuthContext";
+import {
+    useAuth,
+} from "../../../auth/AuthContext";
 
 import {
     getMatFlowRole,
@@ -54,20 +61,6 @@ import {
 } from "../api/matflowApi";
 
 import {
-    errorBoxSx,
-    fieldSx,
-    heroBadgeSx,
-    heroSubSx,
-    heroSx,
-    heroTitleSx,
-    loadingSx,
-    pageSx,
-    panelSx,
-    primaryBtnSx,
-    secondaryBtnSx,
-    tableCellSx,
-    tableHeaderSx,
-    tableRowSx,
     closeButtonSx,
     dialogActionsSx,
     dialogContentSx,
@@ -76,12 +69,26 @@ import {
     dialogSubSx,
     dialogTitleSx,
     emptySx,
+    errorBoxSx,
+    fieldSx,
+    heroBadgeSx,
+    heroSubSx,
+    heroSx,
+    heroTitleSx,
+    loadingSx,
     mainTextSx,
+    pageSx,
     pageTextSx,
+    panelSx,
+    primaryBtnSx,
+    secondaryBtnSx,
     sectionSubSx,
     sectionTitleSx,
     subTextSx,
     switchLabelSx,
+    tableCellSx,
+    tableHeaderSx,
+    tableRowSx,
     tableShellSx,
 } from "../matflowTheme";
 
@@ -91,6 +98,19 @@ const DEFAULT_PLANTS = [
     "AL-P3",
     "AL-P4",
 ];
+
+const PAGE_SIZE = 25;
+
+const DIALOG_MODE = {
+    CREATE_PROJECT:
+        "CREATE_PROJECT",
+
+    ADD_PRODUCT:
+        "ADD_PRODUCT",
+
+    EDIT_PRODUCT:
+        "EDIT_PRODUCT",
+};
 
 const EMPTY_FORM = {
     projectCode: "",
@@ -105,8 +125,123 @@ const EMPTY_FORM = {
     active: true,
 };
 
-const clean = (value) => {
-    return String(value ?? "").trim();
+const clean = (value) =>
+    String(
+        value ?? ""
+    ).trim();
+
+const normalize = (value) =>
+    clean(value)
+        .toUpperCase();
+
+const groupProjectRows = (
+    rows
+) => {
+    const groups =
+        new Map();
+
+    (Array.isArray(rows)
+        ? rows
+        : []
+    ).forEach((row) => {
+        if (!row?.id) {
+            return;
+        }
+
+        const projectCode =
+            normalize(
+                row.projectCode
+            );
+
+        const plantCode =
+            normalize(
+                row.owningPlantCode ||
+                row.plantCode
+            );
+
+        const key =
+            `${plantCode}::${projectCode}`;
+
+        if (!groups.has(key)) {
+            groups.set(key, {
+                key,
+
+                projectCode:
+                    row.projectCode,
+
+                projectName:
+                    row.projectName,
+
+                clientName:
+                    row.clientName,
+
+                plantCode:
+                    row.owningPlantCode ||
+                    row.plantCode,
+
+                requiredDate:
+                    row.requiredDate,
+
+                products: [],
+            });
+        }
+
+        groups.get(key)
+            .products.push(row);
+    });
+
+    return Array.from(
+        groups.values()
+    )
+        .map((project) => ({
+            ...project,
+
+            products:
+                [...project.products]
+                    .sort(
+                        (left, right) => {
+                            const productCompare =
+                                String(
+                                    left.productName ||
+                                    ""
+                                ).localeCompare(
+                                    String(
+                                        right.productName ||
+                                        ""
+                                    )
+                                );
+
+                            if (
+                                productCompare !==
+                                0
+                            ) {
+                                return productCompare;
+                            }
+
+                            return String(
+                                left.drawingNo ||
+                                ""
+                            ).localeCompare(
+                                String(
+                                    right.drawingNo ||
+                                    ""
+                                )
+                            );
+                        }
+                    ),
+        }))
+        .sort(
+            (left, right) =>
+                String(
+                    left.projectCode ||
+                    ""
+                ).localeCompare(
+                    String(
+                        right.projectCode ||
+                        ""
+                    )
+                )
+        );
 };
 
 export default function MatFlowProjectMaster() {
@@ -135,7 +270,9 @@ export default function MatFlowProjectMaster() {
     const availablePlants =
         useMemo(() => {
             const assignedPlants = [
-                ...(Array.isArray(plantCodes)
+                ...(Array.isArray(
+                    plantCodes
+                )
                     ? plantCodes
                     : []),
 
@@ -148,14 +285,13 @@ export default function MatFlowProjectMaster() {
                 plantCode,
                 user?.plantCode,
             ]
-                .map((value) =>
-                    String(value || "")
-                        .trim()
-                        .toUpperCase()
-                )
+                .map(normalize)
                 .filter(Boolean);
 
-            if (assignedPlants.length > 0) {
+            if (
+                assignedPlants.length >
+                0
+            ) {
                 return Array.from(
                     new Set(
                         assignedPlants
@@ -163,16 +299,13 @@ export default function MatFlowProjectMaster() {
                 ).sort();
             }
 
-            /*
-             * Admin can operate across all company plants.
-             * These names must correspond to the plant codes
-             * accepted by your backend.
-             */
             if (
                 cleanRole ===
                 MATFLOW_ROLES.ADMIN
             ) {
-                return [...DEFAULT_PLANTS];
+                return [
+                    ...DEFAULT_PLANTS,
+                ];
             }
 
             return [];
@@ -180,240 +313,385 @@ export default function MatFlowProjectMaster() {
             cleanRole,
             plantCode,
             plantCodes,
-            user,
+            user?.plantCode,
+            user?.plantCodes,
         ]);
 
-    const [rows, setRows] =
-        useState([]);
+    const [
+        rows,
+        setRows,
+    ] = useState([]);
 
-    const [loading, setLoading] =
-        useState(true);
+    const [
+        loading,
+        setLoading,
+    ] = useState(true);
 
-    const [saving, setSaving] =
-        useState(false);
+    const [
+        saving,
+        setSaving,
+    ] = useState(false);
 
-    const [error, setError] =
-        useState("");
+    const [
+        error,
+        setError,
+    ] = useState("");
 
-    const [search, setSearch] =
-        useState("");
+    const [
+        search,
+        setSearch,
+    ] = useState("");
 
-    const [plantFilter, setPlantFilter] =
-        useState("");
+    const [
+        plantFilter,
+        setPlantFilter,
+    ] = useState("");
 
-    const [page, setPage] =
-        useState(0);
+    const [
+        page,
+        setPage,
+    ] = useState(0);
 
-    const [totalPages, setTotalPages] =
-        useState(0);
+    const [
+        totalPages,
+        setTotalPages,
+    ] = useState(0);
 
-    const [totalElements, setTotalElements] =
-        useState(0);
+    const [
+        totalElements,
+        setTotalElements,
+    ] = useState(0);
 
-    const [dialogOpen, setDialogOpen] =
-        useState(false);
+    const [
+        dialogOpen,
+        setDialogOpen,
+    ] = useState(false);
 
-    const [editingRow, setEditingRow] =
-        useState(null);
+    const [
+        dialogMode,
+        setDialogMode,
+    ] = useState(
+        DIALOG_MODE.CREATE_PROJECT
+    );
 
-    const [form, setForm] =
-        useState(EMPTY_FORM);
+    const [
+        editingRow,
+        setEditingRow,
+    ] = useState(null);
 
-    const size = 25;
+    const [
+        form,
+        setForm,
+    ] = useState(
+        EMPTY_FORM
+    );
 
-    const load = useCallback(async (
-        targetPage = 0,
-        targetSearch = "",
-        targetPlant = ""
-    ) => {
-        setLoading(true);
-        setError("");
+    const load =
+        useCallback(
+            async (
+                targetPage = 0,
+                targetSearch = "",
+                targetPlant = ""
+            ) => {
+                setLoading(true);
+                setError("");
 
-        try {
-            const response =
-                await matflowApi.listProjects({
-                    search:
-                        clean(targetSearch) ||
-                        undefined,
-                });
+                try {
+                    const response =
+                        await matflowApi
+                            .listProjects({
+                                search:
+                                    clean(
+                                        targetSearch
+                                    ) ||
+                                    undefined,
+                            });
 
-            const result =
-                extractMatFlowPage(
-                    response?.data
-                );
+                    const result =
+                        extractMatFlowPage(
+                            response?.data
+                        );
 
-            const normalizedPlant =
-                clean(
-                    targetPlant
-                ).toUpperCase();
+                    const normalizedPlant =
+                        normalize(
+                            targetPlant
+                        );
 
-            const filteredRows =
-                normalizedPlant
-                    ? result.rows.filter(
-                        (project) =>
-                            String(
-                                project.plantCode ||
-                                ""
-                            )
-                                .trim()
-                                .toUpperCase() ===
-                            normalizedPlant
-                    )
-                    : result.rows;
+                    const filteredRows =
+                        normalizedPlant
+                            ? result.rows
+                                .filter(
+                                    (project) =>
+                                        normalize(
+                                            project
+                                                ?.owningPlantCode ||
+                                            project
+                                                ?.plantCode
+                                        ) ===
+                                        normalizedPlant
+                                )
+                            : result.rows;
 
-            const calculatedTotalPages =
-                filteredRows.length === 0
-                    ? 0
-                    : Math.ceil(
-                        filteredRows.length /
-                        size
-                    );
+                    const projectGroups =
+                        groupProjectRows(
+                            filteredRows
+                        );
 
-            const safePage =
-                calculatedTotalPages === 0
-                    ? 0
-                    : Math.min(
-                        Math.max(
-                            targetPage,
+                    const calculatedTotalPages =
+                        projectGroups.length ===
                             0
-                        ),
-                        calculatedTotalPages - 1
+                            ? 0
+                            : Math.ceil(
+                                projectGroups.length /
+                                PAGE_SIZE
+                            );
+
+                    const safePage =
+                        calculatedTotalPages ===
+                            0
+                            ? 0
+                            : Math.min(
+                                Math.max(
+                                    targetPage,
+                                    0
+                                ),
+                                calculatedTotalPages -
+                                1
+                            );
+
+                    const startIndex =
+                        safePage *
+                        PAGE_SIZE;
+
+                    setRows(
+                        projectGroups.slice(
+                            startIndex,
+                            startIndex +
+                            PAGE_SIZE
+                        )
                     );
 
-            const startIndex =
-                safePage * size;
+                    setPage(
+                        safePage
+                    );
 
-            const visibleRows =
-                filteredRows.slice(
-                    startIndex,
-                    startIndex + size
-                );
+                    setTotalElements(
+                        projectGroups.length
+                    );
 
-            setRows(visibleRows);
-            setPage(safePage);
+                    setTotalPages(
+                        calculatedTotalPages
+                    );
+                } catch (
+                requestError
+                ) {
+                    setRows([]);
+                    setPage(0);
+                    setTotalElements(0);
+                    setTotalPages(0);
 
-            setTotalElements(
-                filteredRows.length
-            );
-
-            setTotalPages(
-                calculatedTotalPages
-            );
-        } catch (requestError) {
-            setRows([]);
-            setPage(0);
-            setTotalElements(0);
-            setTotalPages(0);
-
-            setError(
-                readMatFlowError(
-                    requestError,
-                    "Unable to load projects and drawings."
-                )
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [size]);
+                    setError(
+                        readMatFlowError(
+                            requestError,
+                            "Unable to load projects and product drawings."
+                        )
+                    );
+                } finally {
+                    setLoading(false);
+                }
+            },
+            []
+        );
 
     useEffect(() => {
-        load(
-            0,
-            "",
-            ""
-        );
+        load();
     }, [load]);
 
-    const openCreate = () => {
+    const openCreateProject =
+        () => {
+            setDialogMode(
+                DIALOG_MODE.CREATE_PROJECT
+            );
+
+            setEditingRow(null);
+
+            setForm({
+                ...EMPTY_FORM,
+
+                plantCode:
+                    availablePlants[0] ||
+                    "",
+            });
+
+            setDialogOpen(true);
+            setError("");
+        };
+
+    const openAddProduct = (
+        project
+    ) => {
+        setDialogMode(
+            DIALOG_MODE.ADD_PRODUCT
+        );
+
         setEditingRow(null);
 
         setForm({
             ...EMPTY_FORM,
+
+            projectCode:
+                project?.projectCode ||
+                "",
+
+            projectName:
+                project?.projectName ||
+                "",
+
+            clientName:
+                project?.clientName ||
+                "",
+
             plantCode:
-                availablePlants[0] || "",
+                project?.plantCode ||
+                availablePlants[0] ||
+                "",
+
+            requiredDate:
+                project?.requiredDate ||
+                "",
         });
 
         setDialogOpen(true);
         setError("");
     };
 
-    const openEdit = (row) => {
-        setEditingRow(row);
+    const openEditProduct = (
+        product
+    ) => {
+        setDialogMode(
+            DIALOG_MODE.EDIT_PRODUCT
+        );
+
+        setEditingRow(
+            product
+        );
 
         setForm({
             projectCode:
-                row.projectCode || "",
+                product?.projectCode ||
+                "",
 
             projectName:
-                row.projectName || "",
+                product?.projectName ||
+                "",
 
             clientName:
-                row.clientName || "",
+                product?.clientName ||
+                "",
 
             drawingNo:
-                row.drawingNo || "",
+                product?.drawingNo ||
+                "",
 
             drawingRevision:
-                row.drawingRevision || "0",
+                product?.drawingRevision ||
+                "0",
 
             productName:
-                row.productName || "",
+                product?.productName ||
+                "",
 
             plantCode:
-                row.plantCode || "",
+                product?.owningPlantCode ||
+                product?.plantCode ||
+                "",
 
             requiredDate:
-                row.requiredDate || "",
+                product?.requiredDate ||
+                "",
 
             remarks:
-                row.remarks || "",
+                product?.remarks ||
+                "",
 
             active:
-                row.active !== false,
+                product?.active !==
+                false,
         });
 
         setDialogOpen(true);
         setError("");
     };
+
     const closeDialog = () => {
         if (saving) {
             return;
         }
 
         setDialogOpen(false);
+
+        setDialogMode(
+            DIALOG_MODE.CREATE_PROJECT
+        );
+
         setEditingRow(null);
-        setForm(EMPTY_FORM);
+
+        setForm(
+            EMPTY_FORM
+        );
     };
 
     const updateForm = (
         key,
         value
     ) => {
-        setForm((current) => ({
-            ...current,
-            [key]: value,
-        }));
+        setForm(
+            (current) => ({
+                ...current,
+                [key]: value,
+            })
+        );
     };
 
     const validate = () => {
-        if (!clean(form.projectCode)) {
+        if (
+            !clean(
+                form.projectCode
+            )
+        ) {
             return "Project or PD code is required.";
         }
 
-        if (!clean(form.projectName)) {
+        if (
+            !clean(
+                form.projectName
+            )
+        ) {
             return "Project name is required.";
         }
 
-        if (!clean(form.drawingNo)) {
+        if (
+            !clean(
+                form.drawingNo
+            )
+        ) {
             return "Drawing number is required.";
         }
 
-        if (!clean(form.productName)) {
+        if (
+            !clean(
+                form.productName
+            )
+        ) {
             return "Product name is required.";
         }
 
-        if (!clean(form.plantCode)) {
-            return "Plant is required.";
+        if (
+            !clean(
+                form.plantCode
+            )
+        ) {
+            return "Owning plant is required.";
         }
 
         return "";
@@ -424,15 +702,18 @@ export default function MatFlowProjectMaster() {
             validate();
 
         if (validationError) {
-            setError(validationError);
+            setError(
+                validationError
+            );
+
             return;
         }
 
         const body = {
             projectCode:
-                clean(
+                normalize(
                     form.projectCode
-                ).toUpperCase(),
+                ),
 
             projectName:
                 clean(
@@ -442,17 +723,19 @@ export default function MatFlowProjectMaster() {
             clientName:
                 clean(
                     form.clientName
-                ) || null,
+                ) ||
+                null,
 
             drawingNo:
-                clean(
+                normalize(
                     form.drawingNo
-                ).toUpperCase(),
+                ),
 
             drawingRevision:
-                clean(
+                normalize(
                     form.drawingRevision
-                ).toUpperCase() || "0",
+                ) ||
+                "0",
 
             productName:
                 clean(
@@ -460,20 +743,23 @@ export default function MatFlowProjectMaster() {
                 ),
 
             plantCode:
-                clean(
+                normalize(
                     form.plantCode
-                ).toUpperCase(),
+                ),
 
             requiredDate:
-                form.requiredDate || null,
+                form.requiredDate ||
+                null,
 
             remarks:
                 clean(
                     form.remarks
-                ) || null,
+                ) ||
+                null,
 
             active:
-                form.active !== false,
+                form.active !==
+                false,
 
             rowVersion:
                 editingRow?.rowVersion ??
@@ -484,44 +770,52 @@ export default function MatFlowProjectMaster() {
         setError("");
 
         try {
-            let response;
-
-            if (editingRow?.id) {
-                response =
-                    await matflowApi
+            const response =
+                editingRow?.id
+                    ? await matflowApi
                         .updateProject(
                             editingRow.id,
                             body
+                        )
+                    : await matflowApi
+                        .createProject(
+                            body
                         );
-            } else {
-                response =
-                    await matflowApi
-                        .createProject(body);
-            }
 
-            const savedProject =
-                response?.data;
-
-            if (!savedProject?.id) {
+            if (
+                !response?.data?.id
+            ) {
                 throw new Error(
-                    "Project ID was not returned."
+                    "Product/Drawing ID was not returned."
                 );
             }
 
             setDialogOpen(false);
+
+            setDialogMode(
+                DIALOG_MODE.CREATE_PROJECT
+            );
+
             setEditingRow(null);
-            setForm(EMPTY_FORM);
+
+            setForm(
+                EMPTY_FORM
+            );
 
             await load(
-                0,
+                editingRow?.id
+                    ? page
+                    : 0,
                 search,
                 plantFilter
             );
-        } catch (requestError) {
+        } catch (
+        requestError
+        ) {
             setError(
                 readMatFlowError(
                     requestError,
-                    "Unable to save the project drawing."
+                    "Unable to save the project product drawing."
                 )
             );
         } finally {
@@ -529,35 +823,61 @@ export default function MatFlowProjectMaster() {
         }
     };
 
+    const projectFieldsLocked =
+        dialogMode !==
+        DIALOG_MODE.CREATE_PROJECT;
+
+    const dialogTitle =
+        dialogMode ===
+            DIALOG_MODE.EDIT_PRODUCT
+            ? "Edit Product / Drawing"
+            : dialogMode ===
+                DIALOG_MODE.ADD_PRODUCT
+                ? "Add Product / Drawing"
+                : "Create Project and First Product";
+
+    const saveLabel =
+        dialogMode ===
+            DIALOG_MODE.EDIT_PRODUCT
+            ? "Save Product"
+            : dialogMode ===
+                DIALOG_MODE.ADD_PRODUCT
+                ? "Add Product"
+                : "Create Project";
+
     return (
         <Box sx={pageSx}>
             <Box sx={heroSx}>
                 <Box sx={headerRowSx}>
                     <Box>
                         <Chip
-                            label="PROJECT AND DRAWING MASTER"
+                            label="PROJECT / PRODUCT MASTER"
                             sx={heroBadgeSx}
                         />
 
                         <Typography sx={heroTitleSx}>
-                            Projects and Drawings
+                            Projects and Product Drawings
                         </Typography>
 
                         <Typography sx={heroSubSx}>
-                            Create the PD, project and drawing
-                            context used by operational BOMs,
-                            requisitions, purchasing and material
-                            tracking.
+                            Create one client project or PD and add
+                            one or multiple product drawings under it.
+                            Each product drawing receives its own BOM,
+                            requisition and material lifecycle.
                         </Typography>
                     </Box>
 
                     {canManage && (
                         <Button
-                            startIcon={<AddIcon />}
-                            onClick={openCreate}
+                            startIcon={
+                                <AddIcon />
+                            }
+                            onClick={
+                                openCreateProject
+                            }
                             sx={primaryBtnSx}
                         >
-                            Add Project Drawing
+                            Create Project
                         </Button>
                     )}
                 </Box>
@@ -567,7 +887,7 @@ export default function MatFlowProjectMaster() {
                 <Box sx={filterGridSx}>
                     <TextField
                         label="Search"
-                        placeholder="PD, drawing, client or product..."
+                        placeholder="PD, project, drawing, client or product..."
                         value={search}
                         onChange={(event) =>
                             setSearch(
@@ -606,7 +926,9 @@ export default function MatFlowProjectMaster() {
 
                     <Box sx={toolbarActionsSx}>
                         <Button
-                            startIcon={<SearchIcon />}
+                            startIcon={
+                                <SearchIcon />
+                            }
                             onClick={() =>
                                 load(
                                     0,
@@ -620,7 +942,9 @@ export default function MatFlowProjectMaster() {
                         </Button>
 
                         <Button
-                            startIcon={<RefreshIcon />}
+                            startIcon={
+                                <RefreshIcon />
+                            }
                             onClick={() =>
                                 load(
                                     page,
@@ -646,11 +970,11 @@ export default function MatFlowProjectMaster() {
                 <Box sx={resultHeaderSx}>
                     <Box>
                         <Typography sx={sectionTitleSx}>
-                            Project Drawing Register
+                            Project Register
                         </Typography>
 
                         <Typography sx={sectionSubSx}>
-                            {totalElements} records
+                            {totalElements} client projects
                         </Typography>
                     </Box>
                 </Box>
@@ -659,125 +983,191 @@ export default function MatFlowProjectMaster() {
                     <Box sx={loadingSx}>
                         <CircularProgress />
                     </Box>
+                ) : rows.length === 0 ? (
+                    <Box sx={emptySx}>
+                        No projects or product drawings were found.
+                    </Box>
                 ) : (
-                    <Box sx={tableShellSx}>
-                        <Box sx={projectHeaderSx}>
-                            <Box sx={tableCellSx}>
-                                PD / Project
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Drawing
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Product
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Client
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Owning Plant
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Version
-                            </Box>
-
-                            <Box sx={tableCellSx}>
-                                Action
-                            </Box>
-                        </Box>
-
-                        {rows.length === 0 ? (
-                            <Box sx={emptySx}>
-                                No project drawing records were found.
-                            </Box>
-                        ) : (
-                            rows.map((row) => (
+                    <Box sx={projectListSx}>
+                        {rows.map(
+                            (project) => (
                                 <Box
-                                    key={row.id}
-                                    sx={projectRowSx}
+                                    key={
+                                        project.key
+                                    }
+                                    sx={projectGroupSx}
                                 >
-                                    <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>
-                                            {row.projectCode ||
-                                                "-"}
-                                        </Typography>
+                                    <Box sx={projectGroupHeaderSx}>
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={projectCodeSx}>
+                                                {project.projectCode ||
+                                                    "-"}
+                                            </Typography>
 
-                                        <Typography sx={subTextSx}>
-                                            {row.projectName ||
-                                                "-"}
-                                        </Typography>
+                                            <Typography sx={projectNameSx}>
+                                                {project.projectName ||
+                                                    "-"}
+                                            </Typography>
+
+                                            <Typography sx={projectMetaSx}>
+                                                {project.clientName ||
+                                                    "No client name"}
+                                                {" · "}
+                                                {project.plantCode ||
+                                                    "No plant"}
+                                                {" · "}
+                                                {project.requiredDate ||
+                                                    "No required date"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={projectActionsSx}>
+                                            <Chip
+                                                label={`${project.products.length} Product${project.products.length ===
+                                                    1
+                                                    ? ""
+                                                    : "s"
+                                                    }`}
+                                                sx={productCountChipSx}
+                                            />
+
+                                            {canManage && (
+                                                <Button
+                                                    startIcon={
+                                                        <AddIcon />
+                                                    }
+                                                    onClick={() =>
+                                                        openAddProduct(
+                                                            project
+                                                        )
+                                                    }
+                                                    sx={primaryBtnSx}
+                                                >
+                                                    Add Product
+                                                </Button>
+                                            )}
+                                        </Box>
                                     </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>
-                                            {row.drawingNo ||
-                                                "-"}
-                                        </Typography>
+                                    <Box sx={tableShellSx}>
+                                        <Box sx={productHeaderSx}>
+                                            <Box sx={tableCellSx}>
+                                                Product
+                                            </Box>
 
-                                        <Typography sx={subTextSx}>
-                                            Revision{" "}
-                                            {row.drawingRevision ||
-                                                "-"}
-                                        </Typography>
-                                    </Box>
+                                            <Box sx={tableCellSx}>
+                                                Drawing
+                                            </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.productName ||
-                                            "-"}
-                                    </Box>
+                                            <Box sx={tableCellSx}>
+                                                Revision
+                                            </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.clientName ||
-                                            "-"}
-                                    </Box>
+                                            <Box sx={tableCellSx}>
+                                                Status
+                                            </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.owningPlantCode ||
-                                            row.plantCode ||
-                                            "-"}
-                                    </Box>
+                                            <Box sx={tableCellSx}>
+                                                Version
+                                            </Box>
 
-                                    <Box sx={tableCellSx}>
-                                        {row.rowVersion ??
-                                            "-"}
-                                    </Box>
+                                            <Box sx={tableCellSx}>
+                                                Actions
+                                            </Box>
+                                        </Box>
 
-                                    <Box sx={actionCellSx}>
-                                        <Button
-                                            startIcon={
-                                                <VisibilityOutlinedIcon />
-                                            }
-                                            onClick={() =>
-                                                navigate(
-                                                    `/matflow/projects/${row.id}`
-                                                )
-                                            }
-                                            sx={secondaryBtnSx}
-                                        >
-                                            Track
-                                        </Button>
+                                        {project.products.map(
+                                            (product) => (
+                                                <Box
+                                                    key={
+                                                        product.id
+                                                    }
+                                                    sx={productRowSx}
+                                                >
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>
+                                                            {product.productName ||
+                                                                "-"}
+                                                        </Typography>
 
-                                        {canManage && (
-                                            <Button
-                                                startIcon={
-                                                    <EditOutlinedIcon />
-                                                }
-                                                onClick={() =>
-                                                    openEdit(row)
-                                                }
-                                                sx={secondaryBtnSx}
-                                            >
-                                                Edit
-                                            </Button>
+                                                        <Typography sx={subTextSx}>
+                                                            {product.remarks ||
+                                                                "No product remarks"}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>
+                                                            {product.drawingNo ||
+                                                                "-"}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        {product.drawingRevision ||
+                                                            "0"}
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        <Chip
+                                                            label={
+                                                                product.active ===
+                                                                    false
+                                                                    ? "Inactive"
+                                                                    : "Active"
+                                                            }
+                                                            size="small"
+                                                            sx={
+                                                                product.active ===
+                                                                    false
+                                                                    ? inactiveChipSx
+                                                                    : activeChipSx
+                                                            }
+                                                        />
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        {product.rowVersion ??
+                                                            "-"}
+                                                    </Box>
+
+                                                    <Box sx={actionCellSx}>
+                                                        <Button
+                                                            startIcon={
+                                                                <VisibilityOutlinedIcon />
+                                                            }
+                                                            onClick={() =>
+                                                                navigate(
+                                                                    `/matflow/projects/${product.id}`
+                                                                )
+                                                            }
+                                                            sx={secondaryBtnSx}
+                                                        >
+                                                            Track
+                                                        </Button>
+
+                                                        {canManage && (
+                                                            <Button
+                                                                startIcon={
+                                                                    <EditOutlinedIcon />
+                                                                }
+                                                                onClick={() =>
+                                                                    openEditProduct(
+                                                                        product
+                                                                    )
+                                                                }
+                                                                sx={secondaryBtnSx}
+                                                            >
+                                                                Edit
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+                                                </Box>
+                                            )
                                         )}
                                     </Box>
                                 </Box>
-                            ))
+                            )
                         )}
                     </Box>
                 )}
@@ -805,7 +1195,10 @@ export default function MatFlowProjectMaster() {
 
                     <Typography sx={pageTextSx}>
                         Page {page + 1} of{" "}
-                        {Math.max(totalPages, 1)}
+                        {Math.max(
+                            totalPages,
+                            1
+                        )}
                     </Typography>
 
                     <Button
@@ -840,14 +1233,14 @@ export default function MatFlowProjectMaster() {
                 <DialogTitle sx={dialogTitleSx}>
                     <Box>
                         <Typography sx={dialogHeadingSx}>
-                            {editingRow
-                                ? "Edit Project Drawing"
-                                : "Create Project Drawing"}
+                            {dialogTitle}
                         </Typography>
 
                         <Typography sx={dialogSubSx}>
-                            One record represents one project and
-                            drawing combination.
+                            Each product and drawing belongs to one
+                            client project or PD. A project may contain
+                            multiple products, with a separate BOM for
+                            each Product/Drawing record.
                         </Typography>
                     </Box>
 
@@ -865,7 +1258,8 @@ export default function MatFlowProjectMaster() {
                         control={
                             <Switch
                                 checked={
-                                    form.active === true
+                                    form.active ===
+                                    true
                                 }
                                 disabled={saving}
                                 onChange={(event) =>
@@ -876,14 +1270,18 @@ export default function MatFlowProjectMaster() {
                                 }
                             />
                         }
-                        label="Project drawing is active"
+                        label="Product / Drawing is active"
                         sx={switchLabelSx}
                     />
+
                     <Box sx={formGridSx}>
                         <TextField
                             label="PD / Project Code *"
                             value={form.projectCode}
-                            disabled={saving}
+                            disabled={
+                                saving ||
+                                projectFieldsLocked
+                            }
                             onChange={(event) =>
                                 updateForm(
                                     "projectCode",
@@ -896,7 +1294,10 @@ export default function MatFlowProjectMaster() {
                         <TextField
                             label="Project Name *"
                             value={form.projectName}
-                            disabled={saving}
+                            disabled={
+                                saving ||
+                                projectFieldsLocked
+                            }
                             onChange={(event) =>
                                 updateForm(
                                     "projectName",
@@ -907,50 +1308,12 @@ export default function MatFlowProjectMaster() {
                         />
 
                         <TextField
-                            label="Drawing Number *"
-                            value={form.drawingNo}
-                            disabled={saving}
-                            onChange={(event) =>
-                                updateForm(
-                                    "drawingNo",
-                                    event.target.value
-                                )
-                            }
-                            sx={fieldSx}
-                        />
-
-                        <TextField
-                            label="Drawing Revision"
-                            value={
-                                form.drawingRevision
-                            }
-                            disabled={saving}
-                            onChange={(event) =>
-                                updateForm(
-                                    "drawingRevision",
-                                    event.target.value
-                                )
-                            }
-                            sx={fieldSx}
-                        />
-
-                        <TextField
-                            label="Product Name *"
-                            value={form.productName}
-                            disabled={saving}
-                            onChange={(event) =>
-                                updateForm(
-                                    "productName",
-                                    event.target.value
-                                )
-                            }
-                            sx={fieldSx}
-                        />
-
-                        <TextField
                             label="Client Name"
                             value={form.clientName}
-                            disabled={saving}
+                            disabled={
+                                saving ||
+                                projectFieldsLocked
+                            }
                             onChange={(event) =>
                                 updateForm(
                                     "clientName",
@@ -964,7 +1327,10 @@ export default function MatFlowProjectMaster() {
                             select
                             label="Owning Plant *"
                             value={form.plantCode}
-                            disabled={saving}
+                            disabled={
+                                saving ||
+                                projectFieldsLocked
+                            }
                             onChange={(event) =>
                                 updateForm(
                                     "plantCode",
@@ -986,14 +1352,19 @@ export default function MatFlowProjectMaster() {
                         </TextField>
 
                         <TextField
-                            label="Remarks"
-                            multiline
-                            minRows={3}
-                            value={form.remarks}
-                            disabled={saving}
+                            type="date"
+                            label="Required Date"
+                            value={form.requiredDate}
+                            disabled={
+                                saving ||
+                                projectFieldsLocked
+                            }
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
                             onChange={(event) =>
                                 updateForm(
-                                    "remarks",
+                                    "requiredDate",
                                     event.target.value
                                 )
                             }
@@ -1001,16 +1372,53 @@ export default function MatFlowProjectMaster() {
                         />
 
                         <TextField
-                            type="date"
-                            label="Required Date"
-                            value={form.requiredDate}
+                            label="Product Name *"
+                            value={form.productName}
                             disabled={saving}
-                            InputLabelProps={{
-                                shrink: true,
-                            }}
                             onChange={(event) =>
                                 updateForm(
-                                    "requiredDate",
+                                    "productName",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Drawing Number *"
+                            value={form.drawingNo}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "drawingNo",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Drawing Revision"
+                            value={form.drawingRevision}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "drawingRevision",
+                                    event.target.value
+                                )
+                            }
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            label="Product / Drawing Remarks"
+                            multiline
+                            minRows={3}
+                            value={form.remarks}
+                            disabled={saving}
+                            onChange={(event) =>
+                                updateForm(
+                                    "remarks",
                                     event.target.value
                                 )
                             }
@@ -1035,7 +1443,7 @@ export default function MatFlowProjectMaster() {
                     >
                         {saving
                             ? "Saving..."
-                            : "Save Project"}
+                            : saveLabel}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -1059,38 +1467,132 @@ const filterGridSx = {
     alignItems: "center",
 
     "@media (max-width: 800px)": {
-        gridTemplateColumns: "1fr",
+        gridTemplateColumns:
+            "1fr",
     },
 };
 
 const toolbarActionsSx = {
     display: "flex",
     gap: "7px",
+    flexWrap: "wrap",
 };
 
 const resultHeaderSx = {
     mb: "12px",
 };
 
-const projectColumns =
-    "170px 150px minmax(220px,1.3fr) 180px 125px 70px 200px";
-
-const projectHeaderSx = {
-    ...tableHeaderSx,
-    gridTemplateColumns:
-        projectColumns,
+const projectListSx = {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
 };
 
-const projectRowSx = {
+const projectGroupSx = {
+    overflow: "hidden",
+    borderRadius: "12px",
+    border:
+        "1px solid var(--mf-border)",
+    background:
+        "var(--mf-panel-bg-solid)",
+};
+
+const projectGroupHeaderSx = {
+    p: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "14px",
+    flexWrap: "wrap",
+    background:
+        "var(--mf-surface-soft)",
+    borderBottom:
+        "1px solid var(--mf-border)",
+};
+
+const projectCodeSx = {
+    color: "#2563eb",
+    fontSize: "16px",
+    fontWeight: 950,
+};
+
+const projectNameSx = {
+    mt: "2px",
+    color:
+        "var(--mf-text)",
+    fontSize: "13px",
+    fontWeight: 900,
+};
+
+const projectMetaSx = {
+    mt: "4px",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "9.5px",
+    fontWeight: 700,
+};
+
+const projectActionsSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+};
+
+const productCountChipSx = {
+    color: "#7c3aed",
+    background:
+        "rgba(124,58,237,.10)",
+    border:
+        "1px solid rgba(124,58,237,.22)",
+    fontSize: "9px",
+    fontWeight: 900,
+};
+
+const productColumns =
+    "minmax(230px,1.4fr) 170px 85px 95px 75px 210px";
+
+const productHeaderSx = {
+    ...tableHeaderSx,
+    gridTemplateColumns:
+        productColumns,
+    minWidth: "980px",
+};
+
+const productRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
-        projectColumns,
+        productColumns,
+    minWidth: "980px",
 };
 
 const actionCellSx = {
     ...tableCellSx,
     display: "flex",
     gap: "6px",
+    flexWrap: "wrap",
+};
+
+const activeChipSx = {
+    height: "22px",
+    color: "#16a34a",
+    background:
+        "rgba(22,163,74,.10)",
+    border:
+        "1px solid rgba(22,163,74,.22)",
+    fontSize: "8px",
+    fontWeight: 900,
+};
+
+const inactiveChipSx = {
+    height: "22px",
+    color: "#dc2626",
+    background:
+        "rgba(220,38,38,.10)",
+    border:
+        "1px solid rgba(220,38,38,.22)",
+    fontSize: "8px",
+    fontWeight: 900,
 };
 
 const paginationSx = {
@@ -1101,7 +1603,6 @@ const paginationSx = {
     mt: "12px",
 };
 
-
 const formGridSx = {
     display: "grid",
     gridTemplateColumns:
@@ -1109,6 +1610,7 @@ const formGridSx = {
     gap: "12px",
 
     "@media (max-width: 700px)": {
-        gridTemplateColumns: "1fr",
+        gridTemplateColumns:
+            "1fr",
     },
 };

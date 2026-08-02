@@ -207,6 +207,7 @@ public class MatFlowMasterService {
                                 request.drawingRevision());
 
                 if (projectRepository.existsDuplicate(
+                                plantCode,
                                 projectCode,
                                 drawingNo,
                                 drawingRevision)) {
@@ -260,12 +261,12 @@ public class MatFlowMasterService {
                 String drawingRevision = normalizedRevision(
                                 request.drawingRevision());
 
-                if (projectRepository
-                                .existsDuplicateExcludingId(
-                                                projectCode,
-                                                drawingNo,
-                                                drawingRevision,
-                                                id)) {
+                if (projectRepository.existsDuplicateExcludingId(
+                                plantCode,
+                                projectCode,
+                                drawingNo,
+                                drawingRevision,
+                                id)) {
                         throw conflict(
                                         "Project drawing revision already exists");
                 }

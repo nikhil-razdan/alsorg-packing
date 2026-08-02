@@ -7,8 +7,16 @@ import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomLineReque
 import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomSummaryResponse;
 import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomUpdateRequest;
 
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomActionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomCreateRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomDetailResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomLineRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomSummaryResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomUpdateRequest;
 import com.alsorg.packing.domain.matflow.MatFlowBomStatus;
 import com.alsorg.packing.service.matflow.MatFlowBomService;
+
+import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,111 +37,131 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("isAuthenticated()")
 public class MatFlowBomController {
 
-    private final MatFlowBomService service;
+        private final MatFlowBomService service;
 
-    public MatFlowBomController(
-            MatFlowBomService service) {
-        this.service = service;
-    }
+        public MatFlowBomController(
+                        MatFlowBomService service) {
+                this.service = service;
+        }
 
-    @GetMapping
-    public List<BomSummaryResponse> list(
-            @RequestParam(required = false) String search,
+        @GetMapping
+        public List<BomSummaryResponse> list(
+                        @RequestParam(required = false) String search,
 
-            @RequestParam(required = false) MatFlowBomStatus status,
+                        @RequestParam(required = false) MatFlowBomStatus status,
 
-            @RequestParam(required = false, defaultValue = "true") Boolean latestOnly) {
-        return service.list(
-                search,
-                status,
-                latestOnly);
-    }
+                        @RequestParam(required = false, defaultValue = "true") Boolean latestOnly) {
+                return service.list(
+                                search,
+                                status,
+                                latestOnly);
+        }
 
-    @PostMapping
-    public BomDetailResponse create(
-            @RequestBody BomCreateRequest request) {
-        return service.create(request);
-    }
+        @PostMapping("/boms/{id}/production-approve")
+        public BomDetailResponse productionApprove(
+                        @PathVariable UUID id,
+                        @Valid @RequestBody BomActionRequest request) {
 
-    @GetMapping("/{id}")
-    public BomDetailResponse get(
-            @PathVariable UUID id) {
-        return service.get(id);
-    }
+                return service.productionApprove(
+                                id,
+                                request);
+        }
 
-    @PutMapping("/{id}")
-    public BomDetailResponse update(
-            @PathVariable UUID id,
-            @RequestBody BomUpdateRequest request) {
-        return service.update(
-                id,
-                request);
-    }
+        @PostMapping("/boms/{id}/production-return")
+        public BomDetailResponse productionReturn(
+                        @PathVariable UUID id,
+                        @Valid @RequestBody BomActionRequest request) {
 
-    @PostMapping("/{id}/lines")
-    public BomDetailResponse addLine(
-            @PathVariable UUID id,
-            @RequestBody BomLineRequest request) {
-        return service.addLine(
-                id,
-                request);
-    }
+                return service.productionReturn(
+                                id,
+                                request);
+        }
 
-    @PutMapping("/{id}/lines/{lineId}")
-    public BomDetailResponse updateLine(
-            @PathVariable UUID id,
-            @PathVariable UUID lineId,
-            @RequestBody BomLineRequest request) {
-        return service.updateLine(
-                id,
-                lineId,
-                request);
-    }
+        @PostMapping
+        public BomDetailResponse create(
+                        @RequestBody BomCreateRequest request) {
+                return service.create(request);
+        }
 
-    @DeleteMapping("/{id}/lines/{lineId}")
-    public BomDetailResponse deleteLine(
-            @PathVariable UUID id,
-            @PathVariable UUID lineId,
-            @RequestParam Long rowVersion) {
-        return service.deleteLine(
-                id,
-                lineId,
-                rowVersion);
-    }
+        @GetMapping("/{id}")
+        public BomDetailResponse get(
+                        @PathVariable UUID id) {
+                return service.get(id);
+        }
 
-    @PostMapping("/{id}/submit")
-    public BomDetailResponse submit(
-            @PathVariable UUID id,
-            @RequestBody BomActionRequest request) {
-        return service.submit(
-                id,
-                request);
-    }
+        @PutMapping("/{id}")
+        public BomDetailResponse update(
+                        @PathVariable UUID id,
+                        @RequestBody BomUpdateRequest request) {
+                return service.update(
+                                id,
+                                request);
+        }
 
-    @PostMapping("/{id}/return")
-    public BomDetailResponse returnBom(
-            @PathVariable UUID id,
-            @RequestBody BomActionRequest request) {
-        return service.returnBom(
-                id,
-                request);
-    }
+        @PostMapping("/{id}/lines")
+        public BomDetailResponse addLine(
+                        @PathVariable UUID id,
+                        @RequestBody BomLineRequest request) {
+                return service.addLine(
+                                id,
+                                request);
+        }
 
-    @PostMapping("/{id}/approve")
-    public BomDetailResponse approve(
-            @PathVariable UUID id,
-            @RequestBody BomActionRequest request) {
-        return service.approve(
-                id,
-                request);
-    }
+        @PutMapping("/{id}/lines/{lineId}")
+        public BomDetailResponse updateLine(
+                        @PathVariable UUID id,
+                        @PathVariable UUID lineId,
+                        @RequestBody BomLineRequest request) {
+                return service.updateLine(
+                                id,
+                                lineId,
+                                request);
+        }
 
-    @PostMapping("/{id}/revisions")
-    public BomDetailResponse createRevision(
-            @PathVariable UUID id,
-            @RequestBody BomActionRequest request) {
-        return service.createRevision(
-                id,
-                request);
-    }
+        @DeleteMapping("/{id}/lines/{lineId}")
+        public BomDetailResponse deleteLine(
+                        @PathVariable UUID id,
+                        @PathVariable UUID lineId,
+                        @RequestParam Long rowVersion) {
+                return service.deleteLine(
+                                id,
+                                lineId,
+                                rowVersion);
+        }
+
+        @PostMapping("/{id}/submit")
+        public BomDetailResponse submit(
+                        @PathVariable UUID id,
+                        @RequestBody BomActionRequest request) {
+                return service.submit(
+                                id,
+                                request);
+        }
+
+        @PostMapping("/{id}/return")
+        public BomDetailResponse returnBom(
+                        @PathVariable UUID id,
+                        @RequestBody BomActionRequest request) {
+                return service.returnBom(
+                                id,
+                                request);
+        }
+
+        @PostMapping("/{id}/approve")
+        public BomDetailResponse approve(
+                        @PathVariable UUID id,
+                        @RequestBody BomActionRequest request) {
+                return service.approve(
+                                id,
+                                request);
+        }
+
+        @PostMapping("/{id}/revisions")
+        public BomDetailResponse createRevision(
+                        @PathVariable UUID id,
+                        @RequestBody BomActionRequest request) {
+                return service.createRevision(
+                                id,
+                                request);
+        }
 }
