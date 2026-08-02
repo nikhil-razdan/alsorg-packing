@@ -627,12 +627,31 @@ public class MatFlowPlanningService {
                                         "Planning request is required");
                 }
 
+                if (id == null) {
+                        throw badRequest(
+                                        "Requisition ID is required");
+                }
+
+                /*
+                 * Lock before validating and creating reservations.
+                 */
+                requisitionRepository
+                                .lockById(id)
+                                .orElseThrow(() -> notFound(
+                                                "Material requisition not found"));
+
+                /*
+                 * Reload and validate full requisition context.
+                 * The pessimistic lock remains active in this transaction.
+                 */
                 MatFlowMaterialRequisition requisition = requireRequisition(id);
 
-                if (requisition.status != RequisitionStatus.SUBMITTED) {
+                if (!isStoreReviewableStatus(
+                                requisition.status)) {
 
                         throw conflict(
-                                        "Only a Submitted requisition can be planned");
+                                        "Only a requisition submitted to Store can be planned. Current status: " +
+                                                        requisition.status);
                 }
 
                 assertVersion(
@@ -666,18 +685,27 @@ public class MatFlowPlanningService {
                                         "Requisition requires at least one material line before planning");
                 }
 
-                /*
-                 * A successful plan can only happen once because the
-                 * status changes away from SUBMITTED. This additional
-                 * check protects legacy or partially migrated data.
-                 */
-                if (!reservationRepository
+                boolean hasReservations = !reservationRepository
                                 .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(
                                                 requisition.getId())
-                                .isEmpty()) {
+                                .isEmpty();
+
+                boolean hasTransfers = !transferRepository
+                                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                                requisition.getId())
+                                .isEmpty();
+
+                boolean hasIndents = !indentRepository
+                                .findByRequisition_Id(
+                                                requisition.getId())
+                                .isEmpty();
+
+                if (hasReservations ||
+                                hasTransfers ||
+                                hasIndents) {
 
                         throw conflict(
-                                        "Active planning records already exist for this requisition");
+                                        "Planning output already exists for this requisition");
                 }
 
                 String actor = accessService.actor();
@@ -687,6 +715,7 @@ public class MatFlowPlanningService {
                 boolean hasShortage = false;
 
                 for (MatFlowRequisitionLine line : lines) {
+
                         if (line == null ||
                                         line.bomLine == null ||
                                         line.material == null) {
@@ -717,62 +746,43 @@ public class MatFlowPlanningService {
                                         ? requisition.destinationLocation
                                         : route.get(0).location;
 
+                        if (firstDestination == null) {
+                                throw conflict(
+                                                "Material route has no first destination");
+                        }
+
                         BigDecimal remaining = requestedQty;
 
                         List<MatFlowStockBalance> returnedCandidates = stockRepository.findPlanningCandidates(
                                         line.material.getId(),
                                         accessService.allowedPlants(),
-                                        EnumSet.of(
-                                                        LocationType.STORE,
-                                                        LocationType.PROCESSING,
-                                                        LocationType.EXTERNAL_PROCESSOR));
+                                        PLANNING_SOURCE_TYPES);
 
                         List<MatFlowStockBalance> candidates = returnedCandidates == null
                                         ? new ArrayList<>()
                                         : new ArrayList<>(
                                                         returnedCandidates);
 
-                        /*
-                         * Remove incomplete candidate records before sorting.
-                         * This also prevents NullPointerException when obtaining
-                         * the location ID, plant or location code.
-                         */
-                        candidates.removeIf(
-                                        candidate -> candidate == null ||
-                                                        candidate.location == null ||
-                                                        candidate.location.getId() == null);
+                        candidates.removeIf(candidate -> candidate == null ||
+                                        candidate.location == null ||
+                                        candidate.location.getId() == null);
 
-                        /*
-                         * Explicitly declare the Comparator generic type.
-                         *
-                         * Without <MatFlowStockBalance>, Java may infer the
-                         * chained lambda parameters as Object, which causes:
-                         *
-                         * - location cannot be resolved
-                         * - samePlantRank(Object, ...) is not applicable
-                         * - availableQty(Object) is not defined
-                         */
                         Comparator<MatFlowStockBalance> candidateOrder = Comparator
                                         .<MatFlowStockBalance>comparingInt(
-                                                        balance -> preferredRank
-                                                                        .getOrDefault(
-                                                                                        balance.location
-                                                                                                        .getId(),
-                                                                                        Integer.MAX_VALUE))
+                                                        balance -> preferredRank.getOrDefault(
+                                                                        balance.location
+                                                                                        .getId(),
+                                                                        Integer.MAX_VALUE))
                                         .thenComparingInt(
                                                         balance -> samePlantRank(
                                                                         balance,
                                                                         firstDestination))
                                         .thenComparing(
-                                                        (MatFlowStockBalance balance) -> safeAvailableQty(
-                                                                        balance),
-
-                                                        Comparator
-                                                                        .<BigDecimal>reverseOrder())
+                                                        this::safeAvailableQty,
+                                                        Comparator.reverseOrder())
                                         .thenComparing(
-                                                        (MatFlowStockBalance balance) -> balance.location
+                                                        balance -> balance.location
                                                                         .getLocationCode(),
-
                                                         Comparator.nullsLast(
                                                                         String.CASE_INSENSITIVE_ORDER));
 
@@ -782,22 +792,18 @@ public class MatFlowPlanningService {
                         BigDecimal totalReserved = BigDecimal.ZERO;
 
                         for (MatFlowStockBalance candidate : candidates) {
+
                                 if (remaining.compareTo(
                                                 BigDecimal.ZERO) <= 0) {
 
                                         break;
                                 }
 
-                                if (candidate == null ||
-                                                candidate.location == null) {
-
-                                        continue;
-                                }
-
                                 MatFlowStockBalance locked = stockRepository
                                                 .lockBalance(
                                                                 line.material
                                                                                 .getId(),
+
                                                                 candidate.location
                                                                                 .getId())
                                                 .orElse(null);
@@ -817,9 +823,8 @@ public class MatFlowPlanningService {
                                         continue;
                                 }
 
-                                BigDecimal allocated = available
-                                                .min(
-                                                                remaining)
+                                BigDecimal allocated = available.min(
+                                                remaining)
                                                 .setScale(
                                                                 3,
                                                                 RoundingMode.HALF_UP);
@@ -892,9 +897,8 @@ public class MatFlowPlanningService {
                                         3,
                                         RoundingMode.HALF_UP);
 
-                        line.shortageQty = remaining
-                                        .max(
-                                                        BigDecimal.ZERO)
+                        line.shortageQty = remaining.max(
+                                        BigDecimal.ZERO)
                                         .setScale(
                                                         3,
                                                         RoundingMode.HALF_UP);
@@ -956,6 +960,16 @@ public class MatFlowPlanningService {
                         }
                 }
 
+                /*
+                 * PLANNED currently means:
+                 *
+                 * Store review completed and reservations/routes were
+                 * generated. It does not mean material is physically
+                 * ready at Production.
+                 *
+                 * READY_TO_ISSUE will be used later after all required
+                 * material reaches the final issue location.
+                 */
                 requisition.status = hasShortage
                                 ? RequisitionStatus.SHORTAGE_PENDING
                                 : RequisitionStatus.PLANNED;
@@ -974,7 +988,7 @@ public class MatFlowPlanningService {
                 requisition.setUpdatedBy(
                                 actor);
 
-                requisition = requisitionRepository.save(
+                requisition = requisitionRepository.saveAndFlush(
                                 requisition);
 
                 long reservedLineCount = lines.stream()
@@ -995,12 +1009,16 @@ public class MatFlowPlanningService {
                                 "REQUISITION",
                                 requisition.getId(),
                                 "PLANNED",
+
                                 requisition.destinationLocation
                                                 .getPlantCode(),
+
                                 requisition.projectDrawing
                                                 .getProjectCode(),
+
                                 requisition.projectDrawing
                                                 .getDrawingNo(),
+
                                 auditService.details(
                                                 "requisitionNumber",
                                                 requisition.requisitionNumber,
@@ -2002,6 +2020,25 @@ public class MatFlowPlanningService {
                                                                 step.processCode));
 
                 return snapshot;
+        }
+
+        private boolean isStoreReviewableStatus(
+                        RequisitionStatus status) {
+
+                if (status == null) {
+                        return false;
+                }
+
+                return switch (status.name()) {
+
+                        case "SUBMITTED",
+                                        "SUBMITTED_TO_STORE",
+                                        "STORE_REVIEW_IN_PROGRESS" ->
+                                true;
+
+                        default ->
+                                false;
+                };
         }
 
         /*

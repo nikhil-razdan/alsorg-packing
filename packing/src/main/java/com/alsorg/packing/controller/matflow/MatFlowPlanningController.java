@@ -6,6 +6,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.service.matflow.MatFlowPlanningService;
+import com.alsorg.packing.service.matflow.MatFlowStoreWorkflowService;
 
 import jakarta.validation.Valid;
 
@@ -27,11 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatFlowPlanningController {
 
     private final MatFlowPlanningService service;
+    private final MatFlowStoreWorkflowService workflowservice;
 
     public MatFlowPlanningController(
-            MatFlowPlanningService service) {
+            MatFlowPlanningService service,
+        MatFlowStoreWorkflowService workflowservice) {
 
         this.service = service;
+        this.workflowservice = workflowservice;
     }
 
     @GetMapping("/requisitions")
@@ -102,8 +106,9 @@ public class MatFlowPlanningController {
 
             @Valid @RequestBody PlanningRequest request) {
 
-        return service.planRequisition(
-                id,
-                request);
+        return workflowservice
+                .confirmStoreReview(
+                        id,
+                        request);
     }
 }

@@ -26,8 +26,7 @@ public class MatFlowAccessService {
                 User user = currentUserService
                                 .requireCurrentUser();
 
-                if (!"ADMIN".equalsIgnoreCase(
-                                user.getRole()) &&
+                if (!isAdmin(user) &&
                                 !currentUserService.hasModule(
                                                 user,
                                                 "MATFLOW")) {
@@ -133,9 +132,22 @@ public class MatFlowAccessService {
 
         public boolean canAccessPlant(
                         String plantCode) {
+
+                String normalizedPlant = plantCode == null
+                                ? null
+                                : plantCode.trim()
+                                                .toUpperCase(
+                                                                Locale.ROOT);
+
+                if (normalizedPlant == null ||
+                                normalizedPlant.isBlank()) {
+
+                        return false;
+                }
+
                 return currentUserService.canAccessPlant(
                                 currentUser(),
-                                plantCode);
+                                normalizedPlant);
         }
 
         private void requireRole(
@@ -167,12 +179,19 @@ public class MatFlowAccessService {
                                                 normalize(prefix));
         }
 
-        private String normalize(String value) {
-                return value == null
-                                ? ""
-                                : value.trim()
-                                                .toUpperCase()
-                                                .replace("ROLE_", "");
+        private String normalize(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                return value.trim()
+                                .toUpperCase(
+                                                Locale.ROOT)
+                                .replaceFirst(
+                                                "^ROLE_",
+                                                "");
         }
 
         public void requireLocationWrite() {
@@ -228,13 +247,14 @@ public class MatFlowAccessService {
 
         public void requireTransferDispatch(
                         MatFlowLocation source) {
+
                 if (source == null) {
                         throw new AccessDeniedException(
                                         "Transfer source is missing");
                 }
 
                 requirePlantAccess(
-                                source.plantCode);
+                                source.getPlantCode());
 
                 User user = currentUser();
 
@@ -242,15 +262,17 @@ public class MatFlowAccessService {
                                 user,
                                 "ADMIN",
                                 "MATFLOW_MANAGER")) {
+
                         return;
                 }
 
-                LocationType type = source.locationType;
+                LocationType type = source.getLocationType();
 
                 if (type == LocationType.STORE &&
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_STORE")) {
+
                         return;
                 }
 
@@ -259,6 +281,7 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_PROCESSING")) {
+
                         return;
                 }
 
@@ -266,6 +289,7 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_QC")) {
+
                         return;
                 }
 
@@ -273,23 +297,25 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_PRODUCTION")) {
+
                         return;
                 }
 
                 throw new AccessDeniedException(
                                 "You cannot dispatch material from location: " +
-                                                source.locationCode);
+                                                source.getLocationCode());
         }
 
         public void requireTransferReceive(
                         MatFlowLocation destination) {
+
                 if (destination == null) {
                         throw new AccessDeniedException(
                                         "Transfer destination is missing");
                 }
 
                 requirePlantAccess(
-                                destination.plantCode);
+                                destination.getPlantCode());
 
                 User user = currentUser();
 
@@ -297,15 +323,17 @@ public class MatFlowAccessService {
                                 user,
                                 "ADMIN",
                                 "MATFLOW_MANAGER")) {
+
                         return;
                 }
 
-                LocationType type = destination.locationType;
+                LocationType type = destination.getLocationType();
 
                 if (type == LocationType.STORE &&
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_STORE")) {
+
                         return;
                 }
 
@@ -314,6 +342,7 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_PROCESSING")) {
+
                         return;
                 }
 
@@ -321,6 +350,7 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_QC")) {
+
                         return;
                 }
 
@@ -328,12 +358,23 @@ public class MatFlowAccessService {
                                 isAnyRole(
                                                 user,
                                                 "MATFLOW_PRODUCTION")) {
+
                         return;
                 }
 
                 throw new AccessDeniedException(
                                 "You cannot receive material at location: " +
-                                                destination.locationCode);
+                                                destination.getLocationCode());
+        }
+
+        public void requireStore() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
         }
 
         private boolean isAnyRole(

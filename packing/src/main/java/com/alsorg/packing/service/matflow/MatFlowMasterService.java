@@ -1,10 +1,5 @@
 package com.alsorg.packing.service.matflow;
 
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingRequest;
-import static com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingResponse;
-
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingRequest;

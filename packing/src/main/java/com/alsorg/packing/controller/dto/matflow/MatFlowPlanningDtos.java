@@ -119,6 +119,53 @@ public final class MatFlowPlanningDtos {
                         @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
         }
 
+        public record StoreStockOptionResponse(
+
+                        UUID stockBalanceId,
+
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+
+                        UUID locationId,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+
+                        BigDecimal onHandQty,
+                        BigDecimal reservedQty,
+                        BigDecimal blockedQty,
+                        BigDecimal availableQty,
+
+                        boolean firstRouteDestination,
+                        boolean productionDestination,
+                        boolean transferRequired) {
+        }
+
+        public record StoreLineAvailabilityResponse(
+
+                        UUID requisitionLineId,
+                        Integer lineNo,
+
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        String materialCategory,
+                        String uom,
+
+                        BigDecimal requestedQty,
+                        BigDecimal currentlyReservedQty,
+                        BigDecimal currentShortageQty,
+
+                        UUID firstDestinationLocationId,
+                        String firstDestinationLocationCode,
+
+                        String approvedRoute,
+
+                        List<StoreStockOptionResponse> stockOptions) {
+        }
+
         public record RequisitionCreateRequest(
 
                         @NotNull(message = "Project drawing ID is required.") UUID projectDrawingId,
@@ -316,5 +363,79 @@ public final class MatFlowPlanningDtos {
                         @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
 
                         @Size(max = 2000, message = "Remarks cannot exceed 2000 characters.") String remarks) {
+        }
+
+        public record StoreSourceAllocationRequest(
+
+                        @NotNull UUID sourceLocationId,
+
+                        @NotNull @DecimalMin("0.001") BigDecimal reserveQty) {
+        }
+
+        public record StoreLineReviewRequest(
+
+                        @NotNull UUID requisitionLineId,
+
+                        @NotNull Long rowVersion,
+
+                        List<@Valid StoreSourceAllocationRequest> allocations,
+
+                        Boolean processingRequired,
+
+                        UUID processingLocationId,
+
+                        Boolean createIndentForShortage,
+
+                        @Size(max = 1000) String remarks) {
+        }
+
+        public record StoreReviewRequest(
+
+                        @NotNull Long rowVersion,
+
+                        @NotEmpty List<@Valid StoreLineReviewRequest> lines,
+
+                        @Size(max = 2000) String remarks) {
+        }
+
+        public record StockOptionResponse(
+
+                        UUID materialId,
+
+                        UUID locationId,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+
+                        BigDecimal onHandQty,
+                        BigDecimal reservedQty,
+                        BigDecimal blockedQty,
+                        BigDecimal availableQty,
+
+                        boolean sameAsProductionDestination,
+                        boolean transferRequired) {
+        }
+
+        public record StoreLinePlanningResponse(
+
+                        RequisitionLineResponse requisitionLine,
+
+                        List<StockOptionResponse> stockOptions,
+
+                        List<ReservationResponse> reservations,
+
+                        List<TransferResponse> transfers,
+
+                        List<IndentLineResponse> indentLines) {
+        }
+
+        public record StorePlanningResponse(
+
+                        RequisitionResponse requisition,
+
+                        List<StoreLinePlanningResponse> lines,
+
+                        List<IndentResponse> indents) {
         }
 }

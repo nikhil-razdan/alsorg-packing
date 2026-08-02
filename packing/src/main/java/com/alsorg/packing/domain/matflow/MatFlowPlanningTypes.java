@@ -90,16 +90,57 @@ public final class MatFlowPlanningTypes {
     public enum RequisitionStatus {
 
         DRAFT,
-
-        SUBMITTED,
-
-        PLANNED,
-
+        SUBMITTED_TO_STORE,
+        STORE_REVIEW_IN_PROGRESS,
+        PARTIALLY_RESERVED,
         SHORTAGE_PENDING,
-
+        READY_TO_ISSUE,
+        PARTIALLY_ISSUED,
+        ISSUED_TO_PRODUCTION,
+        PRODUCTION_STARTED,
+        PRODUCTION_COMPLETED,
+        CANCELLED,
+        /*
+         * Legacy values retained temporarily so existing database
+         * records continue to deserialize during migration.
+         */
+        SUBMITTED,
+        PLANNED,
         ISSUED,
+        COMPLETED
+    }
 
-        COMPLETED,
+    public enum RequisitionLineStatus {
+
+        PENDING_STORE_REVIEW,
+
+        RESERVED,
+
+        PARTIALLY_RESERVED,
+
+        SHORTAGE_IDENTIFIED,
+
+        INDENT_CREATED,
+
+        ORDERED,
+
+        QC_PENDING,
+
+        READY_TO_ISSUE,
+
+        PROCESSING_REQUIRED,
+
+        IN_PROCESSING,
+
+        PARTIALLY_ISSUED,
+
+        ISSUED_TO_PRODUCTION,
+
+        PARTIALLY_CONSUMED,
+
+        CONSUMED,
+
+        RETURNED,
 
         CANCELLED
     }

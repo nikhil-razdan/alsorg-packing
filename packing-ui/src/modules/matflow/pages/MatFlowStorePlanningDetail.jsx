@@ -75,11 +75,11 @@ const ELIGIBLE_SOURCE_TYPES =
         "EXTERNAL_PROCESSOR",
     ]);
 
-const PLANNABLE_STATUSES =
+const STORE_REVIEWABLE_STATUSES =
     new Set([
         "SUBMITTED",
-        "PLANNED",
-        "SHORTAGE_PENDING",
+        "SUBMITTED_TO_STORE",
+        "STORE_REVIEW_IN_PROGRESS",
     ]);
 
 const clean = (value) =>
@@ -359,6 +359,16 @@ export default function MatFlowStorePlanningDetail() {
         },
         [requisitionId]
     );
+
+    const canConfirmStoreReview =
+        Boolean(
+            requisition?.id
+        ) &&
+        STORE_REVIEWABLE_STATUSES.has(
+            normalize(
+                requisition?.status
+            )
+        );
 
     useEffect(() => {
         load();
@@ -911,20 +921,17 @@ export default function MatFlowStorePlanningDetail() {
                             <AutoFixHighOutlinedIcon />
                         }
                         onClick={
-                            executePlanning
+                            confirmStoreReview
                         }
                         disabled={
-                            planning ||
-                            !canPlan
+                            working ||
+                            !canConfirmStoreReview
                         }
                         sx={primaryBtnSx}
                     >
-                        {planning
-                            ? "Planning Materials..."
-                            : status ===
-                                "SUBMITTED"
-                                ? "Plan Requisition"
-                                : "Re-run Planning"}
+                        {working
+                            ? "Reserving Materials..."
+                            : "Confirm Store Review & Reserve"}
                     </Button>
                 </Box>
             </Card>
@@ -1777,5 +1784,5 @@ const emptySx = {
     placeItems: "center",
     color:
         "var(--mf-text-muted)",
-       fontSize: "11px",
+    fontSize: "11px",
 };

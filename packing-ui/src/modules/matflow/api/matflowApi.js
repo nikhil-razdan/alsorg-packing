@@ -675,12 +675,12 @@ export const matflowApi = {
 	},
 
 	/* =====================================================
-	 * STORE REVIEW
-	 * ===================================================== */
+ * STORE REQUISITION REVIEW
+ * ===================================================== */
 
 	listStoreQueue(params = {}) {
 		return API.get(
-			`${BASE}/store/requisitions/pending`,
+			`${BASE}/store/requisitions`,
 			{
 				params:
 					cleanParams(params),
@@ -689,8 +689,46 @@ export const matflowApi = {
 	},
 
 	getStoreReview(requisitionId) {
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
+			);
+		}
+
 		return API.get(
-			`${BASE}/store/requisitions/${requisitionId}`
+			`${BASE}/store/requisitions/${encodeURIComponent(
+				id
+			)}`
+		);
+	},
+
+	getStoreAvailability(
+		requisitionId
+	) {
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
+			);
+		}
+
+		return API.get(
+			`${BASE}/store/requisitions/${encodeURIComponent(
+				id
+			)}/availability`
 		);
 	},
 
@@ -698,18 +736,23 @@ export const matflowApi = {
 		requisitionId,
 		body
 	) {
-		return API.post(
-			`${BASE}/store/requisitions/${requisitionId}/review`,
-			body
-		);
-	},
+		const id =
+			String(
+				requisitionId ?? ""
+			).trim();
 
-	returnRequisitionToProduction(
-		requisitionId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/store/requisitions/${requisitionId}/return-to-production`,
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Requisition ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/store/requisitions/${encodeURIComponent(
+				id
+			)}/review`,
 			body
 		);
 	},
