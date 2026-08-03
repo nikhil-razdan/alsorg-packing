@@ -81,9 +81,118 @@ import {
     dialogTitleSx,
 } from "../matflowTheme";
 
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+
+import {
+    Box,
+    Button,
+    Card,
+    Chip,
+    CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    TextField,
+    Typography,
+} from "@mui/material";
+
+import ArrowBackIcon
+    from "@mui/icons-material/ArrowBack";
+
+import ApprovalOutlinedIcon
+    from "@mui/icons-material/ApprovalOutlined";
+
+import CallSplitOutlinedIcon
+    from "@mui/icons-material/CallSplitOutlined";
+
+import RefreshIcon
+    from "@mui/icons-material/Refresh";
+
+import SendOutlinedIcon
+    from "@mui/icons-material/SendOutlined";
+
+import UndoOutlinedIcon
+    from "@mui/icons-material/UndoOutlined";
+
+import PlaylistAddOutlinedIcon
+    from "@mui/icons-material/PlaylistAddOutlined";
+
+import {
+    useNavigate,
+    useParams,
+} from "react-router-dom";
+
+import {
+    useAuth,
+} from "../../../auth/AuthContext";
+
+import {
+    canAccessMatFlowScreen,
+    getMatFlowRole,
+    MATFLOW_ROLES,
+} from "../../../utils/matflowAccess";
+
+import {
+    matflowApi,
+    readMatFlowError,
+} from "../api/matflowApi";
+
+import MatFlowBomLineEditor
+    from "../components/MatFlowBomLineEditor";
+
+import MatFlowStatusChip
+    from "../components/MatFlowStatusChip";
+
+import {
+    detailBoxSx,
+    detailLabelSx,
+    detailValueSx,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogMessageSx,
+    dialogPaperSx,
+    dialogTitleSx,
+    errorBoxSx,
+    fieldSx,
+    heroBadgeSx,
+    heroSubSx,
+    heroSx,
+    heroTitleSx,
+    loadingSx,
+    pageSx,
+    panelSx,
+    primaryBtnSx,
+    secondaryBtnSx,
+} from "../matflowTheme";
+
+const normalizeStatus = (
+    value
+) =>
+    String(
+        value ?? ""
+    )
+        .trim()
+        .toUpperCase();
+
+const hasRowVersion = (
+    value
+) =>
+    value !== null &&
+    value !== undefined;
+
 export default function MatFlowBomDetail() {
-    const { bomId } = useParams();
-    const navigate = useNavigate();
+    const {
+        bomId,
+    } = useParams();
+
+    const navigate =
+        useNavigate();
 
     const {
         role,
@@ -119,187 +228,184 @@ export default function MatFlowBomDetail() {
         cleanRole
     );
 
-    const canOpenBomEditor =
+    const hasBomEditPermission =
         canAccessMatFlowScreen(
             "bom-edit",
             cleanRole
         ) ||
         isEngineeringRole;
 
-    const [bom, setBom] =
-        useState(null);
+    const hasProductionPermission =
+        canAccessMatFlowScreen(
+            "production",
+            cleanRole
+        ) ||
+        isProductionRole;
 
-    const [loading, setLoading] =
-        useState(true);
+    const [
+        bom,
+        setBom,
+    ] = useState(null);
 
-    const [working, setWorking] =
-        useState(false);
+    const [
+        loading,
+        setLoading,
+    ] = useState(true);
 
-    const [error, setError] =
-        useState("");
+    const [
+        working,
+        setWorking,
+    ] = useState(false);
 
-    const [actionDialog, setActionDialog] =
-        useState(null);
+    const [
+        error,
+        setError,
+    ] = useState("");
 
-    const [remarks, setRemarks] =
-        useState("");
+    const [
+        actionDialog,
+        setActionDialog,
+    ] = useState(null);
 
-    const workflow =
-        useMemo(() => {
-            switch (status) {
-                case "DRAFT":
-                case "RETURNED":
-                    return {
-                        department:
-                            "Engineering",
+    const [
+        remarks,
+        setRemarks,
+    ] = useState("");
 
-                        nextAction:
-                            lines.length > 0
-                                ? "Submit BOM to HOD"
-                                : "Add Material Lines",
-                    };
+    /*
+     * Load is declared before derived BOM values, but it does
+     * not read lines or status, so there is no initialization issue.
+     */
+    const load =
+        useCallback(
+            async () => {
+                if (!bomId) {
+                    setBom(null);
+                    setLoading(false);
 
-                case "SUBMITTED":
-                case "SUBMITTED_TO_HOD":
-                    return {
-                        department:
-                            "HOD / MatFlow Manager",
+                    setError(
+                        "Operational BOM ID is missing."
+                    );
 
-                        nextAction:
-                            "Approve or Return BOM",
-                    };
+                    return;
+                }
 
-                case "PRODUCTION_REVIEW_PENDING":
-                    return {
-                        department:
-                            "Production",
+                setLoading(true);
+                setError("");
 
-                        nextAction:
-                            "Review Manufacturing Requirements",
-                    };
+                try {
+                    const response =
+                        await matflowApi
+                            .getBom(
+                                bomId
+                            );
 
-                case "APPROVED":
-                    return {
-                        department:
-                            "Store and Production",
+                    setBom(
+                        response?.data ??
+                        null
+                    );
+                } catch (
+                requestError
+                ) {
+                    setBom(null);
 
-                        nextAction:
-                            "Raise Material Requisition",
-                    };
-
-                case "SUPERSEDED":
-                    return {
-                        department:
-                            "Engineering",
-
-                        nextAction:
-                            "Use Latest Effective Revision",
-                    };
-
-                default:
-                    return {
-                        department:
-                            "MatFlow",
-
-                        nextAction:
-                            "Review BOM Status",
-                    };
-            }
-        }, [
-            lines.length,
-            status,
-        ]);
-
-    const load = useCallback(async () => {
-        if (!bomId) {
-            setBom(null);
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        setError("");
-
-        try {
-            const response =
-                await matflowApi.getBom(
-                    bomId
-                );
-
-            setBom(
-                response?.data || null
-            );
-        } catch (requestError) {
-            setBom(null);
-
-            setError(
-                readMatFlowError(
-                    requestError,
-                    "Unable to load the operational BOM."
-                )
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, [bomId]);
+                    setError(
+                        readMatFlowError(
+                            requestError,
+                            "Unable to load the operational BOM."
+                        )
+                    );
+                } finally {
+                    setLoading(false);
+                }
+            },
+            [
+                bomId,
+            ]
+        );
 
     useEffect(() => {
         load();
     }, [load]);
 
+    /*
+     * These values must be declared before workflow and
+     * permission booleans that reference them.
+     */
     const lines =
-        useMemo(() => {
-            const candidates = [
-                bom?.lines,
-                bom?.bomLines,
-                bom?.items,
-            ];
+        useMemo(
+            () => {
+                const candidates = [
+                    bom?.lines,
+                    bom?.bomLines,
+                    bom?.items,
+                ];
 
-            return (
-                candidates.find(
-                    Array.isArray
-                ) || []
-            );
-        }, [bom]);
+                return (
+                    candidates.find(
+                        Array.isArray
+                    ) || []
+                );
+            },
+            [
+                bom,
+            ]
+        );
 
     const project =
-        useMemo(() => {
-            return (
-                bom?.projectDrawing ||
-                bom?.project ||
-                bom?.projectContext ||
-                {}
-            );
-        }, [bom]);
+        useMemo(
+            () => {
+                return (
+                    bom?.projectDrawing ||
+                    bom?.project ||
+                    bom?.projectContext ||
+                    {}
+                );
+            },
+            [
+                bom,
+            ]
+        );
 
     const status =
-        String(
-            bom?.status || ""
-        ).toUpperCase();
+        normalizeStatus(
+            bom?.status
+        );
 
     const isLatestRevision =
         bom?.latestRevision ===
         true;
 
-    const isEditableStatus =
-        [
-            "DRAFT",
-            "RETURNED",
-        ].includes(
-            status
+    const isEffectiveRevision =
+        bom?.effective ===
+        true;
+
+    const currentRowVersionAvailable =
+        hasRowVersion(
+            bom?.rowVersion
         );
 
+    const isEditableStatus = [
+        "DRAFT",
+        "RETURNED",
+    ].includes(
+        status
+    );
+
     const canEditCurrent =
+        hasBomEditPermission &&
         isEngineeringRole &&
         isLatestRevision &&
         isEditableStatus;
 
     const canSubmitCurrent =
         canEditCurrent &&
+        currentRowVersionAvailable &&
         lines.length > 0;
 
     const canHodApproveCurrent =
         isHodRole &&
+        currentRowVersionAvailable &&
         [
             "SUBMITTED",
             "SUBMITTED_TO_HOD",
@@ -312,6 +418,7 @@ export default function MatFlowBomDetail() {
 
     const canProductionApproveCurrent =
         isProductionRole &&
+        currentRowVersionAvailable &&
         status ===
         "PRODUCTION_REVIEW_PENDING";
 
@@ -320,179 +427,316 @@ export default function MatFlowBomDetail() {
 
     const canCreateRevision =
         isEngineeringRole &&
+        currentRowVersionAvailable &&
         status ===
         "APPROVED" &&
-        bom?.effective ===
-        true &&
+        isEffectiveRevision &&
         isLatestRevision;
 
     const canRaiseRequisition =
-        isProductionRole &&
+        hasProductionPermission &&
         status ===
         "APPROVED" &&
-        bom?.effective ===
-        true &&
+        isEffectiveRevision &&
         isLatestRevision;
 
-    const openAction = (action) => {
-        setActionDialog(action);
+    /*
+     * workflow is now declared after lines, status and
+     * isEffectiveRevision, fixing:
+     *
+     * Cannot access '<minified symbol>' before initialization
+     */
+    const workflow =
+        useMemo(
+            () => {
+                switch (status) {
+                    case "DRAFT":
+                        return {
+                            department:
+                                "Engineering",
+
+                            nextAction:
+                                lines.length > 0
+                                    ? "Submit BOM to HOD"
+                                    : "Add Material Lines",
+                        };
+
+                    case "RETURNED":
+                        return {
+                            department:
+                                "Engineering",
+
+                            nextAction:
+                                "Correct BOM and Resubmit",
+                        };
+
+                    case "SUBMITTED":
+                    case "SUBMITTED_TO_HOD":
+                        return {
+                            department:
+                                "HOD / MatFlow Manager",
+
+                            nextAction:
+                                "Approve or Return BOM",
+                        };
+
+                    case "PRODUCTION_REVIEW_PENDING":
+                        return {
+                            department:
+                                "Production",
+
+                            nextAction:
+                                "Review Manufacturing Requirements",
+                        };
+
+                    case "APPROVED":
+                        return {
+                            department:
+                                isEffectiveRevision
+                                    ? "Store / Production"
+                                    : "MatFlow Manager",
+
+                            nextAction:
+                                isEffectiveRevision
+                                    ? "Raise Material Requisition"
+                                    : "Resolve Effective Revision",
+                        };
+
+                    case "SUPERSEDED":
+                        return {
+                            department:
+                                "Engineering",
+
+                            nextAction:
+                                "Use Latest Effective Revision",
+                        };
+
+                    default:
+                        return {
+                            department:
+                                "MatFlow",
+
+                            nextAction:
+                                "Review BOM Status",
+                        };
+                }
+            },
+            [
+                isEffectiveRevision,
+                lines.length,
+                status,
+            ]
+        );
+
+    const openAction = (
+        action
+    ) => {
+        if (!bom?.id) {
+            setError(
+                "Operational BOM data is unavailable."
+            );
+
+            return;
+        }
+
+        if (
+            !hasRowVersion(
+                bom.rowVersion
+            )
+        ) {
+            setError(
+                "BOM row version is missing. Refresh the page and retry."
+            );
+
+            return;
+        }
+
+        setActionDialog(
+            action
+        );
+
         setRemarks("");
         setError("");
     };
 
-    const closeAction = () => {
-        if (working) {
-            return;
-        }
+    const closeAction =
+        () => {
+            if (working) {
+                return;
+            }
 
-        setActionDialog(null);
-        setRemarks("");
-    };
+            setActionDialog(null);
+            setRemarks("");
+        };
 
-    const executeAction = async () => {
-        if (!bom?.id || !actionDialog) {
-            return;
-        }
+    const executeAction =
+        async () => {
+            if (
+                !bom?.id ||
+                !actionDialog
+            ) {
+                return;
+            }
 
-        const cleanedRemarks =
-            String(
-                remarks || ""
-            ).trim();
+            if (
+                !hasRowVersion(
+                    bom.rowVersion
+                )
+            ) {
+                setError(
+                    "BOM row version is missing. Refresh the page and retry."
+                );
 
-        const returnAction =
-            [
+                return;
+            }
+
+            const cleanedRemarks =
+                String(
+                    remarks ??
+                    ""
+                ).trim();
+
+            const returnAction = [
                 "HOD_RETURN",
                 "PRODUCTION_RETURN",
             ].includes(
                 actionDialog
             );
 
-        if (
-            returnAction &&
-            !cleanedRemarks
-        ) {
-            setError(
-                "Return remarks are required."
-            );
-
-            return;
-        }
-
-        const body = {
-            rowVersion:
-                bom.rowVersion,
-
-            remarks:
-                cleanedRemarks || null,
-        };
-
-        setWorking(true);
-        setError("");
-
-        try {
-            let response;
-
-            switch (actionDialog) {
-                case "SUBMIT":
-                    response =
-                        await matflowApi
-                            .submitBom(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                case "HOD_APPROVE":
-                    response =
-                        await matflowApi
-                            .approveBom(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                case "HOD_RETURN":
-                    response =
-                        await matflowApi
-                            .returnBom(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                case "PRODUCTION_APPROVE":
-                    response =
-                        await matflowApi
-                            .productionApproveBom(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                case "PRODUCTION_RETURN":
-                    response =
-                        await matflowApi
-                            .productionReturnBom(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                case "REVISION":
-                    response =
-                        await matflowApi
-                            .createBomRevision(
-                                bom.id,
-                                body
-                            );
-                    break;
-
-                default:
-                    throw new Error(
-                        "Unsupported BOM action."
-                    );
-            }
-
-            const updated =
-                response?.data;
-
-            const completedAction =
-                actionDialog;
-
-            setActionDialog(null);
-            setRemarks("");
-
             if (
-                completedAction ===
-                "REVISION" &&
-                updated?.id
+                returnAction &&
+                !cleanedRemarks
             ) {
-                navigate(
-                    `/matflow/boms/${updated.id}`,
-                    {
-                        replace: true,
-                    }
+                setError(
+                    "Return remarks are required."
                 );
 
                 return;
             }
 
-            if (updated?.id) {
-                setBom(updated);
-            } else {
-                await load();
+            const body = {
+                rowVersion:
+                    bom.rowVersion,
+
+                remarks:
+                    cleanedRemarks ||
+                    null,
+            };
+
+            setWorking(true);
+            setError("");
+
+            try {
+                let response;
+
+                switch (
+                actionDialog
+                ) {
+                    case "SUBMIT":
+                        response =
+                            await matflowApi
+                                .submitBom(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    case "HOD_APPROVE":
+                        response =
+                            await matflowApi
+                                .approveBom(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    case "HOD_RETURN":
+                        response =
+                            await matflowApi
+                                .returnBom(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    case "PRODUCTION_APPROVE":
+                        response =
+                            await matflowApi
+                                .productionApproveBom(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    case "PRODUCTION_RETURN":
+                        response =
+                            await matflowApi
+                                .productionReturnBom(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    case "REVISION":
+                        response =
+                            await matflowApi
+                                .createBomRevision(
+                                    bom.id,
+                                    body
+                                );
+                        break;
+
+                    default:
+                        throw new Error(
+                            "Unsupported BOM action."
+                        );
+                }
+
+                const updated =
+                    response?.data ??
+                    null;
+
+                const completedAction =
+                    actionDialog;
+
+                setActionDialog(null);
+                setRemarks("");
+
+                if (
+                    completedAction ===
+                    "REVISION" &&
+                    updated?.id
+                ) {
+                    navigate(
+                        `/matflow/boms/${updated.id}`,
+                        {
+                            replace: true,
+                        }
+                    );
+
+                    return;
+                }
+
+                if (updated?.id) {
+                    setBom(
+                        updated
+                    );
+                } else {
+                    await load();
+                }
+            } catch (
+            requestError
+            ) {
+                setError(
+                    readMatFlowError(
+                        requestError,
+                        "Unable to complete the BOM action."
+                    )
+                );
+            } finally {
+                setWorking(false);
             }
-        } catch (requestError) {
-            setError(
-                readMatFlowError(
-                    requestError,
-                    "Unable to complete the BOM action."
-                )
-            );
-        } finally {
-            setWorking(false);
-        }
-    };
+        };
 
     if (loading) {
         return (
@@ -514,15 +758,18 @@ export default function MatFlowBomDetail() {
 
                         <Typography sx={heroTitleSx}>
                             {bom?.bomNumber ||
+                                bom?.bomNo ||
                                 "Operational BOM"}
                         </Typography>
 
                         <Typography sx={heroSubSx}>
                             Revision{" "}
-                            {bom?.revisionNo ?? "-"}
+                            {bom?.revisionNo ??
+                                "-"}
                             {" · "}
                             {project.projectCode ||
                                 bom?.projectCode ||
+                                bom?.pdNo ||
                                 "No Project"}
                             {" · "}
                             {project.drawingNo ||
@@ -552,6 +799,7 @@ export default function MatFlowBomDetail() {
                                     "/matflow/boms"
                                 )
                             }
+                            disabled={working}
                             sx={secondaryBtnSx}
                         >
                             Back
@@ -566,7 +814,13 @@ export default function MatFlowBomDetail() {
                 </Box>
             )}
 
-            {bom && (
+            {!bom ? (
+                <Card sx={panelSx}>
+                    <Typography sx={missingBomSx}>
+                        Operational BOM was not found.
+                    </Typography>
+                </Card>
+            ) : (
                 <>
                     <Card sx={panelSx}>
                         <Box sx={summaryGridSx}>
@@ -574,7 +828,9 @@ export default function MatFlowBomDetail() {
                                 label="Status"
                                 value={
                                     <MatFlowStatusChip
-                                        status={bom.status}
+                                        status={
+                                            bom.status
+                                        }
                                     />
                                 }
                             />
@@ -584,7 +840,7 @@ export default function MatFlowBomDetail() {
                                 value={
                                     <MatFlowStatusChip
                                         status={
-                                            bom.effective
+                                            isEffectiveRevision
                                                 ? "ACTIVE"
                                                 : "INACTIVE"
                                         }
@@ -595,7 +851,7 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Latest Revision"
                                 value={
-                                    bom.latestRevision
+                                    isLatestRevision
                                         ? "Yes"
                                         : "No"
                                 }
@@ -604,7 +860,9 @@ export default function MatFlowBomDetail() {
                             <Detail
                                 label="Plant"
                                 value={
+                                    project.owningPlantCode ||
                                     project.plantCode ||
+                                    bom.owningPlantCode ||
                                     bom.plantCode
                                 }
                             />
@@ -627,12 +885,16 @@ export default function MatFlowBomDetail() {
 
                             <Detail
                                 label="Prepared By"
-                                value={bom.createdBy}
+                                value={
+                                    bom.createdBy
+                                }
                             />
 
                             <Detail
                                 label="Row Version"
-                                value={bom.rowVersion}
+                                value={
+                                    bom.rowVersion
+                                }
                             />
 
                             <Detail
@@ -664,7 +926,7 @@ export default function MatFlowBomDetail() {
                                     disabled={working}
                                     sx={primaryBtnSx}
                                 >
-                                    Submit BOM
+                                    Submit BOM to HOD
                                 </Button>
                             )}
 
@@ -681,7 +943,7 @@ export default function MatFlowBomDetail() {
                                     disabled={working}
                                     sx={primaryBtnSx}
                                 >
-                                    HOD Approve & Send to Production
+                                    HOD Approve &amp; Send to Production
                                 </Button>
                             )}
 
@@ -715,7 +977,7 @@ export default function MatFlowBomDetail() {
                                     disabled={working}
                                     sx={primaryBtnSx}
                                 >
-                                    Production Review & Approve
+                                    Production Review &amp; Approve
                                 </Button>
                             )}
 
@@ -760,7 +1022,9 @@ export default function MatFlowBomDetail() {
                                     }
                                     onClick={() =>
                                         navigate(
-                                            `/matflow/requisitions/new?bomId=${bom.id}`
+                                            `/matflow/requisitions/new?bomId=${encodeURIComponent(
+                                                bom.id
+                                            )}`
                                         )
                                     }
                                     disabled={working}
@@ -769,6 +1033,17 @@ export default function MatFlowBomDetail() {
                                     Raise Production Requisition
                                 </Button>
                             )}
+
+                            {!canEditCurrent &&
+                                !canHodApproveCurrent &&
+                                !canProductionApproveCurrent &&
+                                !canCreateRevision &&
+                                !canRaiseRequisition && (
+                                    <Typography sx={noActionSx}>
+                                        No BOM action is available for your role
+                                        in the current workflow status.
+                                    </Typography>
+                                )}
                         </Box>
                     </Card>
 
@@ -785,8 +1060,14 @@ export default function MatFlowBomDetail() {
             )}
 
             <Dialog
-                open={Boolean(actionDialog)}
-                onClose={closeAction}
+                open={
+                    Boolean(
+                        actionDialog
+                    )
+                }
+                onClose={
+                    closeAction
+                }
                 fullWidth
                 maxWidth="sm"
                 PaperProps={{
@@ -836,7 +1117,9 @@ export default function MatFlowBomDetail() {
 
                 <DialogActions sx={dialogActionsSx}>
                     <Button
-                        onClick={closeAction}
+                        onClick={
+                            closeAction
+                        }
                         disabled={working}
                         sx={secondaryBtnSx}
                     >
@@ -844,16 +1127,120 @@ export default function MatFlowBomDetail() {
                     </Button>
 
                     <Button
-                        onClick={executeAction}
-                        disabled={working}
+                        onClick={
+                            executeAction
+                        }
+                        disabled={
+                            working ||
+                            !actionDialog
+                        }
                         sx={primaryBtnSx}
                     >
                         {working
                             ? "Working..."
-                            : "Confirm"}
+                            : actionConfirmLabel(
+                                actionDialog
+                            )}
                     </Button>
                 </DialogActions>
             </Dialog>
+        </Box>
+    );
+}
+
+function actionTitle(
+    action
+) {
+    switch (action) {
+        case "SUBMIT":
+            return "Submit Operational BOM";
+
+        case "HOD_APPROVE":
+            return "HOD Approval";
+
+        case "HOD_RETURN":
+            return "Return BOM to Engineering";
+
+        case "PRODUCTION_APPROVE":
+            return "Production Review and Approval";
+
+        case "PRODUCTION_RETURN":
+            return "Return BOM from Production Review";
+
+        case "REVISION":
+            return "Create New BOM Revision";
+
+        default:
+            return "Confirm BOM Action";
+    }
+}
+
+function actionMessage(
+    action
+) {
+    switch (action) {
+        case "SUBMIT":
+            return "Engineering will submit this operational BOM to the HOD for review.";
+
+        case "HOD_APPROVE":
+            return "HOD approval will move this BOM to Production Review. It will not become effective until Production approves it.";
+
+        case "HOD_RETURN":
+            return "The BOM will be returned to Engineering for correction. Return remarks are mandatory.";
+
+        case "PRODUCTION_APPROVE":
+            return "Production confirms that this BOM is suitable for manufacturing. This revision will become the effective operational BOM.";
+
+        case "PRODUCTION_RETURN":
+            return "Production will return the BOM to Engineering for correction. Return remarks are mandatory.";
+
+        case "REVISION":
+            return "A new draft revision will be created while the current approved revision remains effective.";
+
+        default:
+            return "";
+    }
+}
+
+function actionConfirmLabel(
+    action
+) {
+    switch (action) {
+        case "SUBMIT":
+            return "Submit BOM";
+
+        case "HOD_APPROVE":
+            return "Approve & Send";
+
+        case "HOD_RETURN":
+        case "PRODUCTION_RETURN":
+            return "Return BOM";
+
+        case "PRODUCTION_APPROVE":
+            return "Approve BOM";
+
+        case "REVISION":
+            return "Create Revision";
+
+        default:
+            return "Confirm";
+    }
+}
+
+function Detail({
+    label,
+    value,
+}) {
+    return (
+        <Box sx={detailBoxSx}>
+            <Typography sx={detailLabelSx}>
+                {label}
+            </Typography>
+
+            <Box sx={detailValueSx}>
+                {value ??
+                    "-"}
+            </Box>
         </Box>
     );
 }
@@ -912,22 +1299,22 @@ function actionMessage(
     }
 }
 
-function Detail({
-    label,
-    value,
-}) {
-    return (
-        <Box sx={detailBoxSx}>
-            <Typography sx={detailLabelSx}>
-                {label}
-            </Typography>
+const noActionSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "9.5px",
+    fontWeight: 700,
+};
 
-            <Box sx={detailValueSx}>
-                {value ?? "-"}
-            </Box>
-        </Box>
-    );
-}
+const missingBomSx = {
+    minHeight: "140px",
+    display: "grid",
+    placeItems: "center",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "11px",
+    fontWeight: 750,
+};
 
 const headerRowSx = {
     display: "flex",

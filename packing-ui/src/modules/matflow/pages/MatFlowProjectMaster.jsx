@@ -12,6 +12,7 @@ import {
     Chip,
     CircularProgress,
     Dialog,
+    Collapse,
     DialogActions,
     DialogContent,
     DialogTitle,
@@ -28,6 +29,12 @@ import AddIcon
 
 import CloseIcon
     from "@mui/icons-material/Close";
+
+import ExpandMoreOutlinedIcon
+    from "@mui/icons-material/ExpandMoreOutlined";
+
+import ExpandLessOutlinedIcon
+    from "@mui/icons-material/ExpandLessOutlined";
 
 import EditOutlinedIcon
     from "@mui/icons-material/EditOutlined";
@@ -408,6 +415,14 @@ export default function MatFlowProjectMaster() {
         rows,
         setRows,
     ] = useState([]);
+
+    /*
+     * An empty object means every project starts collapsed.
+     */
+    const [
+        expandedProjects,
+        setExpandedProjects,
+    ] = useState({});
 
     const [
         loading,
@@ -797,9 +812,7 @@ export default function MatFlowProjectMaster() {
             const validationError =
                 validate();
 
-            if (
-                validationError
-            ) {
+            if (validationError) {
                 setError(
                     validationError
                 );
@@ -886,9 +899,7 @@ export default function MatFlowProjectMaster() {
                             );
 
                 if (
-                    !response
-                        ?.data
-                        ?.id
+                    !response?.data?.id
                 ) {
                     throw new Error(
                         "Product/Drawing ID was not returned."
@@ -927,6 +938,31 @@ export default function MatFlowProjectMaster() {
                 setSaving(false);
             }
         };
+
+    const toggleProjectProducts = (
+        projectKey
+    ) => {
+        const key =
+            String(
+                projectKey ??
+                ""
+            );
+
+        if (!key) {
+            return;
+        }
+
+        setExpandedProjects(
+            (current) => ({
+                ...current,
+
+                [key]:
+                    !Boolean(
+                        current[key]
+                    ),
+            })
+        );
+    };
 
     const projectFieldsLocked =
         dialogMode !==
@@ -1116,25 +1152,54 @@ export default function MatFlowProjectMaster() {
                         No projects or product drawings were found.
                     </Box>
                 ) : (
+                    /*
+                     * Only one projectListSx wrapper is used.
+                     * The duplicated wrapper from the previous code
+                     * has been removed.
+                     */
                     <Box sx={projectListSx}>
                         {rows.map(
                             (
                                 project,
                                 projectIndex
                             ) => {
+                                const projectProducts =
+                                    Array.isArray(
+                                        project?.products
+                                    )
+                                        ? project.products
+                                        : [];
+
                                 const activeProducts =
-                                    project
-                                        .products
-                                        .filter(
-                                            (product) =>
-                                                product.active !==
-                                                false
-                                        ).length;
+                                    projectProducts.filter(
+                                        (product) =>
+                                            product?.active !==
+                                            false
+                                    ).length;
+
+                                const projectKey =
+                                    String(
+                                        project?.key ??
+                                        `${project?.plantCode ?? "PLANT"}::${project?.projectCode ?? projectIndex}`
+                                    );
+
+                                const expanded =
+                                    Boolean(
+                                        expandedProjects[
+                                        projectKey
+                                        ]
+                                    );
+
+                                const productSectionId =
+                                    `project-products-${projectKey.replace(
+                                        /[^a-zA-Z0-9_-]/g,
+                                        "-"
+                                    )}`;
 
                                 return (
                                     <Box
                                         key={
-                                            project.key
+                                            projectKey
                                         }
                                         sx={projectGroupSx}
                                     >
@@ -1210,7 +1275,7 @@ export default function MatFlowProjectMaster() {
                                                                 <Inventory2OutlinedIcon />
                                                             }
                                                             label="Active Products"
-                                                            value={`${activeProducts} of ${project.products.length}`}
+                                                            value={`${activeProducts} of ${projectProducts.length}`}
                                                         />
                                                     </Box>
                                                 </Box>
@@ -1218,13 +1283,41 @@ export default function MatFlowProjectMaster() {
 
                                             <Box sx={projectActionsSx}>
                                                 <Chip
-                                                    label={`${project.products.length} Product${project.products.length ===
+                                                    label={`${projectProducts.length} Product${projectProducts.length ===
                                                         1
                                                         ? ""
                                                         : "s"
                                                         }`}
                                                     sx={productCountChipSx}
                                                 />
+
+                                                <Button
+                                                    endIcon={
+                                                        expanded
+                                                            ? (
+                                                                <ExpandLessOutlinedIcon />
+                                                            )
+                                                            : (
+                                                                <ExpandMoreOutlinedIcon />
+                                                            )
+                                                    }
+                                                    onClick={() =>
+                                                        toggleProjectProducts(
+                                                            projectKey
+                                                        )
+                                                    }
+                                                    aria-expanded={
+                                                        expanded
+                                                    }
+                                                    aria-controls={
+                                                        productSectionId
+                                                    }
+                                                    sx={projectCollapseBtnSx}
+                                                >
+                                                    {expanded
+                                                        ? "Hide Products"
+                                                        : "View Products"}
+                                                </Button>
 
                                                 {canManage && (
                                                     <Button
@@ -1244,152 +1337,172 @@ export default function MatFlowProjectMaster() {
                                             </Box>
                                         </Box>
 
-                                        <Box sx={productSectionHeadingSx}>
-                                            <Box>
-                                                <Typography sx={productSectionTitleSx}>
-                                                    Product and Drawing Register
-                                                </Typography>
+                                        <Collapse
+                                            in={expanded}
+                                            timeout="auto"
+                                            unmountOnExit
+                                        >
+                                            <Box
+                                                id={
+                                                    productSectionId
+                                                }
+                                            >
+                                                <Box sx={productSectionHeadingSx}>
+                                                    <Box>
+                                                        <Typography sx={productSectionTitleSx}>
+                                                            Product and Drawing Register
+                                                        </Typography>
 
-                                                <Typography sx={productSectionSubSx}>
-                                                    Separate manufacturing
-                                                    context and BOM lifecycle
-                                                    for every project product.
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-
-                                        <Box sx={productTableShellSx}>
-                                            <Box sx={productHeaderSx}>
-                                                <Box sx={tableCellSx}>
-                                                    Product
+                                                        <Typography sx={productSectionSubSx}>
+                                                            Separate manufacturing
+                                                            context and BOM lifecycle
+                                                            for every project product.
+                                                        </Typography>
+                                                    </Box>
                                                 </Box>
 
-                                                <Box sx={tableCellSx}>
-                                                    Drawing
-                                                </Box>
-
-                                                <Box sx={tableCellSx}>
-                                                    Revision
-                                                </Box>
-
-                                                <Box sx={tableCellSx}>
-                                                    Status
-                                                </Box>
-
-                                                <Box sx={tableCellSx}>
-                                                    Version
-                                                </Box>
-
-                                                <Box sx={tableCellSx}>
-                                                    Actions
-                                                </Box>
-                                            </Box>
-
-                                            {project.products.map(
-                                                (
-                                                    product,
-                                                    productIndex
-                                                ) => (
-                                                    <Box
-                                                        key={
-                                                            product.id
-                                                        }
-                                                        sx={productRowSx}
-                                                    >
+                                                <Box sx={productTableShellSx}>
+                                                    <Box sx={productHeaderSx}>
                                                         <Box sx={tableCellSx}>
-                                                            <Box sx={productIdentityCellSx}>
-                                                                <Box sx={productSequenceSx}>
-                                                                    {productIndex +
-                                                                        1}
-                                                                </Box>
-
-                                                                <Box sx={{ minWidth: 0 }}>
-                                                                    <Typography sx={productNameCellSx}>
-                                                                        {product.productName ||
-                                                                            "-"}
-                                                                    </Typography>
-
-                                                                    <Typography sx={subTextSx}>
-                                                                        {product.remarks ||
-                                                                            "No product remarks"}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </Box>
+                                                            Product
                                                         </Box>
 
                                                         <Box sx={tableCellSx}>
-                                                            <Typography sx={drawingCodeSx}>
-                                                                {product.drawingNo ||
-                                                                    "-"}
-                                                            </Typography>
+                                                            Drawing
                                                         </Box>
 
                                                         <Box sx={tableCellSx}>
-                                                            <Chip
-                                                                label={`REV ${product.drawingRevision || "0"}`}
-                                                                size="small"
-                                                                sx={revisionChipSx}
-                                                            />
+                                                            Revision
                                                         </Box>
 
                                                         <Box sx={tableCellSx}>
-                                                            <Chip
-                                                                label={
-                                                                    product.active ===
-                                                                        false
-                                                                        ? "Inactive"
-                                                                        : "Active"
-                                                                }
-                                                                size="small"
-                                                                sx={
-                                                                    product.active ===
-                                                                        false
-                                                                        ? inactiveChipSx
-                                                                        : activeChipSx
-                                                                }
-                                                            />
+                                                            Status
                                                         </Box>
 
                                                         <Box sx={tableCellSx}>
-                                                            {product.rowVersion ??
-                                                                "-"}
+                                                            Version
                                                         </Box>
 
-                                                        <Box sx={actionCellSx}>
-                                                            <Button
-                                                                startIcon={
-                                                                    <VisibilityOutlinedIcon />
-                                                                }
-                                                                onClick={() =>
-                                                                    navigate(
-                                                                        `/matflow/projects/${product.id}`
-                                                                    )
-                                                                }
-                                                                sx={secondaryBtnSx}
-                                                            >
-                                                                Track
-                                                            </Button>
-
-                                                            {canManage && (
-                                                                <Button
-                                                                    startIcon={
-                                                                        <EditOutlinedIcon />
-                                                                    }
-                                                                    onClick={() =>
-                                                                        openEditProduct(
-                                                                            product
-                                                                        )
-                                                                    }
-                                                                    sx={secondaryBtnSx}
-                                                                >
-                                                                    Edit
-                                                                </Button>
-                                                            )}
+                                                        <Box sx={tableCellSx}>
+                                                            Actions
                                                         </Box>
                                                     </Box>
-                                                )
-                                            )}
-                                        </Box>
+
+                                                    {projectProducts.length ===
+                                                        0 ? (
+                                                        <Box sx={emptyProductSx}>
+                                                            No Product/Drawing records
+                                                            are available for this project.
+                                                        </Box>
+                                                    ) : (
+                                                        projectProducts.map(
+                                                            (
+                                                                product,
+                                                                productIndex
+                                                            ) => (
+                                                                <Box
+                                                                    key={
+                                                                        product.id
+                                                                    }
+                                                                    sx={productRowSx}
+                                                                >
+                                                                    <Box sx={tableCellSx}>
+                                                                        <Box sx={productIdentityCellSx}>
+                                                                            <Box sx={productSequenceSx}>
+                                                                                {productIndex +
+                                                                                    1}
+                                                                            </Box>
+
+                                                                            <Box sx={{ minWidth: 0 }}>
+                                                                                <Typography sx={productNameCellSx}>
+                                                                                    {product.productName ||
+                                                                                        "-"}
+                                                                                </Typography>
+
+                                                                                <Typography sx={subTextSx}>
+                                                                                    {product.remarks ||
+                                                                                        "No product remarks"}
+                                                                                </Typography>
+                                                                            </Box>
+                                                                        </Box>
+                                                                    </Box>
+
+                                                                    <Box sx={tableCellSx}>
+                                                                        <Typography sx={drawingCodeSx}>
+                                                                            {product.drawingNo ||
+                                                                                "-"}
+                                                                        </Typography>
+                                                                    </Box>
+
+                                                                    <Box sx={tableCellSx}>
+                                                                        <Chip
+                                                                            label={`REV ${product.drawingRevision || "0"}`}
+                                                                            size="small"
+                                                                            sx={revisionChipSx}
+                                                                        />
+                                                                    </Box>
+
+                                                                    <Box sx={tableCellSx}>
+                                                                        <Chip
+                                                                            label={
+                                                                                product.active ===
+                                                                                    false
+                                                                                    ? "Inactive"
+                                                                                    : "Active"
+                                                                            }
+                                                                            size="small"
+                                                                            sx={
+                                                                                product.active ===
+                                                                                    false
+                                                                                    ? inactiveChipSx
+                                                                                    : activeChipSx
+                                                                            }
+                                                                        />
+                                                                    </Box>
+
+                                                                    <Box sx={tableCellSx}>
+                                                                        {product.rowVersion ??
+                                                                            "-"}
+                                                                    </Box>
+
+                                                                    <Box sx={actionCellSx}>
+                                                                        <Button
+                                                                            startIcon={
+                                                                                <VisibilityOutlinedIcon />
+                                                                            }
+                                                                            onClick={() =>
+                                                                                navigate(
+                                                                                    `/matflow/projects/${product.id}`
+                                                                                )
+                                                                            }
+                                                                            sx={secondaryBtnSx}
+                                                                        >
+                                                                            Track
+                                                                        </Button>
+
+                                                                        {canManage && (
+                                                                            <Button
+                                                                                startIcon={
+                                                                                    <EditOutlinedIcon />
+                                                                                }
+                                                                                onClick={() =>
+                                                                                    openEditProduct(
+                                                                                        product
+                                                                                    )
+                                                                                }
+                                                                                sx={secondaryBtnSx}
+                                                                            >
+                                                                                Edit
+                                                                            </Button>
+                                                                        )}
+                                                                    </Box>
+                                                                </Box>
+                                                            )
+                                                        )
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        </Collapse>
                                     </Box>
                                 );
                             }
@@ -2111,4 +2224,45 @@ const formGridSx = {
         gridTemplateColumns:
             "1fr",
     },
+};
+
+const projectCollapseBtnSx = {
+    minHeight: "34px",
+    px: "12px",
+    borderRadius: "9px",
+    textTransform: "none",
+    color: "#7c3aed",
+    background:
+        "rgba(124,58,237,.07)",
+    border:
+        "1px solid rgba(124,58,237,.20)",
+    fontSize: "9px",
+    fontWeight: 900,
+
+    "&:hover": {
+        background:
+            "rgba(124,58,237,.13)",
+        borderColor:
+            "rgba(124,58,237,.34)",
+    },
+
+    "& .MuiButton-endIcon": {
+        ml: "5px",
+    },
+
+    "& svg": {
+        fontSize: "17px",
+    },
+};
+
+const emptyProductSx = {
+    minHeight: "90px",
+    display: "grid",
+    placeItems: "center",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "9.5px",
+    fontWeight: 700,
+    borderTop:
+        "1px solid var(--mf-border)",
 };
