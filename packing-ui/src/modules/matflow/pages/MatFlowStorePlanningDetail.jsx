@@ -1096,29 +1096,8 @@ export default function MatFlowStorePlanningDetail() {
                     ),
                 ]);
 
-                const planningData =
-                    planningResponse?.data ??
-                    null;
-
-                const availabilityRows =
-                    asArray(
-                        availabilityResponse?.data
-                    );
-
-                setSnapshot(
-                    planningData
-                );
-
-                setAvailability(
-                    availabilityRows
-                );
-
                 /*
-                 * Create one editable Store-review state entry
-                 * for every requisition material line.
-                 *
-                 * Existing user-entered values are retained when
-                 * Refresh is used before review confirmation.
+                 * Declare each response value only once.
                  */
                 const planningData =
                     planningResponse?.data ??
@@ -1136,16 +1115,34 @@ export default function MatFlowStorePlanningDetail() {
                             ?.lines
                     );
 
+                /*
+                 * Fast lookup of the persisted requisition line.
+                 *
+                 * This is used to restore the saved Store decision
+                 * from reservedQty and shortageQty after refresh.
+                 */
                 const lineById =
                     new Map(
-                        requisitionLines.map(
-                            (line) => [
-                                String(line.id),
-                                line,
-                            ]
-                        )
+                        requisitionLines
+                            .filter(
+                                (line) =>
+                                    Boolean(
+                                        line?.id
+                                    )
+                            )
+                            .map(
+                                (line) => [
+                                    String(
+                                        line.id
+                                    ),
+                                    line,
+                                ]
+                            )
                     );
 
+                /*
+                 * Update the API-backed state once only.
+                 */
                 setSnapshot(
                     planningData
                 );
@@ -1154,16 +1151,23 @@ export default function MatFlowStorePlanningDetail() {
                     availabilityRows
                 );
 
+                /*
+                 * Build one frontend review-state entry for every
+                 * requisition line.
+                 *
+                 * Requisition lines are used as the primary source so
+                 * a material still receives a Store decision entry even
+                 * when the availability endpoint returns no stock options.
+                 */
                 setReviewByLine(
                     (current) => {
                         const next = {};
 
-                        availabilityRows.forEach(
-                            (entry) => {
+                        requisitionLines.forEach(
+                            (line) => {
                                 const lineId =
                                     String(
-                                        entry
-                                            ?.requisitionLineId ??
+                                        line?.id ??
                                         ""
                                     );
 
@@ -1172,29 +1176,38 @@ export default function MatFlowStorePlanningDetail() {
                                 }
 
                                 const previous =
-                                    current[lineId] ??
-                                    {};
-
-                                const persistedLine =
-                                    lineById.get(
-                                        lineId
-                                    );
+                                    current[
+                                    lineId
+                                    ] ?? {};
 
                                 const persistedDecision =
                                     deriveStoreDecision(
-                                        persistedLine
+                                        line
+                                    );
+
+                                const availabilityEntry =
+                                    availabilityRows.find(
+                                        (entry) =>
+                                            String(
+                                                entry
+                                                    ?.requisitionLineId ??
+                                                ""
+                                            ) ===
+                                            lineId
                                     );
 
                                 const allocationQuantities =
                                     {};
 
                                 asArray(
-                                    entry?.stockOptions
+                                    availabilityEntry
+                                        ?.stockOptions
                                 ).forEach(
                                     (option) => {
                                         const locationId =
                                             String(
-                                                option?.locationId ??
+                                                option
+                                                    ?.locationId ??
                                                 ""
                                             );
 
@@ -1213,18 +1226,34 @@ export default function MatFlowStorePlanningDetail() {
                                     }
                                 );
 
+                                const previousDecision =
+                                    String(
+                                        previous
+                                            .decision ??
+                                        ""
+                                    )
+                                        .trim()
+                                        .toUpperCase();
+
                                 next[lineId] = {
+                                    /*
+                                     * Preserve an unsaved decision while the user
+                                     * refreshes the review screen. Otherwise,
+                                     * restore the persisted decision based on the
+                                     * reservation and shortage quantities.
+                                     */
                                     decision:
-                                        previous.decision &&
-                                            previous.decision !==
+                                        previousDecision &&
+                                            previousDecision !==
                                             "UNDECIDED"
-                                            ? previous.decision
+                                            ? previousDecision
                                             : persistedDecision,
 
                                     allocationQuantities,
 
                                     remarks:
-                                        previous.remarks ??
+                                        previous
+                                            .remarks ??
                                         "",
                                 };
                             }
