@@ -45,6 +45,7 @@ import { useAuth }
 import {
     canAccessMatFlowScreen,
     getMatFlowRole,
+    MATFLOW_ROLES,
 } from "../../../utils/matflowAccess";
 
 import {
@@ -84,22 +85,46 @@ export default function MatFlowBomDetail() {
     const { bomId } = useParams();
     const navigate = useNavigate();
 
-    const { role } = useAuth();
+    const {
+        role,
+        user,
+    } = useAuth();
 
     const cleanRole =
-        getMatFlowRole(role);
+        getMatFlowRole(
+            role ||
+            user?.role
+        );
 
-    const canEdit =
+    const isEngineeringRole = [
+        MATFLOW_ROLES.ADMIN,
+        MATFLOW_ROLES.MANAGER,
+        MATFLOW_ROLES.ENGINEERING,
+    ].includes(
+        cleanRole
+    );
+
+    const isHodRole = [
+        MATFLOW_ROLES.ADMIN,
+        MATFLOW_ROLES.MANAGER,
+    ].includes(
+        cleanRole
+    );
+
+    const isProductionRole = [
+        MATFLOW_ROLES.ADMIN,
+        MATFLOW_ROLES.MANAGER,
+        MATFLOW_ROLES.PRODUCTION,
+    ].includes(
+        cleanRole
+    );
+
+    const canOpenBomEditor =
         canAccessMatFlowScreen(
             "bom-edit",
             cleanRole
-        );
-
-    const canApprove =
-        canAccessMatFlowScreen(
-            "bom-approval",
-            cleanRole
-        );
+        ) ||
+        isEngineeringRole;
 
     const [bom, setBom] =
         useState(null);
@@ -118,6 +143,72 @@ export default function MatFlowBomDetail() {
 
     const [remarks, setRemarks] =
         useState("");
+
+    const workflow =
+        useMemo(() => {
+            switch (status) {
+                case "DRAFT":
+                case "RETURNED":
+                    return {
+                        department:
+                            "Engineering",
+
+                        nextAction:
+                            lines.length > 0
+                                ? "Submit BOM to HOD"
+                                : "Add Material Lines",
+                    };
+
+                case "SUBMITTED":
+                case "SUBMITTED_TO_HOD":
+                    return {
+                        department:
+                            "HOD / MatFlow Manager",
+
+                        nextAction:
+                            "Approve or Return BOM",
+                    };
+
+                case "PRODUCTION_REVIEW_PENDING":
+                    return {
+                        department:
+                            "Production",
+
+                        nextAction:
+                            "Review Manufacturing Requirements",
+                    };
+
+                case "APPROVED":
+                    return {
+                        department:
+                            "Store and Production",
+
+                        nextAction:
+                            "Raise Material Requisition",
+                    };
+
+                case "SUPERSEDED":
+                    return {
+                        department:
+                            "Engineering",
+
+                        nextAction:
+                            "Use Latest Effective Revision",
+                    };
+
+                default:
+                    return {
+                        department:
+                            "MatFlow",
+
+                        nextAction:
+                            "Review BOM Status",
+                    };
+            }
+        }, [
+            lines.length,
+            status,
+        ]);
 
     const load = useCallback(async () => {
         if (!bomId) {
@@ -186,35 +277,62 @@ export default function MatFlowBomDetail() {
             bom?.status || ""
         ).toUpperCase();
 
-    const canSubmitCurrent =
-        canEdit &&
+    const isLatestRevision =
+        bom?.latestRevision ===
+        true;
+
+    const isEditableStatus =
         [
             "DRAFT",
             "RETURNED",
-        ].includes(status) &&
+        ].includes(
+            status
+        );
+
+    const canEditCurrent =
+        isEngineeringRole &&
+        isLatestRevision &&
+        isEditableStatus;
+
+    const canSubmitCurrent =
+        canEditCurrent &&
         lines.length > 0;
 
-    const canApproveCurrent =
-        canApprove &&
-        status === "SUBMITTED";
+    const canHodApproveCurrent =
+        isHodRole &&
+        [
+            "SUBMITTED",
+            "SUBMITTED_TO_HOD",
+        ].includes(
+            status
+        );
 
-    const canReturnCurrent =
-        canApprove &&
-        status === "SUBMITTED";
+    const canHodReturnCurrent =
+        canHodApproveCurrent;
+
+    const canProductionApproveCurrent =
+        isProductionRole &&
+        status ===
+        "PRODUCTION_REVIEW_PENDING";
+
+    const canProductionReturnCurrent =
+        canProductionApproveCurrent;
 
     const canCreateRevision =
-        canEdit &&
-        status === "APPROVED" &&
-        bom?.effective === true &&
-        bom?.latestRevision === true;
+        isEngineeringRole &&
+        status ===
+        "APPROVED" &&
+        bom?.effective ===
+        true &&
+        isLatestRevision;
 
     const canRaiseRequisition =
-        canAccessMatFlowScreen(
-            "production",
-            cleanRole
-        ) &&
-        status === "APPROVED" &&
-        bom?.effective === true;
+        isProductionRole &&
+        status ===
+        "APPROVED" &&
+        bom?.effective ===
+        true &&
+        isLatestRevision;
 
     const openAction = (action) => {
         setActionDialog(action);
@@ -241,13 +359,22 @@ export default function MatFlowBomDetail() {
                 remarks || ""
             ).trim();
 
+        const returnAction =
+            [
+                "HOD_RETURN",
+                "PRODUCTION_RETURN",
+            ].includes(
+                actionDialog
+            );
+
         if (
-            actionDialog === "RETURN" &&
+            returnAction &&
             !cleanedRemarks
         ) {
             setError(
                 "Return remarks are required."
             );
+
             return;
         }
 
@@ -275,7 +402,7 @@ export default function MatFlowBomDetail() {
                             );
                     break;
 
-                case "APPROVE":
+                case "HOD_APPROVE":
                     response =
                         await matflowApi
                             .approveBom(
@@ -284,10 +411,28 @@ export default function MatFlowBomDetail() {
                             );
                     break;
 
-                case "RETURN":
+                case "HOD_RETURN":
                     response =
                         await matflowApi
                             .returnBom(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                case "PRODUCTION_APPROVE":
+                    response =
+                        await matflowApi
+                            .productionApproveBom(
+                                bom.id,
+                                body
+                            );
+                    break;
+
+                case "PRODUCTION_RETURN":
+                    response =
+                        await matflowApi
+                            .productionReturnBom(
                                 bom.id,
                                 body
                             );
@@ -303,7 +448,9 @@ export default function MatFlowBomDetail() {
                     break;
 
                 default:
-                    return;
+                    throw new Error(
+                        "Unsupported BOM action."
+                    );
             }
 
             const updated =
@@ -487,6 +634,20 @@ export default function MatFlowBomDetail() {
                                 label="Row Version"
                                 value={bom.rowVersion}
                             />
+
+                            <Detail
+                                label="Responsible Department"
+                                value={
+                                    workflow.department
+                                }
+                            />
+
+                            <Detail
+                                label="Next Workflow Action"
+                                value={
+                                    workflow.nextAction
+                                }
+                            />
                         </Box>
 
                         <Box sx={workflowActionsSx}>
@@ -507,31 +668,65 @@ export default function MatFlowBomDetail() {
                                 </Button>
                             )}
 
-                            {canApproveCurrent && (
+                            {canHodApproveCurrent && (
                                 <Button
                                     startIcon={
                                         <ApprovalOutlinedIcon />
                                     }
                                     onClick={() =>
                                         openAction(
-                                            "APPROVE"
+                                            "HOD_APPROVE"
                                         )
                                     }
                                     disabled={working}
                                     sx={primaryBtnSx}
                                 >
-                                    Approve BOM
+                                    HOD Approve & Send to Production
                                 </Button>
                             )}
 
-                            {canReturnCurrent && (
+                            {canHodReturnCurrent && (
                                 <Button
                                     startIcon={
                                         <UndoOutlinedIcon />
                                     }
                                     onClick={() =>
                                         openAction(
-                                            "RETURN"
+                                            "HOD_RETURN"
+                                        )
+                                    }
+                                    disabled={working}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Return to Engineering
+                                </Button>
+                            )}
+
+                            {canProductionApproveCurrent && (
+                                <Button
+                                    startIcon={
+                                        <ApprovalOutlinedIcon />
+                                    }
+                                    onClick={() =>
+                                        openAction(
+                                            "PRODUCTION_APPROVE"
+                                        )
+                                    }
+                                    disabled={working}
+                                    sx={primaryBtnSx}
+                                >
+                                    Production Review & Approve
+                                </Button>
+                            )}
+
+                            {canProductionReturnCurrent && (
+                                <Button
+                                    startIcon={
+                                        <UndoOutlinedIcon />
+                                    }
+                                    onClick={() =>
+                                        openAction(
+                                            "PRODUCTION_RETURN"
                                         )
                                     }
                                     disabled={working}
@@ -580,7 +775,9 @@ export default function MatFlowBomDetail() {
                     <MatFlowBomLineEditor
                         bom={bom}
                         lines={lines}
-                        canEdit={canEdit}
+                        canEdit={
+                            canEditCurrent
+                        }
                         onChanged={load}
                         onError={setError}
                     />
@@ -611,8 +808,12 @@ export default function MatFlowBomDetail() {
 
                     <TextField
                         label={
-                            actionDialog ===
-                                "RETURN"
+                            [
+                                "HOD_RETURN",
+                                "PRODUCTION_RETURN",
+                            ].includes(
+                                actionDialog
+                            )
                                 ? "Remarks *"
                                 : "Remarks"
                         }
@@ -657,38 +858,54 @@ export default function MatFlowBomDetail() {
     );
 }
 
-function actionTitle(action) {
+function actionTitle(
+    action
+) {
     switch (action) {
         case "SUBMIT":
             return "Submit Operational BOM";
 
-        case "APPROVE":
-            return "Approve Operational BOM";
+        case "HOD_APPROVE":
+            return "HOD Approval";
 
-        case "RETURN":
+        case "HOD_RETURN":
             return "Return BOM to Engineering";
+
+        case "PRODUCTION_APPROVE":
+            return "Production Review and Approval";
+
+        case "PRODUCTION_RETURN":
+            return "Return BOM from Production Review";
 
         case "REVISION":
             return "Create New BOM Revision";
 
         default:
-            return "Confirm Action";
+            return "Confirm BOM Action";
     }
 }
 
-function actionMessage(action) {
+function actionMessage(
+    action
+) {
     switch (action) {
         case "SUBMIT":
-            return "The BOM will be submitted for authorized review.";
+            return "Engineering will submit this BOM to the HOD for review.";
 
-        case "APPROVE":
-            return "This revision will become the effective operational BOM.";
+        case "HOD_APPROVE":
+            return "The HOD approval will move this BOM to Production Review. It will not become effective until Production approves it.";
 
-        case "RETURN":
+        case "HOD_RETURN":
             return "The BOM will be returned to Engineering for correction.";
 
+        case "PRODUCTION_APPROVE":
+            return "Production confirms that this BOM is suitable for manufacturing. This revision will become the effective operational BOM.";
+
+        case "PRODUCTION_RETURN":
+            return "Production will return the BOM to Engineering with correction remarks.";
+
         case "REVISION":
-            return "A new draft revision will be created while the approved revision remains effective.";
+            return "A new draft revision will be created while the current approved revision remains effective.";
 
         default:
             return "";

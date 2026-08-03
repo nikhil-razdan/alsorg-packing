@@ -352,69 +352,72 @@ export const matflowApi = {
 		);
 	},
 
-	submitBom(
-		bomId,
+	submitBom: (
+		id,
 		body
-	) {
-		return API.post(
-			`${BASE}/boms/${bomId}/submit`,
-			body
-		);
-	},
-
-	returnBom(
-		bomId,
-		body
-	) {
-		return API.post(
-			`${BASE}/boms/${bomId}/return`,
-			body
-		);
-	},
-
-	approveBom(
-		bomId,
-		body
-	) {
-		return API.post(
-			`${BASE}/boms/${bomId}/approve`,
-			body
-		);
-	},
-
-	createBomRevision(
-		bomId,
-		body
-	) {
-		return API.post(
-			`${BASE}/boms/${bomId}/revisions`,
-			body
-		);
-	},
-
-	productionApproveBom(
-		bomId,
-		body
-	) {
-		return API.post(
+	) =>
+		API.post(
 			`${BASE}/boms/${encodeURIComponent(
-				String(bomId)
+				String(id).trim()
+			)}/submit`,
+			body
+		),
+
+	returnBom: (
+		id,
+		body
+	) =>
+		API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(id).trim()
+			)}/return`,
+			body
+		),
+
+	approveBom: (
+		id,
+		body
+	) =>
+		API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(id).trim()
+			)}/approve`,
+			body
+		),
+
+	createBomRevision: (
+		id,
+		body
+	) =>
+		API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(id).trim()
+			)}/revisions`,
+			body
+		),
+
+	productionApproveBom: (
+		id,
+		body
+	) =>
+		API.post(
+			`${BASE}/boms/${encodeURIComponent(
+				String(id).trim()
 			)}/production-approve`,
 			body
-		);
-	},
+		),
 
-	productionReturnBom(
-		bomId,
+
+	productionReturnBom: (
+		id,
 		body
-	) {
-		return API.post(
+	) =>
+		API.post(
 			`${BASE}/boms/${encodeURIComponent(
-				String(bomId)
+				String(id).trim()
 			)}/production-return`,
 			body
-		);
-	},
+		),
 
 	issueStoreReservation(
 		reservationId,

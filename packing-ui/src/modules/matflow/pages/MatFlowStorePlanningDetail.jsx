@@ -253,7 +253,10 @@ const resolveLineWorkflow = (
     indents
 ) => {
     const lineId =
-        String(line?.id ?? "");
+        String(
+            line?.id ??
+            ""
+        );
 
     const requested =
         numeric(
@@ -263,6 +266,11 @@ const resolveLineWorkflow = (
     const issued =
         numeric(
             line?.issuedQty
+        );
+
+    const consumed =
+        numeric(
+            line?.consumedQty
         );
 
     const reserved =
@@ -277,6 +285,19 @@ const resolveLineWorkflow = (
 
     if (
         requested > 0 &&
+        consumed >= requested
+    ) {
+        return {
+            department:
+                "Production",
+
+            action:
+                "Material Consumed",
+        };
+    }
+
+    if (
+        requested > 0 &&
         issued >= requested
     ) {
         return {
@@ -284,7 +305,7 @@ const resolveLineWorkflow = (
                 "Production",
 
             action:
-                "Material Issued",
+                "Start / Continue Production",
         };
     }
 
@@ -298,24 +319,40 @@ const resolveLineWorkflow = (
                 ) === lineId
         );
 
-    const issueReady =
-        relatedReservations.some(
+    const readyReservation =
+        relatedReservations.find(
             (reservation) =>
                 reservation.issueReady ===
                 true &&
                 numeric(
                     reservation
                         .remainingIssueQty
-                ) > 0
+                ) > 0 &&
+                [
+                    "ACTIVE",
+                    "PARTIALLY_ISSUED",
+                ].includes(
+                    normalize(
+                        reservation.status
+                    )
+                )
         );
 
-    if (issueReady) {
+    if (readyReservation) {
         return {
             department:
-                "Store",
+                readable(
+                    readyReservation
+                        .responsibleDepartment ||
+                    "STORE"
+                ),
 
             action:
-                "Issue to Production",
+                readable(
+                    readyReservation
+                        .nextAction ||
+                    "ISSUE_TO_PRODUCTION"
+                ),
         };
     }
 
@@ -329,7 +366,7 @@ const resolveLineWorkflow = (
                 ) === lineId
         );
 
-    const openTransfer =
+    const activeTransfer =
         relatedTransfers.find(
             (transfer) =>
                 ![
@@ -342,20 +379,26 @@ const resolveLineWorkflow = (
                 )
         );
 
-    if (openTransfer) {
+    if (activeTransfer) {
         return {
             department:
                 readable(
-                    openTransfer
+                    activeTransfer
                         .responsibleDepartment ||
-                    "Transfer"
+                    (
+                        normalize(
+                            activeTransfer.status
+                        ) === "IN_TRANSIT"
+                            ? "DESTINATION"
+                            : "STORE"
+                    )
                 ),
 
             action:
                 readable(
-                    openTransfer
+                    activeTransfer
                         .nextAction ||
-                    openTransfer.status
+                    activeTransfer.status
                 ),
         };
     }
@@ -381,74 +424,84 @@ const resolveLineWorkflow = (
                 relatedIndent.status
             );
 
-        if (
-            [
-                "AUTO_CREATED",
-                "DRAFT",
-                "RETURNED",
-            ].includes(
-                indentStatus
-            )
-        ) {
-            return {
-                department:
-                    "Store",
+        switch (indentStatus) {
+            case "AUTO_CREATED":
+            case "DRAFT":
+            case "RETURNED":
+                return {
+                    department:
+                        "Store",
 
-                action:
-                    "Submit to Purchase",
-            };
-        }
+                    action:
+                        "Submit Indent to Purchase",
+                };
 
-        if (
-            indentStatus ===
-            "SUBMITTED_TO_PURCHASE"
-        ) {
-            return {
-                department:
-                    "Purchase",
+            case "SUBMITTED_TO_PURCHASE":
+                return {
+                    department:
+                        "Purchase",
 
-                action:
-                    "Start Purchase Review",
-            };
-        }
+                    action:
+                        "Review Material Indent",
+                };
 
-        if (
-            indentStatus ===
-            "PURCHASE_IN_PROGRESS"
-        ) {
-            return {
-                department:
-                    "Purchase",
+            case "PURCHASE_IN_PROGRESS":
+                return {
+                    department:
+                        "Purchase",
 
-                action:
-                    "Quotation / Purchase Order",
-            };
-        }
+                    action:
+                        "Create Purchase Order",
+                };
 
-        if (
-            indentStatus ===
-            "PO_CREATED"
-        ) {
-            return {
-                department:
-                    "Purchase",
+            case "PO_CREATED":
+            case "ORDERED":
+                return {
+                    department:
+                        "Purchase",
 
-                action:
-                    "Await Supplier Delivery",
-            };
-        }
+                    action:
+                        "Await Supplier Delivery",
+                };
 
-        if (
-            indentStatus ===
-            "PARTIALLY_RECEIVED"
-        ) {
-            return {
-                department:
-                    "Store / QC",
+            case "PARTIALLY_RECEIVED":
+                return {
+                    department:
+                        "Store / QC",
 
-                action:
-                    "Complete Receipt and QC",
-            };
+                    action:
+                        "Complete Receipt and QC",
+                };
+
+            case "RECEIVED":
+            case "QC_PENDING":
+                return {
+                    department:
+                        "QC",
+
+                    action:
+                        "Inspect Received Material",
+                };
+
+            case "QC_ACCEPTED":
+                return {
+                    department:
+                        "Store",
+
+                    action:
+                        "Reserve Accepted Stock",
+                };
+
+            default:
+                return {
+                    department:
+                        readable(
+                            indentStatus
+                        ),
+
+                    action:
+                        "Continue Procurement Workflow",
+                };
         }
     }
 
@@ -458,7 +511,7 @@ const resolveLineWorkflow = (
                 "Store",
 
             action:
-                "Confirm Shortage",
+                "Create / Submit Shortage Indent",
         };
     }
 
@@ -468,7 +521,7 @@ const resolveLineWorkflow = (
                 "Transfer / Processing",
 
             action:
-                "Complete Approved Route",
+                "Complete Approved Material Route",
         };
     }
 
@@ -477,10 +530,9 @@ const resolveLineWorkflow = (
             "Store",
 
         action:
-            "Review Availability",
+            "Review Material Availability",
     };
 };
-
 
 const roundQty = (value) =>
     Math.round(
@@ -495,6 +547,104 @@ const qtyEquals = (
         roundQty(left) -
         roundQty(right)
     ) < 0.0005;
+
+const deriveStoreDecision = (
+    line
+) => {
+    const requested =
+        roundQty(
+            line?.requestedQty
+        );
+
+    const reserved =
+        roundQty(
+            line?.reservedQty
+        );
+
+    const shortage =
+        roundQty(
+            line?.shortageQty
+        );
+
+    if (requested <= 0) {
+        return "UNDECIDED";
+    }
+
+    if (
+        reserved >= requested &&
+        shortage <= 0
+    ) {
+        return "AVAILABLE";
+    }
+
+    if (
+        reserved > 0 &&
+        shortage > 0
+    ) {
+        return "PARTIAL";
+    }
+
+    if (
+        reserved <= 0 &&
+        shortage > 0
+    ) {
+        return "SHORTAGE";
+    }
+
+    return "UNDECIDED";
+};
+
+const storeDecisionMeta = (
+    value
+) => {
+    switch (normalize(value)) {
+        case "AVAILABLE":
+            return {
+                label:
+                    "Available / Reserved",
+                color:
+                    "#16a34a",
+            };
+
+        case "PARTIAL":
+            return {
+                label:
+                    "Partially Available",
+                color:
+                    "#d97706",
+            };
+
+        case "SHORTAGE":
+            return {
+                label:
+                    "Shortage Confirmed",
+                color:
+                    "#dc2626",
+            };
+
+        default:
+            return {
+                label:
+                    "Awaiting Store Review",
+                color:
+                    "#2563eb",
+            };
+    }
+};
+
+const storeDecisionChipSx = (
+    color
+) => ({
+    height: "25px",
+    maxWidth: "100%",
+    color,
+    background:
+        `${color}14`,
+    border:
+        `1px solid ${color}32`,
+    fontSize: "8.5px",
+    fontWeight: 900,
+});
 
 const summarizeReviewLine = (
     line,
@@ -970,6 +1120,40 @@ export default function MatFlowStorePlanningDetail() {
                  * Existing user-entered values are retained when
                  * Refresh is used before review confirmation.
                  */
+                const planningData =
+                    planningResponse?.data ??
+                    null;
+
+                const availabilityRows =
+                    asArray(
+                        availabilityResponse?.data
+                    );
+
+                const requisitionLines =
+                    asArray(
+                        planningData
+                            ?.requisition
+                            ?.lines
+                    );
+
+                const lineById =
+                    new Map(
+                        requisitionLines.map(
+                            (line) => [
+                                String(line.id),
+                                line,
+                            ]
+                        )
+                    );
+
+                setSnapshot(
+                    planningData
+                );
+
+                setAvailability(
+                    availabilityRows
+                );
+
                 setReviewByLine(
                     (current) => {
                         const next = {};
@@ -978,7 +1162,8 @@ export default function MatFlowStorePlanningDetail() {
                             (entry) => {
                                 const lineId =
                                     String(
-                                        entry?.requisitionLineId ??
+                                        entry
+                                            ?.requisitionLineId ??
                                         ""
                                     );
 
@@ -989,6 +1174,16 @@ export default function MatFlowStorePlanningDetail() {
                                 const previous =
                                     current[lineId] ??
                                     {};
+
+                                const persistedLine =
+                                    lineById.get(
+                                        lineId
+                                    );
+
+                                const persistedDecision =
+                                    deriveStoreDecision(
+                                        persistedLine
+                                    );
 
                                 const allocationQuantities =
                                     {};
@@ -1011,16 +1206,20 @@ export default function MatFlowStorePlanningDetail() {
                                             locationId
                                         ] =
                                             previous
-                                                .allocationQuantities
-                                            ?.[locationId] ??
+                                                .allocationQuantities?.[
+                                            locationId
+                                            ] ??
                                             "";
                                     }
                                 );
 
                                 next[lineId] = {
                                     decision:
-                                        previous.decision ??
-                                        "UNDECIDED",
+                                        previous.decision &&
+                                            previous.decision !==
+                                            "UNDECIDED"
+                                            ? previous.decision
+                                            : persistedDecision,
 
                                     allocationQuantities,
 
@@ -1732,6 +1931,21 @@ export default function MatFlowStorePlanningDetail() {
                                             "",
                                     };
 
+                                const savedDecision =
+                                    deriveStoreDecision(
+                                        line
+                                    );
+
+                                const displayedDecision =
+                                    canConfirmStoreReview
+                                        ? lineReview.decision
+                                        : savedDecision;
+
+                                const decisionMeta =
+                                    storeDecisionMeta(
+                                        displayedDecision
+                                    );
+
                                 const reviewSummary =
                                     summarizeReviewLine(
                                         line,
@@ -1824,156 +2038,179 @@ export default function MatFlowStorePlanningDetail() {
                                         </Box>
 
                                         <Box sx={tableCellSx}>
-                                            <TextField
-                                                select
-                                                label="Store Decision"
-                                                value={
-                                                    lineReview.decision
-                                                }
-                                                disabled={
-                                                    planning ||
-                                                    !canConfirmStoreReview
-                                                }
-                                                onChange={(event) =>
-                                                    updateLineDecision(
-                                                        line.id,
-                                                        event.target.value
-                                                    )
-                                                }
-                                                size="small"
-                                                sx={compactDecisionSx}
-                                            >
-                                                <MenuItem value="UNDECIDED">
-                                                    Select Decision
-                                                </MenuItem>
+                                            {canConfirmStoreReview ? (
+                                                <>
+                                                    <TextField
+                                                        select
+                                                        label="Store Decision"
+                                                        value={
+                                                            lineReview.decision
+                                                        }
+                                                        disabled={planning}
+                                                        onChange={(event) =>
+                                                            updateLineDecision(
+                                                                line.id,
+                                                                event.target.value
+                                                            )
+                                                        }
+                                                        size="small"
+                                                        sx={compactDecisionSx}
+                                                    >
+                                                        <MenuItem value="UNDECIDED">
+                                                            Select Decision
+                                                        </MenuItem>
 
-                                                <MenuItem value="AVAILABLE">
-                                                    Available — Reserve Full
-                                                </MenuItem>
+                                                        <MenuItem value="AVAILABLE">
+                                                            Available — Reserve Full
+                                                        </MenuItem>
 
-                                                <MenuItem value="PARTIAL">
-                                                    Partially Available
-                                                </MenuItem>
+                                                        <MenuItem value="PARTIAL">
+                                                            Partially Available
+                                                        </MenuItem>
 
-                                                <MenuItem value="SHORTAGE">
-                                                    Shortage — Raise Indent
-                                                </MenuItem>
-                                            </TextField>
+                                                        <MenuItem value="SHORTAGE">
+                                                            Shortage — Raise Indent
+                                                        </MenuItem>
+                                                    </TextField>
 
-                                            {reviewSummary
-                                                .stockOptions
-                                                .filter(
-                                                    (option) =>
-                                                        numeric(
-                                                            option.availableQty
-                                                        ) > 0
-                                                )
-                                                .map(
-                                                    (option) => (
-                                                        <Box
-                                                            key={
-                                                                option.locationId
-                                                            }
-                                                            sx={allocationRowSx}
-                                                        >
-                                                            <Box sx={{ minWidth: 0 }}>
-                                                                <Typography sx={stockOptionTextSx}>
-                                                                    {option.locationCode}
-                                                                    {" · Available "}
-                                                                    {formatQty(
-                                                                        option.availableQty
-                                                                    )}
-                                                                    {" "}
-                                                                    {line.uom || ""}
+                                                    {reviewSummary
+                                                        .stockOptions
+                                                        .filter(
+                                                            (option) =>
+                                                                numeric(
+                                                                    option.availableQty
+                                                                ) > 0
+                                                        )
+                                                        .map(
+                                                            (option) => (
+                                                                <Box
+                                                                    key={
+                                                                        option.locationId
+                                                                    }
+                                                                    sx={allocationRowSx}
+                                                                >
+                                                                    <Box sx={{ minWidth: 0 }}>
+                                                                        <Typography sx={stockOptionTextSx}>
+                                                                            {option.locationCode}
+                                                                            {" · Available "}
+                                                                            {formatQty(
+                                                                                option.availableQty
+                                                                            )}
+                                                                            {" "}
+                                                                            {line.uom || ""}
+                                                                        </Typography>
+
+                                                                        <Typography sx={subTextSx}>
+                                                                            {option.plantCode || "-"}
+                                                                            {" · "}
+                                                                            {readable(
+                                                                                option.locationType
+                                                                            )}
+                                                                        </Typography>
+                                                                    </Box>
+
+                                                                    <TextField
+                                                                        type="number"
+                                                                        label="Reserve"
+                                                                        value={
+                                                                            lineReview
+                                                                                .allocationQuantities?.[
+                                                                            String(
+                                                                                option.locationId
+                                                                            )
+                                                                            ] ?? ""
+                                                                        }
+                                                                        disabled={
+                                                                            planning ||
+                                                                            lineReview.decision ===
+                                                                            "SHORTAGE" ||
+                                                                            lineReview.decision ===
+                                                                            "UNDECIDED"
+                                                                        }
+                                                                        onChange={(event) =>
+                                                                            updateAllocationQty(
+                                                                                line.id,
+                                                                                option.locationId,
+                                                                                event.target.value
+                                                                            )
+                                                                        }
+                                                                        inputProps={{
+                                                                            min: 0,
+                                                                            max:
+                                                                                numeric(
+                                                                                    option.availableQty
+                                                                                ),
+                                                                            step: 0.001,
+                                                                        }}
+                                                                        size="small"
+                                                                        sx={allocationQtyFieldSx}
+                                                                    />
+                                                                </Box>
+                                                            )
+                                                        )}
+
+                                                    {reviewSummary
+                                                        .stockOptions
+                                                        .filter(
+                                                            (option) =>
+                                                                numeric(
+                                                                    option.availableQty
+                                                                ) > 0
+                                                        ).length === 0 && (
+                                                            <Box sx={noStockBoxSx}>
+                                                                <Typography sx={noStockTitleSx}>
+                                                                    No recorded stock
                                                                 </Typography>
 
                                                                 <Typography sx={subTextSx}>
-                                                                    {option.plantCode}
-                                                                    {" · "}
-                                                                    {readable(
-                                                                        option.locationType
-                                                                    )}
+                                                                    Select Shortage, or import/adjust
+                                                                    inventory before reserving.
                                                                 </Typography>
                                                             </Box>
+                                                        )}
 
-                                                            <TextField
-                                                                type="number"
-                                                                label="Reserve"
-                                                                value={
-                                                                    lineReview
-                                                                        .allocationQuantities
-                                                                    ?.[String(
-                                                                        option.locationId
-                                                                    )] ??
-                                                                    ""
-                                                                }
-                                                                disabled={
-                                                                    planning ||
-                                                                    !canConfirmStoreReview ||
-                                                                    lineReview.decision ===
-                                                                    "SHORTAGE" ||
-                                                                    lineReview.decision ===
-                                                                    "UNDECIDED"
-                                                                }
-                                                                onChange={(event) =>
-                                                                    updateAllocationQty(
-                                                                        line.id,
-                                                                        option.locationId,
-                                                                        event.target.value
-                                                                    )
-                                                                }
-                                                                inputProps={{
-                                                                    min:
-                                                                        0,
+                                                    <Typography sx={allocationSummarySx}>
+                                                        Planned reserve:{" "}
+                                                        {formatQty(
+                                                            reviewSummary.allocatedQty
+                                                        )}
+                                                        {" · Planned shortage: "}
+                                                        {formatQty(
+                                                            reviewSummary.shortageQty
+                                                        )}
+                                                    </Typography>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Chip
+                                                        label={decisionMeta.label}
+                                                        size="small"
+                                                        sx={storeDecisionChipSx(
+                                                            decisionMeta.color
+                                                        )}
+                                                    />
 
-                                                                    max:
-                                                                        numeric(
-                                                                            option.availableQty
-                                                                        ),
-
-                                                                    step:
-                                                                        0.001,
-                                                                }}
-                                                                size="small"
-                                                                sx={allocationQtyFieldSx}
-                                                            />
-                                                        </Box>
-                                                    )
-                                                )}
-
-                                            {reviewSummary
-                                                .stockOptions
-                                                .filter(
-                                                    (option) =>
-                                                        numeric(
-                                                            option.availableQty
-                                                        ) > 0
-                                                ).length === 0 && (
-                                                    <Box sx={noStockBoxSx}>
-                                                        <Typography sx={noStockTitleSx}>
-                                                            No recorded stock
+                                                    <Box sx={reviewedResultSx}>
+                                                        <Typography sx={reviewedResultLabelSx}>
+                                                            Store Review Result
                                                         </Typography>
 
-                                                        <Typography sx={subTextSx}>
-                                                            Select Shortage, or import/adjust
-                                                            physical inventory before reserving.
+                                                        <Typography sx={reviewedResultValueSx}>
+                                                            Reserved{" "}
+                                                            {formatQty(
+                                                                line.reservedQty
+                                                            )}
+                                                            {" · Shortage "}
+                                                            {formatQty(
+                                                                line.shortageQty
+                                                            )}
+                                                            {" · Issued "}
+                                                            {formatQty(
+                                                                line.issuedQty
+                                                            )}
                                                         </Typography>
                                                     </Box>
-                                                )}
-
-                                            {canConfirmStoreReview && (
-                                                <Typography sx={allocationSummarySx}>
-                                                    Planned reserve:{" "}
-                                                    {formatQty(
-                                                        reviewSummary
-                                                            .allocatedQty
-                                                    )}
-                                                    {" · Planned shortage: "}
-                                                    {formatQty(
-                                                        reviewSummary
-                                                            .shortageQty
-                                                    )}
-                                                </Typography>
+                                                </>
                                             )}
                                         </Box>
 
@@ -2677,6 +2914,32 @@ const subTextSx = {
         "var(--mf-text-muted)",
     fontSize: "9px",
     fontWeight: 650,
+};
+
+const reviewedResultSx = {
+    mt: "7px",
+    p: "7px 8px",
+    borderRadius: "7px",
+    background:
+        "var(--mf-surface-strong)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const reviewedResultLabelSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "8px",
+    fontWeight: 900,
+    textTransform: "uppercase",
+};
+
+const reviewedResultValueSx = {
+    mt: "2px",
+    color:
+        "var(--mf-text)",
+    fontSize: "9px",
+    fontWeight: 850,
 };
 
 const reservedQtySx = {
