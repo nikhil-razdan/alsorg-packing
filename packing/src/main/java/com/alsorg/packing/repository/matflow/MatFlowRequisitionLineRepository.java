@@ -44,4 +44,14 @@ public interface MatFlowRequisitionLineRepository
                         """)
         Optional<MatFlowRequisitionLine> lockById(
                         @Param("id") UUID id);
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                        select line
+                        from MatFlowRequisitionLine line
+                        where line.requisition.id = :requisitionId
+                        order by line.lineNo asc
+                        """)
+        List<MatFlowRequisitionLine> lockByRequisitionId(
+                        @Param("requisitionId") UUID requisitionId);
 }

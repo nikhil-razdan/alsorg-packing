@@ -412,35 +412,42 @@ public final class MatFlowPlanningDtos {
 
         public record StoreSourceAllocationRequest(
 
-                        @NotNull UUID sourceLocationId,
+                        @NotNull(message = "Source location is required.") UUID sourceLocationId,
 
-                        @NotNull @DecimalMin("0.001") BigDecimal reserveQty) {
+                        @NotNull(message = "Reserve quantity is required.") @DecimalMin(value = "0.001", inclusive = true, message = "Reserve quantity must be greater than zero.") BigDecimal reserveQty) {
         }
 
         public record StoreLineReviewRequest(
 
-                        @NotNull UUID requisitionLineId,
+                        @NotNull(message = "Requisition line ID is required.") UUID requisitionLineId,
 
-                        @NotNull Long rowVersion,
+                        @NotNull(message = "Requisition line row version is required.") Long rowVersion,
 
+                        /*
+                         * Empty means no stock is being reserved for this line.
+                         */
                         List<@Valid StoreSourceAllocationRequest> allocations,
 
+                        /*
+                         * The approved BOM route remains authoritative.
+                         * These fields are retained for later processing UI.
+                         */
                         Boolean processingRequired,
 
                         UUID processingLocationId,
 
-                        Boolean createIndentForShortage,
+                        @NotNull(message = "Shortage-indent decision is required.") Boolean createIndentForShortage,
 
-                        @Size(max = 1000) String remarks) {
+                        @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
         }
 
         public record StoreReviewRequest(
 
-                        @NotNull Long rowVersion,
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
 
-                        @NotEmpty List<@Valid StoreLineReviewRequest> lines,
+                        @NotEmpty(message = "At least one Store review line is required.") List<@Valid StoreLineReviewRequest> lines,
 
-                        @Size(max = 2000) String remarks) {
+                        @Size(max = 2000, message = "Store review remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record StockOptionResponse(

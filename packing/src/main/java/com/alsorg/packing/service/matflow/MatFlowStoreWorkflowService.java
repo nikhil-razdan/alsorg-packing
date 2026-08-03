@@ -1,25 +1,27 @@
 package com.alsorg.packing.service.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreStockOptionResponse;
 
 import com.alsorg.packing.domain.matflow.MatFlowBomRouteStep;
+import com.alsorg.packing.domain.matflow.MatFlowIndent;
+import com.alsorg.packing.domain.matflow.MatFlowIndentLine;
 import com.alsorg.packing.domain.matflow.MatFlowLocation;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 
+import com.alsorg.packing.repository.matflow.MatFlowIndentLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowRequisitionLineRepository;
-import com.alsorg.packing.repository.matflow.MatFlowReservationRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockBalanceRepository;
-import com.alsorg.packing.repository.matflow.MatFlowTransferOrderRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,19 +36,16 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
-
 import org.springframework.stereotype.Service;
-
 import org.springframework.transaction.annotation.Transactional;
-
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class MatFlowStoreWorkflowService {
 
     /*
-     * String-based status checks intentionally support both
-     * old and new requisition enum values during migration.
+     * These status names support both the current legacy workflow
+     * and the newer requisition workflow while records are migrated.
      */
     private static final Set<String> STORE_QUEUE_STATUS_NAMES = Set.of(
             "SUBMITTED",
@@ -60,17 +59,11 @@ public class MatFlowStoreWorkflowService {
             "ISSUED",
             "ISSUED_TO_PRODUCTION");
 
-    private static final Set<String> STORE_REVIEWABLE_STATUS_NAMES = Set.of(
-            "SUBMITTED",
-            "SUBMITTED_TO_STORE",
-            "STORE_REVIEW_IN_PROGRESS");
-
     /*
-     * Keep this synchronized with the source types used by
-     * MatFlowPlanningService.
+     * These are the stock location types that Store may see
+     * while reviewing material availability.
      *
-     * Do not show locations as selectable availability when
-     * the planner itself will not use those locations.
+     * Keep this synchronized with MatFlowPlanningService.
      */
     private static final Set<LocationType> AVAILABILITY_SOURCE_TYPES = EnumSet.of(
             LocationType.STORE,
@@ -78,17 +71,19 @@ public class MatFlowStoreWorkflowService {
             LocationType.PROCESSING,
             LocationType.EXTERNAL_PROCESSOR);
 
+    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(
+            3,
+            RoundingMode.HALF_UP);
+
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
 
     private final MatFlowRequisitionLineRepository requisitionLineRepository;
 
     private final MatFlowStockBalanceRepository stockRepository;
 
-    private final MatFlowReservationRepository reservationRepository;
-
-    private final MatFlowTransferOrderRepository transferRepository;
-
     private final MatFlowIndentRepository indentRepository;
+
+    private final MatFlowIndentLineRepository indentLineRepository;
 
     private final MatFlowPlanningService planningService;
 
@@ -102,9 +97,8 @@ public class MatFlowStoreWorkflowService {
             MatFlowMaterialRequisitionRepository requisitionRepository,
             MatFlowRequisitionLineRepository requisitionLineRepository,
             MatFlowStockBalanceRepository stockRepository,
-            MatFlowReservationRepository reservationRepository,
-            MatFlowTransferOrderRepository transferRepository,
             MatFlowIndentRepository indentRepository,
+            MatFlowIndentLineRepository indentLineRepository,
             MatFlowPlanningService planningService,
             MatFlowRoutingService routingService,
             MatFlowAccessService accessService,
@@ -116,11 +110,9 @@ public class MatFlowStoreWorkflowService {
 
         this.stockRepository = stockRepository;
 
-        this.reservationRepository = reservationRepository;
-
-        this.transferRepository = transferRepository;
-
         this.indentRepository = indentRepository;
+
+        this.indentLineRepository = indentLineRepository;
 
         this.planningService = planningService;
 
@@ -141,7 +133,13 @@ public class MatFlowStoreWorkflowService {
     public List<RequisitionResponse> listStoreQueue(
             String plantCode) {
 
-        accessService.requireStore();
+        /*
+         * Your supplied MatFlowAccessService contains
+         * requireMaterialPlanning(), not requireStore().
+         *
+         * ADMIN, MATFLOW_MANAGER and MATFLOW_STORE are allowed.
+         */
+        accessService.requireMaterialPlanning();
 
         String normalizedPlant = cleanUpper(
                 plantCode);
@@ -156,8 +154,7 @@ public class MatFlowStoreWorkflowService {
                 .stream()
                 .filter(
                         this::isStoreQueueStatus)
-                .filter(response -> normalizedPlant == null
-                        ||
+                .filter(response -> normalizedPlant == null ||
                         normalizedPlant.equalsIgnoreCase(
                                 response.destinationPlantCode()))
                 .toList();
@@ -173,7 +170,7 @@ public class MatFlowStoreWorkflowService {
     public PlanningResponse getStorePlanning(
             UUID requisitionId) {
 
-        accessService.requireStore();
+        accessService.requireMaterialPlanning();
 
         requireVisibleRequisition(
                 requisitionId,
@@ -186,7 +183,7 @@ public class MatFlowStoreWorkflowService {
 
     /*
      * =====================================================
-     * AVAILABILITY
+     * STORE AVAILABILITY
      * =====================================================
      */
 
@@ -194,7 +191,7 @@ public class MatFlowStoreWorkflowService {
     public List<StoreLineAvailabilityResponse> getAvailability(
             UUID requisitionId) {
 
-        accessService.requireStore();
+        accessService.requireMaterialPlanning();
 
         MatFlowMaterialRequisition requisition = requireVisibleRequisition(
                 requisitionId,
@@ -230,6 +227,10 @@ public class MatFlowStoreWorkflowService {
                 ? List.of()
                 : returnedRoute;
 
+        validateApprovedRoute(
+                requisition,
+                route);
+
         MatFlowLocation firstDestination = route.isEmpty()
                 ? requisition.destinationLocation
                 : route.get(0).location;
@@ -241,10 +242,11 @@ public class MatFlowStoreWorkflowService {
                     "Approved material route has no first destination");
         }
 
-        List<MatFlowStockBalance> returnedBalances = stockRepository.findPlanningCandidates(
-                line.material.getId(),
-                accessService.allowedPlants(),
-                AVAILABILITY_SOURCE_TYPES);
+        List<MatFlowStockBalance> returnedBalances = stockRepository
+                .findPlanningCandidates(
+                        line.material.getId(),
+                        accessService.allowedPlants(),
+                        AVAILABILITY_SOURCE_TYPES);
 
         List<MatFlowStockBalance> balances = returnedBalances == null
                 ? new ArrayList<>()
@@ -284,6 +286,7 @@ public class MatFlowStoreWorkflowService {
                 .map(balance -> toStockOption(
                         requisition,
                         firstDestination,
+                        route,
                         balance))
                 .toList();
 
@@ -327,19 +330,32 @@ public class MatFlowStoreWorkflowService {
     private StoreStockOptionResponse toStockOption(
             MatFlowMaterialRequisition requisition,
             MatFlowLocation firstDestination,
+            List<MatFlowBomRouteStep> route,
             MatFlowStockBalance balance) {
+
+        if (balance == null ||
+                balance.material == null ||
+                balance.location == null) {
+
+            throw conflict(
+                    "Stock availability record is incomplete");
+        }
 
         boolean firstRouteDestination = balance.location
                 .getId()
                 .equals(
-                        firstDestination
-                                .getId());
+                        firstDestination.getId());
 
         boolean productionDestination = balance.location
                 .getId()
                 .equals(
                         requisition.destinationLocation
                                 .getId());
+
+        boolean transferRequired = requiresPhysicalTransfer(
+                balance.location,
+                route,
+                requisition.destinationLocation);
 
         return new StoreStockOptionResponse(
                 balance.getId(),
@@ -368,149 +384,254 @@ public class MatFlowStoreWorkflowService {
 
                 firstRouteDestination,
                 productionDestination,
+                transferRequired);
+    }
 
-                !firstRouteDestination);
+    /*
+     * Determines whether at least one physical movement is
+     * required from the selected source through the approved route.
+     */
+    private boolean requiresPhysicalTransfer(
+            MatFlowLocation sourceLocation,
+            List<MatFlowBomRouteStep> route,
+            MatFlowLocation productionDestination) {
+
+        if (sourceLocation == null ||
+                sourceLocation.getId() == null ||
+                productionDestination == null ||
+                productionDestination.getId() == null) {
+
+            return false;
+        }
+
+        List<MatFlowLocation> destinations = new ArrayList<>();
+
+        if (route == null ||
+                route.isEmpty()) {
+
+            destinations.add(
+                    productionDestination);
+
+        } else {
+
+            for (MatFlowBomRouteStep step : route) {
+
+                if (step != null &&
+                        step.location != null) {
+
+                    destinations.add(
+                            step.location);
+                }
+            }
+        }
+
+        MatFlowLocation current = sourceLocation;
+
+        for (MatFlowLocation next : destinations) {
+
+            if (next == null ||
+                    next.getId() == null) {
+
+                continue;
+            }
+
+            if (!current.getId()
+                    .equals(
+                            next.getId())) {
+
+                return true;
+            }
+
+            current = next;
+        }
+
+        return false;
     }
 
     /*
      * =====================================================
-     * CONFIRM STORE REVIEW
+     * CONFIRM MATERIAL-BY-MATERIAL STORE REVIEW
      * =====================================================
      */
 
     @Transactional
     public PlanningResponse confirmStoreReview(
             UUID requisitionId,
-            PlanningRequest request) {
+            StoreReviewRequest request) {
 
-        accessService.requireStore();
+        accessService.requireMaterialPlanning();
 
         if (request == null) {
             throw badRequest(
                     "Store review request is required");
         }
 
-        MatFlowMaterialRequisition requisition = requireVisibleRequisition(
+        /*
+         * Early visibility and plant-access validation.
+         *
+         * MatFlowPlanningService.reviewRequisition() must
+         * still perform the authoritative pessimistic lock,
+         * version checks, stock locks and transaction updates.
+         */
+        requireVisibleRequisition(
                 requisitionId,
-                true);
-
-        assertVersion(
-                request.rowVersion(),
-                requisition.getRowVersion(),
-                "Requisition");
-
-        assertStoreReviewable(
-                requisition);
-
-        assertNotAlreadyPlanned(
-                requisition);
+                false);
 
         /*
-         * The existing planning engine remains the only
-         * component that creates:
+         * This replaces the old:
          *
-         * - stock reservations
-         * - reservation ledgers
-         * - transfer chains
-         * - shortage quantities
-         * - material indents
+         * planningService.planRequisition(
+         * requisitionId,
+         * PlanningRequest
+         * );
+         *
+         * The new request contains one decision for every
+         * requisition material line.
          */
-        planningService.planRequisition(
-                requisitionId,
-                request);
-
-        auditService.record(
-                "REQUISITION",
-                requisitionId,
-                "STORE_REVIEW_CONFIRMED",
-
-                requisition.destinationLocation
-                        .getPlantCode(),
-
-                requisition.projectDrawing
-                        .getProjectCode(),
-
-                requisition.projectDrawing
-                        .getDrawingNo(),
-
-                auditService.details(
-                        "preferredSourceLocationIds",
-                        request.preferredSourceLocationIds(),
-
-                        "remarks",
-                        clean(
-                                request.remarks())));
-
         return planningService
-                .getPlanningSnapshot(
-                        requisitionId);
+                .reviewRequisition(
+                        requisitionId,
+                        request);
     }
 
     /*
      * =====================================================
-     * SAFETY VALIDATIONS
+     * SUBMIT SHORTAGE INDENT TO PURCHASE
      * =====================================================
      */
 
-    private void assertNotAlreadyPlanned(
-            MatFlowMaterialRequisition requisition) {
+    @Transactional
+    public void submitIndentToPurchase(
+            UUID indentId,
+            RequisitionActionRequest request) {
 
-        boolean hasActiveReservations = reservationRepository
-                .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(
-                        requisition.getId())
-                .stream()
-                .anyMatch(reservation -> reservation.status != ReservationStatus.CANCELLED
-                        &&
-                        reservation.status != ReservationStatus.RELEASED);
+        accessService.requireMaterialPlanning();
 
-        boolean hasTransfers = !transferRepository
-                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                        requisition.getId())
-                .isEmpty();
+        if (indentId == null) {
+            throw badRequest(
+                    "Material indent ID is required");
+        }
 
-        boolean hasIndents = !indentRepository
-                .findByRequisition_Id(
-                        requisition.getId())
-                .isEmpty();
+        if (request == null) {
+            throw badRequest(
+                    "Indent submission request is required");
+        }
 
-        if (hasActiveReservations ||
-                hasTransfers ||
-                hasIndents) {
+        MatFlowIndent indent = indentRepository
+                .lockById(
+                        indentId)
+                .orElseThrow(() -> notFound(
+                        "Material indent not found"));
 
+        if (indent.deliverToLocation == null) {
             throw conflict(
-                    "This requisition has already been reviewed by Store. " +
-                            "Existing reservations, transfers or indents must be explicitly reversed before replanning.");
+                    "Material indent delivery location is missing");
         }
-    }
 
-    private void assertStoreReviewable(
-            MatFlowMaterialRequisition requisition) {
+        accessService.requirePlantAccess(
+                indent.deliverToLocation
+                        .getPlantCode());
 
-        String statusName = requisition.status == null
-                ? ""
-                : requisition.status.name();
+        assertVersion(
+                request.rowVersion(),
+                indent.getRowVersion(),
+                "Material indent");
 
-        if (!STORE_REVIEWABLE_STATUS_NAMES.contains(
-                statusName)) {
+        boolean allowedStatus = indent.status == IndentStatus.AUTO_CREATED ||
+                indent.status == IndentStatus.DRAFT ||
+                indent.status == IndentStatus.RETURNED;
 
+        if (!allowedStatus) {
             throw conflict(
-                    "Requisition cannot be reviewed by Store in status: " +
-                            statusName);
-        }
-    }
-
-    private boolean isStoreQueueStatus(
-            RequisitionResponse response) {
-
-        if (response == null ||
-                response.status() == null) {
-
-            return false;
+                    "Material indent cannot be submitted to Purchase in status: " +
+                            indent.status);
         }
 
-        return STORE_QUEUE_STATUS_NAMES.contains(
-                response.status().name());
+        List<MatFlowIndentLine> lines = indentLineRepository
+                .findByIndent_IdOrderByCreatedAtAsc(
+                        indent.getId());
+
+        if (lines.isEmpty()) {
+            throw badRequest(
+                    "Material indent contains no shortage lines");
+        }
+
+        boolean invalidQuantity = lines.stream()
+                .anyMatch(line -> line == null ||
+                        line.requiredQty == null ||
+                        line.requiredQty.compareTo(
+                                BigDecimal.ZERO) <= 0);
+
+        if (invalidQuantity) {
+            throw conflict(
+                    "Material indent contains an invalid required quantity");
+        }
+
+        String actor = accessService.actor();
+
+        indent.status = IndentStatus.SUBMITTED_TO_PURCHASE;
+
+        String remarks = clean(
+                request.remarks());
+
+        if (remarks != null) {
+            indent.remarks = remarks;
+        }
+
+        indent.setUpdatedBy(
+                actor);
+
+        indent = indentRepository.saveAndFlush(
+                indent);
+
+        auditService.record(
+                "INDENT",
+                indent.getId(),
+                "SUBMITTED_TO_PURCHASE",
+
+                indent.deliverToLocation
+                        .getPlantCode(),
+
+                indent.projectDrawing == null
+                        ? null
+                        : indent.projectDrawing
+                                .getProjectCode(),
+
+                indent.projectDrawing == null
+                        ? null
+                        : indent.projectDrawing
+                                .getDrawingNo(),
+
+                auditService.details(
+                        "indentNumber",
+                        indent.indentNumber,
+
+                        "requisitionId",
+                        indent.requisition == null
+                                ? null
+                                : indent.requisition
+                                        .getId(),
+
+                        "requisitionNumber",
+                        indent.requisition == null
+                                ? null
+                                : indent.requisition.requisitionNumber,
+
+                        "lineCount",
+                        lines.size(),
+
+                        "status",
+                        indent.status,
+
+                        "remarks",
+                        remarks));
     }
+
+    /*
+     * =====================================================
+     * VISIBILITY AND ROUTE VALIDATION
+     * =====================================================
+     */
 
     private MatFlowMaterialRequisition requireVisibleRequisition(
             UUID requisitionId,
@@ -524,12 +645,15 @@ public class MatFlowStoreWorkflowService {
         MatFlowMaterialRequisition requisition;
 
         if (lock) {
+
             requisition = requisitionRepository
                     .lockById(
                             requisitionId)
                     .orElseThrow(() -> notFound(
                             "Requisition not found"));
+
         } else {
+
             requisition = requisitionRepository
                     .findById(
                             requisitionId)
@@ -547,6 +671,11 @@ public class MatFlowStoreWorkflowService {
                     "Requisition has no project drawing");
         }
 
+        if (requisition.bom == null) {
+            throw conflict(
+                    "Requisition has no operational BOM");
+        }
+
         accessService.requirePlantAccess(
                 requisition.destinationLocation
                         .getPlantCode());
@@ -554,11 +683,75 @@ public class MatFlowStoreWorkflowService {
         return requisition;
     }
 
+    private void validateApprovedRoute(
+            MatFlowMaterialRequisition requisition,
+            List<MatFlowBomRouteStep> route) {
+
+        if (requisition == null ||
+                requisition.destinationLocation == null) {
+
+            throw conflict(
+                    "Requisition Production destination is missing");
+        }
+
+        if (route == null ||
+                route.isEmpty()) {
+
+            return;
+        }
+
+        for (MatFlowBomRouteStep step : route) {
+
+            if (step == null ||
+                    step.location == null) {
+
+                throw conflict(
+                        "Approved BOM route contains an incomplete step");
+            }
+
+            if (!step.location.isActive()) {
+                throw conflict(
+                        "Approved BOM route contains an inactive location: " +
+                                step.location.getLocationCode());
+            }
+
+            accessService.requirePlantAccess(
+                    step.location
+                            .getPlantCode());
+        }
+
+        MatFlowBomRouteStep finalStep = route.get(
+                route.size() - 1);
+
+        if (!finalStep.location
+                .getId()
+                .equals(
+                        requisition.destinationLocation
+                                .getId())) {
+
+            throw conflict(
+                    "Approved BOM route does not end at the requisition Production destination");
+        }
+    }
+
     /*
      * =====================================================
      * HELPERS
      * =====================================================
      */
+
+    private boolean isStoreQueueStatus(
+            RequisitionResponse response) {
+
+        if (response == null ||
+                response.status() == null) {
+
+            return false;
+        }
+
+        return STORE_QUEUE_STATUS_NAMES.contains(
+                response.status().name());
+    }
 
     private boolean samePlant(
             MatFlowLocation left,
@@ -585,8 +778,7 @@ public class MatFlowStoreWorkflowService {
             MatFlowStockBalance balance) {
 
         if (balance == null) {
-            return zero(
-                    null);
+            return ZERO;
         }
 
         return zero(
@@ -606,7 +798,7 @@ public class MatFlowStoreWorkflowService {
                             .getLocationCode();
         }
 
-        return route.stream()
+        String result = route.stream()
                 .filter(step -> step != null &&
                         step.location != null)
                 .map(step -> step.location
@@ -615,6 +807,10 @@ public class MatFlowStoreWorkflowService {
                 .collect(
                         Collectors.joining(
                                 " → "));
+
+        return clean(result) == null
+                ? "-"
+                : result;
     }
 
     private void assertVersion(
@@ -641,9 +837,7 @@ public class MatFlowStoreWorkflowService {
             BigDecimal value) {
 
         return value == null
-                ? BigDecimal.ZERO.setScale(
-                        3,
-                        RoundingMode.HALF_UP)
+                ? ZERO
                 : value.setScale(
                         3,
                         RoundingMode.HALF_UP);

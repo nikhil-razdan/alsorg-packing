@@ -160,47 +160,17 @@ public final class MatFlowPlanningTypes {
 
     public enum IndentStatus {
 
-        /**
-         * Automatically generated from Store planning shortage.
-         * Purchase must not see it as an approved requirement yet.
-         */
         AUTO_CREATED,
-
-        /**
-         * Store is editing or checking the indent.
-         */
         DRAFT,
 
-        /**
-         * Store has formally handed the shortage to Purchase.
-         */
         SUBMITTED_TO_PURCHASE,
-
-        /**
-         * Purchase has started quotation/PO activity.
-         */
         PURCHASE_IN_PROGRESS,
-
-        /**
-         * At least one PO exists against the indent.
-         */
         PO_CREATED,
 
-        /**
-         * Some ordered quantity has been received.
-         */
         PARTIALLY_RECEIVED,
-
-        /**
-         * Required quantity has been received.
-         */
         RECEIVED,
 
-        /**
-         * Purchase returned the indent to Store.
-         */
         RETURNED,
-
         CANCELLED
     }
 

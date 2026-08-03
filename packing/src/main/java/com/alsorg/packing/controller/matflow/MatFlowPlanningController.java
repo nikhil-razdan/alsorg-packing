@@ -5,8 +5,8 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRes
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
+
 import com.alsorg.packing.service.matflow.MatFlowPlanningService;
-import com.alsorg.packing.service.matflow.MatFlowStoreWorkflowService;
 
 import jakarta.validation.Valid;
 
@@ -28,15 +28,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatFlowPlanningController {
 
     private final MatFlowPlanningService service;
-    private final MatFlowStoreWorkflowService workflowservice;
 
     public MatFlowPlanningController(
-            MatFlowPlanningService service,
-        MatFlowStoreWorkflowService workflowservice) {
+            MatFlowPlanningService service) {
 
         this.service = service;
-        this.workflowservice = workflowservice;
     }
+
+    /*
+     * =====================================================
+     * REQUISITION READ
+     * =====================================================
+     */
 
     @GetMapping("/requisitions")
     public List<RequisitionResponse> list() {
@@ -59,6 +62,12 @@ public class MatFlowPlanningController {
         return service.getPlanningSnapshot(
                 id);
     }
+
+    /*
+     * =====================================================
+     * PRODUCTION REQUISITION ACTIONS
+     * =====================================================
+     */
 
     @PostMapping("/requisitions")
     @PreAuthorize("""
@@ -93,6 +102,21 @@ public class MatFlowPlanningController {
                 request);
     }
 
+    /*
+     * =====================================================
+     * LEGACY AUTOMATIC PLANNING
+     * =====================================================
+     *
+     * This endpoint uses PlanningRequest and therefore must
+     * call MatFlowPlanningService.planRequisition().
+     *
+     * The new material-by-material Store review is handled by:
+     *
+     * POST /api/matflow/store/requisitions/{id}/review
+     *
+     * using StoreReviewRequest.
+     */
+
     @PostMapping("/requisitions/{id}/plan")
     @PreAuthorize("""
             hasAnyAuthority(
@@ -106,9 +130,8 @@ public class MatFlowPlanningController {
 
             @Valid @RequestBody PlanningRequest request) {
 
-        return workflowservice
-                .confirmStoreReview(
-                        id,
-                        request);
+        return service.planRequisition(
+                id,
+                request);
     }
 }

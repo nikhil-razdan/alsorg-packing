@@ -1,10 +1,11 @@
 package com.alsorg.packing.controller.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
+
 import com.alsorg.packing.service.matflow.MatFlowStoreIssueService;
 import com.alsorg.packing.service.matflow.MatFlowStoreWorkflowService;
 
@@ -28,13 +29,16 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("isAuthenticated()")
 public class MatFlowStoreController {
 
-    private final MatFlowStoreWorkflowService service;
+    private final MatFlowStoreWorkflowService workflowService;
+
     private final MatFlowStoreIssueService issueService;
 
     public MatFlowStoreController(
-            MatFlowStoreWorkflowService service, MatFlowStoreIssueService issueService) {
+            MatFlowStoreWorkflowService workflowService,
+            MatFlowStoreIssueService issueService) {
 
-        this.service = service;
+        this.workflowService = workflowService;
+
         this.issueService = issueService;
     }
 
@@ -42,35 +46,39 @@ public class MatFlowStoreController {
     public List<RequisitionResponse> queue(
             @RequestParam(required = false) String plantCode) {
 
-        return service.listStoreQueue(
-                plantCode);
+        return workflowService
+                .listStoreQueue(
+                        plantCode);
     }
 
     @GetMapping("/requisitions/{id}")
     public PlanningResponse detail(
             @PathVariable UUID id) {
 
-        return service.getStorePlanning(
-                id);
+        return workflowService
+                .getStorePlanning(
+                        id);
     }
 
     @GetMapping("/requisitions/{id}/availability")
     public List<StoreLineAvailabilityResponse> availability(
             @PathVariable UUID id) {
 
-        return service.getAvailability(
-                id);
+        return workflowService
+                .getAvailability(
+                        id);
     }
 
     @PostMapping("/requisitions/{id}/review")
     public PlanningResponse confirmReview(
             @PathVariable UUID id,
 
-            @Valid @RequestBody PlanningRequest request) {
+            @Valid @RequestBody StoreReviewRequest request) {
 
-        return service.confirmStoreReview(
-                id,
-                request);
+        return workflowService
+                .confirmStoreReview(
+                        id,
+                        request);
     }
 
     @PostMapping("/reservations/{reservationId}/issue")
@@ -79,8 +87,9 @@ public class MatFlowStoreController {
 
             @Valid @RequestBody StoreIssueRequest request) {
 
-        return issueService.issue(
-                reservationId,
-                request);
+        return issueService
+                .issue(
+                        reservationId,
+                        request);
     }
 }

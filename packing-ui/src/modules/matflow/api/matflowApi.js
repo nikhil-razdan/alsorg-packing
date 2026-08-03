@@ -870,8 +870,23 @@ export const matflowApi = {
 		indentId,
 		body
 	) {
+		const id =
+			String(
+				indentId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Indent ID is required."
+				)
+			);
+		}
+
 		return API.patch(
-			`${BASE}/indents/${indentId}/submit-to-purchase`,
+			`${BASE}/indents/${encodeURIComponent(
+				id
+			)}/submit-to-purchase`,
 			body
 		);
 	},

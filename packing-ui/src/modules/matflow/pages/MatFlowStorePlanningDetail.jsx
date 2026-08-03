@@ -68,14 +68,6 @@ import {
     tableShellSx,
 } from "../matflowTheme";
 
-const ELIGIBLE_SOURCE_TYPES =
-    new Set([
-        "STORE",
-        "PRODUCTION",
-        "PROCESSING",
-        "EXTERNAL_PROCESSOR",
-    ]);
-
 const STORE_REVIEWABLE_STATUSES =
     new Set([
         "SUBMITTED",
@@ -489,6 +481,107 @@ const resolveLineWorkflow = (
     };
 };
 
+const summarizeReviewLine = (
+    line,
+    availabilityEntry,
+    review
+) => {
+    const requestedQty =
+        roundQty(
+            line?.requestedQty
+        );
+
+    const stockOptions =
+        asArray(
+            availabilityEntry
+                ?.stockOptions
+        );
+
+    const optionByLocation =
+        new Map(
+            stockOptions.map(
+                (option) => [
+                    String(
+                        option.locationId
+                    ),
+                    option,
+                ]
+            )
+        );
+
+    const allocations =
+        Object.entries(
+            review
+                ?.allocationQuantities ||
+            {}
+        )
+            .map(
+                ([
+                    locationId,
+                    rawQty,
+                ]) => ({
+                    locationId,
+
+                    quantity:
+                        roundQty(
+                            rawQty
+                        ),
+
+                    option:
+                        optionByLocation.get(
+                            String(
+                                locationId
+                            )
+                        ),
+                })
+            )
+            .filter(
+                (item) =>
+                    item.quantity > 0
+            );
+
+    const allocatedQty =
+        roundQty(
+            allocations.reduce(
+                (sum, item) =>
+                    sum +
+                    item.quantity,
+                0
+            )
+        );
+
+    const shortageQty =
+        roundQty(
+            Math.max(
+                0,
+                requestedQty -
+                allocatedQty
+            )
+        );
+
+    return {
+        requestedQty,
+        stockOptions,
+        allocations,
+        allocatedQty,
+        shortageQty,
+    };
+};
+
+const roundQty = (value) =>
+    Math.round(
+        numeric(value) * 1000
+    ) / 1000;
+
+const qtyEquals = (
+    left,
+    right
+) =>
+    Math.abs(
+        roundQty(left) -
+        roundQty(right)
+    ) < 0.0005;
+
 export default function MatFlowStorePlanningDetail() {
     const {
         requisitionId,
@@ -508,19 +601,14 @@ export default function MatFlowStorePlanningDetail() {
     ] = useState([]);
 
     const [
-        availability,
-        setAvailability,
-    ] = useState([]);
-
-    const [
-        selectedSourceIds,
-        setSelectedSourceIds,
-    ] = useState([]);
-
-    const [
         remarks,
         setRemarks,
     ] = useState("");
+
+    const [
+        reviewByLine,
+        setReviewByLine,
+    ] = useState({});
 
     const [
         submittingIndentId,
@@ -547,6 +635,284 @@ export default function MatFlowStorePlanningDetail() {
         setError,
     ] = useState("");
 
+    const buildStoreReviewLines =
+        () => {
+            return lines.map(
+                (line) => {
+                    const lineId =
+                        String(
+                            line.id
+                        );
+
+                    const availabilityEntry =
+                        availabilityByLineId.get(
+                            lineId
+                        );
+
+                    const review =
+                        reviewByLine[
+                        lineId
+                        ] || {
+                            decision:
+                                "UNDECIDED",
+
+                            allocationQuantities:
+                                {},
+
+                            remarks:
+                                "",
+                        };
+
+                    const decision =
+                        normalize(
+                            review.decision
+                        );
+
+                    if (
+                        decision ===
+                        "UNDECIDED"
+                    ) {
+                        throw new Error(
+                            `Select Available, Partial or Shortage for material ${line.materialCode || line.materialName}.`
+                        );
+                    }
+
+                    const summary =
+                        summarizeReviewLine(
+                            line,
+                            availabilityEntry,
+                            review
+                        );
+
+                    for (
+                        const allocation
+                        of summary.allocations
+                    ) {
+                        if (
+                            !allocation.option
+                        ) {
+                            throw new Error(
+                                `An invalid source location was selected for ${line.materialCode || line.materialName}.`
+                            );
+                        }
+
+                        const availableQty =
+                            roundQty(
+                                allocation.option
+                                    .availableQty
+                            );
+
+                        if (
+                            allocation.quantity >
+                            availableQty
+                        ) {
+                            throw new Error(
+                                `${allocation.option.locationCode} has only ${formatQty(
+                                    availableQty
+                                )} ${line.uom || ""} available for ${line.materialCode || line.materialName}.`
+                            );
+                        }
+                    }
+
+                    if (
+                        summary.allocatedQty >
+                        summary.requestedQty
+                    ) {
+                        throw new Error(
+                            `Allocated quantity exceeds requested quantity for ${line.materialCode || line.materialName}.`
+                        );
+                    }
+
+                    if (
+                        decision ===
+                        "AVAILABLE" &&
+                        !qtyEquals(
+                            summary.allocatedQty,
+                            summary.requestedQty
+                        )
+                    ) {
+                        throw new Error(
+                            `Available requires the complete requested quantity to be allocated for ${line.materialCode || line.materialName}.`
+                        );
+                    }
+
+                    if (
+                        decision ===
+                        "PARTIAL" &&
+                        (
+                            summary.allocatedQty <=
+                            0 ||
+                            summary.allocatedQty >=
+                            summary.requestedQty
+                        )
+                    ) {
+                        throw new Error(
+                            `Partial requires an allocation greater than zero and lower than the requested quantity for ${line.materialCode || line.materialName}.`
+                        );
+                    }
+
+                    if (
+                        decision ===
+                        "SHORTAGE" &&
+                        summary.allocatedQty >
+                        0
+                    ) {
+                        throw new Error(
+                            `Shortage cannot contain a stock allocation for ${line.materialCode || line.materialName}.`
+                        );
+                    }
+
+                    return {
+                        requisitionLineId:
+                            line.id,
+
+                        rowVersion:
+                            line.rowVersion,
+
+                        allocations:
+                            summary.allocations.map(
+                                (allocation) => ({
+                                    sourceLocationId:
+                                        allocation
+                                            .option
+                                            .locationId,
+
+                                    reserveQty:
+                                        allocation
+                                            .quantity,
+                                })
+                            ),
+
+                        processingRequired:
+                            null,
+
+                        processingLocationId:
+                            null,
+
+                        createIndentForShortage:
+                            summary.shortageQty >
+                            0,
+
+                        remarks:
+                            clean(
+                                review.remarks
+                            ) || null,
+                    };
+                }
+            );
+        };
+
+    const updateLineDecision = (
+        lineId,
+        decision
+    ) => {
+        const key =
+            String(lineId);
+
+        setReviewByLine(
+            (current) => {
+                const existing =
+                    current[key] || {
+                        decision:
+                            "UNDECIDED",
+
+                        allocationQuantities:
+                            {},
+
+                        remarks:
+                            "",
+                    };
+
+                return {
+                    ...current,
+
+                    [key]: {
+                        ...existing,
+                        decision,
+
+                        allocationQuantities:
+                            decision ===
+                                "SHORTAGE"
+                                ? {}
+                                : existing
+                                    .allocationQuantities,
+                    },
+                };
+            }
+        );
+    };
+
+    const updateAllocationQty = (
+        lineId,
+        locationId,
+        value
+    ) => {
+        const lineKey =
+            String(lineId);
+
+        const locationKey =
+            String(locationId);
+
+        setReviewByLine(
+            (current) => {
+                const existing =
+                    current[lineKey] || {
+                        decision:
+                            "UNDECIDED",
+
+                        allocationQuantities:
+                            {},
+
+                        remarks:
+                            "",
+                    };
+
+                return {
+                    ...current,
+
+                    [lineKey]: {
+                        ...existing,
+
+                        allocationQuantities: {
+                            ...existing
+                                .allocationQuantities,
+
+                            [locationKey]:
+                                value,
+                        },
+                    },
+                };
+            }
+        );
+    };
+
+    const updateLineRemarks = (
+        lineId,
+        value
+    ) => {
+        const key =
+            String(lineId);
+
+        setReviewByLine(
+            (current) => ({
+                ...current,
+
+                [key]: {
+                    ...(current[key] || {
+                        decision:
+                            "UNDECIDED",
+
+                        allocationQuantities:
+                            {},
+                    }),
+
+                    remarks:
+                        value,
+                },
+            })
+        );
+    };
+
     const load = useCallback(
         async () => {
             if (!requisitionId) {
@@ -569,7 +935,6 @@ export default function MatFlowStorePlanningDetail() {
                 const [
                     planningResponse,
                     availabilityResponse,
-                    locationResponse,
                 ] = await Promise.all([
                     matflowApi.getStoreReview(
                         requisitionId
@@ -578,11 +943,76 @@ export default function MatFlowStorePlanningDetail() {
                     matflowApi.getStoreAvailability(
                         requisitionId
                     ),
-
-                    matflowApi.listLocations({
-                        active: true,
-                    }),
                 ]);
+
+                const availabilityRows =
+                    asArray(
+                        availabilityResponse?.data
+                    );
+
+                setSnapshot(
+                    planningResponse?.data ||
+                    null
+                );
+
+                setAvailability(
+                    availabilityRows
+                );
+
+                setReviewByLine(
+                    (current) => {
+                        const next = {};
+
+                        availabilityRows.forEach(
+                            (entry) => {
+                                const lineId =
+                                    String(
+                                        entry.requisitionLineId
+                                    );
+
+                                const previous =
+                                    current[lineId] ||
+                                    {};
+
+                                const allocationQuantities =
+                                    {};
+
+                                asArray(
+                                    entry.stockOptions
+                                ).forEach(
+                                    (option) => {
+                                        const locationId =
+                                            String(
+                                                option.locationId
+                                            );
+
+                                        allocationQuantities[
+                                            locationId
+                                        ] =
+                                            previous
+                                                .allocationQuantities
+                                            ?.[locationId] ??
+                                            "";
+                                    }
+                                );
+
+                                next[lineId] = {
+                                    decision:
+                                        previous.decision ||
+                                        "UNDECIDED",
+
+                                    allocationQuantities,
+
+                                    remarks:
+                                        previous.remarks ||
+                                        "",
+                                };
+                            }
+                        );
+
+                        return next;
+                    }
+                );
 
                 setSnapshot(
                     planningResponse?.data ||
@@ -603,7 +1033,6 @@ export default function MatFlowStorePlanningDetail() {
             } catch (requestError) {
                 setSnapshot(null);
                 setAvailability([]);
-                setLocations([]);
 
                 setError(
                     readMatFlowError(
@@ -695,38 +1124,6 @@ export default function MatFlowStorePlanningDetail() {
             return result;
         }, [availability]);
 
-    const sourceOptions =
-        useMemo(() => {
-            return locations
-                .filter(
-                    (location) =>
-                        Boolean(
-                            location?.id
-                        ) &&
-                        location.active !==
-                        false &&
-                        location.supportsStock ===
-                        true &&
-                        ELIGIBLE_SOURCE_TYPES.has(
-                            normalize(
-                                location.locationType
-                            )
-                        )
-                )
-                .sort(
-                    (left, right) =>
-                        String(
-                            left.locationCode ||
-                            ""
-                        ).localeCompare(
-                            String(
-                                right.locationCode ||
-                                ""
-                            )
-                        )
-                );
-        }, [locations]);
-
     const totals =
         useMemo(() => {
             return lines.reduce(
@@ -788,22 +1185,6 @@ export default function MatFlowStorePlanningDetail() {
         ) &&
         !canConfirmStoreReview;
 
-    const updateSelectedSources = (
-        event
-    ) => {
-        const value =
-            event.target.value;
-
-        setSelectedSourceIds(
-            typeof value ===
-                "string"
-                ? value
-                    .split(",")
-                    .filter(Boolean)
-                : value.map(String)
-        );
-    };
-
     const confirmStoreReview =
         async () => {
             if (!requisition?.id) {
@@ -832,16 +1213,27 @@ export default function MatFlowStorePlanningDetail() {
                 return;
             }
 
+            let reviewLines;
+
+            try {
+                reviewLines =
+                    buildStoreReviewLines();
+            } catch (
+            validationError
+            ) {
+                setError(
+                    validationError.message
+                );
+
+                return;
+            }
+
             const body = {
                 rowVersion:
                     requisition.rowVersion,
 
-                /*
-                 * Empty means automatic location ranking.
-                 * Selected IDs are treated as preferred priority.
-                 */
-                preferredSourceLocationIds:
-                    selectedSourceIds,
+                lines:
+                    reviewLines,
 
                 remarks:
                     clean(remarks) ||
@@ -877,7 +1269,6 @@ export default function MatFlowStorePlanningDetail() {
                 }
 
                 setRemarks("");
-                setSelectedSourceIds([]);
             } catch (requestError) {
                 setError(
                     readMatFlowError(
@@ -1167,91 +1558,9 @@ export default function MatFlowStorePlanningDetail() {
                     />
                 </Box>
 
-                <Box sx={planningFormSx}>
+                <Box sx={planningFormSingleSx}>
                     <TextField
-                        select
-                        label="Preferred Source Priority"
-                        value={
-                            selectedSourceIds
-                        }
-                        disabled={
-                            planning ||
-                            !canConfirmStoreReview
-                        }
-                        onChange={
-                            updateSelectedSources
-                        }
-                        helperText={
-                            sourceOptions.length ===
-                                0
-                                ? "No eligible stock-supporting source locations are configured."
-                                : "Leave blank for automatic source selection. Selected locations are tried first."
-                        }
-                        SelectProps={{
-                            multiple: true,
-
-                            renderValue:
-                                (selected) => {
-                                    if (
-                                        selected.length ===
-                                        0
-                                    ) {
-                                        return "Automatic Selection";
-                                    }
-
-                                    return selected
-                                        .map(
-                                            (id) =>
-                                                sourceOptions.find(
-                                                    (location) =>
-                                                        String(
-                                                            location.id
-                                                        ) ===
-                                                        String(
-                                                            id
-                                                        )
-                                                )
-                                                    ?.locationCode ||
-                                                id
-                                        )
-                                        .join(
-                                            " → "
-                                        );
-                                },
-                        }}
-                        sx={fieldSx}
-                    >
-                        {sourceOptions.map(
-                            (location) => (
-                                <MenuItem
-                                    key={
-                                        location.id
-                                    }
-                                    value={String(
-                                        location.id
-                                    )}
-                                >
-                                    <Checkbox
-                                        checked={selectedSourceIds.includes(
-                                            String(
-                                                location.id
-                                            )
-                                        )}
-                                    />
-
-                                    <ListItemText
-                                        primary={`${location.locationCode} · ${location.locationName}`}
-                                        secondary={`${location.plantCode} · ${readable(
-                                            location.locationType
-                                        )}`}
-                                    />
-                                </MenuItem>
-                            )
-                        )}
-                    </TextField>
-
-                    <TextField
-                        label="Store Review Remarks"
+                        label="Overall Store Review Remarks"
                         value={remarks}
                         disabled={
                             planning ||
@@ -1373,15 +1682,6 @@ export default function MatFlowStorePlanningDetail() {
                     ) : (
                         lines.map(
                             (line) => {
-                                const meta =
-                                    lineStatus(
-                                        line
-                                    );
-
-                                const progress =
-                                    lineProgress(
-                                        line
-                                    );
 
                                 const availabilityEntry =
                                     availabilityByLineId.get(
@@ -1409,6 +1709,63 @@ export default function MatFlowStorePlanningDetail() {
                                                 option.availableQty
                                             ),
                                         0
+                                    );
+
+                                const lineReview =
+                                    reviewByLine[
+                                    String(line.id)
+                                    ] || {
+                                        decision:
+                                            "UNDECIDED",
+
+                                        allocationQuantities:
+                                            {},
+
+                                        remarks:
+                                            "",
+                                    };
+
+                                const reviewSummary =
+                                    summarizeReviewLine(
+                                        line,
+                                        availabilityEntry,
+                                        lineReview
+                                    );
+
+                                const displayedReserved =
+                                    canConfirmStoreReview
+                                        ? reviewSummary
+                                            .allocatedQty
+                                        : numeric(
+                                            line.reservedQty
+                                        );
+
+                                const displayedShortage =
+                                    canConfirmStoreReview
+                                        ? reviewSummary
+                                            .shortageQty
+                                        : numeric(
+                                            line.shortageQty
+                                        );
+
+                                const previewLine = {
+                                    ...line,
+
+                                    reservedQty:
+                                        displayedReserved,
+
+                                    shortageQty:
+                                        displayedShortage,
+                                };
+
+                                const meta =
+                                    lineStatus(
+                                        previewLine
+                                    );
+
+                                const progress =
+                                    lineProgress(
+                                        previewLine
                                     );
 
                                 return (
@@ -1453,45 +1810,156 @@ export default function MatFlowStorePlanningDetail() {
                                         </Box>
 
                                         <Box sx={tableCellSx}>
-                                            <Typography sx={availableTotalSx}>
-                                                {formatQty(
-                                                    totalAvailable
-                                                )}
-                                                {" "}
-                                                {line.uom || ""}
-                                            </Typography>
+                                            <TextField
+                                                select
+                                                label="Store Decision"
+                                                value={
+                                                    lineReview.decision
+                                                }
+                                                disabled={
+                                                    planning ||
+                                                    !canConfirmStoreReview
+                                                }
+                                                onChange={(event) =>
+                                                    updateLineDecision(
+                                                        line.id,
+                                                        event.target.value
+                                                    )
+                                                }
+                                                size="small"
+                                                sx={compactDecisionSx}
+                                            >
+                                                <MenuItem value="UNDECIDED">
+                                                    Select Decision
+                                                </MenuItem>
 
-                                            {stockOptions.length === 0 ? (
-                                                <Typography sx={subTextSx}>
-                                                    No available stock
-                                                </Typography>
-                                            ) : (
-                                                <Box sx={stockOptionListSx}>
-                                                    {stockOptions
-                                                        .filter(
-                                                            (option) =>
-                                                                numeric(
-                                                                    option.availableQty
-                                                                ) > 0
-                                                        )
-                                                        .slice(0, 3)
-                                                        .map(
-                                                            (option) => (
-                                                                <Typography
-                                                                    key={
-                                                                        option.locationId
-                                                                    }
-                                                                    sx={stockOptionTextSx}
-                                                                >
+                                                <MenuItem value="AVAILABLE">
+                                                    Available — Reserve Full
+                                                </MenuItem>
+
+                                                <MenuItem value="PARTIAL">
+                                                    Partially Available
+                                                </MenuItem>
+
+                                                <MenuItem value="SHORTAGE">
+                                                    Shortage — Raise Indent
+                                                </MenuItem>
+                                            </TextField>
+
+                                            {reviewSummary
+                                                .stockOptions
+                                                .filter(
+                                                    (option) =>
+                                                        numeric(
+                                                            option.availableQty
+                                                        ) > 0
+                                                )
+                                                .map(
+                                                    (option) => (
+                                                        <Box
+                                                            key={
+                                                                option.locationId
+                                                            }
+                                                            sx={allocationRowSx}
+                                                        >
+                                                            <Box sx={{ minWidth: 0 }}>
+                                                                <Typography sx={stockOptionTextSx}>
                                                                     {option.locationCode}
-                                                                    {": "}
+                                                                    {" · Available "}
                                                                     {formatQty(
                                                                         option.availableQty
                                                                     )}
+                                                                    {" "}
+                                                                    {line.uom || ""}
                                                                 </Typography>
-                                                            )
-                                                        )}
-                                                </Box>
+
+                                                                <Typography sx={subTextSx}>
+                                                                    {option.plantCode}
+                                                                    {" · "}
+                                                                    {readable(
+                                                                        option.locationType
+                                                                    )}
+                                                                </Typography>
+                                                            </Box>
+
+                                                            <TextField
+                                                                type="number"
+                                                                label="Reserve"
+                                                                value={
+                                                                    lineReview
+                                                                        .allocationQuantities
+                                                                    ?.[String(
+                                                                        option.locationId
+                                                                    )] ??
+                                                                    ""
+                                                                }
+                                                                disabled={
+                                                                    planning ||
+                                                                    !canConfirmStoreReview ||
+                                                                    lineReview.decision ===
+                                                                    "SHORTAGE" ||
+                                                                    lineReview.decision ===
+                                                                    "UNDECIDED"
+                                                                }
+                                                                onChange={(event) =>
+                                                                    updateAllocationQty(
+                                                                        line.id,
+                                                                        option.locationId,
+                                                                        event.target.value
+                                                                    )
+                                                                }
+                                                                inputProps={{
+                                                                    min:
+                                                                        0,
+
+                                                                    max:
+                                                                        numeric(
+                                                                            option.availableQty
+                                                                        ),
+
+                                                                    step:
+                                                                        0.001,
+                                                                }}
+                                                                size="small"
+                                                                sx={allocationQtyFieldSx}
+                                                            />
+                                                        </Box>
+                                                    )
+                                                )}
+
+                                            {reviewSummary
+                                                .stockOptions
+                                                .filter(
+                                                    (option) =>
+                                                        numeric(
+                                                            option.availableQty
+                                                        ) > 0
+                                                ).length === 0 && (
+                                                    <Box sx={noStockBoxSx}>
+                                                        <Typography sx={noStockTitleSx}>
+                                                            No recorded stock
+                                                        </Typography>
+
+                                                        <Typography sx={subTextSx}>
+                                                            Select Shortage, or import/adjust
+                                                            physical inventory before reserving.
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
+                                            {canConfirmStoreReview && (
+                                                <Typography sx={allocationSummarySx}>
+                                                    Planned reserve:{" "}
+                                                    {formatQty(
+                                                        reviewSummary
+                                                            .allocatedQty
+                                                    )}
+                                                    {" · Planned shortage: "}
+                                                    {formatQty(
+                                                        reviewSummary
+                                                            .shortageQty
+                                                    )}
+                                                </Typography>
                                             )}
                                         </Box>
 
@@ -1517,7 +1985,7 @@ export default function MatFlowStorePlanningDetail() {
                                         <Box sx={tableCellSx}>
                                             <Typography sx={reservedQtySx}>
                                                 {formatQty(
-                                                    line.reservedQty
+                                                    displayedReserved
                                                 )}
                                             </Typography>
                                         </Box>
@@ -1526,7 +1994,7 @@ export default function MatFlowStorePlanningDetail() {
                                             <Typography
                                                 sx={
                                                     numeric(
-                                                        line.shortageQty
+                                                        displayedReserved
                                                     ) >
                                                         0
                                                         ? shortageQtySx
@@ -1534,7 +2002,7 @@ export default function MatFlowStorePlanningDetail() {
                                                 }
                                             >
                                                 {formatQty(
-                                                    line.shortageQty
+                                                    displayedShortage
                                                 )}
                                             </Typography>
                                         </Box>
@@ -2098,7 +2566,7 @@ const planningHeaderSx = {
     gap: "12px",
 };
 
-const planningFormSx = {
+const planningFormSingleSx = {
     mt: "15px",
     display: "grid",
     gridTemplateColumns:
@@ -2173,20 +2641,20 @@ const headerStatusChipSx = (
 };
 
 const materialColumns =
-    "minmax(230px,1.4fr) 130px 90px 90px minmax(220px,1.2fr) minmax(180px,1fr) 90px 90px 90px 140px 145px 180px";
+    "minmax(230px,1.4fr) 130px 90px 90px minmax(310px,1.55fr) minmax(180px,1fr) 90px 90px 90px 140px 145px 180px";
 
 const materialHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         materialColumns,
-    minWidth: "1740px",
+    minWidth: "1840px",
 };
 
 const materialRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         materialColumns,
-    minWidth: "1740px",
+    minWidth: "1840px",
 };
 
 const mainTextSx = {
@@ -2429,6 +2897,61 @@ const miniPrimarySx = {
     color: "#fff",
     background: "#0284c7",
     fontSize: "8px",
+    fontWeight: 900,
+};
+
+const compactDecisionSx = {
+    ...fieldSx,
+    width: "100%",
+
+    "& .MuiInputBase-root": {
+        minHeight: "34px",
+        fontSize: "9px",
+    },
+};
+
+const allocationRowSx = {
+    mt: "6px",
+    display: "grid",
+    gridTemplateColumns:
+        "minmax(0,1fr) 88px",
+    alignItems: "center",
+    gap: "7px",
+};
+
+const allocationQtyFieldSx = {
+    ...fieldSx,
+
+    "& .MuiInputBase-root": {
+        minHeight: "33px",
+        fontSize: "9px",
+    },
+
+    "& .MuiInputLabel-root": {
+        fontSize: "9px",
+    },
+};
+
+const allocationSummarySx = {
+    mt: "7px",
+    color: "#0284c7",
+    fontSize: "8.5px",
+    fontWeight: 850,
+};
+
+const noStockBoxSx = {
+    mt: "7px",
+    p: "7px",
+    borderRadius: "7px",
+    background:
+        "rgba(220,38,38,.06)",
+    border:
+        "1px solid rgba(220,38,38,.18)",
+};
+
+const noStockTitleSx = {
+    color: "#dc2626",
+    fontSize: "8.5px",
     fontWeight: 900,
 };
 

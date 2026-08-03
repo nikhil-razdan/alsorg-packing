@@ -10,6 +10,11 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ReservationResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineReviewRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreSourceAllocationRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreStockOptionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
 
 import com.alsorg.packing.domain.matflow.MatFlowBom;
@@ -928,7 +933,9 @@ public class MatFlowPlanningService {
                                         indent = createIndent(
                                                         requisition,
                                                         firstDestination,
-                                                        request,
+                                                        request == null
+                                                                        ? null
+                                                                        : request.remarks(),
                                                         actor);
 
                                         indentByDeliveryLocation.put(
@@ -1232,53 +1239,193 @@ public class MatFlowPlanningService {
                 return TransferPurpose.STORE_TO_PRODUCTION;
         }
 
+        @Transactional(readOnly = true)
+        public List<StoreLineAvailabilityResponse> getStoreAvailability(
+                        UUID requisitionId) {
+
+                accessService.requireMaterialPlanning();
+
+                MatFlowMaterialRequisition requisition = requireRequisition(
+                                requisitionId);
+
+                List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                                .findByRequisition_IdOrderByLineNoAsc(
+                                                requisition.getId());
+
+                return lines.stream()
+                                .map(line -> {
+
+                                        if (line.material == null ||
+                                                        line.bomLine == null) {
+
+                                                throw conflict(
+                                                                "Requisition contains an incomplete material line");
+                                        }
+
+                                        List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
+                                                        line.bomLine.getId());
+
+                                        List<MatFlowBomRouteStep> route = returnedRoute == null
+                                                        ? List.of()
+                                                        : returnedRoute;
+
+                                        validateRoute(
+                                                        route);
+
+                                        validateDestination(
+                                                        requisition.destinationLocation,
+                                                        route);
+
+                                        MatFlowLocation firstDestination = route.isEmpty()
+                                                        ? requisition.destinationLocation
+                                                        : route.get(0).location;
+
+                                        List<MatFlowStockBalance> balances = stockRepository
+                                                        .findPlanningCandidates(
+                                                                        line.material
+                                                                                        .getId(),
+
+                                                                        accessService
+                                                                                        .allowedPlants(),
+
+                                                                        PLANNING_SOURCE_TYPES);
+
+                                        List<StoreStockOptionResponse> stockOptions = balances == null
+                                                        ? List.of()
+                                                        : balances.stream()
+                                                                        .filter(balance -> balance != null &&
+                                                                                        balance.location != null &&
+                                                                                        balance.location
+                                                                                                        .getId() != null)
+                                                                        .map(balance -> {
+
+                                                                                MatFlowLocation location = balance.location;
+
+                                                                                boolean firstRouteDestination = location
+                                                                                                .getId()
+                                                                                                .equals(
+                                                                                                                firstDestination
+                                                                                                                                .getId());
+
+                                                                                boolean productionDestination = location
+                                                                                                .getId()
+                                                                                                .equals(
+                                                                                                                requisition.destinationLocation
+                                                                                                                                .getId());
+
+                                                                                boolean transferRequired = route
+                                                                                                .isEmpty()
+                                                                                                                ? !productionDestination
+                                                                                                                : route.stream()
+                                                                                                                                .anyMatch(step -> step.location != null
+                                                                                                                                                &&
+                                                                                                                                                !step.location
+                                                                                                                                                                .getId()
+                                                                                                                                                                .equals(
+                                                                                                                                                                                location
+                                                                                                                                                                                                .getId()));
+
+                                                                                return new StoreStockOptionResponse(
+                                                                                                balance.getId(),
+
+                                                                                                line.material
+                                                                                                                .getId(),
+
+                                                                                                line.material
+                                                                                                                .getMaterialCode(),
+
+                                                                                                line.material
+                                                                                                                .getMaterialName(),
+
+                                                                                                location.getId(),
+                                                                                                location.getLocationCode(),
+                                                                                                location.getLocationName(),
+                                                                                                location.getPlantCode(),
+                                                                                                location.getLocationType(),
+
+                                                                                                zero(
+                                                                                                                balance.onHandQty),
+
+                                                                                                zero(
+                                                                                                                balance.reservedQty),
+
+                                                                                                zero(
+                                                                                                                balance.blockedQty),
+
+                                                                                                zero(
+                                                                                                                balance.availableQty()),
+
+                                                                                                firstRouteDestination,
+                                                                                                productionDestination,
+                                                                                                transferRequired);
+                                                                        })
+                                                                        .sorted(
+                                                                                        Comparator.comparing(
+                                                                                                        StoreStockOptionResponse::plantCode,
+
+                                                                                                        Comparator.nullsLast(
+                                                                                                                        String.CASE_INSENSITIVE_ORDER))
+
+                                                                                                        .thenComparing(
+                                                                                                                        StoreStockOptionResponse::locationCode,
+
+                                                                                                                        Comparator.nullsLast(
+                                                                                                                                        String.CASE_INSENSITIVE_ORDER)))
+                                                                        .toList();
+
+                                        String approvedRoute = route.isEmpty()
+                                                        ? requisition.destinationLocation
+                                                                        .getLocationCode()
+                                                        : route.stream()
+                                                                        .filter(step -> step != null &&
+                                                                                        step.location != null)
+                                                                        .map(step -> step.location
+                                                                                        .getLocationCode())
+                                                                        .collect(
+                                                                                        java.util.stream.Collectors
+                                                                                                        .joining(
+                                                                                                                        " → "));
+
+                                        return new StoreLineAvailabilityResponse(
+                                                        line.getId(),
+                                                        line.lineNo,
+
+                                                        line.material.getId(),
+                                                        line.material.getMaterialCode(),
+                                                        line.material.getMaterialName(),
+
+                                                        clean(
+                                                                        line.bomLine
+                                                                                        .getMaterialCategorySnapshot()),
+
+                                                        line.material.getUom(),
+
+                                                        zero(
+                                                                        line.requestedQty),
+
+                                                        zero(
+                                                                        line.reservedQty),
+
+                                                        zero(
+                                                                        line.shortageQty),
+
+                                                        firstDestination.getId(),
+
+                                                        firstDestination
+                                                                        .getLocationCode(),
+
+                                                        approvedRoute,
+
+                                                        stockOptions);
+                                })
+                                .toList();
+        }
+
         /*
          * =====================================================
          * INDENT AND LEDGER
          * =====================================================
          */
-
-        private MatFlowIndent createIndent(
-                        MatFlowMaterialRequisition requisition,
-                        MatFlowLocation deliveryLocation,
-                        PlanningRequest request,
-                        String actor) {
-
-                MatFlowIndent indent = new MatFlowIndent();
-
-                indent.indentNumber = generateNumber(
-                                "MFI");
-
-                indent.requisition = requisition;
-
-                indent.projectDrawing = requisition.projectDrawing;
-
-                indent.bom = requisition.bom;
-
-                indent.deliverToLocation = deliveryLocation;
-
-                indent.status = IndentStatus.AUTO_CREATED;
-
-                indent.autoGenerated = true;
-
-                String requestedRemarks = request == null
-                                ? null
-                                : clean(
-                                                request.remarks());
-
-                indent.remarks = requestedRemarks == null
-                                ? "Automatically created from requisition shortage"
-                                : requestedRemarks;
-
-                indent.setCreatedBy(
-                                actor);
-
-                indent.setUpdatedBy(
-                                actor);
-
-                return indentRepository.save(
-                                indent);
-        }
 
         private void saveReservationLedger(
                         MatFlowStockBalance balance,
@@ -2120,6 +2267,516 @@ public class MatFlowPlanningService {
                                 location.getLocationType()
                                                 .name();
                 };
+        }
+
+        @Transactional
+        public PlanningResponse reviewRequisition(
+                        UUID requisitionId,
+                        StoreReviewRequest request) {
+
+                accessService.requireMaterialPlanning();
+
+                if (requisitionId == null) {
+                        throw badRequest(
+                                        "Requisition ID is required");
+                }
+
+                if (request == null) {
+                        throw badRequest(
+                                        "Store review request is required");
+                }
+
+                requisitionRepository
+                                .lockById(
+                                                requisitionId)
+                                .orElseThrow(() -> notFound(
+                                                "Material requisition not found"));
+
+                MatFlowMaterialRequisition requisition = requireRequisition(
+                                requisitionId);
+
+                if (!isStoreReviewableStatus(
+                                requisition.status)) {
+
+                        throw conflict(
+                                        "Requisition cannot be reviewed by Store in status: " +
+                                                        requisition.status);
+                }
+
+                assertVersion(
+                                request.rowVersion(),
+                                requisition.getRowVersion(),
+                                "Requisition");
+
+                List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                                .lockByRequisitionId(
+                                                requisition.getId());
+
+                if (lines.isEmpty()) {
+                        throw badRequest(
+                                        "Requisition contains no material lines");
+                }
+
+                boolean existingReservation = reservationRepository
+                                .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(
+                                                requisition.getId())
+                                .stream()
+                                .anyMatch(reservation -> reservation.status != ReservationStatus.CANCELLED &&
+                                                reservation.status != ReservationStatus.RELEASED);
+
+                boolean existingTransfer = transferRepository
+                                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                                requisition.getId())
+                                .stream()
+                                .anyMatch(transfer -> transfer.status != TransferStatus.CANCELLED);
+
+                boolean existingIndent = indentRepository
+                                .findByRequisition_Id(
+                                                requisition.getId())
+                                .stream()
+                                .anyMatch(indent -> indent.status != IndentStatus.CANCELLED);
+
+                if (existingReservation ||
+                                existingTransfer ||
+                                existingIndent) {
+
+                        throw conflict(
+                                        "Store review output already exists for this requisition");
+                }
+
+                Map<UUID, StoreLineReviewRequest> reviewByLineId = new LinkedHashMap<>();
+
+                for (StoreLineReviewRequest lineReview : request.lines()) {
+
+                        if (lineReview == null ||
+                                        lineReview.requisitionLineId() == null) {
+
+                                throw badRequest(
+                                                "Every Store review line requires a requisition line ID");
+                        }
+
+                        if (reviewByLineId.put(
+                                        lineReview.requisitionLineId(),
+                                        lineReview) != null) {
+
+                                throw badRequest(
+                                                "The same requisition line cannot be reviewed more than once");
+                        }
+                }
+
+                Set<UUID> actualLineIds = lines.stream()
+                                .map(
+                                                MatFlowRequisitionLine::getId)
+                                .collect(
+                                                java.util.stream.Collectors.toCollection(
+                                                                LinkedHashSet::new));
+
+                if (!actualLineIds.equals(
+                                reviewByLineId.keySet())) {
+
+                        throw badRequest(
+                                        "Store review must contain every requisition line exactly once");
+                }
+
+                String actor = accessService.actor();
+
+                Map<UUID, MatFlowIndent> indentByDeliveryLocation = new LinkedHashMap<>();
+
+                boolean hasShortage = false;
+
+                for (MatFlowRequisitionLine line : lines) {
+
+                        if (line == null ||
+                                        line.material == null ||
+                                        line.bomLine == null) {
+
+                                throw conflict(
+                                                "Requisition contains an incomplete material line");
+                        }
+
+                        StoreLineReviewRequest lineReview = reviewByLineId.get(
+                                        line.getId());
+
+                        assertVersion(
+                                        lineReview.rowVersion(),
+                                        line.getRowVersion(),
+                                        "Requisition line");
+
+                        BigDecimal requestedQty = positive(
+                                        line.requestedQty,
+                                        "Requested quantity");
+
+                        List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
+                                        line.bomLine.getId());
+
+                        List<MatFlowBomRouteStep> route = returnedRoute == null
+                                        ? List.of()
+                                        : returnedRoute;
+
+                        validateRoute(
+                                        route);
+
+                        validateDestination(
+                                        requisition.destinationLocation,
+                                        route);
+
+                        MatFlowLocation firstDestination = route.isEmpty()
+                                        ? requisition.destinationLocation
+                                        : route.get(0).location;
+
+                        if (firstDestination == null) {
+                                throw conflict(
+                                                "Approved material route has no first destination");
+                        }
+
+                        List<StoreSourceAllocationRequest> allocations = lineReview.allocations() == null
+                                        ? List.of()
+                                        : lineReview.allocations();
+
+                        Set<UUID> usedSourceIds = new LinkedHashSet<>();
+
+                        BigDecimal totalReserved = BigDecimal.ZERO.setScale(
+                                        3,
+                                        RoundingMode.HALF_UP);
+
+                        for (StoreSourceAllocationRequest allocation : allocations) {
+
+                                if (allocation == null ||
+                                                allocation.sourceLocationId() == null) {
+
+                                        throw badRequest(
+                                                        "A Store allocation contains no source location");
+                                }
+
+                                if (!usedSourceIds.add(
+                                                allocation.sourceLocationId())) {
+
+                                        throw badRequest(
+                                                        "The same source location cannot be allocated twice for one material");
+                                }
+
+                                BigDecimal reserveQty = positive(
+                                                allocation.reserveQty(),
+                                                "Reserve quantity");
+
+                                BigDecimal nextReserved = totalReserved
+                                                .add(
+                                                                reserveQty)
+                                                .setScale(
+                                                                3,
+                                                                RoundingMode.HALF_UP);
+
+                                if (nextReserved.compareTo(
+                                                requestedQty) > 0) {
+
+                                        throw badRequest(
+                                                        "Total reserved quantity cannot exceed requested quantity for material "
+                                                                        +
+                                                                        line.material
+                                                                                        .getMaterialCode());
+                                }
+
+                                MatFlowLocation sourceLocation = requireLocation(
+                                                allocation.sourceLocationId());
+
+                                if (!sourceLocation.isSupportsStock()) {
+                                        throw badRequest(
+                                                        "Selected source does not support stock: " +
+                                                                        sourceLocation
+                                                                                        .getLocationCode());
+                                }
+
+                                if (!PLANNING_SOURCE_TYPES.contains(
+                                                sourceLocation
+                                                                .getLocationType())) {
+
+                                        throw badRequest(
+                                                        "Selected source is not a valid planning location: " +
+                                                                        sourceLocation
+                                                                                        .getLocationCode());
+                                }
+
+                                MatFlowStockBalance lockedBalance = stockRepository
+                                                .lockBalance(
+                                                                line.material
+                                                                                .getId(),
+
+                                                                sourceLocation
+                                                                                .getId())
+                                                .orElseThrow(() -> conflict(
+                                                                "No stock balance exists for material " +
+                                                                                line.material
+                                                                                                .getMaterialCode()
+                                                                                +
+                                                                                " at location " +
+                                                                                sourceLocation
+                                                                                                .getLocationCode()));
+
+                                BigDecimal availableQty = zero(
+                                                lockedBalance.availableQty());
+
+                                if (availableQty.compareTo(
+                                                reserveQty) < 0) {
+
+                                        throw conflict(
+                                                        "Available stock at " +
+                                                                        sourceLocation.getLocationCode() +
+                                                                        " is " +
+                                                                        availableQty +
+                                                                        ", but Store attempted to reserve " +
+                                                                        reserveQty);
+                                }
+
+                                lockedBalance.reservedQty = zero(
+                                                lockedBalance.reservedQty)
+                                                .add(
+                                                                reserveQty)
+                                                .setScale(
+                                                                3,
+                                                                RoundingMode.HALF_UP);
+
+                                lockedBalance.setUpdatedBy(
+                                                actor);
+
+                                lockedBalance = stockRepository.save(
+                                                lockedBalance);
+
+                                MatFlowReservation reservation = new MatFlowReservation();
+
+                                reservation.requisitionLine = line;
+
+                                reservation.material = line.material;
+
+                                reservation.sourceLocation = sourceLocation;
+
+                                reservation.firstDestinationLocation = firstDestination;
+
+                                reservation.demandPlantCode = requisition.destinationLocation
+                                                .getPlantCode();
+
+                                reservation.reservedQty = reserveQty;
+
+                                reservation.issuedQty = BigDecimal.ZERO.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+
+                                reservation.status = ReservationStatus.ACTIVE;
+
+                                reservation.routeSnapshotJson = routeSnapshot(
+                                                route);
+
+                                reservation.setCreatedBy(
+                                                actor);
+
+                                reservation.setUpdatedBy(
+                                                actor);
+
+                                reservation = reservationRepository
+                                                .saveAndFlush(
+                                                                reservation);
+
+                                saveReservationLedger(
+                                                lockedBalance,
+                                                requisition,
+                                                reservation,
+                                                reserveQty,
+                                                actor);
+
+                                createTransferChain(
+                                                requisition,
+                                                reservation,
+                                                route,
+                                                reserveQty,
+                                                actor);
+
+                                totalReserved = nextReserved;
+                        }
+
+                        BigDecimal shortageQty = requestedQty
+                                        .subtract(
+                                                        totalReserved)
+                                        .max(
+                                                        BigDecimal.ZERO)
+                                        .setScale(
+                                                        3,
+                                                        RoundingMode.HALF_UP);
+
+                        if (shortageQty.compareTo(
+                                        BigDecimal.ZERO) > 0 &&
+                                        !Boolean.TRUE.equals(
+                                                        lineReview.createIndentForShortage())) {
+
+                                throw badRequest(
+                                                "Material " +
+                                                                line.material.getMaterialCode() +
+                                                                " has an unallocated quantity of " +
+                                                                shortageQty +
+                                                                ". Mark the line as Partial/Shortage or reserve the complete quantity.");
+                        }
+
+                        line.reservedQty = totalReserved;
+
+                        line.shortageQty = shortageQty;
+
+                        line.remarks = clean(
+                                        lineReview.remarks());
+
+                        line.setUpdatedBy(
+                                        actor);
+
+                        requisitionLineRepository.save(
+                                        line);
+
+                        if (shortageQty.compareTo(
+                                        BigDecimal.ZERO) > 0) {
+
+                                hasShortage = true;
+
+                                UUID deliveryLocationId = firstDestination.getId();
+
+                                MatFlowIndent indent = indentByDeliveryLocation.get(
+                                                deliveryLocationId);
+
+                                if (indent == null) {
+                                        indent = createIndent(
+                                                        requisition,
+                                                        firstDestination,
+                                                        request == null
+                                                                        ? null
+                                                                        : request.remarks(),
+                                                        actor);
+
+                                        indentByDeliveryLocation.put(
+                                                        deliveryLocationId,
+                                                        indent);
+                                }
+
+                                MatFlowIndentLine indentLine = new MatFlowIndentLine();
+
+                                indentLine.indent = indent;
+
+                                indentLine.requisitionLine = line;
+
+                                indentLine.material = line.material;
+
+                                indentLine.requiredQty = shortageQty;
+
+                                indentLine.orderedQty = BigDecimal.ZERO;
+
+                                indentLine.receivedQty = BigDecimal.ZERO;
+
+                                indentLine.uom = line.material.getUom();
+
+                                indentLine.remarks = clean(
+                                                lineReview.remarks());
+
+                                if (indentLine.remarks == null) {
+                                        indentLine.remarks = "Shortage confirmed during Store review";
+                                }
+
+                                indentLine.setCreatedBy(
+                                                actor);
+
+                                indentLine.setUpdatedBy(
+                                                actor);
+
+                                indentLineRepository.save(
+                                                indentLine);
+                        }
+                }
+
+                requisition.status = hasShortage
+                                ? RequisitionStatus.SHORTAGE_PENDING
+                                : RequisitionStatus.PLANNED;
+
+                requisition.plannedBy = actor;
+
+                requisition.plannedAt = LocalDateTime.now();
+
+                String reviewRemarks = clean(
+                                request.remarks());
+
+                if (reviewRemarks != null) {
+                        requisition.remarks = reviewRemarks;
+                }
+
+                requisition.setUpdatedBy(
+                                actor);
+
+                requisition = requisitionRepository
+                                .saveAndFlush(
+                                                requisition);
+
+                auditService.record(
+                                "REQUISITION",
+                                requisition.getId(),
+                                "STORE_REVIEW_CONFIRMED",
+
+                                requisition.destinationLocation
+                                                .getPlantCode(),
+
+                                requisition.projectDrawing
+                                                .getProjectCode(),
+
+                                requisition.projectDrawing
+                                                .getDrawingNo(),
+
+                                auditService.details(
+                                                "requisitionNumber",
+                                                requisition.requisitionNumber,
+
+                                                "status",
+                                                requisition.status,
+
+                                                "reviewedLineCount",
+                                                lines.size(),
+
+                                                "hasShortage",
+                                                hasShortage));
+
+                return toPlanningResponse(
+                                requisition);
+        }
+
+        private MatFlowIndent createIndent(
+                        MatFlowMaterialRequisition requisition,
+                        MatFlowLocation deliveryLocation,
+                        String remarks,
+                        String actor) {
+
+                MatFlowIndent indent = new MatFlowIndent();
+
+                indent.indentNumber = generateNumber(
+                                "MFI");
+
+                indent.requisition = requisition;
+
+                indent.projectDrawing = requisition.projectDrawing;
+
+                indent.bom = requisition.bom;
+
+                indent.deliverToLocation = deliveryLocation;
+
+                indent.status = IndentStatus.AUTO_CREATED;
+
+                indent.autoGenerated = true;
+
+                indent.remarks = clean(
+                                remarks);
+
+                if (indent.remarks == null) {
+                        indent.remarks = "Automatically created from Store-confirmed shortage";
+                }
+
+                indent.setCreatedBy(
+                                actor);
+
+                indent.setUpdatedBy(
+                                actor);
+
+                return indentRepository
+                                .saveAndFlush(
+                                                indent);
         }
 
         private String transferResponsibleDepartment(
