@@ -1,5 +1,6 @@
 package com.alsorg.packing.controller.dto.matflow;
 
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.IndentLineResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.OwnershipType;
@@ -166,6 +167,20 @@ public final class MatFlowPlanningDtos {
                         List<StoreStockOptionResponse> stockOptions) {
         }
 
+        public record StoreIssueRequest(
+
+                        @NotNull(message = "Reservation row version is required.") Long rowVersion,
+
+                        /*
+                         * Null means issue the complete remaining quantity.
+                         */
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Issue quantity must be greater than zero.") BigDecimal quantity,
+
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+
+                        @Size(max = 2000, message = "Issue remarks cannot exceed 2000 characters.") String remarks) {
+        }
+
         public record RequisitionCreateRequest(
 
                         @NotNull(message = "Project drawing ID is required.") UUID projectDrawingId,
@@ -276,7 +291,17 @@ public final class MatFlowPlanningDtos {
                         String demandPlantCode,
                         BigDecimal reservedQty,
                         ReservationStatus status,
-                        Long rowVersion) {
+                        Long rowVersion,
+
+                        BigDecimal issuedQty,
+                        BigDecimal remainingIssueQty,
+                        boolean issueReady,
+
+                        UUID issueLocationId,
+                        String issueLocationCode,
+
+                        String responsibleDepartment,
+                        String nextAction) {
         }
 
         public record IndentLineResponse(
@@ -308,8 +333,22 @@ public final class MatFlowPlanningDtos {
         }
 
         public record TransferResponse(
+
                         UUID id,
                         String transferNumber,
+
+                        UUID requisitionId,
+                        String requisitionNumber,
+
+                        UUID projectDrawingId,
+                        String projectCode,
+                        String drawingNo,
+                        String productName,
+                        String clientName,
+
+                        UUID bomId,
+                        String bomNumber,
+                        Integer bomRevisionNo,
 
                         UUID reservationId,
                         UUID requisitionLineId,
@@ -317,10 +356,12 @@ public final class MatFlowPlanningDtos {
                         UUID fromLocationId,
                         String fromLocationCode,
                         String fromPlantCode,
+                        LocationType fromLocationType,
 
                         UUID toLocationId,
                         String toLocationCode,
                         String toPlantCode,
+                        LocationType toLocationType,
 
                         Integer routeSequenceNo,
                         UUID predecessorTransferId,
@@ -337,6 +378,10 @@ public final class MatFlowPlanningDtos {
                         BigDecimal receivedQty,
 
                         String uom,
+
+                        String responsibleDepartment,
+                        String nextAction,
+
                         Long rowVersion) {
         }
 

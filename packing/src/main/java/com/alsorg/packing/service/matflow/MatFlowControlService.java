@@ -6,6 +6,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ReservationResponse;
 
 import com.alsorg.packing.domain.matflow.MatFlowIndent;
+import com.alsorg.packing.domain.matflow.MatFlowIndentLine;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
@@ -21,7 +22,7 @@ import com.alsorg.packing.domain.matflow.MatFlowReservation;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
 import com.alsorg.packing.domain.matflow.MatFlowTransferOrder;
-
+import com.alsorg.packing.repository.matflow.MatFlowIndentLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProcessingJobRepository;
@@ -57,6 +58,7 @@ public class MatFlowControlService {
         private final MatFlowPurchaseOrderRepository purchaseOrderRepository;
         private final MatFlowPlanningService planningService;
         private final MatFlowAccessService accessService;
+        private final MatFlowIndentLineRepository indentLineRepository;
 
         public MatFlowControlService(
                         MatFlowReservationRepository reservationRepository,
@@ -69,7 +71,8 @@ public class MatFlowControlService {
                         MatFlowIndentRepository indentRepository,
                         MatFlowPurchaseOrderRepository purchaseOrderRepository,
                         MatFlowPlanningService planningService,
-                        MatFlowAccessService accessService) {
+                        MatFlowAccessService accessService,
+                        MatFlowIndentLineRepository indentLineRepository) {
                 this.reservationRepository = reservationRepository;
 
                 this.requisitionRepository = requisitionRepository;
@@ -91,6 +94,8 @@ public class MatFlowControlService {
                 this.planningService = planningService;
 
                 this.accessService = accessService;
+
+                this.indentLineRepository = indentLineRepository;
         }
 
         @Transactional
@@ -155,6 +160,9 @@ public class MatFlowControlService {
                                 "Requisition");
 
                 if (requisition.status == RequisitionStatus.ISSUED ||
+                                requisition.status == RequisitionStatus.ISSUED_TO_PRODUCTION ||
+                                requisition.status == RequisitionStatus.PRODUCTION_STARTED ||
+                                requisition.status == RequisitionStatus.PRODUCTION_COMPLETED ||
                                 requisition.status == RequisitionStatus.COMPLETED ||
                                 requisition.status == RequisitionStatus.CANCELLED) {
                         throw conflict(
@@ -228,6 +236,37 @@ public class MatFlowControlService {
                         MatFlowReservation reservation,
                         String reason,
                         String actor) {
+
+                boolean releasable = reservation.status == ReservationStatus.ACTIVE ||
+                                reservation.status == ReservationStatus.PARTIALLY_ISSUED;
+
+                if (!releasable) {
+                        throw conflict(
+                                        "Only an active or partially issued reservation can be released");
+                }
+
+                BigDecimal reservedQty = scale(
+                                reservation.reservedQty);
+
+                BigDecimal issuedQty = scale(
+                                reservation.issuedQty);
+
+                BigDecimal remainingReservedQty = reservedQty
+                                .subtract(
+                                                issuedQty)
+                                .max(
+                                                BigDecimal.ZERO)
+                                .setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+
+                if (remainingReservedQty.compareTo(
+                                BigDecimal.ZERO) <= 0) {
+
+                        throw conflict(
+                                        "Reservation has no unissued quantity remaining to release");
+                }
+
                 if (reservation.status != ReservationStatus.ACTIVE) {
                         throw conflict(
                                         "Only an active reservation can be released");
@@ -269,17 +308,20 @@ public class MatFlowControlService {
                                 .orElseThrow(() -> conflict(
                                                 "Reserved stock balance was not found"));
 
-                if (balance.reservedQty
+                if (scale(
+                                balance.reservedQty)
                                 .compareTo(
-                                                reservation.reservedQty) < 0) {
+                                                remainingReservedQty) < 0) {
+
                         throw conflict(
                                         "Stock reservation balance is inconsistent");
                 }
 
                 balance.reservedQty = scale(
-                                balance.reservedQty
+                                scale(
+                                                balance.reservedQty)
                                                 .subtract(
-                                                                reservation.reservedQty));
+                                                                remainingReservedQty));
 
                 balance.setUpdatedBy(actor);
 
@@ -288,15 +330,23 @@ public class MatFlowControlService {
                 MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
 
                 requisitionLine.reservedQty = scale(
-                                requisitionLine.reservedQty
+                                scale(
+                                                requisitionLine.reservedQty)
                                                 .subtract(
-                                                                reservation.reservedQty)
-                                                .max(BigDecimal.ZERO));
+                                                                remainingReservedQty)
+                                                .max(
+                                                                BigDecimal.ZERO));
 
                 requisitionLine.shortageQty = scale(
-                                requisitionLine.shortageQty
+                                scale(
+                                                requisitionLine.shortageQty)
                                                 .add(
-                                                                reservation.reservedQty));
+                                                                remainingReservedQty));
+
+                ensureShortageIndent(
+                                requisitionLine,
+                                remainingReservedQty,
+                                actor);
 
                 requisitionLine.setUpdatedBy(actor);
 
@@ -325,6 +375,7 @@ public class MatFlowControlService {
                 saveReleaseLedger(
                                 balance,
                                 reservation,
+                                remainingReservedQty,
                                 reason,
                                 actor);
 
@@ -344,8 +395,145 @@ public class MatFlowControlService {
                 }
         }
 
+        private void ensureShortageIndent(
+                        MatFlowRequisitionLine line,
+                        BigDecimal shortageAdded,
+                        String actor) {
+
+                if (line == null ||
+                                line.requisition == null ||
+                                line.material == null ||
+                                line.requisition.destinationLocation == null) {
+
+                        throw conflict(
+                                        "Cannot create shortage indent from an incomplete requisition line");
+                }
+
+                MatFlowMaterialRequisition requisition = line.requisition;
+
+                MatFlowIndent editableIndent = indentRepository
+                                .findByRequisition_Id(
+                                                requisition.getId())
+                                .stream()
+                                .filter(indent -> indent.status == IndentStatus.AUTO_CREATED ||
+                                                indent.status == IndentStatus.DRAFT ||
+                                                indent.status == IndentStatus.RETURNED)
+                                .filter(indent -> indent.deliverToLocation != null &&
+                                                indent.deliverToLocation
+                                                                .getId()
+                                                                .equals(
+                                                                                requisition.destinationLocation
+                                                                                                .getId()))
+                                .findFirst()
+                                .orElse(null);
+
+                if (editableIndent == null) {
+                        editableIndent = new MatFlowIndent();
+
+                        editableIndent.indentNumber = "MFI-" +
+                                        java.time.LocalDate.now()
+                                                        .getYear()
+                                        +
+                                        "-" +
+                                        UUID.randomUUID()
+                                                        .toString()
+                                                        .replace("-", "")
+                                                        .substring(0, 8)
+                                                        .toUpperCase();
+
+                        editableIndent.requisition = requisition;
+
+                        editableIndent.projectDrawing = requisition.projectDrawing;
+
+                        editableIndent.bom = requisition.bom;
+
+                        editableIndent.deliverToLocation = requisition.destinationLocation;
+
+                        editableIndent.status = IndentStatus.AUTO_CREATED;
+
+                        editableIndent.autoGenerated = true;
+
+                        editableIndent.remarks = "Created after reservation release";
+
+                        editableIndent.setCreatedBy(
+                                        actor);
+
+                        editableIndent.setUpdatedBy(
+                                        actor);
+
+                        editableIndent = indentRepository.save(
+                                        editableIndent);
+                }
+
+                MatFlowIndent finalIndent = editableIndent;
+
+                MatFlowIndentLine indentLine = indentLineRepository
+                                .findByIndent_IdOrderByCreatedAtAsc(
+                                                finalIndent.getId())
+                                .stream()
+                                .filter(existing -> existing.requisitionLine != null &&
+                                                existing.requisitionLine
+                                                                .getId()
+                                                                .equals(
+                                                                                line.getId()))
+                                .findFirst()
+                                .orElse(null);
+
+                if (indentLine == null) {
+                        indentLine = new MatFlowIndentLine();
+
+                        indentLine.indent = finalIndent;
+
+                        indentLine.requisitionLine = line;
+
+                        indentLine.material = line.material;
+
+                        indentLine.requiredQty = scale(
+                                        shortageAdded);
+
+                        indentLine.orderedQty = BigDecimal.ZERO;
+
+                        indentLine.receivedQty = BigDecimal.ZERO;
+
+                        indentLine.uom = line.material.getUom();                
+
+                        indentLine.remarks = "Shortage created after reservation release";
+
+                        indentLine.setCreatedBy(
+                                        actor);
+
+                } else {
+                        indentLine.requiredQty = scale(
+                                        scale(
+                                                        indentLine.requiredQty)
+                                                        .add(
+                                                                        shortageAdded));
+                }
+
+                indentLine.setUpdatedBy(
+                                actor);
+
+                indentLineRepository.save(
+                                indentLine);
+        }
+
         private void ensureNoPhysicalExecution(
                         MatFlowMaterialRequisition requisition) {
+
+                List<MatFlowRequisitionLine> requisitionLines = requisitionLineRepository
+                                .findByRequisition_IdOrderByLineNoAsc(
+                                                requisition.getId());
+
+                boolean materialIssued = requisitionLines.stream()
+                                .anyMatch(line -> scale(
+                                                line.issuedQty)
+                                                .compareTo(
+                                                                BigDecimal.ZERO) > 0);
+
+                if (materialIssued) {
+                        throw conflict(
+                                        "Requisition cannot be cancelled after material has been issued to Production");
+                }
                 List<MatFlowTransferOrder> transfers = transferRepository
                                 .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
                                                 requisition.getId());
@@ -397,31 +585,89 @@ public class MatFlowControlService {
 
         private ReservationResponse toReservationResponse(
                         MatFlowReservation reservation) {
+
+                if (reservation == null ||
+                                reservation.requisitionLine == null ||
+                                reservation.requisitionLine.requisition == null ||
+                                reservation.material == null ||
+                                reservation.sourceLocation == null ||
+                                reservation.firstDestinationLocation == null ||
+                                reservation.requisitionLine.requisition.destinationLocation == null) {
+
+                        throw conflict(
+                                        "Reservation record is incomplete");
+                }
+
+                BigDecimal reservedQty = scale(
+                                reservation.reservedQty);
+
+                BigDecimal issuedQty = scale(
+                                reservation.issuedQty);
+
+                BigDecimal remainingIssueQty = reservedQty
+                                .subtract(
+                                                issuedQty)
+                                .max(
+                                                BigDecimal.ZERO)
+                                .setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+
                 return new ReservationResponse(
                                 reservation.getId(),
+
                                 reservation.requisitionLine
                                                 .getId(),
+
                                 reservation.material
                                                 .getMaterialCode(),
 
                                 reservation.sourceLocation
                                                 .getId(),
-                                reservation.sourceLocation.getLocationCode(),
-                                reservation.sourceLocation.getPlantCode(),
+
+                                reservation.sourceLocation
+                                                .getLocationCode(),
+
+                                reservation.sourceLocation
+                                                .getPlantCode(),
 
                                 reservation.firstDestinationLocation
                                                 .getId(),
-                                reservation.firstDestinationLocation.getLocationCode(),
+
+                                reservation.firstDestinationLocation
+                                                .getLocationCode(),
 
                                 reservation.demandPlantCode,
-                                reservation.reservedQty,
+
+                                reservedQty,
+
                                 reservation.status,
-                                reservation.getRowVersion());
+
+                                reservation.getRowVersion(),
+
+                                issuedQty,
+
+                                remainingIssueQty,
+
+                                false,
+
+                                reservation.requisitionLine.requisition.destinationLocation
+                                                .getId(),
+
+                                reservation.requisitionLine.requisition.destinationLocation
+                                                .getLocationCode(),
+
+                                "NONE",
+
+                                reservation.status == ReservationStatus.RELEASED
+                                                ? "RELEASED"
+                                                : "NOT_ISSUE_READY");
         }
 
         private void saveReleaseLedger(
                         MatFlowStockBalance balance,
                         MatFlowReservation reservation,
+                        BigDecimal releasedQty,
                         String reason,
                         String actor) {
                 MatFlowStockLedger ledger = new MatFlowStockLedger();
@@ -434,8 +680,7 @@ public class MatFlowControlService {
 
                 ledger.quantityChange = BigDecimal.ZERO;
 
-                ledger.reservedChange = reservation.reservedQty
-                                .negate();
+                ledger.reservedChange = releasedQty.negate();
 
                 ledger.blockedChange = BigDecimal.ZERO;
 

@@ -46,4 +46,7 @@ public interface MatFlowTransferOrderRepository
                         """)
         Optional<MatFlowTransferOrder> lockById(
                         @Param("id") UUID id);
+
+        List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                        UUID reservationId);
 }

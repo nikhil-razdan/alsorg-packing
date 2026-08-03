@@ -244,6 +244,28 @@ public class MatFlowAccessService {
                                 "MATFLOW_STORE");
         }
 
+        public void requireStoreIssue() {
+
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
+        public void requireIndentSubmitToPurchase() {
+
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_STORE");
+        }
+
         public void requireIndentRead() {
                 User user = currentUser();
 

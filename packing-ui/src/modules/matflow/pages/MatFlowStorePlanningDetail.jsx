@@ -71,6 +71,7 @@ import {
 const ELIGIBLE_SOURCE_TYPES =
     new Set([
         "STORE",
+        "PRODUCTION",
         "PROCESSING",
         "EXTERNAL_PROCESSOR",
     ]);
@@ -253,6 +254,241 @@ const lineProgress = (line) => {
     );
 };
 
+const resolveLineWorkflow = (
+    line,
+    reservations,
+    transfers,
+    indents
+) => {
+    const lineId =
+        String(line?.id ?? "");
+
+    const requested =
+        numeric(
+            line?.requestedQty
+        );
+
+    const issued =
+        numeric(
+            line?.issuedQty
+        );
+
+    const reserved =
+        numeric(
+            line?.reservedQty
+        );
+
+    const shortage =
+        numeric(
+            line?.shortageQty
+        );
+
+    if (
+        requested > 0 &&
+        issued >= requested
+    ) {
+        return {
+            department:
+                "Production",
+
+            action:
+                "Material Issued",
+        };
+    }
+
+    const relatedReservations =
+        reservations.filter(
+            (reservation) =>
+                String(
+                    reservation
+                        ?.requisitionLineId ??
+                    ""
+                ) === lineId
+        );
+
+    const issueReady =
+        relatedReservations.some(
+            (reservation) =>
+                reservation.issueReady ===
+                true &&
+                numeric(
+                    reservation
+                        .remainingIssueQty
+                ) > 0
+        );
+
+    if (issueReady) {
+        return {
+            department:
+                "Store",
+
+            action:
+                "Issue to Production",
+        };
+    }
+
+    const relatedTransfers =
+        transfers.filter(
+            (transfer) =>
+                String(
+                    transfer
+                        ?.requisitionLineId ??
+                    ""
+                ) === lineId
+        );
+
+    const openTransfer =
+        relatedTransfers.find(
+            (transfer) =>
+                ![
+                    "RECEIVED",
+                    "CANCELLED",
+                ].includes(
+                    normalize(
+                        transfer.status
+                    )
+                )
+        );
+
+    if (openTransfer) {
+        return {
+            department:
+                readable(
+                    openTransfer
+                        .responsibleDepartment ||
+                    "Transfer"
+                ),
+
+            action:
+                readable(
+                    openTransfer
+                        .nextAction ||
+                    openTransfer.status
+                ),
+        };
+    }
+
+    const relatedIndent =
+        indents.find(
+            (indent) =>
+                asArray(
+                    indent.lines
+                ).some(
+                    (indentLine) =>
+                        String(
+                            indentLine
+                                ?.requisitionLineId ??
+                            ""
+                        ) === lineId
+                )
+        );
+
+    if (relatedIndent) {
+        const indentStatus =
+            normalize(
+                relatedIndent.status
+            );
+
+        if (
+            [
+                "AUTO_CREATED",
+                "DRAFT",
+                "RETURNED",
+            ].includes(
+                indentStatus
+            )
+        ) {
+            return {
+                department:
+                    "Store",
+
+                action:
+                    "Submit to Purchase",
+            };
+        }
+
+        if (
+            indentStatus ===
+            "SUBMITTED_TO_PURCHASE"
+        ) {
+            return {
+                department:
+                    "Purchase",
+
+                action:
+                    "Start Purchase Review",
+            };
+        }
+
+        if (
+            indentStatus ===
+            "PURCHASE_IN_PROGRESS"
+        ) {
+            return {
+                department:
+                    "Purchase",
+
+                action:
+                    "Quotation / Purchase Order",
+            };
+        }
+
+        if (
+            indentStatus ===
+            "PO_CREATED"
+        ) {
+            return {
+                department:
+                    "Purchase",
+
+                action:
+                    "Await Supplier Delivery",
+            };
+        }
+
+        if (
+            indentStatus ===
+            "PARTIALLY_RECEIVED"
+        ) {
+            return {
+                department:
+                    "Store / QC",
+
+                action:
+                    "Complete Receipt and QC",
+            };
+        }
+    }
+
+    if (shortage > 0) {
+        return {
+            department:
+                "Store",
+
+            action:
+                "Confirm Shortage",
+        };
+    }
+
+    if (reserved > 0) {
+        return {
+            department:
+                "Transfer / Processing",
+
+            action:
+                "Complete Approved Route",
+        };
+    }
+
+    return {
+        department:
+            "Store",
+
+        action:
+            "Review Availability",
+    };
+};
+
 export default function MatFlowStorePlanningDetail() {
     const {
         requisitionId,
@@ -284,6 +520,11 @@ export default function MatFlowStorePlanningDetail() {
     const [
         remarks,
         setRemarks,
+    ] = useState("");
+
+    const [
+        submittingIndentId,
+        setSubmittingIndentId,
     ] = useState("");
 
     const [
@@ -649,13 +890,27 @@ export default function MatFlowStorePlanningDetail() {
             }
         };
 
-    const issueDirect =
+    const issueReservation =
         async (
             reservation
         ) => {
-            if (
-                !reservation?.id
-            ) {
+            if (!reservation?.id) {
+                return;
+            }
+
+            const remainingQty =
+                numeric(
+                    reservation
+                        .remainingIssueQty ??
+                    reservation
+                        .reservedQty
+                );
+
+            if (remainingQty <= 0) {
+                setError(
+                    "This reservation has no remaining quantity to issue."
+                );
+
                 return;
             }
 
@@ -666,23 +921,76 @@ export default function MatFlowStorePlanningDetail() {
             setError("");
 
             try {
+                const response =
+                    await matflowApi
+                        .issueStoreReservation(
+                            reservation.id,
+                            {
+                                rowVersion:
+                                    reservation
+                                        .rowVersion,
+
+                                quantity:
+                                    remainingQty,
+
+                                batchNo:
+                                    null,
+
+                                remarks:
+                                    "Issued by Store against the material requisition.",
+                            }
+                        );
+
+                if (
+                    response?.data
+                        ?.requisition
+                ) {
+                    setSnapshot(
+                        response.data
+                    );
+                }
+
+                await load();
+            } catch (
+            requestError
+            ) {
+                setError(
+                    readMatFlowError(
+                        requestError,
+                        "Unable to issue material to Production."
+                    )
+                );
+            } finally {
+                setIssuingReservationId(
+                    ""
+                );
+            }
+        };
+
+    const submitIndentToPurchase =
+        async (
+            indent
+        ) => {
+            if (!indent?.id) {
+                return;
+            }
+
+            setSubmittingIndentId(
+                indent.id
+            );
+
+            setError("");
+
+            try {
                 await matflowApi
-                    .issueDirectReservation(
-                        reservation.id,
+                    .submitIndent(
+                        indent.id,
                         {
                             rowVersion:
-                                reservation.rowVersion,
-
-                            quantity:
-                                numeric(
-                                    reservation.reservedQty
-                                ),
-
-                            batchNo:
-                                null,
+                                indent.rowVersion,
 
                             remarks:
-                                "Direct issue from stock already available at Production.",
+                                "Shortage confirmed by Store and submitted to Purchase.",
                         }
                     );
 
@@ -693,11 +1001,11 @@ export default function MatFlowStorePlanningDetail() {
                 setError(
                     readMatFlowError(
                         requestError,
-                        "Unable to issue the reservation directly to Production."
+                        "Unable to submit the shortage indent to Purchase."
                     )
                 );
             } finally {
-                setIssuingReservationId(
+                setSubmittingIndentId(
                     ""
                 );
             }
@@ -1051,6 +1359,10 @@ export default function MatFlowStorePlanningDetail() {
                         <Box sx={tableCellSx}>
                             Status
                         </Box>
+
+                        <Box sx={tableCellSx}>
+                            Responsible / Next Action
+                        </Box>
                     </Box>
 
                     {lines.length === 0 ? (
@@ -1074,6 +1386,14 @@ export default function MatFlowStorePlanningDetail() {
                                 const availabilityEntry =
                                     availabilityByLineId.get(
                                         String(line.id)
+                                    );
+
+                                const workflow =
+                                    resolveLineWorkflow(
+                                        line,
+                                        reservations,
+                                        transfers,
+                                        indents
                                     );
 
                                 const stockOptions =
@@ -1254,6 +1574,18 @@ export default function MatFlowStorePlanningDetail() {
                                                 )}
                                             />
                                         </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Box sx={departmentBoxSx}>
+                                                <Typography sx={departmentNameSx}>
+                                                    {workflow.department}
+                                                </Typography>
+
+                                                <Typography sx={nextActionSx}>
+                                                    {workflow.action}
+                                                </Typography>
+                                            </Box>
+                                        </Box>
                                     </Box>
                                 );
                             }
@@ -1263,21 +1595,26 @@ export default function MatFlowStorePlanningDetail() {
             </Card>
 
             <PlanningResults
-                destinationLocationId={
-                    requisition
-                        ?.destinationLocationId
-                }
                 reservations={reservations}
                 indents={indents}
-                transfers={
-                    transfers
-                }
+                transfers={transfers}
+
                 issuingReservationId={
                     issuingReservationId
                 }
-                onIssueDirect={
-                    issueDirect
+
+                submittingIndentId={
+                    submittingIndentId
                 }
+
+                onIssueReservation={
+                    issueReservation
+                }
+
+                onSubmitIndent={
+                    submitIndentToPurchase
+                }
+
                 onOpenTransfer={(
                     transfer
                 ) =>
@@ -1291,12 +1628,13 @@ export default function MatFlowStorePlanningDetail() {
 }
 
 function PlanningResults({
-    destinationLocationId,
     reservations,
     indents,
     transfers,
     issuingReservationId,
-    onIssueDirect,
+    submittingIndentId,
+    onIssueReservation,
+    onSubmitIndent,
     onOpenTransfer,
 }) {
     return (
@@ -1307,37 +1645,36 @@ function PlanningResults({
                 </Typography>
 
                 <Typography sx={sectionSubSx}>
-                    Stock committed against the
-                    requisition.
+                    Stock committed to this
+                    requisition and its current
+                    fulfilment action.
                 </Typography>
 
                 <Box sx={resultListSx}>
-                    {reservations.length ===
-                        0 ? (
+                    {reservations.length === 0 ? (
                         <Box sx={smallEmptySx}>
                             No reservations created.
                         </Box>
                     ) : (
                         reservations.map(
                             (reservation) => {
-                                const directIssue =
-                                    normalize(
-                                        reservation.status
-                                    ) ===
-                                    "ACTIVE" &&
+                                const remainingQty =
+                                    numeric(
+                                        reservation
+                                            .remainingIssueQty
+                                    );
 
-                                    String(
-                                        reservation.sourceLocationId
-                                    ) ===
-                                    String(
-                                        reservation.firstDestinationLocationId
-                                    ) &&
-
-                                    String(
-                                        reservation.firstDestinationLocationId
-                                    ) ===
-                                    String(
-                                        destinationLocationId
+                                const canIssue =
+                                    reservation.issueReady ===
+                                    true &&
+                                    remainingQty > 0 &&
+                                    [
+                                        "ACTIVE",
+                                        "PARTIALLY_ISSUED",
+                                    ].includes(
+                                        normalize(
+                                            reservation.status
+                                        )
                                     );
 
                                 return (
@@ -1345,9 +1682,9 @@ function PlanningResults({
                                         key={
                                             reservation.id
                                         }
-                                        sx={resultRowSx}
+                                        sx={reservationRowSx}
                                     >
-                                        <Box sx={{ minWidth: 0 }}>
+                                        <Box sx={reservationMainSx}>
                                             <Typography sx={resultMainSx}>
                                                 {reservation.materialCode ||
                                                     "-"}
@@ -1360,21 +1697,30 @@ function PlanningResults({
                                                 {reservation.firstDestinationLocationCode ||
                                                     "-"}
                                             </Typography>
+
+                                            <Typography sx={resultSubSx}>
+                                                Reserved:{" "}
+                                                {formatQty(
+                                                    reservation.reservedQty
+                                                )}
+                                                {" · Issued: "}
+                                                {formatQty(
+                                                    reservation.issuedQty
+                                                )}
+                                                {" · Remaining: "}
+                                                {formatQty(
+                                                    reservation.remainingIssueQty
+                                                )}
+                                            </Typography>
                                         </Box>
 
-                                        <Typography sx={resultQtySx}>
-                                            {formatQty(
-                                                reservation.reservedQty
-                                            )}
-                                        </Typography>
-
-                                        {directIssue ? (
+                                        {canIssue ? (
                                             <Button
                                                 startIcon={
                                                     <OutputOutlinedIcon />
                                                 }
                                                 onClick={() =>
-                                                    onIssueDirect(
+                                                    onIssueReservation(
                                                         reservation
                                                     )
                                                 }
@@ -1387,16 +1733,26 @@ function PlanningResults({
                                                 {issuingReservationId ===
                                                     reservation.id
                                                     ? "Issuing..."
-                                                    : "Issue Direct"}
+                                                    : "Issue to Production"}
                                             </Button>
                                         ) : (
-                                            <Chip
-                                                label={readable(
-                                                    reservation.status
-                                                )}
-                                                size="small"
-                                                sx={smallStatusSx}
-                                            />
+                                            <Box sx={departmentBoxSx}>
+                                                <Typography sx={departmentNameSx}>
+                                                    {readable(
+                                                        reservation
+                                                            .responsibleDepartment ||
+                                                        "Store"
+                                                    )}
+                                                </Typography>
+
+                                                <Typography sx={nextActionSx}>
+                                                    {readable(
+                                                        reservation
+                                                            .nextAction ||
+                                                        reservation.status
+                                                    )}
+                                                </Typography>
+                                            </Box>
                                         )}
                                     </Box>
                                 );
@@ -1413,24 +1769,22 @@ function PlanningResults({
 
                 <Typography sx={sectionSubSx}>
                     Physical movements generated from
-                    remote stock reservations.
+                    reserved stock and approved BOM routes.
                 </Typography>
 
                 <Box sx={resultListSx}>
-                    {transfers.length ===
-                        0 ? (
+                    {transfers.length === 0 ? (
                         <Box sx={smallEmptySx}>
                             No transfer is required or
-                            no remote stock was reserved.
+                            the material is already at
+                            the Production destination.
                         </Box>
                     ) : (
                         transfers.map(
                             (transfer) => (
                                 <Box
-                                    key={
-                                        transfer.id
-                                    }
-                                    sx={resultRowSx}
+                                    key={transfer.id}
+                                    sx={transferResultRowSx}
                                 >
                                     <Box sx={{ minWidth: 0 }}>
                                         <Typography sx={resultMainSx}>
@@ -1445,12 +1799,28 @@ function PlanningResults({
                                             {transfer.toLocationCode ||
                                                 "-"}
                                         </Typography>
+
+                                        <Typography sx={resultSubSx}>
+                                            Responsible:{" "}
+                                            {readable(
+                                                transfer
+                                                    .responsibleDepartment ||
+                                                "Store"
+                                            )}
+                                            {" · "}
+                                            {readable(
+                                                transfer.nextAction ||
+                                                transfer.status
+                                            )}
+                                        </Typography>
                                     </Box>
 
                                     <Typography sx={resultQtySx}>
                                         {formatQty(
                                             transfer.plannedQty
                                         )}
+                                        {" "}
+                                        {transfer.uom || ""}
                                     </Typography>
 
                                     <Button
@@ -1476,68 +1846,136 @@ function PlanningResults({
                 </Typography>
 
                 <Typography sx={sectionSubSx}>
-                    Material demand passed to
-                    Procurement.
+                    Shortage demand requiring Store
+                    confirmation and Purchase action.
                 </Typography>
 
                 <Box sx={resultListSx}>
-                    {indents.length ===
-                        0 ? (
+                    {indents.length === 0 ? (
                         <Box sx={smallEmptySx}>
                             No shortage indent created.
                         </Box>
                     ) : (
                         indents.map(
-                            (indent) => (
-                                <Box
-                                    key={
-                                        indent.id
-                                    }
-                                    sx={indentBoxSx}
-                                >
-                                    <Box sx={indentHeaderSx}>
-                                        <Typography sx={resultMainSx}>
-                                            {indent.indentNumber ||
-                                                "-"}
-                                        </Typography>
+                            (indent) => {
+                                const indentStatus =
+                                    normalize(
+                                        indent.status
+                                    );
 
-                                        <Chip
-                                            label={readable(
-                                                indent.status
-                                            )}
-                                            size="small"
-                                            sx={smallStatusSx}
-                                        />
-                                    </Box>
+                                const canSubmitToPurchase =
+                                    [
+                                        "AUTO_CREATED",
+                                        "DRAFT",
+                                        "RETURNED",
+                                    ].includes(
+                                        indentStatus
+                                    );
 
-                                    {asArray(
-                                        indent.lines
-                                    ).map(
-                                        (line) => (
-                                            <Box
-                                                key={
-                                                    line.id
-                                                }
-                                                sx={indentLineSx}
-                                            >
-                                                <Typography sx={resultSubSx}>
-                                                    {line.materialCode ||
+                                const responsibleDepartment =
+                                    canSubmitToPurchase
+                                        ? "Store"
+                                        : [
+                                            "SUBMITTED_TO_PURCHASE",
+                                            "PURCHASE_IN_PROGRESS",
+                                            "PO_CREATED",
+                                            "PARTIALLY_RECEIVED",
+                                        ].includes(
+                                            indentStatus
+                                        )
+                                            ? "Purchase"
+                                            : readable(
+                                                indentStatus
+                                            );
+
+                                return (
+                                    <Box
+                                        key={indent.id}
+                                        sx={indentBoxSx}
+                                    >
+                                        <Box sx={indentHeaderSx}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={resultMainSx}>
+                                                    {indent.indentNumber ||
                                                         "-"}
                                                 </Typography>
 
-                                                <Typography sx={resultQtySx}>
-                                                    {formatQty(
-                                                        line.requiredQty
+                                                <Typography sx={resultSubSx}>
+                                                    Responsible:{" "}
+                                                    {responsibleDepartment}
+                                                </Typography>
+
+                                                <Typography sx={resultSubSx}>
+                                                    Status:{" "}
+                                                    {readable(
+                                                        indent.status
                                                     )}
-                                                    {" "}
-                                                    {line.uom ||
-                                                        ""}
                                                 </Typography>
                                             </Box>
-                                        )
-                                    )}
-                                </Box>
-                            )
+
+                                            {canSubmitToPurchase ? (
+                                                <Button
+                                                    onClick={() =>
+                                                        onSubmitIndent(
+                                                            indent
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        submittingIndentId ===
+                                                        indent.id
+                                                    }
+                                                    sx={miniPurchaseBtnSx}
+                                                >
+                                                    {submittingIndentId ===
+                                                        indent.id
+                                                        ? "Submitting..."
+                                                        : "Submit to Purchase"}
+                                                </Button>
+                                            ) : (
+                                                <Chip
+                                                    label={readable(
+                                                        indent.status
+                                                    )}
+                                                    size="small"
+                                                    sx={smallStatusSx}
+                                                />
+                                            )}
+                                        </Box>
+
+                                        {asArray(
+                                            indent.lines
+                                        ).map(
+                                            (line) => (
+                                                <Box
+                                                    key={line.id}
+                                                    sx={indentLineSx}
+                                                >
+                                                    <Box>
+                                                        <Typography sx={resultMainSx}>
+                                                            {line.materialName ||
+                                                                line.materialCode ||
+                                                                "-"}
+                                                        </Typography>
+
+                                                        <Typography sx={resultSubSx}>
+                                                            {line.materialCode ||
+                                                                "-"}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Typography sx={resultQtySx}>
+                                                        {formatQty(
+                                                            line.requiredQty
+                                                        )}
+                                                        {" "}
+                                                        {line.uom || ""}
+                                                    </Typography>
+                                                </Box>
+                                            )
+                                        )}
+                                    </Box>
+                                );
+                            }
                         )
                     )}
                 </Box>
@@ -1735,13 +2173,35 @@ const headerStatusChipSx = (
 };
 
 const materialColumns =
-    "minmax(230px,1.4fr) 130px 90px 90px minmax(220px,1.2fr) minmax(180px,1fr) 90px 90px 90px 140px 145px";
+    "minmax(230px,1.4fr) 130px 90px 90px minmax(220px,1.2fr) minmax(180px,1fr) 90px 90px 90px 140px 145px 180px";
 
 const materialHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         materialColumns,
-    minWidth: "1560px",
+    minWidth: "1740px",
+};
+
+const materialRowSx = {
+    ...tableRowSx,
+    gridTemplateColumns:
+        materialColumns,
+    minWidth: "1740px",
+};
+
+const departmentNameSx = {
+    color: "#7c3aed",
+    fontSize: "8px",
+    fontWeight: 950,
+    textTransform: "uppercase",
+};
+
+const nextActionSx = {
+    mt: "2px",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "8px",
+    fontWeight: 700,
 };
 
 const materialRowSx = {
@@ -1814,6 +2274,21 @@ const progressHeadSx = {
     justifyContent: "flex-end",
 };
 
+const miniPurchaseBtnSx = {
+    minWidth: "110px",
+    height: "28px",
+    borderRadius: "8px",
+    textTransform: "none",
+    color: "#fff",
+    background: "#d97706",
+    fontSize: "8px",
+    fontWeight: 900,
+
+    "&:hover": {
+        background: "#b45309",
+    },
+};
+
 const progressTextSx = {
     color:
         "var(--mf-text-secondary)",
@@ -1849,6 +2324,38 @@ const statusChipSx = (
     fontSize: "8px",
     fontWeight: 900,
 });
+
+const reservationRowSx = {
+    p: "10px",
+    display: "grid",
+    gridTemplateColumns:
+        "minmax(0,1fr) auto",
+    alignItems: "center",
+    gap: "10px",
+    borderRadius: "9px",
+    background:
+        "var(--mf-surface-soft)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const reservationMainSx = {
+    minWidth: 0,
+};
+
+const transferResultRowSx = {
+    p: "9px",
+    display: "grid",
+    gridTemplateColumns:
+        "minmax(0,1fr) auto auto",
+    alignItems: "center",
+    gap: "8px",
+    borderRadius: "9px",
+    background:
+        "var(--mf-surface-soft)",
+    border:
+        "1px solid var(--mf-border)",
+};
 
 const resultsGridSx = {
     display: "grid",

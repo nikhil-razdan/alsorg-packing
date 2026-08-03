@@ -237,13 +237,46 @@ export default function MatFlowTransferDetail() {
             user?.role
         );
 
-    const canExecute = [
-        MATFLOW_ROLES.ADMIN,
-        MATFLOW_ROLES.MANAGER,
-        MATFLOW_ROLES.STORE,
-    ].includes(
-        cleanRole
-    );
+    const canActAtLocationType = (
+        locationType
+    ) => {
+        if (
+            [
+                MATFLOW_ROLES.ADMIN,
+                MATFLOW_ROLES.MANAGER,
+            ].includes(
+                cleanRole
+            )
+        ) {
+            return true;
+        }
+
+        switch (
+        normalizeStatus(
+            locationType
+        )
+        ) {
+            case "STORE":
+                return cleanRole ===
+                    MATFLOW_ROLES.STORE;
+
+            case "PRODUCTION":
+                return cleanRole ===
+                    MATFLOW_ROLES.PRODUCTION;
+
+            case "QC":
+                return cleanRole ===
+                    MATFLOW_ROLES.QC;
+
+            case "PROCESSING":
+            case "EXTERNAL_PROCESSOR":
+                return cleanRole ===
+                    MATFLOW_ROLES.PROCESSING;
+
+            default:
+                return false;
+        }
+    };
 
     const [
         transfer,
@@ -361,7 +394,9 @@ export default function MatFlowTransferDetail() {
         );
 
     const dispatchable =
-        canExecute &&
+        canActAtLocationType(
+            transfer?.fromLocationType
+        ) &&
         [
             "READY",
             "PARTIALLY_DISPATCHED",
@@ -370,7 +405,9 @@ export default function MatFlowTransferDetail() {
         pendingDispatch > 0;
 
     const receivable =
-        canExecute &&
+        canActAtLocationType(
+            transfer?.toLocationType
+        ) &&
         [
             "PARTIALLY_DISPATCHED",
             "IN_TRANSIT",
@@ -778,6 +815,67 @@ export default function MatFlowTransferDetail() {
                             Material Context
                         </Typography>
 
+                        <Detail
+                            label="Requisition"
+                            value={
+                                transfer.requisitionNumber
+                            }
+                        />
+
+                        <Detail
+                            label="PD / Project"
+                            value={
+                                transfer.projectCode
+                            }
+                        />
+
+                        <Detail
+                            label="Product"
+                            value={
+                                transfer.productName
+                            }
+                        />
+
+                        <Detail
+                            label="Drawing"
+                            value={
+                                transfer.drawingNo
+                            }
+                        />
+
+                        <Detail
+                            label="Operational BOM"
+                            value={
+                                transfer.bomNumber
+                            }
+                        />
+
+                        <Detail
+                            label="BOM Revision"
+                            value={
+                                transfer.bomRevisionNo
+                            }
+                        />
+
+                        <Detail
+                            label="Responsible Department"
+                            value={
+                                readable(
+                                    transfer
+                                        .responsibleDepartment
+                                )
+                            }
+                        />
+
+                        <Detail
+                            label="Next Action"
+                            value={
+                                readable(
+                                    transfer.nextAction
+                                )
+                            }
+                        />
+
                         <Box sx={detailGridSx}>
                             <Detail
                                 label="Material Code"
@@ -892,16 +990,25 @@ export default function MatFlowTransferDetail() {
                             </Box>
                         )}
 
-                        {canExecute &&
-                            !dispatchable &&
+                        {!dispatchable &&
                             !receivable && (
                                 <Box sx={readOnlyBoxSx}>
-                                    No transfer action is
-                                    currently available for status{" "}
+                                    Responsible department:{" "}
                                     <strong>
-                                        {meta.label}
+                                        {readable(
+                                            transfer
+                                                ?.responsibleDepartment ||
+                                            "None"
+                                        )}
                                     </strong>
-                                    .
+                                    {" · Next action: "}
+                                    <strong>
+                                        {readable(
+                                            transfer
+                                                ?.nextAction ||
+                                            transfer?.status
+                                        )}
+                                    </strong>
                                 </Box>
                             )}
                     </Card>

@@ -416,6 +416,31 @@ export const matflowApi = {
 		);
 	},
 
+	issueStoreReservation(
+		reservationId,
+		body
+	) {
+		const id =
+			String(
+				reservationId ?? ""
+			).trim();
+
+		if (!id) {
+			return Promise.reject(
+				new Error(
+					"Reservation ID is required."
+				)
+			);
+		}
+
+		return API.post(
+			`${BASE}/store/reservations/${encodeURIComponent(
+				id
+			)}/issue`,
+			body
+		);
+	},
+
 	/* =====================================================
 	 * INVENTORY
 	 * Exact backend: MatFlowInventoryController

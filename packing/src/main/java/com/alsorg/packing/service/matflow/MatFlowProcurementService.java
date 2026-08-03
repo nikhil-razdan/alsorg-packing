@@ -597,9 +597,9 @@ public class MatFlowProcurementService {
                                 BigDecimal.ZERO) > 0);
 
         indent.status = allOrdered
-                ? IndentStatus.ORDERED
+                ? IndentStatus.PURCHASE_IN_PROGRESS
                 : anyOrdered
-                        ? IndentStatus.SUBMITTED
+                        ? IndentStatus.SUBMITTED_TO_PURCHASE
                         : IndentStatus.AUTO_CREATED;
 
         indent.setUpdatedBy(actor);

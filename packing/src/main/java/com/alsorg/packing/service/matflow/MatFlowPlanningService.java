@@ -859,6 +859,10 @@ public class MatFlowPlanningService {
 
                                 reservation.reservedQty = allocated;
 
+                                reservation.issuedQty = BigDecimal.ZERO.setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+
                                 reservation.status = ReservationStatus.ACTIVE;
 
                                 reservation.routeSnapshotJson = routeSnapshot(
@@ -1777,6 +1781,46 @@ public class MatFlowPlanningService {
                                 lines);
         }
 
+        private boolean isReservationIssueReady(
+                        MatFlowReservation reservation) {
+
+                if (reservation == null ||
+                                reservation.getId() == null ||
+                                reservation.requisitionLine == null ||
+                                reservation.requisitionLine.requisition == null ||
+                                reservation.requisitionLine.requisition.destinationLocation == null) {
+
+                        return false;
+                }
+
+                MatFlowLocation destination = reservation.requisitionLine.requisition.destinationLocation;
+
+                List<MatFlowTransferOrder> transfers = transferRepository
+                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                                reservation.getId());
+
+                if (transfers == null ||
+                                transfers.isEmpty()) {
+
+                        return reservation.sourceLocation != null &&
+                                        reservation.sourceLocation
+                                                        .getId()
+                                                        .equals(
+                                                                        destination.getId());
+                }
+
+                MatFlowTransferOrder finalTransfer = transfers.get(
+                                transfers.size() - 1);
+
+                return finalTransfer.toLocation != null &&
+                                finalTransfer.toLocation
+                                                .getId()
+                                                .equals(
+                                                                destination.getId())
+                                &&
+                                finalTransfer.status == TransferStatus.RECEIVED;
+        }
+
         private ReservationResponse toReservationResponse(
                         MatFlowReservation reservation) {
 
@@ -1784,11 +1828,38 @@ public class MatFlowPlanningService {
                                 reservation.requisitionLine == null ||
                                 reservation.material == null ||
                                 reservation.sourceLocation == null ||
-                                reservation.firstDestinationLocation == null) {
+                                reservation.firstDestinationLocation == null ||
+                                reservation.requisitionLine.requisition == null ||
+                                reservation.requisitionLine.requisition.destinationLocation == null) {
 
                         throw conflict(
                                         "Reservation record is incomplete");
                 }
+
+                MatFlowLocation issueLocation = reservation.requisitionLine.requisition.destinationLocation;
+
+                BigDecimal reservedQty = zero(
+                                reservation.reservedQty);
+
+                BigDecimal issuedQty = zero(
+                                reservation.issuedQty);
+
+                BigDecimal remainingIssueQty = reservedQty
+                                .subtract(
+                                                issuedQty)
+                                .max(
+                                                BigDecimal.ZERO)
+                                .setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
+
+                boolean issueReady = isReservationIssueReady(
+                                reservation) &&
+                                remainingIssueQty.compareTo(
+                                                BigDecimal.ZERO) > 0
+                                &&
+                                (reservation.status == ReservationStatus.ACTIVE ||
+                                                reservation.status == ReservationStatus.PARTIALLY_ISSUED);
 
                 return new ReservationResponse(
                                 reservation.getId(),
@@ -1815,11 +1886,30 @@ public class MatFlowPlanningService {
                                                 .getLocationCode(),
 
                                 reservation.demandPlantCode,
-                                zero(
-                                                reservation.reservedQty),
+
+                                reservedQty,
 
                                 reservation.status,
-                                reservation.getRowVersion());
+
+                                reservation.getRowVersion(),
+
+                                issuedQty,
+
+                                remainingIssueQty,
+
+                                issueReady,
+
+                                issueLocation.getId(),
+
+                                issueLocation.getLocationCode(),
+
+                                issueReady
+                                                ? "STORE"
+                                                : "TRANSFER / PROCESSING",
+
+                                issueReady
+                                                ? "ISSUE_TO_PRODUCTION"
+                                                : "COMPLETE_APPROVED_ROUTE");
         }
 
         private IndentResponse toIndentResponse(
@@ -1880,10 +1970,15 @@ public class MatFlowPlanningService {
                                 lines);
         }
 
-        private TransferResponse toTransferResponse(
-                        MatFlowTransferOrder transfer) {
+        private TransferResponse
+
+                        toTransferResponse(
+                                        MatFlowTransferOrder transfer) {
 
                 if (transfer == null ||
+                                transfer.requisition == null ||
+                                transfer.requisition.projectDrawing == null ||
+                                transfer.requisition.bom == null ||
                                 transfer.reservation == null ||
                                 transfer.fromLocation == null ||
                                 transfer.toLocation == null) {
@@ -1905,23 +2000,60 @@ public class MatFlowPlanningService {
                                         "Transfer order material is missing");
                 }
 
+                MatFlowMaterialRequisition requisition = transfer.requisition;
+
+                MatFlowProjectDrawing project = requisition.projectDrawing;
+
+                MatFlowBom bom = requisition.bom;
+
                 return new TransferResponse(
                                 transfer.getId(),
                                 transfer.transferNumber,
 
-                                transfer.reservation.getId(),
+                                requisition.getId(),
+                                requisition.requisitionNumber,
+
+                                project.getId(),
+                                project.getProjectCode(),
+                                project.getDrawingNo(),
+                                project.getProductName(),
+                                project.getClientName(),
+
+                                bom.getId(),
+                                bom.getBomNumber(),
+                                bom.getRevisionNo(),
+
+                                transfer.reservation
+                                                .getId(),
 
                                 transfer.reservation.requisitionLine == null
                                                 ? null
-                                                : transfer.reservation.requisitionLine.getId(),
+                                                : transfer.reservation.requisitionLine
+                                                                .getId(),
 
-                                transfer.fromLocation.getId(),
-                                transfer.fromLocation.getLocationCode(),
-                                transfer.fromLocation.getPlantCode(),
+                                transfer.fromLocation
+                                                .getId(),
 
-                                transfer.toLocation.getId(),
-                                transfer.toLocation.getLocationCode(),
-                                transfer.toLocation.getPlantCode(),
+                                transfer.fromLocation
+                                                .getLocationCode(),
+
+                                transfer.fromLocation
+                                                .getPlantCode(),
+
+                                transfer.fromLocation
+                                                .getLocationType(),
+
+                                transfer.toLocation
+                                                .getId(),
+
+                                transfer.toLocation
+                                                .getLocationCode(),
+
+                                transfer.toLocation
+                                                .getPlantCode(),
+
+                                transfer.toLocation
+                                                .getLocationType(),
 
                                 transfer.routeSequenceNo,
                                 transfer.predecessorTransferId,
@@ -1929,17 +2061,186 @@ public class MatFlowPlanningService {
                                 transfer.purpose,
                                 transfer.status,
 
-                                line.material.getId(),
-                                line.material.getMaterialCode(),
-                                line.material.getMaterialName(),
+                                line.material
+                                                .getId(),
 
-                                zero(line.plannedQty),
-                                zero(line.dispatchedQty),
-                                zero(line.receivedQty),
+                                line.material
+                                                .getMaterialCode(),
+
+                                line.material
+                                                .getMaterialName(),
+
+                                zero(
+                                                line.plannedQty),
+
+                                zero(
+                                                line.dispatchedQty),
+
+                                zero(
+                                                line.receivedQty),
 
                                 line.uom,
 
+                                transferResponsibleDepartment(
+                                                transfer,
+                                                line),
+
+                                transferNextAction(
+                                                transfer,
+                                                line),
+
                                 transfer.getRowVersion());
+        }
+
+        private String departmentForLocation(
+                        MatFlowLocation location) {
+
+                if (location == null ||
+                                location.getLocationType() == null) {
+
+                        return "UNKNOWN";
+                }
+
+                return switch (location.getLocationType()) {
+
+                        case STORE ->
+                                "STORE";
+
+                        case PRODUCTION ->
+                                "PRODUCTION";
+
+                        case QC ->
+                                "QC";
+
+                        case PROCESSING,
+                                        EXTERNAL_PROCESSOR ->
+                                "PROCESSING";
+
+                        default ->
+                                location.getLocationType()
+                                                .name();
+                };
+        }
+
+        private String transferResponsibleDepartment(
+                        MatFlowTransferOrder transfer,
+                        MatFlowTransferLine line) {
+
+                if (transfer == null ||
+                                transfer.status == null) {
+
+                        return "UNKNOWN";
+                }
+
+                return switch (transfer.status) {
+
+                        case PLANNED ->
+                                "PREVIOUS_ROUTE_STAGE";
+
+                        case READY ->
+                                departmentForLocation(
+                                                transfer.fromLocation);
+
+                        case PARTIALLY_DISPATCHED,
+                                        PARTIALLY_RECEIVED ->
+                                departmentForLocation(
+                                                transfer.fromLocation)
+                                                +
+                                                " / " +
+                                                departmentForLocation(
+                                                                transfer.toLocation);
+
+                        case IN_TRANSIT ->
+                                departmentForLocation(
+                                                transfer.toLocation);
+
+                        case RECEIVED -> {
+                                boolean hasSuccessor = transferRepository
+                                                .existsByPredecessorTransferId(
+                                                                transfer.getId());
+
+                                if (hasSuccessor) {
+
+                                        yield departmentForLocation(
+                                                        transfer.toLocation);
+                                }
+
+                                LocationType destinationType = transfer.toLocation
+                                                .getLocationType();
+
+                                if (destinationType == LocationType.PRODUCTION) {
+
+                                        yield "STORE";
+                                }
+
+                                yield departmentForLocation(
+                                                transfer.toLocation);
+                        }
+
+                        case CANCELLED -> "NONE";
+
+                };
+        }
+
+        private String transferNextAction(
+                        MatFlowTransferOrder transfer,
+                        MatFlowTransferLine line) {
+
+                if (transfer == null ||
+                                transfer.status == null) {
+
+                        return "UNKNOWN";
+                }
+
+                return switch (transfer.status) {
+
+                        case PLANNED ->
+                                "AWAIT_PREDECESSOR";
+
+                        case READY ->
+                                "DISPATCH";
+
+                        case PARTIALLY_DISPATCHED,
+                                        PARTIALLY_RECEIVED ->
+                                "DISPATCH_REMAINDER_OR_RECEIVE_IN_TRANSIT";
+
+                        case IN_TRANSIT ->
+                                "RECEIVE";
+
+                        case RECEIVED -> {
+                                boolean hasSuccessor = transferRepository
+                                                .existsByPredecessorTransferId(
+                                                                transfer.getId());
+
+                                if (hasSuccessor) {
+                                        yield "CONTINUE_APPROVED_ROUTE";
+                                }
+
+                                LocationType destinationType = transfer.toLocation
+                                                .getLocationType();
+
+                                if (destinationType == LocationType.PRODUCTION) {
+
+                                        yield "ISSUE_TO_PRODUCTION";
+                                }
+
+                                if (destinationType == LocationType.QC) {
+
+                                        yield "INSPECT_MATERIAL";
+                                }
+
+                                if (destinationType == LocationType.PROCESSING ||
+                                                destinationType == LocationType.EXTERNAL_PROCESSOR) {
+
+                                        yield "COMPLETE_PROCESSING";
+                                }
+
+                                yield "COMPLETED";
+                        }
+
+                        case CANCELLED ->
+                                "NONE";
+                };
         }
 
         /*

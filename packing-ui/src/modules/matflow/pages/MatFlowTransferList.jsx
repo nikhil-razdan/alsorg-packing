@@ -345,6 +345,14 @@ export default function MatFlowTransferList() {
                         row.toLocationCode,
                         row.toPlantCode,
                         row.purpose,
+                        row.requisitionNumber,
+                        row.projectCode,
+                        row.drawingNo,
+                        row.productName,
+                        row.clientName,
+                        row.bomNumber,
+                        row.responsibleDepartment,
+                        row.nextAction,
                         row.status,
                     ].some(
                         (value) =>
@@ -559,6 +567,15 @@ export default function MatFlowTransferList() {
                 ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={transferHeaderSx}>
+
+                            <Box sx={tableCellSx}>
+                                Project / BOM
+                            </Box>
+
+                            <Box sx={tableCellSx}>
+                                Responsible / Next
+                            </Box>
+
                             <Box sx={tableCellSx}>
                                 Transfer
                             </Box>
@@ -658,6 +675,29 @@ export default function MatFlowTransferList() {
 
                                             <Box sx={tableCellSx}>
                                                 <Typography sx={mainTextSx}>
+                                                    {row.projectCode ||
+                                                        "-"}
+                                                </Typography>
+
+                                                <Typography sx={subTextSx}>
+                                                    {row.productName ||
+                                                        "-"}
+                                                </Typography>
+
+                                                <Typography sx={subTextSx}>
+                                                    {row.drawingNo ||
+                                                        "-"}
+                                                    {" · "}
+                                                    {row.bomNumber ||
+                                                        "-"}
+                                                    {" R"}
+                                                    {row.bomRevisionNo ??
+                                                        "-"}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>
                                                     {row.materialName ||
                                                         "-"}
                                                 </Typography>
@@ -735,6 +775,20 @@ export default function MatFlowTransferList() {
                                                         meta.color
                                                     )}
                                                 />
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={ownerTextSx}>
+                                                    {readable(
+                                                        row.responsibleDepartment
+                                                    ) || "-"}
+                                                </Typography>
+
+                                                <Typography sx={subTextSx}>
+                                                    {readable(
+                                                        row.nextAction
+                                                    ) || "-"}
+                                                </Typography>
                                             </Box>
 
                                             <Box sx={tableCellSx}>
@@ -908,20 +962,20 @@ const plantChipSx = {
 };
 
 const transferColumns =
-    "170px minmax(220px,1.25fr) minmax(210px,1.1fr) 90px 100px 100px 115px 155px 105px";
+    "165px minmax(210px,1.1fr) minmax(220px,1.2fr) minmax(200px,1fr) 85px 95px 95px 115px 145px 175px 100px";
 
 const transferHeaderSx = {
     ...tableHeaderSx,
     gridTemplateColumns:
         transferColumns,
-    minWidth: "1220px",
+    minWidth: "1580px",
 };
 
 const transferRowSx = {
     ...tableRowSx,
     gridTemplateColumns:
         transferColumns,
-    minWidth: "1220px",
+    minWidth: "1580px",
 };
 
 const mainTextSx = {
@@ -989,4 +1043,10 @@ const emptySubSx = {
         "var(--mf-text-muted)",
     fontSize: "10.5px",
     lineHeight: 1.55,
+};
+
+const ownerTextSx = {
+    color: "#7c3aed",
+    fontSize: "10px",
+    fontWeight: 900,
 };
