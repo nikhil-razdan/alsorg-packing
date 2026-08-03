@@ -2204,13 +2204,6 @@ const nextActionSx = {
     fontWeight: 700,
 };
 
-const materialRowSx = {
-    ...tableRowSx,
-    gridTemplateColumns:
-        materialColumns,
-    minWidth: "1560px",
-};
-
 const mainTextSx = {
     color:
         "var(--mf-text)",
