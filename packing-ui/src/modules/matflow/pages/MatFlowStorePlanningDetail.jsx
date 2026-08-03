@@ -2189,21 +2189,6 @@ const materialRowSx = {
     minWidth: "1740px",
 };
 
-const departmentNameSx = {
-    color: "#7c3aed",
-    fontSize: "8px",
-    fontWeight: 950,
-    textTransform: "uppercase",
-};
-
-const nextActionSx = {
-    mt: "2px",
-    color:
-        "var(--mf-text-muted)",
-    fontSize: "8px",
-    fontWeight: 700,
-};
-
 const mainTextSx = {
     color:
         "var(--mf-text)",
@@ -2239,6 +2224,37 @@ const availableTotalSx = {
     color: "#16a34a",
     fontSize: "11px",
     fontWeight: 950,
+};
+
+const departmentBoxSx = {
+    minWidth: "110px",
+    padding: "6px 8px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "2px",
+    borderRadius: "8px",
+    background:
+        "var(--mf-surface-strong)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const departmentNameSx = {
+    color: "#7c3aed",
+    fontSize: "8px",
+    fontWeight: 950,
+    lineHeight: 1.25,
+    textTransform: "uppercase",
+    letterSpacing: ".04em",
+};
+
+const nextActionSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "8px",
+    fontWeight: 700,
+    lineHeight: 1.35,
 };
 
 const stockOptionListSx = {
