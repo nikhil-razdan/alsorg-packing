@@ -481,6 +481,21 @@ const resolveLineWorkflow = (
     };
 };
 
+
+const roundQty = (value) =>
+    Math.round(
+        numeric(value) * 1000
+    ) / 1000;
+
+const qtyEquals = (
+    left,
+    right
+) =>
+    Math.abs(
+        roundQty(left) -
+        roundQty(right)
+    ) < 0.0005;
+
 const summarizeReviewLine = (
     line,
     availabilityEntry,
@@ -568,20 +583,6 @@ const summarizeReviewLine = (
     };
 };
 
-const roundQty = (value) =>
-    Math.round(
-        numeric(value) * 1000
-    ) / 1000;
-
-const qtyEquals = (
-    left,
-    right
-) =>
-    Math.abs(
-        roundQty(left) -
-        roundQty(right)
-    ) < 0.0005;
-
 export default function MatFlowStorePlanningDetail() {
     const {
         requisitionId,
@@ -596,8 +597,8 @@ export default function MatFlowStorePlanningDetail() {
     ] = useState(null);
 
     const [
-        locations,
-        setLocations,
+        availability,
+        setAvailability,
     ] = useState([]);
 
     const [
@@ -918,7 +919,7 @@ export default function MatFlowStorePlanningDetail() {
             if (!requisitionId) {
                 setSnapshot(null);
                 setAvailability([]);
-                setLocations([]);
+                setReviewByLine({});
                 setLoading(false);
 
                 setError(
@@ -945,20 +946,30 @@ export default function MatFlowStorePlanningDetail() {
                     ),
                 ]);
 
+                const planningData =
+                    planningResponse?.data ??
+                    null;
+
                 const availabilityRows =
                     asArray(
                         availabilityResponse?.data
                     );
 
                 setSnapshot(
-                    planningResponse?.data ||
-                    null
+                    planningData
                 );
 
                 setAvailability(
                     availabilityRows
                 );
 
+                /*
+                 * Create one editable Store-review state entry
+                 * for every requisition material line.
+                 *
+                 * Existing user-entered values are retained when
+                 * Refresh is used before review confirmation.
+                 */
                 setReviewByLine(
                     (current) => {
                         const next = {};
@@ -967,24 +978,34 @@ export default function MatFlowStorePlanningDetail() {
                             (entry) => {
                                 const lineId =
                                     String(
-                                        entry.requisitionLineId
+                                        entry?.requisitionLineId ??
+                                        ""
                                     );
 
+                                if (!lineId) {
+                                    return;
+                                }
+
                                 const previous =
-                                    current[lineId] ||
+                                    current[lineId] ??
                                     {};
 
                                 const allocationQuantities =
                                     {};
 
                                 asArray(
-                                    entry.stockOptions
+                                    entry?.stockOptions
                                 ).forEach(
                                     (option) => {
                                         const locationId =
                                             String(
-                                                option.locationId
+                                                option?.locationId ??
+                                                ""
                                             );
+
+                                        if (!locationId) {
+                                            return;
+                                        }
 
                                         allocationQuantities[
                                             locationId
@@ -998,13 +1019,13 @@ export default function MatFlowStorePlanningDetail() {
 
                                 next[lineId] = {
                                     decision:
-                                        previous.decision ||
+                                        previous.decision ??
                                         "UNDECIDED",
 
                                     allocationQuantities,
 
                                     remarks:
-                                        previous.remarks ||
+                                        previous.remarks ??
                                         "",
                                 };
                             }
@@ -1013,26 +1034,12 @@ export default function MatFlowStorePlanningDetail() {
                         return next;
                     }
                 );
-
-                setSnapshot(
-                    planningResponse?.data ||
-                    null
-                );
-
-                setAvailability(
-                    asArray(
-                        availabilityResponse?.data
-                    )
-                );
-
-                setLocations(
-                    asArray(
-                        locationResponse?.data
-                    )
-                );
-            } catch (requestError) {
+            } catch (
+            requestError
+            ) {
                 setSnapshot(null);
                 setAvailability([]);
+                setReviewByLine({});
 
                 setError(
                     readMatFlowError(
@@ -1732,18 +1739,25 @@ export default function MatFlowStorePlanningDetail() {
                                         lineReview
                                     );
 
+                                const decisionSelected =
+                                    normalize(
+                                        lineReview.decision
+                                    ) !== "UNDECIDED";
+
+                                const showReviewPreview =
+                                    canConfirmStoreReview &&
+                                    decisionSelected;
+
                                 const displayedReserved =
-                                    canConfirmStoreReview
-                                        ? reviewSummary
-                                            .allocatedQty
+                                    showReviewPreview
+                                        ? reviewSummary.allocatedQty
                                         : numeric(
                                             line.reservedQty
                                         );
 
                                 const displayedShortage =
-                                    canConfirmStoreReview
-                                        ? reviewSummary
-                                            .shortageQty
+                                    showReviewPreview
+                                        ? reviewSummary.shortageQty
                                         : numeric(
                                             line.shortageQty
                                         );
@@ -1994,9 +2008,8 @@ export default function MatFlowStorePlanningDetail() {
                                             <Typography
                                                 sx={
                                                     numeric(
-                                                        displayedReserved
-                                                    ) >
-                                                        0
+                                                        displayedShortage
+                                                    ) > 0
                                                         ? shortageQtySx
                                                         : normalQtySx
                                                 }
@@ -2569,14 +2582,8 @@ const planningHeaderSx = {
 const planningFormSingleSx = {
     mt: "15px",
     display: "grid",
-    gridTemplateColumns:
-        "minmax(0,1.2fr) minmax(0,1fr)",
+    gridTemplateColumns: "1fr",
     gap: "12px",
-
-    "@media (max-width: 760px)": {
-        gridTemplateColumns:
-            "1fr",
-    },
 };
 
 const planningActionSx = {
