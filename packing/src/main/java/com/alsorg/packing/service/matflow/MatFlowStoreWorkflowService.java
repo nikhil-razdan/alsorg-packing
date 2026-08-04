@@ -3,6 +3,7 @@ package com.alsorg.packing.service.matflow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreApprovedRouteStepResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreStockOptionResponse;
@@ -14,6 +15,7 @@ import com.alsorg.packing.domain.matflow.MatFlowLocation;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 
@@ -212,20 +214,43 @@ public class MatFlowStoreWorkflowService {
             MatFlowMaterialRequisition requisition,
             MatFlowRequisitionLine line) {
 
+        if (requisition == null ||
+                requisition.destinationLocation == null ||
+                requisition.destinationLocation.getId() == null) {
+
+            throw conflict(
+                    "Requisition Production destination is missing");
+        }
+
         if (line == null ||
+                line.getId() == null ||
                 line.material == null ||
-                line.bomLine == null) {
+                line.bomLine == null ||
+                line.bomLine.getId() == null) {
 
             throw conflict(
                     "Requisition contains an incomplete material line");
         }
 
+        /*
+         * The approved BOM route is the only route authority.
+         * Store can select stock sources and quantities, but cannot
+         * replace the Engineering-approved processing route.
+         */
         List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
                 line.bomLine.getId());
 
         List<MatFlowBomRouteStep> route = returnedRoute == null
                 ? List.of()
-                : returnedRoute;
+                : returnedRoute.stream()
+                        .filter(
+                                java.util.Objects::nonNull)
+                        .sorted(
+                                Comparator.comparing(
+                                        step -> step.sequenceNo,
+                                        Comparator.nullsLast(
+                                                Integer::compareTo)))
+                        .toList();
 
         validateApprovedRoute(
                 requisition,
@@ -242,21 +267,67 @@ public class MatFlowStoreWorkflowService {
                     "Approved material route has no first destination");
         }
 
-        List<MatFlowStockBalance> returnedBalances = stockRepository
-                .findPlanningCandidates(
-                        line.material.getId(),
-                        accessService.allowedPlants(),
-                        AVAILABILITY_SOURCE_TYPES);
+        /*
+         * Build structured route information for the Store UI.
+         */
+        List<StoreApprovedRouteStepResponse> approvedRouteSteps = route.stream()
+                .map(
+                        this::toStoreApprovedRouteStepResponse)
+                .toList();
+
+        /*
+         * A processing route is determined only from the approved
+         * BOM route. Store does not select an arbitrary processor.
+         */
+        MatFlowBomRouteStep firstProcessingStep = route.stream()
+                .filter(
+                        step -> step.location != null &&
+                                step.location.getId() != null &&
+                                step.stepType == RouteStepType.PROCESSING)
+                .findFirst()
+                .orElse(null);
+
+        boolean processingRequired = firstProcessingStep != null;
+
+        UUID firstProcessingLocationId = firstProcessingStep == null
+                ? null
+                : firstProcessingStep.location
+                        .getId();
+
+        String firstProcessingLocationCode = firstProcessingStep == null
+                ? null
+                : firstProcessingStep.location
+                        .getLocationCode();
+
+        /*
+         * Load all valid physical stock sources that the Store may
+         * select for reservation.
+         */
+        List<MatFlowStockBalance> returnedBalances = stockRepository.findPlanningCandidates(
+                line.material.getId(),
+                accessService.allowedPlants(),
+                AVAILABILITY_SOURCE_TYPES);
 
         List<MatFlowStockBalance> balances = returnedBalances == null
                 ? new ArrayList<>()
                 : new ArrayList<>(
                         returnedBalances);
 
-        balances.removeIf(balance -> balance == null ||
-                balance.location == null ||
-                balance.location.getId() == null);
+        balances.removeIf(
+                balance -> balance == null ||
+                        balance.location == null ||
+                        balance.location.getId() == null ||
+                        !balance.location.isActive() ||
+                        !balance.location.isSupportsStock());
 
+        /*
+         * Source-priority order:
+         *
+         * 1. Stock already at the first approved route destination
+         * 2. Stock in the same plant
+         * 3. Higher available quantity
+         * 4. Location code
+         */
         balances.sort(
                 Comparator
                         .<MatFlowStockBalance>comparingInt(
@@ -283,11 +354,12 @@ public class MatFlowStoreWorkflowService {
                                         String.CASE_INSENSITIVE_ORDER)));
 
         List<StoreStockOptionResponse> options = balances.stream()
-                .map(balance -> toStockOption(
-                        requisition,
-                        firstDestination,
-                        route,
-                        balance))
+                .map(
+                        balance -> toStockOption(
+                                requisition,
+                                firstDestination,
+                                route,
+                                balance))
                 .toList();
 
         String materialCategory = clean(
@@ -297,6 +369,10 @@ public class MatFlowStoreWorkflowService {
         if (materialCategory == null) {
             materialCategory = "MISCELLANEOUS";
         }
+
+        String approvedRouteSummary = routeSummary(
+                route,
+                requisition.destinationLocation);
 
         return new StoreLineAvailabilityResponse(
                 line.getId(),
@@ -320,11 +396,42 @@ public class MatFlowStoreWorkflowService {
                 firstDestination.getId(),
                 firstDestination.getLocationCode(),
 
-                routeSummary(
-                        route,
-                        requisition.destinationLocation),
+                approvedRouteSummary,
+
+                processingRequired,
+
+                firstProcessingLocationId,
+                firstProcessingLocationCode,
+
+                approvedRouteSteps,
 
                 options);
+    }
+
+    private StoreApprovedRouteStepResponse toStoreApprovedRouteStepResponse(
+            MatFlowBomRouteStep step) {
+
+        if (step == null ||
+                step.location == null ||
+                step.location.getId() == null) {
+
+            throw conflict(
+                    "Approved BOM route contains an incomplete route step");
+        }
+
+        return new StoreApprovedRouteStepResponse(
+                step.getId(),
+                step.sequenceNo,
+                step.stepType,
+
+                step.location.getId(),
+                step.location.getLocationCode(),
+                step.location.getLocationName(),
+                step.location.getPlantCode(),
+                step.location.getLocationType(),
+
+                clean(
+                        step.processCode));
     }
 
     private StoreStockOptionResponse toStockOption(
