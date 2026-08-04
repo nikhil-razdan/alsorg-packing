@@ -1877,16 +1877,27 @@ const projectListSx = {
     gap: "18px",
 };
 
+const productColumns =
+    "minmax(250px,1.4fr) 180px 100px 100px 80px 210px";
+
+
+const productIdentityCellSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    minWidth: 0,
+};
+
 const projectGroupSx = {
     position: "relative",
     overflow: "hidden",
-    borderRadius: "16px",
+    borderRadius: "15px",
     border:
-        "1px solid var(--mf-border)",
+        "1px solid rgba(148,163,184,.16)",
     background:
         "var(--mf-panel-bg-solid)",
     boxShadow:
-        "0 8px 26px rgba(15,23,42,.07)",
+        "0 8px 24px rgba(2,6,23,.16)",
     transition:
         "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
 
@@ -1894,16 +1905,16 @@ const projectGroupSx = {
         transform:
             "translateY(-1px)",
         borderColor:
-            "rgba(37,99,235,.28)",
+            "rgba(20,184,166,.32)",
         boxShadow:
-            "0 12px 32px rgba(15,23,42,.10)",
+            "0 14px 32px rgba(2,6,23,.22)",
     },
 };
 
 const projectTopAccentSx = {
     height: "4px",
     background:
-        "linear-gradient(90deg,#2563eb 0%,#7c3aed 48%,#0284c7 100%)",
+        "linear-gradient(90deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)",
 };
 
 const projectGroupHeaderSx = {
@@ -1914,9 +1925,9 @@ const projectGroupHeaderSx = {
     gap: "18px",
     flexWrap: "wrap",
     background:
-        "linear-gradient(135deg,rgba(37,99,235,.09),rgba(124,58,237,.045) 58%,transparent)",
+        "linear-gradient(135deg,rgba(15,118,110,.095),rgba(15,23,42,.025) 58%,transparent)",
     borderBottom:
-        "1px solid var(--mf-border)",
+        "1px solid rgba(148,163,184,.14)",
 };
 
 const projectIdentitySx = {
@@ -1933,12 +1944,12 @@ const projectIconSx = {
     flexShrink: 0,
     display: "grid",
     placeItems: "center",
-    borderRadius: "13px",
-    color: "#2563eb",
+    borderRadius: "12px",
+    color: "#38bdf8",
     background:
-        "rgba(37,99,235,.10)",
+        "rgba(14,165,233,.08)",
     border:
-        "1px solid rgba(37,99,235,.20)",
+        "1px solid rgba(56,189,248,.20)",
 
     "& svg": {
         fontSize: "23px",
@@ -1948,27 +1959,26 @@ const projectIconSx = {
 const projectTitleRowSx = {
     display: "flex",
     alignItems: "center",
-    gap: "9px",
+    gap: "10px",
     flexWrap: "wrap",
 };
 
 const projectCodeChipSx = {
     height: "27px",
-    color: "#fff",
+    color: "#eff6ff",
     background:
-        "linear-gradient(135deg,#2563eb,#1d4ed8)",
+        "linear-gradient(135deg,#1d4ed8,#2563eb)",
     border:
-        "1px solid rgba(37,99,235,.35)",
+        "1px solid rgba(96,165,250,.32)",
     boxShadow:
-        "0 4px 12px rgba(37,99,235,.20)",
+        "0 4px 12px rgba(37,99,235,.16)",
     fontSize: "9px",
     fontWeight: 950,
     letterSpacing: ".05em",
 };
 
 const projectNameSx = {
-    color:
-        "var(--mf-text)",
+    color: "#f8fafc",
     fontSize: "19px",
     fontWeight: 950,
     lineHeight: 1.2,
@@ -1977,11 +1987,11 @@ const projectNameSx = {
 
 const projectHierarchySx = {
     mt: "6px",
-    color: "#7c3aed",
-    fontSize: "9px",
+    color: "#94a3b8",
+    fontSize: "8.5px",
     fontWeight: 850,
     textTransform: "uppercase",
-    letterSpacing: ".045em",
+    letterSpacing: ".055em",
 };
 
 const projectMetaGridSx = {
@@ -2006,25 +2016,27 @@ const projectMetaItemSx = {
     minWidth: 0,
     display: "flex",
     alignItems: "center",
-    gap: "7px",
-    p: "7px 9px",
+    gap: "8px",
+    p: "8px 10px",
     borderRadius: "9px",
     background:
-        "var(--mf-surface-soft)",
+        "rgba(15,23,42,.26)",
     border:
-        "1px solid var(--mf-border)",
+        "1px solid rgba(148,163,184,.14)",
 };
 
 const projectMetaIconSx = {
-    width: "26px",
-    height: "26px",
+    width: "27px",
+    height: "27px",
     flexShrink: 0,
     display: "grid",
     placeItems: "center",
     borderRadius: "7px",
-    color: "#0284c7",
+    color: "#22d3ee",
     background:
-        "rgba(2,132,199,.09)",
+        "rgba(6,182,212,.08)",
+    border:
+        "1px solid rgba(34,211,238,.14)",
 
     "& svg": {
         fontSize: "15px",
@@ -2032,12 +2044,11 @@ const projectMetaIconSx = {
 };
 
 const projectMetaLabelSx = {
-    color:
-        "var(--mf-text-muted)",
+    color: "#94a3b8",
     fontSize: "7.5px",
     fontWeight: 900,
     textTransform: "uppercase",
-    letterSpacing: ".04em",
+    letterSpacing: ".045em",
 };
 
 const projectMetaValueSx = {
@@ -2045,8 +2056,7 @@ const projectMetaValueSx = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    color:
-        "var(--mf-text-secondary)",
+    color: "#e2e8f0",
     fontSize: "9px",
     fontWeight: 800,
 };
@@ -2060,40 +2070,84 @@ const projectActionsSx = {
 
 const productCountChipSx = {
     height: "28px",
-    color: "#7c3aed",
+    color: "#5eead4",
     background:
-        "rgba(124,58,237,.10)",
+        "rgba(20,184,166,.09)",
     border:
-        "1px solid rgba(124,58,237,.22)",
+        "1px solid rgba(45,212,191,.22)",
     fontSize: "9px",
     fontWeight: 900,
+};
+
+const projectCollapseBtnSx = {
+    minHeight: "34px",
+    px: "12px",
+    borderRadius: "9px",
+    textTransform: "none",
+    color: "#cbd5e1",
+    background:
+        "rgba(148,163,184,.055)",
+    border:
+        "1px solid rgba(148,163,184,.18)",
+    fontSize: "9px",
+    fontWeight: 900,
+
+    "&:hover": {
+        color: "#5eead4",
+        background:
+            "rgba(20,184,166,.10)",
+        borderColor:
+            "rgba(45,212,191,.30)",
+    },
+
+    "& .MuiButton-endIcon": {
+        ml: "5px",
+    },
+
+    "& svg": {
+        fontSize: "17px",
+    },
 };
 
 const projectAddBtnSx = {
     ...primaryBtnSx,
     minHeight: "34px",
+    color: "#ffffff",
+    background:
+        "linear-gradient(135deg,#0f766e,#0891b2)",
+    border:
+        "1px solid rgba(45,212,191,.26)",
+    boxShadow:
+        "0 5px 14px rgba(15,118,110,.20)",
+
+    "&:hover": {
+        background:
+            "linear-gradient(135deg,#115e59,#0e7490)",
+        boxShadow:
+            "0 7px 18px rgba(15,118,110,.28)",
+    },
 };
 
 const productSectionHeadingSx = {
-    p: "12px 16px",
+    p: "13px 16px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     background:
-        "var(--mf-panel-bg-solid)",
+        "rgba(15,118,110,.035)",
+    borderTop:
+        "1px solid rgba(148,163,184,.10)",
 };
 
 const productSectionTitleSx = {
-    color:
-        "var(--mf-text)",
+    color: "#f1f5f9",
     fontSize: "12px",
     fontWeight: 900,
 };
 
 const productSectionSubSx = {
     mt: "2px",
-    color:
-        "var(--mf-text-muted)",
+    color: "#94a3b8",
     fontSize: "8.5px",
     fontWeight: 650,
 };
@@ -2103,11 +2157,8 @@ const productTableShellSx = {
     border: "none",
     borderRadius: 0,
     borderTop:
-        "1px solid var(--mf-border)",
+        "1px solid rgba(148,163,184,.13)",
 };
-
-const productColumns =
-    "minmax(250px,1.4fr) 180px 100px 100px 80px 210px";
 
 const productHeaderSx = {
     ...tableHeaderSx,
@@ -2115,7 +2166,7 @@ const productHeaderSx = {
         productColumns,
     minWidth: "1020px",
     background:
-        "rgba(37,99,235,.045)",
+        "rgba(15,118,110,.06)",
 };
 
 const productRowSx = {
@@ -2126,15 +2177,8 @@ const productRowSx = {
 
     "&:hover": {
         background:
-            "var(--mf-hover)",
+            "rgba(20,184,166,.035)",
     },
-};
-
-const productIdentityCellSx = {
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    minWidth: 0,
 };
 
 const productSequenceSx = {
@@ -2144,35 +2188,34 @@ const productSequenceSx = {
     display: "grid",
     placeItems: "center",
     borderRadius: "8px",
-    color: "#2563eb",
+    color: "#5eead4",
     background:
-        "rgba(37,99,235,.09)",
+        "rgba(20,184,166,.09)",
     border:
-        "1px solid rgba(37,99,235,.18)",
+        "1px solid rgba(45,212,191,.20)",
     fontSize: "9px",
     fontWeight: 950,
 };
 
 const productNameCellSx = {
-    color:
-        "var(--mf-text)",
+    color: "#f1f5f9",
     fontSize: "11.5px",
     fontWeight: 900,
 };
 
 const drawingCodeSx = {
-    color: "#7c3aed",
+    color: "#38bdf8",
     fontSize: "10.5px",
     fontWeight: 900,
 };
 
 const revisionChipSx = {
     height: "22px",
-    color: "#0284c7",
+    color: "#fbbf24",
     background:
-        "rgba(2,132,199,.09)",
+        "rgba(245,158,11,.08)",
     border:
-        "1px solid rgba(2,132,199,.20)",
+        "1px solid rgba(251,191,36,.20)",
     fontSize: "8px",
     fontWeight: 900,
 };
@@ -2223,35 +2266,6 @@ const formGridSx = {
     "@media (max-width: 700px)": {
         gridTemplateColumns:
             "1fr",
-    },
-};
-
-const projectCollapseBtnSx = {
-    minHeight: "34px",
-    px: "12px",
-    borderRadius: "9px",
-    textTransform: "none",
-    color: "#7c3aed",
-    background:
-        "rgba(124,58,237,.07)",
-    border:
-        "1px solid rgba(124,58,237,.20)",
-    fontSize: "9px",
-    fontWeight: 900,
-
-    "&:hover": {
-        background:
-            "rgba(124,58,237,.13)",
-        borderColor:
-            "rgba(124,58,237,.34)",
-    },
-
-    "& .MuiButton-endIcon": {
-        ml: "5px",
-    },
-
-    "& svg": {
-        fontSize: "17px",
     },
 };
 
