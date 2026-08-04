@@ -31,8 +31,15 @@ const API = axios.create({
 
 const getValidToken = () => {
   const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken");
+    localStorage.getItem(
+      "token"
+    ) ||
+    localStorage.getItem(
+      "jwt"
+    ) ||
+    localStorage.getItem(
+      "accessToken"
+    );
 
   if (
     !token ||
@@ -56,7 +63,9 @@ API.interceptors.request.use(
 
     if (token) {
       config.headers.Authorization =
-        `Bearer ${token}`;
+        /^Bearer\s+/i.test(token)
+          ? token
+          : `Bearer ${token}`;
     } else if (
       typeof config.headers.delete ===
       "function"

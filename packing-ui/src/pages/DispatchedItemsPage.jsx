@@ -2971,6 +2971,17 @@ const MASTER_CREATE_TARGET = {
 	CUSTOM_CHALLAN: "CUSTOM_CHALLAN",
 };
 
+const DISPATCH_BACKEND_BATCH_SIZE = 200;
+
+/*
+ * Safety guard only.
+ *
+ * 5,000 pages × 200 rows gives a theoretical ceiling
+ * of 1,000,000 rows and prevents an accidental infinite
+ * request loop if the backend response is malformed.
+ */
+const DISPATCH_BACKEND_MAX_PAGES = 5000;
+
 function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [loading, setLoading] = useState(false);
@@ -3047,6 +3058,7 @@ function DispatchedItemsPage() {
 	const [pageSize, setPageSize] = useState(25);
 	const scannerInputRef = useRef(null);
 	const scanTimerRef = useRef(null);
+	const dispatchFetchRequestRef = useRef(0);
 	const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
 	const [scanMode, setScanMode] = useState("SINGLE");
 	const [scannerText, setScannerText] = useState("");
@@ -5622,115 +5634,245 @@ function DispatchedItemsPage() {
 		return d.toISOString().slice(0, 16);
 	};
 
+	const normalizeFetchedDispatchRows = (
+		data
+	) => {
+		if (!Array.isArray(data)) {
+			return [];
+		}
+
+		return data
+			.filter((item) => {
+				return Boolean(
+					String(
+						item?.zohoItemId ||
+						""
+					).trim()
+				);
+			})
+			.map((item) => {
+				const itemType =
+					resolveDispatchItemType(
+						item
+					);
+
+				const displayName =
+					String(
+						item?.name ||
+						item?.itemName ||
+						""
+					).trim();
+
+				return {
+					...item,
+
+					zohoItemId:
+						String(
+							item.zohoItemId
+						).trim(),
+
+					name:
+						displayName ||
+						"Unnamed Item",
+
+					itemName:
+						String(
+							item?.itemName ||
+							item?.name ||
+							""
+						).trim(),
+
+					stock:
+						item.stock ?? 0,
+
+					status:
+						String(
+							item.status || ""
+						)
+							.trim()
+							.toUpperCase(),
+
+					itemType,
+
+					packetItemId:
+						item?.packetItemId ||
+						item?.itemId ||
+						"",
+
+					linkedPacketItemId:
+						item?.linkedPacketItemId ||
+						null,
+
+					linkedMasterItemId:
+						item?.linkedMasterItemId ||
+						null,
+
+					hardwarePacket:
+						itemType ===
+						"HARDWARE",
+				};
+			});
+	};
+
+	const fetchAllDispatchedItemPages =
+		async () => {
+			const rowsById =
+				new Map();
+
+			let backendPage = 0;
+
+			while (
+				backendPage <
+				DISPATCH_BACKEND_MAX_PAGES
+			) {
+				const response =
+					await authFetch(
+						`${API_BASE_URL}/api/dispatched?page=${backendPage}&size=${DISPATCH_BACKEND_BATCH_SIZE}`,
+						{
+							method: "GET",
+							headers: {
+								Accept:
+									"application/json",
+							},
+						}
+					);
+
+				if (!response.ok) {
+					const message =
+						await readResponseError(
+							response,
+							"Failed to fetch dispatched items"
+						);
+
+					throw new Error(
+						message
+					);
+				}
+
+				const payload =
+					await response.json();
+
+				if (!Array.isArray(payload)) {
+					console.error(
+						"Invalid paginated dispatch response:",
+						payload
+					);
+
+					throw new Error(
+						"Backend returned an invalid dispatch list"
+					);
+				}
+
+				/*
+				 * Deduplicate by the real primary identifier.
+				 *
+				 * This also protects against a record moving between
+				 * offset pages when another user inserts or updates
+				 * data during the refresh.
+				 */
+				payload.forEach((item) => {
+					const itemId =
+						String(
+							item?.zohoItemId ||
+							""
+						).trim();
+
+					if (!itemId) {
+						return;
+					}
+
+					rowsById.set(
+						itemId,
+						item
+					);
+				});
+
+				/*
+				 * These headers may be readable on same-origin requests.
+				 * When CORS does not expose custom headers, the code still
+				 * safely falls back to the returned batch length.
+				 */
+				const headerTotalPages =
+					Number(
+						response.headers.get(
+							"X-Total-Pages"
+						)
+					);
+
+				const hasValidTotalPages =
+					Number.isInteger(
+						headerTotalPages
+					) &&
+					headerTotalPages >= 0;
+
+				const reachedHeaderEnd =
+					hasValidTotalPages &&
+					backendPage + 1 >=
+					headerTotalPages;
+
+				const reachedShortBatch =
+					payload.length <
+					DISPATCH_BACKEND_BATCH_SIZE;
+
+				if (
+					reachedHeaderEnd ||
+					reachedShortBatch
+				) {
+					return Array.from(
+						rowsById.values()
+					);
+				}
+
+				backendPage += 1;
+			}
+
+			throw new Error(
+				"Dispatch loading stopped because the backend pagination limit was exceeded"
+			);
+		};
+
 	const fetchData = async () => {
+		const requestNumber =
+			dispatchFetchRequestRef.current +
+			1;
+
+		dispatchFetchRequestRef.current =
+			requestNumber;
+
 		try {
 			setLoading(true);
 
-			const res =
-				await authFetch(
-					`${API_BASE_URL}/api/dispatched`,
-					{
-						method: "GET",
-					}
-				);
-
-			if (!res.ok) {
-				const text =
-					await res.text();
-
-				throw new Error(
-					text ||
-					"Failed to fetch dispatched items"
-				);
-			}
-
-			const data =
-				await res.json();
-
-			if (!Array.isArray(data)) {
-				console.error(
-					"Invalid dispatch API response:",
-					data
-				);
-
-				setRows([]);
-				return [];
-			}
+			/*
+			 * Backend queries remain bounded, but the frontend receives
+			 * the complete list required by the existing client-side:
+			 *
+			 * - search
+			 * - status filtering
+			 * - grouping
+			 * - selection
+			 * - export
+			 * - generated document history
+			 * - local pagination
+			 */
+			const completePayload =
+				await fetchAllDispatchedItemPages();
 
 			const cleaned =
-				data
-					.filter((item) => {
-						return Boolean(
-							String(
-								item?.zohoItemId ||
-								""
-							).trim()
-						);
-					})
-					.map((item) => {
-						const itemType =
-							resolveDispatchItemType(
-								item
-							);
+				normalizeFetchedDispatchRows(
+					completePayload
+				);
 
-						const displayName =
-							String(
-								item?.name ||
-								item?.itemName ||
-								""
-							).trim();
-
-						return {
-							...item,
-
-							zohoItemId:
-								String(
-									item.zohoItemId
-								).trim(),
-
-							name:
-								displayName ||
-								"Unnamed Item",
-
-							itemName:
-								String(
-									item?.itemName ||
-									item?.name ||
-									""
-								).trim(),
-
-							stock:
-								item.stock ?? 0,
-
-							status:
-								String(
-									item.status || ""
-								)
-									.trim()
-									.toUpperCase(),
-
-							itemType,
-
-							packetItemId:
-								item?.packetItemId ||
-								item?.itemId ||
-								"",
-
-							linkedPacketItemId:
-								item?.linkedPacketItemId ||
-								null,
-
-							linkedMasterItemId:
-								item?.linkedMasterItemId ||
-								null,
-
-							hardwarePacket:
-								itemType ===
-								"HARDWARE",
-						};
-					});
-
-			setRows(cleaned);
+			/*
+			 * An older refresh must not overwrite a newer refresh.
+			 */
+			if (
+				requestNumber ===
+				dispatchFetchRequestRef.current
+			) {
+				setRows(
+					cleaned
+				);
+			}
 
 			return cleaned;
 
@@ -5740,11 +5882,22 @@ function DispatchedItemsPage() {
 				error
 			);
 
-			setRows([]);
+			if (
+				requestNumber ===
+				dispatchFetchRequestRef.current
+			) {
+				setRows([]);
+			}
+
 			return [];
 
 		} finally {
-			setLoading(false);
+			if (
+				requestNumber ===
+				dispatchFetchRequestRef.current
+			) {
+				setLoading(false);
+			}
 		}
 	};
 
@@ -6699,48 +6852,87 @@ function DispatchedItemsPage() {
 		);
 	}, [rows]);
 
-	const updateStatus = async (zohoItemId, status) => {
-		try {
-			console.log("🚀 API CALL:", zohoItemId, status);
-			let res = null;
+	const updateStatus = async (
+		zohoItemId,
+		status,
+		{
+			refresh = true,
+		} = {}
+	) => {
+		const allowedStatuses =
+			new Set([
+				"READY_TO_STORE",
+				"READY_TO_DISPATCH",
+			]);
 
-			if (status === "READY_TO_STORE" || status === "READY_TO_DISPATCH") {
-				res = await authFetch(
-					`${API_BASE_URL}/api/dispatched/${encodeURIComponent(zohoItemId)}/dispatch?status=${status}`,
-					{
-						method: "POST",
-						headers: {
-							...getAuthHeaders(),
-							"X-Username": localStorage.getItem("username"),
-						},
-					}
-				);
-			} else {
-				console.warn("⛔ Invalid status:", status);
-				return;
-			}
-
-			if (!res) {
-				alert("No API call made");
-				return;
-			}
-
-			console.log("🚀 API RESPONSE STATUS:", res.status);
-			if (!res.ok) {
-				const text = await res.text();
-				console.error("❌ BACKEND ERROR:", text);
-				alert(text || "Status update failed");
-				return;
-			}
-
-			console.log("✅ SUCCESS");
-
-			await fetchData();
-
-		} catch (err) {
-			console.error("❌ ERROR:", err);
-			alert("Status update failed");
+		if (
+			!allowedStatuses.has(
+				status
+			)
+		) {
+			throw new Error(
+				`Invalid status: ${status}`
+			);
 		}
+
+		console.log(
+			"🚀 API CALL:",
+			zohoItemId,
+			status
+		);
+
+		const response =
+			await authFetch(
+				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+					zohoItemId
+				)}/dispatch?status=${encodeURIComponent(
+					status
+				)}`,
+				{
+					method: "POST",
+
+					headers: {
+						...getAuthHeaders(),
+
+						"X-Username":
+							localStorage.getItem(
+								"username"
+							) || "",
+					},
+				}
+			);
+
+		console.log(
+			"🚀 API RESPONSE STATUS:",
+			response.status
+		);
+
+		if (!response.ok) {
+			const message =
+				await readResponseError(
+					response,
+					"Status update failed"
+				);
+
+			console.error(
+				"❌ BACKEND ERROR:",
+				message
+			);
+
+			throw new Error(
+				message
+			);
+		}
+
+		console.log(
+			"✅ SUCCESS"
+		);
+
+		if (refresh) {
+			return await fetchData();
+		}
+
+		return true;
 	};
 
 	const approveRestore = async (zohoItemId) => {
@@ -13082,26 +13274,64 @@ function DispatchedItemsPage() {
 										sx={statusChoiceCardSx("#10b981")}
 										onClick={async () => {
 											try {
-												const row = statusModal;
+												const row =
+													statusModal;
 
-												await updateStatus(row.zohoItemId, "READY_TO_STORE");
+												if (!row?.zohoItemId) {
+													throw new Error(
+														"Item ID missing"
+													);
+												}
 
-												const fresh = await fetchData();
-
-												const updated = fresh.find(
-													r => r.zohoItemId === row.zohoItemId
+												await updateStatus(
+													row.zohoItemId,
+													"READY_TO_STORE",
+													{
+														refresh: false,
+													}
 												);
 
-												if (!updated || updated.status !== "READY_TO_STORE") {
-													alert("Item not ready for warehouse");
-													return;
+												const fresh =
+													await fetchData();
+
+												const updated =
+													fresh.find(
+														(item) =>
+															item.zohoItemId ===
+															row.zohoItemId
+													);
+
+												if (
+													!updated ||
+													updated.status !==
+													"READY_TO_STORE"
+												) {
+													throw new Error(
+														`Item not ready for warehouse. Current status: ${updated?.status ||
+														"Not found"
+														}`
+													);
 												}
 
 												setStatusModal(null);
-												setGatePassModal(updated);
-											} catch (err) {
-												console.error(err);
-												alert("Failed to prepare item for warehouse");
+
+												/*
+												 * Use your existing modal helper so warehouse
+												 * and from-location defaults remain synchronized.
+												 */
+												openSingleGatePassModal(
+													updated
+												);
+
+											} catch (error) {
+												console.error(
+													error
+												);
+
+												alert(
+													error?.message ||
+													"Failed to prepare item for warehouse"
+												);
 											}
 										}}
 									>
@@ -13129,8 +13359,38 @@ function DispatchedItemsPage() {
 									<Box
 										sx={statusChoiceCardSx("#3b82f6")}
 										onClick={async () => {
-											setStatusModal(null);
-											await updateStatus(statusModal.zohoItemId, "READY_TO_DISPATCH");
+											const row =
+												statusModal;
+
+											try {
+												if (!row?.zohoItemId) {
+													throw new Error(
+														"Item ID missing"
+													);
+												}
+
+												setStatusModal(null);
+
+												await updateStatus(
+													row.zohoItemId,
+													"READY_TO_DISPATCH",
+													{
+														refresh: false,
+													}
+												);
+
+												await fetchData();
+
+											} catch (error) {
+												console.error(
+													error
+												);
+
+												alert(
+													error?.message ||
+													"Failed to prepare item for dispatch"
+												);
+											}
 										}}
 									>
 										<Box sx={statusChoiceLeftSx}>
@@ -13360,8 +13620,17 @@ function DispatchedItemsPage() {
 										sx={statusChoiceCardSx("#10b981")}
 										onClick={async () => {
 											try {
-												for (const id of selectionModel) {
-													await updateStatus(id, "READY_TO_STORE");
+												for (
+													const id of
+													selectionModel
+												) {
+													await updateStatus(
+														id,
+														"READY_TO_STORE",
+														{
+															refresh: false,
+														}
+													);
 												}
 
 												await fetchData();
@@ -13399,8 +13668,17 @@ function DispatchedItemsPage() {
 										sx={statusChoiceCardSx("#3b82f6")}
 										onClick={async () => {
 											try {
-												for (const id of selectionModel) {
-													await updateStatus(id, "READY_TO_DISPATCH");
+												for (
+													const id of
+													selectionModel
+												) {
+													await updateStatus(
+														id,
+														"READY_TO_DISPATCH",
+														{
+															refresh: false,
+														}
+													);
 												}
 
 												await fetchData();

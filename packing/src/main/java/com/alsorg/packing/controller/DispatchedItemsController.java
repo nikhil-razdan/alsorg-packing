@@ -8,7 +8,13 @@ import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
+import java.util.Collection;
+import java.util.Set;
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
@@ -38,9 +44,17 @@ public class DispatchedItemsController {
         /* ===================== FETCH ===================== */
 
         @GetMapping
-        public List<DispatchedItem> getDispatchedItems(
+        public ResponseEntity<List<DispatchedItem>> getDispatchedItems(
+
+                        @RequestParam(defaultValue = "0") int page,
+
+                        @RequestParam(defaultValue = "100") int size,
+
                         @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                User user = currentUserService
+                                .getCurrentUserFromAuth(
+                                                auth);
 
                 List<ItemDispatchStatus> statuses = List.of(
                                 ItemDispatchStatus.READY,
@@ -52,13 +66,122 @@ public class DispatchedItemsController {
                                 ItemDispatchStatus.AVAILABLE,
                                 ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
 
-                if (currentUserService.isAdmin(user)) {
-                        return repository.findByStatusIn(statuses);
+                /*
+                 * Protect the server from negative or extremely
+                 * large pagination requests.
+                 */
+                int safePage = Math.max(
+                                page,
+                                0);
+
+                int safeSize = Math.min(
+                                Math.max(
+                                                size,
+                                                1),
+                                200);
+
+                /*
+                 * createdAt exists in the generated SQL and therefore
+                 * is suitable for deterministic newest-first loading.
+                 *
+                 * zohoItemId is added as a stable tie-breaker.
+                 */
+                Pageable pageable = PageRequest.of(
+                                safePage,
+                                safeSize,
+
+                                Sort.by(
+                                                Sort.Direction.DESC,
+                                                "createdAt")
+                                                .and(
+                                                                Sort.by(
+                                                                                Sort.Direction.ASC,
+                                                                                "zohoItemId")));
+
+                Page<DispatchedItem> result;
+
+                if (currentUserService.isAdmin(
+                                user)) {
+
+                        result = repository
+                                        .findByStatusIn(
+                                                        statuses,
+                                                        pageable);
+
+                } else {
+
+                        Set<String> allowedPlants = currentUserService
+                                        .allowedPlants(
+                                                        user);
+
+                        /*
+                         * Preserve legacy visibility when a user has no
+                         * explicit plant assignment.
+                         */
+                        if (allowedPlants == null ||
+                                        allowedPlants.isEmpty()) {
+
+                                result = repository
+                                                .findLegacyVisiblePageByStatuses(
+                                                                statuses,
+                                                                pageable);
+
+                        } else {
+
+                                result = repository
+                                                .findVisiblePageByStatusesAndPlantsIncludingLegacy(
+                                                                statuses,
+                                                                allowedPlants,
+                                                                pageable);
+                        }
                 }
 
-                return repository.findVisibleByStatusesAndPlantsIncludingLegacy(
-                                statuses,
-                                currentUserService.allowedPlants(user));
+                HttpHeaders headers = new HttpHeaders();
+
+                headers.add(
+                                "X-Total-Count",
+                                String.valueOf(
+                                                result.getTotalElements()));
+
+                headers.add(
+                                "X-Total-Pages",
+                                String.valueOf(
+                                                result.getTotalPages()));
+
+                headers.add(
+                                "X-Current-Page",
+                                String.valueOf(
+                                                result.getNumber()));
+
+                headers.add(
+                                "X-Page-Size",
+                                String.valueOf(
+                                                result.getSize()));
+
+                headers.add(
+                                "X-Has-Next-Page",
+                                String.valueOf(
+                                                result.hasNext()));
+
+                headers.add(
+                                "X-Has-Previous-Page",
+                                String.valueOf(
+                                                result.hasPrevious()));
+
+                /*
+                 * Body remains List<DispatchedItem>.
+                 *
+                 * Therefore existing frontend code that expects:
+                 * response.data = [...]
+                 *
+                 * continues to parse correctly.
+                 */
+                return ResponseEntity
+                                .ok()
+                                .headers(
+                                                headers)
+                                .body(
+                                                result.getContent());
         }
 
         @PostMapping("/{zohoItemId:.+}/move-to-fg")
@@ -469,6 +592,7 @@ public class DispatchedItemsController {
                         @PathVariable String challanNumber,
                         @RequestBody(required = false) EndTripRequest request,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
+
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!currentUserService.isLogistics(user)
@@ -478,27 +602,50 @@ public class DispatchedItemsController {
                                         .body("Only LOGISTICS / ADMIN user can end trip");
                 }
 
-                List<ItemDispatchStatus> statuses = List.of(ItemDispatchStatus.DISPATCHED);
-
-                List<DispatchedItem> sourceItems;
-
-                if (currentUserService.isAdmin(user)) {
-                        sourceItems = repository.findByStatusIn(statuses);
-                } else {
-                        sourceItems = repository.findVisibleByStatusesAndPlantsIncludingLegacy(
-                                        statuses,
-                                        currentUserService.allowedPlants(user));
-                }
-
                 String cleanChallanNumber = challanNumber == null
                                 ? ""
                                 : challanNumber.trim();
 
-                List<DispatchedItem> items = sourceItems
-                                .stream()
-                                .filter(item -> item.getChalaanNumber() != null
-                                                && item.getChalaanNumber().trim().equals(cleanChallanNumber))
-                                .toList();
+                if (cleanChallanNumber.isBlank()) {
+                        return ResponseEntity
+                                        .badRequest()
+                                        .body(
+                                                        "Challan number is required");
+                }
+
+                List<DispatchedItem> items;
+
+                if (currentUserService.isAdmin(
+                                user)) {
+
+                        items = repository
+                                        .findByStatusAndChalaanNumber(
+                                                        ItemDispatchStatus.DISPATCHED,
+                                                        cleanChallanNumber);
+
+                } else {
+
+                        Set<String> allowedPlants = currentUserService
+                                        .allowedPlants(
+                                                        user);
+
+                        if (allowedPlants == null ||
+                                        allowedPlants.isEmpty()) {
+
+                                items = repository
+                                                .findLegacyByStatusAndChalaanNumber(
+                                                                ItemDispatchStatus.DISPATCHED,
+                                                                cleanChallanNumber);
+
+                        } else {
+
+                                items = repository
+                                                .findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                                                                ItemDispatchStatus.DISPATCHED,
+                                                                cleanChallanNumber,
+                                                                allowedPlants);
+                        }
+                }
 
                 if (items.isEmpty()) {
                         return ResponseEntity

@@ -11,7 +11,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -21,218 +22,272 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface DispatchedItemRepository
-        extends JpaRepository<DispatchedItem, String> {
+                extends JpaRepository<DispatchedItem, String> {
 
-    /*
-     * =====================================================
-     * STATUS
-     * =====================================================
-     */
+        /*
+         * =====================================================
+         * STATUS
+         * =====================================================
+         */
 
-    List<DispatchedItem> findByStatus(
-            ItemDispatchStatus status
-    );
+        List<DispatchedItem> findByStatus(
+                        ItemDispatchStatus status);
 
-    List<DispatchedItem> findByStatusIn(
-            List<ItemDispatchStatus> statuses
-    );
+        List<DispatchedItem> findByStatusIn(
+                        List<ItemDispatchStatus> statuses);
 
-    long countByStatus(
-            ItemDispatchStatus status
-    );
+        Page<DispatchedItem> findByStatusIn(
+                        Collection<ItemDispatchStatus> statuses,
+                        Pageable pageable);
 
-    long countByStatusIn(
-            List<ItemDispatchStatus> statuses
-    );
+        long countByStatus(
+                        ItemDispatchStatus status);
 
-    long countByStatusIn(
-            Collection<ItemDispatchStatus> statuses
-    );
+        long countByStatusIn(
+                        List<ItemDispatchStatus> statuses);
 
-    Optional<DispatchedItem> findBySku(
-            String sku
-    );
+        long countByStatusIn(
+                        Collection<ItemDispatchStatus> statuses);
 
-    Optional<DispatchedItem> findByName(
-            String name
-    );
+        Optional<DispatchedItem> findBySku(
+                        String sku);
 
-    Optional<DispatchedItem> findByPacketItemId(
-            UUID packetItemId
-    );
+        Optional<DispatchedItem> findByName(
+                        String name);
 
-    Optional<DispatchedItem> findByStickerNumber(
-            String stickerNumber
-    );
+        Optional<DispatchedItem> findByPacketItemId(
+                        UUID packetItemId);
 
-    /*
-     * =====================================================
-     * APPROVAL / GATE PASS
-     * =====================================================
-     */
+        Optional<DispatchedItem> findByStickerNumber(
+                        String stickerNumber);
 
-    List<DispatchedItem> findByApprovalStatus(
-            ApprovalStatus status
-    );
+        /*
+         * =====================================================
+         * APPROVAL / GATE PASS
+         * =====================================================
+         */
 
-    List<DispatchedItem> findByGatePassNumber(
-            String gatePassNumber
-    );
+        List<DispatchedItem> findByApprovalStatus(
+                        ApprovalStatus status);
 
-    List<DispatchedItem> findByStatusAndApprovalStatus(
-            ItemDispatchStatus status,
-            ApprovalStatus approvalStatus
-    );
+        List<DispatchedItem> findByGatePassNumber(
+                        String gatePassNumber);
 
-    long countByStatusAndDispatchedAtBetween(
-            ItemDispatchStatus status,
-            LocalDateTime start,
-            LocalDateTime end
-    );
+        List<DispatchedItem> findByStatusAndApprovalStatus(
+                        ItemDispatchStatus status,
+                        ApprovalStatus approvalStatus);
 
-    boolean existsByZohoItemId(
-            String zohoItemId
-    );
+        long countByStatusAndDispatchedAtBetween(
+                        ItemDispatchStatus status,
+                        LocalDateTime start,
+                        LocalDateTime end);
 
-    /*
-     * =====================================================
-     * PLANT FILTERS
-     * =====================================================
-     */
+        boolean existsByZohoItemId(
+                        String zohoItemId);
 
-    List<DispatchedItem> findByStatusInAndPlantCodeIn(
-            List<ItemDispatchStatus> statuses,
-            Collection<String> plantCodes
-    );
+        /*
+         * =====================================================
+         * PLANT FILTERS
+         * =====================================================
+         */
 
-    List<DispatchedItem> findByStatusAndPlantCodeIn(
-            ItemDispatchStatus status,
-            Collection<String> plantCodes
-    );
+        List<DispatchedItem> findByStatusInAndPlantCodeIn(
+                        List<ItemDispatchStatus> statuses,
+                        Collection<String> plantCodes);
 
-    @Query("""
-        SELECT d
-        FROM DispatchedItem d
-        WHERE d.status IN :statuses
-          AND (
-                d.plantCode IN :plantCodes
-                OR d.plantCode IS NULL
-                OR d.plantCode = ''
-              )
-    """)
-    List<DispatchedItem>
-    findVisibleByStatusesAndPlantsIncludingLegacy(
-            @Param("statuses")
-            List<ItemDispatchStatus> statuses,
+        List<DispatchedItem> findByStatusAndPlantCodeIn(
+                        ItemDispatchStatus status,
+                        Collection<String> plantCodes);
 
-            @Param("plantCodes")
-            Collection<String> plantCodes
-    );
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.status IN :statuses
+                              AND (
+                                    d.plantCode IN :plantCodes
+                                    OR d.plantCode IS NULL
+                                    OR d.plantCode = ''
+                                  )
+                        """)
+        List<DispatchedItem> findVisibleByStatusesAndPlantsIncludingLegacy(
+                        @Param("statuses") List<ItemDispatchStatus> statuses,
 
-    /*
-     * =====================================================
-     * LOGISTICS
-     * =====================================================
-     */
+                        @Param("plantCodes") Collection<String> plantCodes);
 
-    List<DispatchedItem> findByLogisticsTripId(
-            UUID logisticsTripId
-    );
+        @Query(value = """
+                        SELECT d
+                        FROM DispatchedItem d
+                        WHERE d.status IN :statuses
+                          AND (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR d.plantCode = ''
+                              )
+                        """,
 
-    long countByLogisticsTripId(
-            UUID logisticsTripId
-    );
+                        countQuery = """
+                                        SELECT COUNT(d)
+                                        FROM DispatchedItem d
+                                        WHERE d.status IN :statuses
+                                          AND (
+                                                d.plantCode IN :plantCodes
+                                                OR d.plantCode IS NULL
+                                                OR d.plantCode = ''
+                                              )
+                                        """)
+        Page<DispatchedItem> findVisiblePageByStatusesAndPlantsIncludingLegacy(
+                        @Param("statuses") Collection<ItemDispatchStatus> statuses,
 
-    /*
-     * =====================================================
-     * ADMIN LIFECYCLE ROLLBACK LOCKS
-     * =====================================================
-     *
-     * These methods must only be called from a normal writable
-     * @Transactional service method.
-     * =====================================================
-     */
+                        @Param("plantCodes") Collection<String> plantCodes,
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-        SELECT d
-        FROM DispatchedItem d
-        WHERE d.packetItemId = :packetItemId
-    """)
-    Optional<DispatchedItem>
-    findByPacketItemIdForAdminRollback(
-            @Param("packetItemId")
-            UUID packetItemId
-    );
+                        Pageable pageable);
 
-    /*
-     * DispatchedItem primary key is zohoItemId.
-     *
-     * A custom JPQL query is required here because normal findById()
-     * does not apply a pessimistic lock.
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-        SELECT d
-        FROM DispatchedItem d
-        WHERE d.zohoItemId = :zohoItemId
-    """)
-    Optional<DispatchedItem>
-    findByIdForAdminRollback(
-            @Param("zohoItemId")
-            String zohoItemId
-    );
+        @Query(value = """
+                        SELECT d
+                        FROM DispatchedItem d
+                        WHERE d.status IN :statuses
+                          AND (
+                                d.plantCode IS NULL
+                                OR d.plantCode = ''
+                              )
+                        """,
 
-    /*
-     * Final fallback for legacy records where packetItemId was not
-     * populated but the active sticker still matches.
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-        SELECT d
-        FROM DispatchedItem d
-        WHERE d.stickerNumber = :stickerNumber
-    """)
-    Optional<DispatchedItem>
-    findByStickerNumberForAdminRollback(
-            @Param("stickerNumber")
-            String stickerNumber
-    );
+                        countQuery = """
+                                        SELECT COUNT(d)
+                                        FROM DispatchedItem d
+                                        WHERE d.status IN :statuses
+                                          AND (
+                                                d.plantCode IS NULL
+                                                OR d.plantCode = ''
+                                              )
+                                        """)
+        Page<DispatchedItem> findLegacyVisiblePageByStatuses(
+                        @Param("statuses") Collection<ItemDispatchStatus> statuses,
 
-    /*
-     * =====================================================
-     * ADMIN DELETE
-     * =====================================================
-     */
+                        Pageable pageable);
 
-    @Query("""
-        SELECT DISTINCT d
-        FROM DispatchedItem d
-        WHERE d.packetItemId IN :packetItemIds
-           OR d.zohoItemId IN :lookupIds
-    """)
-    List<DispatchedItem> findForAdminDeletion(
-            @Param("packetItemIds")
-            Collection<UUID> packetItemIds,
+        /*
+         * =====================================================
+         * LOGISTICS
+         * =====================================================
+         */
 
-            @Param("lookupIds")
-            Collection<String> lookupIds
-    );
+        List<DispatchedItem> findByStatusAndChalaanNumber(
+                        ItemDispatchStatus status,
+                        String chalaanNumber);
 
-    @Modifying(
-            flushAutomatically = true,
-            clearAutomatically = false
-    )
-    @Query("""
-        DELETE FROM DispatchedItem d
-        WHERE d.packetItemId IN :packetItemIds
-           OR d.zohoItemId IN :lookupIds
-    """)
-    int deleteForAdminDeletion(
-            @Param("packetItemIds")
-            Collection<UUID> packetItemIds,
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.status = :status
+                              AND d.chalaanNumber = :chalaanNumber
+                              AND (
+                                    d.plantCode IN :plantCodes
+                                    OR d.plantCode IS NULL
+                                    OR d.plantCode = ''
+                                  )
+                        """)
+        List<DispatchedItem> findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                        @Param("status") ItemDispatchStatus status,
 
-            @Param("lookupIds")
-            Collection<String> lookupIds
-    );
+                        @Param("chalaanNumber") String chalaanNumber,
+
+                        @Param("plantCodes") Collection<String> plantCodes);
+
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.status = :status
+                              AND d.chalaanNumber = :chalaanNumber
+                              AND (
+                                    d.plantCode IS NULL
+                                    OR d.plantCode = ''
+                                  )
+                        """)
+        List<DispatchedItem> findLegacyByStatusAndChalaanNumber(
+                        @Param("status") ItemDispatchStatus status,
+
+                        @Param("chalaanNumber") String chalaanNumber);
+
+        List<DispatchedItem> findByLogisticsTripId(
+                        UUID logisticsTripId);
+
+        long countByLogisticsTripId(
+                        UUID logisticsTripId);
+
+        /*
+         * =====================================================
+         * ADMIN LIFECYCLE ROLLBACK LOCKS
+         * =====================================================
+         *
+         * These methods must only be called from a normal writable
+         * 
+         * @Transactional service method.
+         * =====================================================
+         */
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.packetItemId = :packetItemId
+                        """)
+        Optional<DispatchedItem> findByPacketItemIdForAdminRollback(
+                        @Param("packetItemId") UUID packetItemId);
+
+        /*
+         * DispatchedItem primary key is zohoItemId.
+         *
+         * A custom JPQL query is required here because normal findById()
+         * does not apply a pessimistic lock.
+         */
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.zohoItemId = :zohoItemId
+                        """)
+        Optional<DispatchedItem> findByIdForAdminRollback(
+                        @Param("zohoItemId") String zohoItemId);
+
+        /*
+         * Final fallback for legacy records where packetItemId was not
+         * populated but the active sticker still matches.
+         */
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.stickerNumber = :stickerNumber
+                        """)
+        Optional<DispatchedItem> findByStickerNumberForAdminRollback(
+                        @Param("stickerNumber") String stickerNumber);
+
+        /*
+         * =====================================================
+         * ADMIN DELETE
+         * =====================================================
+         */
+
+        @Query("""
+                            SELECT DISTINCT d
+                            FROM DispatchedItem d
+                            WHERE d.packetItemId IN :packetItemIds
+                               OR d.zohoItemId IN :lookupIds
+                        """)
+        List<DispatchedItem> findForAdminDeletion(
+                        @Param("packetItemIds") Collection<UUID> packetItemIds,
+
+                        @Param("lookupIds") Collection<String> lookupIds);
+
+        @Modifying(flushAutomatically = true, clearAutomatically = false)
+        @Query("""
+                            DELETE FROM DispatchedItem d
+                            WHERE d.packetItemId IN :packetItemIds
+                               OR d.zohoItemId IN :lookupIds
+                        """)
+        int deleteForAdminDeletion(
+                        @Param("packetItemIds") Collection<UUID> packetItemIds,
+
+                        @Param("lookupIds") Collection<String> lookupIds);
 }
