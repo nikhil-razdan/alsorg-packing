@@ -1,4 +1,11 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import {
+	useEffect,
+	useState,
+	useMemo,
+	useRef,
+	useDeferredValue,
+} from "react";
+
 import {
 	Chip,
 	Box,
@@ -2571,6 +2578,16 @@ const rowSmartHaystack = (
 			row
 		);
 
+	const plantCode =
+		normalizeDispatchPlantCode(
+			row?.plantCode
+		);
+
+	const plantConfig =
+		PLANT_LOCATION_MAP[
+		plantCode
+		] || null;
+
 	const typeSearchTerms =
 		itemType === "HARDWARE"
 			? [
@@ -2617,6 +2634,10 @@ const rowSmartHaystack = (
 		row.vehicleNumber,
 		row.vehicleName,
 
+		plantCode,
+		plantConfig?.label,
+		plantConfig?.searchTerms,
+
 		row.status,
 		getSmartStatusText(
 			row.status
@@ -2645,6 +2666,112 @@ const rowSmartHaystack = (
 		normalText,
 		compactText,
 	};
+};
+
+const attachDispatchSearchIndex = (
+	row
+) => {
+	const {
+		normalText,
+		compactText,
+	} = rowSmartHaystack(
+		row
+	);
+
+	return {
+		...row,
+
+		/*
+		 * Internal frontend-only properties.
+		 * These prevent expensive search-index rebuilding
+		 * after every keyboard input.
+		 */
+		__dispatchSearchNormal:
+			normalText,
+
+		__dispatchSearchCompact:
+			compactText,
+	};
+};
+
+const prepareDispatchSearchTokens = (
+	searchValue
+) => {
+	return tokenizeSmartSearch(
+		searchValue
+	)
+		.map((token) => {
+			return {
+				normal:
+					normalizeSmartSearch(
+						token
+					),
+
+				compact:
+					normalizeCompactSearch(
+						token
+					),
+			};
+		})
+		.filter(
+			(token) =>
+				token.normal ||
+				token.compact
+		);
+};
+
+const indexedDispatchRowMatches = (
+	row,
+	preparedTokens
+) => {
+	if (
+		!Array.isArray(
+			preparedTokens
+		) ||
+		preparedTokens.length === 0
+	) {
+		return true;
+	}
+
+	/*
+	 * Existing rows from before this update still receive
+	 * a safe fallback index.
+	 */
+	const normalText =
+		row?.__dispatchSearchNormal ??
+		rowSmartHaystack(row)
+			.normalText;
+
+	const compactText =
+		row?.__dispatchSearchCompact ??
+		rowSmartHaystack(row)
+			.compactText;
+
+	return preparedTokens.every(
+		(token) => {
+			if (
+				!token.normal &&
+				!token.compact
+			) {
+				return true;
+			}
+
+			return (
+				(
+					token.normal &&
+					normalText.includes(
+						token.normal
+					)
+				) ||
+				(
+					token.compact &&
+					compactText.includes(
+						token.compact
+					)
+				)
+			);
+		}
+	);
 };
 
 const WAREHOUSE_OPTIONS = [
@@ -2728,6 +2855,96 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 	},
 ];
 
+const updateBulkDispatchStatus =
+	async (status) => {
+		const cleanStatus =
+			String(status || "")
+				.trim()
+				.toUpperCase();
+
+		const cleanIds =
+			Array.from(
+				new Set(
+					(selectionModel || [])
+						.map((id) =>
+							String(
+								id || ""
+							).trim()
+						)
+						.filter(Boolean)
+				)
+			);
+
+		if (
+			cleanIds.length === 0
+		) {
+			throw new Error(
+				"No items selected"
+			);
+		}
+
+		if (
+			![
+				"READY_TO_STORE",
+				"READY_TO_DISPATCH",
+			].includes(
+				cleanStatus
+			)
+		) {
+			throw new Error(
+				`Invalid bulk status: ${cleanStatus}`
+			);
+		}
+
+		const response =
+			await authFetch(
+				`${API_BASE_URL}/api/dispatched/bulk/status?status=${encodeURIComponent(
+					cleanStatus
+				)}`,
+				{
+					method:
+						"POST",
+
+					headers: {
+						"Content-Type":
+							"application/json",
+					},
+
+					body:
+						JSON.stringify(
+							cleanIds
+						),
+				}
+			);
+
+		if (!response.ok) {
+			const message =
+				await readResponseError(
+					response,
+					"Bulk status update failed"
+				);
+
+			throw new Error(
+				message
+			);
+		}
+
+		patchDispatchRows(
+			cleanIds,
+			(row) => ({
+				...row,
+
+				status:
+					cleanStatus,
+
+				updatedAt:
+					new Date()
+						.toISOString(),
+			})
+		);
+
+		return cleanIds;
+	};
 
 
 function normalizeStatusSelection(value, previousValue = ["ALL"]) {
@@ -2960,6 +3177,33 @@ const createEmptyCustomChallanLine = () => ({
 	remarks: "",
 });
 
+const PLANT_LOCATION_MAP = {
+	"AL-P1": {
+		label: "AL-P1 (AKG)",
+		packedAreaCode: "PKD-1",
+		fgAreaCode: "FG-1",
+		fgZones: ["A", "B", "C"],
+	},
+	"AL-P2": {
+		label: "AL-P2 (Sofa)",
+		packedAreaCode: "PKD-2",
+		fgAreaCode: "FG-2",
+		fgZones: [],
+	},
+	"AL-P3": {
+		label: "AL-P3 (K&W)",
+		packedAreaCode: "PKD-3",
+		fgAreaCode: "FG-3",
+		fgZones: [],
+	},
+	"AL-P4": {
+		label: "AL-P4 (Basement)",
+		packedAreaCode: "PKD-4",
+		fgAreaCode: "FG-4",
+		fgZones: [],
+	},
+};
+
 const CREATE_NEW_DRIVER_OPTION =
 	"__CREATE_NEW_DRIVER__";
 
@@ -3023,6 +3267,15 @@ function DispatchedItemsPage() {
 	const [auditRows, setAuditRows] = useState([]);
 	const [actionFilter, setActionFilter] = useState("ALL");
 	const [roleFilter, setRoleFilter] = useState("ALL");
+
+	const [plantFilter, setPlantFilter] =
+		useState("ALL");
+
+	const [statusChangeLoading, setStatusChangeLoading] =
+		useState(false);
+
+	const [bulkStatusLoading, setBulkStatusLoading] =
+		useState(false);
 	const [selectionModel, setSelectionModel] = useState([]);
 	const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 	const [bulkLoading, setBulkLoading] = useState(false);
@@ -3185,6 +3438,114 @@ function DispatchedItemsPage() {
 	const [dispatchExportLoading, setDispatchExportLoading] =
 		useState(false);
 
+	/*
+* Keeps the input responsive while the 8,500-row result
+* calculation happens at a lower React priority.
+*/
+	const deferredSearch =
+		useDeferredValue(
+			search
+		);
+
+	const preparedSearchTokens =
+		useMemo(() => {
+			return prepareDispatchSearchTokens(
+				deferredSearch
+			);
+		}, [
+			deferredSearch,
+		]);
+
+	const dispatchPlantOptions =
+		useMemo(() => {
+			const optionMap =
+				new Map();
+
+			Object.entries(
+				PLANT_LOCATION_MAP
+			).forEach(
+				([
+					plantCode,
+					config,
+				]) => {
+					optionMap.set(
+						plantCode,
+						config.label ||
+						plantCode
+					);
+				}
+			);
+
+			let hasUnassignedRows =
+				false;
+
+			(rows || []).forEach(
+				(row) => {
+					const plantCode =
+						normalizeDispatchPlantCode(
+							row?.plantCode
+						);
+
+					if (!plantCode) {
+						hasUnassignedRows =
+							true;
+
+						return;
+					}
+
+					if (
+						!optionMap.has(
+							plantCode
+						)
+					) {
+						optionMap.set(
+							plantCode,
+							plantCode
+						);
+					}
+				}
+			);
+
+			const options =
+				Array.from(
+					optionMap.entries()
+				)
+					.map(
+						([
+							value,
+							label,
+						]) => ({
+							value,
+							label,
+						})
+					)
+					.sort(
+						(a, b) =>
+							a.value.localeCompare(
+								b.value,
+								undefined,
+								{
+									numeric:
+										true,
+								}
+							)
+					);
+
+			if (hasUnassignedRows) {
+				options.push({
+					value:
+						"UNASSIGNED",
+
+					label:
+						"Legacy / Unassigned",
+				});
+			}
+
+			return options;
+		}, [
+			rows,
+		]);
+
 	const filteredRows =
 		useMemo(() => {
 			if (!Array.isArray(rows)) {
@@ -3194,9 +3555,9 @@ function DispatchedItemsPage() {
 			const list =
 				rows.filter((row) => {
 					if (
-						!smartRowMatches(
+						!indexedDispatchRowMatches(
 							row,
-							search
+							preparedSearchTokens
 						)
 					) {
 						return false;
@@ -3211,32 +3572,59 @@ function DispatchedItemsPage() {
 						return false;
 					}
 
+					if (
+						!dispatchPlantMatches(
+							row,
+							plantFilter
+						)
+					) {
+						return false;
+					}
+
 					return true;
 				});
+
+			const compareItemName = (
+				a,
+				b
+			) => {
+				return String(
+					a?.name ||
+					a?.itemName ||
+					""
+				).localeCompare(
+					String(
+						b?.name ||
+						b?.itemName ||
+						""
+					),
+					undefined,
+					{
+						numeric:
+							true,
+
+						sensitivity:
+							"base",
+					}
+				);
+			};
 
 			if (groupBy === "STATUS") {
 				list.sort((a, b) => {
 					const statusCompare =
-						String(a.status || "")
-							.localeCompare(
-								String(
-									b.status || ""
-								)
-							);
-
-					if (statusCompare !== 0) {
-						return statusCompare;
-					}
-
-					return String(
-						a.name ||
-						a.itemName ||
-						""
-					).localeCompare(
 						String(
-							b.name ||
-							b.itemName ||
-							""
+							a?.status || ""
+						).localeCompare(
+							String(
+								b?.status || ""
+							)
+						);
+
+					return (
+						statusCompare ||
+						compareItemName(
+							a,
+							b
 						)
 					);
 				});
@@ -3246,26 +3634,59 @@ function DispatchedItemsPage() {
 				list.sort((a, b) => {
 					const clientCompare =
 						String(
-							a.clientName || ""
+							a?.clientName ||
+							""
 						).localeCompare(
 							String(
-								b.clientName || ""
-							)
+								b?.clientName ||
+								""
+							),
+							undefined,
+							{
+								sensitivity:
+									"base",
+							}
 						);
 
-					if (clientCompare !== 0) {
-						return clientCompare;
-					}
+					return (
+						clientCompare ||
+						compareItemName(
+							a,
+							b
+						)
+					);
+				});
+			}
 
-					return String(
-						a.name ||
-						a.itemName ||
-						""
-					).localeCompare(
-						String(
-							b.name ||
-							b.itemName ||
-							""
+			if (groupBy === "PLANT") {
+				list.sort((a, b) => {
+					const plantA =
+						normalizeDispatchPlantCode(
+							a?.plantCode
+						) ||
+						"ZZ-UNASSIGNED";
+
+					const plantB =
+						normalizeDispatchPlantCode(
+							b?.plantCode
+						) ||
+						"ZZ-UNASSIGNED";
+
+					const plantCompare =
+						plantA.localeCompare(
+							plantB,
+							undefined,
+							{
+								numeric:
+									true,
+							}
+						);
+
+					return (
+						plantCompare ||
+						compareItemName(
+							a,
+							b
 						)
 					);
 				});
@@ -3274,8 +3695,9 @@ function DispatchedItemsPage() {
 			return list;
 		}, [
 			rows,
-			search,
+			preparedSearchTokens,
 			statusFilter,
+			plantFilter,
 			groupBy,
 		]);
 
@@ -3353,7 +3775,12 @@ function DispatchedItemsPage() {
 
 	useEffect(() => {
 		setPageNo(1);
-	}, [search, statusFilter, groupBy]);
+	}, [
+		search,
+		statusFilter,
+		plantFilter,
+		groupBy,
+	]);
 
 	useEffect(() => {
 		setPageNo((currentPage) =>
@@ -4574,6 +5001,15 @@ function DispatchedItemsPage() {
 				return false;
 			}
 
+			if (
+				!dispatchPlantMatches(
+					row,
+					plantFilter
+				)
+			) {
+				return false;
+			}
+
 			return true;
 		});
 	};
@@ -5680,7 +6116,7 @@ function DispatchedItemsPage() {
 						""
 					).trim();
 
-				return {
+				const normalizedRow = {
 					...item,
 
 					zohoItemId:
@@ -5728,6 +6164,10 @@ function DispatchedItemsPage() {
 						itemType ===
 						"HARDWARE",
 				};
+
+				return attachDispatchSearchIndex(
+					normalizedRow
+				);
 			});
 	};
 
@@ -5952,6 +6392,7 @@ function DispatchedItemsPage() {
 		async ({
 			signal,
 			onFirstPage,
+			onPageLoaded,
 			onProgress,
 		} = {}) => {
 			/*
@@ -6107,6 +6548,14 @@ function DispatchedItemsPage() {
 					pageResult.page,
 					pageResult.items
 				);
+
+				onPageLoaded?.({
+					page:
+						pageResult.page,
+
+					items:
+						pageResult.items,
+				});
 
 				pageResult.items.forEach(
 					(item) => {
@@ -6433,6 +6882,92 @@ function DispatchedItemsPage() {
 			const revealFirstPage =
 				existingRowsSnapshot.length === 0;
 
+			/*
+			 * Keeps progressively downloaded backend pages in page order.
+			 * This makes a row searchable as soon as its own page arrives.
+			 */
+			const progressivePageRows =
+				new Map();
+
+			let progressivePublishTimer =
+				null;
+
+			const buildProgressiveRows =
+				() => {
+					const orderedRowsById =
+						new Map();
+
+					Array.from(
+						progressivePageRows.entries()
+					)
+						.sort(
+							([pageA], [pageB]) =>
+								pageA - pageB
+						)
+						.forEach(
+							([
+								,
+								pageRows,
+							]) => {
+								pageRows.forEach(
+									(row) => {
+										const id =
+											String(
+												row?.zohoItemId ||
+												""
+											).trim();
+
+										if (id) {
+											orderedRowsById.set(
+												id,
+												row
+											);
+										}
+									}
+								);
+							}
+						);
+
+					return Array.from(
+						orderedRowsById.values()
+					);
+				};
+
+			const publishProgressiveRows =
+				() => {
+					if (
+						!revealFirstPage ||
+						progressivePublishTimer !==
+						null
+					) {
+						return;
+					}
+
+					/*
+					 * Coalesces concurrent page responses into one
+					 * React render approximately every 80 ms.
+					 */
+					progressivePublishTimer =
+						window.setTimeout(
+							() => {
+								progressivePublishTimer =
+									null;
+
+								if (
+									requestId !==
+									dispatchFetchRequestRef.current
+								) {
+									return;
+								}
+
+								setRows(
+									buildProgressiveRows()
+								);
+							},
+							80
+						);
+				};
+
 			try {
 				setLoading(true);
 
@@ -6466,6 +7001,11 @@ function DispatchedItemsPage() {
 										firstPageRows
 									);
 
+								progressivePageRows.set(
+									0,
+									cleanedFirstPage
+								);
+
 								setRows(
 									cleanedFirstPage
 								);
@@ -6484,6 +7024,33 @@ function DispatchedItemsPage() {
 											metadata.totalPages,
 									})
 								);
+							},
+
+						onPageLoaded:
+							({
+								page,
+								items,
+							}) => {
+								if (
+									!revealFirstPage ||
+									page === 0 ||
+									requestId !==
+									dispatchFetchRequestRef.current
+								) {
+									return;
+								}
+
+								const cleanedPage =
+									normalizeFetchedDispatchRows(
+										items
+									);
+
+								progressivePageRows.set(
+									page,
+									cleanedPage
+								);
+
+								publishProgressiveRows();
 							},
 
 						onProgress:
@@ -6610,6 +7177,15 @@ function DispatchedItemsPage() {
 					dispatchFetchAbortRef.current =
 						null;
 				}
+
+				if (
+					progressivePublishTimer !==
+					null
+				) {
+					window.clearTimeout(
+						progressivePublishTimer
+					);
+				}
 			}
 		};
 
@@ -6647,33 +7223,6 @@ function DispatchedItemsPage() {
 			}
 		}
 	);
-
-	const PLANT_LOCATION_MAP = {
-		"AL-P1": {
-			label: "AL-P1 (AKG)",
-			packedAreaCode: "PKD-1",
-			fgAreaCode: "FG-1",
-			fgZones: ["A", "B", "C"],
-		},
-		"AL-P2": {
-			label: "AL-P2 (Sofa)",
-			packedAreaCode: "PKD-2",
-			fgAreaCode: "FG-2",
-			fgZones: [],
-		},
-		"AL-P3": {
-			label: "AL-P3 (K&W)",
-			packedAreaCode: "PKD-3",
-			fgAreaCode: "FG-3",
-			fgZones: [],
-		},
-		"AL-P4": {
-			label: "AL-P4 (Basement)",
-			packedAreaCode: "PKD-4",
-			fgAreaCode: "FG-4",
-			fgZones: [],
-		},
-	};
 
 	const getPlantCodeFromRow = (row) => {
 		return (row?.plantCode || "").trim().split(" ")[0];
@@ -7564,60 +8113,103 @@ function DispatchedItemsPage() {
 		);
 	}, [rows]);
 
+	const patchDispatchRows = (
+		itemIds,
+		patchValue
+	) => {
+		const cleanIds =
+			new Set(
+				(Array.isArray(itemIds)
+					? itemIds
+					: [itemIds]
+				)
+					.map((id) =>
+						String(id || "")
+							.trim()
+					)
+					.filter(Boolean)
+			);
+
+		setRows((previousRows) =>
+			previousRows.map((row) => {
+				if (
+					!cleanIds.has(
+						String(
+							row?.zohoItemId ||
+							""
+						).trim()
+					)
+				) {
+					return row;
+				}
+
+				const nextRow =
+					typeof patchValue ===
+						"function"
+						? patchValue(row)
+						: {
+							...row,
+							...patchValue,
+						};
+
+				/*
+				 * Status, location and driver data are part of
+				 * the searchable text, so rebuild only this row's index.
+				 */
+				return attachDispatchSearchIndex(
+					nextRow
+				);
+			})
+		);
+	};
+
 	const updateStatus = async (
 		zohoItemId,
-		status,
-		{
-			refresh = true,
-		} = {}
+		status
 	) => {
+		const cleanItemId =
+			String(
+				zohoItemId || ""
+			).trim();
+
+		const cleanStatus =
+			String(status || "")
+				.trim()
+				.toUpperCase();
+
 		const allowedStatuses =
 			new Set([
 				"READY_TO_STORE",
 				"READY_TO_DISPATCH",
 			]);
 
-		if (
-			!allowedStatuses.has(
-				status
-			)
-		) {
+		if (!cleanItemId) {
 			throw new Error(
-				`Invalid status: ${status}`
+				"Item ID missing"
 			);
 		}
 
-		console.log(
-			"🚀 API CALL:",
-			zohoItemId,
-			status
-		);
+		if (
+			!allowedStatuses.has(
+				cleanStatus
+			)
+		) {
+			throw new Error(
+				`Invalid status: ${cleanStatus}`
+			);
+		}
 
 		const response =
 			await authFetch(
 				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
-					zohoItemId
+					cleanItemId
 				)}/dispatch?status=${encodeURIComponent(
-					status
+					cleanStatus
 				)}`,
 				{
 					method: "POST",
-
-					headers: {
-						...getAuthHeaders(),
-
-						"X-Username":
-							localStorage.getItem(
-								"username"
-							) || "",
-					},
 				}
 			);
-
-		console.log(
-			"🚀 API RESPONSE STATUS:",
-			response.status
-		);
 
 		if (!response.ok) {
 			const message =
@@ -7626,25 +8218,55 @@ function DispatchedItemsPage() {
 					"Status update failed"
 				);
 
-			console.error(
-				"❌ BACKEND ERROR:",
-				message
-			);
-
 			throw new Error(
 				message
 			);
 		}
 
-		console.log(
-			"✅ SUCCESS"
+		const existingRow =
+			rows.find(
+				(row) =>
+					String(
+						row?.zohoItemId ||
+						""
+					).trim() ===
+					cleanItemId
+			);
+
+		const updatedRow =
+			attachDispatchSearchIndex({
+				...(existingRow || {
+					zohoItemId:
+						cleanItemId,
+				}),
+
+				status:
+					cleanStatus,
+
+				updatedAt:
+					new Date()
+						.toISOString(),
+			});
+
+		/*
+		 * Update only one browser row.
+		 * Do not download the complete register again.
+		 */
+		patchDispatchRows(
+			[cleanItemId],
+			(row) => ({
+				...row,
+
+				status:
+					cleanStatus,
+
+				updatedAt:
+					new Date()
+						.toISOString(),
+			})
 		);
 
-		if (refresh) {
-			return await fetchData();
-		}
-
-		return true;
+		return updatedRow;
 	};
 
 	const approveRestore = async (zohoItemId) => {
@@ -8602,28 +9224,35 @@ function DispatchedItemsPage() {
 						{showGenerateChalaan && (
 							<Button
 								size="small"
-								onClick={async () => {
-									try {
-										const freshRows = await fetchData();
-
-										const latestItem = freshRows?.find(
-											r => r.zohoItemId === row.zohoItemId
+								onClick={() => {
+									if (
+										row.status !==
+										"READY_TO_DISPATCH"
+									) {
+										alert(
+											`Item not ready. Current status: ${row.status || "Unknown"}`
 										);
 
-										if (!latestItem || latestItem.status !== "READY_TO_DISPATCH") {
-											alert(`Item not ready. Current status: ${latestItem?.status}`);
-											return;
-										}
-
-										openDispatchTripModal({
-											mode: "UI_SINGLE",
-											itemIds: [row.zohoItemId],
-											title: row.name || row.itemName || "Single Chalaan",
-										});
-									} catch (err) {
-										console.error(err);
-										alert("Failed to prepare logistics dispatch");
+										return;
 									}
+
+									/*
+									 * The challan backend must still perform the final
+									 * authoritative status validation.
+									 */
+									openDispatchTripModal({
+										mode:
+											"UI_SINGLE",
+
+										itemIds: [
+											row.zohoItemId,
+										],
+
+										title:
+											row.name ||
+											row.itemName ||
+											"Single Chalaan",
+									});
 								}}
 								sx={{
 									...actionSecondary,
@@ -10215,7 +10844,7 @@ function DispatchedItemsPage() {
 
 					<TextField
 						variant="standard"
-						placeholder="Search by client, item, SKU, PD, DWG, location, status..."
+						placeholder="Search item, SKU, client, PD, DWG, plant, location, status..."
 						value={search}
 						onChange={(e) => {
 							setSearch(
@@ -10407,6 +11036,77 @@ function DispatchedItemsPage() {
 					<TextField
 						select
 						size="small"
+						value={plantFilter}
+						onChange={(event) => {
+							setPlantFilter(
+								event.target.value
+							);
+
+							setPageNo(1);
+						}}
+						sx={{
+							minWidth: 190,
+
+							...formFieldSx,
+
+							"& .MuiOutlinedInput-root": {
+								height: 44,
+								borderRadius: "14px",
+
+								background:
+									"rgba(255,255,255,.04)",
+
+								color: "#fff",
+
+								"& fieldset": {
+									borderColor:
+										"rgba(255,255,255,.08)",
+								},
+
+								"&:hover fieldset": {
+									borderColor:
+										"rgba(16,185,129,.45)",
+								},
+
+								"&.Mui-focused fieldset": {
+									borderColor:
+										"#10b981",
+								},
+							},
+
+							"& .MuiSelect-select": {
+								color: "#fff",
+								fontWeight: 800,
+							},
+
+							"& .MuiSvgIcon-root": {
+								color: "#94a3b8",
+							},
+						}}
+					>
+						<MenuItem value="ALL">
+							🌐 All Plants
+						</MenuItem>
+
+						{dispatchPlantOptions.map(
+							(option) => (
+								<MenuItem
+									key={
+										option.value
+									}
+									value={
+										option.value
+									}
+								>
+									🏭 {option.label}
+								</MenuItem>
+							)
+						)}
+					</TextField>
+
+					<TextField
+						select
+						size="small"
 						value={groupBy}
 						onChange={(e) => {
 							setGroupBy(
@@ -10455,9 +11155,21 @@ function DispatchedItemsPage() {
 							},
 						}}
 					>
-						<MenuItem value="NONE">No Group</MenuItem>
-						<MenuItem value="STATUS">Group by Status</MenuItem>
-						<MenuItem value="CLIENT">Group by Client</MenuItem>
+						<MenuItem value="NONE">
+							No Group
+						</MenuItem>
+
+						<MenuItem value="PLANT">
+							Group by Plant
+						</MenuItem>
+
+						<MenuItem value="STATUS">
+							Group by Status
+						</MenuItem>
+
+						<MenuItem value="CLIENT">
+							Group by Client
+						</MenuItem>
 					</TextField>
 				</Box>
 
@@ -13968,7 +14680,9 @@ function DispatchedItemsPage() {
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Choose the next movement for this item
+											{statusChangeLoading
+												? "Updating item status…"
+												: "Choose the next movement for this item"}
 										</Box>
 									</Box>
 								</Box>
@@ -13986,56 +14700,41 @@ function DispatchedItemsPage() {
 									<Box
 										sx={statusChoiceCardSx("#10b981")}
 										onClick={async () => {
-											try {
-												const row =
-													statusModal;
+											if (statusChangeLoading) {
+												return;
+											}
 
+											const row =
+												statusModal;
+
+											try {
 												if (!row?.zohoItemId) {
 													throw new Error(
 														"Item ID missing"
 													);
 												}
 
-												await updateStatus(
-													row.zohoItemId,
-													"READY_TO_STORE",
-													{
-														refresh: false,
-													}
+												setStatusChangeLoading(
+													true
 												);
 
-												const fresh =
-													await fetchData();
-
-												const updated =
-													fresh.find(
-														(item) =>
-															item.zohoItemId ===
-															row.zohoItemId
+												const updatedRow =
+													await updateStatus(
+														row.zohoItemId,
+														"READY_TO_STORE"
 													);
 
-												if (
-													!updated ||
-													updated.status !==
-													"READY_TO_STORE"
-												) {
-													throw new Error(
-														`Item not ready for warehouse. Current status: ${updated?.status ||
-														"Not found"
-														}`
-													);
-												}
-
-												setStatusModal(null);
+												setStatusModal(
+													null
+												);
 
 												/*
-												 * Use your existing modal helper so warehouse
-												 * and from-location defaults remain synchronized.
+												 * Open the gate-pass modal immediately using
+												 * the locally updated authoritative status.
 												 */
 												openSingleGatePassModal(
-													updated
+													updatedRow
 												);
-
 											} catch (error) {
 												console.error(
 													error
@@ -14044,6 +14743,10 @@ function DispatchedItemsPage() {
 												alert(
 													error?.message ||
 													"Failed to prepare item for warehouse"
+												);
+											} finally {
+												setStatusChangeLoading(
+													false
 												);
 											}
 										}}
@@ -14072,6 +14775,10 @@ function DispatchedItemsPage() {
 									<Box
 										sx={statusChoiceCardSx("#3b82f6")}
 										onClick={async () => {
+											if (statusChangeLoading) {
+												return;
+											}
+
 											const row =
 												statusModal;
 
@@ -14082,18 +14789,18 @@ function DispatchedItemsPage() {
 													);
 												}
 
-												setStatusModal(null);
+												setStatusChangeLoading(
+													true
+												);
 
 												await updateStatus(
 													row.zohoItemId,
-													"READY_TO_DISPATCH",
-													{
-														refresh: false,
-													}
+													"READY_TO_DISPATCH"
 												);
 
-												await fetchData();
-
+												setStatusModal(
+													null
+												);
 											} catch (error) {
 												console.error(
 													error
@@ -14102,6 +14809,10 @@ function DispatchedItemsPage() {
 												alert(
 													error?.message ||
 													"Failed to prepare item for dispatch"
+												);
+											} finally {
+												setStatusChangeLoading(
+													false
 												);
 											}
 										}}
@@ -14332,27 +15043,39 @@ function DispatchedItemsPage() {
 									<Box
 										sx={statusChoiceCardSx("#10b981")}
 										onClick={async () => {
+											if (bulkStatusLoading) {
+												return;
+											}
+
 											try {
-												for (
-													const id of
-													selectionModel
-												) {
-													await updateStatus(
-														id,
-														"READY_TO_STORE",
-														{
-															refresh: false,
-														}
-													);
-												}
+												setBulkStatusLoading(
+													true
+												);
 
-												await fetchData();
+												await updateBulkDispatchStatus(
+													"READY_TO_STORE"
+												);
 
-												setSelectionModel([]);
-												setBulkStatusModal(false);
-											} catch (err) {
-												console.error(err);
-												alert("Bulk store failed");
+												setSelectionModel(
+													[]
+												);
+
+												setBulkStatusModal(
+													false
+												);
+											} catch (error) {
+												console.error(
+													error
+												);
+
+												alert(
+													error?.message ||
+													"Bulk store failed"
+												);
+											} finally {
+												setBulkStatusLoading(
+													false
+												);
 											}
 										}}
 									>
@@ -14380,27 +15103,39 @@ function DispatchedItemsPage() {
 									<Box
 										sx={statusChoiceCardSx("#3b82f6")}
 										onClick={async () => {
+											if (bulkStatusLoading) {
+												return;
+											}
+
 											try {
-												for (
-													const id of
-													selectionModel
-												) {
-													await updateStatus(
-														id,
-														"READY_TO_DISPATCH",
-														{
-															refresh: false,
-														}
-													);
-												}
+												setBulkStatusLoading(
+													true
+												);
 
-												await fetchData();
+												await updateBulkDispatchStatus(
+													"READY_TO_DISPATCH"
+												);
 
-												setSelectionModel([]);
-												setBulkStatusModal(false);
-											} catch (err) {
-												console.error(err);
-												alert("Bulk dispatch failed");
+												setSelectionModel(
+													[]
+												);
+
+												setBulkStatusModal(
+													false
+												);
+											} catch (error) {
+												console.error(
+													error
+												);
+
+												alert(
+													error?.message ||
+													"Bulk dispatch failed"
+												);
+											} finally {
+												setBulkStatusLoading(
+													false
+												);
 											}
 										}}
 									>
