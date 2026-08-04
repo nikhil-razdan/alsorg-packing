@@ -3204,6 +3204,75 @@ const PLANT_LOCATION_MAP = {
 	},
 };
 
+const normalizeDispatchPlantCode = (
+	value
+) => {
+	const text =
+		String(value || "")
+			.trim()
+			.toUpperCase();
+
+	if (!text) {
+		return "";
+	}
+
+	/*
+	 * Supports values such as:
+	 * AL-P1
+	 * AL-P1 (AKG)
+	 * AL-P1 AKG
+	 */
+	const exactPlantMatch =
+		text.match(
+			/\bAL-P\d+\b/
+		);
+
+	if (exactPlantMatch) {
+		return exactPlantMatch[0];
+	}
+
+	return text
+		.split(/\s+/)[0]
+		.trim();
+};
+
+const dispatchPlantMatches = (
+	row,
+	selectedPlant
+) => {
+	const cleanSelection =
+		String(
+			selectedPlant ||
+			"ALL"
+		)
+			.trim()
+			.toUpperCase();
+
+	if (
+		!cleanSelection ||
+		cleanSelection === "ALL"
+	) {
+		return true;
+	}
+
+	const rowPlant =
+		normalizeDispatchPlantCode(
+			row?.plantCode
+		);
+
+	if (
+		cleanSelection ===
+		"UNASSIGNED"
+	) {
+		return !rowPlant;
+	}
+
+	return (
+		rowPlant ===
+		cleanSelection
+	);
+};
+
 const CREATE_NEW_DRIVER_OPTION =
 	"__CREATE_NEW_DRIVER__";
 
@@ -7224,8 +7293,12 @@ function DispatchedItemsPage() {
 		}
 	);
 
-	const getPlantCodeFromRow = (row) => {
-		return (row?.plantCode || "").trim().split(" ")[0];
+	const getPlantCodeFromRow = (
+		row
+	) => {
+		return normalizeDispatchPlantCode(
+			row?.plantCode
+		);
 	};
 
 	const getPlantConfigFromRow = (row) => {
