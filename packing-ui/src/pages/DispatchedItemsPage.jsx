@@ -6254,6 +6254,48 @@ function DispatchedItemsPage() {
 					)
 				);
 
+				/*
+ * Verify that the backend did not under-report totalPages.
+ *
+ * Normally this performs only one additional request returning
+ * an empty array. When a stale or incorrect count reports 21 pages
+ * while more records exist, it continues loading until the real
+ * final short page is reached.
+ */
+				let verificationPage =
+					knownTotalPages;
+
+				while (
+					verificationPage <
+					DISPATCH_BACKEND_MAX_PAGES
+				) {
+					const pageResult =
+						await fetchDispatchBackendPage(
+							verificationPage,
+							signal
+						);
+
+					if (
+						pageResult.items.length === 0
+					) {
+						break;
+					}
+
+					addPageResult(
+						pageResult
+					);
+
+					if (
+						pageResult.last === true ||
+						pageResult.items.length <
+						DISPATCH_BACKEND_BATCH_SIZE
+					) {
+						break;
+					}
+
+					verificationPage += 1;
+				}
+
 				return {
 					items:
 						buildOrderedRows(),
@@ -6262,7 +6304,10 @@ function DispatchedItemsPage() {
 						knownTotalElements,
 
 					totalPages:
-						knownTotalPages,
+						Math.max(
+							knownTotalPages,
+							pageItemsByNumber.size
+						),
 
 					loadedPages:
 						pageItemsByNumber.size,
@@ -6458,6 +6503,33 @@ function DispatchedItemsPage() {
 					normalizeFetchedDispatchRows(
 						result.items
 					);
+
+				const reportedTotal =
+					Number(
+						result.totalElements
+					);
+
+				const missingRows =
+					Number.isFinite(
+						reportedTotal
+					)
+						? reportedTotal -
+						cleaned.length
+						: 0;
+
+				/*
+				 * Small differences can occur when another user inserts a record
+				 * during loading. A difference of one complete page or more means
+				 * that loading was truncated and must not be silently accepted.
+				 */
+				if (
+					missingRows >=
+					DISPATCH_BACKEND_BATCH_SIZE
+				) {
+					throw new Error(
+						`Dispatch loading was incomplete. Backend reported ${reportedTotal} records but only ${cleaned.length} were received.`
+					);
+				}
 
 				/*
 				 * A newer request has already replaced this request.

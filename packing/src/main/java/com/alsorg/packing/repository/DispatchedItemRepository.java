@@ -318,4 +318,49 @@ public interface DispatchedItemRepository
                         @Param("packetItemIds") Collection<UUID> packetItemIds,
 
                         @Param("lookupIds") Collection<String> lookupIds);
+
+        /*
+         * Complete Dispatch-page listing for plant-scoped users.
+         *
+         * No status condition is applied here because the React Dispatch page
+         * already handles status filtering. This also keeps legacy rows whose
+         * status is null.
+         */
+        @Query(value = """
+                        SELECT d
+                        FROM DispatchedItem d
+                        WHERE (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                        )
+                        """, countQuery = """
+                        SELECT COUNT(d)
+                        FROM DispatchedItem d
+                        WHERE (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                        )
+                        """)
+        Page<DispatchedItem> findVisiblePageByPlantsIncludingLegacy(
+                        @Param("plantCodes") Collection<String> plantCodes,
+                        Pageable pageable);
+
+        /*
+         * Legacy rows visible to a user who has no assigned plants.
+         */
+        @Query(value = """
+                        SELECT d
+                        FROM DispatchedItem d
+                        WHERE d.plantCode IS NULL
+                           OR TRIM(d.plantCode) = ''
+                        """, countQuery = """
+                        SELECT COUNT(d)
+                        FROM DispatchedItem d
+                        WHERE d.plantCode IS NULL
+                           OR TRIM(d.plantCode) = ''
+                        """)
+        Page<DispatchedItem> findLegacyVisiblePage(
+                        Pageable pageable);
 }

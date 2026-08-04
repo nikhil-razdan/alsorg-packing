@@ -45,6 +45,7 @@ public class DispatchedItemsController {
 
         /* ===================== FETCH ===================== */
 
+        private static final int DEFAULT_DISPATCH_PAGE_SIZE = 200;
         private static final int MAX_DISPATCH_PAGE_SIZE = 200;
 
         @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -52,49 +53,23 @@ public class DispatchedItemsController {
 
                         @RequestParam(defaultValue = "0") int page,
 
-                        @RequestParam(defaultValue = "200") int size,
+                        @RequestParam(defaultValue = "" + DEFAULT_DISPATCH_PAGE_SIZE) int size,
 
                         @RequestHeader(value = "Authorization", required = false) String auth) {
 
-                User user = currentUserService
-                                .getCurrentUserFromAuth(
-                                                auth);
+                User user = currentUserService.getCurrentUserFromAuth(
+                                auth);
 
-                /*
-                 * Keep the server protected from a client requesting
-                 * 8,500 records in one HTTP response.
-                 */
-                int safePage = Math.max(
-                                page,
-                                0);
+                int safePage = Math.max(page, 0);
 
                 int safeSize = Math.min(
-                                Math.max(
-                                                size,
-                                                1),
+                                Math.max(size, 1),
                                 MAX_DISPATCH_PAGE_SIZE);
 
-                /*
-                 * Include every ItemDispatchStatus value.
-                 *
-                 * Your previous list omitted statuses used by the frontend,
-                 * including LOADED, OUT_FOR_DELIVERY, DELIVERED and RESTORED.
-                 *
-                 * Using values() also prevents new status values from silently
-                 * disappearing from the Dispatch page later.
-                 */
-                List<ItemDispatchStatus> statuses = List.of(
-                                ItemDispatchStatus.values());
-
-                /*
-                 * Stable pagination:
-                 *
-                 * createdAt handles normal newest-first sorting.
-                 * zohoItemId breaks ties where multiple rows have the same timestamp.
-                 */
                 Sort stableSort = Sort.by(
                                 Sort.Direction.DESC,
-                                "createdAt").and(
+                                "createdAt")
+                                .and(
                                                 Sort.by(
                                                                 Sort.Direction.ASC,
                                                                 "zohoItemId"));
@@ -104,41 +79,34 @@ public class DispatchedItemsController {
                                 safeSize,
                                 stableSort);
 
-                boolean admin = currentUserService.isAdmin(
-                                user);
+                boolean admin = currentUserService.isAdmin(user);
 
-                Set<String> allowedPlants = admin
+                boolean dispatchUser = currentUserService.isDispatch(user);
+
+                boolean canViewCompleteDispatchRegister = admin || dispatchUser;
+
+                Set<String> allowedPlants = canViewCompleteDispatchRegister
                                 ? Set.of()
-                                : currentUserService
-                                                .allowedPlants(
-                                                                user);
+                                : currentUserService.allowedPlants(user);
 
                 Page<DispatchedItem> result;
 
-                if (admin) {
+                if (canViewCompleteDispatchRegister) {
 
-                        result = repository.findByStatusIn(
-                                        statuses,
+                        result = repository.findAll(
                                         pageable);
 
                 } else if (allowedPlants == null ||
                                 allowedPlants.isEmpty()) {
 
-                        /*
-                         * Preserve your existing legacy-data visibility rule.
-                         */
-                        result = repository
-                                        .findLegacyVisiblePageByStatuses(
-                                                        statuses,
-                                                        pageable);
+                        result = repository.findLegacyVisiblePage(
+                                        pageable);
 
                 } else {
 
-                        result = repository
-                                        .findVisiblePageByStatusesAndPlantsIncludingLegacy(
-                                                        statuses,
-                                                        allowedPlants,
-                                                        pageable);
+                        result = repository.findVisiblePageByPlantsIncludingLegacy(
+                                        allowedPlants,
+                                        pageable);
                 }
 
                 return ResponseEntity
