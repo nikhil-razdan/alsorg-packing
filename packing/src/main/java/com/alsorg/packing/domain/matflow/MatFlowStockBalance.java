@@ -60,15 +60,12 @@ public class MatFlowStockBalance
                                 ? BigDecimal.ZERO
                                 : blockedQty;
 
-                BigDecimal available = safeOnHand
-                                .subtract(
-                                                safeReserved)
-                                .subtract(
-                                                safeBlocked);
-
-                return available.compareTo(
-                                BigDecimal.ZERO) < 0
-                                                ? BigDecimal.ZERO
-                                                : available;
+                return safeOnHand
+                                .subtract(safeReserved)
+                                .subtract(safeBlocked)
+                                .max(BigDecimal.ZERO)
+                                .setScale(
+                                                3,
+                                                java.math.RoundingMode.HALF_UP);
         }
 }

@@ -4,7 +4,7 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 
 import jakarta.persistence.LockModeType;
-import java.util.EnumSet;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -16,47 +16,56 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface MatFlowStockBalanceRepository
-        extends JpaRepository<MatFlowStockBalance, UUID> {
+                extends JpaRepository<MatFlowStockBalance, UUID> {
 
-    Optional<MatFlowStockBalance> findByMaterial_IdAndLocation_Id(
-            UUID materialId,
-            UUID locationId);
+        Optional<MatFlowStockBalance> findByMaterial_IdAndLocation_Id(
+                        UUID materialId,
+                        UUID locationId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select s
-            from MatFlowStockBalance s
-            where s.material.id = :materialId
-              and s.location.id = :locationId
-            """)
-    Optional<MatFlowStockBalance> lockBalance(
-            @Param("materialId") UUID materialId,
-            @Param("locationId") UUID locationId);
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                        select balance
+                        from MatFlowStockBalance balance
+                        join fetch balance.material material
+                        join fetch balance.location location
+                        where material.id = :materialId
+                          and location.id = :locationId
+                        """)
+        Optional<MatFlowStockBalance> lockBalance(
+                        @Param("materialId") UUID materialId,
 
-    @Query("""
-            select s
-            from MatFlowStockBalance s
-            where s.location.plantCode in :plantCodes
-            order by s.location.plantCode,
-                     s.location.locationCode,
-                     s.material.materialCode
-            """)
-    List<MatFlowStockBalance> findVisibleBalances(
-            @Param("plantCodes") Set<String> plantCodes);
+                        @Param("locationId") UUID locationId);
 
-    @Query("""
-            select s
-            from MatFlowStockBalance s
-            where s.material.id = :materialId
-              and s.location.plantCode in :plantCodes
-              and s.location.locationType in :locationTypes
-              and s.location.active = true
-              and s.location.supportsStock = true
-            """)
-    List<MatFlowStockBalance> findPlanningCandidates(
-            @Param("materialId") UUID materialId,
+        @Query("""
+                        select balance
+                        from MatFlowStockBalance balance
+                        join fetch balance.material material
+                        join fetch balance.location location
+                        where upper(location.plantCode) in :plantCodes
+                        order by location.plantCode asc,
+                                 location.locationCode asc,
+                                 material.materialCode asc
+                        """)
+        List<MatFlowStockBalance> findVisibleBalances(
+                        @Param("plantCodes") Set<String> plantCodes);
 
-            @Param("plantCodes") Set<String> plantCodes,
+        @Query("""
+                        select balance
+                        from MatFlowStockBalance balance
+                        join fetch balance.material material
+                        join fetch balance.location location
+                        where material.id = :materialId
+                          and upper(location.plantCode) in :plantCodes
+                          and location.locationType in :locationTypes
+                          and location.active = true
+                          and location.supportsStock = true
+                        order by location.plantCode asc,
+                                 location.locationCode asc
+                        """)
+        List<MatFlowStockBalance> findPlanningCandidates(
+                        @Param("materialId") UUID materialId,
 
-            @Param("locationTypes") Set<LocationType> locationTypes);
+                        @Param("plantCodes") Set<String> plantCodes,
+
+                        @Param("locationTypes") Set<LocationType> locationTypes);
 }

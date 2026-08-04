@@ -24,7 +24,8 @@ import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowRequisitionLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockBalanceRepository;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -60,6 +61,9 @@ public class MatFlowStoreWorkflowService {
             "PARTIALLY_ISSUED",
             "ISSUED",
             "ISSUED_TO_PRODUCTION");
+
+    private static final Logger log = LoggerFactory.getLogger(
+            MatFlowStoreWorkflowService.class);
 
     /*
      * These are the stock location types that Store may see
@@ -214,6 +218,12 @@ public class MatFlowStoreWorkflowService {
             MatFlowMaterialRequisition requisition,
             MatFlowRequisitionLine line) {
 
+        /*
+         * =====================================================
+         * HEADER AND LINE VALIDATION
+         * =====================================================
+         */
+
         if (requisition == null ||
                 requisition.destinationLocation == null ||
                 requisition.destinationLocation.getId() == null) {
@@ -225,6 +235,7 @@ public class MatFlowStoreWorkflowService {
         if (line == null ||
                 line.getId() == null ||
                 line.material == null ||
+                line.material.getId() == null ||
                 line.bomLine == null ||
                 line.bomLine.getId() == null) {
 
@@ -233,10 +244,22 @@ public class MatFlowStoreWorkflowService {
         }
 
         /*
-         * The approved BOM route is the only route authority.
-         * Store can select stock sources and quantities, but cannot
-         * replace the Engineering-approved processing route.
+         * =====================================================
+         * APPROVED BOM ROUTE
+         * =====================================================
+         *
+         * The approved BOM route is the route authority.
+         *
+         * Store may:
+         * - select a recorded stock source;
+         * - decide the reserve quantity;
+         * - confirm full availability;
+         * - confirm partial availability;
+         * - confirm shortage.
+         *
+         * Store must not replace the Engineering-approved route.
          */
+
         List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
                 line.bomLine.getId());
 
@@ -247,7 +270,9 @@ public class MatFlowStoreWorkflowService {
                                 java.util.Objects::nonNull)
                         .sorted(
                                 Comparator.comparing(
-                                        step -> step.sequenceNo,
+                                        (
+                                                MatFlowBomRouteStep step) -> step.sequenceNo,
+
                                         Comparator.nullsLast(
                                                 Integer::compareTo)))
                         .toList();
@@ -268,17 +293,22 @@ public class MatFlowStoreWorkflowService {
         }
 
         /*
-         * Build structured route information for the Store UI.
+         * =====================================================
+         * STRUCTURED ROUTE INFORMATION
+         * =====================================================
          */
+
         List<StoreApprovedRouteStepResponse> approvedRouteSteps = route.stream()
                 .map(
                         this::toStoreApprovedRouteStepResponse)
                 .toList();
 
         /*
-         * A processing route is determined only from the approved
-         * BOM route. Store does not select an arbitrary processor.
+         * Processing is determined only by the approved BOM route.
+         *
+         * Store does not select an arbitrary processing location.
          */
+
         MatFlowBomRouteStep firstProcessingStep = route.stream()
                 .filter(
                         step -> step.location != null &&
@@ -300,12 +330,74 @@ public class MatFlowStoreWorkflowService {
                         .getLocationCode();
 
         /*
-         * Load all valid physical stock sources that the Store may
-         * select for reservation.
+         * =====================================================
+         * NORMALIZE ALLOWED PLANTS
+         * =====================================================
+         *
+         * The repository query should use:
+         *
+         * upper(location.plantCode) in :plantCodes
+         *
+         * Therefore all parameter values must be uppercase.
          */
+
+        Set<String> rawAllowedPlants = accessService.allowedPlants();
+
+        Set<String> allowedPlants = (rawAllowedPlants == null
+                ? Set.<String>of()
+                : rawAllowedPlants)
+                .stream()
+                .filter(
+                        java.util.Objects::nonNull)
+                .map(
+                        String::trim)
+                .filter(
+                        value -> !value.isBlank())
+                .map(
+                        value -> value.toUpperCase(
+                                Locale.ROOT))
+                .collect(
+                        Collectors.toCollection(
+                                java.util.LinkedHashSet::new));
+
+        /*
+         * This validation is correct only when an empty set means
+         * the user has no assigned plants.
+         *
+         * CurrentUserService.allowedPlants() must return all active
+         * MatFlow plants for ADMIN instead of using an empty set to
+         * represent unrestricted access.
+         */
+
+        if (allowedPlants.isEmpty()) {
+            throw conflict(
+                    "No MatFlow plants are assigned to the current user. " +
+                            "Stock availability cannot be calculated.");
+        }
+
+        log.info(
+                "MatFlow availability request: " +
+                        "requisitionId={}, requisitionLineId={}, " +
+                        "materialId={}, materialCode={}, " +
+                        "allowedPlants={}, sourceTypes={}, " +
+                        "firstDestination={}",
+                requisition.getId(),
+                line.getId(),
+                line.material.getId(),
+                line.material.getMaterialCode(),
+                allowedPlants,
+                AVAILABILITY_SOURCE_TYPES,
+                firstDestination.getLocationCode());
+
+        /*
+         * =====================================================
+         * LOAD STOCK CANDIDATES
+         * =====================================================
+         */
+
         List<MatFlowStockBalance> returnedBalances = stockRepository.findPlanningCandidates(
                 line.material.getId(),
-                accessService.allowedPlants(),
+                allowedPlants,
                 AVAILABILITY_SOURCE_TYPES);
 
         List<MatFlowStockBalance> balances = returnedBalances == null
@@ -313,21 +405,113 @@ public class MatFlowStoreWorkflowService {
                 : new ArrayList<>(
                         returnedBalances);
 
+        log.info(
+                "MatFlow availability result: materialId={}, " +
+                        "materialCode={}, candidateCount={}",
+                line.material.getId(),
+                line.material.getMaterialCode(),
+                balances.size());
+
+        /*
+         * Log the raw query result before applying defensive
+         * application-level filtering.
+         */
+
+        balances.forEach(
+                balance -> log.info(
+                        "MatFlow stock candidate: " +
+                                "balanceId={}, material={}, " +
+                                "location={}, plant={}, type={}, " +
+                                "active={}, supportsStock={}, " +
+                                "onHand={}, reserved={}, blocked={}, " +
+                                "inTransit={}, available={}",
+
+                        balance == null
+                                ? null
+                                : balance.getId(),
+
+                        balance == null ||
+                                balance.material == null
+                                        ? null
+                                        : balance.material
+                                                .getMaterialCode(),
+
+                        balance == null ||
+                                balance.location == null
+                                        ? null
+                                        : balance.location
+                                                .getLocationCode(),
+
+                        balance == null ||
+                                balance.location == null
+                                        ? null
+                                        : balance.location
+                                                .getPlantCode(),
+
+                        balance == null ||
+                                balance.location == null
+                                        ? null
+                                        : balance.location
+                                                .getLocationType(),
+
+                        balance != null &&
+                                balance.location != null &&
+                                balance.location.isActive(),
+
+                        balance != null &&
+                                balance.location != null &&
+                                balance.location.isSupportsStock(),
+
+                        balance == null
+                                ? null
+                                : balance.onHandQty,
+
+                        balance == null
+                                ? null
+                                : balance.reservedQty,
+
+                        balance == null
+                                ? null
+                                : balance.blockedQty,
+
+                        balance == null
+                                ? null
+                                : balance.inTransitQty,
+
+                        balance == null
+                                ? null
+                                : balance.availableQty()));
+
+        /*
+         * Defensive validation.
+         *
+         * The repository already filters active and stock-supporting
+         * locations, but keeping this protects the service if the
+         * repository query is changed later.
+         */
+
         balances.removeIf(
                 balance -> balance == null ||
+                        balance.material == null ||
+                        balance.material.getId() == null ||
                         balance.location == null ||
                         balance.location.getId() == null ||
                         !balance.location.isActive() ||
                         !balance.location.isSupportsStock());
 
         /*
-         * Source-priority order:
+         * =====================================================
+         * SOURCE PRIORITY
+         * =====================================================
          *
-         * 1. Stock already at the first approved route destination
-         * 2. Stock in the same plant
-         * 3. Higher available quantity
-         * 4. Location code
+         * Priority:
+         *
+         * 1. Stock already at first approved destination.
+         * 2. Stock in the same plant as first destination.
+         * 3. Higher available quantity.
+         * 4. Location code.
          */
+
         balances.sort(
                 Comparator
                         .<MatFlowStockBalance>comparingInt(
@@ -350,8 +534,22 @@ public class MatFlowStoreWorkflowService {
                         .thenComparing(
                                 balance -> balance.location
                                         .getLocationCode(),
+
                                 Comparator.nullsLast(
                                         String.CASE_INSENSITIVE_ORDER)));
+
+        /*
+         * Do not remove zero-available balances here.
+         *
+         * They may still be useful for explaining:
+         * - on-hand quantity;
+         * - existing reserved quantity;
+         * - blocked quantity;
+         * - why the free quantity is zero.
+         *
+         * The frontend should enable Full/Partial based on the sum
+         * of option.availableQty.
+         */
 
         List<StoreStockOptionResponse> options = balances.stream()
                 .map(
@@ -361,6 +559,33 @@ public class MatFlowStoreWorkflowService {
                                 route,
                                 balance))
                 .toList();
+
+        BigDecimal totalAvailableQty = options.stream()
+                .map(
+                        StoreStockOptionResponse::availableQty)
+                .filter(
+                        java.util.Objects::nonNull)
+                .reduce(
+                        ZERO,
+                        BigDecimal::add)
+                .setScale(
+                        3,
+                        RoundingMode.HALF_UP);
+
+        log.info(
+                "MatFlow availability DTO: material={}, requestedQty={}, " +
+                        "optionCount={}, totalAvailableQty={}",
+                line.material.getMaterialCode(),
+                zero(
+                        line.requestedQty),
+                options.size(),
+                totalAvailableQty);
+
+        /*
+         * =====================================================
+         * RESPONSE
+         * =====================================================
+         */
 
         String materialCategory = clean(
                 line.bomLine
@@ -381,7 +606,9 @@ public class MatFlowStoreWorkflowService {
                 line.material.getId(),
                 line.material.getMaterialCode(),
                 line.material.getMaterialName(),
+
                 materialCategory,
+
                 line.material.getUom(),
 
                 zero(
@@ -394,6 +621,7 @@ public class MatFlowStoreWorkflowService {
                         line.shortageQty),
 
                 firstDestination.getId(),
+
                 firstDestination.getLocationCode(),
 
                 approvedRouteSummary,
@@ -401,6 +629,7 @@ public class MatFlowStoreWorkflowService {
                 processingRequired,
 
                 firstProcessingLocationId,
+
                 firstProcessingLocationCode,
 
                 approvedRouteSteps,
@@ -503,7 +732,10 @@ public class MatFlowStoreWorkflowService {
          * Any source other than the first approved destination
          * requires a physical transfer.
          */
-        boolean transferRequired = !firstRouteDestination;
+        boolean transferRequired = requiresPhysicalTransfer(
+                location,
+                route,
+                requisition.destinationLocation);
 
         return new StoreStockOptionResponse(
                 balance.getId(),

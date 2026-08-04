@@ -1649,6 +1649,92 @@ export default function MatFlowStorePlanningDetail() {
                         availabilityResponse?.data
                     );
 
+                console.log(
+                    "MatFlow availability response:",
+                    availabilityResponse?.data
+                );
+
+                console.table(
+                    availabilityRows.flatMap(
+                        (entry) =>
+                            asArray(
+                                entry?.stockOptions
+                            ).map(
+                                (option) => ({
+                                    requisitionLineId:
+                                        entry?.requisitionLineId,
+
+                                    materialCode:
+                                        entry?.materialCode,
+
+                                    locationCode:
+                                        option?.locationCode,
+
+                                    locationType:
+                                        option?.locationType,
+
+                                    onHandQty:
+                                        option?.onHandQty,
+
+                                    reservedQty:
+                                        option?.reservedQty,
+
+                                    blockedQty:
+                                        option?.blockedQty,
+
+                                    availableQty:
+                                        option?.availableQty,
+
+                                    supportsStock:
+                                        option?.supportsStock,
+                                })
+                            )
+                    )
+                );
+
+                console.log(
+                    "MatFlow availability response:",
+                    availabilityResponse?.data
+                );
+
+                console.table(
+                    availabilityRows.flatMap(
+                        (entry) =>
+                            asArray(
+                                entry?.stockOptions
+                            ).map(
+                                (option) => ({
+                                    requisitionLineId:
+                                        entry?.requisitionLineId,
+
+                                    materialCode:
+                                        entry?.materialCode,
+
+                                    locationCode:
+                                        option?.locationCode,
+
+                                    locationType:
+                                        option?.locationType,
+
+                                    onHandQty:
+                                        option?.onHandQty,
+
+                                    reservedQty:
+                                        option?.reservedQty,
+
+                                    blockedQty:
+                                        option?.blockedQty,
+
+                                    availableQty:
+                                        option?.availableQty,
+
+                                    supportsStock:
+                                        option?.supportsStock,
+                                })
+                            )
+                    )
+                );
+
                 const requisitionLines =
                     asArray(
                         planningData
@@ -2677,10 +2763,14 @@ export default function MatFlowStorePlanningDetail() {
                                                             }
                                                         >
                                                             {hasCompleteFreeStock
-                                                                ? "Available — Reserve Full"
-                                                                : `Full Stock Unavailable — ${formatQty(
+                                                                ? `Available — Reserve ${formatQty(
+                                                                    requestedQty
+                                                                )}`
+                                                                : `Full Allocation Disabled — Free ${formatQty(
                                                                     totalAvailable
-                                                                )} Available`}
+                                                                )} / Required ${formatQty(
+                                                                    requestedQty
+                                                                )}`}
                                                         </MenuItem>
 
                                                         <MenuItem
@@ -2690,14 +2780,39 @@ export default function MatFlowStorePlanningDetail() {
                                                             }
                                                         >
                                                             {hasAnyFreeStock
-                                                                ? "Partially Available"
-                                                                : "Partial Unavailable — No Free Stock"}
+                                                                ? `Partial — Reserve up to ${formatQty(
+                                                                    totalAvailable
+                                                                )}`
+                                                                : "Partial Allocation Disabled — Free Stock 0"}
                                                         </MenuItem>
 
                                                         <MenuItem value="SHORTAGE">
                                                             Shortage — Raise Indent
                                                         </MenuItem>
                                                     </TextField>
+
+                                                    <Box sx={stockEligibilitySx}>
+                                                        <Typography sx={stockEligibilityTitleSx}>
+                                                            Stock Eligibility
+                                                        </Typography>
+
+                                                        <Typography sx={stockEligibilityValueSx}>
+                                                            Required:{" "}
+                                                            {formatQty(
+                                                                requestedQty
+                                                            )}
+                                                            {" · Free: "}
+                                                            {formatQty(
+                                                                totalAvailable
+                                                            )}
+                                                            {" · Result: "}
+                                                            {hasCompleteFreeStock
+                                                                ? "Full allocation allowed"
+                                                                : hasAnyFreeStock
+                                                                    ? "Partial allocation allowed"
+                                                                    : "Only shortage allowed"}
+                                                        </Typography>
+                                                    </Box>
 
                                                     {reviewSummary
                                                         .stockOptions
@@ -3501,6 +3616,33 @@ const kpiIconSx = {
     placeItems: "center",
     borderRadius: "10px",
     flexShrink: 0,
+};
+
+const stockEligibilitySx = {
+    mt: "6px",
+    p: "6px 8px",
+    borderRadius: "7px",
+    background:
+        "var(--mf-surface-strong)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const stockEligibilityTitleSx = {
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "7.5px",
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: ".04em",
+};
+
+const stockEligibilityValueSx = {
+    mt: "2px",
+    color:
+        "var(--mf-text-secondary)",
+    fontSize: "8.5px",
+    fontWeight: 800,
 };
 
 const routeSelectionSx = {

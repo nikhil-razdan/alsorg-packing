@@ -126,8 +126,28 @@ public class MatFlowAccessService {
         }
 
         public Set<String> allowedPlants() {
-                return currentUserService.allowedPlants(
+
+                Set<String> plants = currentUserService.allowedPlants(
                                 currentUser());
+
+                if (plants == null ||
+                                plants.isEmpty()) {
+
+                        return Set.of();
+                }
+
+                return plants.stream()
+                                .filter(
+                                                java.util.Objects::nonNull)
+                                .map(String::trim)
+                                .filter(
+                                                value -> !value.isBlank())
+                                .map(
+                                                value -> value.toUpperCase(
+                                                                Locale.ROOT))
+                                .collect(
+                                                java.util.stream.Collectors.toCollection(
+                                                                java.util.LinkedHashSet::new));
         }
 
         public boolean canAccessPlant(
