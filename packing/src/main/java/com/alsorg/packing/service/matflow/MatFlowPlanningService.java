@@ -16,7 +16,8 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReview
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreSourceAllocationRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreStockOptionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
-
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreApprovedRouteStepResponse;
 import com.alsorg.packing.domain.matflow.MatFlowBom;
 import com.alsorg.packing.domain.matflow.MatFlowBomLine;
 import com.alsorg.packing.domain.matflow.MatFlowBomRouteStep;
@@ -1276,6 +1277,31 @@ public class MatFlowPlanningService {
                                                         requisition.destinationLocation,
                                                         route);
 
+                                        List<StoreApprovedRouteStepResponse> approvedRouteSteps = route.stream()
+                                                        .map(
+                                                                        this::toStoreApprovedRouteStepResponse)
+                                                        .toList();
+
+                                        MatFlowBomRouteStep firstProcessingStep = route.stream()
+                                                        .filter(
+                                                                        step -> step != null &&
+                                                                                        step.location != null &&
+                                                                                        step.stepType == RouteStepType.PROCESSING)
+                                                        .findFirst()
+                                                        .orElse(null);
+
+                                        boolean processingRequired = firstProcessingStep != null;
+
+                                        UUID firstProcessingLocationId = firstProcessingStep == null
+                                                        ? null
+                                                        : firstProcessingStep.location
+                                                                        .getId();
+
+                                        String firstProcessingLocationCode = firstProcessingStep == null
+                                                        ? null
+                                                        : firstProcessingStep.location
+                                                                        .getLocationCode();
+
                                         MatFlowLocation firstDestination = route.isEmpty()
                                                         ? requisition.destinationLocation
                                                         : route.get(0).location;
@@ -1416,6 +1442,13 @@ public class MatFlowPlanningService {
 
                                                         approvedRoute,
 
+                                                        processingRequired,
+
+                                                        firstProcessingLocationId,
+                                                        firstProcessingLocationCode,
+
+                                                        approvedRouteSteps,
+
                                                         stockOptions);
                                 })
                                 .toList();
@@ -1482,6 +1515,87 @@ public class MatFlowPlanningService {
 
                 ledgerRepository.save(
                                 ledger);
+        }
+
+        private void validateStoreRouteConfirmation(
+                        StoreLineReviewRequest lineReview,
+                        List<MatFlowBomRouteStep> approvedRoute,
+                        MatFlowMaterial material) {
+
+                if (lineReview == null) {
+                        throw badRequest(
+                                        "Store review line is required");
+                }
+
+                List<MatFlowBomRouteStep> processingSteps = approvedRoute == null
+                                ? List.of()
+                                : approvedRoute.stream()
+                                                .filter(
+                                                                step -> step != null &&
+                                                                                step.location != null &&
+                                                                                step.stepType == RouteStepType.PROCESSING)
+                                                .toList();
+
+                boolean approvedProcessingRequired = !processingSteps.isEmpty();
+
+                Boolean submittedProcessingRequired = lineReview.processingRequired();
+
+                UUID submittedProcessingLocationId = lineReview.processingLocationId();
+
+                String materialLabel = material == null
+                                ? "selected material"
+                                : safeLabel(
+                                                material.getMaterialCode(),
+                                                material.getId());
+
+                /*
+                 * Older clients may omit the confirmation flag.
+                 * When supplied, it must agree with the approved BOM.
+                 */
+                if (submittedProcessingRequired != null &&
+                                submittedProcessingRequired != approvedProcessingRequired) {
+
+                        throw badRequest(
+                                        "Processing selection does not match the approved BOM route for material " +
+                                                        materialLabel);
+                }
+
+                /*
+                 * No processing location may be submitted when the
+                 * approved BOM route does not require processing.
+                 */
+                if (!approvedProcessingRequired) {
+
+                        if (submittedProcessingLocationId != null) {
+                                throw badRequest(
+                                                "A processing location was submitted for material " +
+                                                                materialLabel +
+                                                                ", but its approved BOM route is direct to Production");
+                        }
+
+                        return;
+                }
+
+                /*
+                 * The submitted processing location, when provided,
+                 * must be one of the approved processing steps.
+                 */
+                if (submittedProcessingLocationId != null) {
+
+                        boolean approvedLocation = processingSteps.stream()
+                                        .anyMatch(
+                                                        step -> step.location
+                                                                        .getId()
+                                                                        .equals(
+                                                                                        submittedProcessingLocationId));
+
+                        if (!approvedLocation) {
+                                throw badRequest(
+                                                "Selected processing location is not part of the approved BOM route for material "
+                                                                +
+                                                                materialLabel);
+                        }
+                }
         }
 
         /*
@@ -1752,6 +1866,31 @@ public class MatFlowPlanningService {
                 }
 
                 return location;
+        }
+
+        private StoreApprovedRouteStepResponse toStoreApprovedRouteStepResponse(
+                        MatFlowBomRouteStep step) {
+
+                if (step == null ||
+                                step.location == null) {
+
+                        throw conflict(
+                                        "Approved BOM route contains an incomplete route step");
+                }
+
+                return new StoreApprovedRouteStepResponse(
+                                step.getId(),
+                                step.sequenceNo,
+                                step.stepType,
+
+                                step.location.getId(),
+                                step.location.getLocationCode(),
+                                step.location.getLocationName(),
+                                step.location.getPlantCode(),
+                                step.location.getLocationType(),
+
+                                clean(
+                                                step.processCode));
         }
 
         /*
@@ -2419,6 +2558,15 @@ public class MatFlowPlanningService {
                         validateDestination(
                                         requisition.destinationLocation,
                                         route);
+
+                        /*
+                         * Store confirms the route shown on screen.
+                         * The approved BOM route remains authoritative.
+                         */
+                        validateStoreRouteConfirmation(
+                                        lineReview,
+                                        route,
+                                        line.material);
 
                         MatFlowLocation firstDestination = route.isEmpty()
                                         ? requisition.destinationLocation

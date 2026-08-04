@@ -145,7 +145,6 @@ public final class MatFlowPlanningDtos {
         }
 
         public record StoreLineAvailabilityResponse(
-
                         UUID requisitionLineId,
                         Integer lineNo,
 
@@ -156,13 +155,20 @@ public final class MatFlowPlanningDtos {
                         String uom,
 
                         BigDecimal requestedQty,
-                        BigDecimal currentlyReservedQty,
-                        BigDecimal currentShortageQty,
+                        BigDecimal reservedQty,
+                        BigDecimal shortageQty,
 
                         UUID firstDestinationLocationId,
                         String firstDestinationLocationCode,
 
                         String approvedRoute,
+
+                        Boolean processingRequired,
+
+                        UUID firstProcessingLocationId,
+                        String firstProcessingLocationCode,
+
+                        List<StoreApprovedRouteStepResponse> approvedRouteSteps,
 
                         List<StoreStockOptionResponse> stockOptions) {
         }
@@ -448,6 +454,18 @@ public final class MatFlowPlanningDtos {
                         @NotEmpty(message = "At least one Store review line is required.") List<@Valid StoreLineReviewRequest> lines,
 
                         @Size(max = 2000, message = "Store review remarks cannot exceed 2000 characters.") String remarks) {
+        }
+
+        public record StoreApprovedRouteStepResponse(
+                        UUID routeStepId,
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        UUID locationId,
+                        String locationCode,
+                        String locationName,
+                        String plantCode,
+                        LocationType locationType,
+                        String processCode) {
         }
 
         public record StockOptionResponse(

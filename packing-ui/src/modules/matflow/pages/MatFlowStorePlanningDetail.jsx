@@ -9,11 +9,9 @@ import {
     Box,
     Button,
     Card,
-    Checkbox,
     Chip,
     CircularProgress,
     LinearProgress,
-    ListItemText,
     MenuItem,
     TextField,
     Typography,
@@ -548,6 +546,134 @@ const qtyEquals = (
         roundQty(right)
     ) < 0.0005;
 
+const decisionFromAllocation = (
+    requestedQty,
+    allocatedQty
+) => {
+    const requested =
+        roundQty(
+            requestedQty
+        );
+
+    const allocated =
+        roundQty(
+            allocatedQty
+        );
+
+    if (requested <= 0) {
+        return "UNDECIDED";
+    }
+
+    if (
+        allocated >= requested
+    ) {
+        return "AVAILABLE";
+    }
+
+    if (allocated > 0) {
+        return "PARTIAL";
+    }
+
+    return "SHORTAGE";
+};
+
+const buildAutomaticAllocation = (
+    line,
+    availabilityEntry
+) => {
+    const requestedQty =
+        roundQty(
+            line?.requestedQty
+        );
+
+    let remainingQty =
+        requestedQty;
+
+    const allocationQuantities =
+        {};
+
+    const stockOptions =
+        asArray(
+            availabilityEntry
+                ?.stockOptions
+        )
+            .filter(
+                (option) =>
+                    option?.locationId &&
+                    numeric(
+                        option.availableQty
+                    ) > 0
+            );
+
+    for (
+        const option
+        of stockOptions
+    ) {
+        if (
+            remainingQty <= 0
+        ) {
+            break;
+        }
+
+        const locationId =
+            String(
+                option.locationId
+            );
+
+        const availableQty =
+            roundQty(
+                option.availableQty
+            );
+
+        const reserveQty =
+            roundQty(
+                Math.min(
+                    availableQty,
+                    remainingQty
+                )
+            );
+
+        if (reserveQty <= 0) {
+            continue;
+        }
+
+        allocationQuantities[
+            locationId
+        ] =
+            reserveQty;
+
+        remainingQty =
+            roundQty(
+                Math.max(
+                    0,
+                    remainingQty -
+                    reserveQty
+                )
+            );
+    }
+
+    const allocatedQty =
+        roundQty(
+            requestedQty -
+            remainingQty
+        );
+
+    return {
+        allocationQuantities,
+
+        allocatedQty,
+
+        shortageQty:
+            remainingQty,
+
+        decision:
+            decisionFromAllocation(
+                requestedQty,
+                allocatedQty
+            ),
+    };
+};
+
 const deriveStoreDecision = (
     line
 ) => {
@@ -874,42 +1000,29 @@ export default function MatFlowStorePlanningDetail() {
                         );
                     }
 
+                    const effectiveDecision =
+                        decisionFromAllocation(
+                            summary.requestedQty,
+                            summary.allocatedQty
+                        );
+
                     if (
                         decision ===
-                        "AVAILABLE" &&
-                        !qtyEquals(
-                            summary.allocatedQty,
-                            summary.requestedQty
-                        )
+                        "UNDECIDED"
                     ) {
                         throw new Error(
-                            `Available requires the complete requested quantity to be allocated for ${line.materialCode || line.materialName}.`
+                            `Review the stock position for ${line.materialCode || line.materialName}.`
                         );
                     }
 
                     if (
-                        decision ===
-                        "PARTIAL" &&
-                        (
-                            summary.allocatedQty <=
-                            0 ||
-                            summary.allocatedQty >=
-                            summary.requestedQty
-                        )
-                    ) {
-                        throw new Error(
-                            `Partial requires an allocation greater than zero and lower than the requested quantity for ${line.materialCode || line.materialName}.`
-                        );
-                    }
-
-                    if (
-                        decision ===
+                        effectiveDecision ===
                         "SHORTAGE" &&
-                        summary.allocatedQty >
-                        0
+                        decision !==
+                        "SHORTAGE"
                     ) {
                         throw new Error(
-                            `Shortage cannot contain a stock allocation for ${line.materialCode || line.materialName}.`
+                            `No stock quantity has been allocated for ${line.materialCode || line.materialName}. Select Shortage or allocate recorded stock.`
                         );
                     }
 
@@ -935,10 +1048,18 @@ export default function MatFlowStorePlanningDetail() {
                             ),
 
                         processingRequired:
-                            null,
+                            availabilityEntry
+                                ?.processingRequired ===
+                            true,
 
                         processingLocationId:
-                            null,
+                            availabilityEntry
+                                ?.processingRequired ===
+                                true
+                                ? availabilityEntry
+                                    ?.firstProcessingLocationId ??
+                                null
+                                : null,
 
                         createIndentForShortage:
                             summary.shortageQty >
@@ -955,42 +1076,154 @@ export default function MatFlowStorePlanningDetail() {
 
     const updateLineDecision = (
         lineId,
-        decision
+        selectedDecision
     ) => {
-        const key =
-            String(lineId);
+        const lineKey =
+            String(
+                lineId
+            );
 
-        setReviewByLine(
-            (current) => {
-                const existing =
-                    current[key] || {
+        const normalizedDecision =
+            normalize(
+                selectedDecision
+            );
+
+        const line =
+            lines.find(
+                (item) =>
+                    String(
+                        item?.id ??
+                        ""
+                    ) ===
+                    lineKey
+            );
+
+        const availabilityEntry =
+            availabilityByLineId.get(
+                lineKey
+            );
+
+        if (!line) {
+            setError(
+                "The selected requisition line is unavailable."
+            );
+
+            return;
+        }
+
+        if (
+            normalizedDecision ===
+            "UNDECIDED"
+        ) {
+            setReviewByLine(
+                (current) => ({
+                    ...current,
+
+                    [lineKey]: {
+                        ...(current[
+                            lineKey
+                        ] || {}),
+
                         decision:
                             "UNDECIDED",
 
                         allocationQuantities:
                             {},
+                    },
+                })
+            );
 
-                        remarks:
-                            "",
-                    };
+            return;
+        }
 
-                return {
+        if (
+            normalizedDecision ===
+            "SHORTAGE"
+        ) {
+            setReviewByLine(
+                (current) => ({
                     ...current,
 
-                    [key]: {
-                        ...existing,
-                        decision,
+                    [lineKey]: {
+                        ...(current[
+                            lineKey
+                        ] || {}),
+
+                        decision:
+                            "SHORTAGE",
 
                         allocationQuantities:
-                            decision ===
-                                "SHORTAGE"
-                                ? {}
-                                : existing
-                                    .allocationQuantities,
+                            {},
                     },
-                };
-            }
+                })
+            );
+
+            setError("");
+
+            return;
+        }
+
+        const automatic =
+            buildAutomaticAllocation(
+                line,
+                availabilityEntry
+            );
+
+        setReviewByLine(
+            (current) => ({
+                ...current,
+
+                [lineKey]: {
+                    ...(current[
+                        lineKey
+                    ] || {}),
+
+                    /*
+                     * The actual decision is derived from the
+                     * quantity that can be reserved.
+                     */
+                    decision:
+                        automatic
+                            .decision,
+
+                    allocationQuantities:
+                        automatic
+                            .allocationQuantities,
+                },
+            })
         );
+
+        if (
+            normalizedDecision ===
+            "AVAILABLE" &&
+            automatic.decision ===
+            "PARTIAL"
+        ) {
+            setError(
+                `${line.materialCode || line.materialName}: only ${formatQty(
+                    automatic.allocatedQty
+                )} of ${formatQty(
+                    line.requestedQty
+                )} is recorded as available. MatFlow changed this line to Partially Available and will create an indent for ${formatQty(
+                    automatic.shortageQty
+                )}.`
+            );
+
+            return;
+        }
+
+        if (
+            automatic.decision ===
+            "SHORTAGE"
+        ) {
+            setError(
+                `${line.materialCode || line.materialName}: no recorded stock is available. MatFlow changed this line to Shortage.`
+            );
+
+            return;
+        }
+
+        setError("");
     };
 
     const updateAllocationQty = (
@@ -999,15 +1232,56 @@ export default function MatFlowStorePlanningDetail() {
         value
     ) => {
         const lineKey =
-            String(lineId);
+            String(
+                lineId
+            );
 
         const locationKey =
-            String(locationId);
+            String(
+                locationId
+            );
+
+        const line =
+            lines.find(
+                (item) =>
+                    String(
+                        item?.id ??
+                        ""
+                    ) ===
+                    lineKey
+            );
+
+        const availabilityEntry =
+            availabilityByLineId.get(
+                lineKey
+            );
+
+        const option =
+            asArray(
+                availabilityEntry
+                    ?.stockOptions
+            ).find(
+                (item) =>
+                    String(
+                        item?.locationId ??
+                        ""
+                    ) ===
+                    locationKey
+            );
+
+        if (
+            !line ||
+            !option
+        ) {
+            return;
+        }
 
         setReviewByLine(
             (current) => {
                 const existing =
-                    current[lineKey] || {
+                    current[
+                    lineKey
+                    ] || {
                         decision:
                             "UNDECIDED",
 
@@ -1016,7 +1290,107 @@ export default function MatFlowStorePlanningDetail() {
 
                         remarks:
                             "",
+
+                        routeMode:
+                            "APPROVED_ROUTE",
+
+                        processingLocationId:
+                            "",
                     };
+
+                const existingAllocations = {
+                    ...existing
+                        .allocationQuantities,
+                };
+
+                const otherAllocatedQty =
+                    roundQty(
+                        Object.entries(
+                            existingAllocations
+                        )
+                            .filter(
+                                ([
+                                    existingLocationId,
+                                ]) =>
+                                    existingLocationId !==
+                                    locationKey
+                            )
+                            .reduce(
+                                (
+                                    sum,
+                                    [
+                                        ,
+                                        rawQty,
+                                    ]
+                                ) =>
+                                    sum +
+                                    numeric(
+                                        rawQty
+                                    ),
+                                0
+                            )
+                    );
+
+                const requestedQty =
+                    roundQty(
+                        line.requestedQty
+                    );
+
+                const locationAvailableQty =
+                    roundQty(
+                        option.availableQty
+                    );
+
+                const maximumForLocation =
+                    roundQty(
+                        Math.max(
+                            0,
+                            Math.min(
+                                locationAvailableQty,
+                                requestedQty -
+                                otherAllocatedQty
+                            )
+                        )
+                    );
+
+                const enteredQty =
+                    value === ""
+                        ? ""
+                        : roundQty(
+                            Math.max(
+                                0,
+                                Math.min(
+                                    numeric(
+                                        value
+                                    ),
+                                    maximumForLocation
+                                )
+                            )
+                        );
+
+                const nextAllocations = {
+                    ...existingAllocations,
+
+                    [locationKey]:
+                        enteredQty,
+                };
+
+                const allocatedQty =
+                    roundQty(
+                        Object.values(
+                            nextAllocations
+                        ).reduce(
+                            (
+                                sum,
+                                rawQty
+                            ) =>
+                                sum +
+                                numeric(
+                                    rawQty
+                                ),
+                            0
+                        )
+                    );
 
                 return {
                     ...current,
@@ -1024,13 +1398,14 @@ export default function MatFlowStorePlanningDetail() {
                     [lineKey]: {
                         ...existing,
 
-                        allocationQuantities: {
-                            ...existing
-                                .allocationQuantities,
+                        decision:
+                            decisionFromAllocation(
+                                requestedQty,
+                                allocatedQty
+                            ),
 
-                            [locationKey]:
-                                value,
-                        },
+                        allocationQuantities:
+                            nextAllocations,
                     },
                 };
             }
@@ -1923,6 +2298,22 @@ export default function MatFlowStorePlanningDetail() {
                                         String(line.id)
                                     );
 
+                                const approvedRouteSteps =
+                                    asArray(
+                                        availabilityEntry
+                                            ?.approvedRouteSteps
+                                    );
+
+                                const processingRequired =
+                                    availabilityEntry
+                                        ?.processingRequired ===
+                                    true;
+
+                                const firstProcessingLocationCode =
+                                    availabilityEntry
+                                        ?.firstProcessingLocationCode ||
+                                    "";
+
                                 const workflow =
                                     resolveLineWorkflow(
                                         line,
@@ -2244,6 +2635,18 @@ export default function MatFlowStorePlanningDetail() {
                                         </Box>
 
                                         <Box sx={tableCellSx}>
+                                            <Chip
+                                                label={
+                                                    processingRequired
+                                                        ? "Processing Required"
+                                                        : "Direct Production Route"
+                                                }
+                                                size="small"
+                                                sx={routeModeChipSx(
+                                                    processingRequired
+                                                )}
+                                            />
+
                                             <Typography sx={routeTextSx}>
                                                 {availabilityEntry
                                                     ?.approvedRoute ||
@@ -2260,6 +2663,54 @@ export default function MatFlowStorePlanningDetail() {
                                                         ?.destinationLocationCode ||
                                                     "-"}
                                             </Typography>
+
+                                            {processingRequired &&
+                                                firstProcessingLocationCode && (
+                                                    <Typography sx={processingDestinationSx}>
+                                                        Approved processing unit:{" "}
+                                                        {firstProcessingLocationCode}
+                                                    </Typography>
+                                                )}
+
+                                            {approvedRouteSteps.length >
+                                                0 && (
+                                                    <Box sx={approvedRouteStepsSx}>
+                                                        {approvedRouteSteps.map(
+                                                            (
+                                                                step,
+                                                                stepIndex
+                                                            ) => (
+                                                                <Box
+                                                                    key={
+                                                                        step.routeStepId ||
+                                                                        `${line.id}-${stepIndex}`
+                                                                    }
+                                                                    sx={approvedRouteStepSx}
+                                                                >
+                                                                    <Box sx={routeStepIndexSx}>
+                                                                        {stepIndex + 1}
+                                                                    </Box>
+
+                                                                    <Box sx={{ minWidth: 0 }}>
+                                                                        <Typography sx={routeStepMainSx}>
+                                                                            {step.locationCode ||
+                                                                                "-"}
+                                                                        </Typography>
+
+                                                                        <Typography sx={routeStepSubSx}>
+                                                                            {readable(
+                                                                                step.stepType
+                                                                            )}
+                                                                            {step.processCode
+                                                                                ? ` · ${step.processCode}`
+                                                                                : ""}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                </Box>
+                                                            )
+                                                        )}
+                                                    </Box>
+                                                )}
                                         </Box>
 
                                         <Box sx={tableCellSx}>
@@ -2821,6 +3272,13 @@ const kpiIconSx = {
     flexShrink: 0,
 };
 
+const routeSelectionSx = {
+    mt: "8px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "7px",
+};
+
 const kpiLabelSx = {
     color:
         "var(--mf-text-muted)",
@@ -3043,6 +3501,89 @@ const routeTextSx = {
     fontSize: "9.5px",
     fontWeight: 850,
     lineHeight: 1.4,
+};
+
+const routeModeChipSx = (
+    processingRequired
+) => {
+    const color =
+        processingRequired
+            ? "#d97706"
+            : "#16a34a";
+
+    return {
+        height: "22px",
+        mb: "6px",
+        color,
+        background:
+            `${color}14`,
+        border:
+            `1px solid ${color}32`,
+        fontSize: "8px",
+        fontWeight: 900,
+    };
+};
+
+const processingDestinationSx = {
+    mt: "5px",
+    color: "#d97706",
+    fontSize: "8.5px",
+    fontWeight: 850,
+    lineHeight: 1.4,
+};
+
+const approvedRouteStepsSx = {
+    mt: "7px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+};
+
+const approvedRouteStepSx = {
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    p: "5px 6px",
+    borderRadius: "7px",
+    background:
+        "var(--mf-surface-strong)",
+    border:
+        "1px solid var(--mf-border)",
+};
+
+const routeStepIndexSx = {
+    width: "20px",
+    height: "20px",
+    flexShrink: 0,
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "6px",
+    color: "#0284c7",
+    background:
+        "rgba(2,132,199,.09)",
+    border:
+        "1px solid rgba(2,132,199,.18)",
+    fontSize: "8px",
+    fontWeight: 950,
+};
+
+const routeStepMainSx = {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color:
+        "var(--mf-text)",
+    fontSize: "8.5px",
+    fontWeight: 850,
+};
+
+const routeStepSubSx = {
+    mt: "1px",
+    color:
+        "var(--mf-text-muted)",
+    fontSize: "7.5px",
+    fontWeight: 700,
 };
 
 const progressHeadSx = {
