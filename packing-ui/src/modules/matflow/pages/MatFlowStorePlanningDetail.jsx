@@ -90,6 +90,61 @@ const numeric = (value) => {
         : 0;
 };
 
+const optionAvailableQty = (
+    option
+) => {
+    /*
+     * availableQty is the canonical backend field.
+     *
+     * The fallbacks protect the page during API migration,
+     * but the backend should ultimately always return
+     * availableQty.
+     */
+    const rawValue =
+        option?.availableQty ??
+        option?.freeQty ??
+        option?.availableStockQty ??
+        option?.available ??
+        0;
+
+    return Math.max(
+        0,
+        numeric(
+            rawValue
+        )
+    );
+};
+
+const optionOnHandQty = (
+    option
+) =>
+    Math.max(
+        0,
+        numeric(
+            option?.onHandQty
+        )
+    );
+
+const optionReservedQty = (
+    option
+) =>
+    Math.max(
+        0,
+        numeric(
+            option?.reservedQty
+        )
+    );
+
+const optionBlockedQty = (
+    option
+) =>
+    Math.max(
+        0,
+        numeric(
+            option?.blockedQty
+        )
+    );
+
 const formatQty = (value) =>
     numeric(value).toLocaleString(
         "en-IN",
@@ -592,6 +647,9 @@ const buildAutomaticAllocation = (
     const allocationQuantities =
         {};
 
+    /*
+     * Only real, positive, free stock can be reserved.
+     */
     const stockOptions =
         asArray(
             availabilityEntry
@@ -599,9 +657,11 @@ const buildAutomaticAllocation = (
         )
             .filter(
                 (option) =>
-                    option?.locationId &&
-                    numeric(
-                        option.availableQty
+                    Boolean(
+                        option?.locationId
+                    ) &&
+                    optionAvailableQty(
+                        option
                     ) > 0
             );
 
@@ -622,7 +682,9 @@ const buildAutomaticAllocation = (
 
         const availableQty =
             roundQty(
-                option.availableQty
+                optionAvailableQty(
+                    option
+                )
             );
 
         const reserveQty =
@@ -633,7 +695,9 @@ const buildAutomaticAllocation = (
                 )
             );
 
-        if (reserveQty <= 0) {
+        if (
+            reserveQty <= 0
+        ) {
             continue;
         }
 
@@ -658,19 +722,28 @@ const buildAutomaticAllocation = (
             remainingQty
         );
 
+    const shortageQty =
+        roundQty(
+            Math.max(
+                0,
+                requestedQty -
+                allocatedQty
+            )
+        );
+
     return {
         allocationQuantities,
-
         allocatedQty,
-
-        shortageQty:
-            remainingQty,
+        shortageQty,
 
         decision:
             decisionFromAllocation(
                 requestedQty,
                 allocatedQty
             ),
+
+        stockOptionCount:
+            stockOptions.length,
     };
 };
 
@@ -1120,9 +1193,11 @@ export default function MatFlowStorePlanningDetail() {
                     ...current,
 
                     [lineKey]: {
-                        ...(current[
+                        ...(
+                            current[
                             lineKey
-                        ] || {}),
+                            ] || {}
+                        ),
 
                         decision:
                             "UNDECIDED",
@@ -1133,9 +1208,15 @@ export default function MatFlowStorePlanningDetail() {
                 })
             );
 
+            setError("");
+
             return;
         }
 
+        /*
+         * Shortage must be selected explicitly.
+         * It clears all planned allocations.
+         */
         if (
             normalizedDecision ===
             "SHORTAGE"
@@ -1145,9 +1226,11 @@ export default function MatFlowStorePlanningDetail() {
                     ...current,
 
                     [lineKey]: {
-                        ...(current[
+                        ...(
+                            current[
                             lineKey
-                        ] || {}),
+                            ] || {}
+                        ),
 
                         decision:
                             "SHORTAGE",
@@ -1169,22 +1252,135 @@ export default function MatFlowStorePlanningDetail() {
                 availabilityEntry
             );
 
+        /*
+         * Do not silently convert Available or Partial into Shortage.
+         *
+         * No stock means Store must either:
+         * 1. correct/import inventory, or
+         * 2. explicitly select Shortage.
+         */
+        if (
+            automatic.allocatedQty <=
+            0
+        ) {
+            setError(
+                `${line.materialCode ||
+                line.materialName}: no free stock is recorded in MatFlow. ` +
+                `Check on-hand, reserved and blocked quantities, or explicitly select Shortage.`
+            );
+
+            return;
+        }
+
+        /*
+         * Available means the complete requested quantity must be
+         * covered by recorded stock.
+         */
+        if (
+            normalizedDecision ===
+            "AVAILABLE" &&
+            !qtyEquals(
+                automatic.allocatedQty,
+                line.requestedQty
+            )
+        ) {
+            setReviewByLine(
+                (current) => ({
+                    ...current,
+
+                    [lineKey]: {
+                        ...(
+                            current[
+                            lineKey
+                            ] || {}
+                        ),
+
+                        decision:
+                            "PARTIAL",
+
+                        allocationQuantities:
+                            automatic
+                                .allocationQuantities,
+                    },
+                })
+            );
+
+            setError(
+                `${line.materialCode ||
+                line.materialName}: only ${formatQty(
+                    automatic.allocatedQty
+                )} of ${formatQty(
+                    line.requestedQty
+                )} is currently free. ` +
+                `${formatQty(
+                    automatic.shortageQty
+                )} will be treated as shortage and sent to Purchase.`
+            );
+
+            return;
+        }
+
+        /*
+         * Selecting Partial should prepare available stock and leave
+         * the uncovered balance for Purchase.
+         */
+        if (
+            normalizedDecision ===
+            "PARTIAL"
+        ) {
+            setReviewByLine(
+                (current) => ({
+                    ...current,
+
+                    [lineKey]: {
+                        ...(
+                            current[
+                            lineKey
+                            ] || {}
+                        ),
+
+                        decision:
+                            automatic.decision,
+
+                        allocationQuantities:
+                            automatic
+                                .allocationQuantities,
+                    },
+                })
+            );
+
+            if (
+                automatic.decision ===
+                "AVAILABLE"
+            ) {
+                setError(
+                    `${line.materialCode ||
+                    line.materialName}: the complete requested quantity is available. ` +
+                    `MatFlow prepared a full reservation. Reduce one or more reserve quantities to create a partial allocation.`
+                );
+            } else {
+                setError("");
+            }
+
+            return;
+        }
+
+        /*
+         * Full availability confirmed.
+         */
         setReviewByLine(
             (current) => ({
                 ...current,
 
                 [lineKey]: {
-                    ...(current[
+                    ...(
+                        current[
                         lineKey
-                    ] || {}),
+                        ] || {}
+                    ),
 
-                    /*
-                     * The actual decision is derived from the
-                     * quantity that can be reserved.
-                     */
                     decision:
-                        automatic
-                            .decision,
+                        "AVAILABLE",
 
                     allocationQuantities:
                         automatic
@@ -1192,36 +1388,6 @@ export default function MatFlowStorePlanningDetail() {
                 },
             })
         );
-
-        if (
-            normalizedDecision ===
-            "AVAILABLE" &&
-            automatic.decision ===
-            "PARTIAL"
-        ) {
-            setError(
-                `${line.materialCode || line.materialName}: only ${formatQty(
-                    automatic.allocatedQty
-                )} of ${formatQty(
-                    line.requestedQty
-                )} is recorded as available. MatFlow changed this line to Partially Available and will create an indent for ${formatQty(
-                    automatic.shortageQty
-                )}.`
-            );
-
-            return;
-        }
-
-        if (
-            automatic.decision ===
-            "SHORTAGE"
-        ) {
-            setError(
-                `${line.materialCode || line.materialName}: no recorded stock is available. MatFlow changed this line to Shortage.`
-            );
-
-            return;
-        }
 
         setError("");
     };
@@ -2328,13 +2494,37 @@ export default function MatFlowStorePlanningDetail() {
                                     );
 
                                 const totalAvailable =
-                                    stockOptions.reduce(
-                                        (sum, option) =>
-                                            sum +
-                                            numeric(
-                                                option.availableQty
-                                            ),
-                                        0
+                                    roundQty(
+                                        stockOptions.reduce(
+                                            (
+                                                sum,
+                                                option
+                                            ) =>
+                                                sum +
+                                                optionAvailableQty(
+                                                    option
+                                                ),
+                                            0
+                                        )
+                                    );
+
+                                const requestedQty =
+                                    roundQty(
+                                        line.requestedQty
+                                    );
+
+                                const hasAnyFreeStock =
+                                    totalAvailable > 0;
+
+                                const hasCompleteFreeStock =
+                                    requestedQty > 0 &&
+                                    (
+                                        totalAvailable >
+                                        requestedQty ||
+                                        qtyEquals(
+                                            totalAvailable,
+                                            requestedQty
+                                        )
                                     );
 
                                 const lineReview =
@@ -2480,12 +2670,28 @@ export default function MatFlowStorePlanningDetail() {
                                                             Select Decision
                                                         </MenuItem>
 
-                                                        <MenuItem value="AVAILABLE">
-                                                            Available — Reserve Full
+                                                        <MenuItem
+                                                            value="AVAILABLE"
+                                                            disabled={
+                                                                !hasCompleteFreeStock
+                                                            }
+                                                        >
+                                                            {hasCompleteFreeStock
+                                                                ? "Available — Reserve Full"
+                                                                : `Full Stock Unavailable — ${formatQty(
+                                                                    totalAvailable
+                                                                )} Available`}
                                                         </MenuItem>
 
-                                                        <MenuItem value="PARTIAL">
-                                                            Partially Available
+                                                        <MenuItem
+                                                            value="PARTIAL"
+                                                            disabled={
+                                                                !hasAnyFreeStock
+                                                            }
+                                                        >
+                                                            {hasAnyFreeStock
+                                                                ? "Partially Available"
+                                                                : "Partial Unavailable — No Free Stock"}
                                                         </MenuItem>
 
                                                         <MenuItem value="SHORTAGE">
@@ -2512,16 +2718,40 @@ export default function MatFlowStorePlanningDetail() {
                                                                     <Box sx={{ minWidth: 0 }}>
                                                                         <Typography sx={stockOptionTextSx}>
                                                                             {option.locationCode}
-                                                                            {" · Available "}
+                                                                            {" · Free "}
                                                                             {formatQty(
-                                                                                option.availableQty
+                                                                                optionAvailableQty(
+                                                                                    option
+                                                                                )
                                                                             )}
                                                                             {" "}
                                                                             {line.uom || ""}
                                                                         </Typography>
 
                                                                         <Typography sx={subTextSx}>
-                                                                            {option.plantCode || "-"}
+                                                                            On hand{" "}
+                                                                            {formatQty(
+                                                                                optionOnHandQty(
+                                                                                    option
+                                                                                )
+                                                                            )}
+                                                                            {" · Reserved "}
+                                                                            {formatQty(
+                                                                                optionReservedQty(
+                                                                                    option
+                                                                                )
+                                                                            )}
+                                                                            {" · Blocked "}
+                                                                            {formatQty(
+                                                                                optionBlockedQty(
+                                                                                    option
+                                                                                )
+                                                                            )}
+                                                                        </Typography>
+
+                                                                        <Typography sx={subTextSx}>
+                                                                            {option.plantCode ||
+                                                                                "-"}
                                                                             {" · "}
                                                                             {readable(
                                                                                 option.locationType
@@ -2557,8 +2787,8 @@ export default function MatFlowStorePlanningDetail() {
                                                                         inputProps={{
                                                                             min: 0,
                                                                             max:
-                                                                                numeric(
-                                                                                    option.availableQty
+                                                                                optionAvailableQty(
+                                                                                    option
                                                                                 ),
                                                                             step: 0.001,
                                                                         }}
@@ -2583,8 +2813,9 @@ export default function MatFlowStorePlanningDetail() {
                                                                 </Typography>
 
                                                                 <Typography sx={subTextSx}>
-                                                                    Select Shortage, or import/adjust
-                                                                    inventory before reserving.
+                                                                    No free stock balance was returned for this material.
+                                                                    Record or adjust inventory first, or explicitly select
+                                                                    Shortage to create a Purchase indent.
                                                                 </Typography>
                                                             </Box>
                                                         )}

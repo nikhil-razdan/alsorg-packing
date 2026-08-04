@@ -440,29 +440,70 @@ public class MatFlowStoreWorkflowService {
             List<MatFlowBomRouteStep> route,
             MatFlowStockBalance balance) {
 
-        if (balance == null ||
-                balance.material == null ||
-                balance.location == null) {
+        if (requisition == null ||
+                requisition.destinationLocation == null) {
 
             throw conflict(
-                    "Stock availability record is incomplete");
+                    "Requisition destination is missing");
         }
 
-        boolean firstRouteDestination = balance.location
-                .getId()
-                .equals(
-                        firstDestination.getId());
+        if (firstDestination == null ||
+                firstDestination.getId() == null) {
 
-        boolean productionDestination = balance.location
-                .getId()
+            throw conflict(
+                    "First approved route destination is missing");
+        }
+
+        if (balance == null ||
+                balance.getId() == null ||
+                balance.material == null ||
+                balance.location == null ||
+                balance.location.getId() == null) {
+
+            throw conflict(
+                    "Stock balance is incomplete");
+        }
+
+        MatFlowLocation location = balance.location;
+
+        BigDecimal onHandQty = zero(
+                balance.onHandQty);
+
+        BigDecimal reservedQty = zero(
+                balance.reservedQty);
+
+        BigDecimal blockedQty = zero(
+                balance.blockedQty);
+
+        /*
+         * Use the entity's canonical free-stock calculation.
+         *
+         * Usually:
+         * onHand - reserved - blocked
+         */
+        BigDecimal availableQty = zero(
+                balance.availableQty())
+                .max(
+                        BigDecimal.ZERO)
+                .setScale(
+                        3,
+                        RoundingMode.HALF_UP);
+
+        boolean firstRouteDestination = location.getId()
+                .equals(
+                        firstDestination
+                                .getId());
+
+        boolean productionDestination = location.getId()
                 .equals(
                         requisition.destinationLocation
                                 .getId());
 
-        boolean transferRequired = requiresPhysicalTransfer(
-                balance.location,
-                route,
-                requisition.destinationLocation);
+        /*
+         * Any source other than the first approved destination
+         * requires a physical transfer.
+         */
+        boolean transferRequired = !firstRouteDestination;
 
         return new StoreStockOptionResponse(
                 balance.getId(),
@@ -471,23 +512,16 @@ public class MatFlowStoreWorkflowService {
                 balance.material.getMaterialCode(),
                 balance.material.getMaterialName(),
 
-                balance.location.getId(),
-                balance.location.getLocationCode(),
-                balance.location.getLocationName(),
-                balance.location.getPlantCode(),
-                balance.location.getLocationType(),
+                location.getId(),
+                location.getLocationCode(),
+                location.getLocationName(),
+                location.getPlantCode(),
+                location.getLocationType(),
 
-                zero(
-                        balance.onHandQty),
-
-                zero(
-                        balance.reservedQty),
-
-                zero(
-                        balance.blockedQty),
-
-                availableQty(
-                        balance),
+                onHandQty,
+                reservedQty,
+                blockedQty,
+                availableQty,
 
                 firstRouteDestination,
                 productionDestination,
