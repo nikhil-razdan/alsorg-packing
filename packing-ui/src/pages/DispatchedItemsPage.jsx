@@ -5714,26 +5714,103 @@ function DispatchedItemsPage() {
 			});
 	};
 
+	const extractDispatchPageData = (payload) => {
+		/*
+		 * Supports both backend response formats:
+		 *
+		 * 1. Plain array:
+		 *    [...]
+		 *
+		 * 2. Spring Page response:
+		 *    {
+		 *        content: [...],
+		 *        totalPages: 43,
+		 *        last: false
+		 *    }
+		 */
+		if (Array.isArray(payload)) {
+			return {
+				items: payload,
+				totalPages: null,
+				last: false,
+			};
+		}
+
+		const items =
+			Array.isArray(payload?.content)
+				? payload.content
+				: Array.isArray(payload?.items)
+					? payload.items
+					: Array.isArray(payload?.data)
+						? payload.data
+						: null;
+
+		if (!Array.isArray(items)) {
+			throw new Error(
+				"Backend returned an invalid dispatched-items page"
+			);
+		}
+
+		const parsedTotalPages =
+			Number(
+				payload?.totalPages ??
+				payload?.page?.totalPages
+			);
+
+		const totalPages =
+			Number.isInteger(parsedTotalPages) &&
+				parsedTotalPages >= 0
+				? parsedTotalPages
+				: null;
+
+		return {
+			items,
+			totalPages,
+
+			last:
+				payload?.last === true ||
+				payload?.page?.last === true,
+		};
+	};
+
 	const fetchAllDispatchedItemPages =
 		async () => {
 			const rowsById =
 				new Map();
 
 			let backendPage = 0;
+			let previousPageSignature = "";
 
 			while (
 				backendPage <
 				DISPATCH_BACKEND_MAX_PAGES
 			) {
+				const query =
+					new URLSearchParams({
+						page:
+							String(
+								backendPage
+							),
+
+						size:
+							String(
+								DISPATCH_BACKEND_BATCH_SIZE
+							),
+					});
+
 				const response =
 					await authFetch(
-						`${API_BASE_URL}/api/dispatched?page=${backendPage}&size=${DISPATCH_BACKEND_BATCH_SIZE}`,
+						`${API_BASE_URL}/api/dispatched?${query.toString()}`,
 						{
 							method: "GET",
+
 							headers: {
 								Accept:
 									"application/json",
 							},
+
+							cache:
+								"no-store",
 						}
 					);
 
@@ -5741,7 +5818,8 @@ function DispatchedItemsPage() {
 					const message =
 						await readResponseError(
 							response,
-							"Failed to fetch dispatched items"
+							`Failed to fetch dispatched items page ${backendPage + 1
+							}`
 						);
 
 					throw new Error(
@@ -5752,71 +5830,110 @@ function DispatchedItemsPage() {
 				const payload =
 					await response.json();
 
-				if (!Array.isArray(payload)) {
-					console.error(
-						"Invalid paginated dispatch response:",
+				const {
+					items,
+					totalPages:
+					bodyTotalPages,
+					last,
+				} =
+					extractDispatchPageData(
 						payload
 					);
 
-					throw new Error(
-						"Backend returned an invalid dispatch list"
-					);
-				}
-
 				/*
-				 * Deduplicate by the real primary identifier.
-				 *
-				 * This also protects against a record moving between
-				 * offset pages when another user inserts or updates
-				 * data during the refresh.
+				 * Header support for a backend that returns a plain
+				 * array plus pagination metadata in response headers.
 				 */
-				payload.forEach((item) => {
-					const itemId =
-						String(
-							item?.zohoItemId ||
-							""
-						).trim();
-
-					if (!itemId) {
-						return;
-					}
-
-					rowsById.set(
-						itemId,
-						item
-					);
-				});
-
-				/*
-				 * These headers may be readable on same-origin requests.
-				 * When CORS does not expose custom headers, the code still
-				 * safely falls back to the returned batch length.
-				 */
-				const headerTotalPages =
+				const parsedHeaderTotalPages =
 					Number(
 						response.headers.get(
 							"X-Total-Pages"
 						)
 					);
 
-				const hasValidTotalPages =
+				const headerTotalPages =
 					Number.isInteger(
-						headerTotalPages
+						parsedHeaderTotalPages
 					) &&
-					headerTotalPages >= 0;
+						parsedHeaderTotalPages >= 0
+						? parsedHeaderTotalPages
+						: null;
 
-				const reachedHeaderEnd =
-					hasValidTotalPages &&
-					backendPage + 1 >=
+				const knownTotalPages =
+					bodyTotalPages ??
 					headerTotalPages;
 
-				const reachedShortBatch =
-					payload.length <
-					DISPATCH_BACKEND_BATCH_SIZE;
+				/*
+				 * Detect a backend that is ignoring page= and returning
+				 * the same first 200 records repeatedly.
+				 */
+				const currentPageSignature =
+					items
+						.map((item) =>
+							String(
+								item?.zohoItemId ||
+								""
+							).trim()
+						)
+						.filter(Boolean)
+						.join("|");
 
 				if (
-					reachedHeaderEnd ||
-					reachedShortBatch
+					backendPage > 0 &&
+					currentPageSignature &&
+					currentPageSignature ===
+					previousPageSignature
+				) {
+					throw new Error(
+						"The backend returned the same records for multiple pages. Verify that /api/dispatched supports page and size parameters."
+					);
+				}
+
+				previousPageSignature =
+					currentPageSignature;
+
+				/*
+				 * Deduplicate by the actual dispatched-item identifier.
+				 */
+				items.forEach(
+					(item) => {
+						const itemId =
+							String(
+								item?.zohoItemId ||
+								""
+							).trim();
+
+						if (!itemId) {
+							return;
+						}
+
+						rowsById.set(
+							itemId,
+							item
+						);
+					}
+				);
+
+				const reachedEmptyPage =
+					items.length === 0;
+
+				const reachedShortPage =
+					items.length <
+					DISPATCH_BACKEND_BATCH_SIZE;
+
+				const reachedKnownLastPage =
+					last === true ||
+					(
+						knownTotalPages !==
+						null &&
+						backendPage + 1 >=
+						knownTotalPages
+					);
+
+				if (
+					reachedEmptyPage ||
+					reachedShortPage ||
+					reachedKnownLastPage
 				) {
 					return Array.from(
 						rowsById.values()
@@ -5827,79 +5944,79 @@ function DispatchedItemsPage() {
 			}
 
 			throw new Error(
-				"Dispatch loading stopped because the backend pagination limit was exceeded"
+				"Dispatch loading stopped because the maximum pagination safety limit was exceeded"
 			);
 		};
 
-	const fetchData = async () => {
-		const requestNumber =
-			dispatchFetchRequestRef.current +
-			1;
-
-		dispatchFetchRequestRef.current =
-			requestNumber;
-
-		try {
-			setLoading(true);
-
+	const fetchData =
+		async () => {
 			/*
-			 * Backend queries remain bounded, but the frontend receives
-			 * the complete list required by the existing client-side:
-			 *
-			 * - search
-			 * - status filtering
-			 * - grouping
-			 * - selection
-			 * - export
-			 * - generated document history
-			 * - local pagination
+			 * Prevent an older, slower request from overwriting the
+			 * result of a newer refresh request.
 			 */
-			const completePayload =
-				await fetchAllDispatchedItemPages();
+			const requestId =
+				++dispatchFetchRequestRef.current;
 
-			const cleaned =
-				normalizeFetchedDispatchRows(
-					completePayload
+			try {
+				setLoading(true);
+
+				/*
+				 * Fetch pages sequentially:
+				 *
+				 * Page 0 = records 1–200
+				 * Page 1 = records 201–400
+				 * Page 2 = records 401–600
+				 * ...
+				 *
+				 * For approximately 8,500 records this will make around
+				 * 43 small requests rather than one heap-heavy request.
+				 */
+				const allBackendRows =
+					await fetchAllDispatchedItemPages();
+
+				const cleaned =
+					normalizeFetchedDispatchRows(
+						allBackendRows
+					);
+
+				/*
+				 * A newer refresh may have started while these pages
+				 * were loading. Do not let the older request overwrite it.
+				 */
+				if (
+					requestId !==
+					dispatchFetchRequestRef.current
+				) {
+					return cleaned;
+				}
+
+				setRows(cleaned);
+
+				console.info(
+					`Loaded ${cleaned.length} dispatched items across paginated backend requests`
 				);
 
-			/*
-			 * An older refresh must not overwrite a newer refresh.
-			 */
-			if (
-				requestNumber ===
-				dispatchFetchRequestRef.current
-			) {
-				setRows(
-					cleaned
+				return cleaned;
+			} catch (error) {
+				console.error(
+					"Dispatch inventory fetch failed:",
+					error
 				);
+
+				/*
+				 * Keep previously loaded rows visible when a refresh
+				 * temporarily fails. Do not clear all 8,500 records.
+				 */
+				return [];
+			} finally {
+				if (
+					requestId ===
+					dispatchFetchRequestRef.current
+				) {
+					setLoading(false);
+				}
 			}
-
-			return cleaned;
-
-		} catch (error) {
-			console.error(
-				"Dispatch inventory fetch failed:",
-				error
-			);
-
-			if (
-				requestNumber ===
-				dispatchFetchRequestRef.current
-			) {
-				setRows([]);
-			}
-
-			return [];
-
-		} finally {
-			if (
-				requestNumber ===
-				dispatchFetchRequestRef.current
-			) {
-				setLoading(false);
-			}
-		}
-	};
+		};
 
 	usePackFlowDataRefresh(
 		"dispatch",

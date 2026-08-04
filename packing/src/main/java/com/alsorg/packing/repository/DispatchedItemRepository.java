@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -60,6 +61,37 @@ public interface DispatchedItemRepository
 
         Optional<DispatchedItem> findByStickerNumber(
                         String stickerNumber);
+
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.status IN :statuses
+                              AND (
+                                    d.plantCode IN :plantCodes
+                                    OR d.plantCode IS NULL
+                                    OR d.plantCode = ''
+                                  )
+                        """)
+        Slice<DispatchedItem> findVisibleSliceByStatusesAndPlantsIncludingLegacy(
+                        @Param("statuses") Collection<ItemDispatchStatus> statuses,
+
+                        @Param("plantCodes") Collection<String> plantCodes,
+
+                        Pageable pageable);
+
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.status IN :statuses
+                              AND (
+                                    d.plantCode IS NULL
+                                    OR d.plantCode = ''
+                                  )
+                        """)
+        Slice<DispatchedItem> findLegacyVisibleSliceByStatuses(
+                        @Param("statuses") Collection<ItemDispatchStatus> statuses,
+
+                        Pageable pageable);
 
         /*
          * =====================================================
