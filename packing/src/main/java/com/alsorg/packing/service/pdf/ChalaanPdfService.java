@@ -46,13 +46,22 @@ public class ChalaanPdfService {
 
         public byte[] generateChalaan(
                         ChalaanPdfData data) {
-                List<ChalaanItem> items = data != null && data.getItems() != null
+
+                List<ChalaanItem> sourceItems = data != null && data.getItems() != null
                                 ? data.getItems()
                                 : Collections.emptyList();
 
-                ChalaanItem firstItem = !items.isEmpty()
-                                ? items.get(0)
-                                : null;
+                /*
+                 * Sort a copied list so rows having the same PD number are printed
+                 * consecutively without changing the original data list.
+                 */
+                List<ChalaanItem> items = sortChalaanItemsByPd(sourceItems);
+
+                /*
+                 * Preserve the existing header-data behaviour by taking client/address
+                 * information from the first original valid item, not from the sorted list.
+                 */
+                ChalaanItem firstItem = findFirstValidChalaanItem(sourceItems);
 
                 String pdNo = buildAllPdNos(items);
 
@@ -242,6 +251,19 @@ public class ChalaanPdfService {
                 if (items.isEmpty()) {
                         throw new RuntimeException("No valid custom challan items found");
                 }
+
+                /*
+                 * In the current DTO, drawingNo is used for the PDF's "PD No." column
+                 * for backward compatibility. Therefore custom challan rows must be
+                 * grouped and sorted using drawingNo().
+                 *
+                 * List.sort() is stable, so items having the same PD number retain
+                 * their original relative order.
+                 */
+                items.sort(
+                                (left, right) -> comparePdValues(
+                                                left == null ? null : left.drawingNo(),
+                                                right == null ? null : right.drawingNo()));
 
                 final int rowsPerPage = CUSTOM_ROWS_PER_PAGE;
 
@@ -615,6 +637,240 @@ public class ChalaanPdfService {
                 }
 
                 return String.join(", ", pdNos);
+        }
+
+        /**
+         * Returns a new list sorted by PD number.
+         *
+         * Important:
+         * - Does not modify the original list.
+         * - Removes null entries because they are not printable rows.
+         * - Uses stable sorting, preserving original order within the same PD.
+         */
+        private List<ChalaanItem> sortChalaanItemsByPd(
+                        List<ChalaanItem> sourceItems) {
+
+                List<ChalaanItem> sortedItems = new ArrayList<>();
+
+                if (sourceItems != null) {
+                        for (ChalaanItem item : sourceItems) {
+                                if (item != null) {
+                                        sortedItems.add(item);
+                                }
+                        }
+                }
+
+                sortedItems.sort(
+                                (left, right) -> comparePdValues(
+                                                left == null ? null : left.getPdNo(),
+                                                right == null ? null : right.getPdNo()));
+
+                return sortedItems;
+        }
+
+        /**
+         * Finds the first valid item from the original unsorted list.
+         *
+         * This prevents sorting from unexpectedly changing which item supplies
+         * the client name and address in the challan header.
+         */
+        private ChalaanItem findFirstValidChalaanItem(
+                        List<ChalaanItem> items) {
+
+                if (items == null) {
+                        return null;
+                }
+
+                for (ChalaanItem item : items) {
+                        if (item != null) {
+                                return item;
+                        }
+                }
+
+                return null;
+        }
+
+        /**
+         * Compares PD values in natural alphanumeric order.
+         *
+         * Examples:
+         * PD-1
+         * PD-2
+         * PD-9
+         * PD-10
+         * PD-11
+         *
+         * Missing PD values are placed after valid PD values.
+         */
+        private int comparePdValues(
+                        String leftValue,
+                        String rightValue) {
+
+                String left = normalizePdForSorting(leftValue);
+                String right = normalizePdForSorting(rightValue);
+
+                boolean leftMissing = left.isEmpty();
+                boolean rightMissing = right.isEmpty();
+
+                if (leftMissing && rightMissing) {
+                        return 0;
+                }
+
+                if (leftMissing) {
+                        return 1;
+                }
+
+                if (rightMissing) {
+                        return -1;
+                }
+
+                return compareNaturalText(left, right);
+        }
+
+        /**
+         * Normalizes PD values so differences in case or extra spaces do not
+         * separate otherwise matching PD groups.
+         */
+        private String normalizePdForSorting(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                String normalized = value
+                                .trim()
+                                .replaceAll("\\s+", " ")
+                                .toUpperCase(java.util.Locale.ROOT);
+
+                if (normalized.isEmpty() || "-".equals(normalized)) {
+                        return "";
+                }
+
+                return normalized;
+        }
+
+        /**
+         * Natural alphanumeric comparison.
+         *
+         * Unlike ordinary String comparison, this compares numeric portions
+         * numerically, so PD-2 appears before PD-10.
+         */
+        private int compareNaturalText(
+                        String left,
+                        String right) {
+
+                int leftIndex = 0;
+                int rightIndex = 0;
+
+                while (leftIndex < left.length()
+                                && rightIndex < right.length()) {
+
+                        char leftCharacter = left.charAt(leftIndex);
+                        char rightCharacter = right.charAt(rightIndex);
+
+                        boolean leftIsDigit = Character.isDigit(leftCharacter);
+
+                        boolean rightIsDigit = Character.isDigit(rightCharacter);
+
+                        if (leftIsDigit && rightIsDigit) {
+                                int leftNumberStart = leftIndex;
+                                int rightNumberStart = rightIndex;
+
+                                while (leftIndex < left.length()
+                                                && Character.isDigit(
+                                                                left.charAt(leftIndex))) {
+                                        leftIndex++;
+                                }
+
+                                while (rightIndex < right.length()
+                                                && Character.isDigit(
+                                                                right.charAt(rightIndex))) {
+                                        rightIndex++;
+                                }
+
+                                String leftNumber = left.substring(
+                                                leftNumberStart,
+                                                leftIndex);
+
+                                String rightNumber = right.substring(
+                                                rightNumberStart,
+                                                rightIndex);
+
+                                String leftSignificant = removeLeadingZeros(leftNumber);
+
+                                String rightSignificant = removeLeadingZeros(rightNumber);
+
+                                /*
+                                 * Compare numeric length first so very large PD numbers
+                                 * can be handled without parsing them into long/int.
+                                 */
+                                int lengthComparison = Integer.compare(
+                                                leftSignificant.length(),
+                                                rightSignificant.length());
+
+                                if (lengthComparison != 0) {
+                                        return lengthComparison;
+                                }
+
+                                int numericComparison = leftSignificant.compareTo(
+                                                rightSignificant);
+
+                                if (numericComparison != 0) {
+                                        return numericComparison;
+                                }
+
+                                /*
+                                 * When numeric values match, prefer the representation
+                                 * with fewer leading zeroes:
+                                 * PD-1 before PD-001.
+                                 */
+                                int rawLengthComparison = Integer.compare(
+                                                leftNumber.length(),
+                                                rightNumber.length());
+
+                                if (rawLengthComparison != 0) {
+                                        return rawLengthComparison;
+                                }
+
+                                continue;
+                        }
+
+                        int characterComparison = Character.compare(
+                                        leftCharacter,
+                                        rightCharacter);
+
+                        if (characterComparison != 0) {
+                                return characterComparison;
+                        }
+
+                        leftIndex++;
+                        rightIndex++;
+                }
+
+                return Integer.compare(
+                                left.length(),
+                                right.length());
+        }
+
+        /**
+         * Removes leading zeroes without returning an empty string.
+         */
+        private String removeLeadingZeros(
+                        String number) {
+
+                if (number == null || number.isEmpty()) {
+                        return "0";
+                }
+
+                int index = 0;
+
+                while (index < number.length() - 1
+                                && number.charAt(index) == '0') {
+                        index++;
+                }
+
+                return number.substring(index);
         }
 
         private String safe(
