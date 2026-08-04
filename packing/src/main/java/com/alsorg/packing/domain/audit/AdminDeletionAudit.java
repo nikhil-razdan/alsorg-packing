@@ -30,12 +30,10 @@ public class AdminDeletionAudit {
     @Column(name = "deleted_at", nullable = false)
     private LocalDateTime deletedAt;
 
-    @Lob
-    @Column(name = "affected_rows_json", nullable = false)
+    @Column(name = "affected_rows_json", columnDefinition = "text", nullable = false)
     private String affectedRowsJson;
 
-    @Lob
-    @Column(name = "snapshot_json")
+    @Column(name = "snapshot_json", columnDefinition = "text")
     private String snapshotJson;
 
     // Getters and setters

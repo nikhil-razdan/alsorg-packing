@@ -22,20 +22,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.Sort;
-
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/dispatched")
@@ -44,24 +32,27 @@ public class DispatchedItemsController {
         private final DispatchedItemRepository repository;
         private final DispatchedItemService dispatchedItemService;
         private final CurrentUserService currentUserService;
-        private final ObjectMapper objectMapper;
 
         public DispatchedItemsController(
                         DispatchedItemRepository repository,
                         DispatchedItemService dispatchedItemService,
-                        CurrentUserService currentUserService,
-                        ObjectMapper objectMapper) {
+                        CurrentUserService currentUserService) {
 
                 this.repository = repository;
                 this.dispatchedItemService = dispatchedItemService;
                 this.currentUserService = currentUserService;
-                this.objectMapper = objectMapper;
         }
 
         /* ===================== FETCH ===================== */
 
+        private static final int MAX_DISPATCH_PAGE_SIZE = 200;
+
         @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-        public ResponseEntity<StreamingResponseBody> getDispatchedItems(
+        public ResponseEntity<List<DispatchedItem>> getDispatchedItems(
+
+                        @RequestParam(defaultValue = "0") int page,
+
+                        @RequestParam(defaultValue = "200") int size,
 
                         @RequestHeader(value = "Authorization", required = false) String auth) {
 
@@ -69,132 +60,86 @@ public class DispatchedItemsController {
                                 .getCurrentUserFromAuth(
                                                 auth);
 
-                List<ItemDispatchStatus> statuses = List.of(
-                                ItemDispatchStatus.READY,
-                                ItemDispatchStatus.READY_TO_STORE,
-                                ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                                ItemDispatchStatus.IN_WAREHOUSE,
-                                ItemDispatchStatus.READY_TO_DISPATCH,
-                                ItemDispatchStatus.DISPATCHED,
-                                ItemDispatchStatus.AVAILABLE,
-                                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
+                /*
+                 * Keep the server protected from a client requesting
+                 * 8,500 records in one HTTP response.
+                 */
+                int safePage = Math.max(
+                                page,
+                                0);
 
-                final boolean admin = currentUserService.isAdmin(
+                int safeSize = Math.min(
+                                Math.max(
+                                                size,
+                                                1),
+                                MAX_DISPATCH_PAGE_SIZE);
+
+                /*
+                 * Include every ItemDispatchStatus value.
+                 *
+                 * Your previous list omitted statuses used by the frontend,
+                 * including LOADED, OUT_FOR_DELIVERY, DELIVERED and RESTORED.
+                 *
+                 * Using values() also prevents new status values from silently
+                 * disappearing from the Dispatch page later.
+                 */
+                List<ItemDispatchStatus> statuses = List.of(
+                                ItemDispatchStatus.values());
+
+                /*
+                 * Stable pagination:
+                 *
+                 * createdAt handles normal newest-first sorting.
+                 * zohoItemId breaks ties where multiple rows have the same timestamp.
+                 */
+                Sort stableSort = Sort.by(
+                                Sort.Direction.DESC,
+                                "createdAt").and(
+                                                Sort.by(
+                                                                Sort.Direction.ASC,
+                                                                "zohoItemId"));
+
+                Pageable pageable = PageRequest.of(
+                                safePage,
+                                safeSize,
+                                stableSort);
+
+                boolean admin = currentUserService.isAdmin(
                                 user);
 
-                final Set<String> allowedPlants = admin
+                Set<String> allowedPlants = admin
                                 ? Set.of()
                                 : currentUserService
                                                 .allowedPlants(
                                                                 user);
 
-                /*
-                 * Stable sorting is critical when multiple internal
-                 * database pages are read.
-                 */
-                final Sort stableSort = Sort.by(
-                                Sort.Direction.DESC,
-                                "createdAt")
-                                .and(
-                                                Sort.by(
-                                                                Sort.Direction.ASC,
-                                                                "zohoItemId"));
+                Page<DispatchedItem> result;
 
-                /*
-                 * Only this number of full entities exists in backend
-                 * memory at one time.
-                 */
-                final int internalBatchSize = 200;
+                if (admin) {
 
-                StreamingResponseBody responseBody = outputStream -> {
+                        result = repository.findByStatusIn(
+                                        statuses,
+                                        pageable);
+
+                } else if (allowedPlants == null ||
+                                allowedPlants.isEmpty()) {
 
                         /*
-                         * The HTTP response is still one normal JSON array:
-                         *
-                         * [
-                         * {...},
-                         * {...},
-                         * {...}
-                         * ]
-                         *
-                         * Therefore the existing frontend response.json()
-                         * continues working without any payload change.
+                         * Preserve your existing legacy-data visibility rule.
                          */
-                        try (
-                                        JsonGenerator generator = objectMapper
-                                                        .getFactory()
-                                                        .createGenerator(
-                                                                        outputStream)) {
+                        result = repository
+                                        .findLegacyVisiblePageByStatuses(
+                                                        statuses,
+                                                        pageable);
 
-                                generator.setCodec(
-                                                objectMapper);
+                } else {
 
-                                generator.writeStartArray();
-
-                                int internalPage = 0;
-
-                                while (true) {
-
-                                        Pageable pageable = PageRequest.of(
-                                                        internalPage,
-                                                        internalBatchSize,
-                                                        stableSort);
-
-                                        Slice<DispatchedItem> slice;
-
-                                        if (admin) {
-
-                                                slice = repository
-                                                                .findByStatusIn(
-                                                                                statuses,
-                                                                                pageable);
-
-                                        } else if (allowedPlants == null ||
-                                                        allowedPlants.isEmpty()) {
-
-                                                /*
-                                                 * Preserve your existing legacy rule:
-                                                 * users with no plant list can still see
-                                                 * old records whose plant is null/blank.
-                                                 */
-                                                slice = repository
-                                                                .findLegacyVisibleSliceByStatuses(
-                                                                                statuses,
-                                                                                pageable);
-
-                                        } else {
-
-                                                slice = repository
-                                                                .findVisibleSliceByStatusesAndPlantsIncludingLegacy(
-                                                                                statuses,
-                                                                                allowedPlants,
-                                                                                pageable);
-                                        }
-
-                                        for (DispatchedItem item : slice.getContent()) {
-                                                generator.writeObject(
-                                                                item);
-                                        }
-
-                                        /*
-                                         * Flush after every internal page.
-                                         *
-                                         * This prevents Jackson/output buffers from
-                                         * growing with the complete 8,500+ record list.
-                                         */
-                                        generator.flush();
-
-                                        if (!slice.hasNext()) {
-                                                break;
-                                        }
-
-                                        internalPage++;
-                                }
-
-                                generator.writeEndArray();
-                                generator.flush();
-                        }
-                };
+                        result = repository
+                                        .findVisiblePageByStatusesAndPlantsIncludingLegacy(
+                                                        statuses,
+                                                        allowedPlants,
+                                                        pageable);
+                }
 
                 return ResponseEntity
                                 .ok()
@@ -203,8 +148,28 @@ public class DispatchedItemsController {
                                 .header(
                                                 HttpHeaders.CACHE_CONTROL,
                                                 "no-store, no-cache, must-revalidate")
+                                .header(
+                                                "X-Total-Pages",
+                                                String.valueOf(
+                                                                result.getTotalPages()))
+                                .header(
+                                                "X-Total-Elements",
+                                                String.valueOf(
+                                                                result.getTotalElements()))
+                                .header(
+                                                "X-Page-Number",
+                                                String.valueOf(
+                                                                result.getNumber()))
+                                .header(
+                                                "X-Page-Size",
+                                                String.valueOf(
+                                                                result.getSize()))
+                                .header(
+                                                "X-Has-Next",
+                                                String.valueOf(
+                                                                result.hasNext()))
                                 .body(
-                                                responseBody);
+                                                result.getContent());
         }
 
         @PostMapping("/{zohoItemId:.+}/move-to-fg")

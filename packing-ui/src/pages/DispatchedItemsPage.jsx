@@ -2974,12 +2974,14 @@ const MASTER_CREATE_TARGET = {
 const DISPATCH_BACKEND_BATCH_SIZE = 200;
 
 /*
- * Safety guard only.
+ * Four simultaneous requests means at most approximately
+ * 800 dispatch rows are in transit at one time.
  *
- * 5,000 pages × 200 rows gives a theoretical ceiling
- * of 1,000,000 rows and prevents an accidental infinite
- * request loop if the backend response is malformed.
+ * This is significantly faster than 43 sequential requests,
+ * while remaining safe for a Render instance and database pool.
  */
+const DISPATCH_FETCH_CONCURRENCY = 4;
+
 const DISPATCH_BACKEND_MAX_PAGES = 5000;
 
 function DispatchedItemsPage() {
@@ -3059,6 +3061,15 @@ function DispatchedItemsPage() {
 	const scannerInputRef = useRef(null);
 	const scanTimerRef = useRef(null);
 	const dispatchFetchRequestRef = useRef(0);
+	const dispatchFetchAbortRef = useRef(null);
+
+	const [dispatchLoadProgress, setDispatchLoadProgress] =
+		useState({
+			loadedRows: 0,
+			totalRows: null,
+			loadedPages: 0,
+			totalPages: null,
+		});
 	const [qrDispatchOpen, setQrDispatchOpen] = useState(false);
 	const [scanMode, setScanMode] = useState("SINGLE");
 	const [scannerText, setScannerText] = useState("");
@@ -3329,6 +3340,12 @@ function DispatchedItemsPage() {
 			safePageNo,
 			pageSize,
 		]);
+
+	useEffect(() => {
+		return () => {
+			dispatchFetchAbortRef.current?.abort();
+		};
+	}, []);
 
 	useEffect(() => {
 		setPageNo(1);
@@ -5714,28 +5731,78 @@ function DispatchedItemsPage() {
 			});
 	};
 
-	const extractDispatchPageData = (payload) => {
+	const toOptionalNonNegativeInteger = (
+		value
+	) => {
+		if (
+			value === null ||
+			value === undefined ||
+			String(value).trim() === ""
+		) {
+			return null;
+		}
+
+		const parsed =
+			Number(value);
+
+		return (
+			Number.isInteger(parsed) &&
+			parsed >= 0
+		)
+			? parsed
+			: null;
+	};
+
+	const toOptionalBoolean = (
+		value
+	) => {
+		if (
+			value === null ||
+			value === undefined ||
+			String(value).trim() === ""
+		) {
+			return null;
+		}
+
+		const normalized =
+			String(value)
+				.trim()
+				.toLowerCase();
+
+		if (normalized === "true") {
+			return true;
+		}
+
+		if (normalized === "false") {
+			return false;
+		}
+
+		return null;
+	};
+
+	const extractDispatchPageData = (
+		payload
+	) => {
 		/*
-		 * Supports both backend response formats:
+		 * Current backend response:
 		 *
-		 * 1. Plain array:
-		 *    [...]
-		 *
-		 * 2. Spring Page response:
-		 *    {
-		 *        content: [...],
-		 *        totalPages: 43,
-		 *        last: false
-		 *    }
+		 * [
+		 *   {...},
+		 *   {...}
+		 * ]
 		 */
 		if (Array.isArray(payload)) {
 			return {
 				items: payload,
 				totalPages: null,
-				last: false,
+				totalElements: null,
+				last: null,
 			};
 		}
 
+		/*
+		 * Spring Page or custom page response.
+		 */
 		const items =
 			Array.isArray(payload?.content)
 				? payload.content
@@ -5751,124 +5818,265 @@ function DispatchedItemsPage() {
 			);
 		}
 
-		const parsedTotalPages =
-			Number(
-				payload?.totalPages ??
-				payload?.page?.totalPages
-			);
-
-		const totalPages =
-			Number.isInteger(parsedTotalPages) &&
-				parsedTotalPages >= 0
-				? parsedTotalPages
-				: null;
+		const rawLast =
+			payload?.last ??
+			payload?.page?.last;
 
 		return {
 			items,
-			totalPages,
+
+			totalPages:
+				toOptionalNonNegativeInteger(
+					payload?.totalPages ??
+					payload?.page?.totalPages
+				),
+
+			totalElements:
+				toOptionalNonNegativeInteger(
+					payload?.totalElements ??
+					payload?.page?.totalElements
+				),
 
 			last:
-				payload?.last === true ||
-				payload?.page?.last === true,
+				typeof rawLast === "boolean"
+					? rawLast
+					: null,
 		};
 	};
 
-	const fetchAllDispatchedItemPages =
-		async () => {
-			const rowsById =
-				new Map();
+	const fetchDispatchBackendPage =
+		async (
+			backendPage,
+			signal
+		) => {
+			const query =
+				new URLSearchParams({
+					page:
+						String(
+							backendPage
+						),
 
-			let backendPage = 0;
-			let previousPageSignature = "";
+					size:
+						String(
+							DISPATCH_BACKEND_BATCH_SIZE
+						),
+				});
 
-			while (
-				backendPage <
-				DISPATCH_BACKEND_MAX_PAGES
-			) {
-				const query =
-					new URLSearchParams({
-						page:
-							String(
-								backendPage
-							),
+			const response =
+				await authFetch(
+					`${API_BASE_URL}/api/dispatched?${query.toString()}`,
+					{
+						method: "GET",
 
-						size:
-							String(
-								DISPATCH_BACKEND_BATCH_SIZE
-							),
-					});
+						headers: {
+							Accept:
+								"application/json",
+						},
 
-				const response =
-					await authFetch(
-						`${API_BASE_URL}/api/dispatched?${query.toString()}`,
-						{
-							method: "GET",
+						cache:
+							"no-store",
 
-							headers: {
-								Accept:
-									"application/json",
-							},
+						signal,
+					}
+				);
 
-							cache:
-								"no-store",
-						}
+			if (!response.ok) {
+				const message =
+					await readResponseError(
+						response,
+						`Failed to load dispatch page ${backendPage + 1}`
 					);
 
-				if (!response.ok) {
-					const message =
-						await readResponseError(
-							response,
-							`Failed to fetch dispatched items page ${backendPage + 1
-							}`
+				throw new Error(
+					message
+				);
+			}
+
+			const payload =
+				await response.json();
+
+			const parsed =
+				extractDispatchPageData(
+					payload
+				);
+
+			const headerTotalPages =
+				toOptionalNonNegativeInteger(
+					response.headers.get(
+						"X-Total-Pages"
+					)
+				);
+
+			const headerTotalElements =
+				toOptionalNonNegativeInteger(
+					response.headers.get(
+						"X-Total-Elements"
+					)
+				);
+
+			const headerHasNext =
+				toOptionalBoolean(
+					response.headers.get(
+						"X-Has-Next"
+					)
+				);
+
+			const resolvedLast =
+				parsed.last !== null
+					? parsed.last
+					: headerHasNext !== null
+						? !headerHasNext
+						: null;
+
+			return {
+				page:
+					backendPage,
+
+				items:
+					parsed.items,
+
+				totalPages:
+					parsed.totalPages ??
+					headerTotalPages,
+
+				totalElements:
+					parsed.totalElements ??
+					headerTotalElements,
+
+				last:
+					resolvedLast,
+			};
+		};
+
+	const fetchAllDispatchedItemPages =
+		async ({
+			signal,
+			onFirstPage,
+			onProgress,
+		} = {}) => {
+			/*
+			 * Keep each backend page separately.
+			 *
+			 * Concurrent requests can finish out of order, so records
+			 * must not be inserted directly into the final result Map.
+			 */
+			const pageItemsByNumber =
+				new Map();
+
+			const pageSignatures =
+				new Set();
+
+			const loadedItemIds =
+				new Set();
+
+			let knownTotalPages =
+				null;
+
+			let knownTotalElements =
+				null;
+
+			const buildOrderedRows =
+				() => {
+					const orderedRowsById =
+						new Map();
+
+					Array.from(
+						pageItemsByNumber.entries()
+					)
+						.sort(
+							([pageA], [pageB]) =>
+								pageA - pageB
+						)
+						.forEach(
+							([
+								,
+								pageItems,
+							]) => {
+								pageItems.forEach(
+									(item) => {
+										const itemId =
+											String(
+												item?.zohoItemId ||
+												""
+											).trim();
+
+										if (!itemId) {
+											return;
+										}
+
+										/*
+										 * A later duplicate updates the object but
+										 * does not alter its original insertion order.
+										 */
+										orderedRowsById.set(
+											itemId,
+											item
+										);
+									}
+								);
+							}
 						);
 
+					return Array.from(
+						orderedRowsById.values()
+					);
+				};
+
+			const addPageResult = (
+				pageResult
+			) => {
+				if (
+					!Number.isInteger(
+						pageResult.page
+					) ||
+					pageResult.page < 0 ||
+					pageResult.page >=
+					DISPATCH_BACKEND_MAX_PAGES
+				) {
 					throw new Error(
-						message
+						`Invalid dispatch page number: ${pageResult.page}`
 					);
 				}
 
-				const payload =
-					await response.json();
+				/*
+				 * Keep the first reliable totals.
+				 *
+				 * The database may change while background pages are loading,
+				 * so repeatedly replacing totalPages could create an unstable
+				 * request range.
+				 */
+				if (
+					knownTotalPages === null &&
+					pageResult.totalPages !== null
+				) {
+					knownTotalPages =
+						pageResult.totalPages;
+				}
 
-				const {
-					items,
-					totalPages:
-					bodyTotalPages,
-					last,
-				} =
-					extractDispatchPageData(
-						payload
+				if (
+					knownTotalElements === null &&
+					pageResult.totalElements !== null
+				) {
+					knownTotalElements =
+						pageResult.totalElements;
+				}
+
+				if (
+					knownTotalPages !== null &&
+					knownTotalPages >
+					DISPATCH_BACKEND_MAX_PAGES
+				) {
+					throw new Error(
+						`Backend reported ${knownTotalPages} dispatch pages, exceeding the safety limit`
 					);
+				}
 
 				/*
-				 * Header support for a backend that returns a plain
-				 * array plus pagination metadata in response headers.
+				 * Detect a backend that ignores page= and repeatedly
+				 * sends page zero.
 				 */
-				const parsedHeaderTotalPages =
-					Number(
-						response.headers.get(
-							"X-Total-Pages"
-						)
-					);
-
-				const headerTotalPages =
-					Number.isInteger(
-						parsedHeaderTotalPages
-					) &&
-						parsedHeaderTotalPages >= 0
-						? parsedHeaderTotalPages
-						: null;
-
-				const knownTotalPages =
-					bodyTotalPages ??
-					headerTotalPages;
-
-				/*
-				 * Detect a backend that is ignoring page= and returning
-				 * the same first 200 records repeatedly.
-				 */
-				const currentPageSignature =
-					items
+				const pageSignature =
+					pageResult.items
 						.map((item) =>
 							String(
 								item?.zohoItemId ||
@@ -5879,23 +6087,28 @@ function DispatchedItemsPage() {
 						.join("|");
 
 				if (
-					backendPage > 0 &&
-					currentPageSignature &&
-					currentPageSignature ===
-					previousPageSignature
+					pageSignature &&
+					pageSignatures.has(
+						pageSignature
+					)
 				) {
 					throw new Error(
-						"The backend returned the same records for multiple pages. Verify that /api/dispatched supports page and size parameters."
+						`Backend repeated dispatch page ${pageResult.page + 1}. Verify the repository pagination query.`
 					);
 				}
 
-				previousPageSignature =
-					currentPageSignature;
+				if (pageSignature) {
+					pageSignatures.add(
+						pageSignature
+					);
+				}
 
-				/*
-				 * Deduplicate by the actual dispatched-item identifier.
-				 */
-				items.forEach(
+				pageItemsByNumber.set(
+					pageResult.page,
+					pageResult.items
+				);
+
+				pageResult.items.forEach(
 					(item) => {
 						const itemId =
 							String(
@@ -5903,85 +6116,351 @@ function DispatchedItemsPage() {
 								""
 							).trim();
 
-						if (!itemId) {
-							return;
+						if (itemId) {
+							loadedItemIds.add(
+								itemId
+							);
 						}
-
-						rowsById.set(
-							itemId,
-							item
-						);
 					}
 				);
 
-				const reachedEmptyPage =
-					items.length === 0;
+				onProgress?.({
+					loadedRows:
+						loadedItemIds.size,
 
-				const reachedShortPage =
-					items.length <
-					DISPATCH_BACKEND_BATCH_SIZE;
+					totalRows:
+						knownTotalElements,
 
-				const reachedKnownLastPage =
-					last === true ||
-					(
-						knownTotalPages !==
-						null &&
-						backendPage + 1 >=
-						knownTotalPages
+					loadedPages:
+						pageItemsByNumber.size,
+
+					totalPages:
+						knownTotalPages,
+				});
+			};
+
+			/*
+			 * Load page zero first so the screen appears quickly.
+			 */
+			const firstPage =
+				await fetchDispatchBackendPage(
+					0,
+					signal
+				);
+
+			addPageResult(
+				firstPage
+			);
+
+			onFirstPage?.(
+				buildOrderedRows(),
+				{
+					totalRows:
+						knownTotalElements,
+
+					totalPages:
+						knownTotalPages,
+				}
+			);
+
+			const firstPageIsLast =
+				firstPage.last === true ||
+				firstPage.items.length <
+				DISPATCH_BACKEND_BATCH_SIZE ||
+				knownTotalPages === 0 ||
+				knownTotalPages === 1;
+
+			if (firstPageIsLast) {
+				return {
+					items:
+						buildOrderedRows(),
+
+					totalElements:
+						knownTotalElements,
+
+					totalPages:
+						knownTotalPages,
+
+					loadedPages:
+						pageItemsByNumber.size,
+				};
+			}
+
+			/*
+			 * Normal fast path.
+			 *
+			 * X-Total-Pages is available from the first response.
+			 */
+			if (
+				knownTotalPages !== null
+			) {
+				const remainingPages =
+					Array.from(
+						{
+							length:
+								Math.max(
+									0,
+									knownTotalPages -
+									1
+								),
+						},
+						(_, index) =>
+							index + 1
 					);
 
-				if (
-					reachedEmptyPage ||
-					reachedShortPage ||
-					reachedKnownLastPage
+				let nextPageIndex = 0;
+
+				const worker =
+					async () => {
+						while (
+							nextPageIndex <
+							remainingPages.length
+						) {
+							const currentIndex =
+								nextPageIndex;
+
+							nextPageIndex += 1;
+
+							const pageNumber =
+								remainingPages[
+								currentIndex
+								];
+
+							const pageResult =
+								await fetchDispatchBackendPage(
+									pageNumber,
+									signal
+								);
+
+							addPageResult(
+								pageResult
+							);
+						}
+					};
+
+				const workerCount =
+					Math.min(
+						DISPATCH_FETCH_CONCURRENCY,
+						remainingPages.length
+					);
+
+				await Promise.all(
+					Array.from(
+						{
+							length:
+								workerCount,
+						},
+						() => worker()
+					)
+				);
+
+				return {
+					items:
+						buildOrderedRows(),
+
+					totalElements:
+						knownTotalElements,
+
+					totalPages:
+						knownTotalPages,
+
+					loadedPages:
+						pageItemsByNumber.size,
+				};
+			}
+
+			/*
+			 * Compatibility fallback when pagination headers are unavailable.
+			 */
+			let nextUnknownPage = 1;
+
+			while (
+				nextUnknownPage <
+				DISPATCH_BACKEND_MAX_PAGES
+			) {
+				const remainingCapacity =
+					DISPATCH_BACKEND_MAX_PAGES -
+					nextUnknownPage;
+
+				const currentWindowSize =
+					Math.min(
+						DISPATCH_FETCH_CONCURRENCY,
+						remainingCapacity
+					);
+
+				const pageNumbers =
+					Array.from(
+						{
+							length:
+								currentWindowSize,
+						},
+						(_, index) =>
+							nextUnknownPage +
+							index
+					);
+
+				const pageResults =
+					await Promise.all(
+						pageNumbers.map(
+							(pageNumber) =>
+								fetchDispatchBackendPage(
+									pageNumber,
+									signal
+								)
+						)
+					);
+
+				pageResults.sort(
+					(a, b) =>
+						a.page - b.page
+				);
+
+				let reachedEnd = false;
+
+				for (
+					const pageResult of
+					pageResults
 				) {
-					return Array.from(
-						rowsById.values()
+					addPageResult(
+						pageResult
 					);
+
+					if (
+						pageResult.last === true ||
+						pageResult.items.length <
+						DISPATCH_BACKEND_BATCH_SIZE
+					) {
+						reachedEnd = true;
+						break;
+					}
 				}
 
-				backendPage += 1;
+				if (reachedEnd) {
+					return {
+						items:
+							buildOrderedRows(),
+
+						totalElements:
+							knownTotalElements,
+
+						totalPages:
+							knownTotalPages,
+
+						loadedPages:
+							pageItemsByNumber.size,
+					};
+				}
+
+				nextUnknownPage +=
+					currentWindowSize;
 			}
 
 			throw new Error(
-				"Dispatch loading stopped because the maximum pagination safety limit was exceeded"
+				"Dispatch loading exceeded the backend pagination safety limit"
 			);
 		};
 
 	const fetchData =
 		async () => {
-			/*
-			 * Prevent an older, slower request from overwriting the
-			 * result of a newer refresh request.
-			 */
 			const requestId =
 				++dispatchFetchRequestRef.current;
+
+			const existingRowsSnapshot =
+				Array.isArray(rows)
+					? rows
+					: [];
+
+			/*
+			 * Cancel the previous full refresh.
+			 */
+			dispatchFetchAbortRef.current?.abort();
+
+			const abortController =
+				new AbortController();
+
+			dispatchFetchAbortRef.current =
+				abortController;
+
+			/*
+			 * Reveal page one early only when nothing is currently displayed.
+			 * During later refreshes, retain the complete existing table.
+			 */
+			const revealFirstPage =
+				existingRowsSnapshot.length === 0;
 
 			try {
 				setLoading(true);
 
-				/*
-				 * Fetch pages sequentially:
-				 *
-				 * Page 0 = records 1–200
-				 * Page 1 = records 201–400
-				 * Page 2 = records 401–600
-				 * ...
-				 *
-				 * For approximately 8,500 records this will make around
-				 * 43 small requests rather than one heap-heavy request.
-				 */
-				const allBackendRows =
-					await fetchAllDispatchedItemPages();
+				setDispatchLoadProgress({
+					loadedRows: 0,
+					totalRows: null,
+					loadedPages: 0,
+					totalPages: null,
+				});
+
+				const result =
+					await fetchAllDispatchedItemPages({
+						signal:
+							abortController.signal,
+
+						onFirstPage:
+							(
+								firstPageRows,
+								metadata
+							) => {
+								if (
+									!revealFirstPage ||
+									requestId !==
+									dispatchFetchRequestRef.current
+								) {
+									return;
+								}
+
+								const cleanedFirstPage =
+									normalizeFetchedDispatchRows(
+										firstPageRows
+									);
+
+								setRows(
+									cleanedFirstPage
+								);
+
+								setDispatchLoadProgress(
+									(previous) => ({
+										...previous,
+
+										loadedRows:
+											cleanedFirstPage.length,
+
+										totalRows:
+											metadata.totalRows,
+
+										totalPages:
+											metadata.totalPages,
+									})
+								);
+							},
+
+						onProgress:
+							(progress) => {
+								if (
+									requestId ===
+									dispatchFetchRequestRef.current
+								) {
+									setDispatchLoadProgress(
+										progress
+									);
+								}
+							},
+					});
 
 				const cleaned =
 					normalizeFetchedDispatchRows(
-						allBackendRows
+						result.items
 					);
 
 				/*
-				 * A newer refresh may have started while these pages
-				 * were loading. Do not let the older request overwrite it.
+				 * A newer request has already replaced this request.
 				 */
 				if (
 					requestId !==
@@ -5990,30 +6469,74 @@ function DispatchedItemsPage() {
 					return cleaned;
 				}
 
-				setRows(cleaned);
+				setRows(
+					cleaned
+				);
+
+				setDispatchLoadProgress({
+					loadedRows:
+						cleaned.length,
+
+					totalRows:
+						result.totalElements ??
+						cleaned.length,
+
+					loadedPages:
+						result.loadedPages,
+
+					totalPages:
+						result.totalPages ??
+						result.loadedPages,
+				});
 
 				console.info(
-					`Loaded ${cleaned.length} dispatched items across paginated backend requests`
+					`Loaded ${cleaned.length} dispatched items using ${DISPATCH_FETCH_CONCURRENCY} concurrent page workers`
 				);
 
 				return cleaned;
+
 			} catch (error) {
+				if (
+					error?.name ===
+					"AbortError"
+				) {
+					console.info(
+						"Previous dispatch refresh cancelled"
+					);
+
+					/*
+					 * Returning the previous rows prevents callers such as
+					 * Generate Challan from falsely treating an aborted refresh
+					 * as an empty database.
+					 */
+					return existingRowsSnapshot;
+				}
+
 				console.error(
 					"Dispatch inventory fetch failed:",
 					error
 				);
 
 				/*
-				 * Keep previously loaded rows visible when a refresh
-				 * temporarily fails. Do not clear all 8,500 records.
+				 * Do not erase a previously working table because one
+				 * background page temporarily failed.
 				 */
-				return [];
+				return existingRowsSnapshot;
+
 			} finally {
 				if (
 					requestId ===
 					dispatchFetchRequestRef.current
 				) {
 					setLoading(false);
+				}
+
+				if (
+					dispatchFetchAbortRef.current ===
+					abortController
+				) {
+					dispatchFetchAbortRef.current =
+						null;
 				}
 			}
 		};
@@ -9575,6 +10098,7 @@ function DispatchedItemsPage() {
 						</Box>
 
 						<Button
+							disabled={loading}
 							onClick={openDispatchExportModal}
 							sx={dispatchExportButtonSx}
 						>
@@ -14376,6 +14900,26 @@ function DispatchedItemsPage() {
 										accent="#f59e0b"
 									/>
 								</Box>
+								{loading && (
+									<Box
+										sx={{
+											color: "#fcd34d",
+											fontSize: 12,
+											fontWeight: 800,
+										}}
+									>
+										Loading{" "}
+										{dispatchLoadProgress.loadedRows.toLocaleString(
+											"en-IN"
+										)}
+										{dispatchLoadProgress.totalRows !== null
+											? ` / ${dispatchLoadProgress.totalRows.toLocaleString(
+												"en-IN"
+											)}`
+											: ""}
+										{" "}items…
+									</Box>
+								)}
 
 								{challanHistoryLoading && (
 									<Box sx={modalEmptyStateSx}>

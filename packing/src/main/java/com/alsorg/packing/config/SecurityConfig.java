@@ -2,19 +2,36 @@ package com.alsorg.packing.config;
 
 import com.alsorg.packing.security.JwtAuthenticationFilter;
 
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 import org.springframework.web.cors.CorsConfigurationSource;
 
 @Configuration
@@ -22,42 +39,91 @@ import org.springframework.web.cors.CorsConfigurationSource;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+        private static final Logger log = LoggerFactory.getLogger(
+                        SecurityConfig.class);
+
         private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
         public SecurityConfig(
                         JwtAuthenticationFilter jwtAuthenticationFilter) {
+
                 this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         }
 
         @Bean
         public SecurityFilterChain filterChain(
                         HttpSecurity http,
-                        CorsConfigurationSource corsConfigurationSource) throws Exception {
+                        CorsConfigurationSource corsConfigurationSource)
+                        throws Exception {
 
                 http
-                                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                                .cors(cors -> cors.configurationSource(
+                                                corsConfigurationSource))
+
                                 .csrf(csrf -> csrf.disable())
+
                                 .httpBasic(httpBasic -> httpBasic.disable())
+
                                 .formLogin(formLogin -> formLogin.disable())
+
                                 .logout(logout -> logout.disable())
+
                                 .sessionManagement(session -> session.sessionCreationPolicy(
                                                 SessionCreationPolicy.STATELESS))
+
+                                /*
+                                 * Exact location for unauthorized and forbidden
+                                 * request logging.
+                                 *
+                                 * Both handlers verify response.isCommitted()
+                                 * before attempting to write JSON.
+                                 */
                                 .exceptionHandling(exception -> exception
-                                                .authenticationEntryPoint((request, response, ex) -> {
-                                                        response.setStatus(401);
-                                                        response.setContentType("application/json");
-                                                        response.setCharacterEncoding("UTF-8");
-                                                        response.getWriter()
-                                                                        .write("{\"message\":\"Unauthorized\"}");
-                                                })
-                                                .accessDeniedHandler((request, response, ex) -> {
-                                                        response.setStatus(403);
-                                                        response.setContentType("application/json");
-                                                        response.setCharacterEncoding("UTF-8");
-                                                        response.getWriter()
-                                                                        .write("{\"message\":\"Forbidden\"}");
-                                                }))
+
+                                                .authenticationEntryPoint(
+                                                                (request, response, ex) -> writeSecurityResponse(
+                                                                                request,
+                                                                                response,
+                                                                                HttpServletResponse.SC_UNAUTHORIZED,
+                                                                                "Unauthorized",
+                                                                                ex))
+
+                                                .accessDeniedHandler(
+                                                                (request, response, ex) -> writeSecurityResponse(
+                                                                                request,
+                                                                                response,
+                                                                                HttpServletResponse.SC_FORBIDDEN,
+                                                                                "Forbidden",
+                                                                                ex)))
+
                                 .authorizeHttpRequests(auth -> auth
+
+                                                /*
+                                                 * Internal redispatches.
+                                                 *
+                                                 * The original HTTP request still passes
+                                                 * normal JWT authentication and authorization.
+                                                 *
+                                                 * ERROR permits Spring/Tomcat to render an
+                                                 * error response without security denying
+                                                 * /error again.
+                                                 *
+                                                 * ASYNC protects any remaining legitimate
+                                                 * asynchronous endpoints elsewhere in the app.
+                                                 */
+                                                .dispatcherTypeMatchers(
+                                                                DispatcherType.ERROR,
+                                                                DispatcherType.ASYNC)
+                                                .permitAll()
+
+                                                /*
+                                                 * Do not secure Spring Boot's error endpoint.
+                                                 * Otherwise a 401/403 can generate another
+                                                 * 401/403 while processing /error.
+                                                 */
+                                                .requestMatchers(
+                                                                "/error")
+                                                .permitAll()
 
                                                 /*
                                                  * CORS preflight.
@@ -78,10 +144,6 @@ public class SecurityConfig {
 
                                                 /*
                                                  * Generated-history screen.
-                                                 *
-                                                 * The controller applies the final per-user rule:
-                                                 * ADMIN sees all.
-                                                 * Other authenticated users see their own.
                                                  */
                                                 .requestMatchers(
                                                                 HttpMethod.GET,
@@ -90,7 +152,7 @@ public class SecurityConfig {
                                                 .authenticated()
 
                                                 /*
-                                                 * Dispatch can repair/rebuild missing sticker history.
+                                                 * Dispatch can repair missing sticker history.
                                                  */
                                                 .requestMatchers(
                                                                 HttpMethod.POST,
@@ -100,10 +162,7 @@ public class SecurityConfig {
                                                                 "DISPATCH")
 
                                                 /*
-                                                 * Item-wise Sticker History modal and its PDF.
-                                                 *
-                                                 * Plant access and hardware ownership are still checked
-                                                 * inside PacketService.
+                                                 * Sticker history modal and PDF.
                                                  */
                                                 .requestMatchers(
                                                                 HttpMethod.GET,
@@ -120,21 +179,23 @@ public class SecurityConfig {
                                                  */
                                                 .requestMatchers(
                                                                 "/api/users/**")
-                                                .hasAuthority("ADMIN")
+                                                .hasAuthority(
+                                                                "ADMIN")
 
                                                 /*
-                                                 * HardwarePacketController already has method-level
-                                                 * 
-                                                 * @PreAuthorize rules.
+                                                 * HardwarePacketController has method-level
+                                                 * authorization rules.
                                                  */
                                                 .requestMatchers(
                                                                 "/api/hardware-packets/**")
                                                 .authenticated()
 
                                                 /*
-                                                 * Everything else requires authentication.
+                                                 * Everything else requires a valid JWT.
                                                  */
-                                                .anyRequest().authenticated())
+                                                .anyRequest()
+                                                .authenticated())
+
                                 .addFilterBefore(
                                                 jwtAuthenticationFilter,
                                                 UsernamePasswordAuthenticationFilter.class);
@@ -142,8 +203,91 @@ public class SecurityConfig {
                 return http.build();
         }
 
+        /**
+         * Logs the denied request and safely writes the JSON response.
+         *
+         * This method must not attempt to modify a response that has
+         * already been committed by another controller/filter.
+         */
+        private void writeSecurityResponse(
+                        HttpServletRequest request,
+                        HttpServletResponse response,
+                        int status,
+                        String message,
+                        Exception exception)
+                        throws IOException {
+
+                String currentUri = request.getRequestURI();
+
+                Object originalErrorUri = request.getAttribute(
+                                RequestDispatcher.ERROR_REQUEST_URI);
+
+                String username = request.getUserPrincipal() == null
+                                ? "anonymous"
+                                : request
+                                                .getUserPrincipal()
+                                                .getName();
+
+                log.warn(
+                                "Security denied request: status={}, method={}, uri={}, "
+                                                + "originalErrorUri={}, dispatcher={}, user={}, "
+                                                + "committed={}, reason={}",
+                                status,
+                                request.getMethod(),
+                                currentUri,
+                                originalErrorUri,
+                                request.getDispatcherType(),
+                                username,
+                                response.isCommitted(),
+                                exception == null
+                                                ? message
+                                                : exception.getMessage());
+
+                /*
+                 * This is the critical protection that your current
+                 * inline handlers are missing.
+                 */
+                if (response.isCommitted()) {
+
+                        log.warn(
+                                        "Security response not written because HTTP response "
+                                                        + "is already committed: method={}, uri={}, "
+                                                        + "dispatcher={}",
+                                        request.getMethod(),
+                                        currentUri,
+                                        request.getDispatcherType());
+
+                        return;
+                }
+
+                /*
+                 * Clears any uncommitted partial body while preserving the
+                 * normal response object.
+                 */
+                response.resetBuffer();
+
+                response.setStatus(
+                                status);
+
+                response.setContentType(
+                                MediaType.APPLICATION_JSON_VALUE);
+
+                response.setCharacterEncoding(
+                                StandardCharsets.UTF_8.name());
+
+                response
+                                .getWriter()
+                                .write(
+                                                status == HttpServletResponse.SC_UNAUTHORIZED
+                                                                ? "{\"message\":\"Unauthorized\"}"
+                                                                : "{\"message\":\"Forbidden\"}");
+
+                response.flushBuffer();
+        }
+
         @Bean
         public PasswordEncoder passwordEncoder() {
+
                 DelegatingPasswordEncoder encoder = (DelegatingPasswordEncoder) PasswordEncoderFactories
                                 .createDelegatingPasswordEncoder();
 

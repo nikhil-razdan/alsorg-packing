@@ -153,20 +153,18 @@ public interface DispatchedItemRepository
                           AND (
                                 d.plantCode IN :plantCodes
                                 OR d.plantCode IS NULL
-                                OR d.plantCode = ''
+                                OR TRIM(d.plantCode) = ''
                               )
-                        """,
-
-                        countQuery = """
-                                        SELECT COUNT(d)
-                                        FROM DispatchedItem d
-                                        WHERE d.status IN :statuses
-                                          AND (
-                                                d.plantCode IN :plantCodes
-                                                OR d.plantCode IS NULL
-                                                OR d.plantCode = ''
-                                              )
-                                        """)
+                        """, countQuery = """
+                        SELECT COUNT(d)
+                        FROM DispatchedItem d
+                        WHERE d.status IN :statuses
+                          AND (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                              )
+                        """)
         Page<DispatchedItem> findVisiblePageByStatusesAndPlantsIncludingLegacy(
                         @Param("statuses") Collection<ItemDispatchStatus> statuses,
 
@@ -180,19 +178,17 @@ public interface DispatchedItemRepository
                         WHERE d.status IN :statuses
                           AND (
                                 d.plantCode IS NULL
-                                OR d.plantCode = ''
+                                OR TRIM(d.plantCode) = ''
                               )
-                        """,
-
-                        countQuery = """
-                                        SELECT COUNT(d)
-                                        FROM DispatchedItem d
-                                        WHERE d.status IN :statuses
-                                          AND (
-                                                d.plantCode IS NULL
-                                                OR d.plantCode = ''
-                                              )
-                                        """)
+                        """, countQuery = """
+                        SELECT COUNT(d)
+                        FROM DispatchedItem d
+                        WHERE d.status IN :statuses
+                          AND (
+                                d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                              )
+                        """)
         Page<DispatchedItem> findLegacyVisiblePageByStatuses(
                         @Param("statuses") Collection<ItemDispatchStatus> statuses,
 
