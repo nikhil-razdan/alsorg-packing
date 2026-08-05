@@ -3417,6 +3417,23 @@ function DispatchedItemsPage() {
 	const [dispatchExportLoading, setDispatchExportLoading] =
 		useState(false);
 
+	const [dispatchReviewPdfUrl, setDispatchReviewPdfUrl] =
+		useState("");
+
+	const [dispatchReviewPdfLoading, setDispatchReviewPdfLoading] =
+		useState(false);
+
+	const [dispatchReviewPdfError, setDispatchReviewPdfError] =
+		useState("");
+
+	const [dispatchReviewPdfSignature, setDispatchReviewPdfSignature] =
+		useState("");
+
+	const dispatchReviewPdfAbortRef =
+		useRef(null);
+
+	const dispatchReviewPdfUrlRef =
+		useRef("");
 	/*
 * Keeps the input responsive while the 8,500-row result
 * calculation happens at a lower React priority.
@@ -9473,6 +9490,165 @@ function DispatchedItemsPage() {
 		});
 	};
 
+	const loadDispatchReviewPdf =
+		async (
+			requestOverride = null
+		) => {
+			const request =
+				requestOverride ||
+				buildDispatchChallanRequest();
+
+			validateDispatchChallanRequest(
+				request
+			);
+
+			/*
+			 * Cancel an earlier preview request when the
+			 * user opens or refreshes another preview.
+			 */
+			dispatchReviewPdfAbortRef.current?.abort();
+
+			const abortController =
+				new AbortController();
+
+			dispatchReviewPdfAbortRef.current =
+				abortController;
+
+			try {
+				setDispatchReviewPdfLoading(
+					true
+				);
+
+				setDispatchReviewPdfError(
+					""
+				);
+
+				const response =
+					await authFetch(
+						`${API_BASE_URL}/api/chalaan/dispatch/preview`,
+						{
+							method: "POST",
+
+							headers: {
+								"Content-Type":
+									"application/json",
+
+								Accept:
+									"application/pdf",
+							},
+
+							body:
+								JSON.stringify(
+									request
+								),
+
+							signal:
+								abortController.signal,
+						}
+					);
+
+				if (!response.ok) {
+					const message =
+						await readResponseError(
+							response,
+							"Unable to generate challan preview"
+						);
+
+					throw new Error(
+						message
+					);
+				}
+
+				const contentType =
+					String(
+						response.headers.get(
+							"content-type"
+						) || ""
+					).toLowerCase();
+
+				if (
+					contentType &&
+					!contentType.includes(
+						"application/pdf"
+					) &&
+					!contentType.includes(
+						"application/octet-stream"
+					)
+				) {
+					throw new Error(
+						"Preview endpoint did not return a PDF"
+					);
+				}
+
+				const blob =
+					await response.blob();
+
+				if (
+					!blob ||
+					blob.size === 0
+				) {
+					throw new Error(
+						"Empty challan preview PDF received"
+					);
+				}
+
+				const objectUrl =
+					URL.createObjectURL(
+						blob
+					);
+
+				revokeDispatchReviewPdfUrl();
+
+				dispatchReviewPdfUrlRef.current =
+					objectUrl;
+
+				setDispatchReviewPdfUrl(
+					objectUrl
+				);
+
+				setDispatchReviewPdfSignature(
+					buildDispatchReviewSignature(
+						request
+					)
+				);
+
+				return objectUrl;
+
+			} catch (error) {
+				if (
+					error?.name ===
+					"AbortError"
+				) {
+					return null;
+				}
+
+				console.error(
+					"Challan preview failed:",
+					error
+				);
+
+				setDispatchReviewPdfError(
+					error?.message ||
+					"Unable to generate challan preview"
+				);
+
+				throw error;
+
+			} finally {
+				if (
+					dispatchReviewPdfAbortRef.current ===
+					abortController
+				) {
+					dispatchReviewPdfAbortRef.current =
+						null;
+
+					setDispatchReviewPdfLoading(
+						false
+					);
+				}
+			}
+		};
+
 	const getAuditActionTone = (
 		action = ""
 	) => {
@@ -9862,6 +10038,47 @@ function DispatchedItemsPage() {
 		}
 	};
 
+	const revokeDispatchReviewPdfUrl =
+		() => {
+			const activeUrl =
+				dispatchReviewPdfUrlRef.current;
+
+			if (activeUrl) {
+				URL.revokeObjectURL(
+					activeUrl
+				);
+			}
+
+			dispatchReviewPdfUrlRef.current =
+				"";
+
+			setDispatchReviewPdfUrl(
+				""
+			);
+		};
+
+	const clearDispatchReviewPdf =
+		() => {
+			dispatchReviewPdfAbortRef.current?.abort();
+
+			dispatchReviewPdfAbortRef.current =
+				null;
+
+			revokeDispatchReviewPdfUrl();
+
+			setDispatchReviewPdfLoading(
+				false
+			);
+
+			setDispatchReviewPdfError(
+				""
+			);
+
+			setDispatchReviewPdfSignature(
+				""
+			);
+		};
+
 	const openDispatchTripModal = ({
 		mode,
 		itemIds = [],
@@ -9869,6 +10086,8 @@ function DispatchedItemsPage() {
 		qrCart = [],
 		title = "",
 	}) => {
+		clearDispatchReviewPdf();
+
 		const cleanItemIds =
 			Array.from(
 				new Set(
@@ -9877,8 +10096,9 @@ function DispatchedItemsPage() {
 						: []
 					)
 						.map((id) =>
-							String(id || "")
-								.trim()
+							String(
+								id || ""
+							).trim()
 						)
 						.filter(Boolean)
 				)
@@ -9886,15 +10106,23 @@ function DispatchedItemsPage() {
 
 		setDispatchTripContext({
 			mode,
-			itemIds: cleanItemIds,
+			itemIds:
+				cleanItemIds,
+
 			scanTexts:
-				Array.isArray(scanTexts)
+				Array.isArray(
+					scanTexts
+				)
 					? scanTexts
 					: [],
+
 			qrCart:
-				Array.isArray(qrCart)
+				Array.isArray(
+					qrCart
+				)
 					? qrCart
 					: [],
+
 			title,
 		});
 
@@ -9905,9 +10133,6 @@ function DispatchedItemsPage() {
 				getNowDateTimeLocal(),
 		});
 
-		/*
-		 * Always start from the input screen.
-		 */
 		setDispatchTripStep(
 			"DETAILS"
 		);
@@ -9917,71 +10142,100 @@ function DispatchedItemsPage() {
 		);
 	};
 
+	const closeDispatchTripModal =
+		() => {
+			if (dispatchTripLoading) {
+				return;
+			}
+
+			clearDispatchReviewPdf();
+
+			setDispatchTripOpen(
+				false
+			);
+
+			setDispatchTripStep(
+				"DETAILS"
+			);
+		};
+
 	const submitDispatchTrip =
 		async () => {
 			/*
-			 * Prevent accidental direct submission from the
-			 * first step.
+			 * Clicking the submit handler from the Details step
+			 * must only open the Review step.
 			 */
 			if (
 				dispatchTripStep !==
 				"REVIEW"
 			) {
-				openDispatchTripReview();
-				return;
-			}
-
-			const selectedDispatchTime =
-				String(
-					dispatchTripForm.dispatchTime ||
-					""
-				).trim();
-
-			if (!selectedDispatchTime) {
-				alert(
-					"Please select challan date and time"
-				);
-
-				setDispatchTripStep(
-					"DETAILS"
-				);
-
+				await openDispatchTripReview();
 				return;
 			}
 
 			try {
+				/*
+				 * Build one authoritative request.
+				 *
+				 * This exact request is compared against the
+				 * request used to generate the review PDF.
+				 */
+				const finalRequest =
+					buildDispatchChallanRequest();
+
+				validateDispatchChallanRequest(
+					finalRequest
+				);
+
+				const finalSignature =
+					buildDispatchReviewSignature(
+						finalRequest
+					);
+
+				if (
+					!dispatchReviewPdfUrl ||
+					!dispatchReviewPdfSignature
+				) {
+					throw new Error(
+						"Please generate and review the challan PDF before final confirmation"
+					);
+				}
+
+				if (
+					finalSignature !==
+					dispatchReviewPdfSignature
+				) {
+					clearDispatchReviewPdf();
+
+					setDispatchTripStep(
+						"DETAILS"
+					);
+
+					throw new Error(
+						"Challan values changed after the PDF preview. Please review the updated challan again."
+					);
+				}
+
 				setDispatchTripLoading(
 					true
 				);
 
+				/*
+				 * finalRequest already contains the cleaned,
+				 * unique and validated item IDs.
+				 */
 				const finalItemIds =
-					Array.from(
-						new Set(
-							(
-								Array.isArray(
-									dispatchTripContext.itemIds
-								)
-									? dispatchTripContext.itemIds
-									: []
-							)
-								.map((id) =>
-									String(
-										id || ""
-									).trim()
-								)
-								.filter(Boolean)
-						)
-					);
+					finalRequest.itemIds;
 
-				if (
-					finalItemIds.length ===
-					0
-				) {
-					throw new Error(
-						"No items selected for challan"
-					);
-				}
-
+				/*
+				 * QR bulk safety validation.
+				 *
+				 * Preferably, QR items should be moved to FG
+				 * before generating the review PDF so that the
+				 * preview and final PDF contain the same location.
+				 *
+				 * This block remains as the final backend safety check.
+				 */
 				if (
 					dispatchTripContext.mode ===
 					"QR_BULK"
@@ -10020,33 +10274,18 @@ function DispatchedItemsPage() {
 					);
 				}
 
+				/*
+				 * This is the only request that performs the
+				 * real dispatch and creates the final challan.
+				 */
 				const result =
 					await createDispatchChallan({
-						itemIds:
-							finalItemIds,
-
-						driverId:
-							String(
-								dispatchTripForm.driverId ||
-								""
-							).trim() ||
-							null,
-
-						vehicleId:
-							String(
-								dispatchTripForm.vehicleId ||
-								""
-							).trim() ||
-							null,
-
-						dispatchTime:
-							selectedDispatchTime,
+						...finalRequest,
 
 						/*
-						 * This controls the PDF response behaviour
-						 * of your existing backend action.
-						 *
-						 * It is not the new frontend review step.
+						 * Existing final endpoint option.
+						 * It instructs the backend to return the
+						 * completed PDF after saving the challan.
 						 */
 						preview:
 							true,
@@ -10055,19 +10294,27 @@ function DispatchedItemsPage() {
 				const blob =
 					result?.blob;
 
-				if (!blob) {
+				if (
+					!blob ||
+					blob.size === 0
+				) {
 					throw new Error(
-						"No challan PDF generated"
+						"No final challan PDF generated"
 					);
 				}
 
-				const url =
+				const finalPdfUrl =
 					URL.createObjectURL(
 						blob
 					);
 
+				/*
+				 * Remove the temporary pre-confirmation PDF.
+				 */
+				clearDispatchReviewPdf();
+
 				showChalaanPreview(
-					url,
+					finalPdfUrl,
 					result?.challanNo ||
 					finalItemIds[0] ||
 					"CHALAAN"
@@ -10095,11 +10342,9 @@ function DispatchedItemsPage() {
 				setSelectionModel([]);
 
 				/*
-				 * The final creation can affect several fields:
-				 * status, challan number, driver, vehicle and time.
-				 *
-				 * Therefore the complete refresh is appropriate here,
-				 * unlike a simple READY status change.
+				 * Final creation changes status, challan number,
+				 * driver, vehicle, dispatch time and trip fields.
+				 * A complete refresh is appropriate here.
 				 */
 				await fetchData();
 
@@ -10969,6 +11214,127 @@ function DispatchedItemsPage() {
 			logisticsVehicles,
 		]);
 
+	const buildDispatchChallanRequest =
+		() => {
+			const itemIds =
+				Array.from(
+					new Set(
+						(
+							Array.isArray(
+								dispatchTripContext.itemIds
+							)
+								? dispatchTripContext.itemIds
+								: []
+						)
+							.map((id) =>
+								String(
+									id || ""
+								).trim()
+							)
+							.filter(Boolean)
+					)
+				);
+
+			return {
+				itemIds,
+
+				driverId:
+					String(
+						dispatchTripForm.driverId ||
+						""
+					).trim() ||
+					null,
+
+				vehicleId:
+					String(
+						dispatchTripForm.vehicleId ||
+						""
+					).trim() ||
+					null,
+
+				dispatchTime:
+					String(
+						dispatchTripForm.dispatchTime ||
+						""
+					).trim(),
+			};
+		};
+
+	const buildDispatchReviewSignature =
+		(request) => {
+			return JSON.stringify({
+				itemIds:
+					request?.itemIds ||
+					[],
+
+				driverId:
+					request?.driverId ||
+					"",
+
+				vehicleId:
+					request?.vehicleId ||
+					"",
+
+				dispatchTime:
+					request?.dispatchTime ||
+					"",
+			});
+		};
+
+	const validateDispatchChallanRequest =
+		(request) => {
+			if (!request?.dispatchTime) {
+				throw new Error(
+					"Please select challan date and time"
+				);
+			}
+
+			if (
+				!Array.isArray(
+					request?.itemIds
+				) ||
+				request.itemIds.length === 0
+			) {
+				throw new Error(
+					"No items selected for challan"
+				);
+			}
+
+			if (
+				dispatchTripContext.mode ===
+				"QR_BULK"
+			) {
+				const qrCart =
+					Array.isArray(
+						dispatchTripContext.qrCart
+					)
+						? dispatchTripContext.qrCart
+						: [];
+
+				const missingZoneItem =
+					qrCart.find((item) => {
+						return (
+							item?.moveToFgRequired &&
+							isScanFgZoneRequired(
+								item
+							) &&
+							!String(
+								item?.fgZoneCode ||
+								""
+							).trim()
+						);
+					});
+
+				if (missingZoneItem) {
+					throw new Error(
+						`Select FG zone for ${missingZoneItem.itemName ||
+						"selected item"
+						}`
+					);
+				}
+			}
+		};
+
 	const dispatchTripPreviewItems =
 		useMemo(() => {
 			const itemIds =
@@ -11088,77 +11454,119 @@ function DispatchedItemsPage() {
 		]);
 
 	const openDispatchTripReview =
-		() => {
-			const selectedDispatchTime =
-				String(
-					dispatchTripForm.dispatchTime ||
-					""
-				).trim();
+		async () => {
+			try {
+				const request =
+					buildDispatchChallanRequest();
 
-			if (!selectedDispatchTime) {
-				alert(
-					"Please select challan date and time"
+				validateDispatchChallanRequest(
+					request
 				);
 
-				return;
-			}
-
-			const itemIds =
-				Array.isArray(
-					dispatchTripContext.itemIds
-				)
-					? dispatchTripContext.itemIds
-						.filter(Boolean)
-					: [];
-
-			if (itemIds.length === 0) {
-				alert(
-					"No items selected for challan"
+				setDispatchTripStep(
+					"REVIEW"
 				);
 
-				return;
-			}
+				if (
+					dispatchTripContext.mode ===
+					"QR_BULK"
+				) {
+					const qrCart =
+						Array.isArray(
+							dispatchTripContext.qrCart
+						)
+							? dispatchTripContext.qrCart
+							: [];
 
-			if (
-				dispatchTripContext.mode ===
-				"QR_BULK"
-			) {
-				const qrCart =
-					Array.isArray(
-						dispatchTripContext.qrCart
-					)
-						? dispatchTripContext.qrCart
-						: [];
-
-				const missingZoneItem =
-					qrCart.find((item) => {
-						return (
-							item?.moveToFgRequired &&
-							isScanFgZoneRequired(
-								item
-							) &&
-							!String(
-								item?.fgZoneCode ||
-								""
-							).trim()
+					const pendingFgItems =
+						qrCart.filter(
+							(item) =>
+								item?.moveToFgRequired
 						);
-					});
 
-				if (missingZoneItem) {
-					alert(
-						`Select FG zone for ${missingZoneItem.itemName ||
-						"selected item"
-						}`
-					);
+					if (
+						pendingFgItems.length >
+						0
+					) {
+						await moveQrCartItemsToFgIfNeeded(
+							pendingFgItems
+						);
 
-					return;
+						const movedIds =
+							new Set(
+								pendingFgItems.map(
+									(item) =>
+										String(
+											item?.zohoItemId ||
+											""
+										).trim()
+								)
+							);
+
+						/*
+						 * Prevent duplicate FG movements when the
+						 * user returns to Details and reviews again.
+						 */
+						setDispatchTripContext(
+							(previous) => ({
+								...previous,
+
+								qrCart:
+									previous.qrCart.map(
+										(item) =>
+											movedIds.has(
+												String(
+													item?.zohoItemId ||
+													""
+												).trim()
+											)
+												? {
+													...item,
+													moveToFgRequired:
+														false,
+												}
+												: item
+									),
+							})
+						);
+					}
 				}
-			}
 
-			setDispatchTripStep(
-				"REVIEW"
-			);
+				await loadDispatchReviewPdf(
+					request
+				);
+
+			} catch (error) {
+				console.error(
+					"Unable to open challan review:",
+					error
+				);
+
+				setDispatchTripStep(
+					"DETAILS"
+				);
+
+				alert(
+					error?.message ||
+					"Unable to prepare challan review"
+				);
+			}
 		};
+
+	useEffect(() => {
+		return () => {
+			dispatchReviewPdfAbortRef.current?.abort();
+
+			const activeUrl =
+				dispatchReviewPdfUrlRef.current;
+
+			if (activeUrl) {
+				URL.revokeObjectURL(
+					activeUrl
+				);
+			}
+		};
+	}, []);
 
 	useEffect(() => {
 		setCustomChallanPageNo(1);
@@ -15727,7 +16135,18 @@ function DispatchedItemsPage() {
 						<Box
 							sx={{
 								...enhancedModalSx,
-								width: 620,
+
+								width:
+									dispatchTripStep ===
+										"REVIEW"
+										? "min(1120px, 95vw)"
+										: 620,
+
+								maxHeight:
+									"92vh",
+
+								transition:
+									"width 180ms ease",
 							}}
 							onClick={(e) => e.stopPropagation()}
 						>
@@ -16237,6 +16656,236 @@ function DispatchedItemsPage() {
 
 											<Box
 												sx={{
+													mt: 2,
+													mb: 2,
+													borderRadius: "18px",
+													overflow: "hidden",
+													background:
+														"rgba(2,6,23,.42)",
+													border:
+														"1px solid rgba(255,255,255,.08)",
+												}}
+											>
+												<Box
+													sx={{
+														minHeight: 58,
+														px: 2,
+														display: "flex",
+														alignItems: "center",
+														justifyContent:
+															"space-between",
+														gap: 2,
+														background:
+															"rgba(255,255,255,.035)",
+														borderBottom:
+															"1px solid rgba(255,255,255,.07)",
+													}}
+												>
+													<Box>
+														<Box
+															sx={{
+																color: "#fff",
+																fontSize: 14,
+																fontWeight: 950,
+															}}
+														>
+															📄 Challan PDF Preview
+														</Box>
+
+														<Box
+															sx={{
+																color: "#94a3b8",
+																fontSize: 11,
+																fontWeight: 700,
+																mt: 0.35,
+															}}
+														>
+															Read-only preview. No item is dispatched at this stage.
+														</Box>
+													</Box>
+
+													<Box
+														sx={{
+															display: "flex",
+															alignItems: "center",
+															gap: 1,
+														}}
+													>
+														<Button
+															size="small"
+															disabled={
+																dispatchReviewPdfLoading
+															}
+															onClick={() => {
+																loadDispatchReviewPdf()
+																	.catch(() => {
+																		/*
+																		 * The error is already displayed
+																		 * in the preview panel.
+																		 */
+																	});
+															}}
+															sx={modalSecondaryButtonSx}
+														>
+															{dispatchReviewPdfLoading
+																? "Preparing..."
+																: "Refresh Preview"}
+														</Button>
+
+														<Button
+															size="small"
+															disabled={
+																!dispatchReviewPdfUrl ||
+																dispatchReviewPdfLoading
+															}
+															onClick={() => {
+																window.open(
+																	dispatchReviewPdfUrl,
+																	"_blank",
+																	"noopener,noreferrer"
+																);
+															}}
+															sx={modalSecondaryButtonSx}
+														>
+															Open PDF
+														</Button>
+													</Box>
+												</Box>
+
+												{dispatchReviewPdfLoading && (
+													<Box
+														sx={{
+															height: 500,
+															display: "flex",
+															flexDirection: "column",
+															alignItems: "center",
+															justifyContent: "center",
+															gap: 1,
+															color: "#fcd34d",
+															fontWeight: 900,
+															background:
+																"rgba(15,23,42,.65)",
+														}}
+													>
+														<Box
+															sx={{
+																fontSize: 30,
+															}}
+														>
+															📄
+														</Box>
+
+														Preparing challan PDF preview…
+													</Box>
+												)}
+
+												{!dispatchReviewPdfLoading &&
+													dispatchReviewPdfError && (
+														<Box
+															sx={{
+																height: 300,
+																p: 3,
+																display: "flex",
+																flexDirection:
+																	"column",
+																alignItems:
+																	"center",
+																justifyContent:
+																	"center",
+																gap: 1.5,
+																textAlign:
+																	"center",
+																color: "#fca5a5",
+															}}
+														>
+															<Box
+																sx={{
+																	fontSize: 28,
+																}}
+															>
+																⚠️
+															</Box>
+
+															<Box
+																sx={{
+																	fontWeight: 900,
+																}}
+															>
+																PDF preview could not be generated
+															</Box>
+
+															<Box
+																sx={{
+																	color: "#94a3b8",
+																	fontSize: 12,
+																	fontWeight: 700,
+																	maxWidth: 500,
+																}}
+															>
+																{dispatchReviewPdfError}
+															</Box>
+
+															<Button
+																onClick={() => {
+																	loadDispatchReviewPdf()
+																		.catch(() => { });
+																}}
+																sx={modalSecondaryButtonSx}
+															>
+																Try Again
+															</Button>
+														</Box>
+													)}
+
+												{!dispatchReviewPdfLoading &&
+													!dispatchReviewPdfError &&
+													dispatchReviewPdfUrl && (
+														<Box
+															sx={{
+																height: 540,
+																p: 1,
+																background:
+																	"#334155",
+															}}
+														>
+															<iframe
+																title="Dispatch Challan Review PDF"
+																src={
+																	dispatchReviewPdfUrl
+																}
+																style={{
+																	width: "100%",
+																	height: "100%",
+																	border: "none",
+																	borderRadius: 12,
+																	background:
+																		"#ffffff",
+																}}
+															/>
+														</Box>
+													)}
+
+												{!dispatchReviewPdfLoading &&
+													!dispatchReviewPdfError &&
+													!dispatchReviewPdfUrl && (
+														<Box
+															sx={{
+																height: 280,
+																display: "flex",
+																alignItems: "center",
+																justifyContent:
+																	"center",
+																color: "#94a3b8",
+																fontWeight: 800,
+															}}
+														>
+															No PDF preview loaded.
+														</Box>
+													)}
+											</Box>
+
+											<Box
+												sx={{
 													mb: 1,
 													color: "#fff",
 													fontSize: 14,
@@ -16479,14 +17128,14 @@ function DispatchedItemsPage() {
 												disabled={
 													dispatchTripLoading
 												}
-												onClick={() =>
+												onClick={() => {
+													clearDispatchReviewPdf();
+
 													setDispatchTripStep(
 														"DETAILS"
-													)
-												}
-												sx={
-													modalSecondaryButtonSx
-												}
+													);
+												}}
+												sx={modalSecondaryButtonSx}
 											>
 												← Edit Details
 											</Button>
@@ -16494,28 +17143,35 @@ function DispatchedItemsPage() {
 											<Button
 												disabled={
 													dispatchTripLoading ||
-													dispatchTripPreviewItems.length ===
-													0
+													dispatchReviewPdfLoading ||
+													!dispatchReviewPdfUrl ||
+													Boolean(
+														dispatchReviewPdfError
+													)
 												}
 												onClick={
 													submitDispatchTrip
 												}
 												sx={{
 													...premiumButton,
+
 													background:
 														"linear-gradient(135deg,#059669,#10b981)",
 
 													"&.Mui-disabled": {
 														color:
 															"rgba(255,255,255,.45)",
+
 														background:
 															"rgba(255,255,255,.08)",
 													},
 												}}
 											>
 												{dispatchTripLoading
-													? "Creating Challan..."
-													: "Confirm & Create Challan"}
+													? "Creating Final Challan..."
+													: dispatchReviewPdfLoading
+														? "Preparing PDF Preview..."
+														: "Confirm & Create Final Challan"}
 											</Button>
 										</>
 									)}

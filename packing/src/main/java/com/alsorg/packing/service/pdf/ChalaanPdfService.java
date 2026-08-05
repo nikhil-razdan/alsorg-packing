@@ -6,6 +6,9 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.util.Matrix;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import org.springframework.stereotype.Service;
@@ -18,7 +21,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
 import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
 import com.alsorg.packing.controller.dto.challan.CustomChallanRequest;
 
@@ -1917,6 +1919,84 @@ public class ChalaanPdfService {
                         case "SQMTR" -> "sqmtr";
                         default -> "pieces";
                 };
+        }
+
+        private void drawPreviewWatermark(
+                        PDPageContentStream cs,
+                        PDPage page,
+                        PDFont bold) throws IOException {
+
+                if (cs == null ||
+                                page == null ||
+                                bold == null) {
+                        return;
+                }
+
+                String watermark = "PREVIEW - NOT A VALID CHALLAN";
+
+                float fontSize = 38f;
+
+                float textWidth = bold.getStringWidth(
+                                watermark)
+                                / 1000f
+                                * fontSize;
+
+                PDRectangle mediaBox = page.getMediaBox();
+
+                float centerX = mediaBox.getLowerLeftX()
+                                + (mediaBox.getWidth()
+                                                / 2f);
+
+                float centerY = mediaBox.getLowerLeftY()
+                                + (mediaBox.getHeight()
+                                                / 2f);
+
+                cs.saveGraphicsState();
+
+                try {
+                        PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
+
+                        graphicsState.setNonStrokingAlphaConstant(
+                                        0.14f);
+
+                        cs.setGraphicsStateParameters(
+                                        graphicsState);
+
+                        /*
+                         * Faint red watermark.
+                         */
+                        cs.setNonStrokingColor(
+                                        185,
+                                        28,
+                                        28);
+
+                        cs.beginText();
+
+                        cs.setFont(
+                                        bold,
+                                        fontSize);
+
+                        Matrix matrix = Matrix.getRotateInstance(
+                                        Math.toRadians(
+                                                        32),
+                                        centerX,
+                                        centerY);
+
+                        matrix.translate(
+                                        -textWidth / 2f,
+                                        0);
+
+                        cs.setTextMatrix(
+                                        matrix);
+
+                        cs.showText(
+                                        watermark);
+
+                        cs.endText();
+
+                } finally {
+                        cs.restoreGraphicsState();
+                }
         }
 
         private boolean isCustomType(

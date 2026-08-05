@@ -21,6 +21,8 @@ public class ChalaanPdfData {
 
     private LocalDateTime dispatchTime;
 
+    private boolean preview;
+
     // ================= GETTERS =================
 
     public LocalDateTime getDispatchTime() {
@@ -53,6 +55,15 @@ public class ChalaanPdfData {
 
     public List<ChalaanItem> getItems() {
         return items;
+    }
+
+    public boolean isPreview() {
+        return preview;
+    }
+
+    public void setPreview(
+            boolean preview) {
+        this.preview = preview;
     }
 
     // ================= SETTERS =================

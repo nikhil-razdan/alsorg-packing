@@ -31,626 +31,805 @@ import java.util.UUID;
 @Transactional
 public class DispatchChallanService {
 
-    private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
 
-    private final ChalaanPdfService pdfService;
-    private final DispatchedItemRepository dispatchedRepo;
-    private final PacketItemRepository packetItemRepo;
-    private final DriverRepository driverRepository;
-    private final VehicleRepository vehicleRepository;
-    private final DispatchedItemService dispatchedItemService;
+        private final ChalaanPdfService pdfService;
+        private final DispatchedItemRepository dispatchedRepo;
+        private final PacketItemRepository packetItemRepo;
+        private final DriverRepository driverRepository;
+        private final VehicleRepository vehicleRepository;
+        private final DispatchedItemService dispatchedItemService;
 
-    public DispatchChallanService(
-            ChalaanPdfService pdfService,
-            DispatchedItemRepository dispatchedRepo,
-            PacketItemRepository packetItemRepo,
-            DriverRepository driverRepository,
-            VehicleRepository vehicleRepository,
-            DispatchedItemService dispatchedItemService) {
-        this.pdfService = pdfService;
-        this.dispatchedRepo = dispatchedRepo;
-        this.packetItemRepo = packetItemRepo;
-        this.driverRepository = driverRepository;
-        this.vehicleRepository = vehicleRepository;
-        this.dispatchedItemService = dispatchedItemService;
-    }
-
-    /*
-     * Backward-compatible wrapper.
-     * Keeps old controller / mobile calls compiling.
-     */
-    public DispatchTripPdfResult generateAndDispatch(
-            List<String> rawItemIds,
-            UUID driverId,
-            UUID vehicleId,
-            String username,
-            Set<String> allowedPlants) {
-        return generateAndDispatch(
-                rawItemIds,
-                driverId,
-                vehicleId,
-                null,
-                username,
-                allowedPlants);
-    }
-
-    public DispatchTripPdfResult generateAndDispatch(
-            List<String> rawItemIds,
-            UUID driverId,
-            UUID vehicleId,
-            LocalDateTime dispatchTime,
-            String username,
-            Set<String> allowedPlants) {
-        if (rawItemIds == null || rawItemIds.isEmpty()) {
-            throw new RuntimeException("No items selected for challan");
+        public DispatchChallanService(
+                        ChalaanPdfService pdfService,
+                        DispatchedItemRepository dispatchedRepo,
+                        PacketItemRepository packetItemRepo,
+                        DriverRepository driverRepository,
+                        VehicleRepository vehicleRepository,
+                        DispatchedItemService dispatchedItemService) {
+                this.pdfService = pdfService;
+                this.dispatchedRepo = dispatchedRepo;
+                this.packetItemRepo = packetItemRepo;
+                this.driverRepository = driverRepository;
+                this.vehicleRepository = vehicleRepository;
+                this.dispatchedItemService = dispatchedItemService;
         }
-
-        Driver driver = null;
-
-        if (driverId != null) {
-            driver = driverRepository
-                    .findById(driverId)
-                    .orElseThrow(() -> new RuntimeException(
-                            "Driver not found: " +
-                                    driverId));
-        }
-
-        Vehicle vehicle = null;
-
-        if (vehicleId != null) {
-            vehicle = vehicleRepository
-                    .findById(vehicleId)
-                    .orElseThrow(() -> new RuntimeException(
-                            "Vehicle not found: " +
-                                    vehicleId));
-        }
-
-        List<String> itemIds = cleanUniqueItemIds(rawItemIds);
-
-        if (itemIds.isEmpty()) {
-            throw new RuntimeException("No valid items selected for challan");
-        }
-
-        List<DispatchedItem> items = new ArrayList<>();
-
-        for (String id : itemIds) {
-            DispatchedItem item = dispatchedRepo
-                    .findById(id)
-                    .orElseThrow(() -> new RuntimeException("Item not found: " + id));
-
-            assertPlantAccess(
-                    item,
-                    allowedPlants);
-
-            DispatchedItem prepared = prepareForChallan(
-                    item,
-                    username,
-                    allowedPlants);
-
-            items.add(prepared);
-        }
-
-        LocalDateTime dispatchTimeIst = dispatchTime != null
-                ? dispatchTime
-                : LocalDateTime.now(INDIA_ZONE);
-
-        String actor = safeActor(username);
-
-        String challanNo = generateChallanNumber(dispatchTimeIst);
-
-        ChalaanPdfData data = buildPdfData(
-                challanNo,
-                driver,
-                vehicle,
-                items,
-                dispatchTimeIst);
-
-        byte[] pdf = pdfService.generateChalaan(data);
 
         /*
-         * Save challan metadata before marking DISPATCHED.
-         * markDispatchedFromChalaan will set status/stock/logs.
+         * Backward-compatible wrapper.
+         * Keeps old controller / mobile calls compiling.
          */
-        for (DispatchedItem item : items) {
-            applyDispatchMetadata(
-                    item,
-                    challanNo,
-                    driver,
-                    vehicle,
-                    dispatchTimeIst,
-                    actor);
+        public DispatchTripPdfResult generateAndDispatch(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        String username,
+                        Set<String> allowedPlants) {
+                return generateAndDispatch(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                null,
+                                username,
+                                allowedPlants);
         }
 
-        dispatchedRepo.saveAll(items);
+        public DispatchTripPdfResult generateAndDispatch(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        String username,
+                        Set<String> allowedPlants) {
+                if (rawItemIds == null || rawItemIds.isEmpty()) {
+                        throw new RuntimeException("No items selected for challan");
+                }
 
-        /*
-         * This logs and moves status to DISPATCHED.
-         * Then we re-apply the selected time after it, so even if older
-         * markDispatchedFromChalaan overwrites time, final saved time stays correct.
-         */
-        for (DispatchedItem item : items) {
-            dispatchedItemService.markDispatchedFromChalaan(
-                    item.getZohoItemId(),
-                    actor);
+                Driver driver = resolveDriver(
+                                driverId);
+
+                Vehicle vehicle = resolveVehicle(
+                                vehicleId);
+
+                List<String> itemIds = cleanUniqueItemIds(rawItemIds);
+
+                if (itemIds.isEmpty()) {
+                        throw new RuntimeException("No valid items selected for challan");
+                }
+
+                List<DispatchedItem> items = new ArrayList<>();
+
+                for (String id : itemIds) {
+                        DispatchedItem item = dispatchedRepo
+                                        .findById(id)
+                                        .orElseThrow(() -> new RuntimeException("Item not found: " + id));
+
+                        assertPlantAccess(
+                                        item,
+                                        allowedPlants);
+
+                        DispatchedItem prepared = prepareForChallan(
+                                        item,
+                                        username,
+                                        allowedPlants);
+
+                        items.add(prepared);
+                }
+
+                LocalDateTime dispatchTimeIst = dispatchTime != null
+                                ? dispatchTime
+                                : LocalDateTime.now(INDIA_ZONE);
+
+                String actor = safeActor(username);
+
+                String challanNo = generateChallanNumber(dispatchTimeIst);
+
+                ChalaanPdfData data = buildPdfData(
+                                challanNo,
+                                driver,
+                                vehicle,
+                                items,
+                                dispatchTimeIst,
+                                false);
+
+                byte[] pdf = pdfService.generateChalaan(data);
+
+                /*
+                 * Save challan metadata before marking DISPATCHED.
+                 * markDispatchedFromChalaan will set status/stock/logs.
+                 */
+                for (DispatchedItem item : items) {
+                        applyDispatchMetadata(
+                                        item,
+                                        challanNo,
+                                        driver,
+                                        vehicle,
+                                        dispatchTimeIst,
+                                        actor);
+                }
+
+                dispatchedRepo.saveAll(items);
+
+                /*
+                 * This logs and moves status to DISPATCHED.
+                 * Then we re-apply the selected time after it, so even if older
+                 * markDispatchedFromChalaan overwrites time, final saved time stays correct.
+                 */
+                for (DispatchedItem item : items) {
+                        dispatchedItemService.markDispatchedFromChalaan(
+                                        item.getZohoItemId(),
+                                        actor);
+                }
+
+                List<DispatchedItem> finalItems = new ArrayList<>();
+
+                for (DispatchedItem item : items) {
+                        DispatchedItem saved = dispatchedRepo
+                                        .findById(item.getZohoItemId())
+                                        .orElseThrow(() -> new RuntimeException(
+                                                        "Item missing after dispatch: " + item.getZohoItemId()));
+
+                        applyDispatchMetadata(
+                                        saved,
+                                        challanNo,
+                                        driver,
+                                        vehicle,
+                                        dispatchTimeIst,
+                                        actor);
+
+                        saved.setStatus(ItemDispatchStatus.DISPATCHED);
+                        saved.setStock(0);
+
+                        finalItems.add(saved);
+                }
+
+                dispatchedRepo.saveAll(finalItems);
+
+                return new DispatchTripPdfResult(
+                                null,
+                                challanNo,
+                                pdf);
         }
 
-        List<DispatchedItem> finalItems = new ArrayList<>();
+        @Transactional(readOnly = true)
+        public DispatchTripPdfResult previewDispatchChallan(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        String username,
+                        Set<String> allowedPlants) {
 
-        for (DispatchedItem item : items) {
-            DispatchedItem saved = dispatchedRepo
-                    .findById(item.getZohoItemId())
-                    .orElseThrow(() -> new RuntimeException(
-                            "Item missing after dispatch: " + item.getZohoItemId()));
+                List<String> itemIds = cleanUniqueItemIds(
+                                rawItemIds);
 
-            applyDispatchMetadata(
-                    saved,
-                    challanNo,
-                    driver,
-                    vehicle,
-                    dispatchTimeIst,
-                    actor);
+                if (itemIds.isEmpty()) {
+                        throw new RuntimeException(
+                                        "No valid items selected for challan");
+                }
 
-            saved.setStatus(ItemDispatchStatus.DISPATCHED);
-            saved.setStock(0);
+                Driver driver = resolveDriver(
+                                driverId);
 
-            finalItems.add(saved);
+                Vehicle vehicle = resolveVehicle(
+                                vehicleId);
+
+                /*
+                 * Read and validate items without modifying:
+                 *
+                 * - status
+                 * - dispatch metadata
+                 * - challan number
+                 * - driver/vehicle fields
+                 * - audit/history
+                 */
+                List<DispatchedItem> items = loadPreviewItems(
+                                itemIds,
+                                allowedPlants);
+
+                LocalDateTime dispatchTimeIst = dispatchTime != null
+                                ? dispatchTime
+                                : LocalDateTime.now(
+                                                INDIA_ZONE);
+
+                /*
+                 * Never generate a real challan number for preview.
+                 */
+                String previewChallanNumber = "PREVIEW";
+
+                ChalaanPdfData data = buildPdfData(
+                                previewChallanNumber,
+                                driver,
+                                vehicle,
+                                items,
+                                dispatchTimeIst,
+                                true);
+
+                byte[] pdf = pdfService.generateChalaan(
+                                data);
+
+                return new DispatchTripPdfResult(
+                                null,
+                                previewChallanNumber,
+                                pdf);
         }
 
-        dispatchedRepo.saveAll(finalItems);
+        private List<DispatchedItem> loadPreviewItems(
+                        List<String> itemIds,
+                        Set<String> allowedPlants) {
 
-        return new DispatchTripPdfResult(
-                null,
-                challanNo,
-                pdf);
-    }
+                List<DispatchedItem> items = new ArrayList<>();
 
-    public DispatchTripPdfResult generateCustomChallan(
-            CustomChallanRequest request,
-            String username) {
-        if (request == null) {
-            throw new RuntimeException("Custom challan request missing");
+                for (String id : itemIds) {
+
+                        DispatchedItem item = dispatchedRepo
+                                        .findById(id)
+                                        .orElseThrow(
+                                                        () -> new RuntimeException(
+                                                                        "Item not found: "
+                                                                                        + id));
+
+                        assertPlantAccess(
+                                        item,
+                                        allowedPlants);
+
+                        assertEligibleForChallan(
+                                        item);
+
+                        /*
+                         * Important:
+                         * Do not call prepareForChallan() here.
+                         *
+                         * prepareForChallan() may change READY into
+                         * READY_TO_DISPATCH, which is not allowed during preview.
+                         */
+                        items.add(
+                                        item);
+                }
+
+                return List.copyOf(
+                                items);
         }
 
-        if (isBlank(request.fromLocation())) {
-            throw new RuntimeException("From location is required");
-        }
+        private void assertEligibleForChallan(
+                        DispatchedItem item) {
 
-        if (isBlank(request.toLocation())) {
-            throw new RuntimeException("To location / site is required");
-        }
+                if (item == null) {
+                        throw new RuntimeException(
+                                        "Dispatch item is missing");
+                }
 
-        if (request.items() == null || request.items().isEmpty()) {
-            throw new RuntimeException("At least one challan item is required");
-        }
+                ItemDispatchStatus status = item.getStatus();
 
-        boolean hasValidItem = false;
+                if (status == ItemDispatchStatus.READY_TO_DISPATCH) {
+                        return;
+                }
 
-        for (CustomChallanItemRequest item : request.items()) {
-            if (item != null && !isBlank(item.description())) {
-                hasValidItem = true;
-                break;
-            }
-        }
+                /*
+                 * QR dispatch may provide a READY item.
+                 *
+                 * It is acceptable only when:
+                 * - it has already moved to FG, or
+                 * - it is a legacy item without complete plant/location data.
+                 */
+                if (status == ItemDispatchStatus.READY) {
+                        if (requiresMoveToFg(item)) {
+                                throw new RuntimeException(
+                                                "Move item to FG before generating challan: "
+                                                                + safe(
+                                                                                item.getName()));
+                        }
 
-        if (!hasValidItem) {
-            throw new RuntimeException("At least one item description is required");
-        }
+                        return;
+                }
 
-        String challanNo = generateCustomChallanNumber(request.challanType());
+                if (status == ItemDispatchStatus.DISPATCHED) {
+                        throw new RuntimeException(
+                                        "Item already dispatched. Challan: "
+                                                        + safe(
+                                                                        item.getChalaanNumber()));
+                }
 
-        byte[] pdf = pdfService.generateCustomChalaan(
-                request,
-                challanNo,
-                safeActor(username));
+                if (status == ItemDispatchStatus.LOADED) {
+                        throw new RuntimeException(
+                                        "Item is in old queued state. Reset/restore before dispatch: "
+                                                        + safe(
+                                                                        item.getName()));
+                }
 
-        return new DispatchTripPdfResult(
-                null,
-                challanNo,
-                pdf);
-    }
+                if (status == ItemDispatchStatus.OUT_FOR_DELIVERY) {
+                        throw new RuntimeException(
+                                        "Item is in old delivery state. Reset/restore before dispatch: "
+                                                        + safe(
+                                                                        item.getName()));
+                }
 
-    private List<String> cleanUniqueItemIds(
-            List<String> rawItemIds) {
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
+                if (status == ItemDispatchStatus.DELIVERED) {
+                        throw new RuntimeException(
+                                        "Item is in old delivered state. Reset/restore before dispatch: "
+                                                        + safe(
+                                                                        item.getName()));
+                }
 
-        for (String id : rawItemIds) {
-            if (id == null) {
-                continue;
-            }
-
-            String clean = id.trim();
-
-            if (!clean.isBlank()) {
-                unique.add(clean);
-            }
-        }
-
-        return new ArrayList<>(unique);
-    }
-
-    private DispatchedItem prepareForChallan(
-            DispatchedItem item,
-            String username,
-            Set<String> allowedPlants) {
-        ItemDispatchStatus status = item.getStatus();
-
-        if (status == ItemDispatchStatus.READY_TO_DISPATCH) {
-            return item;
-        }
-
-        if (status == ItemDispatchStatus.DISPATCHED) {
-            throw new RuntimeException(
-                    "Item already dispatched. Challan: "
-                            + safe(item.getChalaanNumber()));
-        }
-
-        if (status == ItemDispatchStatus.LOADED) {
-            throw new RuntimeException(
-                    "Item is in old queued state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
-        }
-
-        if (status == ItemDispatchStatus.OUT_FOR_DELIVERY) {
-            throw new RuntimeException(
-                    "Item is in old delivery state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
-        }
-
-        if (status == ItemDispatchStatus.DELIVERED) {
-            throw new RuntimeException(
-                    "Item is in old delivered state. Reset/restore before dispatch: "
-                            + safe(item.getName()));
-        }
-
-        if (status == ItemDispatchStatus.READY) {
-            if (requiresMoveToFg(item)) {
                 throw new RuntimeException(
-                        "Move item to FG before generating challan: "
-                                + safe(item.getName()));
-            }
-
-            dispatchedItemService.updateDispatchStatus(
-                    item.getZohoItemId(),
-                    ItemDispatchStatus.READY_TO_DISPATCH,
-                    safeActor(username),
-                    allowedPlants);
-
-            return dispatchedRepo
-                    .findById(item.getZohoItemId())
-                    .orElseThrow(() -> new RuntimeException(
-                            "Item missing after status update"));
+                                "Item must be READY or READY_TO_DISPATCH before challan. "
+                                                + "Current status: "
+                                                + (status == null
+                                                                ? "NULL"
+                                                                : status.name())
+                                                + " | Item: "
+                                                + safe(
+                                                                item.getName()));
         }
 
-        throw new RuntimeException(
-                "Item must be READY_TO_DISPATCH before challan. Current status: "
-                        + status
-                        + " | Item: "
-                        + safe(item.getName()));
-    }
+        private Driver resolveDriver(
+                        UUID driverId) {
 
-    private ChalaanPdfData buildPdfData(
-            String challanNo,
-            Driver driver,
-            Vehicle vehicle,
-            List<DispatchedItem> items,
-            LocalDateTime dispatchTimeIst) {
-        ChalaanPdfData data = new ChalaanPdfData();
+                if (driverId == null) {
+                        return null;
+                }
 
-        data.setVoucherNo(challanNo);
-        data.setDispatchTime(dispatchTimeIst);
-        data.setDesignerName("-");
-        data.setOt("-");
-        data.setDriverName(
-                driver == null
-                        ? null
-                        : cleanNullable(
-                                driver.getName()));
-
-        data.setVehicleNumber(
-                vehicle == null
-                        ? null
-                        : cleanNullable(
-                                vehicle.getVehicleNumber()));
-
-        List<ChalaanItem> challanItems = new ArrayList<>();
-
-        for (DispatchedItem item : items) {
-            PacketItem packetItem = null;
-
-            if (item.getPacketItemId() != null) {
-                packetItem = packetItemRepo
-                        .findById(item.getPacketItemId())
-                        .orElse(null);
-            }
-
-            challanItems.add(
-                    buildChallanItem(
-                            item,
-                            packetItem));
+                return driverRepository
+                                .findById(driverId)
+                                .orElseThrow(
+                                                () -> new RuntimeException(
+                                                                "Driver not found: "
+                                                                                + driverId));
         }
 
-        data.setItems(challanItems);
+        private Vehicle resolveVehicle(
+                        UUID vehicleId) {
 
-        if (!challanItems.isEmpty()) {
-            data.setAddress(
-                    safe(challanItems.get(0).getClientAddress()));
-        } else {
-            data.setAddress("-");
+                if (vehicleId == null) {
+                        return null;
+                }
+
+                return vehicleRepository
+                                .findById(vehicleId)
+                                .orElseThrow(
+                                                () -> new RuntimeException(
+                                                                "Vehicle not found: "
+                                                                                + vehicleId));
         }
 
-        return data;
-    }
+        public DispatchTripPdfResult generateCustomChallan(
+                        CustomChallanRequest request,
+                        String username) {
+                if (request == null) {
+                        throw new RuntimeException("Custom challan request missing");
+                }
 
-    private void applyDispatchMetadata(
-            DispatchedItem item,
-            String challanNo,
-            Driver driver,
-            Vehicle vehicle,
-            LocalDateTime dispatchTimeIst,
-            String actor) {
-        item.setChalaanNumber(challanNo);
+                if (isBlank(request.fromLocation())) {
+                        throw new RuntimeException("From location is required");
+                }
 
-        item.setDriverId(
-                driver == null
-                        ? null
-                        : driver.getId());
+                if (isBlank(request.toLocation())) {
+                        throw new RuntimeException("To location / site is required");
+                }
 
-        item.setDriverName(
-                driver == null
-                        ? null
-                        : cleanNullable(
-                                driver.getName()));
+                if (request.items() == null || request.items().isEmpty()) {
+                        throw new RuntimeException("At least one challan item is required");
+                }
 
-        item.setVehicleId(
-                vehicle == null
-                        ? null
-                        : vehicle.getId());
+                boolean hasValidItem = false;
 
-        item.setVehicleNumber(
-                vehicle == null
-                        ? null
-                        : cleanNullable(
-                                vehicle.getVehicleNumber()));
+                for (CustomChallanItemRequest item : request.items()) {
+                        if (item != null && !isBlank(item.description())) {
+                                hasValidItem = true;
+                                break;
+                        }
+                }
 
-        /*
-         * Main rule:
-         * selected dispatch time = dispatchedAt = tripStartedAt
-         */
-        item.setDispatchedAt(dispatchTimeIst);
-        item.setTripStartedAt(dispatchTimeIst);
+                if (!hasValidItem) {
+                        throw new RuntimeException("At least one item description is required");
+                }
 
-        /*
-         * Logistics/Admin ends it later from Dispatch Challans screen.
-         */
-        item.setTripEndedAt(null);
+                String challanNo = generateCustomChallanNumber(request.challanType());
 
-        item.setDispatchedBy(actor);
-    }
+                byte[] pdf = pdfService.generateCustomChalaan(
+                                request,
+                                challanNo,
+                                safeActor(username));
 
-    private ChalaanItem buildChallanItem(
-            DispatchedItem dispatchedItem,
-            PacketItem packetItem) {
-        ChalaanItem ci = new ChalaanItem();
-
-        ci.setZohoItemId(
-                dispatchedItem.getZohoItemId());
-
-        ci.setItemName(
-                packetItem != null && packetItem.getItemName() != null
-                        ? packetItem.getItemName()
-                        : dispatchedItem.getName());
-
-        ci.setPdNo(
-                packetItem != null && packetItem.getPdNo() != null
-                        ? packetItem.getPdNo()
-                        : dispatchedItem.getPdNo());
-
-        ci.setClientName(
-                packetItem != null && packetItem.getClientName() != null
-                        ? packetItem.getClientName()
-                        : dispatchedItem.getClientName());
-
-        ci.setClientAddress(
-                packetItem != null && packetItem.getClientAddress() != null
-                        ? packetItem.getClientAddress()
-                        : dispatchedItem.getClientAddress());
-
-        ci.setDescription(
-                packetItem != null && packetItem.getDescription() != null
-                        ? packetItem.getDescription()
-                        : dispatchedItem.getDescription());
-
-        ci.setDrawingNo(
-                packetItem != null && packetItem.getDrawingNo() != null
-                        ? packetItem.getDrawingNo()
-                        : dispatchedItem.getDrawingNo());
-
-        ci.setRemarks(
-                packetItem != null && packetItem.getRemarks() != null
-                        ? packetItem.getRemarks()
-                        : dispatchedItem.getRemarks());
-
-        ci.setQty(
-                dispatchedItem.getQuantity() != null
-                        ? String.valueOf(dispatchedItem.getQuantity())
-                        : "1");
-
-        return ci;
-    }
-
-    private void assertPlantAccess(
-            DispatchedItem item,
-            Set<String> allowedPlants) {
-        if (allowedPlants == null || allowedPlants.isEmpty()) {
-            return;
+                return new DispatchTripPdfResult(
+                                null,
+                                challanNo,
+                                pdf);
         }
 
-        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
-            return;
+        private List<String> cleanUniqueItemIds(
+                        List<String> rawItemIds) {
+                LinkedHashSet<String> unique = new LinkedHashSet<>();
+
+                for (String id : rawItemIds) {
+                        if (id == null) {
+                                continue;
+                        }
+
+                        String clean = id.trim();
+
+                        if (!clean.isBlank()) {
+                                unique.add(clean);
+                        }
+                }
+
+                return new ArrayList<>(unique);
         }
 
-        if (!allowedPlants.contains(item.getPlantCode())) {
-            throw new RuntimeException(
-                    "User does not have access to plant: "
-                            + item.getPlantCode());
-        }
-    }
+        private DispatchedItem prepareForChallan(
+                        DispatchedItem item,
+                        String username,
+                        Set<String> allowedPlants) {
 
-    private boolean requiresMoveToFg(
-            DispatchedItem item) {
-        return item.getStatus() == ItemDispatchStatus.READY
-                && !isLegacyLocationMissing(item)
-                && isPkdLocation(item)
-                && !isFgLocation(item);
-    }
+                /*
+                 * Uses the exact same eligibility rules as preview.
+                 */
+                assertEligibleForChallan(
+                                item);
 
-    private boolean isLegacyLocationMissing(
-            DispatchedItem item) {
-        return item.getPlantCode() == null || item.getPlantCode().isBlank()
-                || item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()
-                || item.getFgAreaCode() == null || item.getFgAreaCode().isBlank();
-    }
+                if (item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
+                        return item;
+                }
 
-    private String currentLocation(
-            DispatchedItem item) {
-        if (item.getCurrentLocationCode() != null && !item.getCurrentLocationCode().isBlank()) {
-            return item.getCurrentLocationCode().trim();
-        }
+                /*
+                 * A valid QR READY item is promoted only during
+                 * final creation, never during preview.
+                 */
+                if (item.getStatus() == ItemDispatchStatus.READY) {
+                        dispatchedItemService
+                                        .updateDispatchStatus(
+                                                        item.getZohoItemId(),
+                                                        ItemDispatchStatus.READY_TO_DISPATCH,
+                                                        safeActor(
+                                                                        username),
+                                                        allowedPlants);
 
-        if (item.getLocation() != null && !item.getLocation().isBlank()) {
-            return item.getLocation().trim();
-        }
+                        return dispatchedRepo
+                                        .findById(
+                                                        item.getZohoItemId())
+                                        .orElseThrow(
+                                                        () -> new RuntimeException(
+                                                                        "Item missing after status update: "
+                                                                                        + item.getZohoItemId()));
+                }
 
-        return "";
-    }
-
-    private boolean isPkdLocation(
-            DispatchedItem item) {
-        String location = currentLocation(item);
-
-        if (location.isBlank()) {
-            return false;
-        }
-
-        String packedArea = item.getPackedAreaCode();
-
-        String cleanLocation = location.trim().toUpperCase();
-
-        if (packedArea != null && !packedArea.isBlank()) {
-            String cleanPackedArea = packedArea.trim().toUpperCase();
-
-            return cleanLocation.equals(cleanPackedArea)
-                    || cleanLocation.startsWith(cleanPackedArea + "-")
-                    || cleanLocation.startsWith(cleanPackedArea + " ");
+                /*
+                 * assertEligibleForChallan() already rejects all
+                 * remaining statuses.
+                 */
+                throw new RuntimeException(
+                                "Item cannot be prepared for challan: "
+                                                + safe(
+                                                                item.getName()));
         }
 
-        return cleanLocation.startsWith("PKD");
-    }
+        private ChalaanPdfData buildPdfData(
+                        String challanNo,
+                        Driver driver,
+                        Vehicle vehicle,
+                        List<DispatchedItem> items,
+                        LocalDateTime dispatchTimeIst,
+                        boolean preview) {
+                ChalaanPdfData data = new ChalaanPdfData();
 
-    private boolean isFgLocation(
-            DispatchedItem item) {
-        String location = currentLocation(item);
+                data.setPreview(
+                                preview);
 
-        String fg = item.getFgAreaCode();
+                data.setVoucherNo(challanNo);
+                data.setDispatchTime(dispatchTimeIst);
+                data.setDesignerName("-");
+                data.setOt("-");
+                data.setDriverName(
+                                driver == null
+                                                ? null
+                                                : cleanNullable(
+                                                                driver.getName()));
 
-        if (location.isBlank() || fg == null || fg.isBlank()) {
-            return false;
+                data.setVehicleNumber(
+                                vehicle == null
+                                                ? null
+                                                : cleanNullable(
+                                                                vehicle.getVehicleNumber()));
+
+                List<ChalaanItem> challanItems = new ArrayList<>();
+
+                for (DispatchedItem item : items) {
+                        PacketItem packetItem = null;
+
+                        if (item.getPacketItemId() != null) {
+                                packetItem = packetItemRepo
+                                                .findById(item.getPacketItemId())
+                                                .orElse(null);
+                        }
+
+                        challanItems.add(
+                                        buildChallanItem(
+                                                        item,
+                                                        packetItem));
+                }
+
+                data.setItems(challanItems);
+
+                if (!challanItems.isEmpty()) {
+                        data.setAddress(
+                                        safe(challanItems.get(0).getClientAddress()));
+                } else {
+                        data.setAddress("-");
+                }
+
+                return data;
         }
 
-        String cleanLocation = location.trim().toUpperCase();
+        private void applyDispatchMetadata(
+                        DispatchedItem item,
+                        String challanNo,
+                        Driver driver,
+                        Vehicle vehicle,
+                        LocalDateTime dispatchTimeIst,
+                        String actor) {
+                item.setChalaanNumber(challanNo);
 
-        String cleanFg = fg.trim().toUpperCase();
+                item.setDriverId(
+                                driver == null
+                                                ? null
+                                                : driver.getId());
 
-        return cleanLocation.equals(cleanFg)
-                || cleanLocation.startsWith(cleanFg + "-")
-                || cleanLocation.startsWith(cleanFg + " ");
-    }
+                item.setDriverName(
+                                driver == null
+                                                ? null
+                                                : cleanNullable(
+                                                                driver.getName()));
 
-    private String generateChallanNumber(
-            LocalDateTime dispatchTimeIst) {
-        String date = (dispatchTimeIst != null
-                ? dispatchTimeIst.toLocalDate()
-                : java.time.LocalDate.now(INDIA_ZONE)).format(
-                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+                item.setVehicleId(
+                                vehicle == null
+                                                ? null
+                                                : vehicle.getId());
 
-        String suffix = UUID.randomUUID()
-                .toString()
-                .substring(0, 6)
-                .toUpperCase();
+                item.setVehicleNumber(
+                                vehicle == null
+                                                ? null
+                                                : cleanNullable(
+                                                                vehicle.getVehicleNumber()));
 
-        return "CH-" + date + "-" + suffix;
-    }
+                /*
+                 * Main rule:
+                 * selected dispatch time = dispatchedAt = tripStartedAt
+                 */
+                item.setDispatchedAt(dispatchTimeIst);
+                item.setTripStartedAt(dispatchTimeIst);
 
-    private String safeActor(
-            String username) {
-        return username != null && !username.isBlank()
-                ? username.trim()
-                : "SYSTEM";
-    }
+                /*
+                 * Logistics/Admin ends it later from Dispatch Challans screen.
+                 */
+                item.setTripEndedAt(null);
 
-    private String cleanNullable(
-            Object value) {
-        if (value == null) {
-            return null;
+                item.setDispatchedBy(actor);
         }
 
-        String text = value
-                .toString()
-                .trim();
+        private ChalaanItem buildChallanItem(
+                        DispatchedItem dispatchedItem,
+                        PacketItem packetItem) {
+                ChalaanItem ci = new ChalaanItem();
 
-        return text.isBlank()
-                ? null
-                : text;
-    }
+                ci.setZohoItemId(
+                                dispatchedItem.getZohoItemId());
 
-    private String safe(
-            Object value) {
-        if (value == null) {
-            return "-";
+                ci.setItemName(
+                                packetItem != null && packetItem.getItemName() != null
+                                                ? packetItem.getItemName()
+                                                : dispatchedItem.getName());
+
+                ci.setPdNo(
+                                packetItem != null && packetItem.getPdNo() != null
+                                                ? packetItem.getPdNo()
+                                                : dispatchedItem.getPdNo());
+
+                ci.setClientName(
+                                packetItem != null && packetItem.getClientName() != null
+                                                ? packetItem.getClientName()
+                                                : dispatchedItem.getClientName());
+
+                ci.setClientAddress(
+                                packetItem != null && packetItem.getClientAddress() != null
+                                                ? packetItem.getClientAddress()
+                                                : dispatchedItem.getClientAddress());
+
+                ci.setDescription(
+                                packetItem != null && packetItem.getDescription() != null
+                                                ? packetItem.getDescription()
+                                                : dispatchedItem.getDescription());
+
+                ci.setDrawingNo(
+                                packetItem != null && packetItem.getDrawingNo() != null
+                                                ? packetItem.getDrawingNo()
+                                                : dispatchedItem.getDrawingNo());
+
+                ci.setRemarks(
+                                packetItem != null && packetItem.getRemarks() != null
+                                                ? packetItem.getRemarks()
+                                                : dispatchedItem.getRemarks());
+
+                ci.setQty(
+                                dispatchedItem.getQuantity() != null
+                                                ? String.valueOf(dispatchedItem.getQuantity())
+                                                : "1");
+
+                return ci;
         }
 
-        String text = value.toString().trim();
+        private void assertPlantAccess(
+                        DispatchedItem item,
+                        Set<String> allowedPlants) {
+                if (allowedPlants == null || allowedPlants.isEmpty()) {
+                        return;
+                }
 
-        return text.isEmpty()
-                ? "-"
-                : text;
-    }
+                if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+                        return;
+                }
 
-    private String generateCustomChallanNumber(
-            String challanType) {
-        String cleanType = challanType == null
-                ? ""
-                : challanType.trim().toUpperCase();
-
-        String prefix;
-
-        if ("CUSTOMER_CARE".equals(cleanType)) {
-            prefix = "CC-CH";
-        } else if ("HARDWARE_SITE_REQUIREMENT".equals(cleanType)) {
-            prefix = "HW-CH";
-        } else if ("ASSEMBLY_SITE_REQUIREMENT".equals(cleanType)) {
-            prefix = "ASM-CH";
-        } else if ("JOB_WORK".equals(cleanType)) {
-            prefix = "JW-CH";
-        } else if ("SITE_RETURN".equals(cleanType)) {
-            prefix = "SR-CH";
-        } else {
-            prefix = "CUS-CH";
+                if (!allowedPlants.contains(item.getPlantCode())) {
+                        throw new RuntimeException(
+                                        "User does not have access to plant: "
+                                                        + item.getPlantCode());
+                }
         }
 
-        String date = java.time.LocalDate.now(INDIA_ZONE)
-                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        private boolean requiresMoveToFg(
+                        DispatchedItem item) {
+                return item.getStatus() == ItemDispatchStatus.READY
+                                && !isLegacyLocationMissing(item)
+                                && isPkdLocation(item)
+                                && !isFgLocation(item);
+        }
 
-        String suffix = UUID.randomUUID()
-                .toString()
-                .substring(0, 6)
-                .toUpperCase();
+        private boolean isLegacyLocationMissing(
+                        DispatchedItem item) {
+                return item.getPlantCode() == null || item.getPlantCode().isBlank()
+                                || item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()
+                                || item.getFgAreaCode() == null || item.getFgAreaCode().isBlank();
+        }
 
-        return prefix + "-" + date + "-" + suffix;
-    }
+        private String currentLocation(
+                        DispatchedItem item) {
+                if (item.getCurrentLocationCode() != null && !item.getCurrentLocationCode().isBlank()) {
+                        return item.getCurrentLocationCode().trim();
+                }
 
-    private boolean isBlank(
-            String value) {
-        return value == null || value.trim().isBlank();
-    }
+                if (item.getLocation() != null && !item.getLocation().isBlank()) {
+                        return item.getLocation().trim();
+                }
+
+                return "";
+        }
+
+        private boolean isPkdLocation(
+                        DispatchedItem item) {
+                String location = currentLocation(item);
+
+                if (location.isBlank()) {
+                        return false;
+                }
+
+                String packedArea = item.getPackedAreaCode();
+
+                String cleanLocation = location.trim().toUpperCase();
+
+                if (packedArea != null && !packedArea.isBlank()) {
+                        String cleanPackedArea = packedArea.trim().toUpperCase();
+
+                        return cleanLocation.equals(cleanPackedArea)
+                                        || cleanLocation.startsWith(cleanPackedArea + "-")
+                                        || cleanLocation.startsWith(cleanPackedArea + " ");
+                }
+
+                return cleanLocation.startsWith("PKD");
+        }
+
+        private boolean isFgLocation(
+                        DispatchedItem item) {
+                String location = currentLocation(item);
+
+                String fg = item.getFgAreaCode();
+
+                if (location.isBlank() || fg == null || fg.isBlank()) {
+                        return false;
+                }
+
+                String cleanLocation = location.trim().toUpperCase();
+
+                String cleanFg = fg.trim().toUpperCase();
+
+                return cleanLocation.equals(cleanFg)
+                                || cleanLocation.startsWith(cleanFg + "-")
+                                || cleanLocation.startsWith(cleanFg + " ");
+        }
+
+        private String generateChallanNumber(
+                        LocalDateTime dispatchTimeIst) {
+                String date = (dispatchTimeIst != null
+                                ? dispatchTimeIst.toLocalDate()
+                                : java.time.LocalDate.now(INDIA_ZONE)).format(
+                                                java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
+                String suffix = UUID.randomUUID()
+                                .toString()
+                                .substring(0, 6)
+                                .toUpperCase();
+
+                return "CH-" + date + "-" + suffix;
+        }
+
+        private String safeActor(
+                        String username) {
+                return username != null && !username.isBlank()
+                                ? username.trim()
+                                : "SYSTEM";
+        }
+
+        private String cleanNullable(
+                        Object value) {
+                if (value == null) {
+                        return null;
+                }
+
+                String text = value
+                                .toString()
+                                .trim();
+
+                return text.isBlank()
+                                ? null
+                                : text;
+        }
+
+        private String safe(
+                        Object value) {
+                if (value == null) {
+                        return "-";
+                }
+
+                String text = value.toString().trim();
+
+                return text.isEmpty()
+                                ? "-"
+                                : text;
+        }
+
+        private String generateCustomChallanNumber(
+                        String challanType) {
+                String cleanType = challanType == null
+                                ? ""
+                                : challanType.trim().toUpperCase();
+
+                String prefix;
+
+                if ("CUSTOMER_CARE".equals(cleanType)) {
+                        prefix = "CC-CH";
+                } else if ("HARDWARE_SITE_REQUIREMENT".equals(cleanType)) {
+                        prefix = "HW-CH";
+                } else if ("ASSEMBLY_SITE_REQUIREMENT".equals(cleanType)) {
+                        prefix = "ASM-CH";
+                } else if ("JOB_WORK".equals(cleanType)) {
+                        prefix = "JW-CH";
+                } else if ("SITE_RETURN".equals(cleanType)) {
+                        prefix = "SR-CH";
+                } else {
+                        prefix = "CUS-CH";
+                }
+
+                String date = java.time.LocalDate.now(INDIA_ZONE)
+                                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
+                String suffix = UUID.randomUUID()
+                                .toString()
+                                .substring(0, 6)
+                                .toUpperCase();
+
+                return prefix + "-" + date + "-" + suffix;
+        }
+
+        private boolean isBlank(
+                        String value) {
+                return value == null || value.trim().isBlank();
+        }
 }

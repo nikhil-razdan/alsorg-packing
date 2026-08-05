@@ -79,6 +79,38 @@ public class ChalaanPdfController {
                 return buildPdfResponse(result, preview);
         }
 
+        @PostMapping(value = "/dispatch/preview", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_PDF_VALUE)
+        public ResponseEntity<byte[]> previewDispatchChallan(
+                        @RequestBody ChallanDispatchRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(
+                                auth);
+
+                /*
+                 * Keep the same permission rule as final challan creation.
+                 */
+                if (!currentUserService.isDispatch(user)) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
+
+                DispatchTripPdfResult result = dispatchChallanService.previewDispatchChallan(
+                                request.itemIds(),
+                                request.driverId(),
+                                request.vehicleId(),
+                                firstNonNull(
+                                                request.dispatchTime(),
+                                                request.tripStart()),
+                                user.getUsername(),
+                                currentUserService.allowedPlants(
+                                                user));
+
+                return buildPreviewPdfResponse(
+                                result);
+        }
+
         @Transactional
         @PostMapping(value = "/custom", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> generateCustomChallan(
@@ -266,6 +298,47 @@ public class ChalaanPdfController {
                                                 "X-Challan-No, Content-Disposition")
                                 .contentType(MediaType.APPLICATION_PDF)
                                 .body(result.getPdfBytes());
+        }
+
+        private ResponseEntity<byte[]> buildPreviewPdfResponse(
+                        DispatchTripPdfResult result) {
+
+                byte[] pdfBytes = result == null
+                                ? null
+                                : result.getPdfBytes();
+
+                if (pdfBytes == null || pdfBytes.length == 0) {
+                        throw new RuntimeException(
+                                        "Preview PDF could not be generated");
+                }
+
+                return ResponseEntity
+                                .ok()
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "inline; filename=\"CHALLAN_PREVIEW.pdf\"")
+                                .header(
+                                                HttpHeaders.CACHE_CONTROL,
+                                                "no-store, no-cache, must-revalidate")
+                                .header(
+                                                "Pragma",
+                                                "no-cache")
+                                .header(
+                                                "Expires",
+                                                "0")
+                                .header(
+                                                "X-Challan-Preview",
+                                                "true")
+                                .header(
+                                                "X-Challan-No",
+                                                "PREVIEW")
+                                .header(
+                                                "Access-Control-Expose-Headers",
+                                                "X-Challan-No, X-Challan-Preview, Content-Disposition")
+                                .contentType(
+                                                MediaType.APPLICATION_PDF)
+                                .body(
+                                                pdfBytes);
         }
 
         @GetMapping("/custom")
