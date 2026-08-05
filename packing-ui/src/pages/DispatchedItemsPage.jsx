@@ -2855,98 +2855,6 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 	},
 ];
 
-const updateBulkDispatchStatus =
-	async (status) => {
-		const cleanStatus =
-			String(status || "")
-				.trim()
-				.toUpperCase();
-
-		const cleanIds =
-			Array.from(
-				new Set(
-					(selectionModel || [])
-						.map((id) =>
-							String(
-								id || ""
-							).trim()
-						)
-						.filter(Boolean)
-				)
-			);
-
-		if (
-			cleanIds.length === 0
-		) {
-			throw new Error(
-				"No items selected"
-			);
-		}
-
-		if (
-			![
-				"READY_TO_STORE",
-				"READY_TO_DISPATCH",
-			].includes(
-				cleanStatus
-			)
-		) {
-			throw new Error(
-				`Invalid bulk status: ${cleanStatus}`
-			);
-		}
-
-		const response =
-			await authFetch(
-				`${API_BASE_URL}/api/dispatched/bulk/status?status=${encodeURIComponent(
-					cleanStatus
-				)}`,
-				{
-					method:
-						"POST",
-
-					headers: {
-						"Content-Type":
-							"application/json",
-					},
-
-					body:
-						JSON.stringify(
-							cleanIds
-						),
-				}
-			);
-
-		if (!response.ok) {
-			const message =
-				await readResponseError(
-					response,
-					"Bulk status update failed"
-				);
-
-			throw new Error(
-				message
-			);
-		}
-
-		patchDispatchRows(
-			cleanIds,
-			(row) => ({
-				...row,
-
-				status:
-					cleanStatus,
-
-				updatedAt:
-					new Date()
-						.toISOString(),
-			})
-		);
-
-		return cleanIds;
-	};
-
-
 function normalizeStatusSelection(value, previousValue = ["ALL"]) {
 	const rawValues = Array.isArray(value)
 		? value
@@ -8235,6 +8143,98 @@ function DispatchedItemsPage() {
 			})
 		);
 	};
+
+	const updateBulkDispatchStatus =
+		async (status) => {
+			const cleanStatus =
+				String(status || "")
+					.trim()
+					.toUpperCase();
+
+			const cleanIds =
+				Array.from(
+					new Set(
+						(selectionModel || [])
+							.map((id) =>
+								String(
+									id || ""
+								).trim()
+							)
+							.filter(Boolean)
+					)
+				);
+
+			if (
+				cleanIds.length === 0
+			) {
+				throw new Error(
+					"No items selected"
+				);
+			}
+
+			if (
+				![
+					"READY_TO_STORE",
+					"READY_TO_DISPATCH",
+				].includes(
+					cleanStatus
+				)
+			) {
+				throw new Error(
+					`Invalid bulk status: ${cleanStatus}`
+				);
+			}
+
+			const response =
+				await authFetch(
+					`${API_BASE_URL}/api/dispatched/bulk/status?status=${encodeURIComponent(
+						cleanStatus
+					)}`,
+					{
+						method:
+							"POST",
+
+						headers: {
+							"Content-Type":
+								"application/json",
+						},
+
+						body:
+							JSON.stringify(
+								cleanIds
+							),
+					}
+				);
+
+			if (!response.ok) {
+				const message =
+					await readResponseError(
+						response,
+						"Bulk status update failed"
+					);
+
+				throw new Error(
+					message
+				);
+			}
+
+			patchDispatchRows(
+				cleanIds,
+				(row) => ({
+					...row,
+
+					status:
+						cleanStatus,
+
+					updatedAt:
+						new Date()
+							.toISOString(),
+				})
+			);
+
+			return cleanIds;
+		};
+
 
 	const updateStatus = async (
 		zohoItemId,
