@@ -64,9 +64,6 @@ function Header() {
 
 	const username = user?.username || "User";
 
-	const canOpenBOMFlow =
-		modules.includes("BOMFLOW");
-
 	const [appsAnchor, setAppsAnchor] =
 		useState(null);
 
