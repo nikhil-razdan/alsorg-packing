@@ -1424,6 +1424,179 @@ const dispatchExportButtonSx = {
 	},
 };
 
+const dispatchTripModalShellSx = (
+	step
+) => ({
+	...enhancedModalSx,
+
+	width:
+		step === "REVIEW"
+			? "min(1480px, 97vw)"
+			: 620,
+
+	height:
+		step === "REVIEW"
+			? "min(92vh, 900px)"
+			: "auto",
+
+	maxHeight: "92vh",
+
+	display: "flex",
+	flexDirection: "column",
+
+	transition:
+		"width 180ms ease, height 180ms ease",
+});
+
+const dispatchTripModalContentSx = {
+	...modalContentSx,
+
+	flex: 1,
+	minHeight: 0,
+
+	display: "flex",
+	flexDirection: "column",
+
+	overflow: "hidden",
+};
+
+const dispatchTripDetailsScrollSx = {
+	minHeight: 0,
+	maxHeight: "64vh",
+
+	overflowY: "auto",
+	overflowX: "hidden",
+
+	pr: 0.7,
+
+	...premiumScrollbarSx(
+		"#60a5fa"
+	),
+};
+
+const dispatchTripReviewGridSx = {
+	flex: 1,
+	minHeight: 0,
+
+	display: "grid",
+
+	gridTemplateColumns: {
+		xs: "minmax(0,1fr)",
+		md:
+			"minmax(360px,.78fr) minmax(520px,1.22fr)",
+	},
+
+	gap: 2,
+
+	overflow: {
+		xs: "auto",
+		md: "hidden",
+	},
+
+	...premiumScrollbarSx(
+		"#60a5fa"
+	),
+};
+
+const dispatchTripReviewLeftSx = {
+	minWidth: 0,
+	minHeight: 0,
+
+	overflowY: {
+		xs: "visible",
+		md: "auto",
+	},
+
+	overflowX: "hidden",
+
+	pr: {
+		xs: 0,
+		md: 1,
+	},
+
+	...premiumScrollbarSx(
+		"#10b981"
+	),
+};
+
+const dispatchTripReviewRightSx = {
+	minWidth: 0,
+
+	minHeight: {
+		xs: 540,
+		md: 0,
+	},
+
+	display: "flex",
+	flexDirection: "column",
+};
+
+const dispatchTripReviewPdfCardSx = {
+	flex: 1,
+	minHeight: 0,
+
+	display: "flex",
+	flexDirection: "column",
+
+	borderRadius: "18px",
+	overflow: "hidden",
+
+	background:
+		"rgba(2,6,23,.42)",
+
+	border:
+		"1px solid rgba(255,255,255,.08)",
+
+	boxShadow:
+		"0 22px 50px rgba(2,6,23,.32)",
+};
+
+const dispatchTripReviewPdfHeaderSx = {
+	minHeight: 64,
+	flexShrink: 0,
+
+	px: 2,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent:
+		"space-between",
+
+	gap: 2,
+
+	background:
+		"rgba(255,255,255,.035)",
+
+	borderBottom:
+		"1px solid rgba(255,255,255,.07)",
+};
+
+const dispatchTripReviewPdfViewportSx = {
+	flex: 1,
+	minHeight: 0,
+
+	p: 1,
+
+	background:
+		"#334155",
+};
+
+const dispatchTripReviewPdfStateSx = {
+	flex: 1,
+	minHeight: 280,
+
+	p: 3,
+
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+
+	gap: 1.2,
+
+	textAlign: "center",
+};
+
 const exportFormatButtonSx = (active, accent = "#60a5fa") => ({
 	flex: 1,
 	height: 42,
@@ -16125,32 +16298,28 @@ function DispatchedItemsPage() {
 				)}
 				{dispatchTripOpen && (
 					<Box
-						sx={{ ...enhancedOverlaySx, zIndex: 5600 }}
-						onClick={() => {
-							if (!dispatchTripLoading) {
-								setDispatchTripOpen(false);
-							}
+						sx={{
+							...enhancedOverlaySx,
+							zIndex: 5600,
 						}}
+						onClick={
+							closeDispatchTripModal
+						}
 					>
 						<Box
-							sx={{
-								...enhancedModalSx,
-
-								width:
-									dispatchTripStep ===
-										"REVIEW"
-										? "min(1120px, 95vw)"
-										: 620,
-
-								maxHeight:
-									"92vh",
-
-								transition:
-									"width 180ms ease",
-							}}
-							onClick={(e) => e.stopPropagation()}
+							sx={dispatchTripModalShellSx(
+								dispatchTripStep
+							)}
+							onClick={(event) =>
+								event.stopPropagation()
+							}
 						>
-							<Box sx={modalHeaderSx}>
+							<Box
+								sx={{
+									...modalHeaderSx,
+									flexShrink: 0,
+								}}
+							>
 								<Box sx={modalTitleWrapSx}>
 									<Box sx={modalIconBubble("#10b981")}>
 										🚚
@@ -16170,16 +16339,23 @@ function DispatchedItemsPage() {
 								<IconButton
 									sx={modalCloseButtonSx}
 									disabled={dispatchTripLoading}
-									onClick={() => setDispatchTripOpen(false)}
+									onClick={
+										closeDispatchTripModal
+									}
 								>
 									×
 								</IconButton>
 							</Box>
 
-							<Box sx={modalContentSx}>
+							<Box
+								sx={
+									dispatchTripModalContentSx
+								}
+							>
 								{/* STEP INDICATOR */}
 								<Box
 									sx={{
+										flexShrink: 0,
 										display: "grid",
 										gridTemplateColumns:
 											"1fr 1fr",
@@ -16260,7 +16436,11 @@ function DispatchedItemsPage() {
 
 								{dispatchTripStep ===
 									"DETAILS" && (
-										<>
+										<Box
+											sx={
+												dispatchTripDetailsScrollSx
+											}
+										>
 											<Box
 												sx={{
 													p: 1.6,
@@ -16559,524 +16739,578 @@ function DispatchedItemsPage() {
 													)}
 												</Box>
 											</Box>
-										</>
+										</Box>
 									)}
 
 								{dispatchTripStep ===
 									"REVIEW" && (
-										<>
+										<Box
+											sx={
+												dispatchTripReviewGridSx
+											}
+										>
+											{/* ================= LEFT SIDE ================= */}
+
 											<Box
-												sx={{
-													p: 1.8,
-													mb: 2,
-													borderRadius:
-														"16px",
-													background:
-														"linear-gradient(135deg,rgba(16,185,129,.12),rgba(59,130,246,.08))",
-													border:
-														"1px solid rgba(52,211,153,.20)",
-												}}
+												sx={
+													dispatchTripReviewLeftSx
+												}
 											>
 												<Box
 													sx={{
-														color: "#6ee7b7",
-														fontSize: 12,
-														fontWeight: 950,
-														letterSpacing:
-															".10em",
-														textTransform:
-															"uppercase",
-														mb: 1.4,
+														p: 1.8,
+														mb: 2,
+														borderRadius:
+															"16px",
+														background:
+															"linear-gradient(135deg,rgba(16,185,129,.12),rgba(59,130,246,.08))",
+														border:
+															"1px solid rgba(52,211,153,.20)",
 													}}
 												>
-													Challan Summary
-												</Box>
+													<Box
+														sx={{
+															color:
+																"#6ee7b7",
+															fontSize: 12,
+															fontWeight: 950,
+															letterSpacing:
+																".10em",
+															textTransform:
+																"uppercase",
+															mb: 1.4,
+														}}
+													>
+														Challan Summary
+													</Box>
 
-												<Box
-													sx={{
-														display: "grid",
-														gridTemplateColumns:
-															"1fr 1fr",
-														gap: 1.4,
-													}}
-												>
-													<DispatchReviewValue
-														label="Date & Time"
-														value={
-															formatLocalDateTimeDisplay(
+													<Box
+														sx={{
+															display:
+																"grid",
+															gridTemplateColumns:
+																"1fr 1fr",
+															gap: 1.4,
+														}}
+													>
+														<DispatchReviewValue
+															label="Date & Time"
+															value={formatLocalDateTimeDisplay(
 																dispatchTripForm
 																	.dispatchTime
-															)
-														}
-													/>
+															)}
+														/>
 
-													<DispatchReviewValue
-														label="Total Items"
-														value={
-															dispatchTripPreviewItems.length
-														}
-													/>
+														<DispatchReviewValue
+															label="Total Items"
+															value={
+																dispatchTripPreviewItems.length
+															}
+														/>
 
-													<DispatchReviewValue
-														label="Driver"
-														value={
-															selectedDispatchDriver
-																?.name ||
-															"No Driver"
-														}
-													/>
+														<DispatchReviewValue
+															label="Driver"
+															value={
+																selectedDispatchDriver
+																	?.name ||
+																"No Driver"
+															}
+														/>
 
-													<DispatchReviewValue
-														label="Vehicle"
-														value={
-															selectedDispatchVehicle
-																?.vehicleNumber ||
-															"No Vehicle"
-														}
-													/>
+														<DispatchReviewValue
+															label="Vehicle"
+															value={
+																selectedDispatchVehicle
+																	?.vehicleNumber ||
+																"No Vehicle"
+															}
+														/>
 
-													<DispatchReviewValue
-														label="Vehicle Name"
-														value={
-															selectedDispatchVehicle
-																?.vehicleName ||
-															"—"
-														}
-													/>
+														<DispatchReviewValue
+															label="Vehicle Name"
+															value={
+																selectedDispatchVehicle
+																	?.vehicleName ||
+																"—"
+															}
+														/>
 
-													<DispatchReviewValue
-														label="Dispatch Mode"
-														value={
-															dispatchTripContext.mode ||
-															"—"
-														}
-													/>
+														<DispatchReviewValue
+															label="Dispatch Mode"
+															value={
+																dispatchTripContext.mode ||
+																"—"
+															}
+														/>
+													</Box>
 												</Box>
-											</Box>
 
-											<Box
-												sx={{
-													mt: 2,
-													mb: 2,
-													borderRadius: "18px",
-													overflow: "hidden",
-													background:
-														"rgba(2,6,23,.42)",
-													border:
-														"1px solid rgba(255,255,255,.08)",
-												}}
-											>
 												<Box
 													sx={{
-														minHeight: 58,
-														px: 2,
-														display: "flex",
-														alignItems: "center",
-														justifyContent:
-															"space-between",
-														gap: 2,
-														background:
-															"rgba(255,255,255,.035)",
-														borderBottom:
-															"1px solid rgba(255,255,255,.07)",
+														mb: 1,
+														color: "#fff",
+														fontSize: 14,
+														fontWeight: 950,
 													}}
 												>
-													<Box>
-														<Box
-															sx={{
-																color: "#fff",
-																fontSize: 14,
-																fontWeight: 950,
-															}}
-														>
-															📄 Challan PDF Preview
-														</Box>
-
-														<Box
-															sx={{
-																color: "#94a3b8",
-																fontSize: 11,
-																fontWeight: 700,
-																mt: 0.35,
-															}}
-														>
-															Read-only preview. No item is dispatched at this stage.
-														</Box>
-													</Box>
-
-													<Box
-														sx={{
-															display: "flex",
-															alignItems: "center",
-															gap: 1,
-														}}
-													>
-														<Button
-															size="small"
-															disabled={
-																dispatchReviewPdfLoading
-															}
-															onClick={() => {
-																loadDispatchReviewPdf()
-																	.catch(() => {
-																		/*
-																		 * The error is already displayed
-																		 * in the preview panel.
-																		 */
-																	});
-															}}
-															sx={modalSecondaryButtonSx}
-														>
-															{dispatchReviewPdfLoading
-																? "Preparing..."
-																: "Refresh Preview"}
-														</Button>
-
-														<Button
-															size="small"
-															disabled={
-																!dispatchReviewPdfUrl ||
-																dispatchReviewPdfLoading
-															}
-															onClick={() => {
-																window.open(
-																	dispatchReviewPdfUrl,
-																	"_blank",
-																	"noopener,noreferrer"
-																);
-															}}
-															sx={modalSecondaryButtonSx}
-														>
-															Open PDF
-														</Button>
-													</Box>
+													Items Included
 												</Box>
 
-												{dispatchReviewPdfLoading && (
-													<Box
-														sx={{
-															height: 500,
-															display: "flex",
-															flexDirection: "column",
-															alignItems: "center",
-															justifyContent: "center",
-															gap: 1,
-															color: "#fcd34d",
-															fontWeight: 900,
-															background:
-																"rgba(15,23,42,.65)",
-														}}
-													>
-														<Box
-															sx={{
-																fontSize: 30,
-															}}
-														>
-															📄
-														</Box>
-
-														Preparing challan PDF preview…
-													</Box>
-												)}
-
-												{!dispatchReviewPdfLoading &&
-													dispatchReviewPdfError && (
-														<Box
-															sx={{
-																height: 300,
-																p: 3,
-																display: "flex",
-																flexDirection:
-																	"column",
-																alignItems:
-																	"center",
-																justifyContent:
-																	"center",
-																gap: 1.5,
-																textAlign:
-																	"center",
-																color: "#fca5a5",
-															}}
-														>
+												<Box>
+													{dispatchTripPreviewItems.map(
+														(item) => (
 															<Box
-																sx={{
-																	fontSize: 28,
-																}}
-															>
-																⚠️
-															</Box>
-
-															<Box
-																sx={{
-																	fontWeight: 900,
-																}}
-															>
-																PDF preview could not be generated
-															</Box>
-
-															<Box
-																sx={{
-																	color: "#94a3b8",
-																	fontSize: 12,
-																	fontWeight: 700,
-																	maxWidth: 500,
-																}}
-															>
-																{dispatchReviewPdfError}
-															</Box>
-
-															<Button
-																onClick={() => {
-																	loadDispatchReviewPdf()
-																		.catch(() => { });
-																}}
-																sx={modalSecondaryButtonSx}
-															>
-																Try Again
-															</Button>
-														</Box>
-													)}
-
-												{!dispatchReviewPdfLoading &&
-													!dispatchReviewPdfError &&
-													dispatchReviewPdfUrl && (
-														<Box
-															sx={{
-																height: 540,
-																p: 1,
-																background:
-																	"#334155",
-															}}
-														>
-															<iframe
-																title="Dispatch Challan Review PDF"
-																src={
-																	dispatchReviewPdfUrl
+																key={
+																	item.zohoItemId
 																}
-																style={{
-																	width: "100%",
-																	height: "100%",
-																	border: "none",
-																	borderRadius: 12,
-																	background:
-																		"#ffffff",
-																}}
-															/>
-														</Box>
-													)}
-
-												{!dispatchReviewPdfLoading &&
-													!dispatchReviewPdfError &&
-													!dispatchReviewPdfUrl && (
-														<Box
-															sx={{
-																height: 280,
-																display: "flex",
-																alignItems: "center",
-																justifyContent:
-																	"center",
-																color: "#94a3b8",
-																fontWeight: 800,
-															}}
-														>
-															No PDF preview loaded.
-														</Box>
-													)}
-											</Box>
-
-											<Box
-												sx={{
-													mb: 1,
-													color: "#fff",
-													fontSize: 14,
-													fontWeight: 950,
-												}}
-											>
-												Items Included
-											</Box>
-
-											<Box
-												sx={{
-													maxHeight: "36vh",
-													overflowY: "auto",
-													pr: 0.5,
-													...premiumScrollbarSx(
-														"#10b981"
-													),
-												}}
-											>
-												{dispatchTripPreviewItems.map(
-													(item) => (
-														<Box
-															key={
-																item.zohoItemId
-															}
-															sx={{
-																p: 1.5,
-																mb: 1,
-																borderRadius:
-																	"14px",
-																background:
-																	"rgba(255,255,255,.035)",
-																border:
-																	"1px solid rgba(255,255,255,.07)",
-															}}
-														>
-															<Box
 																sx={{
-																	display: "flex",
-																	justifyContent:
-																		"space-between",
-																	alignItems:
-																		"flex-start",
-																	gap: 2,
+																	p: 1.5,
+																	mb: 1,
+																	borderRadius:
+																		"14px",
+																	background:
+																		"rgba(255,255,255,.035)",
+																	border:
+																		"1px solid rgba(255,255,255,.07)",
 																}}
 															>
 																<Box
 																	sx={{
-																		minWidth: 0,
+																		display:
+																			"flex",
+																		justifyContent:
+																			"space-between",
+																		alignItems:
+																			"flex-start",
+																		gap: 2,
 																	}}
 																>
 																	<Box
 																		sx={{
-																			color: "#fff",
-																			fontSize: 13,
-																			fontWeight: 900,
-																			whiteSpace:
-																				"nowrap",
-																			overflow:
-																				"hidden",
-																			textOverflow:
-																				"ellipsis",
+																			minWidth:
+																				0,
 																		}}
-																		title={
-																			item.itemName
-																		}
 																	>
-																		{
-																			item.previewSerial
-																		}
-																		.{" "}
-																		{
-																			item.itemName
-																		}
+																		<Box
+																			sx={{
+																				color:
+																					"#fff",
+																				fontSize:
+																					13,
+																				fontWeight:
+																					900,
+																				whiteSpace:
+																					"nowrap",
+																				overflow:
+																					"hidden",
+																				textOverflow:
+																					"ellipsis",
+																			}}
+																			title={
+																				item.itemName
+																			}
+																		>
+																			{
+																				item.previewSerial
+																			}
+																			.{" "}
+																			{
+																				item.itemName
+																			}
+																		</Box>
+
+																		<Box
+																			sx={{
+																				color:
+																					"#94a3b8",
+																				fontSize:
+																					11,
+																				fontWeight:
+																					700,
+																				mt: 0.6,
+																			}}
+																		>
+																			SKU:{" "}
+																			{item.sku}
+																		</Box>
 																	</Box>
 
-																	<Box
+																	<Chip
+																		size="small"
+																		label={
+																			item.status
+																		}
 																		sx={{
-																			color: "#94a3b8",
-																			fontSize: 11,
-																			fontWeight: 700,
-																			mt: 0.6,
+																			color:
+																				"#93c5fd",
+																			fontWeight:
+																				900,
+																			background:
+																				"rgba(59,130,246,.12)",
+																			border:
+																				"1px solid rgba(59,130,246,.20)",
 																		}}
-																	>
-																		SKU:{" "}
-																		{item.sku}
-																	</Box>
+																	/>
 																</Box>
 
-																<Chip
-																	size="small"
-																	label={
-																		item.status
-																	}
+																<Box
 																	sx={{
-																		color: "#93c5fd",
-																		fontWeight: 900,
-																		background:
-																			"rgba(59,130,246,.12)",
-																		border:
-																			"1px solid rgba(59,130,246,.20)",
+																		display:
+																			"grid",
+
+																		gridTemplateColumns:
+																			"repeat(2,minmax(0,1fr))",
+
+																		gap: 1,
+																		mt: 1.2,
 																	}}
-																/>
+																>
+																	<DispatchReviewValue
+																		label="PD No."
+																		value={
+																			item.pdNo
+																		}
+																		compact
+																	/>
+
+																	<DispatchReviewValue
+																		label="Drawing"
+																		value={
+																			item.drawingNo
+																		}
+																		compact
+																	/>
+
+																	<DispatchReviewValue
+																		label="Plant"
+																		value={
+																			item.plantCode
+																		}
+																		compact
+																	/>
+
+																	<DispatchReviewValue
+																		label="Location"
+																		value={
+																			item.location
+																		}
+																		compact
+																	/>
+
+																	<DispatchReviewValue
+																		label="Client"
+																		value={
+																			item.clientName
+																		}
+																		compact
+																	/>
+
+																	<DispatchReviewValue
+																		label="Item ID"
+																		value={
+																			item.zohoItemId
+																		}
+																		compact
+																	/>
+																</Box>
+															</Box>
+														)
+													)}
+												</Box>
+
+												<Box
+													sx={{
+														mt: 1.5,
+														p: 1.4,
+														borderRadius:
+															"12px",
+														color: "#fcd34d",
+														fontSize: 12,
+														fontWeight: 800,
+														background:
+															"rgba(245,158,11,.10)",
+														border:
+															"1px solid rgba(245,158,11,.20)",
+													}}
+												>
+													After confirmation, the
+													selected items will be
+													dispatched and the challan
+													will be created. Review all
+													values carefully before
+													continuing.
+												</Box>
+											</Box>
+
+											{/* ================= RIGHT-SIDE PDF ================= */}
+
+											<Box
+												sx={
+													dispatchTripReviewRightSx
+												}
+											>
+												<Box
+													sx={
+														dispatchTripReviewPdfCardSx
+													}
+												>
+													<Box
+														sx={
+															dispatchTripReviewPdfHeaderSx
+														}
+													>
+														<Box
+															sx={{
+																minWidth:
+																	0,
+															}}
+														>
+															<Box
+																sx={{
+																	color:
+																		"#fff",
+																	fontSize:
+																		14,
+																	fontWeight:
+																		950,
+																}}
+															>
+																📄 Challan PDF
+																Preview
 															</Box>
 
 															<Box
 																sx={{
-																	display: "grid",
-																	gridTemplateColumns:
-																		"repeat(3,minmax(0,1fr))",
-																	gap: 1,
-																	mt: 1.2,
+																	color:
+																		"#94a3b8",
+																	fontSize:
+																		11,
+																	fontWeight:
+																		700,
+																	mt: 0.35,
 																}}
 															>
-																<DispatchReviewValue
-																	label="PD No."
-																	value={
-																		item.pdNo
-																	}
-																	compact
-																/>
-
-																<DispatchReviewValue
-																	label="Drawing"
-																	value={
-																		item.drawingNo
-																	}
-																	compact
-																/>
-
-																<DispatchReviewValue
-																	label="Plant"
-																	value={
-																		item.plantCode
-																	}
-																	compact
-																/>
-
-																<DispatchReviewValue
-																	label="Client"
-																	value={
-																		item.clientName
-																	}
-																	compact
-																/>
-
-																<DispatchReviewValue
-																	label="Location"
-																	value={
-																		item.location
-																	}
-																	compact
-																/>
-
-																<DispatchReviewValue
-																	label="Item ID"
-																	value={
-																		item.zohoItemId
-																	}
-																	compact
-																/>
+																Read-only preview.
+																No item is dispatched
+																at this stage.
 															</Box>
 														</Box>
-													)
-												)}
-											</Box>
 
-											<Box
-												sx={{
-													mt: 1.5,
-													p: 1.4,
-													borderRadius: "12px",
-													color: "#fcd34d",
-													fontSize: 12,
-													fontWeight: 800,
-													background:
-														"rgba(245,158,11,.10)",
-													border:
-														"1px solid rgba(245,158,11,.20)",
-												}}
-											>
-												After confirmation, the selected
-												items will be dispatched and the
-												challan will be created. Review all
-												values carefully before continuing.
+														<Box
+															sx={{
+																display:
+																	"flex",
+																alignItems:
+																	"center",
+																gap: 1,
+																flexShrink:
+																	0,
+															}}
+														>
+															<Button
+																size="small"
+																disabled={
+																	dispatchReviewPdfLoading
+																}
+																onClick={() => {
+																	loadDispatchReviewPdf()
+																		.catch(
+																			() => {
+																				/*
+																				 * Error is shown
+																				 * in this panel.
+																				 */
+																			}
+																		);
+																}}
+																sx={{
+																	...modalSecondaryButtonSx,
+																	height: 34,
+																	px: 1.5,
+																}}
+															>
+																{dispatchReviewPdfLoading
+																	? "Preparing..."
+																	: "Refresh"}
+															</Button>
+
+															<Button
+																size="small"
+																disabled={
+																	!dispatchReviewPdfUrl ||
+																	dispatchReviewPdfLoading
+																}
+																onClick={() => {
+																	window.open(
+																		dispatchReviewPdfUrl,
+																		"_blank",
+																		"noopener,noreferrer"
+																	);
+																}}
+																sx={{
+																	...modalSecondaryButtonSx,
+																	height: 34,
+																	px: 1.5,
+																}}
+															>
+																Open PDF
+															</Button>
+														</Box>
+													</Box>
+
+													{dispatchReviewPdfLoading && (
+														<Box
+															sx={{
+																...dispatchTripReviewPdfStateSx,
+																color:
+																	"#fcd34d",
+																background:
+																	"rgba(15,23,42,.65)",
+																fontWeight:
+																	900,
+															}}
+														>
+															<Box
+																sx={{
+																	fontSize:
+																		32,
+																}}
+															>
+																📄
+															</Box>
+
+															Preparing challan PDF
+															preview…
+														</Box>
+													)}
+
+													{!dispatchReviewPdfLoading &&
+														dispatchReviewPdfError && (
+															<Box
+																sx={{
+																	...dispatchTripReviewPdfStateSx,
+																	color:
+																		"#fca5a5",
+																}}
+															>
+																<Box
+																	sx={{
+																		fontSize:
+																			30,
+																	}}
+																>
+																	⚠️
+																</Box>
+
+																<Box
+																	sx={{
+																		fontWeight:
+																			900,
+																	}}
+																>
+																	PDF preview could
+																	not be generated
+																</Box>
+
+																<Box
+																	sx={{
+																		color:
+																			"#94a3b8",
+																		fontSize:
+																			12,
+																		fontWeight:
+																			700,
+																		maxWidth:
+																			500,
+																	}}
+																>
+																	{
+																		dispatchReviewPdfError
+																	}
+																</Box>
+
+																<Button
+																	onClick={() => {
+																		loadDispatchReviewPdf()
+																			.catch(
+																				() => { }
+																			);
+																	}}
+																	sx={
+																		modalSecondaryButtonSx
+																	}
+																>
+																	Try Again
+																</Button>
+															</Box>
+														)}
+
+													{!dispatchReviewPdfLoading &&
+														!dispatchReviewPdfError &&
+														dispatchReviewPdfUrl && (
+															<Box
+																sx={
+																	dispatchTripReviewPdfViewportSx
+																}
+															>
+																<iframe
+																	title="Dispatch Challan Review PDF"
+																	src={
+																		dispatchReviewPdfUrl
+																	}
+																	style={{
+																		width:
+																			"100%",
+																		height:
+																			"100%",
+																		border:
+																			"none",
+																		borderRadius:
+																			12,
+																		background:
+																			"#ffffff",
+																	}}
+																/>
+															</Box>
+														)}
+
+													{!dispatchReviewPdfLoading &&
+														!dispatchReviewPdfError &&
+														!dispatchReviewPdfUrl && (
+															<Box
+																sx={{
+																	...dispatchTripReviewPdfStateSx,
+																	color:
+																		"#94a3b8",
+																	fontWeight:
+																		800,
+																}}
+															>
+																No PDF preview loaded.
+															</Box>
+														)}
+												</Box>
 											</Box>
-										</>
+										</Box>
 									)}
 							</Box>
 
-							<Box sx={modalFooterSx}>
+							<Box
+								sx={{
+									...modalFooterSx,
+
+									flexShrink: 0,
+
+									position: "relative",
+									zIndex: 5,
+
+									background:
+										"rgba(15,23,42,.98)",
+
+									boxShadow:
+										"0 -16px 34px rgba(2,6,23,.32)",
+								}}
+							>
 								{dispatchTripStep ===
 									"DETAILS" && (
 										<>
@@ -17085,9 +17319,7 @@ function DispatchedItemsPage() {
 													dispatchTripLoading
 												}
 												onClick={() => {
-													setDispatchTripOpen(
-														false
-													);
+													closeDispatchTripModal();
 
 													setDispatchTripStep(
 														"DETAILS"
