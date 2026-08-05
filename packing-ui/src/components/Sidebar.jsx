@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import {
 	canOpenWarehousePageFromUser,
-} from "../utils/warehouseAccess";
+} from "../utils/permissions";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";

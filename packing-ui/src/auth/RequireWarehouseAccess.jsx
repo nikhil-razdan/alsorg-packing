@@ -5,10 +5,11 @@ import {
 
 import {
 	canOpenWarehousePageFromUser,
-} from "../utils/warehouseAccess";
+} from "../utils/permissions";
 
-import { useAuth }
-	from "./AuthContext";
+import {
+	useAuth,
+} from "./AuthContext";
 
 function RequireWarehouseAccess({
 	children,
@@ -52,6 +53,7 @@ function RequireWarehouseAccess({
 				state={{
 					deniedPermission:
 						"WAREHOUSE_ACCESS",
+
 					from:
 						location.pathname,
 				}}

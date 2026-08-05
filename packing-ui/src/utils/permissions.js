@@ -1,12 +1,16 @@
-export const normalizeRole = (role) => {
+export const normalizeRole = (
+	role
+) => {
 	return String(role || "")
-		.replace("ROLE_", "")
+		.replace(/^ROLE_/i, "")
 		.trim()
 		.toUpperCase();
 };
 
-export const userRoleList = (user) => {
-	const roles =
+export const userRoleList = (
+	user
+) => {
+	const explicitRoles =
 		Array.isArray(user?.roles)
 			? user.roles
 			: [];
@@ -14,14 +18,19 @@ export const userRoleList = (user) => {
 	const normalizedRoles =
 		Array.from(
 			new Set(
-				roles
+				explicitRoles
 					.map(normalizeRole)
 					.filter(Boolean)
 			)
 		);
 
+	/*
+	 * Keep the primary legacy role as a fallback.
+	 */
 	const primaryRole =
-		normalizeRole(user?.role);
+		normalizeRole(
+			user?.role
+		);
 
 	if (
 		primaryRole &&
@@ -41,33 +50,79 @@ export const hasRoleFromUser = (
 	user,
 	requestedRole
 ) => {
-	const role =
-		normalizeRole(requestedRole);
+	const cleanRequestedRole =
+		normalizeRole(
+			requestedRole
+		);
+
+	if (!cleanRequestedRole) {
+		return false;
+	}
 
 	return userRoleList(user)
-		.includes(role);
+		.includes(
+			cleanRequestedRole
+		);
+};
+
+export const hasAnyRoleFromUser = (
+	user,
+	...requestedRoles
+) => {
+	return requestedRoles
+		.flat()
+		.some((requestedRole) =>
+			hasRoleFromUser(
+				user,
+				requestedRole
+			)
+		);
+};
+
+const readBoolean = (
+	value
+) => {
+	return (
+		value === true ||
+		String(value || "")
+			.trim()
+			.toLowerCase() ===
+		"true"
+	);
 };
 
 export const canOpenWarehousePageFromUser = (
 	user
 ) => {
+	if (!user) {
+		return false;
+	}
+
 	return (
-		hasRoleFromUser(
+		hasAnyRoleFromUser(
 			user,
-			"ADMIN"
-		) ||
-		hasRoleFromUser(
-			user,
-			"DISPATCH"
-		) ||
-		hasRoleFromUser(
-			user,
+			"ADMIN",
+			"DISPATCH",
 			"WAREHOUSE"
 		) ||
-		user?.warehouseAccess === true
+		readBoolean(
+			user?.warehouseAccess
+		) ||
+		readBoolean(
+			user?.warehousePageAccess
+		) ||
+		readBoolean(
+			user?.hasWarehouseAccess
+		) ||
+		readBoolean(
+			user?.canOpenWarehousePage
+		)
 	);
 };
 
+/*
+ * Compatibility alias used by WarehousePage.
+ */
 export const canOpenWarehousePage = (
 	user
 ) => {
