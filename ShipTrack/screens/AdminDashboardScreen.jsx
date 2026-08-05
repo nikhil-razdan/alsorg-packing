@@ -259,9 +259,12 @@ function formatDuration(minutes) {
 export default function AdminDashboardScreen({
   navigation,
 }) {
+
   const {
     username,
     role,
+    roles,
+    hasRole,
     logout,
   } = useAuth();
 
@@ -505,8 +508,8 @@ export default function AdminDashboardScreen({
   const completionPercent =
     stats.totalChallans > 0
       ? Math.round(
-          (stats.endedTrips / stats.totalChallans) * 100
-        )
+        (stats.endedTrips / stats.totalChallans) * 100
+      )
       : 0;
 
   if (

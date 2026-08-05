@@ -30,15 +30,10 @@ const Stack = createNativeStackNavigator();
 
 function HomeEntry(props) {
   const {
-    role,
+    hasRole,
   } = useAuth();
 
-  const normalizedRole =
-    String(role || "")
-      .trim()
-      .toUpperCase();
-
-  if (normalizedRole === "ADMIN") {
+  if (hasRole("ADMIN")) {
     return (
       <AdminDashboardScreen
         {...props}

@@ -23,27 +23,64 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+const normalizeRole = (
+  value
+) => {
+  return String(value || "")
+    .replace(/^ROLE_/i, "")
+    .trim()
+    .toUpperCase();
+};
+
+const normalizeRoles = (
+  values
+) => {
+  const source =
+    Array.isArray(values)
+      ? values
+      : values
+        ? [values]
+        : [];
+
+  return Array.from(
+    new Set(
+      source
+        .map(normalizeRole)
+        .filter(Boolean)
+    )
+  );
+};
+
 export default function LoginScreen() {
-  
   const {
     saveAuth,
   } = useAuth();
 
-  const [username, setUsername] =
-    useState("");
+  const [
+    username,
+    setUsername,
+  ] = useState("");
 
-  const [password, setPassword] =
-    useState("");
+  const [
+    password,
+    setPassword,
+  ] = useState("");
 
-  const [loading, setLoading] =
-    useState(false);
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   const submit = async () => {
-    if (!username.trim()) {
+    const cleanUsername =
+      username.trim();
+
+    if (!cleanUsername) {
       Alert.alert(
         "Required",
         "Enter username"
       );
+
       return;
     }
 
@@ -52,6 +89,7 @@ export default function LoginScreen() {
         "Required",
         "Enter password"
       );
+
       return;
     }
 
@@ -60,24 +98,79 @@ export default function LoginScreen() {
 
       const data =
         await loginUser({
-          username,
+          username:
+            cleanUsername,
           password,
         });
 
       const token =
-        data.token ||
-        data.jwt ||
-        data.accessToken;
+        data?.token ||
+        data?.jwt ||
+        data?.accessToken ||
+        data?.data?.token ||
+        data?.data?.jwt ||
+        data?.data
+          ?.accessToken;
 
-      const role =
-        data.role ||
-        data.user?.role ||
+      const responseUser =
+        data?.user ||
+        data?.data?.user ||
+        {};
+
+      const responseRole =
+        data?.role ||
+        data?.data?.role ||
+        responseUser?.role ||
         "";
 
+      const responseRoles =
+        normalizeRoles([
+          ...(
+            Array.isArray(
+              data?.roles
+            )
+              ? data.roles
+              : []
+          ),
+
+          ...(
+            Array.isArray(
+              data?.data?.roles
+            )
+              ? data.data.roles
+              : []
+          ),
+
+          ...(
+            Array.isArray(
+              responseUser?.roles
+            )
+              ? responseUser.roles
+              : []
+          ),
+
+          responseRole,
+        ]);
+
+      const cleanPrimaryRole =
+        normalizeRole(
+          responseRole
+        );
+
+      const primaryRole =
+        cleanPrimaryRole &&
+          responseRoles.includes(
+            cleanPrimaryRole
+          )
+          ? cleanPrimaryRole
+          : responseRoles[0] ||
+          "";
+
       const finalUsername =
-        data.username ||
-        data.user?.username ||
-        username;
+        data?.username ||
+        data?.data?.username ||
+        responseUser?.username ||
+        cleanUsername;
 
       if (!token) {
         console.log(
@@ -90,16 +183,37 @@ export default function LoginScreen() {
         );
       }
 
+      if (
+        !primaryRole ||
+        responseRoles.length === 0
+      ) {
+        console.log(
+          "Mobile login response without roles:",
+          data
+        );
+
+        throw new Error(
+          "Login succeeded, but no user role was returned."
+        );
+      }
+
       await saveAuth({
         token,
-        role,
-        username: finalUsername,
+
+        role:
+          primaryRole,
+
+        roles:
+          responseRoles,
+
+        username:
+          finalUsername,
       });
-    } catch (e) {
+    } catch (error) {
       Alert.alert(
         "Login failed",
         getBackendMessage(
-          e,
+          error,
           "Invalid login"
         )
       );
@@ -120,31 +234,56 @@ export default function LoginScreen() {
 
       <TextInput
         value={username}
-        onChangeText={setUsername}
+        onChangeText={
+          setUsername
+        }
         placeholder="Username"
         placeholderTextColor="#64748b"
         style={styles.input}
         autoCapitalize="none"
+        autoCorrect={false}
+        editable={!loading}
       />
 
       <TextInput
         value={password}
-        onChangeText={setPassword}
+        onChangeText={
+          setPassword
+        }
         placeholder="Password"
         placeholderTextColor="#64748b"
         style={styles.input}
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!loading}
+        onSubmitEditing={
+          submit
+        }
+        returnKeyType="done"
       />
 
       <TouchableOpacity
-        style={styles.btn}
+        style={[
+          styles.btn,
+          loading
+            ? styles.btnDisabled
+            : null,
+        ]}
         onPress={submit}
         disabled={loading}
+        activeOpacity={0.85}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator
+            color="#fff"
+          />
         ) : (
-          <Text style={styles.btnText}>
+          <Text
+            style={
+              styles.btnText
+            }
+          >
             Login
           </Text>
         )}
@@ -156,8 +295,10 @@ export default function LoginScreen() {
 const styles = {
   page: {
     flex: 1,
-    backgroundColor: "#020617",
-    justifyContent: "center",
+    backgroundColor:
+      "#020617",
+    justifyContent:
+      "center",
     padding: 24,
   },
 
@@ -178,8 +319,10 @@ const styles = {
     height: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,.10)",
-    backgroundColor: "rgba(255,255,255,.05)",
+    borderColor:
+      "rgba(255,255,255,.10)",
+    backgroundColor:
+      "rgba(255,255,255,.05)",
     color: "#fff",
     paddingHorizontal: 14,
     marginBottom: 14,
@@ -189,10 +332,16 @@ const styles = {
   btn: {
     height: 52,
     borderRadius: 14,
-    backgroundColor: "#2563eb",
+    backgroundColor:
+      "#2563eb",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent:
+      "center",
     marginTop: 8,
+  },
+
+  btnDisabled: {
+    opacity: 0.72,
   },
 
   btnText: {

@@ -631,20 +631,6 @@ const userModules = (user) => {
 	);
 };
 
-const readWarehouseAccess = (user) => {
-	const cleanRole =
-		normalizeRole(user?.role);
-
-	if (
-		cleanRole === "ADMIN" ||
-		cleanRole === "WAREHOUSE"
-	) {
-		return true;
-	}
-
-	return user?.warehouseAccess === true;
-};
-
 /* =========================================================
  * PAGE
  * ========================================================= */

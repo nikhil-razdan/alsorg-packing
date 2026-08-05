@@ -342,17 +342,14 @@ export default function TripsScreen() {
     useState(10);
 
   const {
-    role,
+    hasAnyRole,
   } = useAuth();
 
-  const normalizedRole =
-    String(role || "")
-      .trim()
-      .toUpperCase();
-
   const canManageTripEnd =
-    normalizedRole === "LOGISTICS" ||
-    normalizedRole === "ADMIN";
+    hasAnyRole(
+      "LOGISTICS",
+      "ADMIN"
+    );
 
   const [endTripDrafts, setEndTripDrafts] =
     useState({});

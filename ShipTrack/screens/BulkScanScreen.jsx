@@ -311,17 +311,13 @@ function getSearchBlob(row) {
 export default function BulkScanScreen({
   navigation,
 }) {
+
   const {
-    role,
+    hasRole,
   } = useAuth();
 
-  const normalizedRole =
-    String(role || "")
-      .trim()
-      .toUpperCase();
-
   const isDispatch =
-    normalizedRole === "DISPATCH";
+    hasRole("DISPATCH");
 
   const [permission, requestPermission] =
     useCameraPermissions();

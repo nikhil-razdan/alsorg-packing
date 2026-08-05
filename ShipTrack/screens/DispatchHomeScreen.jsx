@@ -20,17 +20,23 @@ function normalizeRole(role) {
 export default function DispatchHomeScreen({
   navigation,
 }) {
+
   const {
     role,
+    roles = [],
+    hasRole,
     username,
     logout,
   } = useAuth();
 
-  const normalizedRole =
-    normalizeRole(role);
-
   const isDispatch =
-    normalizedRole === "DISPATCH";
+    hasRole("DISPATCH");
+
+  const roleLabel =
+    roles.length > 0
+      ? roles.join(" • ")
+      : normalizeRole(role) ||
+      "ROLE";
 
   return (
     <ScrollView
@@ -51,7 +57,7 @@ export default function DispatchHomeScreen({
 
           <Text style={styles.sub}>
             {username || "User"} •{" "}
-            {normalizedRole || "ROLE"}
+            {roleLabel}
           </Text>
         </View>
 
@@ -127,7 +133,7 @@ export default function DispatchHomeScreen({
             />
           </View>
 
-          
+
         </>
       ) : (
         <View style={styles.permissionBox}>

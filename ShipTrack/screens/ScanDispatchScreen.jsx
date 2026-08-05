@@ -204,17 +204,15 @@ function getFgOptions(item) {
 export default function ScanDispatchScreen({
   navigation,
 }) {
+
   const {
     role,
+    roles = [],
+    hasRole,
   } = useAuth();
 
-  const normalizedRole =
-    String(role || "")
-      .trim()
-      .toUpperCase();
-
   const isDispatch =
-    normalizedRole === "DISPATCH";
+    hasRole("DISPATCH");
 
   const [permission, requestPermission] =
     useCameraPermissions();
@@ -694,7 +692,11 @@ export default function ScanDispatchScreen({
         </Text>
 
         <Text style={styles.permissionText}>
-          Current role: {normalizedRole || "UNKNOWN"}
+          Assigned roles: {
+            roles.length > 0
+              ? roles.join(", ")
+              : role || "UNKNOWN"
+          }
         </Text>
 
         <TouchableOpacity

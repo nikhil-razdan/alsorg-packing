@@ -3494,8 +3494,9 @@ function DispatchedItemsPage() {
 	const [fromLocation, setFromLocation] = useState("");
 
 	const {
-		user: currentUser,
+		roles = [],
 		hasRole,
+		authLoading,
 	} = useAuth();
 
 	const isAdmin =
@@ -3512,6 +3513,9 @@ function DispatchedItemsPage() {
 
 	const isLogistics =
 		hasRole("LOGISTICS");
+
+	const rolesKey =
+		roles.join("|");
 
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [historyItem, setHistoryItem] =
@@ -10176,7 +10180,10 @@ function DispatchedItemsPage() {
 
 
 	useEffect(() => {
-		if (!cleanRole) {
+		if (
+			authLoading ||
+			roles.length === 0
+		) {
 			return;
 		}
 
@@ -10190,7 +10197,12 @@ function DispatchedItemsPage() {
 			fetchLogisticsMasters();
 			loadCustomChallans();
 		}
-	}, [cleanRole]);
+	}, [
+		authLoading,
+		rolesKey,
+		isDispatch,
+		isAdmin,
+	]);
 
 	const showChalaanPreview = (url, id = "DOCUMENT") => {
 		setChalaanPreview((prev) => {

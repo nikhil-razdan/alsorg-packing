@@ -51,7 +51,7 @@ async function assertPdfFile(uri) {
 
     throw new Error(
       text ||
-        "Downloaded file is not a valid PDF. Backend returned an error instead of challan PDF."
+      "Downloaded file is not a valid PDF. Backend returned an error instead of challan PDF."
     );
   }
 }
@@ -100,8 +100,14 @@ export async function downloadChallanPdf(
       fileUri,
       {
         headers: {
-          Authorization: bearer,
-          Accept: "application/pdf",
+          Authorization:
+            bearer,
+
+          Accept:
+            "application/pdf",
+
+          "X-Client-Type":
+            "mobile",
         },
       }
     );
@@ -121,7 +127,7 @@ export async function downloadChallanPdf(
 
     throw new Error(
       text ||
-        `Challan download failed. Backend returned ${result.status}. URL: ${url}`
+      `Challan download failed. Backend returned ${result.status}. URL: ${url}`
     );
   }
 

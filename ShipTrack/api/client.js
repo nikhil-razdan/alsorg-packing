@@ -1,5 +1,6 @@
 import axios from "axios";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore
+  from "expo-secure-store";
 
 export const API_BASE_URL =
   "https://alsorg-packing-backend.onrender.com";
@@ -10,16 +11,47 @@ export const TOKEN_KEY =
 export const ROLE_KEY =
   "shiptrack_role";
 
+export const ROLES_KEY =
+  "shiptrack_roles";
+
 export const USERNAME_KEY =
   "shiptrack_username";
+
+const normalizeRole = (
+  value
+) => {
+  return String(value || "")
+    .replace(/^ROLE_/i, "")
+    .trim()
+    .toUpperCase();
+};
+
+const normalizeRoles = (
+  values
+) => {
+  const source =
+    Array.isArray(values)
+      ? values
+      : values
+        ? [values]
+        : [];
+
+  return Array.from(
+    new Set(
+      source
+        .map(normalizeRole)
+        .filter(Boolean)
+    )
+  );
+};
 
 export async function getStoredToken() {
   const possibleKeys = [
     TOKEN_KEY,
 
     /*
-     * Legacy keys.
-     * Keep these temporarily so old installed apps do not break.
+     * Legacy keys retained temporarily so existing
+     * installed mobile applications keep working.
      */
     "token",
     "authToken",
@@ -28,27 +60,152 @@ export async function getStoredToken() {
   ];
 
   for (const key of possibleKeys) {
-    const value =
-      await SecureStore.getItemAsync(key);
+    try {
+      const value =
+        await SecureStore.getItemAsync(
+          key
+        );
 
-    const clean =
-      String(value || "").trim();
+      const clean =
+        String(value || "").trim();
 
-    if (
-      clean &&
-      clean !== "null" &&
-      clean !== "undefined"
-    ) {
-      return clean;
+      if (
+        clean &&
+        clean !== "null" &&
+        clean !== "undefined"
+      ) {
+        return clean;
+      }
+    } catch {
+      /*
+       * Continue checking compatibility keys.
+       */
     }
   }
 
   return "";
 }
 
+export async function getStoredRole() {
+  try {
+    const stored =
+      (
+        await SecureStore.getItemAsync(
+          ROLE_KEY
+        )
+      ) ||
+      (
+        await SecureStore.getItemAsync(
+          "role"
+        )
+      ) ||
+      "";
+
+    return normalizeRole(stored);
+  } catch {
+    return "";
+  }
+}
+
+export async function getStoredRoles() {
+  const possibleKeys = [
+    ROLES_KEY,
+
+    /*
+     * Compatibility keys in case an older test build
+     * stored roles under a different name.
+     */
+    "roles",
+    "userRoles",
+  ];
+
+  for (const key of possibleKeys) {
+    try {
+      const raw =
+        await SecureStore.getItemAsync(
+          key
+        );
+
+      if (!raw) {
+        continue;
+      }
+
+      /*
+       * Normal format is a JSON array.
+       */
+      try {
+        const parsed =
+          JSON.parse(raw);
+
+        if (Array.isArray(parsed)) {
+          return normalizeRoles(
+            parsed
+          );
+        }
+      } catch {
+        /*
+         * Support a temporary comma-separated format.
+         */
+        const commaSeparated =
+          String(raw)
+            .split(",")
+            .map((value) =>
+              value.trim()
+            )
+            .filter(Boolean);
+
+        if (
+          commaSeparated.length > 0
+        ) {
+          return normalizeRoles(
+            commaSeparated
+          );
+        }
+      }
+    } catch {
+      /*
+       * Continue checking compatibility keys.
+       */
+    }
+  }
+
+  /*
+   * Old installations have only a scalar role.
+   * AuthContext also merges this role, but returning it
+   * here makes this helper independently safe.
+   */
+  const legacyRole =
+    await getStoredRole();
+
+  return legacyRole
+    ? [legacyRole]
+    : [];
+}
+
+export async function getStoredUsername() {
+  try {
+    return (
+      (
+        await SecureStore.getItemAsync(
+          USERNAME_KEY
+        )
+      ) ||
+      (
+        await SecureStore.getItemAsync(
+          "username"
+        )
+      ) ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 export async function saveStoredAuth({
   token,
   role,
+  roles = [],
   username,
 }) {
   const cleanToken =
@@ -60,69 +217,106 @@ export async function saveStoredAuth({
     );
   }
 
-  await SecureStore.setItemAsync(
-    TOKEN_KEY,
-    cleanToken
-  );
+  const cleanRoles =
+    normalizeRoles([
+      ...(
+        Array.isArray(roles)
+          ? roles
+          : []
+      ),
+      role,
+    ]);
 
-  /*
-   * Also write legacy token key once.
-   * This keeps your existing FileSystem/background code safe
-   * while we clean everything gradually.
-   */
-  await SecureStore.setItemAsync(
-    "token",
-    cleanToken
-  );
+  const requestedPrimaryRole =
+    normalizeRole(role);
 
-  await SecureStore.setItemAsync(
-    ROLE_KEY,
-    role || ""
-  );
+  const primaryRole =
+    requestedPrimaryRole &&
+      cleanRoles.includes(
+        requestedPrimaryRole
+      )
+      ? requestedPrimaryRole
+      : cleanRoles[0] || "";
 
-  await SecureStore.setItemAsync(
-    USERNAME_KEY,
-    username || ""
-  );
+  if (!primaryRole) {
+    throw new Error(
+      "Login role missing from backend mobile login response"
+    );
+  }
+
+  const cleanUsername =
+    String(username || "").trim();
+
+  await Promise.all([
+    SecureStore.setItemAsync(
+      TOKEN_KEY,
+      cleanToken
+    ),
+
+    SecureStore.setItemAsync(
+      ROLE_KEY,
+      primaryRole
+    ),
+
+    SecureStore.setItemAsync(
+      ROLES_KEY,
+      JSON.stringify(
+        cleanRoles
+      )
+    ),
+
+    SecureStore.setItemAsync(
+      USERNAME_KEY,
+      cleanUsername
+    ),
+
+    /*
+     * Retain the old token key temporarily because some
+     * FileSystem or background code may still read it.
+     */
+    SecureStore.setItemAsync(
+      "token",
+      cleanToken
+    ),
+  ]);
 }
 
 export async function clearStoredAuth() {
   const keys = [
     TOKEN_KEY,
     ROLE_KEY,
+    ROLES_KEY,
     USERNAME_KEY,
+
+    /*
+     * Legacy keys.
+     */
     "token",
     "authToken",
     "accessToken",
     "jwt",
     "role",
+    "roles",
+    "userRoles",
     "username",
   ];
 
   await Promise.all(
     keys.map((key) =>
-      SecureStore.deleteItemAsync(key).catch(() => {})
+      SecureStore
+        .deleteItemAsync(key)
+        .catch(() => {
+          /*
+           * Continue clearing remaining keys.
+           */
+        })
     )
   );
 }
 
-export async function getStoredRole() {
-  return (
-    (await SecureStore.getItemAsync(ROLE_KEY)) ||
-    (await SecureStore.getItemAsync("role")) ||
-    ""
-  );
-}
-
-export async function getStoredUsername() {
-  return (
-    (await SecureStore.getItemAsync(USERNAME_KEY)) ||
-    (await SecureStore.getItemAsync("username")) ||
-    ""
-  );
-}
-
-export function buildBearerToken(token) {
+export function buildBearerToken(
+  token
+) {
   const clean =
     String(token || "").trim();
 
@@ -130,46 +324,118 @@ export function buildBearerToken(token) {
     return "";
   }
 
-  return clean.startsWith("Bearer ")
+  return /^Bearer\s+/i.test(clean)
     ? clean
     : `Bearer ${clean}`;
 }
 
-export const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-});
+export const api =
+  axios.create({
+    baseURL:
+      API_BASE_URL,
 
-api.interceptors.request.use(async (config) => {
-  const token =
-    await getStoredToken();
+    timeout:
+      30000,
 
-  const bearer =
-    buildBearerToken(token);
+    headers: {
+      Accept:
+        "application/json",
 
-  config.headers =
-    config.headers || {};
+      "X-Client-Type":
+        "mobile",
+    },
+  });
 
-  config.headers["X-Client-Type"] =
-    "mobile";
+api.interceptors.request.use(
+  async (config) => {
+    const token =
+      await getStoredToken();
 
-  if (bearer) {
-    config.headers.Authorization =
-      bearer;
-  }
+    const bearer =
+      buildBearerToken(token);
 
-  return config;
-});
+    config.headers =
+      config.headers || {};
+
+    /*
+     * AxiosHeaders is used in modern Axios versions.
+     */
+    if (
+      typeof config.headers.set ===
+      "function"
+    ) {
+      config.headers.set(
+        "X-Client-Type",
+        "mobile"
+      );
+
+      if (bearer) {
+        config.headers.set(
+          "Authorization",
+          bearer
+        );
+      } else {
+        config.headers.delete?.(
+          "Authorization"
+        );
+      }
+    } else {
+      config.headers[
+        "X-Client-Type"
+      ] = "mobile";
+
+      if (bearer) {
+        config.headers.Authorization =
+          bearer;
+      } else {
+        delete config.headers
+          .Authorization;
+      }
+    }
+
+    return config;
+  },
+  (error) =>
+    Promise.reject(error)
+);
 
 export function getBackendMessage(
   error,
   fallback = "Something went wrong"
 ) {
-  return (
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
-    error?.response?.data ||
-    error?.message ||
-    fallback
-  );
+  const data =
+    error?.response?.data;
+
+  if (
+    typeof data === "string" &&
+    data.trim()
+  ) {
+    return data;
+  }
+
+  if (
+    data?.message &&
+    typeof data.message ===
+    "string"
+  ) {
+    return data.message;
+  }
+
+  if (
+    data?.error &&
+    typeof data.error ===
+    "string"
+  ) {
+    return data.error;
+  }
+
+  if (
+    error?.message &&
+    typeof error.message ===
+    "string"
+  ) {
+    return error.message;
+  }
+
+  return fallback;
 }
