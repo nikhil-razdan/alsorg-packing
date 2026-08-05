@@ -3357,6 +3357,109 @@ const dispatchPlantMatches = (
 	);
 };
 
+const ADMIN_EDIT_API_FIELDS = {
+	itemName: "ITEM_NAME",
+	pdNo: "PD_NO",
+	drawingNo: "DRAWING_NO",
+	clientName: "CLIENT_NAME",
+	clientAddress: "CLIENT_ADDRESS",
+	floor: "FLOOR",
+	description: "DESCRIPTION",
+	weight: "WEIGHT",
+	dimensions: "DIMENSIONS",
+	remarks: "REMARKS",
+	location: "STICKER_LOCATION",
+	driver: "DRIVER",
+	vehicle: "VEHICLE",
+};
+
+const ADMIN_EDIT_TEXT_FIELDS = [
+	{
+		key: "itemName",
+		label: "Item Name",
+	},
+	{
+		key: "pdNo",
+		label: "PD No.",
+	},
+	{
+		key: "drawingNo",
+		label: "Drawing No.",
+	},
+	{
+		key: "clientName",
+		label: "Client Name",
+	},
+	{
+		key: "clientAddress",
+		label: "Client Address",
+		multiline: true,
+	},
+	{
+		key: "floor",
+		label: "Floor",
+	},
+	{
+		key: "description",
+		label: "Description",
+		multiline: true,
+	},
+	{
+		key: "weight",
+		label: "Weight",
+	},
+	{
+		key: "dimensions",
+		label: "Dimensions",
+	},
+	{
+		key: "remarks",
+		label: "Remarks",
+		multiline: true,
+	},
+	{
+		key: "location",
+		label: "Sticker Location",
+	},
+];
+
+const createEmptyAdminEditForm = () => ({
+	itemName: "",
+	pdNo: "",
+	drawingNo: "",
+	clientName: "",
+	clientAddress: "",
+	floor: "",
+	description: "",
+	weight: "",
+	dimensions: "",
+	remarks: "",
+	location: "",
+
+	driverId: "",
+	driverName: "",
+
+	vehicleId: "",
+	vehicleNumber: "",
+});
+
+const createEmptyAdminEditApplyState = () => ({
+	itemName: false,
+	pdNo: false,
+	drawingNo: false,
+	clientName: false,
+	clientAddress: false,
+	floor: false,
+	description: false,
+	weight: false,
+	dimensions: false,
+	remarks: false,
+	location: false,
+
+	driver: false,
+	vehicle: false,
+});
+
 const CREATE_NEW_DRIVER_OPTION =
 	"__CREATE_NEW_DRIVER__";
 
@@ -3366,6 +3469,7 @@ const CREATE_NEW_VEHICLE_OPTION =
 const MASTER_CREATE_TARGET = {
 	DISPATCH_CHALLAN: "DISPATCH_CHALLAN",
 	CUSTOM_CHALLAN: "CUSTOM_CHALLAN",
+	ADMIN_BULK_EDIT: "ADMIN_BULK_EDIT",
 };
 
 const DISPATCH_BACKEND_BATCH_SIZE = 200;
@@ -3391,24 +3495,23 @@ function DispatchedItemsPage() {
 
 	const {
 		user: currentUser,
-		role: authRole,
+		hasRole,
 	} = useAuth();
 
-	const cleanRole =
-		String(
-			currentUser?.role ||
-			authRole ||
-			""
-		)
-			.replace(/^ROLE_/i, "")
-			.trim()
-			.toUpperCase();
-
 	const isAdmin =
-		cleanRole === "ADMIN";
+		hasRole("ADMIN");
 
 	const isDispatch =
-		cleanRole === "DISPATCH";
+		hasRole("DISPATCH");
+
+	const isPacking =
+		hasRole("PACKING");
+
+	const isWarehouse =
+		hasRole("WAREHOUSE");
+
+	const isLogistics =
+		hasRole("LOGISTICS");
 
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [historyItem, setHistoryItem] =
@@ -3565,21 +3668,35 @@ function DispatchedItemsPage() {
 		dispatchTime: "",
 		items: [createEmptyCustomChallanLine()],
 	});
-	const [adminStickerEditOpen, setAdminStickerEditOpen] = useState(false);
-	const [adminStickerEditRow, setAdminStickerEditRow] = useState(null);
-	const [adminStickerEditForm, setAdminStickerEditForm] = useState({
-		itemName: "",
-		pdNo: "",
-		drawingNo: "",
-		clientName: "",
-		clientAddress: "",
-		floor: "",
-		description: "",
-		weight: "",
-		dimensions: "",
-		remarks: "",
-		location: "",
-	});
+
+	const [
+		adminEditOpen,
+		setAdminEditOpen,
+	] = useState(false);
+
+	const [
+		adminEditRows,
+		setAdminEditRows,
+	] = useState([]);
+
+	const [
+		adminEditForm,
+		setAdminEditForm,
+	] = useState(
+		createEmptyAdminEditForm
+	);
+
+	const [
+		adminEditApply,
+		setAdminEditApply,
+	] = useState(
+		createEmptyAdminEditApplyState
+	);
+
+	const [
+		adminEditLoading,
+		setAdminEditLoading,
+	] = useState(false);
 
 	const [dispatchExportOpen, setDispatchExportOpen] =
 		useState(false);
@@ -3610,6 +3727,78 @@ function DispatchedItemsPage() {
 
 	const dispatchReviewPdfUrlRef =
 		useRef("");
+
+	const getAdminEditCommonValue = (
+		targetRows,
+		valueGetter
+	) => {
+		const uniqueValues =
+			Array.from(
+				new Set(
+					(
+						Array.isArray(targetRows)
+							? targetRows
+							: []
+					)
+						.map((row) =>
+							String(
+								valueGetter(row) ??
+								""
+							).trim()
+						)
+				)
+			);
+
+		return uniqueValues.length === 1
+			? uniqueValues[0]
+			: "";
+	};
+
+	const findDriverByName = (
+		driverName
+	) => {
+		const cleanName =
+			normalizeDispatchDriverName(
+				driverName
+			).toLowerCase();
+
+		if (!cleanName) {
+			return null;
+		}
+
+		return (
+			logisticsDrivers.find(
+				(driver) =>
+					normalizeDispatchDriverName(
+						driver?.name
+					).toLowerCase() ===
+					cleanName
+			) || null
+		);
+	};
+
+	const findVehicleByNumber = (
+		vehicleNumber
+	) => {
+		const cleanNumber =
+			normalizeDispatchVehicleNumber(
+				vehicleNumber
+			);
+
+		if (!cleanNumber) {
+			return null;
+		}
+
+		return (
+			logisticsVehicles.find(
+				(vehicle) =>
+					normalizeDispatchVehicleNumber(
+						vehicle?.vehicleNumber
+					) ===
+					cleanNumber
+			) || null
+		);
+	};
 	/*
 * Keeps the input responsive while the 8,500-row result
 * calculation happens at a lower React priority.
@@ -8116,6 +8305,30 @@ function DispatchedItemsPage() {
 				}));
 			}
 
+			if (
+				createDriverTarget ===
+				MASTER_CREATE_TARGET.ADMIN_BULK_EDIT
+			) {
+				setAdminEditForm(
+					(previous) => ({
+						...previous,
+
+						driverId:
+							selectedDriver.id,
+
+						driverName:
+							selectedDriver.name,
+					})
+				);
+
+				setAdminEditApply(
+					(previous) => ({
+						...previous,
+						driver: true,
+					})
+				);
+			}
+
 			setCreateDriverOpen(false);
 			setCreateDriverTarget("");
 
@@ -8232,6 +8445,30 @@ function DispatchedItemsPage() {
 					vehicleNumber:
 						selectedVehicle.vehicleNumber,
 				}));
+			}
+
+			if (
+				createVehicleTarget ===
+				MASTER_CREATE_TARGET.ADMIN_BULK_EDIT
+			) {
+				setAdminEditForm(
+					(previous) => ({
+						...previous,
+
+						vehicleId:
+							selectedVehicle.id,
+
+						vehicleNumber:
+							selectedVehicle.vehicleNumber,
+					})
+				);
+
+				setAdminEditApply(
+					(previous) => ({
+						...previous,
+						vehicle: true,
+					})
+				);
 			}
 
 			setCreateVehicleOpen(false);
@@ -9872,21 +10109,22 @@ function DispatchedItemsPage() {
 								</Button>
 							</>
 						)}
-						{isAdmin &&
-							!isHardwareDispatchRow(row) && (
-								<Button
-									size="small"
-									onClick={() =>
-										openAdminStickerEdit(row)
-									}
-									sx={{
-										...actionWarning,
-										...tableActionButton,
-									}}
-								>
-									Edit Sticker
-								</Button>
-							)}
+						{isAdmin && (
+							<Button
+								size="small"
+								onClick={() =>
+									openAdminDispatchEdit(
+										[row]
+									)
+								}
+								sx={{
+									...actionWarning,
+									...tableActionButton,
+								}}
+							>
+								Edit Details
+							</Button>
+						)}
 						{canRequestRestore && (
 							<Button
 								size="small"
@@ -10458,62 +10696,516 @@ function DispatchedItemsPage() {
 		return row?.packetItemId || row?.itemId || row?.id || row?.zohoItemId || "";
 	};
 
-	const openAdminStickerEdit = (row) => {
-		setAdminStickerEditRow(row);
+	const openAdminDispatchEdit = (
+		targetRows
+	) => {
+		if (!isAdmin) {
+			alert(
+				"Only Admin can edit dispatch details"
+			);
 
-		setAdminStickerEditForm({
-			itemName: row.name || row.itemName || "",
-			pdNo: row.pdNo || "",
-			drawingNo: row.drawingNo || "",
-			clientName: row.clientName || "",
-			clientAddress: row.clientAddress || "",
-			floor: row.floor || "",
-			description: row.description || "",
-			weight: row.weight || "",
-			dimensions: row.dimensions || "",
-			remarks: row.remarks || "",
-			location: row.currentLocationCode || row.location || "",
-		});
-
-		setAdminStickerEditOpen(true);
-	};
-
-	const saveAdminStickerEdit = async () => {
-		const itemId = getDispatchPacketItemId(adminStickerEditRow);
-
-		if (!itemId) {
-			alert("Packet item id missing");
 			return;
 		}
 
-		try {
-			const res = await authFetch(
-				`${API_BASE_URL}/api/packets/items/${encodeURIComponent(itemId)}/admin-sticker-details`,
-				{
-					method: "PUT",
-					headers: {
-						"Content-Type": "application/json",
-						...getAuthHeaders(),
-					},
-					body: JSON.stringify(adminStickerEditForm),
-				}
+		const cleanRows =
+			(
+				Array.isArray(targetRows)
+					? targetRows
+					: [targetRows]
+			)
+				.filter(
+					(row) =>
+						Boolean(
+							String(
+								row?.zohoItemId ||
+								""
+							).trim()
+						)
+				);
+
+		if (cleanRows.length === 0) {
+			alert(
+				"No valid items selected"
 			);
 
-			if (!res.ok) {
-				const text = await res.text();
-				alert(text || "Sticker edit failed");
+			return;
+		}
+
+		const singleRow =
+			cleanRows.length === 1;
+
+		const driverName =
+			getAdminEditCommonValue(
+				cleanRows,
+				(row) =>
+					row?.driverName ||
+					row?.assignedDriverName ||
+					row?.driver?.name ||
+					(
+						typeof row?.driver ===
+							"string"
+							? row.driver
+							: ""
+					)
+			);
+
+		const vehicleNumber =
+			getAdminEditCommonValue(
+				cleanRows,
+				(row) =>
+					row?.vehicleNumber ||
+					row?.vehicleNo ||
+					row?.assignedVehicleNumber ||
+					row?.vehicle?.vehicleNumber ||
+					(
+						typeof row?.vehicle ===
+							"string"
+							? row.vehicle
+							: ""
+					)
+			);
+
+		const matchedDriver =
+			findDriverByName(
+				driverName
+			);
+
+		const matchedVehicle =
+			findVehicleByNumber(
+				vehicleNumber
+			);
+
+		setAdminEditRows(
+			cleanRows
+		);
+
+		setAdminEditForm({
+			itemName:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.itemName ||
+						row?.name
+				),
+
+			pdNo:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.pdNo
+				),
+
+			drawingNo:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.drawingNo
+				),
+
+			clientName:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.clientName
+				),
+
+			clientAddress:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.clientAddress
+				),
+
+			floor:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.floor
+				),
+
+			description:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.description
+				),
+
+			weight:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.weight
+				),
+
+			dimensions:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.dimensions
+				),
+
+			remarks:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.remarks
+				),
+
+			location:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						row?.currentLocationCode ||
+						row?.location
+				),
+
+			driverId:
+				matchedDriver?.id ||
+				"",
+
+			driverName:
+				driverName,
+
+			vehicleId:
+				matchedVehicle?.id ||
+				"",
+
+			vehicleNumber:
+				vehicleNumber,
+		});
+
+		/*
+		 * Single edit behaves like the previous Edit Sticker modal.
+		 *
+		 * In bulk mode no field is selected initially. This prevents
+		 * mixed or blank values from unintentionally overwriting all
+		 * selected items.
+		 */
+		setAdminEditApply(
+			singleRow
+				? {
+					itemName: true,
+					pdNo: true,
+					drawingNo: true,
+					clientName: true,
+					clientAddress: true,
+					floor: true,
+					description: true,
+					weight: true,
+					dimensions: true,
+					remarks: true,
+					location: true,
+
+					driver: false,
+					vehicle: false,
+				}
+				: createEmptyAdminEditApplyState()
+		);
+
+		setAdminEditOpen(
+			true
+		);
+	};
+
+	const closeAdminDispatchEdit =
+		() => {
+			if (adminEditLoading) {
 				return;
 			}
 
-			setAdminStickerEditOpen(false);
-			setAdminStickerEditRow(null);
+			setAdminEditOpen(
+				false
+			);
 
-			await fetchData();
-		} catch (e) {
-			console.error(e);
-			alert("Sticker edit failed");
-		}
-	};
+			setAdminEditRows(
+				[]
+			);
+
+			setAdminEditForm(
+				createEmptyAdminEditForm()
+			);
+
+			setAdminEditApply(
+				createEmptyAdminEditApplyState()
+			);
+		};
+
+	const saveAdminDispatchEdit =
+		async () => {
+			if (!isAdmin) {
+				alert(
+					"Only Admin can edit dispatch details"
+				);
+
+				return;
+			}
+
+			const itemIds =
+				Array.from(
+					new Set(
+						adminEditRows
+							.map((row) =>
+								String(
+									row?.zohoItemId ||
+									""
+								).trim()
+							)
+							.filter(Boolean)
+					)
+				);
+
+			if (itemIds.length === 0) {
+				alert(
+					"No valid items selected"
+				);
+
+				return;
+			}
+
+			const fields =
+				Object.entries(
+					adminEditApply
+				)
+					.filter(
+						([
+							,
+							enabled,
+						]) =>
+							Boolean(enabled)
+					)
+					.map(
+						([
+							key,
+						]) =>
+							ADMIN_EDIT_API_FIELDS[
+							key
+							]
+					)
+					.filter(Boolean);
+
+			if (fields.length === 0) {
+				alert(
+					"Select at least one field to apply"
+				);
+
+				return;
+			}
+
+			const payload = {
+				itemIds,
+				fields,
+
+				itemName:
+					String(
+						adminEditForm.itemName ||
+						""
+					).trim(),
+
+				pdNo:
+					String(
+						adminEditForm.pdNo ||
+						""
+					).trim(),
+
+				drawingNo:
+					String(
+						adminEditForm.drawingNo ||
+						""
+					).trim(),
+
+				clientName:
+					String(
+						adminEditForm.clientName ||
+						""
+					).trim(),
+
+				clientAddress:
+					String(
+						adminEditForm.clientAddress ||
+						""
+					).trim(),
+
+				floor:
+					String(
+						adminEditForm.floor ||
+						""
+					).trim(),
+
+				description:
+					String(
+						adminEditForm.description ||
+						""
+					).trim(),
+
+				weight:
+					String(
+						adminEditForm.weight ||
+						""
+					).trim(),
+
+				dimensions:
+					String(
+						adminEditForm.dimensions ||
+						""
+					).trim(),
+
+				remarks:
+					String(
+						adminEditForm.remarks ||
+						""
+					).trim(),
+
+				stickerLocation:
+					String(
+						adminEditForm.location ||
+						""
+					).trim(),
+
+				driverId:
+					String(
+						adminEditForm.driverId ||
+						""
+					).trim() ||
+					null,
+
+				driverName:
+					normalizeDispatchDriverName(
+						adminEditForm.driverName
+					),
+
+				vehicleId:
+					String(
+						adminEditForm.vehicleId ||
+						""
+					).trim() ||
+					null,
+
+				vehicleNumber:
+					normalizeDispatchVehicleNumber(
+						adminEditForm.vehicleNumber
+					),
+			};
+
+			try {
+				setAdminEditLoading(
+					true
+				);
+
+				const response =
+					await authFetch(
+						`${API_BASE_URL}/api/dispatched/admin/bulk-edit`,
+						{
+							method: "PUT",
+
+							headers: {
+								"Content-Type":
+									"application/json",
+
+								Accept:
+									"application/json",
+							},
+
+							body:
+								JSON.stringify(
+									payload
+								),
+						}
+					);
+
+				if (!response.ok) {
+					const message =
+						await readResponseError(
+							response,
+							"Admin dispatch edit failed"
+						);
+
+					throw new Error(
+						message
+					);
+				}
+
+				const result =
+					await response
+						.json()
+						.catch(
+							() => ({})
+						);
+
+				const updatedRows =
+					Array.isArray(
+						result?.updatedRows
+					)
+						? result.updatedRows
+						: [];
+
+				/*
+				 * The backend should return every affected row,
+				 * including other items belonging to an edited challan.
+				 */
+				if (
+					updatedRows.length >
+					0
+				) {
+					const normalizedUpdates =
+						normalizeFetchedDispatchRows(
+							updatedRows
+						);
+
+					const updateMap =
+						new Map(
+							normalizedUpdates.map(
+								(row) => [
+									String(
+										row.zohoItemId
+									),
+									row,
+								]
+							)
+						);
+
+					setRows(
+						(previousRows) =>
+							previousRows.map(
+								(row) =>
+									updateMap.get(
+										String(
+											row?.zohoItemId ||
+											""
+										)
+									) ||
+									row
+							)
+					);
+				} else {
+					/*
+					 * Compatibility fallback for an older backend
+					 * response that does not return updatedRows.
+					 */
+					await fetchData();
+				}
+
+				setSelectionModel(
+					[]
+				);
+
+				closeAdminDispatchEdit();
+
+			} catch (error) {
+				console.error(
+					"Admin dispatch edit failed:",
+					error
+				);
+
+				alert(
+					error?.message ||
+					"Admin dispatch edit failed"
+				);
+			} finally {
+				setAdminEditLoading(
+					false
+				);
+			}
+		};
 
 	const revokeDispatchReviewPdfUrl =
 		() => {
@@ -13075,8 +13767,7 @@ function DispatchedItemsPage() {
 				</div>
 				{Array.isArray(selectionModel) &&
 					selectionModel.length > 0 &&
-					isDispatch && (
-
+					(isDispatch || isAdmin) && (
 						<div style={bulkBar}>
 							<Box
 								sx={{
@@ -13086,58 +13777,107 @@ function DispatchedItemsPage() {
 									color: "#cbd5e1",
 									fontWeight: 800,
 									fontSize: 13,
+									flexWrap: "wrap",
 								}}
 							>
 								<span>☑️</span>
 
 								<span>
 									{selectionModel.length} item
-									{selectionModel.length > 1 ? "s" : ""} selected
+									{selectionModel.length > 1
+										? "s"
+										: ""}{" "}
+									selected
 								</span>
 
-								<Chip
-									size="small"
-									label={getBulkActionLabel(selectedBulkAction)}
-									sx={{
-										height: 26,
-										fontWeight: 900,
-										fontSize: 11,
+								{/*
+				 * ADMIN receives an Admin Bulk Edit chip.
+				 *
+				 * DISPATCH receives the existing action chip.
+				 *
+				 * A user who has both permissions can still see
+				 * the normal dispatch action chip and the Admin
+				 * Edit Selected button.
+				 */}
+								{isAdmin && !isDispatch ? (
+									<Chip
+										size="small"
+										label="Admin Bulk Edit"
+										sx={{
+											height: 26,
+											fontWeight: 900,
+											fontSize: 11,
+											color: "#fcd34d",
+											background:
+												"rgba(245,158,11,.15)",
+											border:
+												"1px solid rgba(245,158,11,.25)",
+										}}
+									/>
+								) : (
+									<Chip
+										size="small"
+										label={getBulkActionLabel(
+											selectedBulkAction
+										)}
+										sx={{
+											height: 26,
+											fontWeight: 900,
+											fontSize: 11,
 
-										color:
-											selectedBulkAction === "MOVE_TO_FG"
-												? "#fbbf24"
-												: selectedBulkAction === "CHANGE_STATUS"
-													? "#93c5fd"
-													: selectedBulkAction === "GATE_PASS"
-														? "#6ee7b7"
-														: selectedBulkAction === "CHALAAN"
-															? "#93c5fd"
-															: "#fca5a5",
+											color:
+												selectedBulkAction ===
+													"MOVE_TO_FG"
+													? "#fbbf24"
+													: selectedBulkAction ===
+														"CHANGE_STATUS"
+														? "#93c5fd"
+														: selectedBulkAction ===
+															"GATE_PASS"
+															? "#6ee7b7"
+															: selectedBulkAction ===
+																"CHALAAN"
+																? "#93c5fd"
+																: "#fca5a5",
 
-										background:
-											selectedBulkAction === "MOVE_TO_FG"
-												? "rgba(245,158,11,.15)"
-												: selectedBulkAction === "CHANGE_STATUS"
-													? "rgba(59,130,246,.15)"
-													: selectedBulkAction === "GATE_PASS"
-														? "rgba(16,185,129,.15)"
-														: selectedBulkAction === "CHALAAN"
-															? "rgba(59,130,246,.15)"
-															: "rgba(239,68,68,.15)",
+											background:
+												selectedBulkAction ===
+													"MOVE_TO_FG"
+													? "rgba(245,158,11,.15)"
+													: selectedBulkAction ===
+														"CHANGE_STATUS"
+														? "rgba(59,130,246,.15)"
+														: selectedBulkAction ===
+															"GATE_PASS"
+															? "rgba(16,185,129,.15)"
+															: selectedBulkAction ===
+																"CHALAAN"
+																? "rgba(59,130,246,.15)"
+																: "rgba(239,68,68,.15)",
 
-										border:
-											selectedBulkAction === "MIXED"
-												? "1px solid rgba(239,68,68,.25)"
-												: "1px solid rgba(255,255,255,.08)",
-									}}
-								/>
+											border:
+												selectedBulkAction ===
+													"MIXED"
+													? "1px solid rgba(239,68,68,.25)"
+													: "1px solid rgba(255,255,255,.08)",
+										}}
+									/>
+								)}
 							</Box>
 
-							{canBulkMoveToFg && (
+							{/*
+			 * ADMIN-SPECIFIC ACTION
+			 *
+			 * This stays outside the isDispatch wrapper so an
+			 * ADMIN-only user can edit the selected rows.
+			 */}
+							{isAdmin && (
 								<Button
 									size="small"
 									onClick={() => {
-										openBulkMoveToFgModal();
+										openAdminDispatchEdit(
+											selectedItems
+										);
 									}}
 									sx={{
 										px: 2.4,
@@ -13163,133 +13903,193 @@ function DispatchedItemsPage() {
 										},
 									}}
 								>
-									Move to FG
+									Edit Selected
 								</Button>
 							)}
 
-							{canBulkChangeStatus && (
-								<Button
-									size="small"
-									onClick={() => setBulkStatusModal(true)}
-									sx={{
-										px: 2.4,
-										height: 38,
-										borderRadius: "12px",
-										fontWeight: 900,
-										textTransform: "none",
+							{/*
+			 * DISPATCH-SPECIFIC ACTIONS
+			 *
+			 * ADMIN-only users must not see Move to FG,
+			 * Change Status, Challan or Gate Pass buttons.
+			 */}
+							{isDispatch && (
+								<>
+									{canBulkMoveToFg && (
+										<Button
+											size="small"
+											onClick={() => {
+												openBulkMoveToFgModal();
+											}}
+											sx={{
+												px: 2.4,
+												height: 38,
+												borderRadius: "12px",
+												fontWeight: 900,
+												textTransform: "none",
 
-										background:
-											"linear-gradient(180deg,#3b82f6,#2563eb)",
+												background:
+													"linear-gradient(180deg,#f59e0b,#d97706)",
 
-										color: "#fff",
+												color: "#fff",
 
-										border:
-											"1px solid rgba(59,130,246,.35)",
+												border:
+													"1px solid rgba(245,158,11,.35)",
 
-										boxShadow:
-											"0 10px 24px rgba(37,99,235,.28)",
+												boxShadow:
+													"0 10px 24px rgba(245,158,11,.28)",
 
-										"&:hover": {
-											background:
-												"linear-gradient(180deg,#60a5fa,#2563eb)",
-										},
-									}}
-								>
-									Change Status
-								</Button>
+												"&:hover": {
+													background:
+														"linear-gradient(180deg,#fbbf24,#f59e0b)",
+												},
+											}}
+										>
+											Move to FG
+										</Button>
+									)}
+
+									{canBulkChangeStatus && (
+										<Button
+											size="small"
+											onClick={() =>
+												setBulkStatusModal(
+													true
+												)
+											}
+											sx={{
+												px: 2.4,
+												height: 38,
+												borderRadius: "12px",
+												fontWeight: 900,
+												textTransform: "none",
+
+												background:
+													"linear-gradient(180deg,#3b82f6,#2563eb)",
+
+												color: "#fff",
+
+												border:
+													"1px solid rgba(59,130,246,.35)",
+
+												boxShadow:
+													"0 10px 24px rgba(37,99,235,.28)",
+
+												"&:hover": {
+													background:
+														"linear-gradient(180deg,#60a5fa,#2563eb)",
+												},
+											}}
+										>
+											Change Status
+										</Button>
+									)}
+
+									{canBulkGenerateChalaan && (
+										<Button
+											size="small"
+											onClick={() => {
+												openDispatchTripModal({
+													mode: "UI_BULK",
+
+													itemIds:
+														selectionModel,
+
+													title:
+														"Bulk Chalaan",
+												});
+											}}
+											sx={{
+												px: 2.4,
+												height: 38,
+												borderRadius: "12px",
+												fontWeight: 900,
+												textTransform: "none",
+
+												background:
+													"linear-gradient(180deg,#3b82f6,#2563eb)",
+
+												color: "#fff",
+
+												border:
+													"1px solid rgba(59,130,246,.35)",
+
+												boxShadow:
+													"0 10px 24px rgba(37,99,235,.28)",
+
+												"&:hover": {
+													background:
+														"linear-gradient(180deg,#60a5fa,#2563eb)",
+												},
+											}}
+										>
+											Generate Bulk Chalaan
+										</Button>
+									)}
+
+									{canBulkGenerateGatePass && (
+										<Button
+											size="small"
+											onClick={
+												openBulkGatePassModal
+											}
+											sx={{
+												px: 2.4,
+												height: 38,
+												borderRadius: "12px",
+												fontWeight: 900,
+												textTransform: "none",
+
+												background:
+													"linear-gradient(180deg,#10b981,#059669)",
+
+												color: "#fff",
+
+												border:
+													"1px solid rgba(16,185,129,.35)",
+
+												boxShadow:
+													"0 10px 24px rgba(16,185,129,.28)",
+
+												"&:hover": {
+													background:
+														"linear-gradient(180deg,#34d399,#059669)",
+												},
+											}}
+										>
+											Generate Bulk Gate Pass
+										</Button>
+									)}
+
+									{selectedBulkAction ===
+										"MIXED" && (
+											<Button
+												size="small"
+												disabled
+												sx={{
+													px: 2.4,
+													height: 38,
+													borderRadius:
+														"12px",
+													fontWeight: 900,
+													textTransform:
+														"none",
+													background:
+														"#64748b",
+													color: "#fff",
+												}}
+											>
+												Select same action
+												items
+											</Button>
+										)}
+								</>
 							)}
-
-							{canBulkGenerateChalaan && (
-								<Button
-									size="small"
-									onClick={() => {
-										openDispatchTripModal({
-											mode: "UI_BULK",
-											itemIds: selectionModel,
-											title: "Bulk Chalaan",
-										});
-									}}
-									sx={{
-										px: 2.4,
-										height: 38,
-										borderRadius: "12px",
-										fontWeight: 900,
-										textTransform: "none",
-
-										background:
-											"linear-gradient(180deg,#3b82f6,#2563eb)",
-
-										color: "#fff",
-
-										border:
-											"1px solid rgba(59,130,246,.35)",
-
-										boxShadow:
-											"0 10px 24px rgba(37,99,235,.28)",
-
-										"&:hover": {
-											background:
-												"linear-gradient(180deg,#60a5fa,#2563eb)",
-										},
-									}}
-								>
-									Generate Bulk Chalaan
-								</Button>
-							)}
-
-							{canBulkGenerateGatePass && (
-								<Button
-									size="small"
-									onClick={openBulkGatePassModal}
-									sx={{
-										px: 2.4,
-										height: 38,
-										borderRadius: "12px",
-										fontWeight: 900,
-										textTransform: "none",
-
-										background:
-											"linear-gradient(180deg,#10b981,#059669)",
-
-										color: "#fff",
-
-										border:
-											"1px solid rgba(16,185,129,.35)",
-
-										boxShadow:
-											"0 10px 24px rgba(16,185,129,.28)",
-
-										"&:hover": {
-											background:
-												"linear-gradient(180deg,#34d399,#059669)",
-										},
-									}}
-								>
-									Generate Bulk Gate Pass
-								</Button>
-							)}
-
-							{selectedBulkAction === "MIXED" && (
-								<Button
-									size="small"
-									disabled
-									sx={{
-										px: 2.4,
-										height: 38,
-										borderRadius: "12px",
-										fontWeight: 900,
-										textTransform: "none",
-										background: "#64748b",
-										color: "#fff",
-									}}
-								>
-									Select same action items
-								</Button>
-							)}
-
 							<Button
 								size="small"
-								onClick={() => setSelectionModel([])}
+								onClick={() =>
+									setSelectionModel([])
+								}
 								sx={{
 									px: 2,
 									height: 38,
@@ -16509,92 +17309,694 @@ function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
-				{adminStickerEditOpen && (
+				{adminEditOpen && (
 					<Box
-						sx={{ ...enhancedOverlaySx, zIndex: 5400 }}
-						onClick={() => setAdminStickerEditOpen(false)}
+						sx={{
+							...enhancedOverlaySx,
+							zIndex: 6400,
+						}}
+						onClick={
+							closeAdminDispatchEdit
+						}
 					>
 						<Box
 							sx={{
 								...enhancedModalSx,
-								width: 620,
-								maxHeight: "88vh",
+
+								width:
+									"min(900px,94vw)",
+
+								maxHeight:
+									"92vh",
+
+								display:
+									"flex",
+
+								flexDirection:
+									"column",
 							}}
-							onClick={(e) => e.stopPropagation()}
+							onClick={(event) =>
+								event.stopPropagation()
+							}
 						>
 							<Box sx={modalHeaderSx}>
 								<Box sx={modalTitleWrapSx}>
-									<Box sx={modalIconBubble("#f59e0b")}>
+									<Box
+										sx={modalIconBubble(
+											"#f59e0b"
+										)}
+									>
 										✏️
 									</Box>
 
 									<Box>
 										<Box sx={modalTitleSx}>
-											Edit Sticker Details
+											Admin Edit Details
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Admin-only sticker detail correction
+											Editing{" "}
+											{adminEditRows.length}{" "}
+											selected item
+											{adminEditRows.length ===
+												1
+												? ""
+												: "s"}
 										</Box>
 									</Box>
 								</Box>
 
 								<IconButton
+									disabled={
+										adminEditLoading
+									}
 									sx={modalCloseButtonSx}
-									onClick={() => setAdminStickerEditOpen(false)}
+									onClick={
+										closeAdminDispatchEdit
+									}
 								>
 									×
 								</IconButton>
 							</Box>
 
-							<Box sx={modalContentSx}>
-								<Box sx={modalScrollBodySx}>
-									{[
-										"itemName",
-										"pdNo",
-										"drawingNo",
-										"clientName",
-										"clientAddress",
-										"floor",
-										"description",
-										"weight",
-										"dimensions",
-										"remarks",
-										"location",
-									].map((field) => (
-										<TextField
-											key={field}
-											label={field}
-											fullWidth
-											value={adminStickerEditForm[field] || ""}
-											onChange={(e) =>
-												setAdminStickerEditForm((prev) => ({
-													...prev,
-													[field]: e.target.value,
-												}))
+							<Box
+								sx={{
+									...modalContentSx,
+
+									flex: 1,
+									minHeight: 0,
+									overflowY: "auto",
+
+									...premiumScrollbarSx(
+										"#f59e0b"
+									),
+								}}
+							>
+								<Box
+									sx={{
+										mb: 2,
+										p: 1.4,
+										borderRadius: "12px",
+
+										color: "#fcd34d",
+										fontSize: 12,
+										fontWeight: 800,
+
+										background:
+											"rgba(245,158,11,.10)",
+
+										border:
+											"1px solid rgba(245,158,11,.20)",
+									}}
+								>
+									Only checked fields will be
+									applied. A checked field with
+									an empty value will clear that
+									field. Driver and vehicle
+									changes apply consistently to
+									every item belonging to the
+									same challan.
+								</Box>
+
+								<Box
+									sx={{
+										display: "grid",
+										gridTemplateColumns:
+											"repeat(2,minmax(0,1fr))",
+										gap: 1.5,
+									}}
+								>
+									{ADMIN_EDIT_TEXT_FIELDS.map(
+										(field) => {
+											const enabled =
+												Boolean(
+													adminEditApply[
+													field.key
+													]
+												);
+
+											return (
+												<Box
+													key={
+														field.key
+													}
+													sx={{
+														p: 1.2,
+														borderRadius:
+															"14px",
+
+														background:
+															enabled
+																? "rgba(245,158,11,.08)"
+																: "rgba(255,255,255,.025)",
+
+														border:
+															enabled
+																? "1px solid rgba(245,158,11,.24)"
+																: "1px solid rgba(255,255,255,.07)",
+
+														gridColumn:
+															field.multiline
+																? "1 / -1"
+																: "auto",
+													}}
+												>
+													<Box
+														sx={{
+															display:
+																"flex",
+
+															alignItems:
+																"center",
+
+															gap: 1,
+															mb: 1,
+														}}
+													>
+														<Checkbox
+															size="small"
+															checked={
+																enabled
+															}
+															onChange={(
+																event
+															) =>
+																setAdminEditApply(
+																	(previous) => ({
+																		...previous,
+
+																		[field.key]:
+																			event
+																				.target
+																				.checked,
+																	})
+																)
+															}
+															sx={{
+																p: 0.3,
+
+																color:
+																	"rgba(255,255,255,.42)",
+
+																"&.Mui-checked":
+																{
+																	color:
+																		"#f59e0b",
+																},
+															}}
+														/>
+
+														<Box
+															sx={{
+																color:
+																	enabled
+																		? "#fcd34d"
+																		: "#94a3b8",
+
+																fontSize: 11,
+																fontWeight: 950,
+																textTransform:
+																	"uppercase",
+																letterSpacing:
+																	".06em",
+															}}
+														>
+															Apply{" "}
+															{field.label}
+														</Box>
+													</Box>
+
+													<TextField
+														fullWidth
+														disabled={
+															!enabled ||
+															adminEditLoading
+														}
+														label={
+															field.label
+														}
+														multiline={
+															Boolean(
+																field.multiline
+															)
+														}
+														minRows={
+															field.multiline
+																? 2
+																: undefined
+														}
+														value={
+															adminEditForm[
+															field.key
+															] || ""
+														}
+														onChange={(
+															event
+														) =>
+															setAdminEditForm(
+																(previous) => ({
+																	...previous,
+
+																	[field.key]:
+																		event
+																			.target
+																			.value,
+																})
+															)
+														}
+														sx={
+															formFieldSx
+														}
+													/>
+												</Box>
+											);
+										}
+									)}
+								</Box>
+
+								{/* DRIVER */}
+								<Box
+									sx={{
+										mt: 2,
+										p: 1.4,
+										borderRadius: "14px",
+
+										background:
+											adminEditApply.driver
+												? "rgba(59,130,246,.08)"
+												: "rgba(255,255,255,.025)",
+
+										border:
+											adminEditApply.driver
+												? "1px solid rgba(59,130,246,.24)"
+												: "1px solid rgba(255,255,255,.07)",
+									}}
+								>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 1,
+											mb: 1.2,
+										}}
+									>
+										<Checkbox
+											size="small"
+											checked={
+												adminEditApply.driver
+											}
+											onChange={(event) =>
+												setAdminEditApply(
+													(previous) => ({
+														...previous,
+														driver:
+															event.target
+																.checked,
+													})
+												)
 											}
 											sx={{
-												...formFieldSx,
-												mb: 2,
+												p: 0.3,
+
+												"&.Mui-checked": {
+													color:
+														"#60a5fa",
+												},
 											}}
 										/>
-									))}
+
+										<Box
+											sx={{
+												color: "#93c5fd",
+												fontSize: 12,
+												fontWeight: 950,
+											}}
+										>
+											Apply Driver
+										</Box>
+									</Box>
+
+									<Box
+										sx={{
+											display: "grid",
+											gridTemplateColumns:
+												"1fr 1fr",
+											gap: 1.4,
+										}}
+									>
+										<Box
+											component="select"
+											disabled={
+												!adminEditApply.driver ||
+												adminEditLoading
+											}
+											value={
+												adminEditForm.driverId ||
+												""
+											}
+											onChange={(event) => {
+												const value =
+													String(
+														event.target
+															.value ||
+														""
+													);
+
+												if (
+													value ===
+													CREATE_NEW_DRIVER_OPTION
+												) {
+													openCreateDriverModal(
+														MASTER_CREATE_TARGET
+															.ADMIN_BULK_EDIT
+													);
+
+													return;
+												}
+
+												const driver =
+													logisticsDrivers.find(
+														(item) =>
+															String(
+																item?.id ||
+																""
+															) ===
+															value
+													);
+
+												setAdminEditForm(
+													(previous) => ({
+														...previous,
+
+														driverId:
+															value,
+
+														driverName:
+															driver?.name ||
+															previous.driverName,
+													})
+												);
+											}}
+											sx={dispatchTripNativeSelectSx}
+										>
+											<option value="">
+												Manual / No Linked Driver
+											</option>
+
+											<option
+												value={
+													CREATE_NEW_DRIVER_OPTION
+												}
+											>
+												＋ Create New Driver
+											</option>
+
+											{logisticsDrivers.map(
+												(driver) => (
+													<option
+														key={
+															driver.id
+														}
+														value={
+															driver.id
+														}
+													>
+														{
+															driver.name
+														}
+													</option>
+												)
+											)}
+										</Box>
+
+										<TextField
+											fullWidth
+											disabled={
+												!adminEditApply.driver ||
+												adminEditLoading
+											}
+											label="Driver Name"
+											placeholder="Enter legacy driver name"
+											value={
+												adminEditForm.driverName
+											}
+											onChange={(event) =>
+												setAdminEditForm(
+													(previous) => ({
+														...previous,
+
+														/*
+														 * Manual text means the row is
+														 * not necessarily linked to a
+														 * driver master.
+														 */
+														driverId: "",
+
+														driverName:
+															event.target
+																.value,
+													})
+												)
+											}
+											sx={formFieldSx}
+										/>
+									</Box>
+								</Box>
+
+								{/* VEHICLE */}
+								<Box
+									sx={{
+										mt: 1.5,
+										p: 1.4,
+										borderRadius: "14px",
+
+										background:
+											adminEditApply.vehicle
+												? "rgba(16,185,129,.08)"
+												: "rgba(255,255,255,.025)",
+
+										border:
+											adminEditApply.vehicle
+												? "1px solid rgba(16,185,129,.24)"
+												: "1px solid rgba(255,255,255,.07)",
+									}}
+								>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 1,
+											mb: 1.2,
+										}}
+									>
+										<Checkbox
+											size="small"
+											checked={
+												adminEditApply.vehicle
+											}
+											onChange={(event) =>
+												setAdminEditApply(
+													(previous) => ({
+														...previous,
+														vehicle:
+															event.target
+																.checked,
+													})
+												)
+											}
+											sx={{
+												p: 0.3,
+
+												"&.Mui-checked": {
+													color:
+														"#10b981",
+												},
+											}}
+										/>
+
+										<Box
+											sx={{
+												color: "#6ee7b7",
+												fontSize: 12,
+												fontWeight: 950,
+											}}
+										>
+											Apply Vehicle
+										</Box>
+									</Box>
+
+									<Box
+										sx={{
+											display: "grid",
+											gridTemplateColumns:
+												"1fr 1fr",
+											gap: 1.4,
+										}}
+									>
+										<Box
+											component="select"
+											disabled={
+												!adminEditApply.vehicle ||
+												adminEditLoading
+											}
+											value={
+												adminEditForm.vehicleId ||
+												""
+											}
+											onChange={(event) => {
+												const value =
+													String(
+														event.target
+															.value ||
+														""
+													);
+
+												if (
+													value ===
+													CREATE_NEW_VEHICLE_OPTION
+												) {
+													openCreateVehicleModal(
+														MASTER_CREATE_TARGET
+															.ADMIN_BULK_EDIT
+													);
+
+													return;
+												}
+
+												const vehicle =
+													logisticsVehicles.find(
+														(item) =>
+															String(
+																item?.id ||
+																""
+															) ===
+															value
+													);
+
+												setAdminEditForm(
+													(previous) => ({
+														...previous,
+
+														vehicleId:
+															value,
+
+														vehicleNumber:
+															vehicle?.vehicleNumber ||
+															previous.vehicleNumber,
+													})
+												);
+											}}
+											sx={dispatchTripNativeSelectSx}
+										>
+											<option value="">
+												Manual / No Linked Vehicle
+											</option>
+
+											<option
+												value={
+													CREATE_NEW_VEHICLE_OPTION
+												}
+											>
+												＋ Create New Vehicle
+											</option>
+
+											{logisticsVehicles.map(
+												(vehicle) => (
+													<option
+														key={
+															vehicle.id
+														}
+														value={
+															vehicle.id
+														}
+													>
+														{
+															vehicle.vehicleNumber
+														}
+														{vehicle.vehicleName
+															? ` - ${vehicle.vehicleName}`
+															: ""}
+													</option>
+												)
+											)}
+										</Box>
+
+										<TextField
+											fullWidth
+											disabled={
+												!adminEditApply.vehicle ||
+												adminEditLoading
+											}
+											label="Vehicle Number"
+											placeholder="Enter legacy vehicle number"
+											value={
+												adminEditForm.vehicleNumber
+											}
+											onChange={(event) =>
+												setAdminEditForm(
+													(previous) => ({
+														...previous,
+
+														vehicleId: "",
+
+														vehicleNumber:
+															event.target
+																.value,
+													})
+												)
+											}
+											sx={formFieldSx}
+										/>
+									</Box>
 								</Box>
 							</Box>
 
 							<Box sx={modalFooterSx}>
 								<Button
-									onClick={() => setAdminStickerEditOpen(false)}
-									sx={modalSecondaryButtonSx}
+									disabled={
+										adminEditLoading
+									}
+									onClick={
+										closeAdminDispatchEdit
+									}
+									sx={
+										modalSecondaryButtonSx
+									}
 								>
 									Cancel
 								</Button>
 
 								<Button
-									onClick={saveAdminStickerEdit}
-									sx={premiumButton}
+									disabled={
+										adminEditLoading ||
+										!Object.values(
+											adminEditApply
+										).some(Boolean)
+									}
+									onClick={
+										saveAdminDispatchEdit
+									}
+									sx={{
+										...premiumButton,
+
+										background:
+											"linear-gradient(135deg,#d97706,#f59e0b)",
+
+										"&.Mui-disabled": {
+											color:
+												"rgba(255,255,255,.40)",
+
+											background:
+												"rgba(255,255,255,.08)",
+										},
+									}}
 								>
-									Save
+									{adminEditLoading
+										? "Saving Changes..."
+										: `Apply to ${adminEditRows.length} Item${adminEditRows.length === 1
+											? ""
+											: "s"
+										}`}
 								</Button>
 							</Box>
 						</Box>

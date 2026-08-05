@@ -257,6 +257,7 @@ const DEFAULT_FORM = {
 	username: "",
 	password: "",
 	role: "PACKING",
+	roles: ["PACKING"],
 	plantCodes: [],
 	driverId: "",
 	warehouseAccess: false,
@@ -305,6 +306,163 @@ const normalizeArray = (value) => {
 				)
 				.filter(Boolean)
 		)
+	);
+};
+
+const userRoles = (user) => {
+	const explicitRoles =
+		normalizeArray(user?.roles)
+			.filter((role) => ROLE_META[role]);
+
+	if (explicitRoles.length > 0) {
+		return explicitRoles;
+	}
+
+	const legacyRole =
+		normalizeRole(user?.role);
+
+	return legacyRole
+		? [legacyRole]
+		: [];
+};
+
+const hasAssignedRole = (
+	roles,
+	requestedRole
+) => {
+	const cleanRequestedRole =
+		normalizeRole(requestedRole);
+
+	return normalizeArray(roles)
+		.includes(cleanRequestedRole);
+};
+
+const primaryRoleFor = (
+	roles,
+	preferredRole = ""
+) => {
+	const cleanRoles =
+		normalizeArray(roles)
+			.filter((role) => ROLE_META[role]);
+
+	const cleanPreferred =
+		normalizeRole(preferredRole);
+
+	if (
+		cleanPreferred &&
+		cleanRoles.includes(cleanPreferred)
+	) {
+		return cleanPreferred;
+	}
+
+	return cleanRoles[0] || "PACKING";
+};
+
+const modulesForRoles = (roles) => {
+	const cleanRoles =
+		normalizeArray(roles);
+
+	if (cleanRoles.includes("ADMIN")) {
+		return [
+			MODULE_KEYS.PACKFLOW,
+			MODULE_KEYS.BOMFLOW,
+			MODULE_KEYS.MATFLOW,
+		];
+	}
+
+	return Array.from(
+		new Set(
+			cleanRoles
+				.map((role) =>
+					roleMeta(role).moduleKey
+				)
+				.filter(Boolean)
+		)
+	);
+};
+
+const rolesRequireDriver = (roles) => {
+	return hasAssignedRole(
+		roles,
+		"DRIVER"
+	);
+};
+
+const rolesRequirePlantAccess = (roles) => {
+	const cleanRoles =
+		normalizeArray(roles);
+
+	if (cleanRoles.includes("ADMIN")) {
+		return false;
+	}
+
+	return cleanRoles.some((role) => {
+		if (role === "DRIVER") {
+			return false;
+		}
+
+		if (
+			role.startsWith("BOMFLOW_")
+		) {
+			return false;
+		}
+
+		return true;
+	});
+};
+
+const rolesSupportWarehouseToggle = (roles) => {
+	const cleanRoles =
+		normalizeArray(roles);
+
+	if (
+		cleanRoles.includes("ADMIN") ||
+		cleanRoles.includes("WAREHOUSE") ||
+		cleanRoles.includes("DISPATCH")
+	) {
+		return false;
+	}
+
+	return (
+		cleanRoles.includes("PACKING") ||
+		cleanRoles.includes("LOGISTICS")
+	);
+};
+
+const resolveWarehouseAccessForRoles = (
+	roles,
+	requestedValue
+) => {
+	const cleanRoles =
+		normalizeArray(roles);
+
+	if (
+		cleanRoles.includes("ADMIN") ||
+		cleanRoles.includes("WAREHOUSE") ||
+		cleanRoles.includes("DISPATCH")
+	) {
+		return true;
+	}
+
+	if (
+		!cleanRoles.includes("PACKING") &&
+		!cleanRoles.includes("LOGISTICS")
+	) {
+		return false;
+	}
+
+	return requestedValue === true;
+};
+
+const readWarehouseAccess = (user) => {
+	const roles =
+		userRoles(user);
+
+	return (
+		hasAssignedRole(roles, "ADMIN") ||
+		hasAssignedRole(roles, "WAREHOUSE") ||
+		hasAssignedRole(roles, "DISPATCH") ||
+		user?.warehouseAccess === true
 	);
 };
 
@@ -495,7 +653,7 @@ export default function UsersPage() {
 	const navigate = useNavigate();
 
 	const {
-		role: currentRole,
+		hasRole,
 		modules: currentModules = [],
 		logout: authLogout,
 	} = useAuth();
@@ -503,23 +661,23 @@ export default function UsersPage() {
 	const safeCurrentModules =
 		normalizeArray(currentModules);
 
-	const normalizedCurrentRole =
-		normalizeRole(currentRole);
+	const isCurrentAdmin =
+		hasRole("ADMIN");
 
 	const canOpenPackFlow =
-		normalizedCurrentRole === "ADMIN" ||
+		isCurrentAdmin ||
 		safeCurrentModules.includes(
 			MODULE_KEYS.PACKFLOW
 		);
 
 	const canOpenBOMFlow =
-		normalizedCurrentRole === "ADMIN" ||
+		isCurrentAdmin ||
 		safeCurrentModules.includes(
 			MODULE_KEYS.BOMFLOW
 		);
 
 	const canOpenMatFlow =
-		normalizedCurrentRole === "ADMIN" ||
+		isCurrentAdmin ||
 		safeCurrentModules.includes(
 			MODULE_KEYS.MATFLOW
 		);
@@ -753,8 +911,14 @@ export default function UsersPage() {
 	};
 
 	const openEditDrawer = (user) => {
-		const cleanRole =
-			normalizeRole(user.role);
+		const assignedRoles =
+			userRoles(user);
+
+		const primaryRole =
+			primaryRoleFor(
+				assignedRoles,
+				user.role
+			);
 
 		setDrawerMode("edit");
 		setEditingUserId(user.id);
@@ -762,14 +926,25 @@ export default function UsersPage() {
 		setForm({
 			username:
 				user.username || "",
+
 			password: "",
-			role: cleanRole,
+
+			role:
+				primaryRole,
+
+			roles:
+				assignedRoles.length
+					? assignedRoles
+					: [primaryRole],
+
 			plantCodes:
 				userPlantCodes(user),
+
 			driverId:
-				cleanRole === "DRIVER"
+				assignedRoles.includes("DRIVER")
 					? user.driverId || ""
 					: "",
+
 			warehouseAccess:
 				readWarehouseAccess(user),
 		});
@@ -797,40 +972,74 @@ export default function UsersPage() {
 		}));
 	};
 
-	const handleRoleChange = (
-		nextRole
+	const handleRolesChange = (
+		nextRoles
 	) => {
-		const cleanRole =
-			normalizeRole(nextRole);
+		let cleanRoles =
+			normalizeArray(nextRoles)
+				.filter((role) => ROLE_META[role]);
+
+		if (cleanRoles.length === 0) {
+			return;
+		}
+
+		/*
+		 * ADMIN is exclusive.
+		 */
+		if (cleanRoles.includes("ADMIN")) {
+			cleanRoles = ["ADMIN"];
+		}
+
+		/*
+		 * Multiple selections are allowed only inside PackFlow.
+		 */
+		if (cleanRoles.length > 1) {
+			const invalidCombination =
+				cleanRoles.some(
+					(role) =>
+						roleMeta(role).groupKey !==
+						MODULE_KEYS.PACKFLOW
+				);
+
+			if (invalidCombination) {
+				cleanRoles = [
+					cleanRoles[0],
+				];
+			}
+		}
 
 		setForm((previous) => {
+			const nextPrimaryRole =
+				primaryRoleFor(
+					cleanRoles,
+					previous.role
+				);
+
 			const next = {
 				...previous,
-				role: cleanRole,
+				role: nextPrimaryRole,
+				roles: cleanRoles,
 			};
 
 			if (
-				roleRequiresDriver(
-					cleanRole
+				!rolesRequireDriver(
+					cleanRoles
 				)
 			) {
-				next.plantCodes = [];
-				next.warehouseAccess = false;
-			} else {
 				next.driverId = "";
 			}
 
 			if (
-				!roleRequiresPlantAccess(
-					cleanRole
+				!rolesRequirePlantAccess(
+					cleanRoles
 				)
 			) {
 				next.plantCodes = [];
 			}
 
 			next.warehouseAccess =
-				resolveWarehouseAccess(
-					cleanRole,
+				resolveWarehouseAccessForRoles(
+					cleanRoles,
 					previous.warehouseAccess
 				);
 
@@ -839,6 +1048,9 @@ export default function UsersPage() {
 	};
 
 	const validateForm = () => {
+		const roles =
+			normalizeArray(form.roles);
+
 		if (!form.username.trim()) {
 			return "Username is required.";
 		}
@@ -857,23 +1069,45 @@ export default function UsersPage() {
 			return "Password must be at least 8 characters.";
 		}
 
-		if (!ROLE_META[form.role]) {
-			return "Select a valid access role.";
+		if (roles.length === 0) {
+			return "Select at least one role.";
 		}
 
 		if (
-			roleRequiresDriver(
-				form.role
-			) &&
+			roles.some(
+				(role) => !ROLE_META[role]
+			)
+		) {
+			return "One or more selected roles are invalid.";
+		}
+
+		if (
+			roles.includes("ADMIN") &&
+			roles.length > 1
+		) {
+			return "Administrator cannot be combined with another role.";
+		}
+
+		if (
+			roles.length > 1 &&
+			roles.some(
+				(role) =>
+					roleMeta(role).groupKey !==
+					MODULE_KEYS.PACKFLOW
+			)
+		) {
+			return "Multiple roles can currently be selected only inside PackFlow.";
+		}
+
+		if (
+			rolesRequireDriver(roles) &&
 			!form.driverId
 		) {
 			return "Select a linked driver profile.";
 		}
 
 		if (
-			roleRequiresPlantAccess(
-				form.role
-			) &&
+			rolesRequirePlantAccess(roles) &&
 			form.plantCodes.length === 0
 		) {
 			return "Select at least one plant.";
@@ -883,8 +1117,14 @@ export default function UsersPage() {
 	};
 
 	const buildPayload = () => {
-		const cleanRole =
-			normalizeRole(form.role);
+		const roles =
+			normalizeArray(form.roles);
+
+		const primaryRole =
+			primaryRoleFor(
+				roles,
+				form.role
+			);
 
 		return {
 			username:
@@ -897,37 +1137,37 @@ export default function UsersPage() {
 				}
 				: {}),
 
-			role: cleanRole,
+			/*
+			 * Legacy/primary role.
+			 */
+			role:
+				primaryRole,
+
+			/*
+			 * Actual effective role assignments.
+			 */
+			roles,
 
 			plantCodes:
-				roleRequiresPlantAccess(
-					cleanRole
-				)
+				rolesRequirePlantAccess(roles)
 					? normalizeArray(
 						form.plantCodes
 					)
 					: [],
 
 			driverId:
-				cleanRole === "DRIVER"
+				rolesRequireDriver(roles)
 					? form.driverId
 					: null,
 
 			warehouseAccess:
-				resolveWarehouseAccess(
-					cleanRole,
+				resolveWarehouseAccessForRoles(
+					roles,
 					form.warehouseAccess
 				),
 
-			/*
-			 * Modules are generated from the selected access
-			 * profile. Users cannot create invalid role/module
-			 * combinations from the UI.
-			 */
 			modules:
-				modulesForRole(
-					cleanRole
-				),
+				modulesForRoles(roles),
 		};
 	};
 
@@ -1096,15 +1336,16 @@ export default function UsersPage() {
 					.join(" ")
 					.toLowerCase();
 
-			const roleText =
-				normalizeRole(user.role)
+			const rolesText =
+				userRoles(user)
+					.join(" ")
 					.toLowerCase();
 
 			return (
 				String(user.username || "")
 					.toLowerCase()
 					.includes(query) ||
-				roleText.includes(query) ||
+				rolesText.includes(query) ||
 				plantsText.includes(query) ||
 				modulesText.includes(query)
 			);
@@ -1148,19 +1389,21 @@ export default function UsersPage() {
 
 		const matFlowUsers =
 			users.filter((user) =>
-				normalizeRole(
-					user.role
-				).startsWith(
-					"MATFLOW_"
+				userRoles(user).some(
+					(role) =>
+						role.startsWith(
+							"MATFLOW_"
+						)
 				)
 			).length;
 
 		const bomFlowUsers =
 			users.filter((user) =>
-				normalizeRole(
-					user.role
-				).startsWith(
-					"BOMFLOW_"
+				userRoles(user).some(
+					(role) =>
+						role.startsWith(
+							"BOMFLOW_"
+						)
 				)
 			).length;
 
@@ -1490,8 +1733,8 @@ export default function UsersPage() {
 				onClose={closeDrawer}
 				onSave={saveUser}
 				onUpdate={updateForm}
-				onRoleChange={
-					handleRoleChange
+				onRolesChange={
+					handleRolesChange
 				}
 				plantName={plantName}
 			/>
@@ -1686,11 +1929,17 @@ function UserRow({
 	onReset,
 	onDisable,
 }) {
-	const cleanRole =
-		normalizeRole(user.role);
+	const roles =
+		userRoles(user);
 
-	const meta =
-		roleMeta(cleanRole);
+	const primaryRole =
+		primaryRoleFor(
+			roles,
+			user.role
+		);
+
+	const primaryMeta =
+		roleMeta(primaryRole);
 
 	const plants =
 		userPlantCodes(user);
@@ -1712,7 +1961,7 @@ function UserRow({
 			}}
 		>
 			<Box sx={userCellSx}>
-				<Box sx={avatarSx(meta.accent)}>
+				<Box sx={avatarSx(primaryMeta.accent)}>
 					{String(
 						user.username || "U"
 					)
@@ -1754,13 +2003,16 @@ function UserRow({
 			</Box>
 
 			<Box sx={chipWrapSx}>
-				{cleanRole === "ADMIN" ? (
+				{roles.includes("ADMIN") ? (
 					<Chip
 						label="All Plants"
 						size="small"
 						sx={allPlantChipSx}
 					/>
-				) : cleanRole === "DRIVER" ? (
+				) : (
+					roles.length === 1 &&
+					roles.includes("DRIVER")
+				) ? (
 					<Chip
 						label="Not Required"
 						size="small"
@@ -1776,9 +2028,7 @@ function UserRow({
 					plants.map((plant) => (
 						<Tooltip
 							key={plant}
-							title={
-								plantName(plant)
-							}
+							title={plantName(plant)}
 						>
 							<Chip
 								label={plant}
@@ -1791,7 +2041,7 @@ function UserRow({
 			</Box>
 
 			<Box sx={operationalCellSx}>
-				{cleanRole === "DRIVER" ? (
+				{roles.includes("DRIVER") && (
 					<Chip
 						label={driverName(
 							user.driverId
@@ -1799,24 +2049,24 @@ function UserRow({
 						size="small"
 						sx={driverChipSx}
 					/>
-				) : (
-					<Chip
-						icon={
-							<WarehouseOutlinedIcon />
-						}
-						label={
-							warehouseAccess
-								? "Warehouse Enabled"
-								: "No Warehouse Access"
-						}
-						size="small"
-						sx={
-							warehouseAccess
-								? warehouseChipSx
-								: neutralChipSx
-						}
-					/>
 				)}
+
+				<Chip
+					icon={
+						<WarehouseOutlinedIcon />
+					}
+					label={
+						warehouseAccess
+							? "Warehouse Enabled"
+							: "No Warehouse Access"
+					}
+					size="small"
+					sx={
+						warehouseAccess
+							? warehouseChipSx
+							: neutralChipSx
+					}
+				/>
 			</Box>
 
 			<Box>
@@ -1890,33 +2140,42 @@ function UserEditorDrawer({
 	onClose,
 	onSave,
 	onUpdate,
-	onRoleChange,
+	onRolesChange,
 	plantName,
 }) {
+	const selectedRoles =
+		normalizeArray(form.roles);
+
+	const primaryRole =
+		primaryRoleFor(
+			selectedRoles,
+			form.role
+		);
+
 	const selectedMeta =
-		roleMeta(form.role);
+		roleMeta(primaryRole);
 
 	const selectedModules =
-		modulesForRole(form.role);
+		modulesForRoles(selectedRoles);
 
 	const requiresPlants =
-		roleRequiresPlantAccess(
-			form.role
+		rolesRequirePlantAccess(
+			selectedRoles
 		);
 
 	const requiresDriver =
-		roleRequiresDriver(
-			form.role
+		rolesRequireDriver(
+			selectedRoles
 		);
 
 	const supportsWarehouse =
-		roleSupportsWarehouseToggle(
-			form.role
+		rolesSupportWarehouseToggle(
+			selectedRoles
 		);
 
 	const resolvedWarehouseAccess =
-		resolveWarehouseAccess(
-			form.role,
+		resolveWarehouseAccessForRoles(
+			selectedRoles,
 			form.warehouseAccess
 		);
 
@@ -2014,9 +2273,9 @@ function UserEditorDrawer({
 					</Box>
 
 					<AccessProfileSelector
-						role={form.role}
+						roles={selectedRoles}
 						onRoleChange={
-							onRoleChange
+							onRolesChange
 						}
 					/>
 				</Box>
@@ -2033,29 +2292,46 @@ function UserEditorDrawer({
 					</Box>
 
 					<Box sx={{ minWidth: 0 }}>
-						<Typography
-							sx={summaryTitleSx}
-						>
-							{selectedMeta.label}
+						<Typography sx={summaryTitleSx}>
+							{selectedRoles.length === 1
+								? selectedMeta.label
+								: `${selectedRoles.length} PackFlow Roles`}
 						</Typography>
 
-						<Typography
-							sx={summaryDescriptionSx}
-						>
-							{selectedMeta.description}
+						<Typography sx={summaryDescriptionSx}>
+							{selectedRoles.length === 1
+								? selectedMeta.description
+								: "This user receives the combined permissions of every selected PackFlow role."}
 						</Typography>
+
+						<Box sx={chipWrapSx}>
+							{roles.map((role) => {
+								const meta =
+									roleMeta(role);
+
+								return (
+									<Chip
+										key={role}
+										icon={roleIcon(role)}
+										label={meta.label}
+										size="small"
+										sx={roleChipSx(
+											meta.accent
+										)}
+									/>
+								);
+							})}
+						</Box>
 
 						<Box sx={moduleChipRowSx}>
-							{selectedModules.map(
-								(module) => (
-									<Chip
-										key={module}
-										label={module}
-										size="small"
-										sx={moduleChipSx}
-									/>
-								)
-							)}
+							{selectedModules.map((module) => (
+								<Chip
+									key={module}
+									label={module}
+									size="small"
+									sx={moduleChipSx}
+								/>
+							))}
 						</Box>
 					</Box>
 				</Box>
@@ -2196,36 +2472,56 @@ function UserEditorDrawer({
 					</Box>
 				)}
 
-				{form.role === "WAREHOUSE" && (
-					<Alert
-						severity="info"
-						sx={infoAlertSx}
-					>
-						Warehouse access is automatically
-						enabled for the Warehouse role.
-					</Alert>
-				)}
-
-				{form.role ===
-					"HARDWARE_PACKING" && (
+				{(
+					selectedRoles.includes("WAREHOUSE") ||
+					selectedRoles.includes("DISPATCH")
+				) && (
 						<Alert
 							severity="info"
 							sx={infoAlertSx}
 						>
-							Hardware Packing users remain
-							restricted to their own hardware
-							packet workspace.
+							Warehouse page access is automatically enabled
+							because Warehouse or Dispatch access is assigned.
 						</Alert>
 					)}
 
-				{form.role === "ADMIN" && (
+				{(
+					selectedRoles.length === 1 &&
+					selectedRoles.includes(
+						"HARDWARE_PACKING"
+					)
+				) && (
+						<Alert
+							severity="info"
+							sx={infoAlertSx}
+						>
+							This is a hardware-only user and remains restricted
+							to their own hardware packet workspace.
+						</Alert>
+					)}
+
+				{(
+					selectedRoles.includes(
+						"HARDWARE_PACKING"
+					) &&
+					selectedRoles.length > 1
+				) && (
+						<Alert
+							severity="success"
+							sx={infoAlertSx}
+						>
+							This user can access the hardware workspace as well
+							as the other selected PackFlow responsibilities.
+						</Alert>
+					)}
+
+				{selectedRoles.includes("ADMIN") && (
 					<Alert
 						severity="warning"
 						sx={infoAlertSx}
 					>
-						Administrators automatically receive
-						all modules, all plants and warehouse
-						access.
+						Administrators automatically receive all modules,
+						all plants and warehouse access.
 					</Alert>
 				)}
 			</Box>
@@ -2262,18 +2558,29 @@ function UserEditorDrawer({
  * ========================================================= */
 
 function AccessProfileSelector({
-	role,
-	onRoleChange,
+	roles,
+	onRolesChange,
 }) {
-	const selectedMeta =
-		roleMeta(role);
+	const selectedRoles =
+		normalizeArray(roles)
+			.filter((role) => ROLE_META[role]);
+
+	const primaryRole =
+		primaryRoleFor(selectedRoles);
+
+	const selectedGroupKey =
+		roleMeta(primaryRole).groupKey;
 
 	return (
 		<Box sx={accessGridSx}>
 			{ACCESS_GROUPS.map((group) => {
 				const selected =
-					selectedMeta.groupKey ===
+					selectedGroupKey ===
 					group.key;
+
+				const isPackFlow =
+					group.key ===
+					MODULE_KEYS.PACKFLOW;
 
 				return (
 					<Box
@@ -2282,20 +2589,21 @@ function AccessProfileSelector({
 						tabIndex={0}
 						onClick={() => {
 							if (!selected) {
-								onRoleChange(
-									group.defaultRole
-								);
+								onRolesChange([
+									group.defaultRole,
+								]);
 							}
 						}}
 						onKeyDown={(event) => {
 							if (
-								event.key ===
-								"Enter" ||
+								event.key === "Enter" ||
 								event.key === " "
 							) {
-								onRoleChange(
-									group.defaultRole
-								);
+								if (!selected) {
+									onRolesChange([
+										group.defaultRole,
+									]);
+								}
 							}
 						}}
 						sx={accessCardSx(
@@ -2336,21 +2644,98 @@ function AccessProfileSelector({
 							</Box>
 						</Box>
 
-						{selected && (
+						{selected && isPackFlow && (
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="PackFlow Roles"
+								value={selectedRoles}
+								onClick={(event) =>
+									event.stopPropagation()
+								}
+								onChange={(event) => {
+									const value =
+										event.target.value;
+
+									onRolesChange(
+										typeof value ===
+											"string"
+											? value.split(",")
+											: value
+									);
+								}}
+								SelectProps={{
+									multiple: true,
+
+									renderValue: (
+										selectedValues
+									) =>
+										selectedValues
+											.map(
+												(value) =>
+													roleMeta(
+														value
+													).label
+											)
+											.join(", "),
+								}}
+								sx={{
+									...fieldSx,
+									mt: 1.5,
+								}}
+							>
+								{group.roles.map(
+									(roleOption) => {
+										const checked =
+											selectedRoles.includes(
+												roleOption.value
+											);
+
+										return (
+											<MenuItem
+												key={
+													roleOption.value
+												}
+												value={
+													roleOption.value
+												}
+											>
+												<Checkbox
+													checked={
+														checked
+													}
+												/>
+
+												<ListItemText
+													primary={
+														roleOption.label
+													}
+													secondary={
+														roleOption.description
+													}
+												/>
+											</MenuItem>
+										);
+									}
+								)}
+							</TextField>
+						)}
+
+						{selected && !isPackFlow && (
 							<TextField
 								select
 								fullWidth
 								size="small"
 								label="Role"
-								value={role}
+								value={primaryRole}
 								onClick={(event) =>
 									event.stopPropagation()
 								}
 								onChange={(event) =>
-									onRoleChange(
-										event.target
-											.value
-									)
+									onRolesChange([
+										event.target.value,
+									])
 								}
 								sx={{
 									...fieldSx,

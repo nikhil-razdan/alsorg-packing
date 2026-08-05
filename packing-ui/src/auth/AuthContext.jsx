@@ -30,14 +30,97 @@ const normalizeValues = (values) => {
 	);
 };
 
+const normalizeRoles = (values) => {
+	const source =
+		Array.isArray(values)
+			? values
+			: values
+				? [values]
+				: [];
+
+	return Array.from(
+		new Set(
+			source
+				.map((value) =>
+					normalizeRole(value)
+				)
+				.filter(Boolean)
+		)
+	);
+};
+
+const modulesForRoles = (roles) => {
+	const cleanRoles =
+		normalizeRoles(roles);
+
+	if (cleanRoles.includes("ADMIN")) {
+		return [
+			"PACKFLOW",
+			"BOMFLOW",
+			"MATFLOW",
+		];
+	}
+
+	const modules =
+		new Set();
+
+	cleanRoles.forEach((role) => {
+		if (
+			[
+				"PACKING",
+				"HARDWARE_PACKING",
+				"WAREHOUSE",
+				"DISPATCH",
+				"LOGISTICS",
+				"DRIVER",
+			].includes(role)
+		) {
+			modules.add("PACKFLOW");
+		}
+
+		if (
+			role.startsWith(
+				"BOMFLOW_"
+			)
+		) {
+			modules.add("BOMFLOW");
+		}
+
+		if (
+			role.startsWith(
+				"MATFLOW_"
+			)
+		) {
+			modules.add("MATFLOW");
+		}
+	});
+
+	return Array.from(modules);
+};
+
 const clearCompatibilityStorage = () => {
 	localStorage.removeItem("token");
+	localStorage.removeItem("jwt");
 	localStorage.removeItem("accessToken");
+
 	localStorage.removeItem("currentUser");
 	localStorage.removeItem("username");
+
 	localStorage.removeItem("role");
+	localStorage.removeItem("roles");
+
+	localStorage.removeItem("modules");
+
 	localStorage.removeItem("plantCode");
 	localStorage.removeItem("plantCodes");
+
+	localStorage.removeItem(
+		"warehouseAccess"
+	);
+
+	localStorage.removeItem(
+		"driverId"
+	);
 };
 
 const persistCompatibilityUser = (user) => {
@@ -62,6 +145,20 @@ const persistCompatibilityUser = (user) => {
 	);
 
 	localStorage.setItem(
+		"roles",
+		JSON.stringify(
+			user.roles || []
+		)
+	);
+
+	localStorage.setItem(
+		"modules",
+		JSON.stringify(
+			user.modules || []
+		)
+	);
+
+	localStorage.setItem(
 		"plantCode",
 		user.plantCode || ""
 	);
@@ -71,6 +168,19 @@ const persistCompatibilityUser = (user) => {
 		JSON.stringify(
 			user.plantCodes || []
 		)
+	);
+
+	localStorage.setItem(
+		"warehouseAccess",
+		String(
+			user.warehouseAccess ===
+			true
+		)
+	);
+
+	localStorage.setItem(
+		"driverId",
+		user.driverId || ""
 	);
 };
 
@@ -82,12 +192,16 @@ const unwrapAuthResponse = (response) => {
 	);
 };
 
-export function AuthProvider({ children }) {
+export function AuthProvider({
+	children,
+}) {
 	const [user, setUserState] =
 		useState(null);
 
-	const [authLoading, setAuthLoading] =
-		useState(true);
+	const [
+		authLoading,
+		setAuthLoading,
+	] = useState(true);
 
 	const setUser = useCallback(
 		(nextUser) => {
@@ -95,6 +209,7 @@ export function AuthProvider({ children }) {
 				nextUser || null;
 
 			setUserState(cleanUser);
+
 			persistCompatibilityUser(
 				cleanUser
 			);
@@ -102,102 +217,172 @@ export function AuthProvider({ children }) {
 		[]
 	);
 
-	const clearSession = useCallback(() => {
-		setUserState(null);
-		clearCompatibilityStorage();
-	}, []);
+	const clearSession = useCallback(
+		() => {
+			setUserState(null);
+			clearCompatibilityStorage();
+		},
+		[]
+	);
 
-	const loadMe = useCallback(async () => {
-		setAuthLoading(true);
+	const loadMe = useCallback(
+		async () => {
+			setAuthLoading(true);
 
-		try {
-			const response =
-				await API.get("/auth/me");
+			try {
+				const response =
+					await API.get(
+						"/auth/me"
+					);
 
-			const data =
-				unwrapAuthResponse(response);
+				const data =
+					unwrapAuthResponse(
+						response
+					);
 
-			if (
-				data.authenticated !== true ||
-				data.enabled !== true ||
-				!data.id ||
-				!String(
-					data.username || ""
-				).trim()
-			) {
-				clearSession();
-				return null;
-			}
-
-			const cleanRole =
-				normalizeRole(data.role);
-
-			const primaryPlantCode =
-				String(
-					data.plantCode || ""
-				)
-					.trim()
-					.toUpperCase();
-
-			const plantCodes =
-				normalizeValues([
-					...(
-						Array.isArray(
-							data.plantCodes
-						)
-							? data.plantCodes
-							: []
-					),
-					primaryPlantCode,
-				]);
-
-			const nextUser = {
-				id: data.id,
-
-				username:
-					String(
-						data.username || ""
-					).trim(),
-
-				role: cleanRole,
-
-				enabled: true,
-
-				warehouseAccess:
-					data.warehouseAccess ===
+				if (
+					data.authenticated !==
 					true ||
-					cleanRole === "ADMIN" ||
-					cleanRole === "WAREHOUSE",
+					data.enabled !== true ||
+					data.id == null ||
+					!String(
+						data.username || ""
+					).trim()
+				) {
+					clearSession();
+					return null;
+				}
 
-				plantCode:
-					primaryPlantCode ||
-					plantCodes[0] ||
-					"",
+				const legacyRole =
+					normalizeRole(
+						data.role
+					);
 
-				plantCodes,
+				const roles =
+					normalizeRoles([
+						...(
+							Array.isArray(
+								data.roles
+							)
+								? data.roles
+								: []
+						),
+						legacyRole,
+					]);
 
-				modules:
+				const cleanRole =
+					legacyRole &&
+						roles.includes(
+							legacyRole
+						)
+						? legacyRole
+						: roles[0] || "";
+
+				if (
+					!cleanRole ||
+					roles.length === 0
+				) {
+					clearSession();
+					return null;
+				}
+
+				const primaryPlantCode =
+					String(
+						data.plantCode || ""
+					)
+						.trim()
+						.toUpperCase();
+
+				const plantCodes =
+					normalizeValues([
+						...(
+							Array.isArray(
+								data.plantCodes
+							)
+								? data.plantCodes
+								: []
+						),
+						primaryPlantCode,
+					]);
+
+				const responseModules =
 					normalizeValues(
 						data.modules
-					),
+					);
 
-				driverId:
-					data.driverId || null,
-			};
+				const modules =
+					responseModules.length > 0
+						? responseModules
+						: modulesForRoles(
+							roles
+						);
 
-			setUser(nextUser);
+				const warehouseAccess =
+					data.warehouseAccess ===
+					true ||
+					roles.includes(
+						"ADMIN"
+					) ||
+					roles.includes(
+						"WAREHOUSE"
+					) ||
+					roles.includes(
+						"DISPATCH"
+					);
 
-			return nextUser;
-		} catch {
-			clearSession();
-			return null;
-		} finally {
-			setAuthLoading(false);
-		}
-	}, [
-		clearSession,
-		setUser,
-	]);
+				const nextUser = {
+					id: data.id,
+
+					username:
+						String(
+							data.username ||
+							""
+						).trim(),
+
+					/*
+					 * Primary compatibility role.
+					 */
+					role:
+						cleanRole,
+
+					/*
+					 * Full effective role list.
+					 */
+					roles,
+
+					enabled: true,
+
+					warehouseAccess,
+
+					plantCode:
+						primaryPlantCode ||
+						plantCodes[0] ||
+						"",
+
+					plantCodes,
+
+					modules,
+
+					driverId:
+						data.driverId ||
+						null,
+				};
+
+				setUser(nextUser);
+
+				return nextUser;
+			} catch {
+				clearSession();
+				return null;
+			} finally {
+				setAuthLoading(false);
+			}
+		},
+		[
+			clearSession,
+			setUser,
+		]
+	);
 
 	useEffect(() => {
 		loadMe();
@@ -222,50 +407,109 @@ export function AuthProvider({ children }) {
 		loadMe,
 	]);
 
-	const logout = useCallback(async () => {
-		try {
-			await API.post("/auth/logout");
-		} catch {
-			/*
-			 * Local authentication state must still
-			 * be cleared when the API is unavailable.
-			 */
-		}
+	const logout = useCallback(
+		async () => {
+			try {
+				await API.post(
+					"/auth/logout"
+				);
+			} catch {
+				/*
+				 * Local authentication state must still
+				 * be cleared if the API is unavailable.
+				 */
+			}
 
-		clearSession();
-	}, [clearSession]);
+			clearSession();
+		},
+		[clearSession]
+	);
 
 	const value = useMemo(
-		() => ({
-			user,
-			setUser,
-			authLoading,
+		() => {
+			const roles =
+				Array.isArray(user?.roles)
+					? user.roles
+					: [];
 
-			isLoggedIn: Boolean(
-				user?.id &&
-				user?.enabled === true
-			),
+			const hasRole = (
+				requestedRole
+			) => {
+				const cleanRequestedRole =
+					normalizeRole(
+						requestedRole
+					);
 
-			role:
-				user?.role || "",
+				return roles.includes(
+					cleanRequestedRole
+				);
+			};
 
-			modules:
-				user?.modules || [],
+			const hasAnyRole = (
+				...requestedRoles
+			) => {
+				return requestedRoles
+					.flat()
+					.some((requestedRole) =>
+						hasRole(requestedRole)
+					);
+			};
 
-			plantCode:
-				user?.plantCode || "",
+			return {
+				user,
 
-			plantCodes:
-				user?.plantCodes || [],
+				/*
+				 * Compatibility alias for older pages.
+				 */
+				currentUser: user,
 
-			warehouseAccess:
-				Boolean(
-					user?.warehouseAccess
+				setUser,
+				authLoading,
+
+				isLoggedIn: Boolean(
+					user?.id &&
+					user?.enabled === true
 				),
 
-			loadMe,
-			logout,
-		}),
+				/*
+				 * Primary legacy role.
+				 */
+				role:
+					user?.role || "",
+
+				/*
+				 * Complete effective roles.
+				 */
+				roles,
+
+				hasRole,
+				hasAnyRole,
+
+				username:
+					user?.username || "",
+
+				modules:
+					user?.modules || [],
+
+				plantCode:
+					user?.plantCode || "",
+
+				plantCodes:
+					user?.plantCodes || [],
+
+				warehouseAccess:
+					Boolean(
+						user?.warehouseAccess
+					),
+
+				driverId:
+					user?.driverId ||
+					null,
+
+				loadMe,
+				logout,
+			};
+		},
 		[
 			user,
 			setUser,
@@ -276,7 +520,9 @@ export function AuthProvider({ children }) {
 	);
 
 	return (
-		<AuthContext.Provider value={value}>
+		<AuthContext.Provider
+			value={value}
+		>
 			{children}
 		</AuthContext.Provider>
 	);

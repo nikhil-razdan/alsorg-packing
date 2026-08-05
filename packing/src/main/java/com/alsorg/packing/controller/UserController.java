@@ -17,137 +17,129 @@ import com.alsorg.packing.service.UserService;
 @PreAuthorize("hasAuthority('ADMIN')")
 public class UserController {
 
-    private final UserService service;
+        private final UserService service;
 
-    public UserController(
-            UserService service
-    ) {
-        this.service = service;
-    }
+        public UserController(
+                        UserService service) {
+                this.service = service;
+        }
 
-    @PostMapping
-    public UserResponse createUser(
-            @RequestBody CreateUserRequest request
-    ) {
-        User user =
-                service.createUser(
-                        request.username(),
-                        request.password(),
-                        request.role(),
-                        request.plantCodes(),
-                        request.driverId(),
-                        request.warehouseAccess(),
-                        request.modules()
-                );
+        @PostMapping
+        public UserResponse createUser(
+                        @RequestBody CreateUserRequest request) {
+                User user = service.createUser(
+                                request.username(),
+                                request.password(),
+                                request.role(),
+                                request.roles(),
+                                request.plantCodes(),
+                                request.driverId(),
+                                request.warehouseAccess(),
+                                request.modules());
 
-        return toResponse(user);
-    }
+                return toResponse(user);
+        }
 
-    @GetMapping
-    public List<UserResponse> getUsers() {
-        return service.getAllUsers()
-                .stream()
-                .map(this::toResponse)
-                .toList();
-    }
+        @GetMapping
+        public List<UserResponse> getUsers() {
+                return service.getAllUsers()
+                                .stream()
+                                .map(this::toResponse)
+                                .toList();
+        }
 
-    @PutMapping("/{id}")
-    public UserResponse updateUser(
-            @PathVariable Long id,
-            @RequestBody UpdateUserRequest request
-    ) {
-        User user =
-                service.updateUser(
-                        id,
-                        request.username(),
-                        request.role(),
-                        request.plantCodes(),
-                        request.driverId(),
-                        request.warehouseAccess(),
-                        request.modules()
-                );
+        @PutMapping("/{id}")
+        public UserResponse updateUser(
+                        @PathVariable Long id,
+                        @RequestBody UpdateUserRequest request) {
+                User user = service.updateUser(
+                                id,
+                                request.username(),
+                                request.role(),
+                                request.roles(),
+                                request.plantCodes(),
+                                request.driverId(),
+                                request.warehouseAccess(),
+                                request.modules());
 
-        return toResponse(user);
-    }
+                return toResponse(user);
+        }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> disableUser(
-            @PathVariable Long id
-    ) {
-        service.disableUser(id);
+        @DeleteMapping("/{id}")
+        public ResponseEntity<?> disableUser(
+                        @PathVariable Long id) {
+                service.disableUser(id);
 
-        return ResponseEntity.ok(
-                Map.of("message", "User disabled")
-        );
-    }
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message",
+                                                "User disabled"));
+        }
 
-    @PutMapping("/{id}/password")
-    public ResponseEntity<?> resetPassword(
-            @PathVariable Long id,
-            @RequestBody PasswordResetRequest request
-    ) {
-        service.resetPassword(
-                id,
-                request.password()
-        );
+        @PutMapping("/{id}/password")
+        public ResponseEntity<?> resetPassword(
+                        @PathVariable Long id,
+                        @RequestBody PasswordResetRequest request) {
+                service.resetPassword(
+                                id,
+                                request.password());
 
-        return ResponseEntity.ok(
-                Map.of("message", "Password updated successfully")
-        );
-    }
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message",
+                                                "Password updated successfully"));
+        }
 
-    private UserResponse toResponse(
-            User user
-    ) {
-        return new UserResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getRole(),
-                user.isEnabled(),
-                user.getPlantCode(),
-                user.getEffectivePlantCodes(),
-                user.getEffectiveModules(),
-                user.getDriverId(),
-                user.isWarehouseAccess()
-        );
-    }
+        private UserResponse toResponse(
+                        User user) {
+                return new UserResponse(
+                                user.getId(),
+                                user.getUsername(),
+                                user.getRole(),
+                                user.getEffectiveRoles(),
+                                user.isEnabled(),
+                                user.getPlantCode(),
+                                user.getEffectivePlantCodes(),
+                                user.getEffectiveModules(),
+                                user.getDriverId(),
+                                user.isWarehouseAccess());
+        }
 
-    public record CreateUserRequest(
-            String username,
-            String password,
-            String role,
-            Set<String> plantCodes,
-            UUID driverId,
-            boolean warehouseAccess,
-            Set<String> modules
-    ) {
-    }
+        public record CreateUserRequest(
+                        String username,
+                        String password,
+                        String role,
+                        Set<String> roles,
+                        Set<String> plantCodes,
+                        UUID driverId,
+                        boolean warehouseAccess,
+                        Set<String> modules) {
+        }
 
-    public record UpdateUserRequest(
-            String username,
-            String role,
-            Set<String> plantCodes,
-            UUID driverId,
-            boolean warehouseAccess,
-            Set<String> modules
-    ) {
-    }
+        public record UpdateUserRequest(
+                        String username,
+                        String role,
+                        Set<String> roles,
+                        Set<String> plantCodes,
+                        UUID driverId,
+                        boolean warehouseAccess,
+                        Set<String> modules) {
+        }
 
-    public record PasswordResetRequest(
-            String password
-    ) {
-    }
+        public record PasswordResetRequest(
+                        String password) {
+        }
 
-    public record UserResponse(
-            Long id,
-            String username,
-            String role,
-            boolean enabled,
-            String plantCode,
-            Set<String> plantCodes,
-            Set<String> modules,
-            UUID driverId,
-            boolean warehouseAccess
-    ) {
-    }
+        public record UserResponse(
+                        Long id,
+                        String username,
+                        String role,
+                        Set<String> roles,
+                        boolean enabled,
+                        String plantCode,
+                        Set<String> plantCodes,
+                        Set<String> modules,
+                        UUID driverId,
+                        boolean warehouseAccess) {
+        }
 }

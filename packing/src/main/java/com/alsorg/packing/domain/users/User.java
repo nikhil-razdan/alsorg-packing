@@ -22,346 +22,348 @@ import java.util.UUID;
 @Table(name = "users")
 public class User {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
 
-    @Column(
-            unique = true,
-            nullable = false
-    )
-    private String username;
+        @Column(unique = true, nullable = false)
+        private String username;
 
-    @JsonIgnore
-    @Column(nullable = false)
-    private String password;
+        @JsonIgnore
+        @Column(nullable = false)
+        private String password;
 
-    @Column(nullable = false)
-    private String role;
+        /**
+         * Primary/legacy role.
+         *
+         * Keep this column because older code, JWT responses and existing
+         * users may still depend on one primary role.
+         */
+        @Column(nullable = false)
+        private String role;
 
-    @Column(nullable = false)
-    private boolean enabled = true;
+        /**
+         * Effective role assignments.
+         *
+         * Multiple role support is currently allowed for PackFlow roles.
+         */
+        @ElementCollection(fetch = FetchType.EAGER)
+        @CollectionTable(name = "user_role_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
+                        @UniqueConstraint(name = "uk_user_role_access", columnNames = {
+                                        "user_id",
+                                        "role_key"
+                        })
+        })
+        @Column(name = "role_key", nullable = false, length = 64)
+        private Set<String> roles = new LinkedHashSet<>();
 
-    @Column(name = "plant_code")
-    private String plantCode;
+        @Column(nullable = false)
+        private boolean enabled = true;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "user_plant_access",
-            joinColumns = @JoinColumn(name = "user_id"),
-            uniqueConstraints = {
-                    @UniqueConstraint(
-                            name = "uk_user_plant_access",
-                            columnNames = {
-                                    "user_id",
-                                    "plant_code"
-                            }
-                    )
-            }
-    )
-    @Column(name = "plant_code")
-    private Set<String> plantCodes =
-            new LinkedHashSet<>();
+        @Column(name = "plant_code")
+        private String plantCode;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "user_module_access",
-            joinColumns = @JoinColumn(name = "user_id"),
-            uniqueConstraints = {
-                    @UniqueConstraint(
-                            name = "uk_user_module_access",
-                            columnNames = {
-                                    "user_id",
-                                    "module_key"
-                            }
-                    )
-            }
-    )
-    @Column(name = "module_key")
-    private Set<String> modules =
-            new LinkedHashSet<>();
+        @ElementCollection(fetch = FetchType.EAGER)
+        @CollectionTable(name = "user_plant_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
+                        @UniqueConstraint(name = "uk_user_plant_access", columnNames = {
+                                        "user_id",
+                                        "plant_code"
+                        })
+        })
+        @Column(name = "plant_code")
+        private Set<String> plantCodes = new LinkedHashSet<>();
 
-    private String packedAreaCode;
+        @ElementCollection(fetch = FetchType.EAGER)
+        @CollectionTable(name = "user_module_access", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = {
+                        @UniqueConstraint(name = "uk_user_module_access", columnNames = {
+                                        "user_id",
+                                        "module_key"
+                        })
+        })
+        @Column(name = "module_key")
+        private Set<String> modules = new LinkedHashSet<>();
 
-    private String fgAreaCode;
+        private String packedAreaCode;
 
-    private String allowedWarehouseCodes;
+        private String fgAreaCode;
 
-    private UUID driverId;
+        private String allowedWarehouseCodes;
 
-    @Column(
-            name = "warehouse_access",
-            nullable = false
-    )
-    private boolean warehouseAccess = false;
+        private UUID driverId;
 
-    public Long getId() {
-        return id;
-    }
+        @Column(name = "warehouse_access", nullable = false)
+        private boolean warehouseAccess = false;
 
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(
-            String username
-    ) {
-        this.username =
-                cleanText(username);
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(
-            String password
-    ) {
-        this.password = password;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(
-            String role
-    ) {
-        this.role =
-                normalizeUpper(role);
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(
-            boolean enabled
-    ) {
-        this.enabled = enabled;
-    }
-
-    public String getPlantCode() {
-        return plantCode;
-    }
-
-    public void setPlantCode(
-            String plantCode
-    ) {
-        this.plantCode =
-                normalizeUpper(plantCode);
-    }
-
-    public Set<String> getPlantCodes() {
-        return plantCodes;
-    }
-
-    public void setPlantCodes(
-            Set<String> plantCodes
-    ) {
-        this.plantCodes =
-                normalizeValues(plantCodes);
-    }
-
-    public Set<String> getEffectivePlantCodes() {
-        Set<String> effective =
-                new LinkedHashSet<>();
-
-        if (
-                plantCodes != null &&
-                !plantCodes.isEmpty()
-        ) {
-            effective.addAll(
-                    normalizeValues(plantCodes)
-            );
-
-            return effective;
+        public Long getId() {
+                return id;
         }
 
-        String fallback =
-                normalizeUpper(plantCode);
-
-        if (fallback != null) {
-            effective.add(fallback);
+        public String getUsername() {
+                return username;
         }
 
-        return effective;
-    }
-
-    public Set<String> getModules() {
-        return modules;
-    }
-
-    public void setModules(
-            Set<String> modules
-    ) {
-        this.modules =
-                normalizeValues(modules);
-    }
-
-    /**
-     * Explicit module assignments are preferred.
-     *
-     * Role-based values are only a compatibility fallback for users
-     * created before module assignments were introduced.
-     */
-    public Set<String> getEffectiveModules() {
-        Set<String> effective =
-                new LinkedHashSet<>();
-
-        if (
-                modules != null &&
-                !modules.isEmpty()
-        ) {
-            effective.addAll(
-                    normalizeValues(modules)
-            );
-
-            return effective;
+        public void setUsername(
+                        String username) {
+                this.username = cleanText(username);
         }
 
-        String cleanRole =
-                normalizeUpper(role);
-
-        if (cleanRole == null) {
-            return effective;
+        public String getPassword() {
+                return password;
         }
 
-        if ("ADMIN".equals(cleanRole)) {
-            effective.add("PACKFLOW");
-            effective.add("BOMFLOW");
-            effective.add("MATFLOW");
-
-            return effective;
+        public void setPassword(
+                        String password) {
+                this.password = password;
         }
 
-        if (
-                "PACKING".equals(cleanRole) ||
-                "HARDWARE_PACKING".equals(cleanRole) ||
-                "WAREHOUSE".equals(cleanRole) ||
-                "DISPATCH".equals(cleanRole) ||
-                "LOGISTICS".equals(cleanRole) ||
-                "DRIVER".equals(cleanRole)
-        ) {
-            effective.add("PACKFLOW");
+        public String getRole() {
+                return role;
         }
 
-        if (cleanRole.startsWith("BOMFLOW_")) {
-            effective.add("BOMFLOW");
+        public void setRole(
+                        String role) {
+                this.role = normalizeUpper(role);
         }
 
-        if (cleanRole.startsWith("MATFLOW_")) {
-            effective.add("MATFLOW");
+        public Set<String> getRoles() {
+                return roles;
         }
 
-        return effective;
-    }
-
-    public String getPackedAreaCode() {
-        return packedAreaCode;
-    }
-
-    public void setPackedAreaCode(
-            String packedAreaCode
-    ) {
-        this.packedAreaCode =
-                cleanText(packedAreaCode);
-    }
-
-    public String getFgAreaCode() {
-        return fgAreaCode;
-    }
-
-    public void setFgAreaCode(
-            String fgAreaCode
-    ) {
-        this.fgAreaCode =
-                cleanText(fgAreaCode);
-    }
-
-    public String getAllowedWarehouseCodes() {
-        return allowedWarehouseCodes;
-    }
-
-    public void setAllowedWarehouseCodes(
-            String allowedWarehouseCodes
-    ) {
-        this.allowedWarehouseCodes =
-                cleanText(allowedWarehouseCodes);
-    }
-
-    public UUID getDriverId() {
-        return driverId;
-    }
-
-    public void setDriverId(
-            UUID driverId
-    ) {
-        this.driverId = driverId;
-    }
-
-    public boolean isWarehouseAccess() {
-        return warehouseAccess;
-    }
-
-    public void setWarehouseAccess(
-            boolean warehouseAccess
-    ) {
-        this.warehouseAccess =
-                warehouseAccess;
-    }
-
-    private static Set<String> normalizeValues(
-            Set<String> values
-    ) {
-        Set<String> normalized =
-                new LinkedHashSet<>();
-
-        if (values == null) {
-            return normalized;
+        public void setRoles(
+                        Set<String> roles) {
+                this.roles = normalizeValues(roles);
         }
 
-        for (String value : values) {
-            String clean =
-                    normalizeUpper(value);
+        /**
+         * Returns explicit roles where present.
+         *
+         * The old role column remains a fallback and is also merged in case
+         * an old record has not yet been backfilled.
+         */
+        public Set<String> getEffectiveRoles() {
+                Set<String> effective = new LinkedHashSet<>();
 
-            if (clean != null) {
-                normalized.add(clean);
-            }
+                if (roles != null) {
+                        effective.addAll(
+                                        normalizeValues(roles));
+                }
+
+                String primaryRole = normalizeUpper(role);
+
+                if (primaryRole != null) {
+                        effective.add(primaryRole);
+                }
+
+                return effective;
         }
 
-        return normalized;
-    }
+        public boolean hasEffectiveRole(
+                        String requestedRole) {
+                String normalized = normalizeUpper(requestedRole);
 
-    private static String normalizeUpper(
-            String value
-    ) {
-        String clean =
-                cleanText(value);
+                if (normalized == null) {
+                        return false;
+                }
 
-        return clean == null
-                ? null
-                : clean.toUpperCase();
-    }
-
-    private static String cleanText(
-            String value
-    ) {
-        if (value == null) {
-            return null;
+                return getEffectiveRoles()
+                                .stream()
+                                .anyMatch(normalized::equalsIgnoreCase);
         }
 
-        String clean =
-                value.trim();
-
-        if (
-                clean.isBlank() ||
-                "null".equalsIgnoreCase(clean) ||
-                "undefined".equalsIgnoreCase(clean)
-        ) {
-            return null;
+        public boolean isEnabled() {
+                return enabled;
         }
 
-        return clean;
-    }
+        public void setEnabled(
+                        boolean enabled) {
+                this.enabled = enabled;
+        }
+
+        public String getPlantCode() {
+                return plantCode;
+        }
+
+        public void setPlantCode(
+                        String plantCode) {
+                this.plantCode = normalizeUpper(plantCode);
+        }
+
+        public Set<String> getPlantCodes() {
+                return plantCodes;
+        }
+
+        public void setPlantCodes(
+                        Set<String> plantCodes) {
+                this.plantCodes = normalizeValues(plantCodes);
+        }
+
+        public Set<String> getEffectivePlantCodes() {
+                Set<String> effective = new LinkedHashSet<>();
+
+                if (plantCodes != null &&
+                                !plantCodes.isEmpty()) {
+                        effective.addAll(
+                                        normalizeValues(plantCodes));
+
+                        return effective;
+                }
+
+                String fallback = normalizeUpper(plantCode);
+
+                if (fallback != null) {
+                        effective.add(fallback);
+                }
+
+                return effective;
+        }
+
+        public Set<String> getModules() {
+                return modules;
+        }
+
+        public void setModules(
+                        Set<String> modules) {
+                this.modules = normalizeValues(modules);
+        }
+
+        /**
+         * Explicit module assignments are preferred.
+         *
+         * Effective roles are used as the compatibility fallback.
+         */
+        public Set<String> getEffectiveModules() {
+                Set<String> effective = new LinkedHashSet<>();
+
+                if (modules != null &&
+                                !modules.isEmpty()) {
+                        effective.addAll(
+                                        normalizeValues(modules));
+
+                        return effective;
+                }
+
+                for (String effectiveRole : getEffectiveRoles()) {
+                        if ("ADMIN".equals(effectiveRole)) {
+                                effective.add("PACKFLOW");
+                                effective.add("BOMFLOW");
+                                effective.add("MATFLOW");
+
+                                return effective;
+                        }
+
+                        if (isPackFlowRole(effectiveRole)) {
+                                effective.add("PACKFLOW");
+                        }
+
+                        if (effectiveRole.startsWith("BOMFLOW_")) {
+                                effective.add("BOMFLOW");
+                        }
+
+                        if (effectiveRole.startsWith("MATFLOW_")) {
+                                effective.add("MATFLOW");
+                        }
+                }
+
+                return effective;
+        }
+
+        public String getPackedAreaCode() {
+                return packedAreaCode;
+        }
+
+        public void setPackedAreaCode(
+                        String packedAreaCode) {
+                this.packedAreaCode = cleanText(packedAreaCode);
+        }
+
+        public String getFgAreaCode() {
+                return fgAreaCode;
+        }
+
+        public void setFgAreaCode(
+                        String fgAreaCode) {
+                this.fgAreaCode = cleanText(fgAreaCode);
+        }
+
+        public String getAllowedWarehouseCodes() {
+                return allowedWarehouseCodes;
+        }
+
+        public void setAllowedWarehouseCodes(
+                        String allowedWarehouseCodes) {
+                this.allowedWarehouseCodes = cleanText(allowedWarehouseCodes);
+        }
+
+        public UUID getDriverId() {
+                return driverId;
+        }
+
+        public void setDriverId(
+                        UUID driverId) {
+                this.driverId = driverId;
+        }
+
+        public boolean isWarehouseAccess() {
+                return warehouseAccess;
+        }
+
+        public void setWarehouseAccess(
+                        boolean warehouseAccess) {
+                this.warehouseAccess = warehouseAccess;
+        }
+
+        private static boolean isPackFlowRole(
+                        String role) {
+                return "PACKING".equals(role) ||
+                                "HARDWARE_PACKING".equals(role) ||
+                                "WAREHOUSE".equals(role) ||
+                                "DISPATCH".equals(role) ||
+                                "LOGISTICS".equals(role) ||
+                                "DRIVER".equals(role);
+        }
+
+        private static Set<String> normalizeValues(
+                        Set<String> values) {
+                Set<String> normalized = new LinkedHashSet<>();
+
+                if (values == null) {
+                        return normalized;
+                }
+
+                for (String value : values) {
+                        String clean = normalizeUpper(value);
+
+                        if (clean != null) {
+                                normalized.add(clean);
+                        }
+                }
+
+                return normalized;
+        }
+
+        private static String normalizeUpper(
+                        String value) {
+                String clean = cleanText(value);
+
+                return clean == null
+                                ? null
+                                : clean.toUpperCase();
+        }
+
+        private static String cleanText(
+                        String value) {
+                if (value == null) {
+                        return null;
+                }
+
+                String clean = value.trim();
+
+                if (clean.isBlank() ||
+                                "null".equalsIgnoreCase(clean) ||
+                                "undefined".equalsIgnoreCase(clean)) {
+                        return null;
+                }
+
+                return clean;
+        }
 }

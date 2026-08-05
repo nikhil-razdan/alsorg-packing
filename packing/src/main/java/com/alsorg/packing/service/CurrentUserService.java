@@ -139,11 +139,40 @@ public class CurrentUserService {
     public boolean hasRole(
             User user,
             String role) {
-        return user != null
-                && user.getRole() != null
-                && user.getRole()
-                        .trim()
-                        .equalsIgnoreCase(role);
+        if (user == null ||
+                role == null ||
+                role.isBlank()) {
+            return false;
+        }
+
+        String normalizedRole = role
+                .replace("ROLE_", "")
+                .trim()
+                .toUpperCase();
+
+        return user.getEffectiveRoles()
+                .stream()
+                .anyMatch(value -> value != null &&
+                        value.trim()
+                                .equalsIgnoreCase(
+                                        normalizedRole));
+    }
+
+    public boolean hasAnyRole(
+            User user,
+            String... roles) {
+        if (user == null ||
+                roles == null) {
+            return false;
+        }
+
+        for (String role : roles) {
+            if (hasRole(user, role)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public boolean hasModule(
@@ -293,6 +322,19 @@ public class CurrentUserService {
                 "PACKING");
     }
 
+    public boolean isHardwareOnlyPackingUser(
+            User user) {
+        return user != null
+                && isHardwarePacking(user)
+                && !isAdmin(user)
+                && !hasAnyRole(
+                        user,
+                        "PACKING",
+                        "WAREHOUSE",
+                        "DISPATCH",
+                        "LOGISTICS");
+    }
+
     /*
      * Read-only hardware access.
      *
@@ -348,9 +390,9 @@ public class CurrentUserService {
 
     public void rejectHardwareUserFromNormalInventory(
             User user) {
-        if (isHardwarePacking(user)) {
+        if (isHardwareOnlyPackingUser(user)) {
             throw new AccessDeniedException(
-                    "Hardware packing users cannot access normal inventory");
+                    "Hardware-only packing users cannot access normal inventory");
         }
     }
 }

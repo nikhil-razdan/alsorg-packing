@@ -1,10 +1,23 @@
-import { Navigate } from "react-router-dom";
-import { useAuth } from "./AuthContext";
+import {
+	Navigate,
+	useLocation,
+} from "react-router-dom";
 
-function RequireWarehouseAccess({ children }) {
+import {
+	canOpenWarehousePageFromUser,
+} from "../utils/warehouseAccess";
+
+import { useAuth }
+	from "./AuthContext";
+
+function RequireWarehouseAccess({
+	children,
+}) {
+	const location =
+		useLocation();
+
 	const {
-		role,
-		warehouseAccess,
+		user,
 		authLoading,
 		isLoggedIn,
 	} = useAuth();
@@ -14,17 +27,36 @@ function RequireWarehouseAccess({ children }) {
 	}
 
 	if (!isLoggedIn) {
-		return <Navigate to="/login" replace />;
+		return (
+			<Navigate
+				to="/login"
+				replace
+				state={{
+					from:
+						location.pathname,
+				}}
+			/>
+		);
 	}
 
 	const allowed =
-		role === "ADMIN" ||
-		role === "DISPATCH" ||
-		role === "WAREHOUSE" ||
-		warehouseAccess;
+		canOpenWarehousePageFromUser(
+			user
+		);
 
 	if (!allowed) {
-		return <Navigate to="/modules" replace />;
+		return (
+			<Navigate
+				to="/modules"
+				replace
+				state={{
+					deniedPermission:
+						"WAREHOUSE_ACCESS",
+					from:
+						location.pathname,
+				}}
+			/>
+		);
 	}
 
 	return children;

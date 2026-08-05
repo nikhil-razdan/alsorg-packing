@@ -45,7 +45,10 @@ export default function ModuleHub() {
 	const {
 		user,
 		role,
-		modules,
+		roles = [],
+		modules = [],
+		hasRole,
+		hasAnyRole,
 		logout,
 	} = useAuth();
 
@@ -60,10 +63,19 @@ export default function ModuleHub() {
 	 */
 	const accessUser = {
 		...(user || {}),
+
 		role:
 			role ||
 			user?.role ||
 			"",
+
+		roles:
+			Array.isArray(roles)
+				? roles
+				: Array.isArray(user?.roles)
+					? user.roles
+					: [],
+
 		modules:
 			Array.isArray(modules)
 				? modules
@@ -71,6 +83,16 @@ export default function ModuleHub() {
 					? user.modules
 					: [],
 	};
+
+	const isHardwareOnly =
+		hasRole("HARDWARE_PACKING") &&
+		!hasAnyRole(
+			"ADMIN",
+			"PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS"
+		);
 
 	const canAccess = (moduleKey) => {
 		return hasModuleAccessFromUser(
@@ -90,7 +112,10 @@ export default function ModuleHub() {
 					fontSize="large"
 				/>
 			),
-			path: "/packflow/dashboard",
+			path:
+				isHardwareOnly
+					? "/packflow/zoho-items"
+					: "/packflow/dashboard",
 			tags: [
 				"Inventory",
 				"Warehouse",
@@ -164,10 +189,7 @@ export default function ModuleHub() {
 				"Permissions",
 			],
 			visible:
-				String(role || "")
-					.trim()
-					.toUpperCase() ===
-				"ADMIN",
+				hasRole("ADMIN"),
 			accent: "Admin Control",
 		},
 	].filter((card) => card.visible);

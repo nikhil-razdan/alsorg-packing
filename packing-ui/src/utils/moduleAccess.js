@@ -4,8 +4,9 @@ export const MODULE_KEYS = Object.freeze({
 	MATFLOW: "MATFLOW",
 });
 
-const normalizeModuleKey = (value) => {
+const normalizeValue = (value) => {
 	return String(value || "")
+		.replace("ROLE_", "")
 		.trim()
 		.toUpperCase();
 };
@@ -18,10 +19,38 @@ const normalizeModules = (modules) => {
 	return Array.from(
 		new Set(
 			modules
-				.map(normalizeModuleKey)
+				.map(normalizeValue)
 				.filter(Boolean)
 		)
 	);
+};
+
+const normalizeRolesFromUser = (user) => {
+	const roles =
+		Array.isArray(user?.roles)
+			? user.roles
+			: [];
+
+	const normalized =
+		Array.from(
+			new Set(
+				roles
+					.map(normalizeValue)
+					.filter(Boolean)
+			)
+		);
+
+	const primaryRole =
+		normalizeValue(user?.role);
+
+	if (
+		primaryRole &&
+		!normalized.includes(primaryRole)
+	) {
+		normalized.push(primaryRole);
+	}
+
+	return normalized;
 };
 
 export function hasModuleAccessFromUser(
@@ -29,16 +58,16 @@ export function hasModuleAccessFromUser(
 	moduleKey
 ) {
 	const requestedKey =
-		normalizeModuleKey(moduleKey);
+		normalizeValue(moduleKey);
 
 	if (!requestedKey) {
 		return false;
 	}
 
-	const role =
-		normalizeModuleKey(user?.role);
+	const roles =
+		normalizeRolesFromUser(user);
 
-	if (role === "ADMIN") {
+	if (roles.includes("ADMIN")) {
 		return true;
 	}
 
@@ -63,12 +92,14 @@ export function hasModuleAccess(
 export function hasModuleAccessFromList(
 	modules,
 	moduleKey,
-	role = ""
+	role = "",
+	roles = []
 ) {
 	return hasModuleAccessFromUser(
 		{
 			modules,
 			role,
+			roles,
 		},
 		moduleKey
 	);

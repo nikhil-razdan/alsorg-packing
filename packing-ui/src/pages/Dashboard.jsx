@@ -456,25 +456,36 @@ function DashboardPage() {
     useState(false);
 
   const {
-    role,
-    currentUser,
     user,
+    hasRole,
+    hasAnyRole,
   } = useAuth();
 
-  const rawRole =
-    role ??
-    currentUser?.role ??
-    user?.role ??
-    "";
-
-  const cleanRole = String(rawRole)
-    .trim()
-    .toUpperCase()
-    .replace(/^ROLE_/, "");
-
   const isAdmin =
-    cleanRole === "ADMIN";
+    hasRole("ADMIN");
 
+  const isPacking =
+    hasRole("PACKING");
+
+  const isDispatch =
+    hasRole("DISPATCH");
+
+  const isWarehouse =
+    hasRole("WAREHOUSE");
+
+  const isLogistics =
+    hasRole("LOGISTICS");
+
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
+    
   const clampPercent = (value) => {
     if (!Number.isFinite(value)) return 0;
 

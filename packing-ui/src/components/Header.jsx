@@ -34,17 +34,38 @@ function Header() {
 	const {
 		user,
 		role,
-		modules,
+		roles = [],
+		modules = [],
+		hasRole,
+		hasAnyRole,
 		logout,
 	} = useAuth();
+
+	const isHardwareOnly =
+		hasRole("HARDWARE_PACKING") &&
+		!hasAnyRole(
+			"ADMIN",
+			"PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS"
+		);
+
+	const packFlowHomePath =
+		isHardwareOnly
+			? "/packflow/zoho-items"
+			: "/packflow/dashboard";
+
+	const canOpenBOMFlow =
+		modules.includes("BOMFLOW");
+
+	const canOpenMatFlow =
+		modules.includes("MATFLOW");
 
 	const username = user?.username || "User";
 
 	const canOpenBOMFlow =
 		modules.includes("BOMFLOW");
-
-	const canOpenVenFlow =
-		modules.includes("VENFLOW");
 
 	const [appsAnchor, setAppsAnchor] =
 		useState(null);
@@ -104,7 +125,11 @@ function Header() {
 				label: "Inventory Items",
 				path: "/packflow/zoho-items",
 				icon: <InventoryIcon />,
-				roles: ["ADMIN", "PACKING"],
+				roles: [
+					"ADMIN",
+					"PACKING",
+					"HARDWARE_PACKING",
+				],
 			},
 			{
 				label: "Warehouse",
@@ -138,8 +163,11 @@ function Header() {
 	);
 
 	const visibleModules =
-		moduleLinks.filter((m) =>
-			m.roles.includes(role)
+		moduleLinks.filter((module) =>
+			module.roles.some(
+				(allowedRole) =>
+					hasRole(allowedRole)
+			)
 		);
 
 	const unreadCount =
@@ -302,11 +330,13 @@ function Header() {
 							</span>
 						</button>
 					)}
-					{canOpenVenFlow && (
+					{canOpenMatFlow && (
 						<button
 							style={moduleCard}
 							onClick={() =>
-								openModule("/venflow/dashboard")
+								openModule(
+									"/matflow/dashboard"
+								)
 							}
 						>
 							<span style={moduleIcon}>
@@ -314,11 +344,11 @@ function Header() {
 							</span>
 
 							<span>
-								VenFlow
+								MatFlow
 							</span>
 						</button>
 					)}
-					{role === "ADMIN" && (
+					{hasRole("ADMIN") && (
 						<button
 							style={moduleCard}
 							onClick={() =>
@@ -531,7 +561,9 @@ function Header() {
 						</Box>
 
 						<Box sx={profileRole}>
-							{role === "GUEST" ? "Guest User" : role}
+							{roles.length > 0
+								? roles.join(" • ")
+								: role || "User"}
 						</Box>
 					</Box>
 				</Box>
@@ -550,12 +582,14 @@ function Header() {
 
 					<button
 						style={settingsAction}
-						onClick={() => navigate("/packflow/dashboard")}
+						onClick={() =>
+							navigate(packFlowHomePath)
+						}
 					>
 						Go to PackFlow Dashboard
 					</button>
 
-					{role === "ADMIN" && (
+					{hasRole("ADMIN") && (
 						<button
 							style={settingsAction}
 							onClick={() =>

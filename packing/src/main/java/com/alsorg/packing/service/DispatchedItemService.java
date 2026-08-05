@@ -1,23 +1,38 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditRequest;
+import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditResponse;
+import com.alsorg.packing.controller.dto.dispatch.AdminDispatchEditField;
+import com.alsorg.packing.controller.dto.dispatch.AdminUpdatedDispatchRow;
 import com.alsorg.packing.domain.common.ApprovalStatus;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.common.PacketStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.PacketItem;
+import com.alsorg.packing.domain.logistics.Driver;
+import com.alsorg.packing.domain.logistics.Vehicle;
 import com.alsorg.packing.domain.packet.Packet;
 import com.alsorg.packing.repository.DispatchedItemRepository;
+import com.alsorg.packing.repository.DriverRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
+import com.alsorg.packing.repository.VehicleRepository;
 
 import jakarta.transaction.Transactional;
 
@@ -25,12 +40,40 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class DispatchedItemService {
 
+    private static final java.time.ZoneId APP_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+
+    private static final Set<String> FIXED_WAREHOUSE_CODES = Set.of(
+            "BLS-WH-1",
+            "RTP-WH-2",
+            "AL-P1",
+            "AL-P2",
+            "AL-P3",
+            "AL-P4");
+
+    private static final Set<String> FIXED_FROM_LOCATION_CODES = Set.of(
+            "AL-P1-FG-1-A",
+            "AL-P1-FG-1-B",
+            "AL-P1-FG-1-C",
+            "AL-P2-FG-2",
+            "AL-P3-FG-3",
+            "AL-P4-FG-4",
+            "AL-P1",
+            "AL-P2",
+            "AL-P3",
+            "AL-P4",
+            "AL-P1-PKD-1",
+            "AL-P2-PKD-2",
+            "AL-P3-PKD-3",
+            "AL-P4-PKD-4");
+
     private final DispatchedItemRepository dispatchedRepo;
     private final AuditLogService auditLogService;
     private final ActivityLogService activityLogService;
     private final PacketItemRepository packetItemRepo;
     private final PacketRepository packetRepository;
     private final PlantLocationService plantLocationService;
+    private final DriverRepository driverRepository;
+    private final VehicleRepository vehicleRepository;
 
     public DispatchedItemService(
             DispatchedItemRepository dispatchedRepo,
@@ -38,23 +81,38 @@ public class DispatchedItemService {
             ActivityLogService activityLogService,
             PacketItemRepository packetItemRepo,
             PacketRepository packetRepository,
-            PlantLocationService plantLocationService) {
+            PlantLocationService plantLocationService,
+            DriverRepository driverRepository,
+            VehicleRepository vehicleRepository) {
+
         this.dispatchedRepo = dispatchedRepo;
         this.auditLogService = auditLogService;
         this.activityLogService = activityLogService;
         this.packetItemRepo = packetItemRepo;
         this.packetRepository = packetRepository;
         this.plantLocationService = plantLocationService;
+        this.driverRepository = driverRepository;
+        this.vehicleRepository = vehicleRepository;
     }
 
-    public void requestRestore(String zohoItemId, String username, String role) {
+    /*
+     * ============================================================
+     * RESTORE
+     * ============================================================
+     */
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+    public void requestRestore(
+            String zohoItemId,
+            String username,
+            String role) {
 
-        // ================= RULES =================
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
         if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
+
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Cannot restore while trip is out for delivery. End the trip first.");
@@ -62,20 +120,27 @@ public class DispatchedItemService {
 
         if (item.getStatus() != ItemDispatchStatus.DISPATCHED &&
                 item.getStatus() != ItemDispatchStatus.DELIVERED) {
+
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Restore allowed only after delivery");
         }
 
-        if (ApprovalStatus.PENDING.equals(item.getApprovalStatus())) {
-            throw new IllegalStateException("Restore already requested");
+        if (ApprovalStatus.PENDING.equals(
+                item.getApprovalStatus())) {
+
+            throw new IllegalStateException(
+                    "Restore already requested");
         }
 
-        // ================= UPDATE =================
+        item.setApprovalStatus(
+                ApprovalStatus.PENDING);
 
-        item.setApprovalStatus(ApprovalStatus.PENDING);
-        item.setApprovalRequestedBy(username);
-        item.setApprovalRequestedAt(LocalDateTime.now());
+        item.setApprovalRequestedBy(
+                username);
+
+        item.setApprovalRequestedAt(
+                LocalDateTime.now());
 
         dispatchedRepo.save(item);
 
@@ -95,145 +160,209 @@ public class DispatchedItemService {
                 null);
     }
 
-    public void approveRestore(String zohoItemId, String admin) {
+    public void approveRestore(
+            String zohoItemId,
+            String admin) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
         if (item.getApprovalStatus() != ApprovalStatus.PENDING) {
-            throw new IllegalStateException("No pending restore request");
+
+            throw new IllegalStateException(
+                    "No pending restore request");
         }
 
-        // ================= APPROVAL =================
-        item.setApprovalStatus(ApprovalStatus.APPROVED);
-        item.setApprovedBy(admin);
-        item.setApprovedAt(LocalDateTime.now());
+        item.setApprovalStatus(
+                ApprovalStatus.APPROVED);
 
-        // ================= KEEP DISPATCH HISTORY =================
-        item.setStatus(ItemDispatchStatus.RESTORED);
+        item.setApprovedBy(admin);
+        item.setApprovedAt(
+                LocalDateTime.now());
+
+        /*
+         * Keep the original dispatch record as history.
+         */
+        item.setStatus(
+                ItemDispatchStatus.RESTORED);
+
         item.setStock(0);
 
         PacketItem original = null;
 
-        // =====================================================
-        // 1️⃣ TRY ORIGINAL PACKET ITEM
-        // =====================================================
+        /*
+         * First try the original linked packet item.
+         */
         if (item.getPacketItemId() != null) {
-            original = packetItemRepo.findById(item.getPacketItemId()).orElse(null);
+            original = packetItemRepo
+                    .findById(
+                            item.getPacketItemId())
+                    .orElse(null);
         }
 
-        // =====================================================
-        // 2️⃣ FALLBACK → USE PACKET ID
-        // =====================================================
-        if (original == null && item.getPacketId() != null) {
+        /*
+         * Fallback to the linked packet.
+         */
+        if (original == null &&
+                item.getPacketId() != null) {
 
-            System.out.println("⚠ Rebuilding from packetId");
-
-            Packet packet = packetRepository.findById(item.getPacketId())
+            Packet packet = packetRepository
+                    .findById(
+                            item.getPacketId())
                     .orElse(null);
 
             if (packet != null) {
                 original = new PacketItem();
-                original.setPacket(packet);
 
-                original.setItemName(item.getName());
-                original.setSku(item.getSku());
-                original.setClientName(item.getClientName());
-                original.setClientAddress(item.getClientAddress());
-                original.setPdNo(item.getPdNo());
-                original.setDrawingNo(item.getDrawingNo());
-                original.setDescription(item.getDescription());
-                original.setRemarks(item.getRemarks());
+                original.setPacket(packet);
+                original.setItemName(
+                        item.getName());
+                original.setSku(
+                        item.getSku());
+                original.setClientName(
+                        item.getClientName());
+                original.setClientAddress(
+                        item.getClientAddress());
+                original.setPdNo(
+                        item.getPdNo());
+                original.setDrawingNo(
+                        item.getDrawingNo());
+                original.setDescription(
+                        item.getDescription());
+                original.setRemarks(
+                        item.getRemarks());
                 original.setQuantity(1);
                 original.setLocation("FLOOR");
                 original.setFloor("FLOOR");
             }
         }
 
-        // =====================================================
-        // 3️⃣ FINAL FALLBACK → REBUILD COMPLETELY (CRITICAL FIX)
-        // =====================================================
-        if (original == null || original.getPacket() == null) {
+        /*
+         * Final fallback for old records where neither the packet
+         * nor original packet item remains available.
+         */
+        if (original == null ||
+                original.getPacket() == null) {
 
-            System.out.println("⚠ FULL FALLBACK: rebuilding from dispatched item");
-
-            // 🔥 CREATE NEW PACKET
             Packet packet = new Packet();
-            packet.setId(UUID.randomUUID());
-            packet.setStatus(PacketStatus.CREATED);
-            packet.setCreatedAt(LocalDateTime.now());
-            packet.setCreatedBy("SYSTEM");
 
-            packet = packetRepository.save(packet);
+            packet.setId(
+                    UUID.randomUUID());
 
-            // 🔥 CREATE BASE ITEM
+            packet.setStatus(
+                    PacketStatus.CREATED);
+
+            packet.setCreatedAt(
+                    LocalDateTime.now());
+
+            packet.setCreatedBy(
+                    "SYSTEM");
+
+            packet = packetRepository.save(
+                    packet);
+
             original = new PacketItem();
+
             original.setPacket(packet);
             original.setQuantity(1);
-            original.setItemName(item.getName());
-            original.setSku(item.getSku());
-            original.setClientName(item.getClientName());
-            original.setClientAddress(item.getClientAddress());
-            original.setPdNo(item.getPdNo());
-            original.setDrawingNo(item.getDrawingNo());
-            original.setDescription(item.getDescription());
-            original.setRemarks(item.getRemarks());
-
+            original.setItemName(
+                    item.getName());
+            original.setSku(
+                    item.getSku());
+            original.setClientName(
+                    item.getClientName());
+            original.setClientAddress(
+                    item.getClientAddress());
+            original.setPdNo(
+                    item.getPdNo());
+            original.setDrawingNo(
+                    item.getDrawingNo());
+            original.setDescription(
+                    item.getDescription());
+            original.setRemarks(
+                    item.getRemarks());
             original.setLocation("FLOOR");
             original.setFloor("FLOOR");
         }
 
-        // =====================================================
-        // CREATE RESTORED ITEM
-        // =====================================================
         PacketItem restored = new PacketItem();
 
-        restored.setPacket(original.getPacket());
-        restored.setId(UUID.randomUUID());
-        // ================= COPY DATA =================
-        restored.setItemName(original.getItemName());
-        restored.setSku(original.getSku());
-        restored.setClientName(original.getClientName());
-        restored.setClientAddress(original.getClientAddress());
-        restored.setPdNo(original.getPdNo());
-        restored.setDrawingNo(original.getDrawingNo());
-        restored.setDescription(original.getDescription());
-        restored.setRemarks(original.getRemarks());
-        restored.setDimensions(original.getDimensions());
-        restored.setWeight(original.getWeight());
+        restored.setId(
+                UUID.randomUUID());
+
+        restored.setPacket(
+                original.getPacket());
+
+        restored.setItemName(
+                original.getItemName());
+
+        restored.setSku(
+                original.getSku());
+
+        restored.setClientName(
+                original.getClientName());
+
+        restored.setClientAddress(
+                original.getClientAddress());
+
+        restored.setPdNo(
+                original.getPdNo());
+
+        restored.setDrawingNo(
+                original.getDrawingNo());
+
+        restored.setDescription(
+                original.getDescription());
+
+        restored.setRemarks(
+                original.getRemarks());
+
+        restored.setDimensions(
+                original.getDimensions());
+
+        restored.setWeight(
+                original.getWeight());
+
         restored.setQuantity(
-                original.getQuantity() != null ? original.getQuantity() : 1);
-        // ================= RESET STATE =================
+                original.getQuantity() != null
+                        ? original.getQuantity()
+                        : 1);
+
         restored.setStatus("CREATED");
         restored.setLocation("FLOOR");
         restored.setFloor("FLOOR");
 
-        // ================= ITERATION =================
-        Long iteration = (original.getPrintIteration() == null ? 1 : original.getPrintIteration()) + 1;
-        restored.setPrintIteration(iteration);
-        restored.setStickerNumber(null);
-        // ✅ CRITICAL: maintain linkage
-        restored.setZohoItemId(item.getZohoItemId());
+        Long iteration = (original.getPrintIteration() == null
+                ? 1
+                : original.getPrintIteration())
+                + 1;
 
-        // ✅ Optional but VERY important for traceability
-        restored.setPacket(original.getPacket());
+        restored.setPrintIteration(
+                iteration);
 
-        // SAVE
-        packetItemRepo.save(restored);
-
-        // ✅ LINK BACK
-        item.setPacketItemId(restored.getId());
-
-        // 🔥 FORCE NEW STICKER
         restored.setStickerNumber(null);
 
+        /*
+         * Maintain the same business item reference while creating
+         * a new PacketItem record for the restored sticker.
+         */
+        restored.setZohoItemId(
+                item.getZohoItemId());
+
         packetItemRepo.save(restored);
 
-        // ================= SAVE DISPATCH =================
+        item.setPacketItemId(
+                restored.getId());
+
         dispatchedRepo.save(item);
 
-        // ================= LOGGING =================
-        auditLogService.log(zohoItemId, "Restore approved", admin, "ADMIN");
+        auditLogService.log(
+                zohoItemId,
+                "Restore approved",
+                admin,
+                "ADMIN");
 
         activityLogService.log(
                 zohoItemId,
@@ -245,14 +374,22 @@ public class DispatchedItemService {
                 null);
     }
 
-    public void rejectRestore(String zohoItemId, String admin) {
+    public void rejectRestore(
+            String zohoItemId,
+            String admin) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        item.setApprovalStatus(ApprovalStatus.REJECTED);
+        item.setApprovalStatus(
+                ApprovalStatus.REJECTED);
+
         item.setApprovedBy(admin);
-        item.setApprovedAt(LocalDateTime.now());
+
+        item.setApprovedAt(
+                LocalDateTime.now());
 
         dispatchedRepo.save(item);
 
@@ -270,67 +407,92 @@ public class DispatchedItemService {
                 "PENDING",
                 "REJECTED",
                 null);
-
     }
+
+    /*
+     * ============================================================
+     * ACCESS AND LOCATION HELPERS
+     * ============================================================
+     */
 
     private void assertDispatchItemPlantAccess(
             DispatchedItem item,
-            java.util.Set<String> allowedPlants) {
-        if (allowedPlants == null || allowedPlants.isEmpty()) {
+            Set<String> allowedPlants) {
+
+        if (allowedPlants == null ||
+                allowedPlants.isEmpty()) {
+
             return;
         }
 
         /*
-         * Legacy safety:
-         * Old records may not have plantCode.
-         * Do not break old data.
+         * Legacy records without plant data remain available.
          */
-        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+        if (item.getPlantCode() == null ||
+                item.getPlantCode().isBlank()) {
+
             return;
         }
 
-        if (!allowedPlants.contains(item.getPlantCode())) {
+        if (!allowedPlants.contains(
+                item.getPlantCode())) {
+
             throw new RuntimeException(
-                    "User does not have access to plant: " + item.getPlantCode());
+                    "User does not have access to plant: "
+                            + item.getPlantCode());
         }
     }
 
-    private boolean isInFg(DispatchedItem item) {
-        return item.getCurrentLocationCode() != null
-                && item.getFgAreaCode() != null
-                && item.getCurrentLocationCode().startsWith(item.getFgAreaCode());
+    private boolean isInFg(
+            DispatchedItem item) {
+
+        return item.getCurrentLocationCode() != null &&
+                item.getFgAreaCode() != null &&
+                item.getCurrentLocationCode()
+                        .startsWith(
+                                item.getFgAreaCode());
     }
 
-    private boolean canProceedFromPacked(DispatchedItem item) {
+    private boolean canProceedFromPacked(
+            DispatchedItem item) {
 
         /*
-         * Legacy safety:
-         * Old records may not have plant/location fields.
-         * Do not block them, otherwise old READY items will break.
+         * Preserve legacy behaviour where old items do not have
+         * plant/location tracking.
          */
-        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+        if (item.getPlantCode() == null ||
+                item.getPlantCode().isBlank()) {
+
             return true;
         }
 
-        if (item.getCurrentLocationCode() == null || item.getCurrentLocationCode().isBlank()) {
+        if (item.getCurrentLocationCode() == null ||
+                item.getCurrentLocationCode()
+                        .isBlank()) {
+
             return true;
         }
 
-        if (item.getFgAreaCode() == null || item.getFgAreaCode().isBlank()) {
+        if (item.getFgAreaCode() == null ||
+                item.getFgAreaCode().isBlank()) {
+
             return true;
         }
 
-        /*
-         * New records with plant tracking must be in FG before next action.
-         */
         return isInFg(item);
     }
 
-    @Transactional
+    /*
+     * ============================================================
+     * STATUS
+     * ============================================================
+     */
+
     public void updateDispatchStatus(
             String zohoItemId,
             ItemDispatchStatus newStatus,
             String username) {
+
         updateDispatchStatus(
                 zohoItemId,
                 newStatus,
@@ -338,23 +500,25 @@ public class DispatchedItemService {
                 null);
     }
 
-    @Transactional
     public void updateDispatchStatus(
             String zohoItemId,
             ItemDispatchStatus newStatus,
             String username,
-            java.util.Set<String> allowedPlants) {
+            Set<String> allowedPlants) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        assertDispatchItemPlantAccess(item, allowedPlants);
+        assertDispatchItemPlantAccess(
+                item,
+                allowedPlants);
 
         ItemDispatchStatus current = item.getStatus();
 
-        System.out.println("➡ REQUEST: " + zohoItemId + " | " + current + " → " + newStatus);
-
         if (newStatus == ItemDispatchStatus.DISPATCHED) {
+
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "DISPATCHED can only be set via Chalaan generation");
@@ -367,8 +531,8 @@ public class DispatchedItemService {
         String role = "DISPATCH";
         String action;
 
-        if (current == ItemDispatchStatus.READY
-                && newStatus == ItemDispatchStatus.READY_TO_STORE) {
+        if (current == ItemDispatchStatus.READY &&
+                newStatus == ItemDispatchStatus.READY_TO_STORE) {
 
             if (!canProceedFromPacked(item)) {
                 throw new ResponseStatusException(
@@ -377,11 +541,10 @@ public class DispatchedItemService {
             }
 
             item.setStatus(newStatus);
-            action = "PACKED → READY_TO_STORE";
-        }
 
-        else if (current == ItemDispatchStatus.READY
-                && newStatus == ItemDispatchStatus.READY_TO_DISPATCH) {
+            action = "PACKED → READY_TO_STORE";
+        } else if (current == ItemDispatchStatus.READY &&
+                newStatus == ItemDispatchStatus.READY_TO_DISPATCH) {
 
             if (!canProceedFromPacked(item)) {
                 throw new ResponseStatusException(
@@ -390,27 +553,27 @@ public class DispatchedItemService {
             }
 
             item.setStatus(newStatus);
+
             action = "PACKED → READY_TO_DISPATCH";
-        }
-
-        else if (current == ItemDispatchStatus.READY_TO_STORE
-                && newStatus == ItemDispatchStatus.WAREHOUSE_REQUESTED) {
+        } else if (current == ItemDispatchStatus.READY_TO_STORE &&
+                newStatus == ItemDispatchStatus.WAREHOUSE_REQUESTED) {
 
             item.setStatus(newStatus);
+
             action = "WAREHOUSE REQUESTED";
-        }
-
-        else if (current == ItemDispatchStatus.IN_WAREHOUSE
-                && newStatus == ItemDispatchStatus.READY_TO_DISPATCH) {
+        } else if (current == ItemDispatchStatus.IN_WAREHOUSE &&
+                newStatus == ItemDispatchStatus.READY_TO_DISPATCH) {
 
             item.setStatus(newStatus);
-            action = "WAREHOUSE → READY_TO_DISPATCH";
-        }
 
-        else {
+            action = "WAREHOUSE → READY_TO_DISPATCH";
+        } else {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Invalid transition: " + current + " → " + newStatus);
+                    "Invalid transition: "
+                            + current
+                            + " → "
+                            + newStatus);
         }
 
         dispatchedRepo.save(item);
@@ -426,16 +589,69 @@ public class DispatchedItemService {
                 action,
                 username,
                 role,
-                current.name(),
+                current == null
+                        ? null
+                        : current.name(),
                 newStatus.name(),
                 item.getGatePassNumber());
     }
+
+    public void bulkUpdateStatus(
+            List<String> ids,
+            ItemDispatchStatus status,
+            String username) {
+
+        bulkUpdateStatus(
+                ids,
+                status,
+                username,
+                null);
+    }
+
+    public void bulkUpdateStatus(
+            List<String> ids,
+            ItemDispatchStatus status,
+            String username,
+            Set<String> allowedPlants) {
+
+        if (ids == null ||
+                ids.isEmpty()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "No items selected");
+        }
+
+        List<DispatchedItem> items = dispatchedRepo.findAllById(ids);
+
+        if (items.size() != new LinkedHashSet<>(ids).size()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "One or more selected dispatch items were not found");
+        }
+
+        for (DispatchedItem item : items) {
+            updateDispatchStatus(
+                    item.getZohoItemId(),
+                    status,
+                    username,
+                    allowedPlants);
+        }
+    }
+
+    /*
+     * ============================================================
+     * WAREHOUSE
+     * ============================================================
+     */
 
     public String moveToWarehouse(
             String zohoItemId,
             String warehouseCode,
             String fromLocation,
             String username) {
+
         return moveToWarehouse(
                 zohoItemId,
                 warehouseCode,
@@ -449,25 +665,35 @@ public class DispatchedItemService {
             String warehouseCode,
             String fromLocation,
             String username,
-            java.util.Set<String> allowedPlants) {
+            Set<String> allowedPlants) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        assertDispatchItemPlantAccess(item, allowedPlants);
+        assertDispatchItemPlantAccess(
+                item,
+                allowedPlants);
 
         if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
+
             throw new IllegalStateException(
                     "Only READY_TO_STORE items can be moved to warehouse");
         }
 
-        String cleanWarehouse = cleanLocationCode(warehouseCode);
+        String cleanWarehouse = cleanLocationCode(
+                warehouseCode);
 
-        if (cleanWarehouse == null || cleanWarehouse.isBlank()) {
-            throw new RuntimeException("Warehouse code required");
+        if (cleanWarehouse == null ||
+                cleanWarehouse.isBlank()) {
+
+            throw new RuntimeException(
+                    "Warehouse code required");
         }
 
-        assertAllowedWarehouseCode(cleanWarehouse);
+        assertAllowedWarehouseCode(
+                cleanWarehouse);
 
         String cleanFromLocation = firstNonBlank(
                 fromLocation,
@@ -475,47 +701,64 @@ public class DispatchedItemService {
                 item.getLocation(),
                 item.getPackedAreaCode());
 
-        if (cleanFromLocation == null || cleanFromLocation.isBlank()) {
-            throw new RuntimeException("From location required");
-        }
+        cleanFromLocation = cleanLocationCode(
+                cleanFromLocation);
 
-        assertAllowedFromLocation(cleanFromLocation);
-
-        /*
-         * Keep plant access safety.
-         * But allow your fixed warehouse list globally.
-         */
-        if (!FIXED_WAREHOUSE_CODES.contains(cleanWarehouse)
-                && item.getPlantCode() != null
-                && !item.getPlantCode().isBlank()
-                && !plantLocationService.isWarehouseAllowed(
-                        item.getPlantCode(),
-                        cleanWarehouse)) {
+        if (cleanFromLocation == null ||
+                cleanFromLocation.isBlank()) {
 
             throw new RuntimeException(
-                    "Warehouse " + cleanWarehouse
+                    "From location required");
+        }
+
+        assertAllowedFromLocation(
+                cleanFromLocation);
+
+        if (!FIXED_WAREHOUSE_CODES.contains(
+                cleanWarehouse) &&
+                item.getPlantCode() != null &&
+                !item.getPlantCode().isBlank() &&
+                !plantLocationService
+                        .isWarehouseAllowed(
+                                item.getPlantCode(),
+                                cleanWarehouse)) {
+
+            throw new RuntimeException(
+                    "Warehouse "
+                            + cleanWarehouse
                             + " is not allowed for plant "
                             + item.getPlantCode());
         }
 
-        String gatePass = generateGatePassNumber(cleanWarehouse);
+        String gatePass = generateGatePassNumber(
+                cleanWarehouse);
 
-        item.setStatus(ItemDispatchStatus.WAREHOUSE_REQUESTED);
-        item.setFromLocation(cleanFromLocation);
-        item.setWarehouseCode(cleanWarehouse);
-        item.setGatePassNumber(gatePass);
+        item.setStatus(
+                ItemDispatchStatus.WAREHOUSE_REQUESTED);
+
+        item.setFromLocation(
+                cleanFromLocation);
+
+        item.setWarehouseCode(
+                cleanWarehouse);
+
+        item.setGatePassNumber(
+                gatePass);
+
         item.setStoredAt(null);
 
         item.setCreatedBy(
-                username != null && !username.isBlank()
-                        ? username
-                        : "SYSTEM");
+                username != null &&
+                        !username.isBlank()
+                                ? username
+                                : "SYSTEM");
 
         dispatchedRepo.save(item);
 
         auditLogService.log(
                 zohoItemId,
-                "Warehouse move requested | GP: " + gatePass,
+                "Warehouse move requested | GP: "
+                        + gatePass,
                 username,
                 "DISPATCH");
 
@@ -536,6 +779,7 @@ public class DispatchedItemService {
             String warehouseCode,
             String fromLocation,
             String username) {
+
         return bulkMoveToWarehouse(
                 itemIds,
                 warehouseCode,
@@ -549,69 +793,115 @@ public class DispatchedItemService {
             String warehouseCode,
             String fromLocation,
             String username,
-            java.util.Set<String> allowedPlants) {
+            Set<String> allowedPlants) {
 
-        if (itemIds == null || itemIds.isEmpty()) {
-            throw new RuntimeException("No items selected");
+        if (itemIds == null ||
+                itemIds.isEmpty()) {
+
+            throw new RuntimeException(
+                    "No items selected");
         }
 
-        String cleanWarehouse = cleanLocationCode(warehouseCode);
+        LinkedHashSet<String> uniqueIds = itemIds.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(id -> !id.isBlank())
+                .collect(
+                        Collectors.toCollection(
+                                LinkedHashSet::new));
 
-        if (cleanWarehouse == null || cleanWarehouse.isBlank()) {
-            throw new RuntimeException("Warehouse code required");
+        if (uniqueIds.isEmpty()) {
+            throw new RuntimeException(
+                    "No items selected");
         }
 
-        assertAllowedWarehouseCode(cleanWarehouse);
+        String cleanWarehouse = cleanLocationCode(
+                warehouseCode);
 
-        String cleanFromLocation = cleanLocationCode(fromLocation);
+        if (cleanWarehouse == null ||
+                cleanWarehouse.isBlank()) {
 
-        if (cleanFromLocation == null || cleanFromLocation.isBlank()) {
-            throw new RuntimeException("From location required");
+            throw new RuntimeException(
+                    "Warehouse code required");
         }
 
-        assertAllowedFromLocation(cleanFromLocation);
+        assertAllowedWarehouseCode(
+                cleanWarehouse);
 
-        List<DispatchedItem> items = dispatchedRepo.findAllById(itemIds);
+        String cleanFromLocation = cleanLocationCode(
+                fromLocation);
 
-        if (items.isEmpty()) {
-            throw new RuntimeException("No items selected");
+        if (cleanFromLocation == null ||
+                cleanFromLocation.isBlank()) {
+
+            throw new RuntimeException(
+                    "From location required");
+        }
+
+        assertAllowedFromLocation(
+                cleanFromLocation);
+
+        List<DispatchedItem> items = dispatchedRepo.findAllById(
+                uniqueIds);
+
+        if (items.size() != uniqueIds.size()) {
+
+            throw new RuntimeException(
+                    "One or more selected items were not found");
         }
 
         for (DispatchedItem item : items) {
-            assertDispatchItemPlantAccess(item, allowedPlants);
+            assertDispatchItemPlantAccess(
+                    item,
+                    allowedPlants);
 
             if (item.getStatus() != ItemDispatchStatus.READY_TO_STORE) {
+
                 throw new RuntimeException(
-                        "Invalid item state: " + item.getZohoItemId());
+                        "Invalid item state: "
+                                + item.getZohoItemId());
             }
 
-            if (!FIXED_WAREHOUSE_CODES.contains(cleanWarehouse)
-                    && item.getPlantCode() != null
-                    && !item.getPlantCode().isBlank()
-                    && !plantLocationService.isWarehouseAllowed(
-                            item.getPlantCode(),
-                            cleanWarehouse)) {
+            if (!FIXED_WAREHOUSE_CODES.contains(
+                    cleanWarehouse) &&
+                    item.getPlantCode() != null &&
+                    !item.getPlantCode().isBlank() &&
+                    !plantLocationService
+                            .isWarehouseAllowed(
+                                    item.getPlantCode(),
+                                    cleanWarehouse)) {
 
                 throw new RuntimeException(
-                        "Warehouse " + cleanWarehouse
+                        "Warehouse "
+                                + cleanWarehouse
                                 + " is not allowed for plant "
                                 + item.getPlantCode());
             }
         }
 
-        String gatePass = generateGatePassNumber(cleanWarehouse);
+        String gatePass = generateGatePassNumber(
+                cleanWarehouse);
 
         for (DispatchedItem item : items) {
-            item.setStatus(ItemDispatchStatus.WAREHOUSE_REQUESTED);
-            item.setWarehouseCode(cleanWarehouse);
-            item.setGatePassNumber(gatePass);
-            item.setFromLocation(cleanFromLocation);
+            item.setStatus(
+                    ItemDispatchStatus.WAREHOUSE_REQUESTED);
+
+            item.setWarehouseCode(
+                    cleanWarehouse);
+
+            item.setGatePassNumber(
+                    gatePass);
+
+            item.setFromLocation(
+                    cleanFromLocation);
+
             item.setStoredAt(null);
 
             item.setCreatedBy(
-                    username != null && !username.isBlank()
-                            ? username
-                            : "SYSTEM");
+                    username != null &&
+                            !username.isBlank()
+                                    ? username
+                                    : "SYSTEM");
         }
 
         dispatchedRepo.saveAll(items);
@@ -619,7 +909,8 @@ public class DispatchedItemService {
         for (DispatchedItem item : items) {
             auditLogService.log(
                     item.getZohoItemId(),
-                    "Warehouse move requested (bulk) | GP: " + gatePass,
+                    "Warehouse move requested (bulk) | GP: "
+                            + gatePass,
                     username,
                     "DISPATCH");
 
@@ -653,28 +944,43 @@ public class DispatchedItemService {
             String zohoItemId,
             String enteredGatePass,
             String username,
-            java.util.Set<String> allowedPlants,
+            Set<String> allowedPlants,
             String role) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        assertDispatchItemPlantAccess(item, allowedPlants);
+        assertDispatchItemPlantAccess(
+                item,
+                allowedPlants);
 
         if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_REQUESTED) {
-            throw new IllegalStateException("Item not pending warehouse approval");
+
+            throw new IllegalStateException(
+                    "Item not pending warehouse approval");
         }
 
-        if (enteredGatePass == null || enteredGatePass.isBlank()) {
-            throw new IllegalStateException("Gate pass required");
+        if (enteredGatePass == null ||
+                enteredGatePass.isBlank()) {
+
+            throw new IllegalStateException(
+                    "Gate pass required");
         }
 
-        String savedGatePass = normalizeGatePass(item.getGatePassNumber());
+        String savedGatePass = normalizeGatePass(
+                item.getGatePassNumber());
 
-        String userGatePass = normalizeGatePass(enteredGatePass);
+        String userGatePass = normalizeGatePass(
+                enteredGatePass);
 
-        if (savedGatePass.isBlank() || !savedGatePass.equals(userGatePass)) {
-            throw new IllegalStateException("Invalid Gate Pass");
+        if (savedGatePass.isBlank() ||
+                !savedGatePass.equals(
+                        userGatePass)) {
+
+            throw new IllegalStateException(
+                    "Invalid Gate Pass");
         }
 
         String warehouseLocation = firstNonBlank(
@@ -683,13 +989,24 @@ public class DispatchedItemService {
                 item.getLocation(),
                 "WH");
 
-        warehouseLocation = cleanLocationCode(warehouseLocation);
+        warehouseLocation = cleanLocationCode(
+                warehouseLocation);
 
-        item.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
-        item.setStoredAt(LocalDateTime.now(APP_ZONE));
-        item.setWarehouseCode(warehouseLocation);
-        item.setCurrentLocationCode(warehouseLocation);
-        item.setLocation(warehouseLocation);
+        item.setStatus(
+                ItemDispatchStatus.IN_WAREHOUSE);
+
+        item.setStoredAt(
+                LocalDateTime.now(
+                        APP_ZONE));
+
+        item.setWarehouseCode(
+                warehouseLocation);
+
+        item.setCurrentLocationCode(
+                warehouseLocation);
+
+        item.setLocation(
+                warehouseLocation);
 
         dispatchedRepo.save(item);
 
@@ -698,13 +1015,15 @@ public class DispatchedItemService {
                 warehouseLocation,
                 null);
 
-        String safeRole = role != null && !role.isBlank()
-                ? role
-                : "WAREHOUSE";
+        String safeRole = role != null &&
+                !role.isBlank()
+                        ? role
+                        : "WAREHOUSE";
 
         auditLogService.log(
                 zohoItemId,
-                "Warehouse approved | GP: " + item.getGatePassNumber(),
+                "Warehouse approved | GP: "
+                        + item.getGatePassNumber(),
                 username,
                 safeRole);
 
@@ -732,16 +1051,22 @@ public class DispatchedItemService {
     public void rejectWarehouseMove(
             String zohoItemId,
             String username,
-            java.util.Set<String> allowedPlants,
+            Set<String> allowedPlants,
             String role) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        assertDispatchItemPlantAccess(item, allowedPlants);
+        assertDispatchItemPlantAccess(
+                item,
+                allowedPlants);
 
         if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_REQUESTED) {
-            throw new IllegalStateException("Item not pending warehouse approval");
+
+            throw new IllegalStateException(
+                    "Item not pending warehouse approval");
         }
 
         String returnLocation = firstNonBlank(
@@ -750,15 +1075,22 @@ public class DispatchedItemService {
                 item.getLocation(),
                 item.getPackedAreaCode());
 
-        item.setStatus(ItemDispatchStatus.READY_TO_STORE);
+        item.setStatus(
+                ItemDispatchStatus.READY_TO_STORE);
+
         item.setWarehouseCode(null);
         item.setGatePassNumber(null);
         item.setStoredAt(null);
         item.setFromLocation(null);
 
-        if (returnLocation != null && !returnLocation.isBlank()) {
-            item.setCurrentLocationCode(returnLocation);
-            item.setLocation(returnLocation);
+        if (returnLocation != null &&
+                !returnLocation.isBlank()) {
+
+            item.setCurrentLocationCode(
+                    returnLocation);
+
+            item.setLocation(
+                    returnLocation);
         }
 
         dispatchedRepo.save(item);
@@ -768,9 +1100,10 @@ public class DispatchedItemService {
                 returnLocation,
                 item.getFgZoneCode());
 
-        String safeRole = role != null && !role.isBlank()
-                ? role
-                : "WAREHOUSE";
+        String safeRole = role != null &&
+                !role.isBlank()
+                        ? role
+                        : "WAREHOUSE";
 
         auditLogService.log(
                 zohoItemId,
@@ -788,66 +1121,63 @@ public class DispatchedItemService {
                 null);
     }
 
+    /*
+     * ============================================================
+     * CHALAAN DISPATCH
+     * ============================================================
+     */
+
     public void markDispatchedFromChalaan(
             String zohoItemId,
             String username) {
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
         ItemDispatchStatus previousStatus = item.getStatus();
 
-        /*
-         * Allowed:
-         * 1. READY_TO_DISPATCH - normal dispatch flow.
-         * 2. READY - QR dispatch flow after FG movement / legacy-safe item.
-         */
-        if (previousStatus != ItemDispatchStatus.READY_TO_DISPATCH
-                && previousStatus != ItemDispatchStatus.READY) {
+        if (previousStatus != ItemDispatchStatus.READY_TO_DISPATCH &&
+                previousStatus != ItemDispatchStatus.READY) {
+
             throw new IllegalStateException(
                     "Item must be READY or READY_TO_DISPATCH before challan dispatch");
         }
 
-        /*
-         * If new plant/location tracking exists, READY item must already be in FG.
-         * Legacy records without plant/location are allowed.
-         */
-        if (previousStatus == ItemDispatchStatus.READY
-                && !canProceedFromPacked(item)) {
+        if (previousStatus == ItemDispatchStatus.READY &&
+                !canProceedFromPacked(item)) {
+
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Move item to FG before dispatch action");
         }
 
         LocalDateTime nowIst = LocalDateTime.now(
-                java.time.ZoneId.of("Asia/Kolkata"));
+                APP_ZONE);
 
-        item.setStatus(ItemDispatchStatus.DISPATCHED);
+        item.setStatus(
+                ItemDispatchStatus.DISPATCHED);
+
         item.setDispatchedBy(
-                username != null && !username.isBlank()
-                        ? username
-                        : "SYSTEM");
+                username != null &&
+                        !username.isBlank()
+                                ? username
+                                : "SYSTEM");
 
         /*
-         * Do not overwrite if DispatchChallanService already set selected dispatch
-         * time.
+         * Preserve a custom dispatch timestamp already assigned
+         * during challan generation.
          */
         if (item.getDispatchedAt() == null) {
-            item.setDispatchedAt(nowIst);
+            item.setDispatchedAt(
+                    nowIst);
         }
 
-        /*
-         * Trip timer starts from dispatch/challan time.
-         * Do not overwrite if already set by selected driver/vehicle dispatch form.
-         */
         if (item.getTripStartedAt() == null) {
-            item.setTripStartedAt(item.getDispatchedAt());
+            item.setTripStartedAt(
+                    item.getDispatchedAt());
         }
-
-        /*
-         * Important:
-         * Do NOT set tripEndedAt here.
-         * Logistics/Admin ends the trip later.
-         */
 
         item.setStock(0);
 
@@ -864,94 +1194,156 @@ public class DispatchedItemService {
                 "DISPATCHED",
                 username,
                 "DISPATCH",
-                previousStatus == null ? null : previousStatus.name(),
+                previousStatus == null
+                        ? null
+                        : previousStatus.name(),
                 "DISPATCHED",
                 null);
     }
 
-    public void createFromPacketItem(PacketItem item) {
+    /*
+     * ============================================================
+     * CREATE DISPATCH RECORD
+     * ============================================================
+     */
+
+    public void createFromPacketItem(
+            PacketItem item) {
+
+        if (item == null) {
+            throw new IllegalStateException(
+                    "PacketItem is null");
+        }
+
+        if (item.getId() == null) {
+            throw new IllegalStateException(
+                    "PacketItem ID is null");
+        }
+
+        if (item.getPacket() == null) {
+            throw new IllegalStateException(
+                    "PacketItem has no packet");
+        }
 
         String id = item.getId().toString();
+
         if (dispatchedRepo.existsById(id)) {
             return;
         }
 
-        DispatchedItem d = new DispatchedItem();
-        if (item.getId() == null) {
-            throw new IllegalStateException("PacketItem ID is null");
-        }
-        if (item.getPacket() == null) {
-            throw new IllegalStateException("PacketItem has no packet");
-        }
-        d.setItemType(
+        DispatchedItem dispatched = new DispatchedItem();
+
+        dispatched.setZohoItemId(id);
+
+        dispatched.setItemType(
                 item.getItemType() != null
                         ? item.getItemType()
                         : PacketItemType.NORMAL);
 
-        d.setLinkedPacketItemId(
+        dispatched.setLinkedPacketItemId(
                 item.getLinkedPacketItemId());
 
-        d.setLinkedMasterItemId(
+        dispatched.setLinkedMasterItemId(
                 item.getLinkedMasterItemId());
 
-        d.setZohoItemId(id); // primary key
-        d.setName(item.getItemName());
-        d.setPacketItemId(item.getId());
-        d.setPacketId(item.getPacket().getId());
-        d.setSku(item.getSku());
-        d.setLocation(item.getCurrentLocationCode());
-        d.setFloor(item.getFloor());
+        dispatched.setName(
+                item.getItemName());
 
-        d.setPlantCode(item.getPlantCode());
-        d.setPackedAreaCode(item.getPackedAreaCode());
-        d.setCurrentLocationCode(item.getCurrentLocationCode());
-        d.setFgAreaCode(item.getFgAreaCode());
-        d.setFgZoneCode(item.getFgZoneCode());
+        dispatched.setPacketItemId(
+                item.getId());
 
-        d.setStock(1);
-        d.setStatus(ItemDispatchStatus.READY);
-        d.setStickerNumber(item.getStickerNumber());
+        dispatched.setPacketId(
+                item.getPacket().getId());
 
-        /*
-         * Required by the Dispatch Register Excel report.
-         * Preserve the real sticker/packing timestamp.
-         */
-        d.setPackedAt(item.getPackedAt());
+        dispatched.setSku(
+                item.getSku());
 
-        d.setWarehouseCode(null);
-        d.setGatePassNumber(null);
-        d.setPdNo(item.getPdNo());
-        d.setWeight(item.getWeight());
-        d.setDimensions(item.getDimensions());
-        d.setClientName(item.getClientName());
-        d.setClientAddress(item.getClientAddress());
-        d.setDrawingNo(item.getDrawingNo());
-        d.setDescription(item.getDescription());
-        d.setRemarks(item.getRemarks());
-        d.setItemType(
-                item.getItemType() != null
-                        ? item.getItemType()
-                        : PacketItemType.NORMAL);
+        dispatched.setLocation(
+                item.getCurrentLocationCode());
 
-        d.setLinkedPacketItemId(
-                item.getLinkedPacketItemId());
+        dispatched.setFloor(
+                item.getFloor());
 
-        d.setLinkedMasterItemId(
-                item.getLinkedMasterItemId());
+        dispatched.setPlantCode(
+                item.getPlantCode());
 
-        dispatchedRepo.save(d);
+        dispatched.setPackedAreaCode(
+                item.getPackedAreaCode());
+
+        dispatched.setCurrentLocationCode(
+                item.getCurrentLocationCode());
+
+        dispatched.setFgAreaCode(
+                item.getFgAreaCode());
+
+        dispatched.setFgZoneCode(
+                item.getFgZoneCode());
+
+        dispatched.setStock(1);
+
+        dispatched.setStatus(
+                ItemDispatchStatus.READY);
+
+        dispatched.setStickerNumber(
+                item.getStickerNumber());
+
+        dispatched.setPackedAt(
+                item.getPackedAt());
+
+        dispatched.setWarehouseCode(null);
+        dispatched.setGatePassNumber(null);
+
+        dispatched.setPdNo(
+                item.getPdNo());
+
+        dispatched.setWeight(
+                item.getWeight());
+
+        dispatched.setDimensions(
+                item.getDimensions());
+
+        dispatched.setClientName(
+                item.getClientName());
+
+        dispatched.setClientAddress(
+                item.getClientAddress());
+
+        dispatched.setDrawingNo(
+                item.getDrawingNo());
+
+        dispatched.setDescription(
+                item.getDescription());
+
+        dispatched.setRemarks(
+                item.getRemarks());
+
+        dispatchedRepo.save(
+                dispatched);
     }
 
-    public void requestReturnToDispatch(String zohoItemId, String username) {
+    /*
+     * ============================================================
+     * WAREHOUSE RETURN
+     * ============================================================
+     */
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+    public void requestReturnToDispatch(
+            String zohoItemId,
+            String username) {
+
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
         if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
-            throw new RuntimeException("Only warehouse items can be returned");
+
+            throw new RuntimeException(
+                    "Only warehouse items can be returned");
         }
 
-        item.setStatus(ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
+        item.setStatus(
+                ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
 
         dispatchedRepo.save(item);
 
@@ -971,16 +1363,23 @@ public class DispatchedItemService {
                 null);
     }
 
-    public void approveReturnToDispatch(String zohoItemId, String admin) {
+    public void approveReturnToDispatch(
+            String zohoItemId,
+            String admin) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
         if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED) {
-            throw new RuntimeException("No return request pending");
+
+            throw new RuntimeException(
+                    "No return request pending");
         }
 
-        item.setStatus(ItemDispatchStatus.READY);
+        item.setStatus(
+                ItemDispatchStatus.READY);
 
         dispatchedRepo.save(item);
 
@@ -1000,12 +1399,17 @@ public class DispatchedItemService {
                 null);
     }
 
-    public void rejectReturnToDispatch(String zohoItemId, String admin) {
+    public void rejectReturnToDispatch(
+            String zohoItemId,
+            String admin) {
 
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
 
-        item.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
+        item.setStatus(
+                ItemDispatchStatus.IN_WAREHOUSE);
 
         dispatchedRepo.save(item);
 
@@ -1025,48 +1429,84 @@ public class DispatchedItemService {
                 null);
     }
 
+    /*
+     * ============================================================
+     * FG MOVEMENT
+     * ============================================================
+     */
+
     public void movePackedItemToFg(
             String zohoItemId,
             String fgZoneCode,
             String username,
-            java.util.Set<String> allowedPlants) {
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new IllegalStateException("Item not found"));
+            Set<String> allowedPlants) {
 
-        assertDispatchItemPlantAccess(item, allowedPlants);
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Item not found"));
+
+        assertDispatchItemPlantAccess(
+                item,
+                allowedPlants);
 
         if (item.getStatus() != ItemDispatchStatus.READY) {
-            throw new RuntimeException("Only packed items can be moved to FG");
+
+            throw new RuntimeException(
+                    "Only packed items can be moved to FG");
         }
 
-        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
-            throw new RuntimeException("Plant not assigned to this item");
+        if (item.getPlantCode() == null ||
+                item.getPlantCode().isBlank()) {
+
+            throw new RuntimeException(
+                    "Plant not assigned to this item");
         }
 
-        String fgLocation = plantLocationService.buildFgLocation(
-                item.getPlantCode(),
+        String cleanFgZone = cleanNullable(
                 fgZoneCode);
+
+        String fgLocation = plantLocationService
+                .buildFgLocation(
+                        item.getPlantCode(),
+                        cleanFgZone);
 
         String oldLocation = item.getCurrentLocationCode();
 
-        item.setCurrentLocationCode(fgLocation);
-        item.setLocation(fgLocation);
-        item.setFgZoneCode(fgZoneCode);
+        item.setCurrentLocationCode(
+                fgLocation);
+
+        item.setLocation(
+                fgLocation);
+
+        item.setFgZoneCode(
+                cleanFgZone);
 
         dispatchedRepo.save(item);
 
         if (item.getPacketItemId() != null) {
-            packetItemRepo.findById(item.getPacketItemId()).ifPresent(packetItem -> {
-                packetItem.setCurrentLocationCode(fgLocation);
-                packetItem.setLocation(fgLocation);
-                packetItem.setFgZoneCode(fgZoneCode);
-                packetItemRepo.save(packetItem);
-            });
+            packetItemRepo
+                    .findById(
+                            item.getPacketItemId())
+                    .ifPresent(packetItem -> {
+                        packetItem.setCurrentLocationCode(
+                                fgLocation);
+
+                        packetItem.setLocation(
+                                fgLocation);
+
+                        packetItem.setFgZoneCode(
+                                cleanFgZone);
+
+                        packetItemRepo.save(
+                                packetItem);
+                    });
         }
 
         auditLogService.log(
                 zohoItemId,
-                "Moved packed item to FG: " + fgLocation,
+                "Moved packed item to FG: "
+                        + fgLocation,
                 username,
                 "DISPATCH");
 
@@ -1080,17 +1520,31 @@ public class DispatchedItemService {
                 null);
     }
 
+    /*
+     * ============================================================
+     * GATE PASS
+     * ============================================================
+     */
+
     public String createGatePassNumber(
             String warehouseCode) {
-        return generateGatePassNumber(warehouseCode);
+
+        return generateGatePassNumber(
+                warehouseCode);
     }
 
-    private String generateGatePassNumber(String warehouseCode) {
-        String warehouse = warehouseShortCode(warehouseCode);
+    private String generateGatePassNumber(
+            String warehouseCode) {
 
-        String date = java.time.LocalDate.now(APP_ZONE)
+        String warehouse = warehouseShortCode(
+                warehouseCode);
+
+        String date = java.time.LocalDate
+                .now(APP_ZONE)
                 .format(
-                        java.time.format.DateTimeFormatter.ofPattern("MMdd"));
+                        java.time.format.DateTimeFormatter
+                                .ofPattern(
+                                        "MMdd"));
 
         for (int i = 0; i < 30; i++) {
             String suffix = UUID.randomUUID()
@@ -1099,38 +1553,31 @@ public class DispatchedItemService {
                     .substring(0, 5)
                     .toUpperCase();
 
-            String gatePass = "GP-" + warehouse + "-" + date + "-" + suffix;
+            String gatePass = "GP-"
+                    + warehouse
+                    + "-"
+                    + date
+                    + "-"
+                    + suffix;
 
-            if (dispatchedRepo.findByGatePassNumber(gatePass).isEmpty()) {
+            if (dispatchedRepo
+                    .findByGatePassNumber(
+                            gatePass)
+                    .isEmpty()) {
+
                 return gatePass;
             }
         }
 
-        throw new RuntimeException("Could not generate unique gate pass number");
+        throw new RuntimeException(
+                "Could not generate unique gate pass number");
     }
 
-    public void bulkUpdateStatus(
-            List<String> ids,
-            ItemDispatchStatus status,
-            String username) {
-        bulkUpdateStatus(ids, status, username, null);
-    }
-
-    public void bulkUpdateStatus(
-            List<String> ids,
-            ItemDispatchStatus status,
-            String username,
-            java.util.Set<String> allowedPlants) {
-        List<DispatchedItem> items = dispatchedRepo.findAllById(ids);
-
-        for (DispatchedItem item : items) {
-            updateDispatchStatus(
-                    item.getZohoItemId(),
-                    status,
-                    username,
-                    allowedPlants);
-        }
-    }
+    /*
+     * ============================================================
+     * ADMIN PLANT AND LOCATION ASSIGNMENT
+     * ============================================================
+     */
 
     public DispatchedItem assignPlantLocationToDispatchedItem(
             String zohoItemId,
@@ -1139,91 +1586,130 @@ public class DispatchedItemService {
             String fgZoneCode,
             String warehouseCode,
             String username) {
-        DispatchedItem item = dispatchedRepo.findById(zohoItemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
 
-        if (plantCode == null || plantCode.isBlank()) {
-            throw new RuntimeException("Plant code required");
+        DispatchedItem item = dispatchedRepo
+                .findById(zohoItemId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Item not found"));
+
+        if (plantCode == null ||
+                plantCode.isBlank()) {
+
+            throw new RuntimeException(
+                    "Plant code required");
         }
 
-        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+        String cleanPlantCode = plantCode.trim();
 
-        String finalLocation = currentLocationCode;
+        PlantLocationService.PlantConfig plant = plantLocationService
+                .getPlantConfig(
+                        cleanPlantCode);
 
-        /*
-         * Auto-decide location if UI does not send currentLocationCode.
-         */
-        if (finalLocation == null || finalLocation.isBlank()) {
+        String finalLocation = cleanNullable(
+                currentLocationCode);
+
+        String resolvedFgZoneCode = cleanNullable(
+                fgZoneCode);
+
+        if (finalLocation == null) {
 
             if (item.getStatus() == ItemDispatchStatus.READY) {
 
-                // Packed item should be in PKD area.
                 finalLocation = plant.packedAreaCode();
-
             } else if (item.getStatus() == ItemDispatchStatus.READY_TO_STORE ||
                     item.getStatus() == ItemDispatchStatus.READY_TO_DISPATCH) {
 
-                // Item already moved towards FG.
-                finalLocation = plantLocationService.buildFgLocation(
-                        plantCode,
-                        fgZoneCode);
-
+                finalLocation = plantLocationService
+                        .buildFgLocation(
+                                cleanPlantCode,
+                                resolvedFgZoneCode);
             } else if (item.getStatus() == ItemDispatchStatus.WAREHOUSE_REQUESTED ||
                     item.getStatus() == ItemDispatchStatus.IN_WAREHOUSE ||
                     item.getStatus() == ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED) {
 
-                // Warehouse item.
-                finalLocation = warehouseCode != null && !warehouseCode.isBlank()
-                        ? warehouseCode.trim()
-                        : item.getWarehouseCode();
+                finalLocation = firstNonBlank(
+                        warehouseCode,
+                        item.getWarehouseCode());
             }
         }
 
-        /*
-         * Final safety fallback.
-         */
-        if (finalLocation == null || finalLocation.isBlank()) {
+        if (finalLocation == null ||
+                finalLocation.isBlank()) {
+
             finalLocation = plant.packedAreaCode();
         }
 
-        /*
-         * IMPORTANT:
-         * Java lambda needs final/effectively final variable.
-         */
-        final String resolvedLocation = finalLocation;
-        final String resolvedFgZoneCode = fgZoneCode != null && !fgZoneCode.isBlank()
-                ? fgZoneCode.trim()
-                : null;
+        final String resolvedLocation = finalLocation.trim();
 
-        item.setPlantCode(plantCode);
-        item.setPackedAreaCode(plant.packedAreaCode());
-        item.setFgAreaCode(plant.fgAreaCode());
-        item.setFgZoneCode(resolvedFgZoneCode);
-        item.setCurrentLocationCode(resolvedLocation);
-        item.setLocation(resolvedLocation);
+        final String finalFgZoneCode = resolvedFgZoneCode;
 
-        if (warehouseCode != null && !warehouseCode.isBlank()) {
-            item.setWarehouseCode(warehouseCode.trim());
+        item.setPlantCode(
+                cleanPlantCode);
+
+        item.setPackedAreaCode(
+                plant.packedAreaCode());
+
+        item.setFgAreaCode(
+                plant.fgAreaCode());
+
+        item.setFgZoneCode(
+                finalFgZoneCode);
+
+        item.setCurrentLocationCode(
+                resolvedLocation);
+
+        item.setLocation(
+                resolvedLocation);
+
+        String cleanWarehouse = cleanNullable(
+                warehouseCode);
+
+        if (cleanWarehouse != null) {
+            item.setWarehouseCode(
+                    cleanWarehouse);
         }
 
         dispatchedRepo.save(item);
 
         if (item.getPacketItemId() != null) {
-            packetItemRepo.findById(item.getPacketItemId()).ifPresent(packetItem -> {
-                packetItem.setPlantCode(plantCode);
-                packetItem.setPackedAreaCode(plant.packedAreaCode());
-                packetItem.setFgAreaCode(plant.fgAreaCode());
-                packetItem.setFgZoneCode(resolvedFgZoneCode);
-                packetItem.setCurrentLocationCode(resolvedLocation);
-                packetItem.setLocation(resolvedLocation);
+            packetItemRepo
+                    .findById(
+                            item.getPacketItemId())
+                    .ifPresent(packetItem -> {
+                        packetItem.setPlantCode(
+                                cleanPlantCode);
 
-                packetItemRepo.save(packetItem);
-            });
+                        packetItem.setPackedAreaCode(
+                                plant.packedAreaCode());
+
+                        packetItem.setFgAreaCode(
+                                plant.fgAreaCode());
+
+                        packetItem.setFgZoneCode(
+                                finalFgZoneCode);
+
+                        packetItem.setCurrentLocationCode(
+                                resolvedLocation);
+
+                        packetItem.setLocation(
+                                resolvedLocation);
+
+                        if (cleanWarehouse != null) {
+                            packetItem.setWarehouseCode(
+                                    cleanWarehouse);
+                        }
+
+                        packetItemRepo.save(
+                                packetItem);
+                    });
         }
 
         auditLogService.log(
                 zohoItemId,
-                "Plant/location assigned: " + plantCode + " / " + resolvedLocation,
+                "Plant/location assigned: "
+                        + cleanPlantCode
+                        + " / "
+                        + resolvedLocation,
                 username,
                 "ADMIN");
 
@@ -1239,43 +1725,752 @@ public class DispatchedItemService {
         return item;
     }
 
-    private String cleanLocationCode(String value) {
+    /*
+     * ============================================================
+     * ADMIN MULTI-ITEM EDIT
+     * ============================================================
+     */
+
+    public AdminBulkDispatchEditResponse adminBulkEdit(
+            AdminBulkDispatchEditRequest request,
+            String adminUsername) {
+
+        if (request == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Admin edit request is required");
+        }
+
+        Set<AdminDispatchEditField> fields = request.fields();
+
+        if (fields == null ||
+                fields.isEmpty()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Select at least one field to update");
+        }
+
+        LinkedHashSet<String> requestedIds = request.itemIds() == null
+                ? new LinkedHashSet<>()
+                : request.itemIds()
+                        .stream()
+                        .filter(
+                                Objects::nonNull)
+                        .map(
+                                String::trim)
+                        .filter(value -> !value.isBlank())
+                        .collect(
+                                Collectors.toCollection(
+                                        LinkedHashSet::new));
+
+        if (requestedIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "No valid dispatch items selected");
+        }
+
+        if (requestedIds.size() > 500) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "A maximum of 500 items can be edited at once");
+        }
+
+        /*
+         * The name column is non-nullable.
+         */
+        if (fields.contains(
+                AdminDispatchEditField.ITEM_NAME) &&
+                cleanNullable(
+                        request.itemName()) == null) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Item name cannot be empty");
+        }
+
+        List<DispatchedItem> selectedItems = dispatchedRepo.findAllById(
+                requestedIds);
+
+        Set<String> foundIds = selectedItems.stream()
+                .map(
+                        DispatchedItem::getZohoItemId)
+                .filter(
+                        Objects::nonNull)
+                .collect(
+                        Collectors.toSet());
+
+        List<String> missingIds = requestedIds.stream()
+                .filter(id -> !foundIds.contains(id))
+                .toList();
+
+        if (!missingIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Dispatch items not found: "
+                            + String.join(
+                                    ", ",
+                                    missingIds.stream()
+                                            .limit(10)
+                                            .toList()));
+        }
+
+        /*
+         * The map prevents duplicate saves where multiple selected
+         * rows belong to the same challan.
+         */
+        Map<String, DispatchedItem> affectedItems = new LinkedHashMap<>();
+
+        for (DispatchedItem item : selectedItems) {
+
+            affectedItems.put(
+                    item.getZohoItemId(),
+                    item);
+        }
+
+        /*
+         * Sticker and item details apply only to rows selected by
+         * the Admin.
+         */
+        applyAdminSelectedItemFields(
+                selectedItems,
+                request,
+                fields);
+
+        /*
+         * Update the source PacketItem as well so sticker reprints
+         * do not restore the old values.
+         */
+        synchronizeAdminPacketItemFields(
+                selectedItems,
+                request,
+                fields);
+
+        boolean updateDriver = fields.contains(
+                AdminDispatchEditField.DRIVER);
+
+        boolean updateVehicle = fields.contains(
+                AdminDispatchEditField.VEHICLE);
+
+        int updatedChallanCount = 0;
+
+        if (updateDriver ||
+                updateVehicle) {
+
+            Driver selectedDriver = resolveAdminDriver(
+                    request,
+                    updateDriver);
+
+            Vehicle selectedVehicle = resolveAdminVehicle(
+                    request,
+                    updateVehicle);
+
+            /*
+             * Driver and vehicle belong to the whole challan.
+             */
+            Set<String> chalaanNumbers = selectedItems.stream()
+                    .map(
+                            DispatchedItem::getChalaanNumber)
+                    .filter(
+                            Objects::nonNull)
+                    .map(
+                            String::trim)
+                    .filter(value -> !value.isBlank())
+                    .collect(
+                            Collectors.toCollection(
+                                    LinkedHashSet::new));
+
+            if (!chalaanNumbers.isEmpty()) {
+                List<DispatchedItem> chalaanItems = dispatchedRepo
+                        .findAllByChalaanNumberIn(
+                                chalaanNumbers);
+
+                applyAdminTransportFields(
+                        chalaanItems,
+                        request,
+                        fields,
+                        selectedDriver,
+                        selectedVehicle);
+
+                for (DispatchedItem item : chalaanItems) {
+
+                    affectedItems.put(
+                            item.getZohoItemId(),
+                            item);
+                }
+
+                updatedChallanCount = chalaanNumbers.size();
+            }
+
+            /*
+             * Old records may not contain a challan number.
+             * Those records are updated individually.
+             */
+            List<DispatchedItem> legacyItems = selectedItems.stream()
+                    .filter(item -> item.getChalaanNumber() == null ||
+                            item.getChalaanNumber()
+                                    .isBlank())
+                    .toList();
+
+            applyAdminTransportFields(
+                    legacyItems,
+                    request,
+                    fields,
+                    selectedDriver,
+                    selectedVehicle);
+
+            for (DispatchedItem item : legacyItems) {
+
+                affectedItems.put(
+                        item.getZohoItemId(),
+                        item);
+            }
+        }
+
+        List<DispatchedItem> savedItems = dispatchedRepo.saveAll(
+                affectedItems.values());
+
+        String cleanAdmin = cleanNullable(
+                adminUsername);
+
+        if (cleanAdmin == null) {
+            cleanAdmin = "SYSTEM";
+        }
+
+        String editedFields = fields.stream()
+                .map(
+                        Enum::name)
+                .sorted()
+                .collect(
+                        Collectors.joining(
+                                ", "));
+
+        for (DispatchedItem item : savedItems) {
+
+            String status = item.getStatus() == null
+                    ? ""
+                    : item.getStatus()
+                            .name();
+
+            auditLogService.log(
+                    item.getZohoItemId(),
+                    "ADMIN DETAILS EDITED: "
+                            + editedFields,
+                    cleanAdmin,
+                    "ADMIN");
+
+            activityLogService.log(
+                    item.getZohoItemId(),
+                    "ADMIN DETAILS EDITED",
+                    cleanAdmin,
+                    "ADMIN",
+                    status,
+                    status,
+                    item.getGatePassNumber());
+        }
+
+        LocalDateTime responseTime = LocalDateTime.now(
+                APP_ZONE);
+
+        List<AdminUpdatedDispatchRow> updatedRows = savedItems.stream()
+                .map(item -> toAdminUpdatedDispatchRow(
+                        item,
+                        responseTime))
+                .toList();
+
+        return new AdminBulkDispatchEditResponse(
+                requestedIds.size(),
+                savedItems.size(),
+                updatedChallanCount,
+                updatedRows);
+    }
+
+    private void applyAdminSelectedItemFields(
+            Collection<DispatchedItem> items,
+            AdminBulkDispatchEditRequest request,
+            Set<AdminDispatchEditField> fields) {
+
+        for (DispatchedItem item : items) {
+
+            if (fields.contains(
+                    AdminDispatchEditField.ITEM_NAME)) {
+
+                item.setName(
+                        cleanNullable(
+                                request.itemName()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.PD_NO)) {
+
+                item.setPdNo(
+                        cleanNullable(
+                                request.pdNo()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DRAWING_NO)) {
+
+                item.setDrawingNo(
+                        cleanNullable(
+                                request.drawingNo()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.CLIENT_NAME)) {
+
+                item.setClientName(
+                        cleanNullable(
+                                request.clientName()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.CLIENT_ADDRESS)) {
+
+                item.setClientAddress(
+                        cleanNullable(
+                                request.clientAddress()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.FLOOR)) {
+
+                item.setFloor(
+                        cleanNullable(
+                                request.floor()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DESCRIPTION)) {
+
+                item.setDescription(
+                        cleanNullable(
+                                request.description()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.WEIGHT)) {
+
+                item.setWeight(
+                        cleanNullable(
+                                request.weight()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DIMENSIONS)) {
+
+                item.setDimensions(
+                        cleanNullable(
+                                request.dimensions()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.REMARKS)) {
+
+                item.setRemarks(
+                        cleanNullable(
+                                request.remarks()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.STICKER_LOCATION)) {
+
+                /*
+                 * location is the sticker/display location.
+                 * currentLocationCode remains the actual operational
+                 * movement location.
+                 */
+                item.setLocation(
+                        cleanNullable(
+                                request.stickerLocation()));
+            }
+        }
+    }
+
+    private void synchronizeAdminPacketItemFields(
+            Collection<DispatchedItem> selectedItems,
+            AdminBulkDispatchEditRequest request,
+            Set<AdminDispatchEditField> fields) {
+
+        Set<UUID> packetItemIds = selectedItems.stream()
+                .map(
+                        DispatchedItem::getPacketItemId)
+                .filter(
+                        Objects::nonNull)
+                .collect(
+                        Collectors.toCollection(
+                                LinkedHashSet::new));
+
+        if (packetItemIds.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, PacketItem> packetItemMap = new LinkedHashMap<>();
+
+        packetItemRepo
+                .findAllById(
+                        packetItemIds)
+                .forEach(packetItem -> packetItemMap.put(
+                        packetItem.getId(),
+                        packetItem));
+
+        for (DispatchedItem dispatchedItem : selectedItems) {
+
+            UUID packetItemId = dispatchedItem
+                    .getPacketItemId();
+
+            if (packetItemId == null) {
+                continue;
+            }
+
+            PacketItem packetItem = packetItemMap.get(
+                    packetItemId);
+
+            /*
+             * Legacy dispatch rows can remain editable even where
+             * their original PacketItem no longer exists.
+             */
+            if (packetItem == null) {
+                continue;
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.ITEM_NAME)) {
+
+                packetItem.setItemName(
+                        cleanNullable(
+                                request.itemName()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.PD_NO)) {
+
+                packetItem.setPdNo(
+                        cleanNullable(
+                                request.pdNo()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DRAWING_NO)) {
+
+                packetItem.setDrawingNo(
+                        cleanNullable(
+                                request.drawingNo()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.CLIENT_NAME)) {
+
+                packetItem.setClientName(
+                        cleanNullable(
+                                request.clientName()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.CLIENT_ADDRESS)) {
+
+                packetItem.setClientAddress(
+                        cleanNullable(
+                                request.clientAddress()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.FLOOR)) {
+
+                packetItem.setFloor(
+                        cleanNullable(
+                                request.floor()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DESCRIPTION)) {
+
+                packetItem.setDescription(
+                        cleanNullable(
+                                request.description()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.WEIGHT)) {
+
+                packetItem.setWeight(
+                        cleanNullable(
+                                request.weight()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.DIMENSIONS)) {
+
+                packetItem.setDimensions(
+                        cleanNullable(
+                                request.dimensions()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.REMARKS)) {
+
+                packetItem.setRemarks(
+                        cleanNullable(
+                                request.remarks()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.STICKER_LOCATION)) {
+
+                packetItem.setLocation(
+                        cleanNullable(
+                                request.stickerLocation()));
+            }
+        }
+
+        packetItemRepo.saveAll(
+                packetItemMap.values());
+    }
+
+    private Driver resolveAdminDriver(
+            AdminBulkDispatchEditRequest request,
+            boolean updateDriver) {
+
+        if (!updateDriver ||
+                request.driverId() == null) {
+
+            return null;
+        }
+
+        return driverRepository
+                .findById(
+                        request.driverId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Selected driver was not found"));
+    }
+
+    private Vehicle resolveAdminVehicle(
+            AdminBulkDispatchEditRequest request,
+            boolean updateVehicle) {
+
+        if (!updateVehicle ||
+                request.vehicleId() == null) {
+
+            return null;
+        }
+
+        return vehicleRepository
+                .findById(
+                        request.vehicleId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Selected vehicle was not found"));
+    }
+
+    private void applyAdminTransportFields(
+            Collection<DispatchedItem> items,
+            AdminBulkDispatchEditRequest request,
+            Set<AdminDispatchEditField> fields,
+            Driver selectedDriver,
+            Vehicle selectedVehicle) {
+
+        if (items == null ||
+                items.isEmpty()) {
+
+            return;
+        }
+
+        String manualDriverName = cleanDriverName(
+                request.driverName());
+
+        String manualVehicleNumber = cleanVehicleNumber(
+                request.vehicleNumber());
+
+        for (DispatchedItem item : items) {
+
+            if (fields.contains(
+                    AdminDispatchEditField.DRIVER)) {
+
+                if (selectedDriver != null) {
+                    item.setDriverId(
+                            selectedDriver.getId());
+
+                    item.setDriverName(
+                            cleanDriverName(
+                                    selectedDriver.getName()));
+                } else {
+                    /*
+                     * Null driverId supports manual legacy names and
+                     * intentional clearing.
+                     */
+                    item.setDriverId(null);
+
+                    item.setDriverName(
+                            manualDriverName);
+                }
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.VEHICLE)) {
+
+                if (selectedVehicle != null) {
+                    item.setVehicleId(
+                            selectedVehicle.getId());
+
+                    item.setVehicleNumber(
+                            cleanVehicleNumber(
+                                    selectedVehicle
+                                            .getVehicleNumber()));
+                } else {
+                    /*
+                     * Null vehicleId supports manual legacy numbers
+                     * and intentional clearing.
+                     */
+                    item.setVehicleId(null);
+
+                    item.setVehicleNumber(
+                            manualVehicleNumber);
+                }
+            }
+        }
+    }
+
+    private AdminUpdatedDispatchRow toAdminUpdatedDispatchRow(
+            DispatchedItem item,
+            LocalDateTime updatedAt) {
+
+        return new AdminUpdatedDispatchRow(
+                item.getZohoItemId(),
+                item.getName(),
+                item.getName(),
+                item.getPdNo(),
+                item.getDrawingNo(),
+                item.getClientName(),
+                item.getClientAddress(),
+                item.getFloor(),
+                item.getDescription(),
+                item.getWeight(),
+                item.getDimensions(),
+                item.getRemarks(),
+                item.getLocation(),
+                item.getCurrentLocationCode(),
+                item.getDriverName(),
+                item.getVehicleNumber(),
+                item.getChalaanNumber(),
+                item.getStatus() == null
+                        ? ""
+                        : item.getStatus().name(),
+                updatedAt);
+    }
+
+    /*
+     * ============================================================
+     * INTERNAL HELPERS
+     * ============================================================
+     */
+
+    private String cleanNullable(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim();
+
+        return clean.isBlank()
+                ? null
+                : clean;
+    }
+
+    private String cleanDriverName(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim()
+                .replaceAll(
+                        "\\s+",
+                        " ");
+
+        return clean.isBlank()
+                ? null
+                : clean;
+    }
+
+    private String cleanVehicleNumber(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim()
+                .toUpperCase()
+                .replaceAll(
+                        "\\s+",
+                        "");
+
+        return clean.isBlank()
+                ? null
+                : clean;
+    }
+
+    private String cleanLocationCode(
+            String value) {
+
         if (value == null) {
             return null;
         }
 
         String text = value.trim()
                 .toUpperCase()
-                .replaceAll("\\s+", "");
+                .replaceAll(
+                        "\\s+",
+                        "");
 
-        if (text.isBlank()
-                || "NULL".equals(text)
-                || "UNDEFINED".equals(text)
-                || "-".equals(text)) {
+        if (text.isBlank() ||
+                "NULL".equals(text) ||
+                "UNDEFINED".equals(text) ||
+                "-".equals(text)) {
+
             return null;
         }
 
         return text;
     }
 
-    private void assertAllowedWarehouseCode(String warehouseCode) {
-        if (!FIXED_WAREHOUSE_CODES.contains(warehouseCode)) {
+    private void assertAllowedWarehouseCode(
+            String warehouseCode) {
+
+        if (!FIXED_WAREHOUSE_CODES.contains(
+                warehouseCode)) {
+
             throw new RuntimeException(
-                    "Invalid warehouse code: " + warehouseCode);
+                    "Invalid warehouse code: "
+                            + warehouseCode);
         }
     }
 
-    private void assertAllowedFromLocation(String fromLocation) {
-        if (!FIXED_FROM_LOCATION_CODES.contains(fromLocation)) {
+    private void assertAllowedFromLocation(
+            String fromLocation) {
+
+        if (!FIXED_FROM_LOCATION_CODES.contains(
+                fromLocation)) {
+
             throw new RuntimeException(
-                    "Invalid from location: " + fromLocation);
+                    "Invalid from location: "
+                            + fromLocation);
         }
     }
 
-    private String warehouseShortCode(String warehouseCode) {
-        String clean = cleanLocationCode(warehouseCode);
+    private String warehouseShortCode(
+            String warehouseCode) {
 
-        if (clean == null || clean.isBlank()) {
+        String clean = cleanLocationCode(
+                warehouseCode);
+
+        if (clean == null ||
+                clean.isBlank()) {
+
             return "WH";
         }
 
@@ -1286,11 +2481,16 @@ public class DispatchedItemService {
             case "AL-P2" -> "ALP2";
             case "AL-P3" -> "ALP3";
             case "AL-P4" -> "ALP4";
-            default -> clean.replaceAll("[^A-Z0-9]", "");
+            default ->
+                clean.replaceAll(
+                        "[^A-Z0-9]",
+                        "");
         };
     }
 
-    private String normalizeGatePass(String value) {
+    private String normalizeGatePass(
+            String value) {
+
         if (value == null) {
             return "";
         }
@@ -1300,17 +2500,25 @@ public class DispatchedItemService {
                 .toUpperCase()
                 .replace("–", "-")
                 .replace("—", "-")
-                .replaceAll("\\s+", "")
-                .replaceAll("[^A-Z0-9-]", "");
+                .replaceAll(
+                        "\\s+",
+                        "")
+                .replaceAll(
+                        "[^A-Z0-9-]",
+                        "");
     }
 
-    private String firstNonBlank(String... values) {
+    private String firstNonBlank(
+            String... values) {
+
         if (values == null) {
             return "";
         }
 
         for (String value : values) {
-            if (value != null && !value.trim().isBlank()) {
+            if (value != null &&
+                    !value.trim().isBlank()) {
+
                 return value.trim();
             }
         }
@@ -1323,48 +2531,34 @@ public class DispatchedItemService {
             String location,
             String fgZoneCode) {
 
-        if (item == null || item.getPacketItemId() == null) {
+        if (item == null ||
+                item.getPacketItemId() == null) {
+
             return;
         }
 
-        packetItemRepo.findById(item.getPacketItemId())
+        packetItemRepo
+                .findById(
+                        item.getPacketItemId())
                 .ifPresent(packetItem -> {
-                    if (location != null && !location.isBlank()) {
-                        packetItem.setCurrentLocationCode(location);
-                        packetItem.setLocation(location);
+                    if (location != null &&
+                            !location.isBlank()) {
+
+                        packetItem.setCurrentLocationCode(
+                                location);
+
+                        packetItem.setLocation(
+                                location);
                     }
 
-                    packetItem.setWarehouseCode(item.getWarehouseCode());
-                    packetItem.setFgZoneCode(fgZoneCode);
+                    packetItem.setWarehouseCode(
+                            item.getWarehouseCode());
 
-                    packetItemRepo.save(packetItem);
+                    packetItem.setFgZoneCode(
+                            fgZoneCode);
+
+                    packetItemRepo.save(
+                            packetItem);
                 });
     }
-
-    private static final java.time.ZoneId APP_ZONE = java.time.ZoneId.of("Asia/Kolkata");
-
-    private static final java.util.Set<String> FIXED_WAREHOUSE_CODES = java.util.Set.of(
-            "BLS-WH-1",
-            "RTP-WH-2",
-            "AL-P1",
-            "AL-P2",
-            "AL-P3",
-            "AL-P4");
-
-    private static final java.util.Set<String> FIXED_FROM_LOCATION_CODES = java.util.Set.of(
-            "AL-P1-FG-1-A",
-            "AL-P1-FG-1-B",
-            "AL-P1-FG-1-C",
-            "AL-P2-FG-2",
-            "AL-P3-FG-3",
-            "AL-P4-FG-4",
-            "AL-P1",
-            "AL-P2",
-            "AL-P3",
-            "AL-P4",
-            "AL-P1-PKD-1",
-            "AL-P2-PKD-2",
-            "AL-P3-PKD-3",
-            "AL-P4-PKD-4");
-
 }

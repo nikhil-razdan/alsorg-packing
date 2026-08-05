@@ -15,30 +15,40 @@ function WarehousePage() {
 	const [search, setSearch] = useState("");
 	const [gatePassPopup, setGatePassPopup] = useState(null);
 	const [approveGatePass, setApproveGatePass] = useState({});
+
 	const {
 		user,
-		role,
+		hasRole,
 	} = useAuth();
 
-	const canOpenWarehouse = canOpenWarehousePage(user);
+	const canOpenWarehouse =
+		canOpenWarehousePage(user);
 
-	const cleanRole = normalizeRole(role);
+	const isAdmin =
+		hasRole("ADMIN");
 
-	const isAdmin = cleanRole === "ADMIN";
-	const isDispatch = cleanRole === "DISPATCH";
-	const isPacking = cleanRole === "PACKING";
-	const isWarehouse = cleanRole === "WAREHOUSE";
+	const isDispatch =
+		hasRole("DISPATCH");
 
-	const hasWarehouseAccess =
-		Boolean(
-			user?.warehouseAccess ||
-			user?.warehousePageAccess ||
-			user?.hasWarehouseAccess ||
-			user?.canOpenWarehousePage
-		);
+	const isPacking =
+		hasRole("PACKING");
 
+	const isWarehouse =
+		hasRole("WAREHOUSE");
+
+	const isLogistics =
+		hasRole("LOGISTICS");
+
+	/*
+	 * Important:
+	 * warehouseAccess permits opening the page.
+	 *
+	 * It must not grant warehouse approval authority.
+	 * Backend approval is ADMIN or WAREHOUSE only.
+	 */
 	const canApproveWarehouse =
-		isAdmin || isWarehouse || hasWarehouseAccess;
+		isAdmin ||
+		isWarehouse;
 
 	const WAREHOUSE_OPTIONS = [
 		"BLS-WH-1",

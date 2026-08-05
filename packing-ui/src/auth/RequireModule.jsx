@@ -20,6 +20,7 @@ export default function RequireModule({
 
 	const {
 		user,
+		roles,
 		modules,
 		authLoading,
 		isLoggedIn,
@@ -44,10 +45,19 @@ export default function RequireModule({
 
 	const accessUser = {
 		...(user || {}),
+
 		role:
 			role ||
 			user?.role ||
 			"",
+
+		roles:
+			Array.isArray(roles)
+				? roles
+				: Array.isArray(user?.roles)
+					? user.roles
+					: [],
+
 		modules:
 			Array.isArray(modules)
 				? modules

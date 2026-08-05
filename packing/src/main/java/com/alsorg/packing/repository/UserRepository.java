@@ -1,31 +1,44 @@
 package com.alsorg.packing.repository;
 
-import java.util.Optional;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.alsorg.packing.domain.users.User;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository
+                extends JpaRepository<User, Long> {
 
-    Optional<User> findByUsername(String username);
+        Optional<User> findByUsername(
+                        String username);
 
-    Optional<User> findByUsernameIgnoreCase(String username);
+        Optional<User> findByUsernameIgnoreCase(
+                        String username);
 
-    boolean existsByUsername(String username);
+        boolean existsByUsername(
+                        String username);
 
-    boolean existsByUsernameIgnoreCase(String username);
+        boolean existsByUsernameIgnoreCase(
+                        String username);
 
-    List<User> findAllByRoleIgnoreCase(String role);
+        @Query("""
+                        select distinct user
+                        from User user
+                        left join user.roles assignedRole
+                        where lower(user.role) = lower(:role)
+                           or lower(assignedRole) = lower(:role)
+                        """)
+        List<User> findAllByRoleIgnoreCase(
+                        @Param("role") String role);
 
-    boolean existsByUsernameAndIdNot(
-            String username,
-            Long id
-    );
+        boolean existsByUsernameAndIdNot(
+                        String username,
+                        Long id);
 
-    boolean existsByUsernameIgnoreCaseAndIdNot(
-            String username,
-            Long id
-    );
+        boolean existsByUsernameIgnoreCaseAndIdNot(
+                        String username,
+                        Long id);
 }

@@ -1,6 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
-
+import {
+	canOpenWarehousePageFromUser,
+} from "../utils/warehouseAccess";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
@@ -15,26 +17,25 @@ function Sidebar() {
 	const [collapsed, setCollapsed] = useState(false);
 
 	const {
-		role,
-		warehouseAccess,
+		user,
+		hasRole,
+		hasAnyRole,
 	} = useAuth();
 
-	const cleanRole = String(role || "")
-		.replace(/^ROLE_/i, "")
-		.trim()
-		.toUpperCase();
-
-	const hasWarehousePageAccess =
-		warehouseAccess === true ||
-		String(warehouseAccess || "")
-			.trim()
-			.toLowerCase() === "true";
-
 	const canOpenWarehouse =
-		cleanRole === "ADMIN" ||
-		cleanRole === "DISPATCH" ||
-		cleanRole === "WAREHOUSE" ||
-		hasWarehousePageAccess;
+		canOpenWarehousePageFromUser(
+			user
+		);
+
+	const isHardwareOnly =
+		hasRole("HARDWARE_PACKING") &&
+		!hasAnyRole(
+			"ADMIN",
+			"PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS"
+		);
 
 	const links = [
 		{
@@ -57,7 +58,7 @@ function Sidebar() {
 		{
 			path: "/packflow/zoho-items",
 			label:
-				cleanRole === "HARDWARE_PACKING"
+				isHardwareOnly
 					? "Hardware Inventory"
 					: "Inventory Items",
 			roles: [
@@ -124,8 +125,9 @@ function Sidebar() {
 				return link.customAccess;
 			}
 
-			return link.roles.includes(
-				cleanRole
+			return link.roles.some(
+				(allowedRole) =>
+					hasRole(allowedRole)
 			);
 		});
 

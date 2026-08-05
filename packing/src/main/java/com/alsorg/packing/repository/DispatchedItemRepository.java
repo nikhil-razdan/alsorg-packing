@@ -363,4 +363,10 @@ public interface DispatchedItemRepository
                         """)
         Page<DispatchedItem> findLegacyVisiblePage(
                         Pageable pageable);
+
+        List<DispatchedItem> findAllByZohoItemIdIn(
+                        Collection<String> zohoItemIds);
+
+        List<DispatchedItem> findAllByChalaanNumberIn(
+                        Collection<String> challanNumbers);
 }

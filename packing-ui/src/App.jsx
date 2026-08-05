@@ -25,7 +25,8 @@ import useViewportHeight from "./useViewportHeight";
 
 function PackFlowDefaultRedirect() {
 	const {
-		role,
+		hasRole,
+		hasAnyRole,
 		authLoading,
 	} = useAuth();
 
@@ -33,18 +34,29 @@ function PackFlowDefaultRedirect() {
 		return null;
 	}
 
-	if (role === "HARDWARE_PACKING") {
-		return (
-			<Navigate
-				to="/packflow/zoho-items"
-				replace
-			/>
+	/*
+	 * Redirect only hardware-only users.
+	 *
+	 * PACKING + HARDWARE_PACKING users must still be
+	 * able to open the normal dashboard.
+	 */
+	const isHardwareOnly =
+		hasRole("HARDWARE_PACKING") &&
+		!hasAnyRole(
+			"ADMIN",
+			"PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS"
 		);
-	}
 
 	return (
 		<Navigate
-			to="/packflow/dashboard"
+			to={
+				isHardwareOnly
+					? "/packflow/zoho-items"
+					: "/packflow/dashboard"
+			}
 			replace
 		/>
 	);
@@ -54,7 +66,8 @@ function PackFlowDashboardAccess({
 	children,
 }) {
 	const {
-		role,
+		hasRole,
+		hasAnyRole,
 		authLoading,
 	} = useAuth();
 
@@ -62,7 +75,17 @@ function PackFlowDashboardAccess({
 		return null;
 	}
 
-	if (role === "HARDWARE_PACKING") {
+	const isHardwareOnly =
+		hasRole("HARDWARE_PACKING") &&
+		!hasAnyRole(
+			"ADMIN",
+			"PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS"
+		);
+
+	if (isHardwareOnly) {
 		return (
 			<Navigate
 				to="/packflow/zoho-items"

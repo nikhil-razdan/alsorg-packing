@@ -62,7 +62,8 @@ public class UserService {
         public User createUser(
                         String username,
                         String password,
-                        String role,
+                        String primaryRole,
+                        Set<String> roles,
                         Set<String> plantCodes,
                         UUID driverId,
                         boolean warehouseAccess,
@@ -77,7 +78,9 @@ public class UserService {
 
                 validatePassword(cleanPassword);
 
-                String cleanRole = normalizeRole(role);
+                RoleAssignment roleAssignment = normalizeRoleAssignment(
+                                primaryRole,
+                                roles);
 
                 if (repo.existsByUsernameIgnoreCase(
                                 cleanUsername)) {
@@ -91,12 +94,15 @@ public class UserService {
                 user.setUsername(cleanUsername);
                 user.setPassword(
                                 encoder.encode(cleanPassword));
-                user.setRole(cleanRole);
+                user.setRole(
+                                roleAssignment.primaryRole());
+                user.setRoles(
+                                roleAssignment.roles());
                 user.setEnabled(true);
 
                 applyAccessFields(
                                 user,
-                                cleanRole,
+                                roleAssignment.roles(),
                                 plantCodes,
                                 driverId,
                                 warehouseAccess,
@@ -116,7 +122,8 @@ public class UserService {
         public User updateUser(
                         Long id,
                         String username,
-                        String role,
+                        String primaryRole,
+                        Set<String> roles,
                         Set<String> plantCodes,
                         UUID driverId,
                         boolean warehouseAccess,
@@ -130,7 +137,9 @@ public class UserService {
                                 username,
                                 "Username is required.");
 
-                String cleanRole = normalizeRole(role);
+                RoleAssignment roleAssignment = normalizeRoleAssignment(
+                                primaryRole,
+                                roles);
 
                 if (repo.existsByUsernameIgnoreCaseAndIdNot(
                                 cleanUsername,
@@ -141,11 +150,14 @@ public class UserService {
                 }
 
                 user.setUsername(cleanUsername);
-                user.setRole(cleanRole);
+                user.setRole(
+                                roleAssignment.primaryRole());
+                user.setRoles(
+                                roleAssignment.roles());
 
                 applyAccessFields(
                                 user,
-                                cleanRole,
+                                roleAssignment.roles(),
                                 plantCodes,
                                 driverId,
                                 warehouseAccess,
@@ -162,13 +174,13 @@ public class UserService {
                                                 () -> new RuntimeException(
                                                                 "User not found"));
 
-                if ("ADMIN".equalsIgnoreCase(
-                                user.getRole())) {
+                if (hasRole(user, "ADMIN")) {
                         long activeAdminCount = repo.findAll()
                                         .stream()
                                         .filter(User::isEnabled)
-                                        .filter(existing -> "ADMIN".equalsIgnoreCase(
-                                                        existing.getRole()))
+                                        .filter(existing -> hasRole(
+                                                        existing,
+                                                        "ADMIN"))
                                         .count();
 
                         if (activeAdminCount <= 1) {
@@ -205,14 +217,14 @@ public class UserService {
 
         private void applyAccessFields(
                         User user,
-                        String role,
+                        Set<String> roles,
                         Set<String> plantCodes,
                         UUID driverId,
                         boolean requestedWarehouseAccess,
                         Set<String> modules) {
                 Set<String> cleanModules = cleanModules(
                                 modules,
-                                role);
+                                roles);
 
                 user.setModules(cleanModules);
 
@@ -220,58 +232,50 @@ public class UserService {
 
                 boolean finalWarehouseAccess;
 
-                if ("ADMIN".equals(role) ||
-                                "WAREHOUSE".equals(role)) {
+                /*
+                 * ADMIN, WAREHOUSE and DISPATCH already receive warehouse
+                 * access from the permission service.
+                 */
+                if (containsRole(roles, "ADMIN") ||
+                                containsRole(roles, "WAREHOUSE") ||
+                                containsRole(roles, "DISPATCH")) {
                         finalWarehouseAccess = true;
-
-                } else if ("HARDWARE_PACKING".equals(role) ||
-                                "DRIVER".equals(role)) {
+                } else if (!packFlowAssigned ||
+                                (!containsRole(roles, "PACKING") &&
+                                                !containsRole(roles, "LOGISTICS"))) {
                         finalWarehouseAccess = false;
-
                 } else {
-                        /*
-                         * Warehouse permission has no meaning for a user
-                         * who does not have PackFlow access.
-                         */
-                        finalWarehouseAccess = packFlowAssigned &&
-                                        requestedWarehouseAccess;
+                        finalWarehouseAccess = requestedWarehouseAccess;
                 }
 
                 user.setWarehouseAccess(
                                 finalWarehouseAccess);
 
-                if ("DRIVER".equals(role)) {
+                /*
+                 * DRIVER may be assigned together with another PackFlow role.
+                 * In that case driver profile and plant access may both apply.
+                 */
+                if (containsRole(roles, "DRIVER")) {
                         if (driverId == null) {
                                 throw new RuntimeException(
-                                                "Driver profile required for DRIVER user");
+                                                "Driver profile required when DRIVER role is assigned");
                         }
 
                         user.setDriverId(driverId);
-                        user.setPlantCodes(
-                                        new LinkedHashSet<>());
-                        user.setPlantCode(null);
-
-                        return;
+                } else {
+                        user.setDriverId(null);
                 }
-
-                user.setDriverId(null);
 
                 Set<String> cleanPlants = cleanPlantCodes(plantCodes);
 
-                /*
-                 * BOMFlow performs product costing and does not require
-                 * operational plant ownership.
-                 *
-                 * Every non-admin PackFlow or MatFlow operational user
-                 * requires explicit plant access.
-                 */
-                boolean plantRequired = !"ADMIN".equals(role) &&
-                                !role.startsWith("BOMFLOW_");
+                boolean plantRequired = roles.stream()
+                                .anyMatch(
+                                                this::roleRequiresPlantAccess);
 
                 if (plantRequired &&
                                 cleanPlants.isEmpty()) {
                         throw new RuntimeException(
-                                        "Plant access is required for this user");
+                                        "Plant access is required for the selected role combination");
                 }
 
                 user.setPlantCodes(cleanPlants);
@@ -280,10 +284,67 @@ public class UserService {
                         user.setPlantCode(null);
                 } else {
                         user.setPlantCode(
-                                        cleanPlants
-                                                        .iterator()
-                                                        .next());
+                                        cleanPlants.iterator().next());
                 }
+        }
+
+        private RoleAssignment normalizeRoleAssignment(
+                        String primaryRole,
+                        Set<String> requestedRoles) {
+                String cleanPrimaryRole = normalizeRole(primaryRole);
+
+                Set<String> cleanRoles = new LinkedHashSet<>();
+
+                if (requestedRoles != null) {
+                        for (String role : requestedRoles) {
+                                if (role == null ||
+                                                role.isBlank()) {
+                                        continue;
+                                }
+
+                                cleanRoles.add(
+                                                normalizeRole(role));
+                        }
+                }
+
+                /*
+                 * Backward compatibility for old frontend/API clients.
+                 */
+                if (cleanRoles.isEmpty()) {
+                        cleanRoles.add(cleanPrimaryRole);
+                }
+
+                if (!cleanRoles.contains(cleanPrimaryRole)) {
+                        throw new RuntimeException(
+                                        "Primary role must be included in assigned roles");
+                }
+
+                /*
+                 * ADMIN already means complete application access and therefore
+                 * must remain an exclusive role.
+                 */
+                if (cleanRoles.contains("ADMIN") &&
+                                cleanRoles.size() > 1) {
+                        throw new RuntimeException(
+                                        "ADMIN cannot be combined with another role");
+                }
+
+                /*
+                 * Current requested scope:
+                 * multiple-role assignment is supported only inside PackFlow.
+                 *
+                 * BOMFlow and MatFlow remain controlled single-role profiles.
+                 */
+                if (cleanRoles.size() > 1 &&
+                                cleanRoles.stream()
+                                                .anyMatch(role -> !isPackFlowRole(role))) {
+                        throw new RuntimeException(
+                                        "Multiple roles can currently be assigned only within PackFlow");
+                }
+
+                return new RoleAssignment(
+                                cleanPrimaryRole,
+                                cleanRoles);
         }
 
         private Set<String> cleanPlantCodes(
@@ -300,8 +361,7 @@ public class UserService {
                                 continue;
                         }
 
-                        String normalized = code.trim()
-                                        .toUpperCase();
+                        String normalized = code.trim().toUpperCase();
 
                         if (!plantLocationService.isValidPlant(
                                         normalized)) {
@@ -318,7 +378,7 @@ public class UserService {
 
         private Set<String> cleanModules(
                         Set<String> modules,
-                        String role) {
+                        Set<String> roles) {
                 Set<String> clean = new LinkedHashSet<>();
 
                 if (modules != null) {
@@ -328,8 +388,7 @@ public class UserService {
                                         continue;
                                 }
 
-                                String normalized = module.trim()
-                                                .toUpperCase();
+                                String normalized = module.trim().toUpperCase();
 
                                 if (!ALLOWED_MODULES.contains(
                                                 normalized)) {
@@ -342,56 +401,77 @@ public class UserService {
                         }
                 }
 
+                Set<String> requiredModules = defaultModulesForRoles(roles);
+
                 if (clean.isEmpty()) {
-                        clean.addAll(
-                                        defaultModulesForRole(role));
+                        clean.addAll(requiredModules);
                 }
 
-                /*
-                 * Every departmental role must retain access to its
-                 * natural module.
-                 */
-                if (role.startsWith("BOMFLOW_") &&
-                                !clean.contains("BOMFLOW")) {
+                if (!clean.containsAll(requiredModules)) {
                         throw new RuntimeException(
-                                        "BOMFlow role requires BOMFlow module access");
-                }
-
-                if (role.startsWith("MATFLOW_") &&
-                                !clean.contains("MATFLOW")) {
-                        throw new RuntimeException(
-                                        "MatFlow role requires MatFlow module access");
-                }
-
-                if (isPackFlowRole(role) &&
-                                !clean.contains("PACKFLOW")) {
-                        throw new RuntimeException(
-                                        "PackFlow role requires PackFlow module access");
+                                        "Selected modules do not contain every module required by the assigned roles");
                 }
 
                 return clean;
         }
 
-        private Set<String> defaultModulesForRole(
-                        String role) {
+        private Set<String> defaultModulesForRoles(
+                        Set<String> roles) {
                 Set<String> modules = new LinkedHashSet<>();
 
-                if ("ADMIN".equals(role)) {
+                if (containsRole(roles, "ADMIN")) {
                         modules.add("PACKFLOW");
                         modules.add("BOMFLOW");
                         modules.add("MATFLOW");
 
-                } else if (isPackFlowRole(role)) {
-                        modules.add("PACKFLOW");
+                        return modules;
+                }
 
-                } else if (role.startsWith("BOMFLOW_")) {
-                        modules.add("BOMFLOW");
+                for (String role : roles) {
+                        if (isPackFlowRole(role)) {
+                                modules.add("PACKFLOW");
+                        }
 
-                } else if (role.startsWith("MATFLOW_")) {
-                        modules.add("MATFLOW");
+                        if (role.startsWith("BOMFLOW_")) {
+                                modules.add("BOMFLOW");
+                        }
+
+                        if (role.startsWith("MATFLOW_")) {
+                                modules.add("MATFLOW");
+                        }
                 }
 
                 return modules;
+        }
+
+        private boolean roleRequiresPlantAccess(
+                        String role) {
+                return !"ADMIN".equals(role) &&
+                                !"DRIVER".equals(role) &&
+                                !role.startsWith("BOMFLOW_");
+        }
+
+        private boolean containsRole(
+                        Set<String> roles,
+                        String requestedRole) {
+                if (roles == null ||
+                                requestedRole == null) {
+                        return false;
+                }
+
+                return roles.stream()
+                                .anyMatch(role -> requestedRole.equalsIgnoreCase(
+                                                role));
+        }
+
+        private boolean hasRole(
+                        User user,
+                        String requestedRole) {
+                return user != null &&
+                                user.getEffectiveRoles()
+                                                .stream()
+                                                .anyMatch(role -> requestedRole.equalsIgnoreCase(
+                                                                role));
         }
 
         private boolean isPackFlowRole(
@@ -409,10 +489,10 @@ public class UserService {
                 String cleanRole = cleanRequired(
                                 role,
                                 "Role is required.")
+                                .replace("ROLE_", "")
                                 .toUpperCase();
 
-                if (!ALLOWED_ROLES.contains(
-                                cleanRole)) {
+                if (!ALLOWED_ROLES.contains(cleanRole)) {
                         throw new RuntimeException(
                                         "Invalid role: " +
                                                         cleanRole);
@@ -450,5 +530,10 @@ public class UserService {
                 }
 
                 return clean;
+        }
+
+        private record RoleAssignment(
+                        String primaryRole,
+                        Set<String> roles) {
         }
 }

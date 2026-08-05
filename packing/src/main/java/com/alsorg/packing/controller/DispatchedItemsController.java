@@ -2,17 +2,27 @@ package com.alsorg.packing.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.Map;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
+
+import jakarta.validation.Valid;
+
 import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
+import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditRequest;
+import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditResponse;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+
 import java.util.Set;
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
@@ -691,6 +701,27 @@ public class DispatchedItemsController {
                                 item.getQuantity(),
                                 item.getDispatchedAt(),
                                 item.getDispatchedBy());
+        }
+
+        @PutMapping("/admin/bulk-edit")
+        public ResponseEntity<AdminBulkDispatchEditResponse> adminBulkEdit(
+                        @Valid @RequestBody AdminBulkDispatchEditRequest request,
+
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService
+                                .getCurrentUserFromAuth(
+                                                auth);
+
+                if (!currentUserService.isAdmin(user)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "Only ADMIN can edit dispatch item details");
+                }
+
+                return ResponseEntity.ok(
+                                dispatchedItemService.adminBulkEdit(
+                                                request,
+                                                user.getUsername()));
         }
 
         private String firstNonBlank(

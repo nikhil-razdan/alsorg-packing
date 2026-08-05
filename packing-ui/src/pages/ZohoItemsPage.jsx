@@ -1524,30 +1524,37 @@ function ZohoItemsPage() {
 
   const {
     user: currentUser,
-    role: authRole,
+    hasRole,
+    hasAnyRole,
   } = useAuth();
 
-  const cleanRole = String(
-    currentUser?.role ||
-    authRole ||
-    ""
-  )
-    .replace(/^ROLE_/i, "")
-    .trim()
-    .toUpperCase();
-
   const isAdmin =
-    cleanRole === "ADMIN";
+    hasRole("ADMIN");
 
   const isPacking =
-    cleanRole === "PACKING";
+    hasRole("PACKING");
 
   const isHardwarePacking =
-    cleanRole ===
-    "HARDWARE_PACKING";
+    hasRole("HARDWARE_PACKING");
 
   const isDispatch =
-    cleanRole === "DISPATCH";
+    hasRole("DISPATCH");
+
+  const isWarehouse =
+    hasRole("WAREHOUSE");
+
+  const isLogistics =
+    hasRole("LOGISTICS");
+
+  const isHardwareOnly =
+    isHardwarePacking &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
 
   /*
    * Normal inventory write operations:
