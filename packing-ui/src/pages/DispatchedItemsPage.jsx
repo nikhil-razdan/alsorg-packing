@@ -38,6 +38,9 @@ import {
 	fetchCustomChallans,
 	downloadCustomChallan,
 } from "../dashboard/api/logisticsApi";
+import {
+	fetchDispatchReport,
+} from "../dashboard/api/dashboardApi";
 
 import { useAuth } from "../auth/AuthContext";
 
@@ -4531,6 +4534,223 @@ function DispatchedItemsPage() {
 			: cleanValue;
 	};
 
+	const normalizeDispatchVehicleNumber = (
+		value
+	) => {
+		const cleanValue =
+			String(value ?? "")
+				.trim()
+				.replace(/\s+/g, " ")
+				.toUpperCase();
+
+		const placeholderValues =
+			new Set([
+				"",
+				"-",
+				"—",
+				"N/A",
+				"NA",
+				"NONE",
+				"NULL",
+				"UNDEFINED",
+			]);
+
+		return placeholderValues.has(
+			cleanValue
+		)
+			? ""
+			: cleanValue;
+	};
+
+	const extractDispatchReportRows = (
+		payload
+	) => {
+		if (Array.isArray(payload)) {
+			return payload;
+		}
+
+		if (
+			Array.isArray(
+				payload?.rows
+			)
+		) {
+			return payload.rows;
+		}
+
+		if (
+			Array.isArray(
+				payload?.content
+			)
+		) {
+			return payload.content;
+		}
+
+		if (
+			Array.isArray(
+				payload?.items
+			)
+		) {
+			return payload.items;
+		}
+
+		if (
+			Array.isArray(
+				payload?.data
+			)
+		) {
+			return payload.data;
+		}
+
+		return [];
+	};
+
+	const formatDispatchReportLocalDateTime =
+		(date) => {
+			const pad = (value) =>
+				String(value)
+					.padStart(
+						2,
+						"0"
+					);
+
+			return [
+				date.getFullYear(),
+				"-",
+				pad(
+					date.getMonth() +
+					1
+				),
+				"-",
+				pad(
+					date.getDate()
+				),
+				"T",
+				pad(
+					date.getHours()
+				),
+				":",
+				pad(
+					date.getMinutes()
+				),
+				":",
+				pad(
+					date.getSeconds()
+				),
+			].join("");
+		};
+
+	const getDispatchReportLookupRange =
+		(sourceRows) => {
+			const timestamps =
+				(
+					Array.isArray(
+						sourceRows
+					)
+						? sourceRows
+						: []
+				)
+					.map((row) => {
+						const rawValue =
+							row?.dispatchedAt ||
+							row?.dispatchDate ||
+							row?.createdAt ||
+							null;
+
+						if (!rawValue) {
+							return null;
+						}
+
+						const parsedDate =
+							new Date(
+								rawValue
+							);
+
+						return Number.isNaN(
+							parsedDate.getTime()
+						)
+							? null
+							: parsedDate.getTime();
+					})
+					.filter(
+						(value) =>
+							Number.isFinite(
+								value
+							)
+					);
+
+			const earliestDate =
+				timestamps.length >
+					0
+					? new Date(
+						Math.min(
+							...timestamps
+						)
+					)
+					: new Date(
+						2000,
+						0,
+						1
+					);
+
+			/*
+			 * Include one day before the earliest record so
+			 * timezone or midnight boundaries cannot exclude it.
+			 */
+			earliestDate.setDate(
+				earliestDate.getDate() -
+				1
+			);
+
+			earliestDate.setHours(
+				0,
+				0,
+				0,
+				0
+			);
+
+			const latestRecordDate =
+				timestamps.length >
+					0
+					? new Date(
+						Math.max(
+							...timestamps
+						)
+					)
+					: new Date();
+
+			const upperDate =
+				new Date(
+					Math.max(
+						Date.now(),
+						latestRecordDate.getTime()
+					)
+				);
+
+			upperDate.setDate(
+				upperDate.getDate() +
+				1
+			);
+
+			upperDate.setHours(
+				23,
+				59,
+				59,
+				999
+			);
+
+			return {
+				from:
+					formatDispatchReportLocalDateTime(
+						earliestDate
+					),
+
+				to:
+					formatDispatchReportLocalDateTime(
+						upperDate
+					),
+			};
+		};
+
 	const normalizeDispatchLookupId = (value) => {
 		return String(value ?? "")
 			.trim()
@@ -4557,61 +4777,129 @@ function DispatchedItemsPage() {
 			.join("|");
 	};
 
-	const buildDispatchDriverLookupFromHistory = (
-		challans
-	) => {
-		const nextLookup =
-			new Map();
+	const buildDispatchAssociationFromReportRow =
+		(reportRow) => {
+			const rawDriver =
+				reportRow?.driverName ||
+				reportRow?.assignedDriverName ||
+				reportRow?.driver?.name ||
+				(
+					typeof reportRow?.driver ===
+						"string"
+						? reportRow.driver
+						: ""
+				);
 
-		(Array.isArray(challans) ? challans : []).forEach(
-			(challan) => {
-				const driverName =
+			const rawVehicle =
+				reportRow?.vehicleNumber ||
+				reportRow?.vehicleNo ||
+				reportRow?.assignedVehicleNumber ||
+				reportRow?.vehicle?.vehicleNumber ||
+				(
+					typeof reportRow?.vehicle ===
+						"string"
+						? reportRow.vehicle
+						: ""
+				);
+
+			return {
+				driverName:
 					normalizeDispatchDriverName(
-						challan?.driverName
-					);
+						rawDriver
+					),
 
-				/*
-				 * A challan without a real driver name
-				 * cannot contribute to the lookup.
-				 */
-				if (!driverName) {
-					return;
-				}
+				vehicleNumber:
+					normalizeDispatchVehicleNumber(
+						rawVehicle
+					),
 
-				const challanNumber =
+				challanNumber:
 					normalizeDispatchLookupChallan(
-						challan?.challanNumber ||
-						challan?.chalaanNumber ||
-						challan?.dispatchChallanNumber
-					);
+						reportRow?.challanNumber ||
+						reportRow?.chalaanNumber ||
+						reportRow?.dispatchChallanNumber
+					),
+			};
+		};
 
-				/*
-				 * Challan-level lookup.
-				 */
-				if (challanNumber) {
-					nextLookup.set(
-						`CHALLAN:${challanNumber}`,
-						driverName
-					);
-				}
+	const mergeDispatchExportAssociation = (
+		lookup,
+		key,
+		nextAssociation
+	) => {
+		const cleanKey =
+			String(key || "")
+				.trim();
 
-				const historyItems =
-					Array.isArray(challan?.items)
-						? challan.items
-						: [];
+		if (!cleanKey) {
+			return;
+		}
 
-				historyItems.forEach((item) => {
-					/*
-					 * Backend currently returns zohoItemId.
-					 * The additional fields safely support
-					 * legacy response versions.
-					 */
+		const previousAssociation =
+			lookup.get(
+				cleanKey
+			) || {};
+
+		lookup.set(
+			cleanKey,
+			{
+				driverName:
+					nextAssociation
+						?.driverName ||
+					previousAssociation
+						?.driverName ||
+					"",
+
+				vehicleNumber:
+					nextAssociation
+						?.vehicleNumber ||
+					previousAssociation
+						?.vehicleNumber ||
+					"",
+
+				challanNumber:
+					nextAssociation
+						?.challanNumber ||
+					previousAssociation
+						?.challanNumber ||
+					"",
+			}
+		);
+	};
+
+	const buildDispatchLookupFromReport =
+		(reportRows) => {
+			const lookup =
+				new Map();
+
+			(
+				Array.isArray(
+					reportRows
+				)
+					? reportRows
+					: []
+			).forEach(
+				(reportRow) => {
+					const association =
+						buildDispatchAssociationFromReportRow(
+							reportRow
+						);
+
 					const possibleItemIds = [
-						item?.zohoItemId,
-						item?.dispatchedItemId,
-						item?.itemId,
-						item?.packetItemId,
-						item?.id,
+						reportRow
+							?.zohoItemId,
+
+						reportRow
+							?.dispatchedItemId,
+
+						reportRow
+							?.itemId,
+
+						reportRow
+							?.packetItemId,
+
+						reportRow
+							?.id,
 					]
 						.map(
 							normalizeDispatchLookupId
@@ -4620,108 +4908,84 @@ function DispatchedItemsPage() {
 
 					possibleItemIds.forEach(
 						(itemId) => {
-							nextLookup.set(
+							mergeDispatchExportAssociation(
+								lookup,
 								`ITEM:${itemId}`,
-								driverName
+								association
 							);
 						}
 					);
 
-					/*
-					 * Secondary fallback for old records where
-					 * the item identifier may have changed.
-					 */
-					const fingerprint =
-						buildDispatchHistoryItemFingerprint(
-							item
-						);
-
 					if (
-						challanNumber &&
-						fingerprint.replace(
-							/\|/g,
-							""
-						)
+						association
+							.challanNumber
 					) {
-						nextLookup.set(
-							`CHALLAN_DETAIL:${challanNumber}|${fingerprint}`,
-							driverName
+						mergeDispatchExportAssociation(
+							lookup,
+							`CHALLAN:${association.challanNumber}`,
+							association
 						);
 					}
-				});
-			}
-		);
-
-		return nextLookup;
-	};
-
-	const loadDispatchExportDriverLookup = async () => {
-		const response =
-			await authFetch(
-				`${API_BASE_URL}/api/dispatched/challans`,
-				{
-					method: "GET",
-					headers: {
-						Accept: "application/json",
-					},
 				}
 			);
 
-		if (!response.ok) {
-			const message =
-				await readResponseError(
-					response,
-					"Failed to load challan history drivers"
+			return lookup;
+		};
+
+	const loadDispatchExportDriverLookup =
+		async (
+			sourceRows = rows
+		) => {
+			const {
+				from,
+				to,
+			} =
+				getDispatchReportLookupRange(
+					sourceRows
 				);
 
-			throw new Error(message);
-		}
+			/*
+			 * Reuse the exact report source that already
+			 * returns driverName and vehicleNumber correctly
+			 * on the Dashboard Reports page.
+			 */
+			const payload =
+				await fetchDispatchReport(
+					from,
+					to
+				);
 
-		const payload =
-			await response.json();
+			const reportRows =
+				extractDispatchReportRows(
+					payload
+				);
 
-		const challans =
-			Array.isArray(payload)
-				? payload
-				: Array.isArray(payload?.content)
-					? payload.content
-					: Array.isArray(payload?.items)
-						? payload.items
-						: [];
+			const freshLookup =
+				buildDispatchLookupFromReport(
+					reportRows
+				);
 
-		const freshLookup =
-			buildDispatchDriverLookupFromHistory(
-				challans
+			setDispatchExportDriverLookup(
+				freshLookup
 			);
 
-		/*
-		 * Update preview state.
-		 */
-		setDispatchExportDriverLookup(
-			freshLookup
-		);
+			/*
+			 * Return the fresh Map immediately because React
+			 * state updates are asynchronous.
+			 */
+			return freshLookup;
+		};
 
-		/*
-		 * Critical:
-		 * Return the fresh Map so Excel does not have to
-		 * wait for React state to update.
-		 */
-		return freshLookup;
-	};
-
-	const getDispatchExportDriverName = (
+	const getDispatchExportAssociation = (
 		row,
-		driverLookup = dispatchExportDriverLookup
+		driverLookup =
+			dispatchExportDriverLookup
 	) => {
 		const activeLookup =
 			driverLookup instanceof Map
 				? driverLookup
 				: dispatchExportDriverLookup;
 
-		/*
-		 * 1. Match the Dispatch row ID against the exact
-		 * challan-history item zohoItemId.
-		 */
 		const possibleRowIds = [
 			row?.zohoItemId,
 			row?.dispatchedItemId,
@@ -4729,71 +4993,96 @@ function DispatchedItemsPage() {
 			row?.itemId,
 			row?.id,
 		]
-			.map(normalizeDispatchLookupId)
+			.map(
+				normalizeDispatchLookupId
+			)
 			.filter(Boolean);
 
-		for (const rowId of possibleRowIds) {
-			const historyDriver =
-				normalizeDispatchDriverName(
-					activeLookup.get(
-						`ITEM:${rowId}`
-					)
+		/*
+		 * First preference:
+		 * exact item-level report match.
+		 */
+		for (
+			const itemId of
+			possibleRowIds
+		) {
+			const association =
+				activeLookup.get(
+					`ITEM:${itemId}`
 				);
 
-			if (historyDriver) {
-				return historyDriver;
+			if (
+				association?.driverName ||
+				association?.vehicleNumber
+			) {
+				return association;
 			}
 		}
 
 		/*
-		 * 2. Match through the challan number.
+		 * Second preference:
+		 * challan-level match.
+		 *
+		 * Every item belonging to the same challan receives
+		 * the same driver and vehicle.
 		 */
 		const challanNumber =
 			normalizeDispatchLookupChallan(
-				getDispatchChallanNo(row)
+				getDispatchChallanNo(
+					row
+				)
 			);
 
 		if (challanNumber) {
-			const challanDriver =
-				normalizeDispatchDriverName(
-					activeLookup.get(
-						`CHALLAN:${challanNumber}`
-					)
+			const association =
+				activeLookup.get(
+					`CHALLAN:${challanNumber}`
 				);
 
-			if (challanDriver) {
-				return challanDriver;
-			}
-
-			/*
-			 * 3. Legacy fallback using challan plus item details.
-			 */
-			const fingerprint =
-				buildDispatchHistoryItemFingerprint(
-					row
-				);
-
-			const detailDriver =
-				normalizeDispatchDriverName(
-					activeLookup.get(
-						`CHALLAN_DETAIL:${challanNumber}|${fingerprint}`
-					)
-				);
-
-			if (detailDriver) {
-				return detailDriver;
+			if (
+				association?.driverName ||
+				association?.vehicleNumber
+			) {
+				return association;
 			}
 		}
 
+		return null;
+	};
+
+	const getDispatchExportDriverName = (
+		row,
+		driverLookup =
+			dispatchExportDriverLookup
+	) => {
+		const association =
+			getDispatchExportAssociation(
+				row,
+				driverLookup
+			);
+
+		if (
+			association
+				?.driverName
+		) {
+			return association
+				.driverName;
+		}
+
 		/*
-		 * 4. Use Dispatch row metadata only when challan
-		 * history did not provide a result.
+		 * Safe fallback for records that already contain
+		 * driver metadata directly.
 		 */
 		return normalizeDispatchDriverName(
 			row?.driverName ||
 			row?.assignedDriverName ||
 			row?.driver?.name ||
-			row?.driver
+			(
+				typeof row?.driver ===
+					"string"
+					? row.driver
+					: ""
+			)
 		);
 	};
 	/*
@@ -5217,45 +5506,53 @@ function DispatchedItemsPage() {
 		});
 	};
 
-	const openDispatchExportModal = () => {
-		setDispatchExportStatus(
-			normalizeStatusSelection(
-				statusFilter
-			)
-		);
-
-		setDispatchExportFormat(
-			"EXCEL"
-		);
-
-		setDispatchExportOpen(
-			true
-		);
-
-		/*
-		 * Load driver names for modal preview.
-		 * Export will independently verify them again.
-		 */
-		loadDispatchExportDriverLookup()
-			.catch((error) => {
-				console.error(
-					"Unable to load preview driver names:",
-					error
+	const openDispatchExportModal =
+		() => {
+			const selectedStatuses =
+				normalizeStatusSelection(
+					statusFilter
 				);
-			});
-	};
 
-	const dispatchExportPreviewRows = useMemo(() => {
-		return buildDispatchExportRows(
-			dispatchExportStatus
-		);
-	}, [
-		rows,
-		search,
-		dispatchExportStatus,
-		dispatchExportFormat,
-		dispatchExportDriverLookup,
-	]);
+			setDispatchExportStatus(
+				selectedStatuses
+			);
+
+			setDispatchExportFormat(
+				"EXCEL"
+			);
+
+			setDispatchExportOpen(
+				true
+			);
+
+			const scopedRows =
+				getDispatchExportSourceRows(
+					selectedStatuses
+				);
+
+			loadDispatchExportDriverLookup(
+				scopedRows
+			)
+				.catch((error) => {
+					console.error(
+						"Unable to load Dispatch Report driver associations:",
+						error
+					);
+				});
+		};
+
+	const dispatchExportPreviewRows =
+		useMemo(() => {
+			return buildDispatchExportRows(
+				dispatchExportStatus
+			);
+		}, [
+			rows,
+			search,
+			plantFilter,
+			dispatchExportStatus,
+			dispatchExportDriverLookup,
+		]);
 
 	const formatDispatchPreviewValue = (
 		value
@@ -6144,8 +6441,15 @@ function DispatchedItemsPage() {
 				 * Do not rely only on React state because setState
 				 * is asynchronous.
 				 */
+				const scopedSourceRows =
+					getDispatchExportSourceRows(
+						dispatchExportStatus
+					);
+
 				const freshDriverLookup =
-					await loadDispatchExportDriverLookup();
+					await loadDispatchExportDriverLookup(
+						scopedSourceRows
+					);
 
 				const exportRows =
 					buildDispatchExportRows(
