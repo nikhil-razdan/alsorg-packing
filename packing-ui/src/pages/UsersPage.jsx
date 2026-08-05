@@ -1967,14 +1967,34 @@ function UserRow({
 			</Box>
 
 			<Box sx={{ minWidth: 0 }}>
-				<Chip
-					icon={roleIcon(cleanRole)}
-					label={meta.label}
-					size="small"
-					sx={roleChipSx(
-						meta.accent
-					)}
-				/>
+				<Box sx={chipWrapSx}>
+					{(
+						roles.length > 0
+							? roles
+							: [primaryRole]
+					).map((assignedRole) => {
+						const assignedMeta =
+							roleMeta(
+								assignedRole
+							);
+
+						return (
+							<Chip
+								key={assignedRole}
+								icon={roleIcon(
+									assignedRole
+								)}
+								label={
+									assignedMeta.label
+								}
+								size="small"
+								sx={roleChipSx(
+									assignedMeta.accent
+								)}
+							/>
+						);
+					})}
+				</Box>
 
 				<Box sx={moduleChipRowSx}>
 					{modules.map((module) => (
@@ -2260,7 +2280,7 @@ function UserEditorDrawer({
 
 					<AccessProfileSelector
 						roles={selectedRoles}
-						onRoleChange={
+						onRolesChange={
 							onRolesChange
 						}
 					/>
@@ -2291,22 +2311,30 @@ function UserEditorDrawer({
 						</Typography>
 
 						<Box sx={chipWrapSx}>
-							{roles.map((role) => {
-								const meta =
-									roleMeta(role);
+							{selectedRoles.map(
+								(assignedRole) => {
+									const assignedMeta =
+										roleMeta(
+											assignedRole
+										);
 
-								return (
-									<Chip
-										key={role}
-										icon={roleIcon(role)}
-										label={meta.label}
-										size="small"
-										sx={roleChipSx(
-											meta.accent
-										)}
-									/>
-								);
-							})}
+									return (
+										<Chip
+											key={assignedRole}
+											icon={roleIcon(
+												assignedRole
+											)}
+											label={
+												assignedMeta.label
+											}
+											size="small"
+											sx={roleChipSx(
+												assignedMeta.accent
+											)}
+										/>
+									);
+								}
+							)}
 						</Box>
 
 						<Box sx={moduleChipRowSx}>

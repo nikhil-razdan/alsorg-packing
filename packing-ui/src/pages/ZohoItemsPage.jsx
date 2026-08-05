@@ -23,6 +23,9 @@ import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
 import ExcelJS from "exceljs";
+import {
+  userRoleList,
+} from "../utils/permissions";
 
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -1524,9 +1527,28 @@ function ZohoItemsPage() {
 
   const {
     user: currentUser,
+    authLoading,
     hasRole,
     hasAnyRole,
   } = useAuth();
+
+  const effectiveRoles =
+    useMemo(
+      () =>
+        userRoleList(
+          currentUser
+        ),
+      [currentUser]
+    );
+
+  const effectiveRoleKey =
+    useMemo(
+      () =>
+        [...effectiveRoles]
+          .sort()
+          .join("|"),
+      [effectiveRoles]
+    );
 
   const isAdmin =
     hasRole("ADMIN");
@@ -2559,11 +2581,7 @@ function ZohoItemsPage() {
 
       let finalRows = [];
 
-      /*
-       * HARDWARE PACKING:
-       * Load only the user's hardware packets.
-       */
-      if (isHardwarePacking) {
+      if (isHardwareOnly) {
         const hardwareRows =
           await fetchInventoryRowsFromPath(
             "/api/hardware-packets",
@@ -2576,11 +2594,10 @@ function ZohoItemsPage() {
           );
       }
 
-      /*
-       * ADMIN:
-       * Load normal and hardware inventory simultaneously.
-       */
-      else if (isAdmin) {
+      else if (
+        isAdmin ||
+        isHardwarePacking
+      ) {
         let loadedNormalRows = [];
         let loadedHardwareRows = [];
 
@@ -5986,13 +6003,21 @@ function ZohoItemsPage() {
   };
 
   useEffect(() => {
-    if (!cleanRole) {
+    if (
+      authLoading ||
+      !currentUser?.id ||
+      !effectiveRoleKey
+    ) {
       return;
     }
 
     fetchItems();
     fetchMyPlants();
-  }, [cleanRole]);
+  }, [
+    authLoading,
+    currentUser?.id,
+    effectiveRoleKey,
+  ]);
 
   useEffect(() => {
     /*
@@ -6098,15 +6123,19 @@ function ZohoItemsPage() {
 
             <div>
               <div style={logo}>
-                {isHardwarePacking
+                {isHardwareOnly
                   ? "Hardware Packet Inventory"
-                  : "Inventory Items"}
+                  : isHardwarePacking
+                    ? "Inventory & Hardware Packets"
+                    : "Inventory Items"}
               </div>
 
               <div style={subtitle}>
-                {isHardwarePacking
+                {isHardwareOnly
                   ? "Create hardware packets, manage hardware contents and generate stickers"
-                  : "Manage packed inventory, packets and stickers"}
+                  : isHardwarePacking
+                    ? "Manage normal packed inventory and hardware packets"
+                    : "Manage packed inventory, packets and stickers"}
               </div>
             </div>
           </Box>
@@ -7587,7 +7616,7 @@ function ZohoItemsPage() {
             </>
           )}
         </InventorySidePanel>
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventorySidePanel
             open={createOpen}
             onClose={() => setCreateOpen(false)}
@@ -7658,7 +7687,7 @@ function ZohoItemsPage() {
             </Button>
           </InventorySidePanel>
         )}
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventoryModal
             open={detailsPopup}
             onClose={() => setDetailsPopup(false)}
@@ -7807,7 +7836,7 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventoryModal
             open={customCreateOpen}
             onClose={() => setCustomCreateOpen(false)}
@@ -7969,7 +7998,7 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventoryModal
             open={addMoreOpen}
             onClose={() => setAddMoreOpen(false)}
@@ -8151,7 +8180,7 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventoryModal
             open={customAddOpen}
             onClose={() => setCustomAddOpen(false)}
@@ -8303,7 +8332,7 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
-        {!isHardwarePacking && (
+        {canCreateNormalPackets && (
           <InventoryModal
             open={editOpen}
             onClose={() => setEditOpen(false)}
@@ -8408,7 +8437,7 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
-        {!isHardwarePacking && (
+        {canViewGeneratedHistory && (
           <InventoryModal
             open={generatedHistoryOpen}
             onClose={closeGeneratedHistoryModal}
