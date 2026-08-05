@@ -3292,6 +3292,8 @@ function DispatchedItemsPage() {
 	const scanTimerRef = useRef(null);
 	const dispatchFetchRequestRef = useRef(0);
 	const dispatchFetchAbortRef = useRef(null);
+	const [dispatchTripStep, setDispatchTripStep] =
+		useState("DETAILS");
 
 	const [dispatchLoadProgress, setDispatchLoadProgress] =
 		useState({
@@ -9867,21 +9869,52 @@ function DispatchedItemsPage() {
 		qrCart = [],
 		title = "",
 	}) => {
+		const cleanItemIds =
+			Array.from(
+				new Set(
+					(Array.isArray(itemIds)
+						? itemIds
+						: []
+					)
+						.map((id) =>
+							String(id || "")
+								.trim()
+						)
+						.filter(Boolean)
+				)
+			);
+
 		setDispatchTripContext({
 			mode,
-			itemIds,
-			scanTexts,
-			qrCart,
+			itemIds: cleanItemIds,
+			scanTexts:
+				Array.isArray(scanTexts)
+					? scanTexts
+					: [],
+			qrCart:
+				Array.isArray(qrCart)
+					? qrCart
+					: [],
 			title,
 		});
 
 		setDispatchTripForm({
 			driverId: "",
 			vehicleId: "",
-			dispatchTime: getNowDateTimeLocal(),
+			dispatchTime:
+				getNowDateTimeLocal(),
 		});
 
-		setDispatchTripOpen(true);
+		/*
+		 * Always start from the input screen.
+		 */
+		setDispatchTripStep(
+			"DETAILS"
+		);
+
+		setDispatchTripOpen(
+			true
+		);
 	};
 
 	const submitDispatchTrip = async () => {
@@ -9975,6 +10008,209 @@ function DispatchedItemsPage() {
 			setDispatchTripLoading(false);
 		}
 	};
+
+	const submitDispatchTrip =
+		async () => {
+			/*
+			 * Prevent accidental direct submission from the
+			 * first step.
+			 */
+			if (
+				dispatchTripStep !==
+				"REVIEW"
+			) {
+				openDispatchTripReview();
+				return;
+			}
+
+			const selectedDispatchTime =
+				String(
+					dispatchTripForm.dispatchTime ||
+					""
+				).trim();
+
+			if (!selectedDispatchTime) {
+				alert(
+					"Please select challan date and time"
+				);
+
+				setDispatchTripStep(
+					"DETAILS"
+				);
+
+				return;
+			}
+
+			try {
+				setDispatchTripLoading(
+					true
+				);
+
+				const finalItemIds =
+					Array.from(
+						new Set(
+							(
+								Array.isArray(
+									dispatchTripContext.itemIds
+								)
+									? dispatchTripContext.itemIds
+									: []
+							)
+								.map((id) =>
+									String(
+										id || ""
+									).trim()
+								)
+								.filter(Boolean)
+						)
+					);
+
+				if (
+					finalItemIds.length ===
+					0
+				) {
+					throw new Error(
+						"No items selected for challan"
+					);
+				}
+
+				if (
+					dispatchTripContext.mode ===
+					"QR_BULK"
+				) {
+					const qrCart =
+						Array.isArray(
+							dispatchTripContext.qrCart
+						)
+							? dispatchTripContext.qrCart
+							: [];
+
+					const missingZoneItem =
+						qrCart.find((item) => {
+							return (
+								item?.moveToFgRequired &&
+								isScanFgZoneRequired(
+									item
+								) &&
+								!String(
+									item?.fgZoneCode ||
+									""
+								).trim()
+							);
+						});
+
+					if (missingZoneItem) {
+						throw new Error(
+							`Select FG zone for ${missingZoneItem.itemName ||
+							"selected item"
+							}`
+						);
+					}
+
+					await moveQrCartItemsToFgIfNeeded(
+						qrCart
+					);
+				}
+
+				const result =
+					await createDispatchChallan({
+						itemIds:
+							finalItemIds,
+
+						driverId:
+							String(
+								dispatchTripForm.driverId ||
+								""
+							).trim() ||
+							null,
+
+						vehicleId:
+							String(
+								dispatchTripForm.vehicleId ||
+								""
+							).trim() ||
+							null,
+
+						dispatchTime:
+							selectedDispatchTime,
+
+						/*
+						 * This controls the PDF response behaviour
+						 * of your existing backend action.
+						 *
+						 * It is not the new frontend review step.
+						 */
+						preview:
+							true,
+					});
+
+				const blob =
+					result?.blob;
+
+				if (!blob) {
+					throw new Error(
+						"No challan PDF generated"
+					);
+				}
+
+				const url =
+					URL.createObjectURL(
+						blob
+					);
+
+				showChalaanPreview(
+					url,
+					result?.challanNo ||
+					finalItemIds[0] ||
+					"CHALAAN"
+				);
+
+				setDispatchTripOpen(
+					false
+				);
+
+				setDispatchTripStep(
+					"DETAILS"
+				);
+
+				setDispatchTripContext({
+					mode: "",
+					itemIds: [],
+					scanTexts: [],
+					qrCart: [],
+					title: "",
+				});
+
+				setScanCart([]);
+				setScannerText("");
+				setQrDispatchOpen(false);
+				setSelectionModel([]);
+
+				/*
+				 * The final creation can affect several fields:
+				 * status, challan number, driver, vehicle and time.
+				 *
+				 * Therefore the complete refresh is appropriate here,
+				 * unlike a simple READY status change.
+				 */
+				await fetchData();
+
+			} catch (error) {
+				console.error(
+					"Dispatch challan creation failed:",
+					error
+				);
+
+				alert(
+					error?.message ||
+					"Challan generation failed"
+				);
+			} finally {
+				setDispatchTripLoading(
+					false
+				);
+			}
+		};
 
 	const resetCustomChallanForm = () => {
 		setCustomChallanForm({
@@ -10772,6 +11008,249 @@ function DispatchedItemsPage() {
 		customChallanPageNo,
 		customChallanPageSize,
 	]);
+
+	const selectedDispatchDriver =
+		useMemo(() => {
+			const selectedId =
+				String(
+					dispatchTripForm.driverId ||
+					""
+				).trim();
+
+			if (!selectedId) {
+				return null;
+			}
+
+			return (
+				logisticsDrivers.find(
+					(driver) =>
+						String(
+							driver?.id || ""
+						).trim() ===
+						selectedId
+				) || null
+			);
+		}, [
+			dispatchTripForm.driverId,
+			logisticsDrivers,
+		]);
+
+	const selectedDispatchVehicle =
+		useMemo(() => {
+			const selectedId =
+				String(
+					dispatchTripForm.vehicleId ||
+					""
+				).trim();
+
+			if (!selectedId) {
+				return null;
+			}
+
+			return (
+				logisticsVehicles.find(
+					(vehicle) =>
+						String(
+							vehicle?.id || ""
+						).trim() ===
+						selectedId
+				) || null
+			);
+		}, [
+			dispatchTripForm.vehicleId,
+			logisticsVehicles,
+		]);
+
+	const dispatchTripPreviewItems =
+		useMemo(() => {
+			const itemIds =
+				Array.isArray(
+					dispatchTripContext.itemIds
+				)
+					? dispatchTripContext.itemIds
+					: [];
+
+			const qrItems =
+				Array.isArray(
+					dispatchTripContext.qrCart
+				)
+					? dispatchTripContext.qrCart
+					: [];
+
+			const rowLookup =
+				new Map(
+					(rows || [])
+						.filter(
+							(row) =>
+								row?.zohoItemId
+						)
+						.map((row) => [
+							String(
+								row.zohoItemId
+							).trim(),
+							row,
+						])
+				);
+
+			const qrLookup =
+				new Map(
+					qrItems
+						.filter(
+							(item) =>
+								item?.zohoItemId
+						)
+						.map((item) => [
+							String(
+								item.zohoItemId
+							).trim(),
+							item,
+						])
+				);
+
+			return itemIds.map(
+				(itemId, index) => {
+					const cleanId =
+						String(
+							itemId || ""
+						).trim();
+
+					const row =
+						rowLookup.get(
+							cleanId
+						) ||
+						qrLookup.get(
+							cleanId
+						) ||
+						{};
+
+					return {
+						...row,
+
+						zohoItemId:
+							cleanId,
+
+						previewSerial:
+							index + 1,
+
+						itemName:
+							row?.name ||
+							row?.itemName ||
+							row?.productName ||
+							"Unnamed Item",
+
+						sku:
+							row?.sku ||
+							"—",
+
+						pdNo:
+							row?.pdNo ||
+							"—",
+
+						drawingNo:
+							row?.drawingNo ||
+							"—",
+
+						clientName:
+							row?.clientName ||
+							"—",
+
+						clientAddress:
+							row?.clientAddress ||
+							"—",
+
+						plantCode:
+							row?.plantCode ||
+							"—",
+
+						location:
+							row?.currentLocationCode ||
+							row?.location ||
+							"—",
+
+						status:
+							row?.status ||
+							"—",
+					};
+				}
+			);
+		}, [
+			rows,
+			dispatchTripContext.itemIds,
+			dispatchTripContext.qrCart,
+		]);
+
+	const openDispatchTripReview =
+		() => {
+			const selectedDispatchTime =
+				String(
+					dispatchTripForm.dispatchTime ||
+					""
+				).trim();
+
+			if (!selectedDispatchTime) {
+				alert(
+					"Please select challan date and time"
+				);
+
+				return;
+			}
+
+			const itemIds =
+				Array.isArray(
+					dispatchTripContext.itemIds
+				)
+					? dispatchTripContext.itemIds
+						.filter(Boolean)
+					: [];
+
+			if (itemIds.length === 0) {
+				alert(
+					"No items selected for challan"
+				);
+
+				return;
+			}
+
+			if (
+				dispatchTripContext.mode ===
+				"QR_BULK"
+			) {
+				const qrCart =
+					Array.isArray(
+						dispatchTripContext.qrCart
+					)
+						? dispatchTripContext.qrCart
+						: [];
+
+				const missingZoneItem =
+					qrCart.find((item) => {
+						return (
+							item?.moveToFgRequired &&
+							isScanFgZoneRequired(
+								item
+							) &&
+							!String(
+								item?.fgZoneCode ||
+								""
+							).trim()
+						);
+					});
+
+				if (missingZoneItem) {
+					alert(
+						`Select FG zone for ${missingZoneItem.itemName ||
+						"selected item"
+						}`
+					);
+
+					return;
+				}
+			}
+
+			setDispatchTripStep(
+				"REVIEW"
+			);
+		};
 
 	useEffect(() => {
 		setCustomChallanPageNo(1);
@@ -15371,304 +15850,767 @@ function DispatchedItemsPage() {
 							</Box>
 
 							<Box sx={modalContentSx}>
+								{/* STEP INDICATOR */}
 								<Box
 									sx={{
-										p: 1.6,
+										display: "grid",
+										gridTemplateColumns:
+											"1fr 1fr",
+										gap: 1,
 										mb: 2,
-										borderRadius: "12px",
-										background: "rgba(255,255,255,.035)",
-										border: "1px solid rgba(255,255,255,.07)",
+										p: 0.8,
+										borderRadius: "14px",
+										background:
+											"rgba(255,255,255,.035)",
+										border:
+											"1px solid rgba(255,255,255,.07)",
 									}}
 								>
-									<Box sx={{ color: "#fff", fontWeight: 900 }}>
-										Items:{" "}
-										{dispatchTripContext.mode === "QR_SINGLE"
-											? 1
-											: dispatchTripContext.mode === "QR_BULK"
-												? dispatchTripContext.scanTexts.length
-												: dispatchTripContext.itemIds.length}
-									</Box>
-
 									<Box
 										sx={{
-											color: "#94a3b8",
+											height: 38,
+											display: "flex",
+											alignItems: "center",
+											justifyContent:
+												"center",
+											gap: 0.8,
+											borderRadius: "10px",
+											color:
+												dispatchTripStep ===
+													"DETAILS"
+													? "#fff"
+													: "#94a3b8",
 											fontSize: 12,
-											fontWeight: 700,
-											mt: 0.5,
+											fontWeight: 900,
+											background:
+												dispatchTripStep ===
+													"DETAILS"
+													? "rgba(59,130,246,.20)"
+													: "transparent",
+											border:
+												dispatchTripStep ===
+													"DETAILS"
+													? "1px solid rgba(96,165,250,.30)"
+													: "1px solid transparent",
 										}}
 									>
-										Mode: {dispatchTripContext.mode || "—"}
-									</Box>
-								</Box>
-
-								<Box sx={{ mb: 2 }}>
-									<Box sx={dispatchTripFieldLabelSx}>
-										Challan Date & Time
-									</Box>
-
-									<TextField
-										fullWidth
-										type="datetime-local"
-										value={dispatchTripForm.dispatchTime}
-										onChange={(e) =>
-											setDispatchTripForm((prev) => ({
-												...prev,
-												dispatchTime: e.target.value,
-											}))
-										}
-										sx={dateTimeFieldSx}
-									/>
-								</Box>
-
-								<Box sx={{ mb: 2 }}>
-									<Box sx={dispatchTripFieldLabelSx}>
-										Driver
-
-										<Box
-											component="span"
-											sx={{
-												ml: 0.7,
-												color: "#64748b",
-												fontSize: 11,
-												fontWeight: 750,
-											}}
-										>
-											(Optional)
-										</Box>
-									</Box>
-
-									<Box
-										component="select"
-										value={
-											dispatchTripForm.driverId || ""
-										}
-										onChange={(event) => {
-											const selectedValue =
-												String(
-													event.target.value || ""
-												);
-
-											/*
-											 * This special option opens the create-driver modal.
-											 * It must never be saved in dispatchTripForm.
-											 */
-											if (
-												selectedValue ===
-												CREATE_NEW_DRIVER_OPTION
-											) {
-												openCreateDriverModal(
-													MASTER_CREATE_TARGET
-														.DISPATCH_CHALLAN
-												);
-
-												return;
-											}
-
-											/*
-											 * Blank value means no driver.
-											 * A normal value is the Driver UUID.
-											 */
-											setDispatchTripForm(
-												(previous) => ({
-													...previous,
-													driverId: selectedValue,
-												})
-											);
-										}}
-										sx={dispatchTripNativeSelectSx}
-									>
-										<option value="">
-											No Driver / Leave Blank
-										</option>
-
-										<option
-											value={CREATE_NEW_DRIVER_OPTION}
-										>
-											＋ Create New Driver
-										</option>
-
-										{logisticsDrivers.map(
-											(driver) => {
-												const driverId =
-													String(
-														driver?.id || ""
-													).trim();
-
-												const driverName =
-													String(
-														driver?.name || ""
-													).trim();
-
-												if (
-													!driverId ||
-													!driverName
-												) {
-													return null;
-												}
-
-												return (
-													<option
-														key={driverId}
-														value={driverId}
-													>
-														{driverName}
-													</option>
-												);
-											}
-										)}
+										<span>1</span>
+										Details
 									</Box>
 
 									<Box
 										sx={{
-											mt: 0.7,
-											color: "rgba(255,255,255,.42)",
-											fontSize: 11,
-											fontWeight: 650,
+											height: 38,
+											display: "flex",
+											alignItems: "center",
+											justifyContent:
+												"center",
+											gap: 0.8,
+											borderRadius: "10px",
+											color:
+												dispatchTripStep ===
+													"REVIEW"
+													? "#fff"
+													: "#94a3b8",
+											fontSize: 12,
+											fontWeight: 900,
+											background:
+												dispatchTripStep ===
+													"REVIEW"
+													? "rgba(16,185,129,.18)"
+													: "transparent",
+											border:
+												dispatchTripStep ===
+													"REVIEW"
+													? "1px solid rgba(52,211,153,.30)"
+													: "1px solid transparent",
 										}}
 									>
-										Leave blank when no driver is assigned.
+										<span>2</span>
+										Review & Confirm
 									</Box>
 								</Box>
 
-								<Box sx={{ mb: 2 }}>
-									<Box sx={dispatchTripFieldLabelSx}>
-										Vehicle
+								{dispatchTripStep ===
+									"DETAILS" && (
+										<>
+											<Box
+												sx={{
+													p: 1.6,
+													mb: 2,
+													borderRadius:
+														"12px",
+													background:
+														"rgba(255,255,255,.035)",
+													border:
+														"1px solid rgba(255,255,255,.07)",
+												}}
+											>
+												<Box
+													sx={{
+														color: "#fff",
+														fontWeight: 900,
+													}}
+												>
+													Items:{" "}
+													{
+														dispatchTripPreviewItems.length
+													}
+												</Box>
 
-										<Box
-											component="span"
-											sx={{
-												ml: 0.7,
-												color: "#64748b",
-												fontSize: 11,
-												fontWeight: 750,
-											}}
-										>
-											(Optional)
-										</Box>
-									</Box>
+												<Box
+													sx={{
+														color: "#94a3b8",
+														fontSize: 12,
+														fontWeight: 700,
+														mt: 0.5,
+													}}
+												>
+													Mode:{" "}
+													{dispatchTripContext.mode ||
+														"—"}
+												</Box>
+											</Box>
 
-									<Box
-										component="select"
-										value={
-											dispatchTripForm.vehicleId || ""
-										}
-										onChange={(event) => {
-											const selectedValue =
-												String(
-													event.target.value || ""
-												);
+											<Box sx={{ mb: 2 }}>
+												<Box
+													sx={
+														dispatchTripFieldLabelSx
+													}
+												>
+													Challan Date & Time
+												</Box>
 
-											/*
-											 * Open vehicle creation without putting the
-											 * special option into vehicleId.
-											 */
-											if (
-												selectedValue ===
-												CREATE_NEW_VEHICLE_OPTION
-											) {
-												openCreateVehicleModal(
-													MASTER_CREATE_TARGET
-														.DISPATCH_CHALLAN
-												);
+												<TextField
+													fullWidth
+													type="datetime-local"
+													value={
+														dispatchTripForm.dispatchTime
+													}
+													onChange={(event) =>
+														setDispatchTripForm(
+															(previous) => ({
+																...previous,
+																dispatchTime:
+																	event
+																		.target
+																		.value,
+															})
+														)
+													}
+													sx={dateTimeFieldSx}
+												/>
+											</Box>
 
-												return;
-											}
-
-											/*
-											 * Blank = no vehicle.
-											 * Otherwise this is the Vehicle UUID.
-											 */
-											setDispatchTripForm(
-												(previous) => ({
-													...previous,
-													vehicleId: selectedValue,
-												})
-											);
-										}}
-										sx={dispatchTripNativeSelectSx}
-									>
-										<option value="">
-											No Vehicle / Leave Blank
-										</option>
-
-										<option
-											value={CREATE_NEW_VEHICLE_OPTION}
-										>
-											＋ Create New Vehicle
-										</option>
-
-										{logisticsVehicles.map(
-											(vehicle) => {
-												const vehicleId =
-													String(
-														vehicle?.id || ""
-													).trim();
-
-												const vehicleNumber =
-													String(
-														vehicle?.vehicleNumber ||
-														""
-													).trim();
-
-												const vehicleName =
-													String(
-														vehicle?.vehicleName ||
-														""
-													).trim();
-
-												if (
-													!vehicleId ||
-													!vehicleNumber
-												) {
-													return null;
-												}
-
-												return (
-													<option
-														key={vehicleId}
-														value={vehicleId}
+											<Box sx={{ mb: 2 }}>
+												<Box
+													sx={
+														dispatchTripFieldLabelSx
+													}
+												>
+													Driver{" "}
+													<Box
+														component="span"
+														sx={{
+															ml: 0.7,
+															color: "#64748b",
+															fontSize: 11,
+															fontWeight: 750,
+														}}
 													>
-														{vehicleNumber}
-														{vehicleName
-															? ` - ${vehicleName}`
-															: ""}
-													</option>
-												);
-											}
-										)}
-									</Box>
+														(Optional)
+													</Box>
+												</Box>
 
-									<Box
-										sx={{
-											mt: 0.7,
-											color: "rgba(255,255,255,.42)",
-											fontSize: 11,
-											fontWeight: 650,
-										}}
-									>
-										Leave blank when no vehicle is assigned.
-									</Box>
-								</Box>
+												<Box
+													component="select"
+													value={
+														dispatchTripForm.driverId ||
+														""
+													}
+													onChange={(event) => {
+														const selectedValue =
+															String(
+																event.target
+																	.value ||
+																""
+															);
+
+														if (
+															selectedValue ===
+															CREATE_NEW_DRIVER_OPTION
+														) {
+															openCreateDriverModal(
+																MASTER_CREATE_TARGET
+																	.DISPATCH_CHALLAN
+															);
+
+															return;
+														}
+
+														setDispatchTripForm(
+															(previous) => ({
+																...previous,
+																driverId:
+																	selectedValue,
+															})
+														);
+													}}
+													sx={
+														dispatchTripNativeSelectSx
+													}
+												>
+													<option value="">
+														No Driver / Leave Blank
+													</option>
+
+													<option
+														value={
+															CREATE_NEW_DRIVER_OPTION
+														}
+													>
+														＋ Create New Driver
+													</option>
+
+													{logisticsDrivers.map(
+														(driver) => {
+															const driverId =
+																String(
+																	driver?.id ||
+																	""
+																).trim();
+
+															const driverName =
+																String(
+																	driver?.name ||
+																	""
+																).trim();
+
+															if (
+																!driverId ||
+																!driverName
+															) {
+																return null;
+															}
+
+															return (
+																<option
+																	key={
+																		driverId
+																	}
+																	value={
+																		driverId
+																	}
+																>
+																	{
+																		driverName
+																	}
+																</option>
+															);
+														}
+													)}
+												</Box>
+											</Box>
+
+											<Box sx={{ mb: 2 }}>
+												<Box
+													sx={
+														dispatchTripFieldLabelSx
+													}
+												>
+													Vehicle{" "}
+													<Box
+														component="span"
+														sx={{
+															ml: 0.7,
+															color: "#64748b",
+															fontSize: 11,
+															fontWeight: 750,
+														}}
+													>
+														(Optional)
+													</Box>
+												</Box>
+
+												<Box
+													component="select"
+													value={
+														dispatchTripForm.vehicleId ||
+														""
+													}
+													onChange={(event) => {
+														const selectedValue =
+															String(
+																event.target
+																	.value ||
+																""
+															);
+
+														if (
+															selectedValue ===
+															CREATE_NEW_VEHICLE_OPTION
+														) {
+															openCreateVehicleModal(
+																MASTER_CREATE_TARGET
+																	.DISPATCH_CHALLAN
+															);
+
+															return;
+														}
+
+														setDispatchTripForm(
+															(previous) => ({
+																...previous,
+																vehicleId:
+																	selectedValue,
+															})
+														);
+													}}
+													sx={
+														dispatchTripNativeSelectSx
+													}
+												>
+													<option value="">
+														No Vehicle / Leave Blank
+													</option>
+
+													<option
+														value={
+															CREATE_NEW_VEHICLE_OPTION
+														}
+													>
+														＋ Create New Vehicle
+													</option>
+
+													{logisticsVehicles.map(
+														(vehicle) => {
+															const vehicleId =
+																String(
+																	vehicle?.id ||
+																	""
+																).trim();
+
+															const vehicleNumber =
+																String(
+																	vehicle
+																		?.vehicleNumber ||
+																	""
+																).trim();
+
+															const vehicleName =
+																String(
+																	vehicle
+																		?.vehicleName ||
+																	""
+																).trim();
+
+															if (
+																!vehicleId ||
+																!vehicleNumber
+															) {
+																return null;
+															}
+
+															return (
+																<option
+																	key={
+																		vehicleId
+																	}
+																	value={
+																		vehicleId
+																	}
+																>
+																	{
+																		vehicleNumber
+																	}
+																	{vehicleName
+																		? ` - ${vehicleName}`
+																		: ""}
+																</option>
+															);
+														}
+													)}
+												</Box>
+											</Box>
+										</>
+									)}
+
+								{dispatchTripStep ===
+									"REVIEW" && (
+										<>
+											<Box
+												sx={{
+													p: 1.8,
+													mb: 2,
+													borderRadius:
+														"16px",
+													background:
+														"linear-gradient(135deg,rgba(16,185,129,.12),rgba(59,130,246,.08))",
+													border:
+														"1px solid rgba(52,211,153,.20)",
+												}}
+											>
+												<Box
+													sx={{
+														color: "#6ee7b7",
+														fontSize: 12,
+														fontWeight: 950,
+														letterSpacing:
+															".10em",
+														textTransform:
+															"uppercase",
+														mb: 1.4,
+													}}
+												>
+													Challan Summary
+												</Box>
+
+												<Box
+													sx={{
+														display: "grid",
+														gridTemplateColumns:
+															"1fr 1fr",
+														gap: 1.4,
+													}}
+												>
+													<DispatchReviewValue
+														label="Date & Time"
+														value={
+															formatLocalDateTimeDisplay(
+																dispatchTripForm
+																	.dispatchTime
+															)
+														}
+													/>
+
+													<DispatchReviewValue
+														label="Total Items"
+														value={
+															dispatchTripPreviewItems.length
+														}
+													/>
+
+													<DispatchReviewValue
+														label="Driver"
+														value={
+															selectedDispatchDriver
+																?.name ||
+															"No Driver"
+														}
+													/>
+
+													<DispatchReviewValue
+														label="Vehicle"
+														value={
+															selectedDispatchVehicle
+																?.vehicleNumber ||
+															"No Vehicle"
+														}
+													/>
+
+													<DispatchReviewValue
+														label="Vehicle Name"
+														value={
+															selectedDispatchVehicle
+																?.vehicleName ||
+															"—"
+														}
+													/>
+
+													<DispatchReviewValue
+														label="Dispatch Mode"
+														value={
+															dispatchTripContext.mode ||
+															"—"
+														}
+													/>
+												</Box>
+											</Box>
+
+											<Box
+												sx={{
+													mb: 1,
+													color: "#fff",
+													fontSize: 14,
+													fontWeight: 950,
+												}}
+											>
+												Items Included
+											</Box>
+
+											<Box
+												sx={{
+													maxHeight: "36vh",
+													overflowY: "auto",
+													pr: 0.5,
+													...premiumScrollbarSx(
+														"#10b981"
+													),
+												}}
+											>
+												{dispatchTripPreviewItems.map(
+													(item) => (
+														<Box
+															key={
+																item.zohoItemId
+															}
+															sx={{
+																p: 1.5,
+																mb: 1,
+																borderRadius:
+																	"14px",
+																background:
+																	"rgba(255,255,255,.035)",
+																border:
+																	"1px solid rgba(255,255,255,.07)",
+															}}
+														>
+															<Box
+																sx={{
+																	display: "flex",
+																	justifyContent:
+																		"space-between",
+																	alignItems:
+																		"flex-start",
+																	gap: 2,
+																}}
+															>
+																<Box
+																	sx={{
+																		minWidth: 0,
+																	}}
+																>
+																	<Box
+																		sx={{
+																			color: "#fff",
+																			fontSize: 13,
+																			fontWeight: 900,
+																			whiteSpace:
+																				"nowrap",
+																			overflow:
+																				"hidden",
+																			textOverflow:
+																				"ellipsis",
+																		}}
+																		title={
+																			item.itemName
+																		}
+																	>
+																		{
+																			item.previewSerial
+																		}
+																		.{" "}
+																		{
+																			item.itemName
+																		}
+																	</Box>
+
+																	<Box
+																		sx={{
+																			color: "#94a3b8",
+																			fontSize: 11,
+																			fontWeight: 700,
+																			mt: 0.6,
+																		}}
+																	>
+																		SKU:{" "}
+																		{item.sku}
+																	</Box>
+																</Box>
+
+																<Chip
+																	size="small"
+																	label={
+																		item.status
+																	}
+																	sx={{
+																		color: "#93c5fd",
+																		fontWeight: 900,
+																		background:
+																			"rgba(59,130,246,.12)",
+																		border:
+																			"1px solid rgba(59,130,246,.20)",
+																	}}
+																/>
+															</Box>
+
+															<Box
+																sx={{
+																	display: "grid",
+																	gridTemplateColumns:
+																		"repeat(3,minmax(0,1fr))",
+																	gap: 1,
+																	mt: 1.2,
+																}}
+															>
+																<DispatchReviewValue
+																	label="PD No."
+																	value={
+																		item.pdNo
+																	}
+																	compact
+																/>
+
+																<DispatchReviewValue
+																	label="Drawing"
+																	value={
+																		item.drawingNo
+																	}
+																	compact
+																/>
+
+																<DispatchReviewValue
+																	label="Plant"
+																	value={
+																		item.plantCode
+																	}
+																	compact
+																/>
+
+																<DispatchReviewValue
+																	label="Client"
+																	value={
+																		item.clientName
+																	}
+																	compact
+																/>
+
+																<DispatchReviewValue
+																	label="Location"
+																	value={
+																		item.location
+																	}
+																	compact
+																/>
+
+																<DispatchReviewValue
+																	label="Item ID"
+																	value={
+																		item.zohoItemId
+																	}
+																	compact
+																/>
+															</Box>
+														</Box>
+													)
+												)}
+											</Box>
+
+											<Box
+												sx={{
+													mt: 1.5,
+													p: 1.4,
+													borderRadius: "12px",
+													color: "#fcd34d",
+													fontSize: 12,
+													fontWeight: 800,
+													background:
+														"rgba(245,158,11,.10)",
+													border:
+														"1px solid rgba(245,158,11,.20)",
+												}}
+											>
+												After confirmation, the selected
+												items will be dispatched and the
+												challan will be created. Review all
+												values carefully before continuing.
+											</Box>
+										</>
+									)}
 							</Box>
 
 							<Box sx={modalFooterSx}>
-								<Button
-									disabled={dispatchTripLoading}
-									onClick={() => setDispatchTripOpen(false)}
-									sx={modalSecondaryButtonSx}
-								>
-									Cancel
-								</Button>
+								{dispatchTripStep ===
+									"DETAILS" && (
+										<>
+											<Button
+												disabled={
+													dispatchTripLoading
+												}
+												onClick={() => {
+													setDispatchTripOpen(
+														false
+													);
 
-								<Button
-									disabled={dispatchTripLoading}
-									onClick={submitDispatchTrip}
-									sx={premiumButton}
-								>
-									{dispatchTripLoading
-										? "Generating Challan..."
-										: "Generate Challan"}
-								</Button>
+													setDispatchTripStep(
+														"DETAILS"
+													);
+												}}
+												sx={
+													modalSecondaryButtonSx
+												}
+											>
+												Cancel
+											</Button>
+
+											<Button
+												disabled={
+													dispatchTripLoading ||
+													!dispatchTripForm.dispatchTime ||
+													dispatchTripPreviewItems.length ===
+													0
+												}
+												onClick={
+													openDispatchTripReview
+												}
+												sx={{
+													...premiumButton,
+													background:
+														"linear-gradient(135deg,#2563eb,#3b82f6)",
+												}}
+											>
+												Review Challan
+											</Button>
+										</>
+									)}
+
+								{dispatchTripStep ===
+									"REVIEW" && (
+										<>
+											<Button
+												disabled={
+													dispatchTripLoading
+												}
+												onClick={() =>
+													setDispatchTripStep(
+														"DETAILS"
+													)
+												}
+												sx={
+													modalSecondaryButtonSx
+												}
+											>
+												← Edit Details
+											</Button>
+
+											<Button
+												disabled={
+													dispatchTripLoading ||
+													dispatchTripPreviewItems.length ===
+													0
+												}
+												onClick={
+													submitDispatchTrip
+												}
+												sx={{
+													...premiumButton,
+													background:
+														"linear-gradient(135deg,#059669,#10b981)",
+
+													"&.Mui-disabled": {
+														color:
+															"rgba(255,255,255,.45)",
+														background:
+															"rgba(255,255,255,.08)",
+													},
+												}}
+											>
+												{dispatchTripLoading
+													? "Creating Challan..."
+													: "Confirm & Create Challan"}
+											</Button>
+										</>
+									)}
 							</Box>
 						</Box>
 					</Box>
@@ -16392,6 +17334,76 @@ function ChallanHistoryStat({
 
 			<Box sx={challanHistoryStatValueSx}>
 				{value}
+			</Box>
+		</Box>
+	);
+}
+
+function DispatchReviewValue({
+	label,
+	value,
+	compact = false,
+}) {
+	const displayValue =
+		value === null ||
+			value === undefined ||
+			String(value).trim() === ""
+			? "—"
+			: String(value);
+
+	return (
+		<Box
+			sx={{
+				minWidth: 0,
+				p: compact
+					? 1
+					: 1.2,
+				borderRadius:
+					compact
+						? "10px"
+						: "12px",
+				background:
+					"rgba(2,6,23,.26)",
+				border:
+					"1px solid rgba(255,255,255,.06)",
+			}}
+		>
+			<Box
+				sx={{
+					color: "#64748b",
+					fontSize:
+						compact
+							? 9
+							: 10,
+					fontWeight: 900,
+					letterSpacing:
+						".08em",
+					textTransform:
+						"uppercase",
+					mb: 0.45,
+				}}
+			>
+				{label}
+			</Box>
+
+			<Box
+				sx={{
+					color: "#f8fafc",
+					fontSize:
+						compact
+							? 11
+							: 12,
+					fontWeight: 850,
+					whiteSpace:
+						"nowrap",
+					overflow:
+						"hidden",
+					textOverflow:
+						"ellipsis",
+				}}
+				title={displayValue}
+			>
+				{displayValue}
 			</Box>
 		</Box>
 	);
