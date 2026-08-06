@@ -23,12 +23,68 @@ import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
 import ExcelJS from "exceljs";
-import {
-  userRoleList,
-} from "../utils/permissions";
-
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
+
+/*
+ * Keep role normalization local to this page.
+ *
+ * ZohoItemsPage previously imported userRoleList from permissions.js while
+ * also importing AuthContext. In a bundled PackFlow dependency graph, that
+ * imported binding can participate in a circular module initialization and
+ * surface as: Cannot access 'u' before initialization.
+ */
+const normalizeInventoryRole = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const rawValue =
+    typeof value === "object"
+      ? (
+        value?.authority ??
+        value?.role ??
+        value?.name ??
+        ""
+      )
+      : value;
+
+  return String(rawValue)
+    .trim()
+    .replace(/^ROLE_/i, "")
+    .toUpperCase();
+};
+
+const getInventoryRoleList = (
+  user,
+  contextRoles = []
+) => {
+  const values = [];
+
+  if (user?.role) {
+    values.push(user.role);
+  }
+
+  if (Array.isArray(user?.roles)) {
+    values.push(...user.roles);
+  }
+
+  if (Array.isArray(user?.authorities)) {
+    values.push(...user.authorities);
+  }
+
+  if (Array.isArray(contextRoles)) {
+    values.push(...contextRoles);
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .map(normalizeInventoryRole)
+        .filter(Boolean)
+    )
+  );
+};
 
 function InventoryModal({
   open,
@@ -1368,6 +1424,8 @@ function ZohoItemsPage() {
     useRef(0);
   const inventoryAbortControllerRef =
     useRef(null);
+  const inventoryColumnResizeRef =
+    useRef(null);
   const [activeStep, setActiveStep] = useState(0);
   const [errors, setErrors] = useState({});
   const [addMoreOpen, setAddMoreOpen] = useState(false);
@@ -1522,11 +1580,10 @@ function ZohoItemsPage() {
     };
   }, []);
 
-  const inventoryColumnResizeRef =
-    useRef(null);
 
   const {
     user: currentUser,
+    roles: authRoles = [],
     authLoading,
     hasRole,
     hasAnyRole,
@@ -1535,10 +1592,14 @@ function ZohoItemsPage() {
   const effectiveRoles =
     useMemo(
       () =>
-        userRoleList(
-          currentUser
+        getInventoryRoleList(
+          currentUser,
+          authRoles
         ),
-      [currentUser]
+      [
+        currentUser,
+        authRoles,
+      ]
     );
 
   const effectiveRoleKey =
@@ -2950,7 +3011,7 @@ function ZohoItemsPage() {
     await fetchGeneratedHistory("ALL");
   };
 
-  const fetchGeneratedHistoryUsers = async () => {
+  async function fetchGeneratedHistoryUsers() {
     try {
       const res = await API.get(
         "/stickers/generated-history/users"
@@ -2976,11 +3037,9 @@ function ZohoItemsPage() {
         "Failed to load generated history users"
       );
     }
-  };
+  }
 
-  const fetchGeneratedHistory = async (
-    userFilter = generatedHistoryUserFilter
-  ) => {
+  async function fetchGeneratedHistory(userFilter = generatedHistoryUserFilter) {
     try {
       setGeneratedHistoryLoading(true);
 
@@ -3019,7 +3078,7 @@ function ZohoItemsPage() {
     } finally {
       setGeneratedHistoryLoading(false);
     }
-  };
+  }
 
   const openHistoryPdf = async (historyId) => {
     if (!historyId) {
@@ -3387,7 +3446,7 @@ function ZohoItemsPage() {
     }));
   };
 
-  const resetGeneratedHistoryFilters = () => {
+  function resetGeneratedHistoryFilters() {
     setGeneratedHistorySearch("");
 
     setGeneratedHistoryFilters({
@@ -3405,7 +3464,7 @@ function ZohoItemsPage() {
     setGeneratedHistoryTimeFrom("");
     setGeneratedHistoryTimeTo("");
     setGeneratedHistoryReportMode("DETAILED");
-  };
+  }
 
   const generatedHistoryReportModes = [
     {
@@ -4303,7 +4362,7 @@ function ZohoItemsPage() {
     return valid;
   };
 
-  const getPacketItemIdForSticker = (rowOrId) => {
+  function getPacketItemIdForSticker(rowOrId) {
     if (!rowOrId) {
       return "";
     }
@@ -4319,7 +4378,7 @@ function ZohoItemsPage() {
       rowOrId.packet_item_id ||
       ""
     );
-  };
+  }
 
   const getPacketItemId = (row) => {
     return getPacketItemIdForSticker(row);
@@ -5247,14 +5306,14 @@ function ZohoItemsPage() {
     setDeleteTarget(null);
   };
 
-  const showUiAlert = (type, message) => {
+  function showUiAlert(type, message) {
     setUiAlert({
       type,
       message,
     });
-  };
+  }
 
-  const readApiErrorMessage = async (res) => {
+  async function readApiErrorMessage(res) {
     const text = await res.text();
 
     if (!text) {
@@ -5267,9 +5326,9 @@ function ZohoItemsPage() {
     } catch {
       return text;
     }
-  };
+  }
 
-  const handleApiError = async (res, fallbackMessage) => {
+  async function handleApiError(res, fallbackMessage) {
     const message = await readApiErrorMessage(res);
 
     const isDuplicateSku =
@@ -5282,7 +5341,7 @@ function ZohoItemsPage() {
         ? message
         : `${fallbackMessage}: ${message}`
     );
-  };
+  }
 
   const getEmptyHardwareForm = (
     plants = myPlants
@@ -5299,9 +5358,7 @@ function ZohoItemsPage() {
         : "",
   });
 
-  const resetHardwarePacketForm = (
-    plants = myPlants
-  ) => {
+  function resetHardwarePacketForm(plants = myPlants) {
     setHardwareEditingItem(null);
     setHardwareAddMaster(null);
 
@@ -5318,7 +5375,7 @@ function ZohoItemsPage() {
     ]);
 
     setErrors({});
-  };
+  }
 
   const closeHardwarePacketModal =
     () => {
@@ -5662,7 +5719,7 @@ function ZohoItemsPage() {
     );
   };
 
-  const validateHardwarePacket = () => {
+  function validateHardwarePacket() {
     const nextErrors = {};
 
     if (
@@ -5718,7 +5775,7 @@ function ZohoItemsPage() {
       Object.keys(nextErrors)
         .length === 0
     );
-  };
+  }
 
   const openHardwareAddPacketsModal = (
     row
@@ -5836,9 +5893,7 @@ function ZohoItemsPage() {
       setHardwarePacketOpen(true);
     };
 
-  const openHardwareEditModal = (
-    row
-  ) => {
+  function openHardwareEditModal(row) {
 
     if (
       !canManageHardwarePackets
@@ -5913,7 +5968,7 @@ function ZohoItemsPage() {
 
     setErrors({});
     setHardwarePacketOpen(true);
-  };
+  }
 
   const deletePacketItem = async () => {
     const row = deleteTarget;
