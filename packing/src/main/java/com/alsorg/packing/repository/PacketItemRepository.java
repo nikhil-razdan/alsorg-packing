@@ -741,4 +741,78 @@ public interface PacketItemRepository
             """)
     List<PacketItem> findLegacyCreatedNormalInventory(
             @Param("normalType") PacketItemType normalType);
+
+    /*
+     * =====================================================
+     * NORMAL INVENTORY — OWNER'S NEW UNPRINTED ITEMS ONLY
+     * =====================================================
+     *
+     * Used for normal Inventory users.
+     *
+     * A row is returned only when:
+     * - it is a NORMAL packet;
+     * - it belongs to the current user;
+     * - its status is CREATED;
+     * - no sticker has been generated.
+     *
+     * Once sticker generation changes the status to READY and
+     * assigns stickerNumber, the item immediately disappears
+     * from normal Inventory and continues through Dispatch.
+     */
+    @EntityGraph(attributePaths = {
+            "masterItem"
+    })
+    @Query("""
+            SELECT p
+            FROM PacketItem p
+            WHERE (
+                p.itemType IS NULL
+                OR p.itemType = :normalType
+            )
+            AND UPPER(
+                TRIM(
+                    COALESCE(
+                        p.status,
+                        ''
+                    )
+                )
+            ) = 'CREATED'
+            AND (
+                p.stickerNumber IS NULL
+                OR TRIM(p.stickerNumber) = ''
+            )
+            AND (
+                p.createdByUserId = :userId
+
+                OR (
+                    p.createdByUserId IS NULL
+                    AND :username IS NOT NULL
+                    AND TRIM(:username) <> ''
+                    AND LOWER(
+                        TRIM(
+                            COALESCE(
+                                p.createdBy,
+                                ''
+                            )
+                        )
+                    ) = LOWER(
+                        TRIM(:username)
+                    )
+                )
+            )
+            ORDER BY
+                LOWER(
+                    COALESCE(
+                        p.itemName,
+                        ''
+                    )
+                ) ASC,
+                p.packetNumber ASC
+            """)
+    List<PacketItem> findOwnedCreatedUnprintedNormalInventory(
+            @Param("normalType") PacketItemType normalType,
+
+            @Param("userId") Long userId,
+
+            @Param("username") String username);
 }

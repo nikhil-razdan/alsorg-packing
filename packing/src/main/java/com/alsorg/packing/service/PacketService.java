@@ -248,18 +248,17 @@ public class PacketService {
         public List<PacketItemResponse> getVisibleNormalInventoryItems(
                         User user,
                         Set<String> allowedPlants) {
+
                 if (user == null) {
                         throw new AccessDeniedException(
                                         "Authentication is required");
                 }
 
                 /*
-                 * Do not block a user who has both:
-                 * - HARDWARE_PACKING
-                 * - PACKING
+                 * A user having both PACKING and HARDWARE_PACKING
+                 * can still use normal Inventory.
                  *
-                 * Only a hardware-only user must be blocked from
-                 * normal Inventory.
+                 * Only a hardware-only user is rejected.
                  */
                 if (currentUserService
                                 .isHardwareOnlyPackingUser(user)) {
@@ -268,46 +267,56 @@ public class PacketService {
                                         "Hardware-only packing users cannot access normal inventory");
                 }
 
-                List<PacketItem> sourceItems;
-
                 /*
-                 * ADMIN continues to see all normal Inventory records.
+                 * ADMIN:
+                 *
+                 * Preserve the existing behaviour.
+                 *
+                 * ADMIN may see CREATED, RESTORED and qualifying READY
+                 * items according to isVisibleOnNormalInventoryPage().
                  */
                 if (currentUserService.isAdmin(user)) {
 
-                        sourceItems = packetItemRepository
+                        return packetItemRepository
                                         .findAdminNormalInventoryCandidates(
                                                         PacketItemType.NORMAL,
-                                                        NORMAL_INVENTORY_CANDIDATE_STATUSES);
-
-                } else {
-
-                        if (user.getId() == null) {
-                                throw new AccessDeniedException(
-                                                "Authenticated user ID is missing");
-                        }
-
-                        String username = user.getUsername() == null
-                                        ? ""
-                                        : user.getUsername().trim();
-
-                        /*
-                         * Normal users now see only their own records.
-                         *
-                         * Plant access is not used for Inventory visibility.
-                         */
-                        sourceItems = packetItemRepository
-                                        .findOwnedNormalInventoryCandidates(
-                                                        PacketItemType.NORMAL,
-                                                        NORMAL_INVENTORY_CANDIDATE_STATUSES,
-                                                        user.getId(),
-                                                        username);
+                                                        NORMAL_INVENTORY_CANDIDATE_STATUSES)
+                                        .stream()
+                                        .filter(
+                                                        this::isVisibleOnNormalInventoryPage)
+                                        .map(
+                                                        this::toInventoryPacketItemResponse)
+                                        .toList();
                 }
 
-                return sourceItems
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is missing");
+                }
+
+                String username = user.getUsername() == null
+                                ? ""
+                                : user.getUsername().trim();
+
+                /*
+                 * NORMAL USER:
+                 *
+                 * Only return:
+                 * - items owned by this user;
+                 * - status CREATED;
+                 * - stickerNumber null/blank.
+                 *
+                 * Do not use NORMAL_INVENTORY_CANDIDATE_STATUSES here,
+                 * because that contains READY and RESTORED.
+                 */
+                return packetItemRepository
+                                .findOwnedCreatedUnprintedNormalInventory(
+                                                PacketItemType.NORMAL,
+                                                user.getId(),
+                                                username)
                                 .stream()
-                                .filter(this::isVisibleOnNormalInventoryPage)
-                                .map(this::toInventoryPacketItemResponse)
+                                .map(
+                                                this::toInventoryPacketItemResponse)
                                 .toList();
         }
 
