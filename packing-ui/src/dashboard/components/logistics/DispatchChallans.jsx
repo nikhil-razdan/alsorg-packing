@@ -58,7 +58,7 @@ function DispatchChallans({
         useState("");
 
     const [endTimeFilter, setEndTimeFilter] =
-        useState("WITHOUT_END_TIME");
+        useState("ALL");
 
     const [expanded, setExpanded] =
         useState("");
@@ -173,10 +173,11 @@ function DispatchChallans({
                  * tripEndedAt contains a valid value.
                  */
                 const matchesEndTimeFilter =
-                    endTimeFilter ===
-                        "WITH_END_TIME"
-                        ? hasEndTime
-                        : !hasEndTime;
+                    endTimeFilter === "ALL"
+                        ? true
+                        : endTimeFilter === "WITH_END_TIME"
+                            ? hasEndTime
+                            : !hasEndTime;
 
                 if (!matchesEndTimeFilter) {
                     return false;
@@ -593,11 +594,17 @@ function DispatchChallans({
                             e.target.value
                         )
                     }
-                    renderValue={(value) =>
-                        value === "WITH_END_TIME"
-                            ? "Challans With End Time"
-                            : "Challans Without End Time"
-                    }
+                    renderValue={(value) => {
+                        if (value === "ALL") {
+                            return "All Challans";
+                        }
+
+                        if (value === "WITH_END_TIME") {
+                            return "Challans With End Time";
+                        }
+
+                        return "Challans Without End Time";
+                    }}
                     sx={endTimeFilterSelect}
                     MenuProps={{
                         PaperProps: {
@@ -627,6 +634,10 @@ function DispatchChallans({
                         },
                     }}
                 >
+                    <MenuItem value="ALL">
+                        All Challans
+                    </MenuItem>
+
                     <MenuItem value="WITHOUT_END_TIME">
                         Challans Without End Time
                     </MenuItem>
@@ -646,10 +657,11 @@ function DispatchChallans({
             {!loading &&
                 filteredRows.length === 0 && (
                     <Box sx={emptyState}>
-                        {endTimeFilter ===
-                            "WITH_END_TIME"
-                            ? "No challans with an end time were found."
-                            : "No challans without an end time were found."}
+                        {endTimeFilter === "ALL"
+                            ? "No dispatched challans were found."
+                            : endTimeFilter === "WITH_END_TIME"
+                                ? "No challans with an end time were found."
+                                : "No challans without an end time were found."}
                     </Box>
                 )}
 
