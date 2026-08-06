@@ -57,9 +57,6 @@ function DispatchChallans({
     const [search, setSearch] =
         useState("");
 
-    const [search, setSearch] =
-        useState("");
-
     const [endTimeFilter, setEndTimeFilter] =
         useState("WITHOUT_END_TIME");
 
