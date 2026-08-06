@@ -45,6 +45,154 @@ function hasChallanEndTime(
     );
 }
 
+function hasHelpersLoaders(
+    challan
+) {
+    const count =
+        Number(
+            challan
+                ?.helperLoaderCount ?? 0
+        );
+
+    return (
+        Number.isFinite(count) &&
+        count > 0
+    );
+}
+
+const openHelperDialog =
+    (challan) => {
+        setHelperDialog({
+            open: true,
+
+            challanNumber:
+                challan
+                    ?.challanNumber || "",
+
+            helperLoaderCount:
+                hasHelpersLoaders(challan)
+                    ? String(
+                        challan
+                            .helperLoaderCount
+                    )
+                    : "",
+        });
+    };
+
+const closeHelperDialog =
+    () => {
+        setHelperDialog({
+            open: false,
+            challanNumber: "",
+            helperLoaderCount: "",
+        });
+    };
+
+const submitHelpers =
+    async () => {
+        if (
+            !helperDialog.challanNumber
+        ) {
+            showAlert?.(
+                "Challan number missing",
+                "error"
+            );
+
+            return;
+        }
+
+        let helperLoaderCount =
+            null;
+
+        if (
+            String(
+                helperDialog
+                    .helperLoaderCount
+            ).trim() !== ""
+        ) {
+            const parsed =
+                Number(
+                    helperDialog
+                        .helperLoaderCount
+                );
+
+            if (
+                !Number.isInteger(parsed) ||
+                parsed < 0
+            ) {
+                showAlert?.(
+                    "Helpers/loaders must be a whole number",
+                    "error"
+                );
+
+                return;
+            }
+
+            helperLoaderCount =
+                parsed === 0
+                    ? null
+                    : parsed;
+        }
+
+        try {
+            setSavingHelpers(true);
+
+            const res =
+                await fetch(
+                    `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
+                        helperDialog
+                            .challanNumber
+                    )}/helpers`,
+                    {
+                        method: "POST",
+                        credentials:
+                            "include",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
+
+                        body:
+                            JSON.stringify({
+                                helperLoaderCount,
+                            }),
+                    }
+                );
+
+            if (!res.ok) {
+                const text =
+                    await res.text();
+
+                throw new Error(
+                    text ||
+                    "Failed to save helpers/loaders"
+                );
+            }
+
+            showAlert?.(
+                helperLoaderCount
+                    ? "Helpers/loaders updated successfully"
+                    : "Helpers/loaders cleared successfully",
+                "success"
+            );
+
+            closeHelperDialog();
+
+            await loadData();
+        } catch (error) {
+            console.error(error);
+
+            showAlert?.(
+                error.message ||
+                "Failed to save helpers/loaders",
+                "error"
+            );
+        } finally {
+            setSavingHelpers(false);
+        }
+    };
+
 function DispatchChallans({
     showAlert,
 }) {
@@ -75,6 +223,25 @@ function DispatchChallans({
             challanNumber: "",
             endTime: getNowDateTimeLocal(),
         });
+
+    const [
+        helperFilter,
+        setHelperFilter,
+    ] = useState("ALL");
+
+    const [
+        helperDialog,
+        setHelperDialog,
+    ] = useState({
+        open: false,
+        challanNumber: "",
+        helperLoaderCount: "",
+    });
+
+    const [
+        savingHelpers,
+        setSavingHelpers,
+    ] = useState(false);
 
     const [endingTrip, setEndingTrip] =
         useState(false);
@@ -157,6 +324,23 @@ function DispatchChallans({
                     .trim()
                     .toLowerCase();
 
+            const hasHelpers =
+                hasHelpersLoaders(
+                    challan
+                );
+
+            const matchesHelperFilter =
+                helperFilter === "ALL"
+                    ? true
+                    : helperFilter ===
+                        "WITH_HELPERS"
+                        ? hasHelpers
+                        : !hasHelpers;
+
+            if (!matchesHelperFilter) {
+                return false;
+            }
+
             return rows.filter((challan) => {
                 const hasEndTime =
                     hasChallanEndTime(
@@ -230,6 +414,7 @@ function DispatchChallans({
         }, [
             rows,
             search,
+            helperFilter,
             endTimeFilter,
         ]);
 
@@ -238,6 +423,7 @@ function DispatchChallans({
     }, [
         search,
         endTimeFilter,
+        helperFilter,
         pageSize,
     ]);
 
@@ -646,6 +832,29 @@ function DispatchChallans({
                         Challans With End Time
                     </MenuItem>
                 </Select>
+
+                <Select
+                    size="small"
+                    value={helperFilter}
+                    onChange={(e) =>
+                        setHelperFilter(
+                            e.target.value
+                        )
+                    }
+                    sx={endTimeFilterSelect}
+                >
+                    <MenuItem value="ALL">
+                        All Helper Status
+                    </MenuItem>
+
+                    <MenuItem value="WITH_HELPERS">
+                        With Helpers / Loaders
+                    </MenuItem>
+
+                    <MenuItem value="WITHOUT_HELPERS">
+                        No Helpers / Loaders
+                    </MenuItem>
+                </Select>
             </Box>
 
             {loading && (
@@ -690,6 +899,15 @@ function DispatchChallans({
                                         Vehicle:{" "}
                                         <b>
                                             {challan.vehicleNumber || "—"}
+                                        </b>
+                                    </Box>
+
+                                    <Box sx={challanMeta}>
+                                        Helpers / Loaders:{" "}
+                                        <b>
+                                            {hasHelpersLoaders(challan)
+                                                ? challan.helperLoaderCount
+                                                : "—"}
                                         </b>
                                     </Box>
 
@@ -791,6 +1009,19 @@ function DispatchChallans({
                                         {challan.tripEndedAt
                                             ? "Edit End Time"
                                             : "Enter End Time"}
+                                    </Button>
+
+                                    <Button
+                                        onClick={() =>
+                                            openHelperDialog(
+                                                challan
+                                            )
+                                        }
+                                        sx={helperButton}
+                                    >
+                                        {hasHelpersLoaders(challan)
+                                            ? "Edit Helpers"
+                                            : "Enter Helpers"}
                                     </Button>
                                 </Box>
                             </Box>
@@ -951,6 +1182,107 @@ function DispatchChallans({
                             {endingTrip
                                 ? "Saving..."
                                 : "Save End Time"}
+                        </Button>
+                    </Box>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={helperDialog.open}
+                onClose={closeHelperDialog}
+                fullWidth
+                maxWidth="xs"
+                PaperProps={{
+                    sx: {
+                        borderRadius: "18px",
+                        background: "#020617",
+                        border:
+                            "1px solid rgba(255,255,255,.12)",
+                        color: "#fff",
+                    },
+                }}
+            >
+                <DialogTitle
+                    sx={{
+                        color: "#fff",
+                        fontWeight: 900,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent:
+                            "space-between",
+                        borderBottom:
+                            "1px solid rgba(255,255,255,.08)",
+                    }}
+                >
+                    Helpers / Loaders
+
+                    <IconButton
+                        onClick={
+                            closeHelperDialog
+                        }
+                        sx={{ color: "#fff" }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                </DialogTitle>
+
+                <DialogContent sx={{ p: 2.5 }}>
+                    <Box sx={endDialogLabel}>
+                        Challan No.
+                    </Box>
+
+                    <Box sx={endDialogChallan}>
+                        {helperDialog
+                            .challanNumber || "—"}
+                    </Box>
+
+                    <TextField
+                        fullWidth
+                        label="Number of Helpers / Loaders"
+                        type="number"
+                        value={
+                            helperDialog
+                                .helperLoaderCount
+                        }
+                        onChange={(e) =>
+                            setHelperDialog(
+                                (previous) => ({
+                                    ...previous,
+                                    helperLoaderCount:
+                                        e.target.value,
+                                })
+                            )
+                        }
+                        inputProps={{
+                            min: 0,
+                            max: 999,
+                            step: 1,
+                        }}
+                        helperText="Leave empty or enter 0 for no helpers/loaders."
+                        sx={endTimeInput}
+                    />
+
+                    <Box sx={endDialogActions}>
+                        <Button
+                            onClick={
+                                closeHelperDialog
+                            }
+                            sx={cancelEndButton}
+                        >
+                            Cancel
+                        </Button>
+
+                        <Button
+                            onClick={
+                                submitHelpers
+                            }
+                            disabled={
+                                savingHelpers
+                            }
+                            sx={saveEndButton}
+                        >
+                            {savingHelpers
+                                ? "Saving..."
+                                : "Save Helpers"}
                         </Button>
                     </Box>
                 </DialogContent>
@@ -1559,6 +1891,25 @@ const downloadButton = {
     "&:hover": {
         background:
             "rgba(59,130,246,.22)",
+    },
+};
+
+const helperButton = {
+    height: 34,
+    borderRadius: "10px",
+    textTransform: "none",
+    fontWeight: 900,
+    color: "#fff",
+    background:
+        "linear-gradient(135deg,#7c3aed,#8b5cf6)",
+    border:
+        "1px solid rgba(167,139,250,.42)",
+    boxShadow:
+        "0 10px 22px rgba(124,58,237,.20)",
+
+    "&:hover": {
+        background:
+            "linear-gradient(135deg,#6d28d9,#7c3aed)",
     },
 };
 

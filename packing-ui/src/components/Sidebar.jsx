@@ -16,6 +16,16 @@ function Sidebar() {
 	const location = useLocation();
 	const [collapsed, setCollapsed] = useState(false);
 
+	const currentInventoryView =
+		new URLSearchParams(
+			location.search
+		).get("view") ||
+		(
+			canOpenNormalInventory
+				? "normal"
+				: "hardware"
+		);
+
 	const {
 		user,
 		hasRole,
@@ -26,15 +36,16 @@ function Sidebar() {
 		canOpenWarehousePageFromUser(
 			user
 		);
-
-	const isHardwareOnly =
-		hasRole("HARDWARE_PACKING") &&
-		!hasAnyRole(
+	const canOpenNormalInventory =
+		hasAnyRole(
 			"ADMIN",
-			"PACKING",
-			"WAREHOUSE",
-			"DISPATCH",
-			"LOGISTICS"
+			"PACKING"
+		);
+
+	const canOpenHardwareInventory =
+		hasAnyRole(
+			"ADMIN",
+			"HARDWARE_PACKING"
 		);
 
 	const links = [
@@ -54,18 +65,27 @@ function Sidebar() {
 				/>
 			),
 		},
+		{
+			path: "/packflow/zoho-items",
+			view: "normal",
+			label: "Inventory Items",
+			roles: [],
+			customAccess:
+				canOpenNormalInventory,
+			icon: (
+				<Inventory2OutlinedIcon
+					fontSize="small"
+				/>
+			),
+		},
 
 		{
 			path: "/packflow/zoho-items",
-			label:
-				isHardwareOnly
-					? "Hardware Inventory"
-					: "Inventory Items",
-			roles: [
-				"ADMIN",
-				"PACKING",
-				"HARDWARE_PACKING",
-			],
+			view: "hardware",
+			label: "Hardware Inventory",
+			roles: [],
+			customAccess:
+				canOpenHardwareInventory,
 			icon: (
 				<Inventory2OutlinedIcon
 					fontSize="small"
@@ -229,14 +249,36 @@ function Sidebar() {
 			<div style={smallDivider} />
 
 			{visibleLinks.map((link) => {
+				const target =
+					link.view
+						? `${link.path}?view=${link.view}`
+						: link.path;
+
 				const active =
-					location.pathname === link.path ||
-					location.pathname.startsWith(`${link.path}/`);
+					link.view
+						? (
+							location.pathname ===
+							link.path &&
+							currentInventoryView ===
+							link.view
+						)
+						: (
+							location.pathname ===
+							link.path ||
+							location.pathname.startsWith(
+								`${link.path}/`
+							)
+						);
+
+				const key =
+					link.view
+						? `${link.path}-${link.view}`
+						: link.path;
 
 				return (
 					<Link
-						key={link.path}
-						to={link.path}
+						key={key}
+						to={target}
 						style={linkStyle(active)}
 					>
 						<span style={icon}>

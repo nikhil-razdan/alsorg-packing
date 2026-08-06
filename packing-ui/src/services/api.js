@@ -35,6 +35,9 @@ const getValidToken = () => {
       "token"
     ) ||
     localStorage.getItem(
+      "authToken"
+    ) ||
+    localStorage.getItem(
       "jwt"
     ) ||
     localStorage.getItem(

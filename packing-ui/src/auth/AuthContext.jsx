@@ -100,6 +100,7 @@ const modulesForRoles = (roles) => {
 
 const clearCompatibilityStorage = () => {
 	localStorage.removeItem("token");
+	localStorage.removeItem("authToken");
 	localStorage.removeItem("jwt");
 	localStorage.removeItem("accessToken");
 

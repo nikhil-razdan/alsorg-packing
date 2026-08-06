@@ -132,6 +132,45 @@ const normalizeLocalDateTime = (value) => {
     .slice(0, 16);
 };
 
+const normalizeOptionalHelperCount = (
+  value
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    String(value).trim() === ""
+  ) {
+    return null;
+  }
+
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isInteger(parsed)
+  ) {
+    throw new Error(
+      "Helpers/loaders must be a whole number"
+    );
+  }
+
+  if (parsed < 0) {
+    throw new Error(
+      "Helpers/loaders cannot be negative"
+    );
+  }
+
+  if (parsed > 999) {
+    throw new Error(
+      "Helpers/loaders cannot exceed 999"
+    );
+  }
+
+  return parsed === 0
+    ? null
+    : parsed;
+};
+
 const getHeaderValue = (
   res,
   headerName,
@@ -304,10 +343,114 @@ export async function deleteVehicle(
   );
 }
 
+export async function previewDispatchChallan({
+  itemIds,
+  driverId,
+  vehicleId,
+  helperLoaderCount,
+  dispatchTime,
+  tripStart,
+}) {
+  const finalDispatchTime =
+    normalizeLocalDateTime(
+      dispatchTime || tripStart
+    );
+
+  if (
+    !Array.isArray(itemIds) ||
+    itemIds.length === 0
+  ) {
+    throw new Error(
+      "No items selected for challan preview"
+    );
+  }
+
+  const finalHelperLoaderCount =
+    normalizeOptionalHelperCount(
+      helperLoaderCount
+    );
+
+  const cleanDriverId =
+    String(driverId || "").trim() ||
+    null;
+
+  const cleanVehicleId =
+    String(vehicleId || "").trim() ||
+    null;
+
+  const res =
+    await requestBlob(
+      "/api/chalaan/dispatch/preview",
+      {
+        method: "POST",
+
+        body: {
+          itemIds,
+
+          driverId:
+            cleanDriverId,
+
+          vehicleId:
+            cleanVehicleId,
+
+          helperLoaderCount:
+            finalHelperLoaderCount,
+
+          dispatchTime:
+            finalDispatchTime,
+
+          tripStart:
+            finalDispatchTime,
+        },
+
+        errorMessage:
+          "Challan preview failed",
+      }
+    );
+
+  return res.blob();
+}
+
+export async function updateDispatchChallanHelpers(
+  challanNumber,
+  helperLoaderCount
+) {
+  const cleanChallanNumber =
+    String(
+      challanNumber || ""
+    ).trim();
+
+  if (!cleanChallanNumber) {
+    throw new Error(
+      "Challan number is required"
+    );
+  }
+
+  return requestJson(
+    `/api/dispatched/challans/${encodeURIComponent(
+      cleanChallanNumber
+    )}/helpers`,
+    {
+      method: "POST",
+
+      body: {
+        helperLoaderCount:
+          normalizeOptionalHelperCount(
+            helperLoaderCount
+          ),
+      },
+
+      errorMessage:
+        "Failed to update helpers/loaders",
+    }
+  );
+}
+
 export async function createDispatchChallan({
   itemIds,
   driverId,
   vehicleId,
+  helperLoaderCount,
   dispatchTime,
   tripStart,
   preview = true,
@@ -340,6 +483,28 @@ export async function createDispatchChallan({
     String(vehicleId || "").trim() ||
     null;
 
+  const cleanHelperLoaderCount =
+    helperLoaderCount === null ||
+      helperLoaderCount === undefined ||
+      String(helperLoaderCount).trim() === ""
+      ? null
+      : Number(helperLoaderCount);
+
+  if (
+    cleanHelperLoaderCount !== null &&
+    (
+      !Number.isInteger(
+        cleanHelperLoaderCount
+      ) ||
+      cleanHelperLoaderCount < 0 ||
+      cleanHelperLoaderCount > 999
+    )
+  ) {
+    throw new Error(
+      "Helpers / loaders must be a whole number between 0 and 999"
+    );
+  }
+
   const res = await requestBlob(
     `/api/chalaan/dispatch?preview=${preview ? "true" : "false"
     }`,
@@ -348,18 +513,19 @@ export async function createDispatchChallan({
 
       body: {
         itemIds,
-
-        /*
-         * Both fields are intentionally nullable.
-         */
         driverId: cleanDriverId,
         vehicleId: cleanVehicleId,
+
+        helperLoaderCount:
+          cleanHelperLoaderCount === 0
+            ? null
+            : cleanHelperLoaderCount,
 
         dispatchTime:
           finalDispatchTime,
 
         /*
-         * Backward compatibility.
+         * Backward compatibility for old mobile/backend callers.
          */
         tripStart:
           finalDispatchTime,
@@ -389,6 +555,7 @@ export async function createDispatchChallan({
       ),
   };
 }
+
 
 /*
  * =========================================================

@@ -65,10 +65,12 @@ public class DispatchChallanService {
                         UUID vehicleId,
                         String username,
                         Set<String> allowedPlants) {
+
                 return generateAndDispatch(
                                 rawItemIds,
                                 driverId,
                                 vehicleId,
+                                null,
                                 null,
                                 username,
                                 allowedPlants);
@@ -81,6 +83,25 @@ public class DispatchChallanService {
                         LocalDateTime dispatchTime,
                         String username,
                         Set<String> allowedPlants) {
+
+                return generateAndDispatch(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                null,
+                                username,
+                                allowedPlants);
+        }
+
+        public DispatchTripPdfResult generateAndDispatch(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
+                        String username,
+                        Set<String> allowedPlants) {
                 if (rawItemIds == null || rawItemIds.isEmpty()) {
                         throw new RuntimeException("No items selected for challan");
                 }
@@ -90,6 +111,9 @@ public class DispatchChallanService {
 
                 Vehicle vehicle = resolveVehicle(
                                 vehicleId);
+
+                Integer finalHelperLoaderCount = normalizeHelperLoaderCount(
+                                helperLoaderCount);
 
                 List<String> itemIds = cleanUniqueItemIds(rawItemIds);
 
@@ -130,6 +154,7 @@ public class DispatchChallanService {
                                 vehicle,
                                 items,
                                 dispatchTimeIst,
+                                finalHelperLoaderCount,
                                 false);
 
                 byte[] pdf = pdfService.generateChalaan(data);
@@ -145,6 +170,7 @@ public class DispatchChallanService {
                                         driver,
                                         vehicle,
                                         dispatchTimeIst,
+                                        finalHelperLoaderCount,
                                         actor);
                 }
 
@@ -175,6 +201,7 @@ public class DispatchChallanService {
                                         driver,
                                         vehicle,
                                         dispatchTimeIst,
+                                        finalHelperLoaderCount,
                                         actor);
 
                         saved.setStatus(ItemDispatchStatus.DISPATCHED);
@@ -191,12 +218,35 @@ public class DispatchChallanService {
                                 pdf);
         }
 
+        /*
+         * Backward-compatible preview overload.
+         */
         @Transactional(readOnly = true)
         public DispatchTripPdfResult previewDispatchChallan(
                         List<String> rawItemIds,
                         UUID driverId,
                         UUID vehicleId,
                         LocalDateTime dispatchTime,
+                        String username,
+                        Set<String> allowedPlants) {
+
+                return previewDispatchChallan(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                null,
+                                username,
+                                allowedPlants);
+        }
+
+        @Transactional(readOnly = true)
+        public DispatchTripPdfResult previewDispatchChallan(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
                         String username,
                         Set<String> allowedPlants) {
 
@@ -214,15 +264,9 @@ public class DispatchChallanService {
                 Vehicle vehicle = resolveVehicle(
                                 vehicleId);
 
-                /*
-                 * Read and validate items without modifying:
-                 *
-                 * - status
-                 * - dispatch metadata
-                 * - challan number
-                 * - driver/vehicle fields
-                 * - audit/history
-                 */
+                Integer finalHelperLoaderCount = normalizeHelperLoaderCount(
+                                helperLoaderCount);
+
                 List<DispatchedItem> items = loadPreviewItems(
                                 itemIds,
                                 allowedPlants);
@@ -232,9 +276,6 @@ public class DispatchChallanService {
                                 : LocalDateTime.now(
                                                 INDIA_ZONE);
 
-                /*
-                 * Never generate a real challan number for preview.
-                 */
                 String previewChallanNumber = "PREVIEW";
 
                 ChalaanPdfData data = buildPdfData(
@@ -243,6 +284,7 @@ public class DispatchChallanService {
                                 vehicle,
                                 items,
                                 dispatchTimeIst,
+                                finalHelperLoaderCount,
                                 true);
 
                 byte[] pdf = pdfService.generateChalaan(
@@ -509,11 +551,16 @@ public class DispatchChallanService {
                         Vehicle vehicle,
                         List<DispatchedItem> items,
                         LocalDateTime dispatchTimeIst,
+                        Integer helperLoaderCount,
                         boolean preview) {
+                                
                 ChalaanPdfData data = new ChalaanPdfData();
 
                 data.setPreview(
                                 preview);
+
+                data.setHelperLoaderCount(
+                                helperLoaderCount);
 
                 data.setVoucherNo(challanNo);
                 data.setDispatchTime(dispatchTimeIst);
@@ -566,8 +613,12 @@ public class DispatchChallanService {
                         Driver driver,
                         Vehicle vehicle,
                         LocalDateTime dispatchTimeIst,
+                        Integer helperLoaderCount,
                         String actor) {
                 item.setChalaanNumber(challanNo);
+
+                item.setHelperLoaderCount(
+                                helperLoaderCount);
 
                 item.setDriverId(
                                 driver == null
@@ -793,6 +844,29 @@ public class DispatchChallanService {
                 return text.isEmpty()
                                 ? "-"
                                 : text;
+        }
+
+        private Integer normalizeHelperLoaderCount(
+                        Integer value) {
+
+                /*
+                 * Empty or zero means no helpers/loaders.
+                 */
+                if (value == null || value == 0) {
+                        return null;
+                }
+
+                if (value < 0) {
+                        throw new IllegalArgumentException(
+                                        "Helpers/loaders count cannot be negative");
+                }
+
+                if (value > 999) {
+                        throw new IllegalArgumentException(
+                                        "Helpers/loaders count cannot exceed 999");
+                }
+
+                return value;
         }
 
         private String generateCustomChallanNumber(

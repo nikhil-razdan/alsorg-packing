@@ -23,6 +23,8 @@ public class ChalaanPdfData {
 
     private boolean preview;
 
+    private Integer helperLoaderCount;
+
     // ================= GETTERS =================
 
     public LocalDateTime getDispatchTime() {
@@ -114,5 +116,14 @@ public class ChalaanPdfData {
 
     public void setVehicleNumber(String vehicleNumber) {
         this.vehicleNumber = vehicleNumber;
+    }
+
+    public Integer getHelperLoaderCount() {
+        return helperLoaderCount;
+    }
+
+    public void setHelperLoaderCount(
+            Integer helperLoaderCount) {
+        this.helperLoaderCount = helperLoaderCount;
     }
 }

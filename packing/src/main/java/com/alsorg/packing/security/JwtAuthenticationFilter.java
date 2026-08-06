@@ -13,8 +13,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -111,25 +111,39 @@ public class JwtAuthenticationFilter
                         if (SecurityContextHolder
                                         .getContext()
                                         .getAuthentication() == null) {
-                                String cleanRole = cleanRole(
-                                                user.getRole());
 
-                                List<GrantedAuthority> authorities = new ArrayList<>();
+                                Set<GrantedAuthority> authorities = new LinkedHashSet<>();
 
-                                if (cleanRole != null &&
-                                                !cleanRole.isBlank()) {
-                                        /*
-                                         * Existing code uses both hasAuthority("ADMIN")
-                                         * and hasRole("ADMIN"), so both authority formats
-                                         * are provided.
-                                         */
-                                        authorities.add(
-                                                        new SimpleGrantedAuthority(
-                                                                        cleanRole));
+                                for (String assignedRole : user.getEffectiveRoles()) {
+
+                                        String cleanAssignedRole = cleanRole(
+                                                        assignedRole);
+
+                                        if (cleanAssignedRole == null ||
+                                                        cleanAssignedRole.isBlank()) {
+                                                continue;
+                                        }
 
                                         authorities.add(
                                                         new SimpleGrantedAuthority(
-                                                                        "ROLE_" + cleanRole));
+                                                                        cleanAssignedRole));
+
+                                        authorities.add(
+                                                        new SimpleGrantedAuthority(
+                                                                        "ROLE_" +
+                                                                                        cleanAssignedRole));
+                                }
+
+                                if (authorities.isEmpty()) {
+                                        SecurityContextHolder
+                                                        .clearContext();
+
+                                        writeJsonError(
+                                                        response,
+                                                        HttpServletResponse.SC_FORBIDDEN,
+                                                        "No application role is assigned");
+
+                                        return;
                                 }
 
                                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

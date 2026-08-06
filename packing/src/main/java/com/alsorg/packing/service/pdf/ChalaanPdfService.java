@@ -65,6 +65,13 @@ public class ChalaanPdfService {
                  */
                 ChalaanItem firstItem = findFirstValidChalaanItem(sourceItems);
 
+                String helperLoaderText = data != null &&
+                                data.getHelperLoaderCount() != null &&
+                                data.getHelperLoaderCount() > 0
+                                                ? String.valueOf(
+                                                                data.getHelperLoaderCount())
+                                                : "-";
+
                 String pdNo = buildAllPdNos(items);
 
                 String clientName = firstItem != null
@@ -104,7 +111,8 @@ public class ChalaanPdfService {
                                         date,
                                         challanNo,
                                         driverName,
-                                        vehicleNo);
+                                        vehicleNo,
+                                        helperLoaderText);
 
                         float y = 580;
                         int sr = 1;
@@ -169,7 +177,8 @@ public class ChalaanPdfService {
                                                         date,
                                                         challanNo,
                                                         driverName,
-                                                        vehicleNo);
+                                                        vehicleNo,
+                                                        helperLoaderText);
 
                                         y = 580;
                                 }
@@ -327,7 +336,8 @@ public class ChalaanPdfService {
                         String date,
                         String challanNo,
                         String driverName,
-                        String vehicleNo) throws IOException {
+                        String vehicleNo,
+                        String helperLoadertext) throws IOException {
 
                 drawCenteredText(
                                 cs,
@@ -347,9 +357,10 @@ public class ChalaanPdfService {
                                 date,
                                 challanNo,
                                 driverName,
-                                vehicleNo);
+                                vehicleNo,
+                                helperLoadertext);
 
-                drawLine(cs, LEFT, 640, RIGHT, 640);
+                drawLine(cs, LEFT, 636, RIGHT, 636);
 
                 drawTableFrame(cs, bold);
         }
@@ -430,7 +441,8 @@ public class ChalaanPdfService {
                         String date,
                         String challanNo,
                         String driverName,
-                        String vehicleNo) throws IOException {
+                        String vehicleNo,
+                        String helperLoaderText) throws IOException {
 
                 drawText(cs, regular, 10, 40, 710, "P.D. No:");
 
@@ -464,10 +476,50 @@ public class ChalaanPdfService {
                                 290,
                                 "Address: " + safe(address));
 
-                drawText(cs, regular, 10, 350, 710, "Date / Time: " + safe(date));
-                drawText(cs, regular, 10, 350, 690, "Challan No: " + safe(challanNo));
-                drawText(cs, regular, 10, 350, 670, "Driver Name: " + safe(driverName));
-                drawText(cs, regular, 10, 350, 650, "Vehicle No: " + safe(vehicleNo));
+                drawText(
+                                cs,
+                                regular,
+                                9,
+                                350,
+                                712,
+                                "Date / Time: " +
+                                                safe(date));
+
+                drawText(
+                                cs,
+                                regular,
+                                9,
+                                350,
+                                696,
+                                "Challan No: " +
+                                                safe(challanNo));
+
+                drawText(
+                                cs,
+                                regular,
+                                9,
+                                350,
+                                680,
+                                "Driver Name: " +
+                                                safe(driverName));
+
+                drawText(
+                                cs,
+                                regular,
+                                9,
+                                350,
+                                664,
+                                "Vehicle No: " +
+                                                safe(vehicleNo));
+
+                drawText(
+                                cs,
+                                regular,
+                                9,
+                                350,
+                                648,
+                                "Helpers / Loaders: " +
+                                                safe(helperLoaderText));
         }
 
         private void drawCenteredText(

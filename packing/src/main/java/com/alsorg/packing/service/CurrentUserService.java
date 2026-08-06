@@ -139,23 +139,46 @@ public class CurrentUserService {
     public boolean hasRole(
             User user,
             String role) {
-        if (user == null ||
-                role == null ||
-                role.isBlank()) {
+
+        if (user == null) {
             return false;
         }
 
-        String normalizedRole = role
-                .replace("ROLE_", "")
-                .trim()
-                .toUpperCase();
+        String normalizedRequestedRole = normalizeRoleKey(
+                role);
+
+        if (normalizedRequestedRole == null) {
+            return false;
+        }
 
         return user.getEffectiveRoles()
                 .stream()
-                .anyMatch(value -> value != null &&
-                        value.trim()
-                                .equalsIgnoreCase(
-                                        normalizedRole));
+                .map(this::normalizeRoleKey)
+                .anyMatch(
+                        normalizedRequestedRole::equals);
+    }
+
+    private String normalizeRoleKey(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value
+                .trim()
+                .replaceFirst(
+                        "(?i)^ROLE_",
+                        "")
+                .toUpperCase();
+
+        if (clean.isBlank() ||
+                "NULL".equals(clean) ||
+                "UNDEFINED".equals(clean)) {
+            return null;
+        }
+
+        return clean;
     }
 
     public boolean hasAnyRole(

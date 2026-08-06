@@ -62,10 +62,11 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
-                }
-
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 request.itemIds(),
                                 request.driverId(),
@@ -73,6 +74,7 @@ public class ChalaanPdfController {
                                 firstNonNull(
                                                 request.dispatchTime(),
                                                 request.tripStart()),
+                                request.helperLoaderCount(),
                                 user.getUsername(),
                                 currentUserService.allowedPlants(user));
 
@@ -90,11 +92,11 @@ public class ChalaanPdfController {
                 /*
                  * Keep the same permission rule as final challan creation.
                  */
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .build();
-                }
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
 
                 DispatchTripPdfResult result = dispatchChallanService.previewDispatchChallan(
                                 request.itemIds(),
@@ -103,6 +105,7 @@ public class ChalaanPdfController {
                                 firstNonNull(
                                                 request.dispatchTime(),
                                                 request.tripStart()),
+                                request.helperLoaderCount(),
                                 user.getUsername(),
                                 currentUserService.allowedPlants(
                                                 user));
@@ -119,9 +122,11 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
-                }
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
 
                 DispatchTripPdfResult result = customChallanService.generateAndSave(
                                 request,
@@ -140,9 +145,11 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
-                }
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
 
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 List.of(zohoItemId),
@@ -165,9 +172,11 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)) {
-                        return ResponseEntity.status(403).build();
-                }
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
 
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 ids,
@@ -238,6 +247,15 @@ public class ChalaanPdfController {
                 data.setOt("-");
                 data.setDriverName(first.getDriverName());
                 data.setVehicleNumber(first.getVehicleNumber());
+                data.setHelperLoaderCount(
+                                first.getHelperLoaderCount());
+
+                /*
+                 * Existing challan is a valid generated challan.
+                 * The preview query parameter controls inline/attachment,
+                 * not draft watermark behaviour.
+                 */
+                data.setPreview(false);
 
                 List<ChalaanItem> challanItems = new ArrayList<>();
 
@@ -273,6 +291,16 @@ public class ChalaanPdfController {
                                                                 : "attachment; filename=" + filename)
                                 .contentType(MediaType.APPLICATION_PDF)
                                 .body(pdf);
+        }
+
+        private boolean canUseDispatchChallan(
+                        User user) {
+
+                return currentUserService
+                                .hasAnyRole(
+                                                user,
+                                                "ADMIN",
+                                                "DISPATCH");
         }
 
         private ResponseEntity<byte[]> buildPdfResponse(
@@ -346,10 +374,11 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                if (!currentUserService.isDispatch(user)
-                                && !currentUserService.isAdmin(user)) {
-                        return ResponseEntity.status(403).build();
-                }
+                if (!canUseDispatchChallan(user)) {
+    return ResponseEntity
+            .status(403)
+            .build();
+}
 
                 return ResponseEntity.ok(
                                 customChallanService.listForUser(
@@ -448,7 +477,7 @@ public class ChalaanPdfController {
                         List<String> itemIds,
                         UUID driverId,
                         UUID vehicleId,
-
+                        Integer helperLoaderCount,
                         /*
                          * Kept only so old frontend/mobile payload does not break.
                          * Not used for trip/delivery anymore.

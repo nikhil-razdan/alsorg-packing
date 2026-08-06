@@ -44,6 +44,8 @@ public class DispatchedItem {
 	private String packedAreaCode;
 	private String fgAreaCode;
 	private String allowedWarehouseCodes;
+	@Column(name = "helper_loader_count")
+	private Integer helperLoaderCount;
 	private String currentLocationCode;
 	private String fgZoneCode;
 
@@ -701,5 +703,14 @@ public class DispatchedItem {
 		if (stock == null) {
 			stock = 0;
 		}
+	}
+
+	public Integer getHelperLoaderCount() {
+		return helperLoaderCount;
+	}
+
+	public void setHelperLoaderCount(
+			Integer helperLoaderCount) {
+		this.helperLoaderCount = helperLoaderCount;
 	}
 }

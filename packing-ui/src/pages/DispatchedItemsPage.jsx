@@ -1089,64 +1089,6 @@ const auditActionChipBaseSx = {
 		"1px solid rgba(255,255,255,.08)",
 };
 
-const getAuditActionTone = (action = "") => {
-	const a = action.toLowerCase();
-
-	if (a.includes("approved")) {
-		return {
-			bg: "rgba(16,185,129,.15)",
-			color: "#6ee7b7",
-			border: "1px solid rgba(16,185,129,.25)",
-		};
-	}
-
-	if (a.includes("rejected")) {
-		return {
-			bg: "rgba(239,68,68,.15)",
-			color: "#fca5a5",
-			border: "1px solid rgba(239,68,68,.25)",
-		};
-	}
-
-	if (a.includes("requested")) {
-		return {
-			bg: "rgba(245,158,11,.15)",
-			color: "#fcd34d",
-			border: "1px solid rgba(245,158,11,.25)",
-		};
-	}
-
-	if (a.includes("dispatched")) {
-		return {
-			bg: "rgba(59,130,246,.15)",
-			color: "#93c5fd",
-			border: "1px solid rgba(59,130,246,.25)",
-		};
-	}
-
-	if (a.includes("packed")) {
-		return {
-			bg: "rgba(99,102,241,.15)",
-			color: "#c4b5fd",
-			border: "1px solid rgba(99,102,241,.25)",
-		};
-	}
-
-	if (a.includes("sticker")) {
-		return {
-			bg: "rgba(14,165,233,.15)",
-			color: "#7dd3fc",
-			border: "1px solid rgba(14,165,233,.25)",
-		};
-	}
-
-	return {
-		bg: "rgba(148,163,184,.14)",
-		color: "#cbd5e1",
-		border: "1px solid rgba(148,163,184,.20)",
-	};
-};
-
 const auditTimeSx = {
 	color: "rgba(255,255,255,.55)",
 	fontSize: 12,
@@ -3031,6 +2973,33 @@ const DISPATCH_EXPORT_STATUS_OPTIONS = [
 	},
 ];
 
+const DISPATCH_STATUS_OPTION_ICONS = {
+	ALL: "🌐",
+	READY: "🟡",
+	READY_TO_STORE: "📦",
+	WAREHOUSE_REQUESTED: "🏭",
+	IN_WAREHOUSE: "🏢",
+	READY_TO_DISPATCH: "🚚",
+	LOADED: "🟠",
+	DISPATCHED: "✅",
+	OUT_FOR_DELIVERY: "🛣️",
+	DELIVERED: "📍",
+	WAREHOUSE_RETURN_REQUESTED: "↩️",
+	RESTORED: "♻️",
+	AVAILABLE: "📋",
+};
+
+const getDispatchStatusOptionDisplay = (
+	option
+) => {
+	const icon =
+		DISPATCH_STATUS_OPTION_ICONS[
+		option?.value
+		] || "•";
+
+	return `${icon} ${option?.label || "Status"}`;
+};
+
 function normalizeStatusSelection(value, previousValue = ["ALL"]) {
 	const rawValues = Array.isArray(value)
 		? value
@@ -3492,12 +3461,23 @@ function DispatchedItemsPage() {
 	const [statusFilter, setStatusFilter] = useState(["ALL"]);
 	const [groupBy, setGroupBy] = useState("NONE");
 	const [fromLocation, setFromLocation] = useState("");
+	const [
+		driverFilter,
+		setDriverFilter,
+	] = useState("ALL");
+	const authContext =
+		useAuth();
 
 	const {
 		roles = [],
 		hasRole,
 		authLoading,
-	} = useAuth();
+	} = authContext;
+
+	const currentUser =
+		authContext?.currentUser ??
+		authContext?.user ??
+		null;
 
 	const isAdmin =
 		hasRole("ADMIN");
@@ -3641,11 +3621,13 @@ function DispatchedItemsPage() {
 		title: "",
 	});
 
-	const [dispatchTripForm, setDispatchTripForm] = useState({
-		driverId: "",
-		vehicleId: "",
-		dispatchTime: "",
-	});
+	const [dispatchTripForm, setDispatchTripForm] =
+		useState({
+			driverId: "",
+			vehicleId: "",
+			helperLoaderCount: "",
+			dispatchTime: "",
+		});
 
 	const [customChallanSectionOpen, setCustomChallanSectionOpen] = useState(false);
 	const [customChallans, setCustomChallans] = useState([]);
@@ -6468,13 +6450,6 @@ function DispatchedItemsPage() {
 	/*
 	 * Generates the real XLSX workbook.
 	 */
-	const authContext = useAuth();
-
-	const currentUser =
-		authContext?.currentUser ??
-		authContext?.user ??
-		null;
-
 	const exportDispatchExcelWorkbook =
 		async (
 			driverLookup
@@ -11317,6 +11292,7 @@ function DispatchedItemsPage() {
 		setDispatchTripForm({
 			driverId: "",
 			vehicleId: "",
+			helperLoaderCount: "",
 			dispatchTime:
 				getNowDateTimeLocal(),
 		});
@@ -12402,6 +12378,40 @@ function DispatchedItemsPage() {
 			logisticsVehicles,
 		]);
 
+	const normalizeDispatchHelperLoaderCount =
+		(value) => {
+			const cleanValue =
+				String(value ?? "")
+					.trim();
+
+			if (!cleanValue) {
+				return null;
+			}
+
+			const parsedValue =
+				Number(cleanValue);
+
+			if (
+				!Number.isInteger(
+					parsedValue
+				) ||
+				parsedValue < 0 ||
+				parsedValue > 999
+			) {
+				throw new Error(
+					"Helpers / loaders must be a whole number between 0 and 999"
+				);
+			}
+
+			/*
+			 * Zero and blank both mean that no helper count
+			 * was specified.
+			 */
+			return parsedValue === 0
+				? null
+				: parsedValue;
+		};
+
 	const buildDispatchChallanRequest =
 		() => {
 			const itemIds =
@@ -12440,6 +12450,12 @@ function DispatchedItemsPage() {
 					).trim() ||
 					null,
 
+				helperLoaderCount:
+					normalizeDispatchHelperLoaderCount(
+						dispatchTripForm
+							.helperLoaderCount
+					),
+
 				dispatchTime:
 					String(
 						dispatchTripForm.dispatchTime ||
@@ -12462,6 +12478,10 @@ function DispatchedItemsPage() {
 				vehicleId:
 					request?.vehicleId ||
 					"",
+
+				helperLoaderCount:
+					request?.helperLoaderCount ??
+					null,
 
 				dispatchTime:
 					request?.dispatchTime ||
@@ -13061,23 +13081,9 @@ function DispatchedItemsPage() {
 
 									<ListItemText
 										primary={
-											option.value === "READY"
-												? "🟡 Packed"
-												: option.value === "READY_TO_STORE"
-													? "📦 Ready To Store"
-													: option.value === "WAREHOUSE_REQUESTED"
-														? "🏭 Warehouse Requested"
-														: option.value === "LOADED"
-															? "🟠 Queued"
-															: option.value === "IN_WAREHOUSE"
-																? "🏢 In Warehouse"
-																: option.value === "READY_TO_DISPATCH"
-																	? "🚚 Ready To Dispatch"
-																	: option.value === "DISPATCHED"
-																		? "✅ Dispatched"
-																		: option.value === "WAREHOUSE_RETURN_REQUESTED"
-																			? "↩️ Warehouse Return Requested"
-																			: "All Status"
+											getDispatchStatusOptionDisplay(
+												option
+											)
 										}
 										primaryTypographyProps={{
 											fontSize: 13,
@@ -18464,6 +18470,63 @@ function DispatchedItemsPage() {
 													)}
 												</Box>
 											</Box>
+
+											<Box sx={{ mb: 2 }}>
+												<Box
+													sx={
+														dispatchTripFieldLabelSx
+													}
+												>
+													Helpers / Loaders{" "}
+													<Box
+														component="span"
+														sx={{
+															ml: 0.7,
+															color: "#64748b",
+															fontSize: 11,
+															fontWeight: 750,
+														}}
+													>
+														(Optional)
+													</Box>
+												</Box>
+
+												<TextField
+													fullWidth
+													type="number"
+													value={
+														dispatchTripForm
+															.helperLoaderCount
+													}
+													onChange={(event) => {
+														const value =
+															event.target.value;
+
+														if (
+															value === "" ||
+															/^\d{0,3}$/.test(
+																value
+															)
+														) {
+															setDispatchTripForm(
+																(previous) => ({
+																	...previous,
+																	helperLoaderCount:
+																		value,
+																})
+															);
+														}
+													}}
+													inputProps={{
+														min: 0,
+														max: 999,
+														step: 1,
+														inputMode: "numeric",
+													}}
+													placeholder="Enter total helpers / loaders"
+													sx={formFieldSx}
+												/>
+											</Box>
 										</Box>
 									)}
 
@@ -18530,6 +18593,15 @@ function DispatchedItemsPage() {
 															label="Total Items"
 															value={
 																dispatchTripPreviewItems.length
+															}
+														/>
+
+														<DispatchReviewValue
+															label="Helpers / Loaders"
+															value={
+																dispatchTripForm
+																	.helperLoaderCount ||
+																"Not specified"
 															}
 														/>
 

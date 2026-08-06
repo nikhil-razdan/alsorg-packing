@@ -3,7 +3,7 @@ package com.alsorg.packing.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
+import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
@@ -521,6 +521,7 @@ public class DispatchedItemsController {
                                                         first.getDriverName(),
                                                         first.getVehicleId(),
                                                         first.getVehicleNumber(),
+                                                        first.getHelperLoaderCount(),
                                                         dispatchedAt,
                                                         first.getDispatchedBy(),
                                                         tripStartedAt,
@@ -679,6 +680,145 @@ public class DispatchedItemsController {
                                                 "tripDurationMinutes", durationMinutes));
         }
 
+        @Transactional
+        @PostMapping("/challans/{challanNumber:.+}/helpers")
+        public ResponseEntity<?> updateChallanHelpers(
+                        @PathVariable String challanNumber,
+                        @RequestBody(required = false) UpdateHelpersRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService
+                                .getCurrentUserFromAuth(auth);
+
+                boolean permitted = currentUserService.isAdmin(user) ||
+                                currentUserService.isDispatch(user) ||
+                                currentUserService.isLogistics(user);
+
+                if (!permitted) {
+                        return ResponseEntity
+                                        .status(403)
+                                        .body(
+                                                        "Only DISPATCH / LOGISTICS / ADMIN can update helpers/loaders");
+                }
+
+                String cleanChallanNumber = challanNumber == null
+                                ? ""
+                                : challanNumber.trim();
+
+                if (cleanChallanNumber.isBlank()) {
+                        return ResponseEntity
+                                        .badRequest()
+                                        .body("Challan number is required");
+                }
+
+                Integer helperLoaderCount = normalizeHelperLoaderCount(
+                                request == null
+                                                ? null
+                                                : request.helperLoaderCount());
+
+                List<ItemDispatchStatus> statuses = List.of(
+                                ItemDispatchStatus.DISPATCHED);
+
+                List<DispatchedItem> sourceItems;
+
+                if (currentUserService.isAdmin(user)) {
+                        sourceItems = repository.findByStatusIn(
+                                        statuses);
+                } else {
+                        sourceItems = repository
+                                        .findVisibleByStatusesAndPlantsIncludingLegacy(
+                                                        statuses,
+                                                        currentUserService.allowedPlants(user));
+                }
+
+                String currentUsername = cleanLower(
+                                user.getUsername());
+
+                List<DispatchedItem> challanItems = sourceItems
+                                .stream()
+                                .filter(item -> item.getChalaanNumber() != null &&
+                                                cleanChallanNumber.equals(
+                                                                item.getChalaanNumber().trim()))
+                                .filter(item -> {
+                                        /*
+                                         * Logistics can maintain plant-visible challans.
+                                         * Dispatch can maintain its own challans.
+                                         */
+                                        if (currentUserService.isAdmin(user) ||
+                                                        currentUserService.isLogistics(user)) {
+                                                return true;
+                                        }
+
+                                        return cleanLower(
+                                                        item.getDispatchedBy())
+                                                        .equals(
+                                                                        currentUsername);
+                                })
+                                .toList();
+
+                if (challanItems.isEmpty()) {
+                        return ResponseEntity
+                                        .status(404)
+                                        .body(
+                                                        "No accessible dispatched items found for challan: "
+                                                                        + cleanChallanNumber);
+                }
+
+                for (DispatchedItem item : challanItems) {
+                        item.setHelperLoaderCount(
+                                        helperLoaderCount);
+                }
+
+                repository.saveAll(
+                                challanItems);
+
+                Map<String, Object> response = new LinkedHashMap<>();
+
+                response.put(
+                                "challanNumber",
+                                cleanChallanNumber);
+
+                response.put(
+                                "helperLoaderCount",
+                                helperLoaderCount);
+
+                response.put(
+                                "message",
+                                helperLoaderCount == null
+                                                ? "Helpers/loaders cleared"
+                                                : "Helpers/loaders updated successfully");
+
+                return ResponseEntity.ok(
+                                response);
+        }
+
+        public record UpdateHelpersRequest(
+                        Integer helperLoaderCount) {
+        }
+
+        private Integer normalizeHelperLoaderCount(
+                        Integer value) {
+
+                if (value == null ||
+                                value == 0) {
+                        return null;
+                }
+
+                if (value < 0) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Helpers/loaders count cannot be negative");
+                }
+
+                if (value > 999) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Helpers/loaders count cannot exceed 999");
+                }
+
+                return value;
+        }
+
         private DispatchedChallanItemResponse toDispatchedChallanItemResponse(
                         DispatchedItem item) {
                 return new DispatchedChallanItemResponse(
@@ -745,6 +885,7 @@ public class DispatchedItemsController {
                         String driverName,
                         java.util.UUID vehicleId,
                         String vehicleNumber,
+                        Integer helperLoaderCount,
                         LocalDateTime dispatchedAt,
                         String dispatchedBy,
                         LocalDateTime tripStartedAt,
