@@ -60,139 +60,6 @@ function hasHelpersLoaders(
     );
 }
 
-const openHelperDialog =
-    (challan) => {
-        setHelperDialog({
-            open: true,
-
-            challanNumber:
-                challan
-                    ?.challanNumber || "",
-
-            helperLoaderCount:
-                hasHelpersLoaders(challan)
-                    ? String(
-                        challan
-                            .helperLoaderCount
-                    )
-                    : "",
-        });
-    };
-
-const closeHelperDialog =
-    () => {
-        setHelperDialog({
-            open: false,
-            challanNumber: "",
-            helperLoaderCount: "",
-        });
-    };
-
-const submitHelpers =
-    async () => {
-        if (
-            !helperDialog.challanNumber
-        ) {
-            showAlert?.(
-                "Challan number missing",
-                "error"
-            );
-
-            return;
-        }
-
-        let helperLoaderCount =
-            null;
-
-        if (
-            String(
-                helperDialog
-                    .helperLoaderCount
-            ).trim() !== ""
-        ) {
-            const parsed =
-                Number(
-                    helperDialog
-                        .helperLoaderCount
-                );
-
-            if (
-                !Number.isInteger(parsed) ||
-                parsed < 0
-            ) {
-                showAlert?.(
-                    "Helpers/loaders must be a whole number",
-                    "error"
-                );
-
-                return;
-            }
-
-            helperLoaderCount =
-                parsed === 0
-                    ? null
-                    : parsed;
-        }
-
-        try {
-            setSavingHelpers(true);
-
-            const res =
-                await fetch(
-                    `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
-                        helperDialog
-                            .challanNumber
-                    )}/helpers`,
-                    {
-                        method: "POST",
-                        credentials:
-                            "include",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json",
-                        },
-
-                        body:
-                            JSON.stringify({
-                                helperLoaderCount,
-                            }),
-                    }
-                );
-
-            if (!res.ok) {
-                const text =
-                    await res.text();
-
-                throw new Error(
-                    text ||
-                    "Failed to save helpers/loaders"
-                );
-            }
-
-            showAlert?.(
-                helperLoaderCount
-                    ? "Helpers/loaders updated successfully"
-                    : "Helpers/loaders cleared successfully",
-                "success"
-            );
-
-            closeHelperDialog();
-
-            await loadData();
-        } catch (error) {
-            console.error(error);
-
-            showAlert?.(
-                error.message ||
-                "Failed to save helpers/loaders",
-                "error"
-            );
-        } finally {
-            setSavingHelpers(false);
-        }
-    };
-
 function DispatchChallans({
     showAlert,
 }) {
@@ -256,7 +123,7 @@ function DispatchChallans({
     const canManageTripEnd =
         true;
 
-    const loadData = async () => {
+    async function loadData() {
         try {
             setLoading(true);
 
@@ -265,7 +132,8 @@ function DispatchChallans({
                     `${API_BASE_URL}/api/dispatched/challans`,
                     {
                         method: "GET",
-                        credentials: "include",
+                        credentials:
+                            "include",
                     }
                 );
 
@@ -274,7 +142,8 @@ function DispatchChallans({
                     await res.text();
 
                 throw new Error(
-                    text || "Failed to load dispatched challans"
+                    text ||
+                    "Failed to load dispatched challans"
                 );
             }
 
@@ -286,25 +155,162 @@ function DispatchChallans({
                     ? data
                     : []
             );
-        } catch (e) {
-            console.error(e);
+        } catch (error) {
+            console.error(
+                error
+            );
 
             setRows([]);
 
+            const message =
+                error?.message ||
+                "Failed to load dispatched challans";
+
             if (showAlert) {
                 showAlert(
-                    e.message || "Failed to load dispatched challans",
+                    message,
                     "error"
                 );
             } else {
-                alert(
-                    e.message || "Failed to load dispatched challans"
-                );
+                alert(message);
             }
         } finally {
             setLoading(false);
         }
-    };
+    }
+
+    const openHelperDialog =
+        (challan) => {
+            setHelperDialog({
+                open: true,
+
+                challanNumber:
+                    challan
+                        ?.challanNumber || "",
+
+                helperLoaderCount:
+                    hasHelpersLoaders(challan)
+                        ? String(
+                            challan
+                                .helperLoaderCount
+                        )
+                        : "",
+            });
+        };
+
+    const closeHelperDialog =
+        () => {
+            setHelperDialog({
+                open: false,
+                challanNumber: "",
+                helperLoaderCount: "",
+            });
+        };
+
+    const submitHelpers =
+        async () => {
+            if (
+                !helperDialog.challanNumber
+            ) {
+                showAlert?.(
+                    "Challan number missing",
+                    "error"
+                );
+
+                return;
+            }
+
+            let helperLoaderCount =
+                null;
+
+            if (
+                String(
+                    helperDialog
+                        .helperLoaderCount
+                ).trim() !== ""
+            ) {
+                const parsed =
+                    Number(
+                        helperDialog
+                            .helperLoaderCount
+                    );
+
+                if (
+                    !Number.isInteger(parsed) ||
+                    parsed < 0
+                ) {
+                    showAlert?.(
+                        "Helpers/loaders must be a whole number",
+                        "error"
+                    );
+
+                    return;
+                }
+
+                helperLoaderCount =
+                    parsed === 0
+                        ? null
+                        : parsed;
+            }
+
+            try {
+                setSavingHelpers(true);
+
+                const res =
+                    await fetch(
+                        `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
+                            helperDialog
+                                .challanNumber
+                        )}/helpers`,
+                        {
+                            method: "POST",
+                            credentials:
+                                "include",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json",
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    helperLoaderCount,
+                                }),
+                        }
+                    );
+
+                if (!res.ok) {
+                    const text =
+                        await res.text();
+
+                    throw new Error(
+                        text ||
+                        "Failed to save helpers/loaders"
+                    );
+                }
+
+                showAlert?.(
+                    helperLoaderCount
+                        ? "Helpers/loaders updated successfully"
+                        : "Helpers/loaders cleared successfully",
+                    "success"
+                );
+
+                closeHelperDialog();
+
+                await loadData();
+            } catch (error) {
+                console.error(error);
+
+                showAlert?.(
+                    error.message ||
+                    "Failed to save helpers/loaders",
+                    "error"
+                );
+            } finally {
+                setSavingHelpers(false);
+            }
+        };
 
     useEffect(() => {
         loadData();
@@ -324,93 +330,128 @@ function DispatchChallans({
                     .trim()
                     .toLowerCase();
 
-            const hasHelpers =
-                hasHelpersLoaders(
-                    challan
-                );
+            return rows.filter(
+                (challan) => {
+                    const hasHelpers =
+                        hasHelpersLoaders(
+                            challan
+                        );
 
-            const matchesHelperFilter =
-                helperFilter === "ALL"
-                    ? true
-                    : helperFilter ===
-                        "WITH_HELPERS"
-                        ? hasHelpers
-                        : !hasHelpers;
+                    const matchesHelperFilter =
+                        helperFilter ===
+                            "ALL"
+                            ? true
+                            : helperFilter ===
+                                "WITH_HELPERS"
+                                ? hasHelpers
+                                : !hasHelpers;
 
-            if (!matchesHelperFilter) {
-                return false;
-            }
+                    if (
+                        !matchesHelperFilter
+                    ) {
+                        return false;
+                    }
 
-            return rows.filter((challan) => {
-                const hasEndTime =
-                    hasChallanEndTime(
+                    const hasEndTime =
+                        hasChallanEndTime(
+                            challan
+                        );
+
+                    const matchesEndTimeFilter =
+                        endTimeFilter ===
+                            "ALL"
+                            ? true
+                            : endTimeFilter ===
+                                "WITH_END_TIME"
+                                ? hasEndTime
+                                : !hasEndTime;
+
+                    if (
+                        !matchesEndTimeFilter
+                    ) {
+                        return false;
+                    }
+
+                    if (!q) {
+                        return true;
+                    }
+
+                    const mainText = [
                         challan
-                    );
-
-                /*
-                 * End-time status filter.
-                 *
-                 * WITHOUT_END_TIME:
-                 * tripEndedAt is null, undefined or blank.
-                 *
-                 * WITH_END_TIME:
-                 * tripEndedAt contains a valid value.
-                 */
-                const matchesEndTimeFilter =
-                    endTimeFilter === "ALL"
-                        ? true
-                        : endTimeFilter === "WITH_END_TIME"
-                            ? hasEndTime
-                            : !hasEndTime;
-
-                if (!matchesEndTimeFilter) {
-                    return false;
-                }
-
-                /*
-                 * When the search field is empty, return every
-                 * challan matching the selected end-time filter.
-                 */
-                if (!q) {
-                    return true;
-                }
-
-                const mainText = [
-                    challan.challanNumber,
-                    challan.driverName,
-                    challan.vehicleNumber,
-                    challan.dispatchedBy,
-                    challan.tripStatus,
-                    challan.tripEndedAt,
-                ]
-                    .filter(Boolean)
-                    .join(" ")
-                    .toLowerCase();
-
-                const itemText =
-                    (challan.items || [])
-                        .map((item) =>
-                            [
-                                item.name,
-                                item.sku,
-                                item.pdNo,
-                                item.drawingNo,
-                                item.clientName,
-                                item.description,
-                                item.plantCode,
-                                item.status,
-                            ]
-                                .filter(Boolean)
-                                .join(" ")
+                            .challanNumber,
+                        challan
+                            .driverName,
+                        challan
+                            .vehicleNumber,
+                        challan
+                            .dispatchedBy,
+                        challan
+                            .tripStatus,
+                        challan
+                            .tripEndedAt,
+                        challan
+                            .helperLoaderCount,
+                    ]
+                        .filter(
+                            (value) =>
+                                value !==
+                                null &&
+                                value !==
+                                undefined
                         )
                         .join(" ")
                         .toLowerCase();
 
-                return (
-                    mainText.includes(q) ||
-                    itemText.includes(q)
-                );
-            });
+                    const itemText =
+                        (
+                            Array.isArray(
+                                challan
+                                    .items
+                            )
+                                ? challan
+                                    .items
+                                : []
+                        )
+                            .map(
+                                (item) =>
+                                    [
+                                        item
+                                            .name,
+                                        item
+                                            .sku,
+                                        item
+                                            .pdNo,
+                                        item
+                                            .drawingNo,
+                                        item
+                                            .clientName,
+                                        item
+                                            .description,
+                                        item
+                                            .plantCode,
+                                        item
+                                            .status,
+                                    ]
+                                        .filter(
+                                            Boolean
+                                        )
+                                        .join(
+                                            " "
+                                        )
+                            )
+                            .join(" ")
+                            .toLowerCase();
+
+                    return (
+                        mainText.includes(
+                            q
+                        ) ||
+                        itemText.includes(
+                            q
+                        )
+                    );
+                }
+            );
         }, [
             rows,
             search,

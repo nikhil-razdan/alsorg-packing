@@ -13,29 +13,24 @@ import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import { useAuth } from "../auth/AuthContext";
 
 function Sidebar() {
-	const location = useLocation();
-	const [collapsed, setCollapsed] = useState(false);
+	const location =
+		useLocation();
 
-	const currentInventoryView =
-		new URLSearchParams(
-			location.search
-		).get("view") ||
-		(
-			canOpenNormalInventory
-				? "normal"
-				: "hardware"
-		);
+	const [
+		collapsed,
+		setCollapsed,
+	] = useState(false);
 
+	/*
+	 * Auth must be resolved before any values
+	 * derived from roles are calculated.
+	 */
 	const {
 		user,
 		hasRole,
 		hasAnyRole,
 	} = useAuth();
 
-	const canOpenWarehouse =
-		canOpenWarehousePageFromUser(
-			user
-		);
 	const canOpenNormalInventory =
 		hasAnyRole(
 			"ADMIN",
@@ -46,6 +41,28 @@ function Sidebar() {
 		hasAnyRole(
 			"ADMIN",
 			"HARDWARE_PACKING"
+		);
+
+	const canOpenWarehouse =
+		canOpenWarehousePageFromUser(
+			user
+		);
+
+	/*
+	 * Calculate this only after
+	 * canOpenNormalInventory is initialized.
+	 */
+	const requestedInventoryView =
+		new URLSearchParams(
+			location.search
+		).get("view");
+
+	const currentInventoryView =
+		requestedInventoryView ||
+		(
+			canOpenNormalInventory
+				? "normal"
+				: "hardware"
 		);
 
 	const links = [
@@ -78,7 +95,6 @@ function Sidebar() {
 				/>
 			),
 		},
-
 		{
 			path: "/packflow/zoho-items",
 			view: "hardware",
@@ -92,19 +108,18 @@ function Sidebar() {
 				/>
 			),
 		},
-
 		{
 			path: "/packflow/warehouse",
 			label: "Warehouse",
 			roles: [],
-			customAccess: canOpenWarehouse,
+			customAccess:
+				canOpenWarehouse,
 			icon: (
 				<WarehouseOutlinedIcon
 					fontSize="small"
 				/>
 			),
 		},
-
 		{
 			path: "/packflow/dispatched-items",
 			label: "Dispatched Items",
@@ -120,7 +135,6 @@ function Sidebar() {
 				/>
 			),
 		},
-
 		{
 			path: "/packflow/logistics",
 			label: "Logistics",
