@@ -27,6 +27,24 @@ import {
     API_BASE_URL,
 } from "../../../config";
 
+
+function hasChallanEndTime(
+    challan
+) {
+    const normalizedValue =
+        String(
+            challan?.tripEndedAt ?? ""
+        )
+            .trim()
+            .toLowerCase();
+
+    return (
+        normalizedValue !== "" &&
+        normalizedValue !== "null" &&
+        normalizedValue !== "undefined"
+    );
+}
+
 function DispatchChallans({
     showAlert,
 }) {
@@ -38,6 +56,12 @@ function DispatchChallans({
 
     const [search, setSearch] =
         useState("");
+
+    const [search, setSearch] =
+        useState("");
+
+    const [endTimeFilter, setEndTimeFilter] =
+        useState("WITHOUT_END_TIME");
 
     const [expanded, setExpanded] =
         useState("");
@@ -132,18 +156,50 @@ function DispatchChallans({
     const filteredRows =
         useMemo(() => {
             const q =
-                search.trim().toLowerCase();
-
-            if (!q) {
-                return rows;
-            }
+                search
+                    .trim()
+                    .toLowerCase();
 
             return rows.filter((challan) => {
+                const hasEndTime =
+                    hasChallanEndTime(
+                        challan
+                    );
+
+                /*
+                 * End-time status filter.
+                 *
+                 * WITHOUT_END_TIME:
+                 * tripEndedAt is null, undefined or blank.
+                 *
+                 * WITH_END_TIME:
+                 * tripEndedAt contains a valid value.
+                 */
+                const matchesEndTimeFilter =
+                    endTimeFilter ===
+                        "WITH_END_TIME"
+                        ? hasEndTime
+                        : !hasEndTime;
+
+                if (!matchesEndTimeFilter) {
+                    return false;
+                }
+
+                /*
+                 * When the search field is empty, return every
+                 * challan matching the selected end-time filter.
+                 */
+                if (!q) {
+                    return true;
+                }
+
                 const mainText = [
                     challan.challanNumber,
                     challan.driverName,
                     challan.vehicleNumber,
                     challan.dispatchedBy,
+                    challan.tripStatus,
+                    challan.tripEndedAt,
                 ]
                     .filter(Boolean)
                     .join(" ")
@@ -173,11 +229,19 @@ function DispatchChallans({
                     itemText.includes(q)
                 );
             });
-        }, [rows, search]);
+        }, [
+            rows,
+            search,
+            endTimeFilter,
+        ]);
 
     useEffect(() => {
         setPageNo(1);
-    }, [search, pageSize]);
+    }, [
+        search,
+        endTimeFilter,
+        pageSize,
+    ]);
 
     const totalPages =
         Math.max(
@@ -486,7 +550,9 @@ function DispatchChallans({
             <Box sx={searchPanel}>
                 <SearchIcon
                     sx={{
-                        color: "rgba(255,255,255,.45)",
+                        color:
+                            "rgba(255,255,255,.45)",
+                        flexShrink: 0,
                     }}
                 />
 
@@ -495,13 +561,16 @@ function DispatchChallans({
                     placeholder="Search challan, driver, vehicle, item, client, PD no..."
                     value={search}
                     onChange={(e) =>
-                        setSearch(e.target.value)
+                        setSearch(
+                            e.target.value
+                        )
                     }
                     InputProps={{
                         disableUnderline: true,
                     }}
                     sx={{
                         flex: 1,
+                        minWidth: 220,
 
                         "& .MuiInputBase-root": {
                             color: "#fff",
@@ -510,11 +579,65 @@ function DispatchChallans({
                         },
 
                         "& input::placeholder": {
-                            color: "rgba(255,255,255,.42)",
+                            color:
+                                "rgba(255,255,255,.42)",
                             opacity: 1,
                         },
                     }}
                 />
+
+                <Box sx={searchFilterDivider} />
+
+                <Select
+                    size="small"
+                    value={endTimeFilter}
+                    onChange={(e) =>
+                        setEndTimeFilter(
+                            e.target.value
+                        )
+                    }
+                    renderValue={(value) =>
+                        value === "WITH_END_TIME"
+                            ? "Challans With End Time"
+                            : "Challans Without End Time"
+                    }
+                    sx={endTimeFilterSelect}
+                    MenuProps={{
+                        PaperProps: {
+                            sx: {
+                                mt: 1,
+                                borderRadius: "12px",
+                                color: "#fff",
+                                background: "#0f172a",
+                                border:
+                                    "1px solid rgba(255,255,255,.12)",
+
+                                "& .MuiMenuItem-root": {
+                                    fontSize: 13,
+                                    fontWeight: 750,
+                                },
+
+                                "& .MuiMenuItem-root:hover": {
+                                    background:
+                                        "rgba(59,130,246,.15)",
+                                },
+
+                                "& .Mui-selected": {
+                                    background:
+                                        "rgba(59,130,246,.22) !important",
+                                },
+                            },
+                        },
+                    }}
+                >
+                    <MenuItem value="WITHOUT_END_TIME">
+                        Challans Without End Time
+                    </MenuItem>
+
+                    <MenuItem value="WITH_END_TIME">
+                        Challans With End Time
+                    </MenuItem>
+                </Select>
             </Box>
 
             {loading && (
@@ -526,7 +649,10 @@ function DispatchChallans({
             {!loading &&
                 filteredRows.length === 0 && (
                     <Box sx={emptyState}>
-                        No dispatched challans found.
+                        {endTimeFilter ===
+                            "WITH_END_TIME"
+                            ? "No challans with an end time were found."
+                            : "No challans without an end time were found."}
                     </Box>
                 )}
 
@@ -1272,15 +1398,64 @@ const summaryLabel = {
 const searchPanel = {
     display: "flex",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 1.5,
-    height: 50,
+    minHeight: 50,
     px: 2,
+    py: 0.75,
     mb: 2,
     borderRadius: "14px",
     background:
         "rgba(255,255,255,.035)",
     border:
         "1px solid rgba(255,255,255,.07)",
+};
+
+const searchFilterDivider = {
+    width: "1px",
+    height: 28,
+    flexShrink: 0,
+    background:
+        "rgba(255,255,255,.10)",
+
+    "@media (max-width: 700px)": {
+        display: "none",
+    },
+};
+
+const endTimeFilterSelect = {
+    minWidth: 230,
+    height: 38,
+    flexShrink: 0,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 850,
+    borderRadius: "10px",
+    background:
+        "rgba(59,130,246,.10)",
+
+    "& .MuiOutlinedInput-notchedOutline": {
+        borderColor:
+            "rgba(96,165,250,.24)",
+    },
+
+    "&:hover .MuiOutlinedInput-notchedOutline": {
+        borderColor:
+            "rgba(96,165,250,.48)",
+    },
+
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+        borderColor: "#60a5fa",
+    },
+
+    "& .MuiSvgIcon-root": {
+        color: "#93c5fd",
+    },
+
+    "@media (max-width: 700px)": {
+        width: "100%",
+        minWidth: 0,
+    },
 };
 
 const emptyState = {
