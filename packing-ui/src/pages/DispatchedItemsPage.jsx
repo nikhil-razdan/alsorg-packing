@@ -3340,6 +3340,7 @@ const ADMIN_EDIT_API_FIELDS = {
 	location: "STICKER_LOCATION",
 	driver: "DRIVER",
 	vehicle: "VEHICLE",
+	dispatchDateTime: "DISPATCH_DATE_TIME",
 };
 
 const ADMIN_EDIT_TEXT_FIELDS = [
@@ -3410,6 +3411,8 @@ const createEmptyAdminEditForm = () => ({
 
 	vehicleId: "",
 	vehicleNumber: "",
+
+	dispatchDateTime: "",
 });
 
 const createEmptyAdminEditApplyState = () => ({
@@ -3427,6 +3430,7 @@ const createEmptyAdminEditApplyState = () => ({
 
 	driver: false,
 	vehicle: false,
+	dispatchDateTime: false,
 });
 
 const CREATE_NEW_DRIVER_OPTION =
@@ -10690,6 +10694,42 @@ function DispatchedItemsPage() {
 		return row?.packetItemId || row?.itemId || row?.id || row?.zohoItemId || "";
 	};
 
+	const toAdminDateTimeLocalValue = (value) => {
+		if (!value) {
+			return "";
+		}
+
+		if (
+			value instanceof Date &&
+			!Number.isNaN(value.getTime())
+		) {
+			const localDate = new Date(value);
+
+			localDate.setMinutes(
+				localDate.getMinutes() -
+				localDate.getTimezoneOffset()
+			);
+
+			return localDate
+				.toISOString()
+				.slice(0, 16);
+		}
+
+		/*
+		 * Backend LocalDateTime is already business-local time.
+		 * Do not convert it through UTC/toISOString().
+		 */
+		const text = String(value)
+			.trim()
+			.replace(" ", "T");
+
+		const match = text.match(
+			/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/
+		);
+
+		return match ? match[1] : "";
+	};
+
 	const openAdminDispatchEdit = (
 		targetRows
 	) => {
@@ -10756,6 +10796,16 @@ function DispatchedItemsPage() {
 							"string"
 							? row.vehicle
 							: ""
+					)
+			);
+
+		const dispatchDateTime =
+			getAdminEditCommonValue(
+				cleanRows,
+				(row) =>
+					toAdminDateTimeLocalValue(
+						row?.dispatchedAt ||
+						row?.tripStartedAt
 					)
 			);
 
@@ -10866,6 +10916,8 @@ function DispatchedItemsPage() {
 
 			vehicleNumber:
 				vehicleNumber,
+
+			dispatchDateTime,
 		});
 
 		/*
@@ -10892,6 +10944,13 @@ function DispatchedItemsPage() {
 
 					driver: false,
 					vehicle: false,
+
+					/*
+					 * Enable automatically only when the single row
+					 * already has a real dispatch timestamp.
+					 */
+					dispatchDateTime:
+						Boolean(dispatchDateTime),
 				}
 				: createEmptyAdminEditApplyState()
 		);
@@ -10980,6 +11039,23 @@ function DispatchedItemsPage() {
 			if (fields.length === 0) {
 				alert(
 					"Select at least one field to apply"
+				);
+
+				return;
+			}
+
+			const cleanDispatchDateTime =
+				String(
+					adminEditForm.dispatchDateTime ||
+					""
+				).trim();
+
+			if (
+				adminEditApply.dispatchDateTime &&
+				!cleanDispatchDateTime
+			) {
+				alert(
+					"Dispatch date and time is required"
 				);
 
 				return;
@@ -11078,6 +11154,11 @@ function DispatchedItemsPage() {
 					normalizeDispatchVehicleNumber(
 						adminEditForm.vehicleNumber
 					),
+
+				dispatchDateTime:
+					adminEditApply.dispatchDateTime
+						? cleanDispatchDateTime
+						: null,
 			};
 
 			try {
@@ -11160,14 +11241,29 @@ function DispatchedItemsPage() {
 					setRows(
 						(previousRows) =>
 							previousRows.map(
-								(row) =>
-									updateMap.get(
-										String(
-											row?.zohoItemId ||
-											""
-										)
-									) ||
-									row
+								(row) => {
+									const update =
+										updateMap.get(
+											String(
+												row?.zohoItemId ||
+												""
+											)
+										);
+
+									if (!update) {
+										return row;
+									}
+
+									/*
+									 * Backend returns an update DTO, not the complete
+									 * DispatchedItem entity. Preserve packet/location
+									 * fields that are not present in the DTO.
+									 */
+									return attachDispatchSearchIndex({
+										...row,
+										...update,
+									});
+								}
 							)
 					);
 				} else {
@@ -17435,12 +17531,12 @@ function DispatchedItemsPage() {
 									}}
 								>
 									Only checked fields will be
-									applied. A checked field with
-									an empty value will clear that
-									field. Driver and vehicle
-									changes apply consistently to
-									every item belonging to the
-									same challan.
+									applied. Driver, vehicle and
+									dispatch date/time changes are
+									challan-level changes, so every
+									item in each affected challan
+									will be updated together.
+									Dispatch date/time cannot be blank.
 								</Box>
 
 								<Box
@@ -17597,6 +17693,107 @@ function DispatchedItemsPage() {
 											);
 										}
 									)}
+								</Box>
+
+								{/* DISPATCH DATE / TIME */}
+								<Box
+									sx={{
+										mt: 2,
+										p: 1.4,
+										borderRadius: "14px",
+
+										background:
+											adminEditApply.dispatchDateTime
+												? "rgba(16,185,129,.08)"
+												: "rgba(255,255,255,.025)",
+
+										border:
+											adminEditApply.dispatchDateTime
+												? "1px solid rgba(16,185,129,.24)"
+												: "1px solid rgba(255,255,255,.07)",
+									}}
+								>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 1,
+											mb: 1.2,
+										}}
+									>
+										<Checkbox
+											size="small"
+											checked={
+												adminEditApply.dispatchDateTime
+											}
+											onChange={(event) =>
+												setAdminEditApply(
+													(previous) => ({
+														...previous,
+														dispatchDateTime:
+															event.target.checked,
+													})
+												)
+											}
+											sx={{
+												p: 0.3,
+
+												"&.Mui-checked": {
+													color: "#34d399",
+												},
+											}}
+										/>
+
+										<Box
+											sx={{
+												color: "#6ee7b7",
+												fontSize: 12,
+												fontWeight: 950,
+											}}
+										>
+											Apply Dispatch Date / Time
+										</Box>
+									</Box>
+
+									<TextField
+										fullWidth
+										disabled={
+											!adminEditApply.dispatchDateTime ||
+											adminEditLoading
+										}
+										type="datetime-local"
+										label="Dispatch Date / Time"
+										InputLabelProps={{
+											shrink: true,
+										}}
+										value={
+											adminEditForm.dispatchDateTime ||
+											""
+										}
+										onChange={(event) =>
+											setAdminEditForm(
+												(previous) => ({
+													...previous,
+
+													dispatchDateTime:
+														event.target.value,
+												})
+											)
+										}
+										sx={dateTimeFieldSx}
+									/>
+
+									<Box
+										sx={{
+											mt: 1,
+											color: "rgba(255,255,255,.52)",
+											fontSize: 11,
+											fontWeight: 750,
+										}}
+									>
+										Changing one item updates dispatchedAt and
+										tripStartedAt for every item in the same challan.
+									</Box>
 								</Box>
 
 								{/* DRIVER */}

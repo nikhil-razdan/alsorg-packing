@@ -1,17 +1,16 @@
 package com.alsorg.packing.controller.dto.dispatch;
 
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
-
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import jakarta.validation.constraints.NotEmpty;
+
 public record AdminBulkDispatchEditRequest(
+        @NotEmpty(message = "Select at least one dispatch item") List<String> itemIds,
 
-        @NotEmpty @Size(max = 500) List<String> itemIds,
-
-        @NotEmpty Set<AdminDispatchEditField> fields,
+        @NotEmpty(message = "Select at least one field to update") Set<AdminDispatchEditField> fields,
 
         String itemName,
         String pdNo,
@@ -29,5 +28,7 @@ public record AdminBulkDispatchEditRequest(
         String driverName,
 
         UUID vehicleId,
-        String vehicleNumber) {
+        String vehicleNumber,
+
+        LocalDateTime dispatchDateTime) {
 }

@@ -334,13 +334,15 @@ public class DispatchedItemService {
         restored.setLocation("FLOOR");
         restored.setFloor("FLOOR");
 
-        Long iteration = (original.getPrintIteration() == null
-                ? 1
-                : original.getPrintIteration())
-                + 1;
+        Long currentPrintIteration = original.getPrintIteration();
+
+        long nextPrintIteration = (currentPrintIteration == null
+                ? 1L
+                : currentPrintIteration.longValue())
+                + 1L;
 
         restored.setPrintIteration(
-                iteration);
+                nextPrintIteration);
 
         restored.setStickerNumber(null);
 
@@ -1743,9 +1745,7 @@ public class DispatchedItemService {
 
         Set<AdminDispatchEditField> fields = request.fields();
 
-        if (fields == null ||
-                fields.isEmpty()) {
-
+        if (fields == null || fields.isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Select at least one field to update");
@@ -1755,10 +1755,8 @@ public class DispatchedItemService {
                 ? new LinkedHashSet<>()
                 : request.itemIds()
                         .stream()
-                        .filter(
-                                Objects::nonNull)
-                        .map(
-                                String::trim)
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
                         .filter(value -> !value.isBlank())
                         .collect(
                                 Collectors.toCollection(
@@ -1776,12 +1774,9 @@ public class DispatchedItemService {
                     "A maximum of 500 items can be edited at once");
         }
 
-        /*
-         * The name column is non-nullable.
-         */
         if (fields.contains(
-                AdminDispatchEditField.ITEM_NAME) &&
-                cleanNullable(
+                AdminDispatchEditField.ITEM_NAME)
+                && cleanNullable(
                         request.itemName()) == null) {
 
             throw new ResponseStatusException(
@@ -1789,8 +1784,26 @@ public class DispatchedItemService {
                     "Item name cannot be empty");
         }
 
-        List<DispatchedItem> selectedItems = dispatchedRepo.findAllById(
-                requestedIds);
+        boolean updateDriver = fields.contains(
+                AdminDispatchEditField.DRIVER);
+
+        boolean updateVehicle = fields.contains(
+                AdminDispatchEditField.VEHICLE);
+
+        boolean updateDispatchDateTime = fields.contains(
+                AdminDispatchEditField.DISPATCH_DATE_TIME);
+
+        if (updateDispatchDateTime
+                && request.dispatchDateTime() == null) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Dispatch date and time is required");
+        }
+
+        List<DispatchedItem> selectedItems = dispatchedRepo
+                .findAllById(
+                        requestedIds);
 
         Set<String> foundIds = selectedItems.stream()
                 .map(
@@ -1816,58 +1829,48 @@ public class DispatchedItemService {
         }
 
         /*
-         * The map prevents duplicate saves where multiple selected
-         * rows belong to the same challan.
+         * The map prevents duplicate saves when multiple selected rows
+         * belong to the same challan. It also ensures that every sibling
+         * row changed by a challan-level field is returned to the frontend.
          */
         Map<String, DispatchedItem> affectedItems = new LinkedHashMap<>();
 
         for (DispatchedItem item : selectedItems) {
-
             affectedItems.put(
                     item.getZohoItemId(),
                     item);
         }
 
         /*
-         * Sticker and item details apply only to rows selected by
-         * the Admin.
+         * Item/sticker fields apply only to rows explicitly selected
+         * by the Admin. Dispatch date/time, driver and vehicle are handled
+         * later as challan-level values.
          */
         applyAdminSelectedItemFields(
                 selectedItems,
                 request,
                 fields);
 
-        /*
-         * Update the source PacketItem as well so sticker reprints
-         * do not restore the old values.
-         */
         synchronizeAdminPacketItemFields(
                 selectedItems,
                 request,
                 fields);
 
-        boolean updateDriver = fields.contains(
-                AdminDispatchEditField.DRIVER);
+        Driver selectedDriver = resolveAdminDriver(
+                request,
+                updateDriver);
 
-        boolean updateVehicle = fields.contains(
-                AdminDispatchEditField.VEHICLE);
+        Vehicle selectedVehicle = resolveAdminVehicle(
+                request,
+                updateVehicle);
+
+        boolean updateChallanLevelFields = updateDriver
+                || updateVehicle
+                || updateDispatchDateTime;
 
         int updatedChallanCount = 0;
 
-        if (updateDriver ||
-                updateVehicle) {
-
-            Driver selectedDriver = resolveAdminDriver(
-                    request,
-                    updateDriver);
-
-            Vehicle selectedVehicle = resolveAdminVehicle(
-                    request,
-                    updateVehicle);
-
-            /*
-             * Driver and vehicle belong to the whole challan.
-             */
+        if (updateChallanLevelFields) {
             Set<String> chalaanNumbers = selectedItems.stream()
                     .map(
                             DispatchedItem::getChalaanNumber)
@@ -1885,7 +1888,39 @@ public class DispatchedItemService {
                         .findAllByChalaanNumberIn(
                                 chalaanNumbers);
 
-                applyAdminTransportFields(
+                /*
+                 * A selected challan must resolve back to at least one row.
+                 * This also protects against a misspelled repository property
+                 * or dirty challan values silently producing partial updates.
+                 */
+                Set<String> resolvedChalaanNumbers = chalaanItems.stream()
+                        .map(
+                                DispatchedItem::getChalaanNumber)
+                        .filter(
+                                Objects::nonNull)
+                        .map(
+                                String::trim)
+                        .filter(value -> !value.isBlank())
+                        .collect(
+                                Collectors.toCollection(
+                                        LinkedHashSet::new));
+
+                Set<String> unresolvedChalaanNumbers = new LinkedHashSet<>(
+                        chalaanNumbers);
+
+                unresolvedChalaanNumbers.removeAll(
+                        resolvedChalaanNumbers);
+
+                if (!unresolvedChalaanNumbers.isEmpty()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Could not resolve every selected challan: "
+                                    + String.join(
+                                            ", ",
+                                            unresolvedChalaanNumbers));
+                }
+
+                applyAdminChallanLevelFields(
                         chalaanItems,
                         request,
                         fields,
@@ -1893,26 +1928,24 @@ public class DispatchedItemService {
                         selectedVehicle);
 
                 for (DispatchedItem item : chalaanItems) {
-
                     affectedItems.put(
                             item.getZohoItemId(),
                             item);
                 }
 
-                updatedChallanCount = chalaanNumbers.size();
+                updatedChallanCount = resolvedChalaanNumbers.size();
             }
 
             /*
-             * Old records may not contain a challan number.
-             * Those records are updated individually.
+             * Legacy rows without a challan number have no sibling group.
+             * Only those explicitly selected legacy rows are updated.
              */
             List<DispatchedItem> legacyItems = selectedItems.stream()
-                    .filter(item -> item.getChalaanNumber() == null ||
-                            item.getChalaanNumber()
-                                    .isBlank())
+                    .filter(item -> item.getChalaanNumber() == null
+                            || item.getChalaanNumber().isBlank())
                     .toList();
 
-            applyAdminTransportFields(
+            applyAdminChallanLevelFields(
                     legacyItems,
                     request,
                     fields,
@@ -1920,7 +1953,6 @@ public class DispatchedItemService {
                     selectedVehicle);
 
             for (DispatchedItem item : legacyItems) {
-
                 affectedItems.put(
                         item.getZohoItemId(),
                         item);
@@ -1937,25 +1969,49 @@ public class DispatchedItemService {
             cleanAdmin = "SYSTEM";
         }
 
-        String editedFields = fields.stream()
-                .map(
-                        Enum::name)
-                .sorted()
+        Set<AdminDispatchEditField> selectedItemFields = fields.stream()
+                .filter(field -> !isAdminChallanLevelField(field))
                 .collect(
-                        Collectors.joining(
-                                ", "));
+                        Collectors.toCollection(
+                                LinkedHashSet::new));
+
+        Set<AdminDispatchEditField> challanLevelFields = fields.stream()
+                .filter(this::isAdminChallanLevelField)
+                .collect(
+                        Collectors.toCollection(
+                                LinkedHashSet::new));
 
         for (DispatchedItem item : savedItems) {
-
             String status = item.getStatus() == null
                     ? ""
-                    : item.getStatus()
-                            .name();
+                    : item.getStatus().name();
+
+            Set<AdminDispatchEditField> rowFields = new LinkedHashSet<>();
+
+            if (requestedIds.contains(
+                    item.getZohoItemId())) {
+                rowFields.addAll(
+                        selectedItemFields);
+            }
+
+            rowFields.addAll(
+                    challanLevelFields);
+
+            String editedFields = rowFields.stream()
+                    .map(
+                            AdminDispatchEditField::name)
+                    .sorted()
+                    .collect(
+                            Collectors.joining(
+                                    ", "));
+
+            if (editedFields.isBlank()) {
+                continue;
+            }
 
             auditLogService.log(
                     item.getZohoItemId(),
-                    "ADMIN DETAILS EDITED: "
-                            + editedFields,
+                    "ADMIN DETAILS EDITED: " + editedFields,
                     cleanAdmin,
                     "ADMIN");
 
@@ -1983,6 +2039,14 @@ public class DispatchedItemService {
                 savedItems.size(),
                 updatedChallanCount,
                 updatedRows);
+    }
+
+    private boolean isAdminChallanLevelField(
+            AdminDispatchEditField field) {
+
+        return field == AdminDispatchEditField.DRIVER
+                || field == AdminDispatchEditField.VEHICLE
+                || field == AdminDispatchEditField.DISPATCH_DATE_TIME;
     }
 
     private void applyAdminSelectedItemFields(
@@ -2263,16 +2327,14 @@ public class DispatchedItemService {
                         "Selected vehicle was not found"));
     }
 
-    private void applyAdminTransportFields(
+    private void applyAdminChallanLevelFields(
             Collection<DispatchedItem> items,
             AdminBulkDispatchEditRequest request,
             Set<AdminDispatchEditField> fields,
             Driver selectedDriver,
             Vehicle selectedVehicle) {
 
-        if (items == null ||
-                items.isEmpty()) {
-
+        if (items == null || items.isEmpty()) {
             return;
         }
 
@@ -2282,8 +2344,60 @@ public class DispatchedItemService {
         String manualVehicleNumber = cleanVehicleNumber(
                 request.vehicleNumber());
 
-        for (DispatchedItem item : items) {
+        boolean updateDispatchDateTime = fields.contains(
+                AdminDispatchEditField.DISPATCH_DATE_TIME);
 
+        LocalDateTime newDispatchDateTime = updateDispatchDateTime
+                ? request.dispatchDateTime()
+                : null;
+
+        if (updateDispatchDateTime
+                && newDispatchDateTime == null) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Dispatch date and time is required");
+        }
+
+        /*
+         * Validate the complete affected group before changing any row.
+         * Because this service is transactional, any failure rolls back
+         * item-level and PacketItem changes made earlier in the request.
+         */
+        if (updateDispatchDateTime) {
+            for (DispatchedItem item : items) {
+                if (!canEditDispatchDateTime(item)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Dispatch date/time can only be edited for an item with dispatch history: "
+                                    + item.getZohoItemId());
+                }
+
+                if (item.getTripEndedAt() != null
+                        && newDispatchDateTime.isAfter(
+                                item.getTripEndedAt())) {
+
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Dispatch date/time cannot be after trip end time for challan: "
+                                    + safe(
+                                            item.getChalaanNumber()));
+                }
+
+                if (item.getDeliveredAt() != null
+                        && newDispatchDateTime.isAfter(
+                                item.getDeliveredAt())) {
+
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Dispatch date/time cannot be after delivery time for challan: "
+                                    + safe(
+                                            item.getChalaanNumber()));
+                }
+            }
+        }
+
+        for (DispatchedItem item : items) {
             if (fields.contains(
                     AdminDispatchEditField.DRIVER)) {
 
@@ -2295,12 +2409,7 @@ public class DispatchedItemService {
                             cleanDriverName(
                                     selectedDriver.getName()));
                 } else {
-                    /*
-                     * Null driverId supports manual legacy names and
-                     * intentional clearing.
-                     */
                     item.setDriverId(null);
-
                     item.setDriverName(
                             manualDriverName);
                 }
@@ -2315,20 +2424,51 @@ public class DispatchedItemService {
 
                     item.setVehicleNumber(
                             cleanVehicleNumber(
-                                    selectedVehicle
-                                            .getVehicleNumber()));
+                                    selectedVehicle.getVehicleNumber()));
                 } else {
-                    /*
-                     * Null vehicleId supports manual legacy numbers
-                     * and intentional clearing.
-                     */
                     item.setVehicleId(null);
-
                     item.setVehicleNumber(
                             manualVehicleNumber);
                 }
             }
+
+            if (updateDispatchDateTime) {
+                /*
+                 * Preserve the application invariant established during
+                 * challan generation. Every row in the same challan gets
+                 * the exact same values.
+                 */
+                item.setDispatchedAt(
+                        newDispatchDateTime);
+
+                item.setTripStartedAt(
+                        newDispatchDateTime);
+
+                /*
+                 * tripEndedAt and deliveredAt deliberately remain unchanged.
+                 */
+            }
         }
+    }
+
+    private boolean canEditDispatchDateTime(
+            DispatchedItem item) {
+
+        if (item == null) {
+            return false;
+        }
+
+        if (item.getDispatchedAt() != null
+                || item.getTripStartedAt() != null) {
+            return true;
+        }
+
+        ItemDispatchStatus status = item.getStatus();
+
+        return status == ItemDispatchStatus.DISPATCHED
+                || status == ItemDispatchStatus.OUT_FOR_DELIVERY
+                || status == ItemDispatchStatus.DELIVERED
+                || status == ItemDispatchStatus.RESTORED;
     }
 
     private AdminUpdatedDispatchRow toAdminUpdatedDispatchRow(
@@ -2350,12 +2490,25 @@ public class DispatchedItemService {
                 item.getRemarks(),
                 item.getLocation(),
                 item.getCurrentLocationCode(),
+
+                item.getDriverId(),
                 item.getDriverName(),
+
+                item.getVehicleId(),
                 item.getVehicleNumber(),
+
+                item.getHelperLoaderCount(),
+
                 item.getChalaanNumber(),
                 item.getStatus() == null
                         ? ""
                         : item.getStatus().name(),
+
+                item.getDispatchedAt(),
+                item.getTripStartedAt(),
+                item.getTripEndedAt(),
+                item.getDeliveredAt(),
+
                 updatedAt);
     }
 
@@ -2364,6 +2517,21 @@ public class DispatchedItemService {
      * INTERNAL HELPERS
      * ============================================================
      */
+
+    private String safe(
+            Object value) {
+
+        if (value == null) {
+            return "-";
+        }
+
+        String clean = value.toString()
+                .trim();
+
+        return clean.isBlank()
+                ? "-"
+                : clean;
+    }
 
     private String cleanNullable(
             String value) {

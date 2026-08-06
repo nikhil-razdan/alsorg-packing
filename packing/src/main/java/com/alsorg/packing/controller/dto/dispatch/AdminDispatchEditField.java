@@ -13,5 +13,6 @@ public enum AdminDispatchEditField {
     REMARKS,
     STICKER_LOCATION,
     DRIVER,
-    VEHICLE
+    VEHICLE,
+    DISPATCH_DATE_TIME
 }
