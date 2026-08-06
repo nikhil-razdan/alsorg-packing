@@ -1,4 +1,6 @@
 import {
+	lazy,
+	Suspense,
 	useEffect,
 	useState,
 	useMemo,
@@ -24,10 +26,8 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import MasterItemsModal from "../dashboard/components/inventory/MasterItemsModal";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
-import ExcelJS from "exceljs";
 import {
 	fetchDrivers,
 	fetchVehicles,
@@ -38,11 +38,17 @@ import {
 	fetchCustomChallans,
 	downloadCustomChallan,
 } from "../dashboard/api/logisticsApi";
-import {
-	fetchDispatchReport,
-} from "../dashboard/api/dashboardApi";
-
 import { useAuth } from "../auth/AuthContext";
+
+/*
+ * Loaded asynchronously to prevent this page from participating in a
+ * static import cycle through the inventory modal dependency graph.
+ */
+const MasterItemsModal = lazy(() =>
+	import(
+		"../dashboard/components/inventory/MasterItemsModal"
+	)
+);
 
 const page = {
 	minHeight: "100vh",
@@ -5128,8 +5134,18 @@ function DispatchedItemsPage() {
 			 * returns driverName and vehicleNumber correctly
 			 * on the Dashboard Reports page.
 			 */
+			/*
+			 * Keep dashboardApi outside this page's static module graph.
+			 * This prevents a production-only temporal-dead-zone failure
+			 * when a dashboard barrel or dependency imports this page back.
+			 */
+			const dashboardApi =
+				await import(
+					"../dashboard/api/dashboardApi"
+				);
+
 			const payload =
-				await fetchDispatchReport(
+				await dashboardApi.fetchDispatchReport(
 					from,
 					to
 				);
@@ -6518,6 +6534,20 @@ function DispatchedItemsPage() {
 							)
 						);
 					});
+
+			/*
+			 * ExcelJS is used only when the user exports a workbook.
+			 * Dynamic loading keeps it out of the initial page module and
+			 * avoids unnecessary production-bundle initialization coupling.
+			 */
+			const excelJsModule =
+				await import(
+					"exceljs"
+				);
+
+			const ExcelJS =
+				excelJsModule.default ??
+				excelJsModule;
 
 			const workbook =
 				new ExcelJS.Workbook();
@@ -11836,7 +11866,7 @@ function DispatchedItemsPage() {
 		}
 	};
 
-	const loadCustomChallans = async () => {
+	async function loadCustomChallans() {
 		try {
 			setCustomChallansLoading(true);
 
@@ -11853,7 +11883,7 @@ function DispatchedItemsPage() {
 		} finally {
 			setCustomChallansLoading(false);
 		}
-	};
+	}
 
 	const toggleCustomChallanSection = async () => {
 		const nextOpen = !customChallanSectionOpen;
@@ -12071,7 +12101,7 @@ function DispatchedItemsPage() {
 			""
 		).trim();
 
-	const fetchChallanHistoryRows = async () => {
+	async function fetchChallanHistoryRows() {
 		const res =
 			await authFetch(`${API_BASE_URL}/api/dispatched/challans`, {
 				method: "GET",
@@ -12088,7 +12118,7 @@ function DispatchedItemsPage() {
 		return Array.isArray(data)
 			? data
 			: [];
-	};
+	}
 
 	const openChallanHistory = async () => {
 		try {
@@ -20102,10 +20132,16 @@ function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
-				<MasterItemsModal
-					open={masterItemsModalOpen}
-					onClose={() => setMasterItemsModalOpen(false)}
-				/>
+				<Suspense fallback={null}>
+					<MasterItemsModal
+						open={masterItemsModalOpen}
+						onClose={() =>
+							setMasterItemsModalOpen(
+								false
+							)
+						}
+					/>
+				</Suspense>
 			</div>
 		</div>
 	);
