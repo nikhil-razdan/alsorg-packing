@@ -19,11 +19,16 @@ import {
 	Collapse,
 	Checkbox,
 	ListItemText,
+	Popover,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import { API_BASE_URL } from "../config";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import usePackFlowDataRefresh
@@ -58,9 +63,9 @@ const page = {
 };
 
 const dispatchGrid =
-	"70px 350px 280px 140px 180px 250px 100px 220px 120px 180px 240px 540px";
+	"70px 350px 280px 140px 180px 250px 100px 220px 120px 180px 210px 240px 540px";
 
-const dispatchMinWidth = 2670;
+const dispatchMinWidth = 2880;
 
 const tableHeader = {
 	position: "sticky",
@@ -1821,11 +1826,13 @@ const searchPanel = {
 
 	alignItems: "center",
 
+	flexWrap: "wrap",
+
 	gap: 12,
 
-	height: 52,
+	minHeight: 52,
 
-	padding: "0 18px",
+	padding: "8px 18px",
 
 	borderRadius: 16,
 
@@ -1833,6 +1840,279 @@ const searchPanel = {
 
 	border:
 		"1px solid rgba(255,255,255,.06)",
+};
+
+
+const dateFilterButtonSx = (
+	active
+) => ({
+	minWidth: 210,
+	height: 44,
+	px: 1.5,
+	borderRadius: "14px",
+	textTransform: "none",
+	justifyContent: "flex-start",
+	color: "#fff",
+	background: active
+		? "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))"
+		: "rgba(255,255,255,.04)",
+	border: active
+		? "1px solid rgba(96,165,250,.42)"
+		: "1px solid rgba(255,255,255,.08)",
+	boxShadow: active
+		? "0 12px 26px rgba(37,99,235,.18)"
+		: "none",
+
+	"& .MuiButton-startIcon": {
+		color: active
+			? "#93c5fd"
+			: "#64748b",
+	},
+
+	"&:hover": {
+		background: active
+			? "linear-gradient(135deg,rgba(37,99,235,.42),rgba(59,130,246,.24))"
+			: "rgba(255,255,255,.075)",
+		borderColor:
+			"rgba(96,165,250,.34)",
+	},
+});
+
+const dateFilterPopoverPaperSx = {
+	mt: 1.2,
+	width: "min(520px, calc(100vw - 28px))",
+	borderRadius: "22px",
+	overflow: "hidden",
+	color: "#fff",
+	background:
+		"radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 34%), linear-gradient(180deg,#0f172a,#111827)",
+	border:
+		"1px solid rgba(148,163,184,.16)",
+	boxShadow:
+		"0 32px 90px rgba(2,6,23,.68)",
+	backdropFilter: "blur(22px)",
+};
+
+const dateFilterPanelSx = {
+	p: 2,
+};
+
+const dateFilterHeaderSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.5,
+	mb: 1.8,
+};
+
+const dateFilterIconSx = {
+	width: 42,
+	height: 42,
+	borderRadius: "14px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	color: "#bfdbfe",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.14))",
+	border:
+		"1px solid rgba(96,165,250,.26)",
+	boxShadow:
+		"0 12px 24px rgba(37,99,235,.18)",
+};
+
+const dateFilterTitleSx = {
+	color: "#fff",
+	fontSize: 16,
+	fontWeight: 950,
+};
+
+const dateFilterSubtitleSx = {
+	mt: 0.35,
+	color: "#94a3b8",
+	fontSize: 10.5,
+	fontWeight: 650,
+};
+
+const dateFilterCountChipSx = {
+	height: 24,
+	color: "#6ee7b7",
+	fontSize: 10,
+	fontWeight: 950,
+	background:
+		"rgba(16,185,129,.13)",
+	border:
+		"1px solid rgba(16,185,129,.24)",
+};
+
+const datePresetRowSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"repeat(4,minmax(0,1fr))",
+	gap: 0.8,
+	mb: 1.4,
+
+	"@media (max-width: 520px)": {
+		gridTemplateColumns:
+			"repeat(2,minmax(0,1fr))",
+	},
+};
+
+const datePresetButtonSx = {
+	minWidth: 0,
+	height: 34,
+	borderRadius: "11px",
+	textTransform: "none",
+	color: "#dbeafe",
+	fontSize: 10.5,
+	fontWeight: 900,
+	background:
+		"rgba(59,130,246,.09)",
+	border:
+		"1px solid rgba(96,165,250,.18)",
+
+	"&:hover": {
+		color: "#fff",
+		background:
+			"rgba(59,130,246,.18)",
+		borderColor:
+			"rgba(96,165,250,.34)",
+	},
+};
+
+const dateFilterGridSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"repeat(2,minmax(0,1fr))",
+	gap: 1.2,
+	mb: 1.2,
+
+	"@media (max-width: 520px)": {
+		gridTemplateColumns:
+			"minmax(0,1fr)",
+	},
+};
+
+const dateFilterFieldSx = {
+	"& .MuiInputLabel-root": {
+		color: "#94a3b8",
+		fontSize: 12,
+		fontWeight: 800,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "#93c5fd",
+	},
+
+	"& .MuiOutlinedInput-root": {
+		minHeight: 46,
+		borderRadius: "13px",
+		color: "#fff",
+		background:
+			"rgba(255,255,255,.04)",
+
+		"& fieldset": {
+			borderColor:
+				"rgba(255,255,255,.09)",
+		},
+
+		"&:hover fieldset": {
+			borderColor:
+				"rgba(96,165,250,.36)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#60a5fa",
+			boxShadow:
+				"0 0 0 3px rgba(96,165,250,.12)",
+		},
+	},
+
+	"& input": {
+		color: "#fff",
+		fontSize: 12,
+		fontWeight: 850,
+		colorScheme: "dark",
+	},
+
+	"& .MuiSelect-select": {
+		color: "#fff",
+		fontSize: 12,
+		fontWeight: 850,
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
+
+	"& input::-webkit-calendar-picker-indicator": {
+		filter: "invert(1)",
+		opacity: 0.88,
+		cursor: "pointer",
+	},
+};
+
+const dateFilterHintSx = {
+	display: "flex",
+	alignItems: "flex-start",
+	gap: 1,
+	p: 1.2,
+	borderRadius: "13px",
+	background:
+		"rgba(16,185,129,.075)",
+	border:
+		"1px solid rgba(16,185,129,.16)",
+};
+
+const dateFilterFooterSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	mt: 1.5,
+	pt: 1.4,
+	borderTop:
+		"1px solid rgba(255,255,255,.07)",
+};
+
+const dateFilterClearButtonSx = {
+	height: 36,
+	borderRadius: "11px",
+	textTransform: "none",
+	color: "#fca5a5",
+	fontWeight: 900,
+	background:
+		"rgba(239,68,68,.08)",
+	border:
+		"1px solid rgba(239,68,68,.17)",
+
+	"&:hover": {
+		background:
+			"rgba(239,68,68,.15)",
+	},
+
+	"&.Mui-disabled": {
+		opacity: 0.35,
+		color: "#94a3b8",
+	},
+};
+
+const dateFilterDoneButtonSx = {
+	height: 36,
+	px: 2.4,
+	borderRadius: "11px",
+	textTransform: "none",
+	color: "#fff",
+	fontWeight: 950,
+	background:
+		"linear-gradient(135deg,#2563eb,#3b82f6)",
+	boxShadow:
+		"0 10px 22px rgba(37,99,235,.25)",
+
+	"&:hover": {
+		background:
+			"linear-gradient(135deg,#1d4ed8,#2563eb)",
+	},
 };
 
 const wrap = {
@@ -3135,6 +3415,534 @@ const smartRowMatches = (row, search) => {
 	});
 };
 
+
+const DISPATCH_DATE_FILTER_MODES = [
+	{
+		value: "ACTIVITY",
+		label: "Relevant Activity",
+		description:
+			"Uses the most meaningful available timestamp for each row.",
+	},
+	{
+		value: "PACKING",
+		label: "Packing Date / Time",
+		description:
+			"Filters only by packing or sticker-generation time.",
+	},
+	{
+		value: "DISPATCH",
+		label: "Dispatch Date / Time",
+		description:
+			"Filters only rows having an actual dispatch timestamp.",
+	},
+	{
+		value: "UPDATED",
+		label: "Last Updated",
+		description:
+			"Filters by the latest row update timestamp.",
+	},
+];
+
+function parseDispatchDateTime(
+	value
+) {
+	if (!value) {
+		return null;
+	}
+
+	if (
+		value instanceof Date
+	) {
+		return Number.isNaN(
+			value.getTime()
+		)
+			? null
+			: new Date(
+				value.getTime()
+			);
+	}
+
+	const raw =
+		String(value)
+			.trim()
+			.replace(" ", "T");
+
+	if (!raw) {
+		return null;
+	}
+
+	const hasTimezone =
+		/[zZ]$/.test(raw) ||
+		/[+-]\d{2}:?\d{2}$/.test(
+			raw
+		);
+
+	if (hasTimezone) {
+		const parsed =
+			new Date(raw);
+
+		return Number.isNaN(
+			parsed.getTime()
+		)
+			? null
+			: parsed;
+	}
+
+	/*
+	 * Spring LocalDateTime values must be treated as local
+	 * business time instead of being shifted as UTC.
+	 */
+	const localMatch =
+		raw.match(
+			/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/
+		);
+
+	if (localMatch) {
+		const parsed =
+			new Date(
+				Number(localMatch[1]),
+				Number(localMatch[2]) - 1,
+				Number(localMatch[3]),
+				Number(localMatch[4] || 0),
+				Number(localMatch[5] || 0),
+				Number(localMatch[6] || 0),
+				Number(
+					String(
+						localMatch[7] || "0"
+					).padEnd(3, "0")
+				)
+			);
+
+		return Number.isNaN(
+			parsed.getTime()
+		)
+			? null
+			: parsed;
+	}
+
+	const fallback =
+		new Date(raw);
+
+	return Number.isNaN(
+		fallback.getTime()
+	)
+		? null
+		: fallback;
+}
+
+function getDispatchRowDateInfo(
+	row,
+	mode = "ACTIVITY"
+) {
+	const cleanMode =
+		String(mode || "ACTIVITY")
+			.trim()
+			.toUpperCase();
+
+	const candidatesByMode = {
+		PACKING: [
+			["packedAt", "Packed"],
+			["packingDate", "Packed"],
+			["packedDate", "Packed"],
+			[
+				"stickerGeneratedAt",
+				"Sticker Generated",
+			],
+			["generatedAt", "Generated"],
+			["createdAt", "Created"],
+		],
+
+		DISPATCH: [
+			[
+				"dispatchedAt",
+				"Dispatched",
+			],
+			[
+				"tripStartedAt",
+				"Trip Started",
+			],
+		],
+
+		UPDATED: [
+			["updatedAt", "Updated"],
+			["createdAt", "Created"],
+		],
+	};
+
+	let candidates;
+
+	if (cleanMode === "ACTIVITY") {
+		const status =
+			String(
+				row?.status || ""
+			)
+				.trim()
+				.toUpperCase();
+
+		if (
+			status === "DELIVERED"
+		) {
+			candidates = [
+				[
+					"deliveredAt",
+					"Delivered",
+				],
+				[
+					"dispatchedAt",
+					"Dispatched",
+				],
+				[
+					"tripStartedAt",
+					"Trip Started",
+				],
+				["updatedAt", "Updated"],
+				["packedAt", "Packed"],
+				["createdAt", "Created"],
+			];
+		} else if (
+			[
+				"DISPATCHED",
+				"OUT_FOR_DELIVERY",
+				"RESTORED",
+			].includes(status)
+		) {
+			candidates = [
+				[
+					"dispatchedAt",
+					"Dispatched",
+				],
+				[
+					"tripStartedAt",
+					"Trip Started",
+				],
+				[
+					"deliveredAt",
+					"Delivered",
+				],
+				["updatedAt", "Updated"],
+				["packedAt", "Packed"],
+				["createdAt", "Created"],
+			];
+		} else {
+			candidates = [
+				["packedAt", "Packed"],
+				[
+					"packingDate",
+					"Packed",
+				],
+				[
+					"packedDate",
+					"Packed",
+				],
+				[
+					"stickerGeneratedAt",
+					"Sticker Generated",
+				],
+				["updatedAt", "Updated"],
+				["createdAt", "Created"],
+				["generatedAt", "Generated"],
+			];
+		}
+	} else {
+		candidates =
+			candidatesByMode[
+			cleanMode
+			] ||
+			candidatesByMode.UPDATED;
+	}
+
+	for (
+		const [
+			field,
+			label,
+		] of candidates
+	) {
+		const rawValue =
+			row?.[field];
+
+		const date =
+			parseDispatchDateTime(
+				rawValue
+			);
+
+		if (date) {
+			return {
+				field,
+				label,
+				rawValue,
+				date,
+			};
+		}
+	}
+
+	return {
+		field: "",
+		label:
+			cleanMode === "DISPATCH"
+				? "Not Dispatched"
+				: "No Date",
+		rawValue: null,
+		date: null,
+	};
+}
+
+function formatDispatchTableDateTime(
+	value
+) {
+	const date =
+		parseDispatchDateTime(
+			value
+		);
+
+	if (!date) {
+		return "—";
+	}
+
+	return new Intl.DateTimeFormat(
+		"en-IN",
+		{
+			day: "2-digit",
+			month: "short",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+			hour12: true,
+		}
+	).format(date);
+}
+
+function toDispatchDateInputValue(
+	value
+) {
+	const date =
+		value instanceof Date
+			? value
+			: parseDispatchDateTime(
+				value
+			);
+
+	if (!date) {
+		return "";
+	}
+
+	const pad = (number) =>
+		String(number)
+			.padStart(2, "0");
+
+	return [
+		date.getFullYear(),
+		"-",
+		pad(
+			date.getMonth() + 1
+		),
+		"-",
+		pad(date.getDate()),
+	].join("");
+}
+
+function getDispatchDateMinutes(
+	value
+) {
+	if (!value) {
+		return null;
+	}
+
+	const [
+		hour,
+		minute,
+	] =
+		String(value)
+			.split(":")
+			.map(Number);
+
+	if (
+		!Number.isFinite(hour) ||
+		!Number.isFinite(minute)
+	) {
+		return null;
+	}
+
+	return (
+		hour * 60 +
+		minute
+	);
+}
+
+function hasDispatchDateFilter({
+	dateFrom,
+	dateTo,
+	timeFrom,
+	timeTo,
+}) {
+	return Boolean(
+		dateFrom ||
+		dateTo ||
+		timeFrom ||
+		timeTo
+	);
+}
+
+function dispatchRowMatchesDateFilter(
+	row,
+	{
+		mode,
+		dateFrom,
+		dateTo,
+		timeFrom,
+		timeTo,
+	}
+) {
+	if (
+		!hasDispatchDateFilter({
+			dateFrom,
+			dateTo,
+			timeFrom,
+			timeTo,
+		})
+	) {
+		return true;
+	}
+
+	const dateInfo =
+		getDispatchRowDateInfo(
+			row,
+			mode
+		);
+
+	if (!dateInfo.date) {
+		return false;
+	}
+
+	const rowDateKey =
+		toDispatchDateInputValue(
+			dateInfo.date
+		);
+
+	if (
+		dateFrom &&
+		rowDateKey < dateFrom
+	) {
+		return false;
+	}
+
+	if (
+		dateTo &&
+		rowDateKey > dateTo
+	) {
+		return false;
+	}
+
+	const rowMinutes =
+		dateInfo.date.getHours() *
+		60 +
+		dateInfo.date.getMinutes();
+
+	const fromMinutes =
+		getDispatchDateMinutes(
+			timeFrom
+		);
+
+	const toMinutes =
+		getDispatchDateMinutes(
+			timeTo
+		);
+
+	if (
+		fromMinutes !== null &&
+		toMinutes !== null &&
+		fromMinutes > toMinutes
+	) {
+		/*
+		 * Overnight window, for example 10:00 PM to 06:00 AM.
+		 */
+		return (
+			rowMinutes >=
+			fromMinutes ||
+			rowMinutes <=
+			toMinutes
+		);
+	}
+
+	if (
+		fromMinutes !== null &&
+		rowMinutes < fromMinutes
+	) {
+		return false;
+	}
+
+	if (
+		toMinutes !== null &&
+		rowMinutes > toMinutes
+	) {
+		return false;
+	}
+
+	return true;
+}
+
+function getDispatchDateFilterModeLabel(
+	mode
+) {
+	return (
+		DISPATCH_DATE_FILTER_MODES
+			.find(
+				(option) =>
+					option.value ===
+					mode
+			)
+			?.label ||
+		"Relevant Activity"
+	);
+}
+
+function getDispatchDateFilterSummary({
+	mode,
+	dateFrom,
+	dateTo,
+	timeFrom,
+	timeTo,
+}) {
+	if (
+		!hasDispatchDateFilter({
+			dateFrom,
+			dateTo,
+			timeFrom,
+			timeTo,
+		})
+	) {
+		return "Date / Time";
+	}
+
+	const modeLabel =
+		getDispatchDateFilterModeLabel(
+			mode
+		);
+
+	const dateText =
+		dateFrom && dateTo
+			? dateFrom === dateTo
+				? dateFrom
+				: `${dateFrom} → ${dateTo}`
+			: dateFrom
+				? `From ${dateFrom}`
+				: dateTo
+					? `Until ${dateTo}`
+					: "All Dates";
+
+	const timeText =
+		timeFrom || timeTo
+			? `${timeFrom || "00:00"} – ${timeTo || "23:59"}`
+			: "";
+
+	return [
+		modeLabel,
+		dateText,
+		timeText,
+	]
+		.filter(Boolean)
+		.join(" • ");
+}
+
 const CUSTOM_CHALLAN_TYPE_OPTIONS = [
 	{
 		value: "CUSTOMER_CARE",
@@ -3475,6 +4283,37 @@ function DispatchedItemsPage() {
 		driverFilter,
 		setDriverFilter,
 	] = useState("ALL");
+
+	const [
+		dateFilterAnchor,
+		setDateFilterAnchor,
+	] = useState(null);
+
+	const [
+		dateFilterMode,
+		setDateFilterMode,
+	] = useState("ACTIVITY");
+
+	const [
+		dateFilterFrom,
+		setDateFilterFrom,
+	] = useState("");
+
+	const [
+		dateFilterTo,
+		setDateFilterTo,
+	] = useState("");
+
+	const [
+		dateFilterTimeFrom,
+		setDateFilterTimeFrom,
+	] = useState("");
+
+	const [
+		dateFilterTimeTo,
+		setDateFilterTimeTo,
+	] = useState("");
+
 	const authContext =
 		useAuth();
 
@@ -3813,6 +4652,112 @@ function DispatchedItemsPage() {
 			deferredSearch,
 		]);
 
+
+	const dateFilterOpen =
+		Boolean(
+			dateFilterAnchor
+		);
+
+	const dateFilterActive =
+		hasDispatchDateFilter({
+			dateFrom:
+				dateFilterFrom,
+			dateTo:
+				dateFilterTo,
+			timeFrom:
+				dateFilterTimeFrom,
+			timeTo:
+				dateFilterTimeTo,
+		});
+
+	const dateFilterSummary =
+		getDispatchDateFilterSummary({
+			mode:
+				dateFilterMode,
+			dateFrom:
+				dateFilterFrom,
+			dateTo:
+				dateFilterTo,
+			timeFrom:
+				dateFilterTimeFrom,
+			timeTo:
+				dateFilterTimeTo,
+		});
+
+	const clearDispatchDateFilter =
+		() => {
+			setDateFilterFrom("");
+			setDateFilterTo("");
+			setDateFilterTimeFrom("");
+			setDateFilterTimeTo("");
+			setPageNo(1);
+		};
+
+	const applyDispatchDatePreset =
+		(preset) => {
+			const now =
+				new Date();
+
+			const start =
+				new Date(
+					now.getFullYear(),
+					now.getMonth(),
+					now.getDate()
+				);
+
+			const end =
+				new Date(
+					now.getFullYear(),
+					now.getMonth(),
+					now.getDate()
+				);
+
+			if (
+				preset ===
+				"YESTERDAY"
+			) {
+				start.setDate(
+					start.getDate() - 1
+				);
+
+				end.setDate(
+					end.getDate() - 1
+				);
+			}
+
+			if (
+				preset ===
+				"LAST_7_DAYS"
+			) {
+				start.setDate(
+					start.getDate() - 6
+				);
+			}
+
+			if (
+				preset ===
+				"THIS_MONTH"
+			) {
+				start.setDate(1);
+			}
+
+			setDateFilterFrom(
+				toDispatchDateInputValue(
+					start
+				)
+			);
+
+			setDateFilterTo(
+				toDispatchDateInputValue(
+					end
+				)
+			);
+
+			setDateFilterTimeFrom("");
+			setDateFilterTimeTo("");
+			setPageNo(1);
+		};
+
 	const dispatchPlantOptions =
 		useMemo(() => {
 			const optionMap =
@@ -3938,6 +4883,30 @@ function DispatchedItemsPage() {
 						return false;
 					}
 
+					if (
+						!dispatchRowMatchesDateFilter(
+							row,
+							{
+								mode:
+									dateFilterMode,
+
+								dateFrom:
+									dateFilterFrom,
+
+								dateTo:
+									dateFilterTo,
+
+								timeFrom:
+									dateFilterTimeFrom,
+
+								timeTo:
+									dateFilterTimeTo,
+							}
+						)
+					) {
+						return false;
+					}
+
 					return true;
 				});
 
@@ -4055,6 +5024,11 @@ function DispatchedItemsPage() {
 			preparedSearchTokens,
 			statusFilter,
 			plantFilter,
+			dateFilterMode,
+			dateFilterFrom,
+			dateFilterTo,
+			dateFilterTimeFrom,
+			dateFilterTimeTo,
 			groupBy,
 		]);
 
@@ -4136,6 +5110,11 @@ function DispatchedItemsPage() {
 		search,
 		statusFilter,
 		plantFilter,
+		dateFilterMode,
+		dateFilterFrom,
+		dateFilterTo,
+		dateFilterTimeFrom,
+		dateFilterTimeTo,
 		groupBy,
 	]);
 
@@ -5663,6 +6642,30 @@ function DispatchedItemsPage() {
 				return false;
 			}
 
+			if (
+				!dispatchRowMatchesDateFilter(
+					row,
+					{
+						mode:
+							dateFilterMode,
+
+						dateFrom:
+							dateFilterFrom,
+
+						dateTo:
+							dateFilterTo,
+
+						timeFrom:
+							dateFilterTimeFrom,
+
+						timeTo:
+							dateFilterTimeTo,
+					}
+				)
+			) {
+				return false;
+			}
+
 			return true;
 		});
 	};
@@ -5745,6 +6748,11 @@ function DispatchedItemsPage() {
 			rows,
 			search,
 			plantFilter,
+			dateFilterMode,
+			dateFilterFrom,
+			dateFilterTo,
+			dateFilterTimeFrom,
+			dateFilterTimeTo,
 			dispatchExportStatus,
 			dispatchExportDriverLookup,
 		]);
@@ -6092,9 +7100,16 @@ function DispatchedItemsPage() {
 			`Generated: ${generatedAt}`;
 
 		worksheet.getCell("I3").value =
-			search
-				? `Search Applied: ${search}`
-				: "Search Applied: None";
+			[
+				search
+					? `Search: ${search}`
+					: "Search: None",
+
+				dateFilterActive
+					? `Date: ${dateFilterSummary}`
+					: "Date: All",
+			]
+				.join(" | ");
 
 		["A3", "E3", "I3"].forEach(
 			(cellReference) => {
@@ -9937,6 +10952,94 @@ function DispatchedItemsPage() {
 				</span>
 			),
 		},
+
+		{
+			field: "dateTime",
+			headerName: "Date / Time",
+			width: 210,
+
+			renderHeader: () => (
+				<span>Date / Time</span>
+			),
+
+			renderCell: (params) => {
+				const dateInfo =
+					getDispatchRowDateInfo(
+						params.row,
+						dateFilterMode
+					);
+
+				return (
+					<Box
+						sx={{
+							minWidth: 0,
+							display: "flex",
+							flexDirection: "column",
+							alignItems: "flex-start",
+							gap: 0.55,
+						}}
+					>
+						<Box
+							component="span"
+							title={
+								dateInfo.date
+									? formatDispatchTableDateTime(
+										dateInfo.date
+									)
+									: dateInfo.label
+							}
+							sx={{
+								color:
+									dateInfo.date
+										? "#f8fafc"
+										: "#64748b",
+								fontSize: 12,
+								fontWeight: 850,
+								whiteSpace: "nowrap",
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								maxWidth: "100%",
+							}}
+						>
+							{dateInfo.date
+								? formatDispatchTableDateTime(
+									dateInfo.date
+								)
+								: "—"}
+						</Box>
+
+						<Chip
+							size="small"
+							label={dateInfo.label}
+							sx={{
+								height: 20,
+								maxWidth: "100%",
+								color:
+									dateInfo.date
+										? "#bfdbfe"
+										: "#94a3b8",
+								fontSize: 9,
+								fontWeight: 950,
+								background:
+									dateInfo.date
+										? "rgba(59,130,246,.13)"
+										: "rgba(148,163,184,.08)",
+								border:
+									dateInfo.date
+										? "1px solid rgba(96,165,250,.22)"
+										: "1px solid rgba(148,163,184,.12)",
+
+								"& .MuiChip-label": {
+									px: 0.9,
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								},
+							}}
+						/>
+					</Box>
+				);
+			},
+		},
 		{
 			field: "status",
 			headerName: "Status",
@@ -13092,7 +14195,467 @@ function DispatchedItemsPage() {
 						>
 							Clear
 						</Button>
+
 					) : null}
+
+					<Button
+						startIcon={
+							<CalendarMonthOutlinedIcon />
+						}
+						onClick={(event) =>
+							setDateFilterAnchor(
+								event.currentTarget
+							)
+						}
+						sx={dateFilterButtonSx(
+							dateFilterActive
+						)}
+					>
+						<Box
+							sx={{
+								minWidth: 0,
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "flex-start",
+								lineHeight: 1.1,
+							}}
+						>
+							<Box
+								sx={{
+									color: "#fff",
+									fontSize: 11,
+									fontWeight: 950,
+									whiteSpace: "nowrap",
+								}}
+							>
+								{dateFilterActive
+									? "Date Filter Active"
+									: "Date / Time"}
+							</Box>
+
+							<Box
+								sx={{
+									maxWidth: 220,
+									mt: 0.35,
+									color:
+										dateFilterActive
+											? "#bfdbfe"
+											: "#94a3b8",
+									fontSize: 9.5,
+									fontWeight: 750,
+									whiteSpace: "nowrap",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								}}
+								title={
+									dateFilterSummary
+								}
+							>
+								{dateFilterSummary}
+							</Box>
+						</Box>
+					</Button>
+
+					<Popover
+						open={dateFilterOpen}
+						anchorEl={
+							dateFilterAnchor
+						}
+						onClose={() =>
+							setDateFilterAnchor(
+								null
+							)
+						}
+						anchorOrigin={{
+							vertical:
+								"bottom",
+							horizontal:
+								"right",
+						}}
+						transformOrigin={{
+							vertical:
+								"top",
+							horizontal:
+								"right",
+						}}
+						PaperProps={{
+							sx:
+								dateFilterPopoverPaperSx,
+						}}
+					>
+						<Box sx={dateFilterPanelSx}>
+							<Box
+								sx={
+									dateFilterHeaderSx
+								}
+							>
+								<Box
+									sx={{
+										display:
+											"flex",
+										alignItems:
+											"center",
+										gap: 1.2,
+									}}
+								>
+									<Box
+										sx={
+											dateFilterIconSx
+										}
+									>
+										<CalendarMonthOutlinedIcon />
+									</Box>
+
+									<Box>
+										<Box
+											sx={
+												dateFilterTitleSx
+											}
+										>
+											Date & Time Filter
+										</Box>
+
+										<Box
+											sx={
+												dateFilterSubtitleSx
+											}
+										>
+											Choose a date basis, range and optional time window
+										</Box>
+									</Box>
+								</Box>
+
+								<Chip
+									size="small"
+									label={`${filteredRows.length} matching`}
+									sx={
+										dateFilterCountChipSx
+									}
+								/>
+							</Box>
+
+							<Box
+								sx={{
+									display:
+										"grid",
+									gridTemplateColumns:
+										"minmax(0,1fr)",
+									gap: 1.2,
+									mb: 1.5,
+								}}
+							>
+								<TextField
+									select
+									size="small"
+									label="Date Basis"
+									value={
+										dateFilterMode
+									}
+									onChange={(event) => {
+										setDateFilterMode(
+											event
+												.target
+												.value
+										);
+
+										setPageNo(1);
+									}}
+									sx={
+										dateFilterFieldSx
+									}
+									SelectProps={{
+										MenuProps:
+											modalSelectMenuProps,
+									}}
+								>
+									{DISPATCH_DATE_FILTER_MODES.map(
+										(option) => (
+											<MenuItem
+												key={
+													option.value
+												}
+												value={
+													option.value
+												}
+											>
+												<Box>
+													<Box
+														sx={{
+															color:
+																"#fff",
+															fontSize:
+																12,
+															fontWeight:
+																900,
+														}}
+													>
+														{option.label}
+													</Box>
+
+													<Box
+														sx={{
+															mt: 0.2,
+															color:
+																"#94a3b8",
+															fontSize:
+																10,
+															fontWeight:
+																650,
+														}}
+													>
+														{option.description}
+													</Box>
+												</Box>
+											</MenuItem>
+										)
+									)}
+								</TextField>
+							</Box>
+
+							<Box sx={datePresetRowSx}>
+								<Button
+									onClick={() =>
+										applyDispatchDatePreset(
+											"TODAY"
+										)
+									}
+									sx={
+										datePresetButtonSx
+									}
+								>
+									Today
+								</Button>
+
+								<Button
+									onClick={() =>
+										applyDispatchDatePreset(
+											"YESTERDAY"
+										)
+									}
+									sx={
+										datePresetButtonSx
+									}
+								>
+									Yesterday
+								</Button>
+
+								<Button
+									onClick={() =>
+										applyDispatchDatePreset(
+											"LAST_7_DAYS"
+										)
+									}
+									sx={
+										datePresetButtonSx
+									}
+								>
+									Last 7 Days
+								</Button>
+
+								<Button
+									onClick={() =>
+										applyDispatchDatePreset(
+											"THIS_MONTH"
+										)
+									}
+									sx={
+										datePresetButtonSx
+									}
+								>
+									This Month
+								</Button>
+							</Box>
+
+							<Box sx={dateFilterGridSx}>
+								<TextField
+									label="From Date"
+									type="date"
+									value={
+										dateFilterFrom
+									}
+									onChange={(event) => {
+										setDateFilterFrom(
+											event
+												.target
+												.value
+										);
+
+										setPageNo(1);
+									}}
+									InputLabelProps={{
+										shrink: true,
+									}}
+									sx={
+										dateFilterFieldSx
+									}
+								/>
+
+								<TextField
+									label="To Date"
+									type="date"
+									value={
+										dateFilterTo
+									}
+									onChange={(event) => {
+										setDateFilterTo(
+											event
+												.target
+												.value
+										);
+
+										setPageNo(1);
+									}}
+									InputLabelProps={{
+										shrink: true,
+									}}
+									sx={
+										dateFilterFieldSx
+									}
+								/>
+							</Box>
+
+							<Box sx={dateFilterGridSx}>
+								<TextField
+									label="From Time"
+									type="time"
+									value={
+										dateFilterTimeFrom
+									}
+									onChange={(event) => {
+										setDateFilterTimeFrom(
+											event
+												.target
+												.value
+										);
+
+										setPageNo(1);
+									}}
+									InputLabelProps={{
+										shrink: true,
+									}}
+									InputProps={{
+										startAdornment: (
+											<AccessTimeOutlinedIcon
+												sx={{
+													mr: 0.8,
+													color:
+														"#60a5fa",
+													fontSize:
+														18,
+												}}
+											/>
+										),
+									}}
+									sx={
+										dateFilterFieldSx
+									}
+								/>
+
+								<TextField
+									label="To Time"
+									type="time"
+									value={
+										dateFilterTimeTo
+									}
+									onChange={(event) => {
+										setDateFilterTimeTo(
+											event
+												.target
+												.value
+										);
+
+										setPageNo(1);
+									}}
+									InputLabelProps={{
+										shrink: true,
+									}}
+									InputProps={{
+										startAdornment: (
+											<AccessTimeOutlinedIcon
+												sx={{
+													mr: 0.8,
+													color:
+														"#60a5fa",
+													fontSize:
+														18,
+												}}
+											/>
+										),
+									}}
+									sx={
+										dateFilterFieldSx
+									}
+								/>
+							</Box>
+
+							<Box sx={dateFilterHintSx}>
+								<EventAvailableOutlinedIcon
+									sx={{
+										fontSize: 18,
+										color: "#6ee7b7",
+										flexShrink: 0,
+									}}
+								/>
+
+								<Box>
+									<Box
+										sx={{
+											color: "#d1fae5",
+											fontSize: 11,
+											fontWeight: 900,
+										}}
+									>
+										{dateFilterActive
+											? dateFilterSummary
+											: "No date restriction applied"}
+									</Box>
+
+									<Box
+										sx={{
+											mt: 0.3,
+											color: "#94a3b8",
+											fontSize: 10,
+											fontWeight: 650,
+										}}
+									>
+										The same date filter is also applied to the exported report.
+									</Box>
+								</Box>
+							</Box>
+
+							<Box sx={dateFilterFooterSx}>
+								<Button
+									startIcon={
+										<RestartAltOutlinedIcon />
+									}
+									disabled={
+										!dateFilterActive
+									}
+									onClick={
+										clearDispatchDateFilter
+									}
+									sx={
+										dateFilterClearButtonSx
+									}
+								>
+									Clear
+								</Button>
+
+								<Button
+									onClick={() =>
+										setDateFilterAnchor(
+											null
+										)
+									}
+									sx={
+										dateFilterDoneButtonSx
+									}
+								>
+									Done
+								</Button>
+							</Box>
+						</Box>
+					</Popover>
 
 					<TextField
 						select
@@ -13663,6 +15226,7 @@ function DispatchedItemsPage() {
 								<div>Client</div>
 								<div>Plant</div>
 								<div>Location</div>
+								<div>Date / Time</div>
 								<div>Status</div>
 								<div>Actions</div>
 							</div>
@@ -13734,6 +15298,10 @@ function DispatchedItemsPage() {
 
 										<div style={tableCellWrap}>
 											{columns[11].renderCell({ row })}
+										</div>
+
+										<div style={tableCellWrap}>
+											{columns[12].renderCell({ row })}
 										</div>
 									</div>
 
