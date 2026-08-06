@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -55,11 +56,14 @@ public class PacketService {
         private final MasterItemRepository masterItemRepository;
         private final StickerHistoryRepository stickerHistoryRepository;
         private final PlantLocationService plantLocationService;
+        private final CurrentUserService currentUserService;
         private final ActivityLogService activityLogService;
         private static final List<String> NORMAL_INVENTORY_CANDIDATE_STATUSES = List.of(
                         "CREATED",
                         "RESTORED",
                         "READY");
+
+        private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
 
         @Value("${sticker.storage.path}")
         private String stickerStoragePath;
@@ -67,6 +71,7 @@ public class PacketService {
         public PacketService(
                         PacketRepository packetRepository,
                         PacketItemRepository packetItemRepository,
+                        CurrentUserService currentUserService,
                         CompanyRepository companyRepository,
                         StickerSequenceService stickerSequenceService,
                         PdfStickerService pdfService,
@@ -87,6 +92,7 @@ public class PacketService {
                 this.stickerHistoryRepository = stickerHistoryRepository;
                 this.plantLocationService = plantLocationService;
                 this.activityLogService = activityLogService;
+                this.currentUserService = currentUserService;
         }
 
         private StickerPdfData buildStickerPdfData(
@@ -242,75 +248,66 @@ public class PacketService {
         public List<PacketItemResponse> getVisibleNormalInventoryItems(
                         User user,
                         Set<String> allowedPlants) {
-
                 if (user == null) {
                         throw new AccessDeniedException(
                                         "Authentication is required");
                 }
 
-                if (isHardwarePacking(user)) {
+                /*
+                 * Do not block a user who has both:
+                 * - HARDWARE_PACKING
+                 * - PACKING
+                 *
+                 * Only a hardware-only user must be blocked from
+                 * normal Inventory.
+                 */
+                if (currentUserService
+                                .isHardwareOnlyPackingUser(user)) {
+
                         throw new AccessDeniedException(
-                                        "Hardware packing users cannot access normal inventory");
+                                        "Hardware-only packing users cannot access normal inventory");
                 }
 
                 List<PacketItem> sourceItems;
 
                 /*
-                 * Admin:
-                 *
-                 * Query only NORMAL rows whose status could possibly
-                 * appear on the Inventory page.
-                 *
-                 * READY rows still require the PKD/FG location check.
+                 * ADMIN continues to see all normal Inventory records.
                  */
-                if (isAdmin(user)) {
+                if (currentUserService.isAdmin(user)) {
+
                         sourceItems = packetItemRepository
                                         .findAdminNormalInventoryCandidates(
                                                         PacketItemType.NORMAL,
                                                         NORMAL_INVENTORY_CANDIDATE_STATUSES);
 
-                        return sourceItems
-                                        .stream()
-                                        .filter(
-                                                        this::isVisibleOnNormalInventoryPage)
-                                        .map(
-                                                        this::toInventoryPacketItemResponse)
-                                        .toList();
-                }
-
-                /*
-                 * Normalize plant codes before passing them to JPQL.
-                 */
-                Set<String> cleanPlants = allowedPlants == null
-                                ? Set.of()
-                                : allowedPlants
-                                                .stream()
-                                                .filter(Objects::nonNull)
-                                                .map(String::trim)
-                                                .filter(value -> !value.isBlank())
-                                                .collect(
-                                                                Collectors.toCollection(
-                                                                                LinkedHashSet::new));
-
-                /*
-                 * Non-admin normal Packing users only receive CREATED,
-                 * unprinted packets.
-                 */
-                if (cleanPlants.isEmpty()) {
-                        sourceItems = packetItemRepository
-                                        .findLegacyCreatedNormalInventory(
-                                                        PacketItemType.NORMAL);
                 } else {
+
+                        if (user.getId() == null) {
+                                throw new AccessDeniedException(
+                                                "Authenticated user ID is missing");
+                        }
+
+                        String username = user.getUsername() == null
+                                        ? ""
+                                        : user.getUsername().trim();
+
+                        /*
+                         * Normal users now see only their own records.
+                         *
+                         * Plant access is not used for Inventory visibility.
+                         */
                         sourceItems = packetItemRepository
-                                        .findCreatedNormalInventoryForPlants(
+                                        .findOwnedNormalInventoryCandidates(
                                                         PacketItemType.NORMAL,
-                                                        cleanPlants);
+                                                        NORMAL_INVENTORY_CANDIDATE_STATUSES,
+                                                        user.getId(),
+                                                        username);
                 }
 
                 return sourceItems
                                 .stream()
-                                .map(
-                                                this::toInventoryPacketItemResponse)
+                                .filter(this::isVisibleOnNormalInventoryPage)
+                                .map(this::toInventoryPacketItemResponse)
                                 .toList();
         }
 
@@ -531,14 +528,28 @@ public class PacketService {
         }
 
         @Transactional(readOnly = true)
-        public byte[] getExistingStickerPdf(UUID packetId) {
+        public byte[] getExistingStickerPdf(
+                        UUID packetId) {
 
-                Packet packet = packetRepository.findById(packetId)
-                                .orElseThrow(() -> new IllegalArgumentException("Packet not found"));
+                Packet packet = packetRepository
+                                .findById(packetId)
+                                .orElseThrow(() -> new IllegalArgumentException(
+                                                "Packet not found"));
 
-                Path path = Paths.get(packet.getStickerPath());
+                if (packet.getStickerPath() == null ||
+                                packet.getStickerPath().isBlank()) {
 
-                if (!Files.exists(path)) {
+                        throw new IllegalStateException(
+                                        "No sticker file path is stored for packet "
+                                                        + packet.getStickerNumber());
+                }
+
+                Path path = Paths.get(
+                                packet.getStickerPath());
+
+                if (!Files.exists(path) ||
+                                !Files.isRegularFile(path)) {
+
                         throw new IllegalStateException(
                                         "Sticker file does not exist on disk for packet "
                                                         + packet.getStickerNumber());
@@ -546,8 +557,10 @@ public class PacketService {
 
                 try {
                         return Files.readAllBytes(path);
-                } catch (IOException e) {
-                        throw new RuntimeException("Failed to read sticker file", e);
+                } catch (IOException exception) {
+                        throw new RuntimeException(
+                                        "Failed to read sticker file",
+                                        exception);
                 }
         }
 
@@ -596,38 +609,63 @@ public class PacketService {
         @Transactional
         public List<PacketItem> createItemWithPackets(
                         CreateItemRequest req,
-                        String createdBy,
+                        User user,
                         String plantCode) {
 
-                String actor = safeActor(createdBy);
-                LocalDateTime now = LocalDateTime.now();
-                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+                assertNormalPackingUser(user);
 
-                // 🔥 1. CREATE DUMMY COMPANY (TEMP FIX)
-                Company company = companyRepository.findAll()
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is required");
+                }
+
+                int packetCount = req == null
+                                ? 0
+                                : req.getNumberOfPackets();
+
+                validatePacketCreationRequest(
+                                req,
+                                packetCount);
+
+                String actor = safeActor(
+                                user.getUsername());
+
+                Long ownerUserId = user.getId();
+
+                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                                plantCode);
+
+                Company company = companyRepository
+                                .findAll()
                                 .stream()
                                 .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
 
                 MasterItem master = new MasterItem();
 
                 master.setItemName(req.itemName);
+                master.setCreatedByUserId(ownerUserId);
                 master.setPdNo(req.pdNo);
                 master.setDrawingName(req.drawingNo);
                 master.setClientName(req.clientName);
                 master.setAddress(req.clientAddress);
-                master.setTotalPackets(req.numberOfPackets);
+                master.setTotalPackets(packetCount);
                 master.setFloor(req.floor);
                 master.setPlantCode(plantCode);
                 master.setItemType(PacketItemType.NORMAL);
 
                 master = masterItemRepository.save(master);
 
-                // 🔥 2. CREATE PACKET (MASTER)
                 Packet packet = new Packet();
+
                 packet.setId(UUID.randomUUID());
-                packet.setCompany(company); // ✅ REQUIRED
-                packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+                packet.setCompany(company);
+                packet.setStickerNumber(
+                                stickerSequenceService
+                                                .generateNextStickerNumber());
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -635,19 +673,28 @@ public class PacketService {
 
                 packet = packetRepository.save(packet);
 
-                // 🔥 3. CREATE ITEMS
-                List<PacketItem> items = new ArrayList<>();
-
                 List<String> descriptions = req.getDescriptions();
 
-                for (int i = 1; i <= req.numberOfPackets; i++) {
+                List<String> weights = req.getWeights();
+
+                List<String> dimensions = req.getDimensionsList();
+
+                List<String> remarks = req.getRemarksList();
+
+                List<PacketItem> items = new ArrayList<>();
+
+                for (int index = 0; index < packetCount; index++) {
+
+                        int packetNo = index + 1;
 
                         PacketItem item = new PacketItem();
 
                         item.setId(UUID.randomUUID());
+                        item.setCreatedByUserId(ownerUserId);
                         item.setPacket(packet);
                         item.setMasterItem(master);
                         item.setItemType(PacketItemType.NORMAL);
+
                         item.setItemName(req.itemName);
                         item.setPdNo(req.pdNo);
                         item.setDrawingNo(req.drawingNo);
@@ -655,43 +702,42 @@ public class PacketService {
                         item.setClientAddress(req.clientAddress);
                         item.setFloor(req.floor);
 
-                        String desc = (descriptions != null && descriptions.size() >= i)
-                                        ? descriptions.get(i - 1)
-                                        : "";
+                        item.setDescription(
+                                        getListValue(
+                                                        descriptions,
+                                                        index));
 
-                        item.setDescription(desc);
-                        List<String> weights = req.getWeights();
-                        List<String> dimensionsList = req.getDimensionsList();
-                        List<String> remarksList = req.getRemarksList();
+                        item.setWeight(
+                                        getListValue(
+                                                        weights,
+                                                        index));
 
-                        String weight = (weights != null && weights.size() >= i)
-                                        ? weights.get(i - 1)
-                                        : "";
+                        item.setDimensions(
+                                        getListValue(
+                                                        dimensions,
+                                                        index));
 
-                        String dimension = (dimensionsList != null && dimensionsList.size() >= i)
-                                        ? dimensionsList.get(i - 1)
-                                        : "";
+                        item.setRemarks(
+                                        getListValue(
+                                                        remarks,
+                                                        index));
 
-                        String remark = (remarksList != null && remarksList.size() >= i)
-                                        ? remarksList.get(i - 1)
-                                        : "";
+                        item.setPacketNumber(
+                                        "Pkt-" + packetNo);
 
-                        item.setWeight(weight);
-                        item.setDimensions(dimension);
-                        item.setRemarks(remark);
-
-                        int packetNo = i;
-
-                        item.setPacketNumber("Pkt-" + packetNo);
-
-                        String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
-                        item.setSku(sku);
+                        item.setSku(
+                                        buildSku(
+                                                        req.pdNo,
+                                                        req.drawingNo,
+                                                        packetNo));
 
                         item.setQuantity(1);
                         item.setPlantCode(plantCode);
-                        item.setPackedAreaCode(plant.packedAreaCode());
+                        item.setPackedAreaCode(
+                                        plant.packedAreaCode());
                         item.setCurrentLocationCode(null);
-                        item.setFgAreaCode(plant.fgAreaCode());
+                        item.setFgAreaCode(
+                                        plant.fgAreaCode());
                         item.setFgZoneCode(null);
                         item.setLocation("FLOOR");
                         item.setStatus("CREATED");
@@ -700,7 +746,22 @@ public class PacketService {
                         items.add(item);
                 }
 
-                return packetItemRepository.saveAll(items);
+                return packetItemRepository.saveAll(
+                                items);
+        }
+
+        private String getListValue(
+                        List<String> values,
+                        int index) {
+
+                if (values == null ||
+                                index < 0 ||
+                                index >= values.size() ||
+                                values.get(index) == null) {
+                        return "";
+                }
+
+                return values.get(index);
         }
 
         @Transactional(readOnly = true)
@@ -727,7 +788,6 @@ public class PacketService {
                                 showCompanyHeader);
         }
 
-        @Transactional
         private byte[] generateStickerInternal(
                         UUID itemId,
                         String factoryFloor,
@@ -750,14 +810,38 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
                 if (expectedType == PacketItemType.HARDWARE) {
+
                         assertHardwarePacketWriteAccess(
                                         item,
                                         user,
                                         allowedPlants);
-                } else {
+
+                } else if (user != null) {
+
+                        /*
+                         * Current authenticated normal-packing flow.
+                         */
                         assertNormalPacketAccess(
                                         item,
                                         user,
+                                        allowedPlants);
+
+                } else {
+
+                        /*
+                         * Legacy/internal compatibility flow.
+                         *
+                         * Keep the old plant-based behaviour for existing
+                         * backend callers that do not provide a User.
+                         */
+                        if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+
+                                throw new AccessDeniedException(
+                                                "Hardware packets must use the hardware packet API");
+                        }
+
+                        assertLegacyPlantAccess(
+                                        item.getPlantCode(),
                                         allowedPlants);
                 }
 
@@ -1042,18 +1126,22 @@ public class PacketService {
 
                 PacketItem saved = packetItemRepository.save(item);
 
-                dispatchedRepo.findById(itemId.toString()).ifPresent(d -> {
-                        d.setName(saved.getItemName());
-                        d.setSku(saved.getSku());
-                        d.setPdNo(saved.getPdNo());
-                        d.setDrawingNo(saved.getDrawingNo());
-                        d.setDescription(saved.getDescription());
-                        d.setClientName(saved.getClientName());
-                        d.setLocation(saved.getLocation());
-                        d.setFloor(saved.getFloor());
+                dispatchedRepo
+                                .findByPacketItemId(itemId)
+                                .or(() -> dispatchedRepo.findById(
+                                                itemId.toString()))
+                                .ifPresent(d -> {
+                                        d.setName(saved.getItemName());
+                                        d.setSku(saved.getSku());
+                                        d.setPdNo(saved.getPdNo());
+                                        d.setDrawingNo(saved.getDrawingNo());
+                                        d.setDescription(saved.getDescription());
+                                        d.setClientName(saved.getClientName());
+                                        d.setLocation(saved.getLocation());
+                                        d.setFloor(saved.getFloor());
 
-                        dispatchedRepo.save(d);
-                });
+                                        dispatchedRepo.save(d);
+                                });
 
                 return saved;
         }
@@ -1277,44 +1365,76 @@ public class PacketService {
                 return packetItemRepository.saveAll(items);
         }
 
-        private boolean isAdmin(User user) {
-                return user != null
-                                && "ADMIN".equalsIgnoreCase(user.getRole());
-        }
-
-        private boolean isHardwarePacking(User user) {
-                return user != null
-                                && "HARDWARE_PACKING".equalsIgnoreCase(user.getRole());
-        }
-
-        private boolean isDispatch(
-                        User user) {
-                return user != null
-                                && "DISPATCH".equalsIgnoreCase(
-                                                user.getRole());
-        }
-
         private void assertNormalPacketAccess(
                         PacketItem item,
                         User user,
                         Set<String> allowedPlants) {
+
+                if (item == null) {
+                        throw new AccessDeniedException(
+                                        "Packet item is missing");
+                }
+
                 if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+
                         throw new AccessDeniedException(
                                         "Hardware packets must be accessed through the hardware packet API");
                 }
 
-                if (isHardwarePacking(user)) {
-                        throw new AccessDeniedException(
-                                        "Hardware packing users cannot access normal inventory");
-                }
+                assertNormalPackingUser(user);
 
-                if (isAdmin(user)) {
+                if (currentUserService.isAdmin(user)) {
                         return;
                 }
 
-                assertPlantAccess(
-                                item.getPlantCode(),
-                                allowedPlants);
+                if (!isNormalPacketOwnedByUser(
+                                item,
+                                user)) {
+
+                        throw new AccessDeniedException(
+                                        "You cannot access a packet created by another user");
+                }
+
+                /*
+                 * Normal inventory read/edit/delete/print is owner-scoped.
+                 * Plant access is checked during creation.
+                 */
+        }
+
+        private boolean isNormalPacketOwnedByUser(
+                        PacketItem item,
+                        User user) {
+                if (item == null || user == null) {
+                        return false;
+                }
+
+                /*
+                 * Preferred modern ownership check.
+                 */
+                if (item.getCreatedByUserId() != null &&
+                                user.getId() != null) {
+
+                        return Objects.equals(
+                                        item.getCreatedByUserId(),
+                                        user.getId());
+                }
+
+                /*
+                 * Legacy fallback for rows created before
+                 * created_by_user_id was populated.
+                 */
+                String itemCreator = item.getCreatedBy() == null
+                                ? ""
+                                : item.getCreatedBy().trim();
+
+                String username = user.getUsername() == null
+                                ? ""
+                                : user.getUsername().trim();
+
+                return !itemCreator.isBlank() &&
+                                !username.isBlank() &&
+                                itemCreator.equalsIgnoreCase(
+                                                username);
         }
 
         private void assertHardwarePacketReadAccess(
@@ -1326,14 +1446,14 @@ public class PacketService {
                                         "This is not a hardware packet");
                 }
 
-                if (isAdmin(user)) {
+                if (currentUserService.isAdmin(user)) {
                         return;
                 }
 
                 /*
                  * Dispatch receives read-only access by assigned plant.
                  */
-                if (isDispatch(user)) {
+                if (currentUserService.isDispatch(user)) {
                         assertPlantAccess(
                                         item.getPlantCode(),
                                         allowedPlants);
@@ -1341,7 +1461,7 @@ public class PacketService {
                         return;
                 }
 
-                if (!isHardwarePacking(user)) {
+                if (!currentUserService.isHardwarePacking(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing access required");
                 }
@@ -1367,14 +1487,14 @@ public class PacketService {
                                         "This is not a hardware packet");
                 }
 
-                if (isAdmin(user)) {
+                if (currentUserService.isAdmin(user)) {
                         return;
                 }
 
                 /*
                  * DISPATCH deliberately does not pass this check.
                  */
-                if (!isHardwarePacking(user)) {
+                if (!currentUserService.isHardwarePacking(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing write access required");
                 }
@@ -1392,15 +1512,249 @@ public class PacketService {
         }
 
         @Transactional
-        public PacketItem createCustomPacket(CreateItemRequest req) {
-                return createCustomPacket(req, "SYSTEM", req.getPlantCode());
+        public List<PacketItem> addPackets(
+                        UUID masterItemId,
+                        CreateItemRequest req,
+                        User user,
+                        Set<String> allowedPlants) {
+
+                assertNormalPackingUser(user);
+
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is required");
+                }
+
+                int toCreate = req == null
+                                ? 0
+                                : req.getNumberOfPackets();
+
+                validatePacketCreationRequest(
+                                req,
+                                toCreate);
+
+                MasterItem master = masterItemRepository
+                                .findById(masterItemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Master item not found"));
+
+                if (master.getItemType() == PacketItemType.HARDWARE) {
+
+                        throw new AccessDeniedException(
+                                        "Hardware master items must be managed through the hardware packet API");
+                }
+
+                assertNormalMasterAccess(
+                                master,
+                                user);
+
+                String plantCode = master.getPlantCode();
+
+                /*
+                 * Creation remains plant-aware even though the
+                 * Inventory read is owner-scoped.
+                 */
+                if (!currentUserService.isAdmin(user)) {
+                        assertPlantAccess(
+                                        plantCode,
+                                        allowedPlants);
+                }
+
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                                plantCode);
+
+                Company company = companyRepository
+                                .findAll()
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
+
+                String actor = safeActor(
+                                user.getUsername());
+
+                Long ownerUserId = master.getCreatedByUserId() != null
+                                ? master.getCreatedByUserId()
+                                : user.getId();
+
+                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+
+                Packet packet = new Packet();
+
+                packet.setId(UUID.randomUUID());
+                packet.setCompany(company);
+                packet.setStickerNumber(
+                                stickerSequenceService
+                                                .generateNextStickerNumber());
+                packet.setStatus(PacketStatus.CREATED);
+                packet.setCreatedBy(actor);
+                packet.setCreatedAt(now);
+                packet.setStickerGenerated(false);
+
+                packet = packetRepository.save(packet);
+
+                int startPacketNo = nextPacketNumber(
+                                masterItemId);
+
+                List<String> descriptions = req.getDescriptions();
+
+                List<String> weights = req.getWeights();
+
+                List<String> dimensions = req.getDimensionsList();
+
+                List<String> remarks = req.getRemarksList();
+
+                List<PacketItem> items = new ArrayList<>();
+
+                for (int index = 0; index < toCreate; index++) {
+
+                        int packetNo = startPacketNo + index;
+
+                        PacketItem item = new PacketItem();
+
+                        item.setId(UUID.randomUUID());
+                        item.setCreatedByUserId(
+                                        ownerUserId);
+                        item.setMasterItem(master);
+                        item.setPacket(packet);
+                        item.setItemType(
+                                        PacketItemType.NORMAL);
+
+                        item.setItemName(
+                                        master.getItemName());
+                        item.setPdNo(
+                                        master.getPdNo());
+                        item.setDrawingNo(
+                                        master.getDrawingName());
+                        item.setClientName(
+                                        master.getClientName());
+                        item.setClientAddress(
+                                        master.getAddress());
+                        item.setFloor(
+                                        master.getFloor());
+
+                        item.setPlantCode(
+                                        plantCode);
+                        item.setPackedAreaCode(
+                                        plant.packedAreaCode());
+                        item.setCurrentLocationCode(null);
+                        item.setFgAreaCode(
+                                        plant.fgAreaCode());
+                        item.setFgZoneCode(null);
+
+                        item.setPacketNumber(
+                                        "Pkt-" + packetNo);
+
+                        item.setSku(
+                                        buildSku(
+                                                        master.getPdNo(),
+                                                        master.getDrawingName(),
+                                                        packetNo));
+
+                        item.setDescription(
+                                        getListValue(
+                                                        descriptions,
+                                                        index));
+
+                        item.setWeight(
+                                        getListValue(
+                                                        weights,
+                                                        index));
+
+                        item.setDimensions(
+                                        getListValue(
+                                                        dimensions,
+                                                        index));
+
+                        item.setRemarks(
+                                        getListValue(
+                                                        remarks,
+                                                        index));
+
+                        item.setQuantity(1);
+                        item.setLocation("FLOOR");
+                        item.setStatus("CREATED");
+                        item.setCreatedBy(actor);
+
+                        items.add(item);
+                }
+
+                List<PacketItem> saved = packetItemRepository.saveAll(
+                                items);
+
+                packetItemRepository.flush();
+
+                long totalPackets = packetItemRepository
+                                .countByMasterItemId(
+                                                masterItemId);
+
+                master.setTotalPackets(
+                                Math.toIntExact(
+                                                totalPackets));
+
+                masterItemRepository.save(master);
+
+                return saved;
+        }
+
+        @Transactional
+        public PacketItem createCustomPacket(
+                        CreateItemRequest req,
+                        User user) {
+
+                return createCustomPacket(
+                                req,
+                                user,
+                                req.getPlantCode());
+        }
+
+        @Transactional
+        public PacketItem createCustomPacket(
+                        CreateItemRequest req,
+                        User user,
+                        String plantCode) {
+
+                assertNormalPackingUser(user);
+
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is required");
+                }
+
+                return createCustomPacketInternal(
+                                req,
+                                user.getId(),
+                                safeActor(user.getUsername()),
+                                plantCode);
+        }
+
+        /*
+         * Legacy/internal compatibility overloads.
+         *
+         * Keep these only for old internal callers.
+         * Normal frontend requests must use the User-aware overload.
+         */
+        @Transactional
+        public PacketItem createCustomPacket(
+                        CreateItemRequest req) {
+
+                return createCustomPacketInternal(
+                                req,
+                                null,
+                                "SYSTEM",
+                                req.getPlantCode());
         }
 
         @Transactional
         public PacketItem createCustomPacket(
                         CreateItemRequest req,
                         String createdBy) {
-                return createCustomPacket(req, createdBy, req.getPlantCode());
+
+                return createCustomPacketInternal(
+                                req,
+                                null,
+                                safeActor(createdBy),
+                                req.getPlantCode());
         }
 
         @Transactional
@@ -1408,19 +1762,48 @@ public class PacketService {
                         CreateItemRequest req,
                         String createdBy,
                         String plantCode) {
-                String actor = safeActor(createdBy);
-                LocalDateTime now = LocalDateTime.now();
 
-                Company company = companyRepository.findAll()
+                return createCustomPacketInternal(
+                                req,
+                                null,
+                                safeActor(createdBy),
+                                plantCode);
+        }
+
+        private PacketItem createCustomPacketInternal(
+                        CreateItemRequest req,
+                        Long ownerUserId,
+                        String actor,
+                        String plantCode) {
+
+                if (req == null) {
+                        throw new IllegalArgumentException(
+                                        "Custom packet request is required");
+                }
+
+                int packetNo = req.getCustomPacketNumber();
+
+                if (packetNo <= 0) {
+                        throw new IllegalArgumentException(
+                                        "Custom packet number must be greater than zero");
+                }
+
+                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+
+                Company company = companyRepository
+                                .findAll()
                                 .stream()
                                 .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
 
-                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                                plantCode);
 
-                // 🔥 CREATE MASTER ITEM (same as existing)
                 MasterItem master = new MasterItem();
+
                 master.setItemType(PacketItemType.NORMAL);
+                master.setCreatedByUserId(ownerUserId);
                 master.setItemName(req.itemName);
                 master.setPdNo(req.pdNo);
                 master.setDrawingName(req.drawingNo);
@@ -1432,11 +1815,13 @@ public class PacketService {
 
                 master = masterItemRepository.save(master);
 
-                // 🔥 CREATE PACKET
                 Packet packet = new Packet();
+
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
-                packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+                packet.setStickerNumber(
+                                stickerSequenceService
+                                                .generateNextStickerNumber());
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -1444,41 +1829,62 @@ public class PacketService {
 
                 packet = packetRepository.save(packet);
 
-                int packetNo = req.getCustomPacketNumber();
-
-                // 🔥 DUPLICATE CHECK
-                if (packetItemRepository.existsByMasterItemIdAndPacketNumber(
-                                master.getId(), "Pkt-" + packetNo)) {
-                        throw new RuntimeException("Packet number already exists");
-                }
-
+                /*
+                 * No duplicate check is required here.
+                 *
+                 * A new MasterItem was just created and therefore
+                 * cannot already contain the requested packet number.
+                 */
                 PacketItem item = new PacketItem();
 
                 item.setId(UUID.randomUUID());
+                item.setCreatedByUserId(ownerUserId);
                 item.setPacket(packet);
-                item.setItemType(PacketItemType.NORMAL);
                 item.setMasterItem(master);
-                item.setDescription(req.getDescriptions().get(0));
-                item.setWeight(req.getWeights().get(0));
-                item.setDimensions(req.getDimensionsList().get(0));
-                item.setRemarks(req.getRemarksList().get(0));
+                item.setItemType(PacketItemType.NORMAL);
+
+                item.setDescription(
+                                firstListValue(
+                                                req.getDescriptions()));
+
+                item.setWeight(
+                                firstListValue(
+                                                req.getWeights()));
+
+                item.setDimensions(
+                                firstListValue(
+                                                req.getDimensionsList()));
+
+                item.setRemarks(
+                                firstListValue(
+                                                req.getRemarksList()));
+
                 item.setItemName(req.itemName);
                 item.setPdNo(req.pdNo);
                 item.setDrawingNo(req.drawingNo);
                 item.setClientName(req.clientName);
                 item.setClientAddress(req.clientAddress);
                 item.setFloor(req.floor);
+
                 item.setPlantCode(plantCode);
-                item.setPackedAreaCode(plant.packedAreaCode());
+                item.setPackedAreaCode(
+                                plant.packedAreaCode());
                 item.setCurrentLocationCode(null);
-                item.setFgAreaCode(plant.fgAreaCode());
+                item.setFgAreaCode(
+                                plant.fgAreaCode());
                 item.setFgZoneCode(null);
-                item.setPacketNumber("Pkt-" + packetNo);
 
-                String sku = buildSku(req.pdNo, req.drawingNo, packetNo);
+                item.setPacketNumber(
+                                "Pkt-" + packetNo);
 
-                item.setSku(sku);
+                item.setSku(
+                                buildSku(
+                                                req.pdNo,
+                                                req.drawingNo,
+                                                packetNo));
 
+                item.setQuantity(1);
+                item.setLocation("FLOOR");
                 item.setStatus("CREATED");
                 item.setCreatedBy(actor);
 
@@ -1583,6 +1989,180 @@ public class PacketService {
         }
 
         @Transactional
+        public PacketItem addCustomPacket(
+                        UUID masterItemId,
+                        CreateItemRequest req,
+                        User user,
+                        Set<String> allowedPlants) {
+
+                assertNormalPackingUser(user);
+
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is required");
+                }
+
+                if (req == null) {
+                        throw new IllegalArgumentException(
+                                        "Custom packet request is required");
+                }
+
+                int packetNo = req.getCustomPacketNumber();
+
+                if (packetNo <= 0) {
+                        throw new IllegalArgumentException(
+                                        "Custom packet number must be greater than zero");
+                }
+
+                MasterItem master = masterItemRepository
+                                .findById(masterItemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Master item not found"));
+
+                if (master.getItemType() == PacketItemType.HARDWARE) {
+
+                        throw new AccessDeniedException(
+                                        "Custom normal packets cannot be added to a hardware master item");
+                }
+
+                assertNormalMasterAccess(
+                                master,
+                                user);
+
+                String plantCode = master.getPlantCode();
+
+                if (!currentUserService.isAdmin(user)) {
+                        assertPlantAccess(
+                                        plantCode,
+                                        allowedPlants);
+                }
+
+                String packetNumber = "Pkt-" + packetNo;
+
+                /*
+                 * Perform the duplicate check before creating
+                 * the internal Packet row.
+                 */
+                if (packetItemRepository
+                                .existsByMasterItemIdAndPacketNumber(
+                                                masterItemId,
+                                                packetNumber)) {
+
+                        throw new IllegalArgumentException(
+                                        "Packet number already exists");
+                }
+
+                PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
+                                plantCode);
+
+                Company company = companyRepository
+                                .findAll()
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
+
+                String actor = safeActor(
+                                user.getUsername());
+
+                Long ownerUserId = master.getCreatedByUserId() != null
+                                ? master.getCreatedByUserId()
+                                : user.getId();
+
+                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+
+                Packet packet = new Packet();
+
+                packet.setId(UUID.randomUUID());
+                packet.setCompany(company);
+                packet.setStickerNumber(
+                                stickerSequenceService
+                                                .generateNextStickerNumber());
+                packet.setStatus(PacketStatus.CREATED);
+                packet.setCreatedBy(actor);
+                packet.setCreatedAt(now);
+                packet.setStickerGenerated(false);
+
+                packet = packetRepository.save(packet);
+
+                PacketItem item = new PacketItem();
+
+                item.setId(UUID.randomUUID());
+                item.setCreatedByUserId(
+                                ownerUserId);
+                item.setPacket(packet);
+                item.setMasterItem(master);
+                item.setItemType(
+                                PacketItemType.NORMAL);
+
+                item.setItemName(
+                                master.getItemName());
+                item.setPdNo(
+                                master.getPdNo());
+                item.setDrawingNo(
+                                master.getDrawingName());
+                item.setClientName(
+                                master.getClientName());
+                item.setClientAddress(
+                                master.getAddress());
+                item.setFloor(
+                                master.getFloor());
+
+                item.setDescription(
+                                firstListValue(
+                                                req.getDescriptions()));
+
+                item.setWeight(
+                                firstListValue(
+                                                req.getWeights()));
+
+                item.setDimensions(
+                                firstListValue(
+                                                req.getDimensionsList()));
+
+                item.setRemarks(
+                                firstListValue(
+                                                req.getRemarksList()));
+
+                item.setPlantCode(
+                                plantCode);
+                item.setPackedAreaCode(
+                                plant.packedAreaCode());
+                item.setCurrentLocationCode(null);
+                item.setFgAreaCode(
+                                plant.fgAreaCode());
+                item.setFgZoneCode(null);
+
+                item.setPacketNumber(
+                                packetNumber);
+
+                item.setSku(
+                                buildSku(
+                                                master.getPdNo(),
+                                                master.getDrawingName(),
+                                                packetNo));
+
+                item.setQuantity(1);
+                item.setLocation("FLOOR");
+                item.setStatus("CREATED");
+                item.setCreatedBy(actor);
+
+                PacketItem saved = packetItemRepository.save(item);
+
+                packetItemRepository.flush();
+
+                master.setTotalPackets(
+                                Math.toIntExact(
+                                                packetItemRepository
+                                                                .countByMasterItemId(
+                                                                                masterItemId)));
+
+                masterItemRepository.save(master);
+
+                return saved;
+        }
+
+        @Transactional
         public PacketItem updateNormalPacketItem(
                         UUID itemId,
                         UpdatePacketItemRequest req,
@@ -1598,19 +2178,47 @@ public class PacketService {
 
                 // Keep your existing normal update logic here.
 
-                boolean stickerGenerated = item.getStickerNumber() != null;
+                boolean stickerGenerated = item.getStickerNumber() != null &&
+                                !item.getStickerNumber().isBlank();
 
                 /*
                  * ALWAYS EDITABLE FIELDS
                  */
 
-                item.setDescription(req.getDescription());
-                item.setWeight(req.getWeight());
-                item.setDimensions(req.getDimensions());
-                item.setRemarks(req.getRemarks());
-                item.setFloor(req.getFloor());
-                item.setLocation(req.getLocation());
-                item.setClientAddress(req.getClientAddress());
+                item.setDescription(
+                                keepExistingIfNull(
+                                                req.getDescription(),
+                                                item.getDescription()));
+
+                item.setWeight(
+                                keepExistingIfNull(
+                                                req.getWeight(),
+                                                item.getWeight()));
+
+                item.setDimensions(
+                                keepExistingIfNull(
+                                                req.getDimensions(),
+                                                item.getDimensions()));
+
+                item.setRemarks(
+                                keepExistingIfNull(
+                                                req.getRemarks(),
+                                                item.getRemarks()));
+
+                item.setFloor(
+                                keepExistingIfNull(
+                                                req.getFloor(),
+                                                item.getFloor()));
+
+                item.setLocation(
+                                keepExistingIfNull(
+                                                req.getLocation(),
+                                                item.getLocation()));
+
+                item.setClientAddress(
+                                keepExistingIfNull(
+                                                req.getClientAddress(),
+                                                item.getClientAddress()));
 
                 /*
                  * RESTRICTED FIELDS
@@ -1856,6 +2464,145 @@ public class PacketService {
                 });
 
                 return saved;
+        }
+
+        private void assertNormalPackingUser(
+                        User user) {
+
+                if (user == null) {
+                        throw new AccessDeniedException(
+                                        "Authentication is required");
+                }
+
+                if (currentUserService.isAdmin(user)) {
+                        return;
+                }
+
+                if (currentUserService
+                                .isHardwareOnlyPackingUser(user)) {
+
+                        throw new AccessDeniedException(
+                                        "Hardware-only packing users cannot access normal inventory");
+                }
+
+                if (!currentUserService.isNormalPacking(user)) {
+                        throw new AccessDeniedException(
+                                        "Normal packing access is required");
+                }
+        }
+
+        private void assertNormalMasterAccess(
+                        MasterItem master,
+                        User user) {
+
+                if (master == null) {
+                        throw new AccessDeniedException(
+                                        "Master item is missing");
+                }
+
+                assertNormalPackingUser(user);
+
+                if (currentUserService.isAdmin(user)) {
+                        return;
+                }
+
+                if (user.getId() == null) {
+                        throw new AccessDeniedException(
+                                        "Authenticated user ID is missing");
+                }
+
+                /*
+                 * Preferred ownership check.
+                 */
+                if (master.getCreatedByUserId() != null) {
+                        if (!Objects.equals(
+                                        master.getCreatedByUserId(),
+                                        user.getId())) {
+
+                                throw new AccessDeniedException(
+                                                "You cannot modify a master item created by another user");
+                        }
+
+                        return;
+                }
+
+                /*
+                 * Legacy ownership check using existing child packets.
+                 */
+                String username = user.getUsername() == null
+                                ? ""
+                                : user.getUsername().trim();
+
+                boolean ownsLegacyMaster = packetItemRepository.existsOwnedPacketInMaster(
+                                master.getId(),
+                                user.getId(),
+                                username);
+
+                if (!ownsLegacyMaster) {
+                        throw new AccessDeniedException(
+                                        "You cannot modify a master item created by another user");
+                }
+        }
+
+        private int nextPacketNumber(
+                        UUID masterItemId) {
+
+                return packetItemRepository
+                                .findPacketNumbersByMasterItemId(
+                                                masterItemId)
+                                .stream()
+                                .mapToInt(this::parsePacketNumberSafely)
+                                .max()
+                                .orElse(0) + 1;
+        }
+
+        private int parsePacketNumberSafely(
+                        String packetNumber) {
+
+                if (packetNumber == null ||
+                                packetNumber.isBlank()) {
+                        return 0;
+                }
+
+                String digits = packetNumber
+                                .replaceAll("[^0-9]", "");
+
+                if (digits.isBlank()) {
+                        return 0;
+                }
+
+                try {
+                        return Integer.parseInt(digits);
+                } catch (NumberFormatException exception) {
+                        return 0;
+                }
+        }
+
+        private String firstListValue(
+                        List<String> values) {
+
+                if (values == null ||
+                                values.isEmpty() ||
+                                values.get(0) == null) {
+                        return "";
+                }
+
+                return values.get(0);
+        }
+
+        private void validatePacketCreationRequest(
+                        CreateItemRequest req,
+                        int packetCount) {
+
+                if (req == null) {
+                        throw new IllegalArgumentException(
+                                        "Packet request is required");
+                }
+
+                if (packetCount <= 0) {
+                        throw new IllegalArgumentException(
+                                        "Number of packets must be greater than zero");
+                }
         }
 
         @Transactional

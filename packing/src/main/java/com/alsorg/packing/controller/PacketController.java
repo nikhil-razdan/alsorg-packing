@@ -24,19 +24,26 @@ import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
 import com.alsorg.packing.domain.users.User;
 import org.springframework.security.access.prepost.PreAuthorize;
-import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/packets")
-@PreAuthorize("isAuthenticated() and !hasAuthority('HARDWARE_PACKING')")
+@PreAuthorize("""
+                isAuthenticated() and
+                hasAnyAuthority(
+                    'ADMIN',
+                    'PACKING',
+                    'WAREHOUSE',
+                    'DISPATCH',
+                    'LOGISTICS'
+                )
+                """)
 public class PacketController {
 
         private final ZohoStickerService zohoStickerService;
         private final PacketService packetService;
         private final ZohoInventoryClient zohoInventoryClient;
         private final ZohoItemCacheService zohoItemCacheService;
-        private final PacketItemRepository packetItemRepository;
         private final CurrentUserService currentUserService;
 
         public PacketController(
@@ -50,7 +57,6 @@ public class PacketController {
                 this.zohoInventoryClient = zohoInventoryClient;
                 this.zohoItemCacheService = zohoItemCacheService;
                 this.zohoStickerService = zohoStickerService;
-                this.packetItemRepository = packetItemRepository;
                 this.currentUserService = currentUserService;
         }
 
@@ -60,7 +66,15 @@ public class PacketController {
 
         @PostMapping
         public ResponseEntity<PacketCreateResponse> createPacket(
-                        @RequestBody PacketCreateRequest request) {
+                        @RequestBody PacketCreateRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService
+                                .getCurrentUserFromAuth(auth);
+
+                currentUserService
+                                .rejectHardwareUserFromNormalInventory(
+                                                user);
 
                 List<PacketItem> items = request.getItems().stream().map(dto -> {
                         PacketItem item = new PacketItem();
@@ -182,7 +196,7 @@ public class PacketController {
 
                 List<PacketItem> items = packetService.createItemWithPackets(
                                 req,
-                                user.getUsername(),
+                                user,
                                 plantCode);
 
                 return ResponseEntity.ok(
@@ -228,7 +242,7 @@ public class PacketController {
                                 packetService.addPackets(
                                                 masterItemId,
                                                 req,
-                                                user.getUsername(),
+                                                user,
                                                 currentUserService.allowedPlants(user)));
         }
 
@@ -284,7 +298,7 @@ public class PacketController {
                 return ResponseEntity.ok(
                                 packetService.createCustomPacket(
                                                 req,
-                                                user.getUsername(),
+                                                user,
                                                 plantCode));
         }
 
@@ -300,7 +314,7 @@ public class PacketController {
                                 packetService.addCustomPacket(
                                                 masterItemId,
                                                 req,
-                                                user.getUsername(),
+                                                user,
                                                 currentUserService.allowedPlants(user)));
         }
 
@@ -340,101 +354,6 @@ public class PacketController {
                                 packetService.assignPlantToPacketItem(
                                                 itemId,
                                                 req.getPlantCode()));
-        }
-
-        private boolean showOnInventoryPage(PacketItem item) {
-                if (item == null || item.getStatus() == null) {
-                        return false;
-                }
-
-                if (item.getItemType() == com.alsorg.packing.domain.common.PacketItemType.HARDWARE) {
-                        return false;
-                }
-
-                String status = clean(item.getStatus());
-
-                if ("CREATED".equals(status)
-                                || "RESTORED".equals(status)) {
-                        return true;
-                }
-
-                if ("READY".equals(status)) {
-                        return isPackedPkdItem(item);
-                }
-
-                return false;
-        }
-
-        private boolean isPackedPkdItem(PacketItem item) {
-                String packedAreaCode = clean(item.getPackedAreaCode());
-                String fgAreaCode = clean(item.getFgAreaCode());
-
-                String currentLocationCode = clean(item.getCurrentLocationCode());
-                String location = clean(item.getLocation());
-
-                String finalLocation = !currentLocationCode.isBlank()
-                                ? currentLocationCode
-                                : location;
-
-                if (finalLocation.isBlank()) {
-                        return false;
-                }
-
-                // If already in FG, do not show in Inventory page
-                if (!fgAreaCode.isBlank() &&
-                                (finalLocation.equals(fgAreaCode) ||
-                                                finalLocation.startsWith(fgAreaCode + "-") ||
-                                                finalLocation.startsWith(fgAreaCode + " "))) {
-                        return false;
-                }
-
-                // If current location is assigned packed area, show in Inventory page
-                if (!packedAreaCode.isBlank()) {
-                        return finalLocation.equals(packedAreaCode) ||
-                                        finalLocation.startsWith(packedAreaCode + "-") ||
-                                        finalLocation.startsWith(packedAreaCode + " ");
-                }
-
-                // Safe fallback for old data
-                return finalLocation.startsWith("PKD");
-        }
-
-        private String clean(String value) {
-                return value == null ? "" : value.trim();
-        }
-
-        private PacketItemResponse toPacketItemResponse(PacketItem item) {
-                PacketItemResponse dto = new PacketItemResponse();
-
-                dto.setItemId(item.getId());
-                dto.setItemName(item.getItemName());
-                dto.setSku(item.getSku());
-                dto.setLocation(item.getLocation());
-                dto.setFloor(item.getFloor());
-                dto.setPdNo(item.getPdNo());
-                dto.setDrawingNo(item.getDrawingNo());
-                dto.setClientName(item.getClientName());
-                dto.setClientAddress(item.getClientAddress());
-                dto.setQuantity(item.getQuantity() != null ? item.getQuantity() : 1);
-                dto.setDescription(item.getDescription());
-                dto.setDimensions(item.getDimensions());
-                dto.setWeight(item.getWeight());
-                dto.setRemarks(item.getRemarks());
-                dto.setCreatedBy(item.getCreatedBy());
-                dto.setStickerNumber(item.getStickerNumber());
-
-                dto.setPlantCode(item.getPlantCode());
-                dto.setPackedAreaCode(item.getPackedAreaCode());
-                dto.setCurrentLocationCode(item.getCurrentLocationCode());
-                dto.setFgAreaCode(item.getFgAreaCode());
-                dto.setFgZoneCode(item.getFgZoneCode());
-
-                if (item.getMasterItem() != null) {
-                        dto.setMasterItemId(item.getMasterItem().getId());
-                        dto.setTotalPackets(item.getMasterItem().getTotalPackets());
-                }
-
-                return dto;
         }
 
         @PostMapping("/items/{itemId}/preview-sticker")

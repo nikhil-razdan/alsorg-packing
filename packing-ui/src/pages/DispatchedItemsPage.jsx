@@ -6468,6 +6468,13 @@ function DispatchedItemsPage() {
 	/*
 	 * Generates the real XLSX workbook.
 	 */
+	const authContext = useAuth();
+
+	const currentUser =
+		authContext?.currentUser ??
+		authContext?.user ??
+		null;
+
 	const exportDispatchExcelWorkbook =
 		async (
 			driverLookup
