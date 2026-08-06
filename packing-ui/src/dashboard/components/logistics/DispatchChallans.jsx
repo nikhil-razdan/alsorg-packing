@@ -22,6 +22,10 @@ import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import DownloadIcon from "@mui/icons-material/Download";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
 
 import {
     API_BASE_URL,
@@ -60,6 +64,456 @@ function hasHelpersLoaders(
     );
 }
 
+
+const CHALLAN_DATE_FILTER_MODES = [
+    {
+        value: "ACTIVITY",
+        label: "Relevant Activity",
+        description:
+            "Uses trip end when available, otherwise the challan or trip-start time.",
+    },
+    {
+        value: "CHALLAN",
+        label: "Challan Date / Time",
+        description:
+            "Filters by the challan dispatch or generation timestamp.",
+    },
+    {
+        value: "TRIP_START",
+        label: "Trip Start",
+        description:
+            "Filters by the recorded trip-start timestamp.",
+    },
+    {
+        value: "TRIP_END",
+        label: "Trip End",
+        description:
+            "Filters only challans having a recorded trip-end timestamp.",
+    },
+];
+
+function parseChallanDateTime(
+    value
+) {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(
+            value.getTime()
+        )
+            ? null
+            : new Date(
+                value.getTime()
+            );
+    }
+
+    const raw =
+        String(value)
+            .trim()
+            .replace(" ", "T");
+
+    if (!raw) {
+        return null;
+    }
+
+    const hasTimezone =
+        /[zZ]$/.test(raw) ||
+        /[+-]\d{2}:?\d{2}$/.test(
+            raw
+        );
+
+    if (hasTimezone) {
+        const parsed =
+            new Date(raw);
+
+        return Number.isNaN(
+            parsed.getTime()
+        )
+            ? null
+            : parsed;
+    }
+
+    /*
+     * Spring LocalDateTime values represent local business time.
+     * Construct them using local date parts so the browser does not
+     * shift the value as UTC.
+     */
+    const localMatch =
+        raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/
+        );
+
+    if (localMatch) {
+        const milliseconds =
+            Number(
+                String(
+                    localMatch[7] || "0"
+                )
+                    .slice(0, 3)
+                    .padEnd(3, "0")
+            );
+
+        const parsed =
+            new Date(
+                Number(localMatch[1]),
+                Number(localMatch[2]) - 1,
+                Number(localMatch[3]),
+                Number(localMatch[4] || 0),
+                Number(localMatch[5] || 0),
+                Number(localMatch[6] || 0),
+                milliseconds
+            );
+
+        return Number.isNaN(
+            parsed.getTime()
+        )
+            ? null
+            : parsed;
+    }
+
+    const fallback =
+        new Date(raw);
+
+    return Number.isNaN(
+        fallback.getTime()
+    )
+        ? null
+        : fallback;
+}
+
+function getChallanDateInfo(
+    challan,
+    mode = "ACTIVITY"
+) {
+    const cleanMode =
+        String(mode || "ACTIVITY")
+            .trim()
+            .toUpperCase();
+
+    const candidatesByMode = {
+        CHALLAN: [
+            ["dispatchedAt", "Challan / Dispatch"],
+            ["dispatchDate", "Challan / Dispatch"],
+            ["generatedAt", "Generated"],
+            ["tripStartedAt", "Trip Started"],
+            ["createdAt", "Created"],
+        ],
+
+        TRIP_START: [
+            ["tripStartedAt", "Trip Started"],
+            ["dispatchedAt", "Challan / Dispatch"],
+        ],
+
+        TRIP_END: [
+            ["tripEndedAt", "Trip Ended"],
+        ],
+    };
+
+    let candidates;
+
+    if (cleanMode === "ACTIVITY") {
+        const hasEndTime =
+            Boolean(
+                parseChallanDateTime(
+                    challan?.tripEndedAt
+                )
+            );
+
+        candidates =
+            hasEndTime
+                ? [
+                    ["tripEndedAt", "Trip Ended"],
+                    ["dispatchedAt", "Challan / Dispatch"],
+                    ["tripStartedAt", "Trip Started"],
+                    ["generatedAt", "Generated"],
+                    ["createdAt", "Created"],
+                ]
+                : [
+                    ["dispatchedAt", "Challan / Dispatch"],
+                    ["tripStartedAt", "Trip Started"],
+                    ["generatedAt", "Generated"],
+                    ["createdAt", "Created"],
+                    ["updatedAt", "Updated"],
+                ];
+    } else {
+        candidates =
+            candidatesByMode[
+            cleanMode
+            ] ||
+            candidatesByMode.CHALLAN;
+    }
+
+    for (
+        const [
+            field,
+            label,
+        ] of candidates
+    ) {
+        const rawValue =
+            challan?.[field];
+
+        const date =
+            parseChallanDateTime(
+                rawValue
+            );
+
+        if (date) {
+            return {
+                field,
+                label,
+                rawValue,
+                date,
+            };
+        }
+    }
+
+    return {
+        field: "",
+        label:
+            cleanMode === "TRIP_END"
+                ? "No Trip End"
+                : cleanMode === "TRIP_START"
+                    ? "No Trip Start"
+                    : "No Date",
+        rawValue: null,
+        date: null,
+    };
+}
+
+function toChallanDateInputValue(
+    value
+) {
+    const date =
+        value instanceof Date
+            ? value
+            : parseChallanDateTime(
+                value
+            );
+
+    if (!date) {
+        return "";
+    }
+
+    const pad = (number) =>
+        String(number)
+            .padStart(2, "0");
+
+    return [
+        date.getFullYear(),
+        "-",
+        pad(
+            date.getMonth() + 1
+        ),
+        "-",
+        pad(date.getDate()),
+    ].join("");
+}
+
+function getChallanTimeMinutes(
+    value
+) {
+    if (!value) {
+        return null;
+    }
+
+    const [
+        hour,
+        minute,
+    ] =
+        String(value)
+            .split(":")
+            .map(Number);
+
+    if (
+        !Number.isFinite(hour) ||
+        !Number.isFinite(minute)
+    ) {
+        return null;
+    }
+
+    return (
+        hour * 60 +
+        minute
+    );
+}
+
+function hasChallanDateFilter({
+    dateFrom,
+    dateTo,
+    timeFrom,
+    timeTo,
+}) {
+    return Boolean(
+        dateFrom ||
+        dateTo ||
+        timeFrom ||
+        timeTo
+    );
+}
+
+function challanMatchesDateFilter(
+    challan,
+    {
+        mode,
+        dateFrom,
+        dateTo,
+        timeFrom,
+        timeTo,
+    }
+) {
+    if (
+        !hasChallanDateFilter({
+            dateFrom,
+            dateTo,
+            timeFrom,
+            timeTo,
+        })
+    ) {
+        return true;
+    }
+
+    const dateInfo =
+        getChallanDateInfo(
+            challan,
+            mode
+        );
+
+    if (!dateInfo.date) {
+        return false;
+    }
+
+    const rowDateKey =
+        toChallanDateInputValue(
+            dateInfo.date
+        );
+
+    if (
+        dateFrom &&
+        rowDateKey < dateFrom
+    ) {
+        return false;
+    }
+
+    if (
+        dateTo &&
+        rowDateKey > dateTo
+    ) {
+        return false;
+    }
+
+    const rowMinutes =
+        dateInfo.date.getHours() *
+        60 +
+        dateInfo.date.getMinutes();
+
+    const fromMinutes =
+        getChallanTimeMinutes(
+            timeFrom
+        );
+
+    const toMinutes =
+        getChallanTimeMinutes(
+            timeTo
+        );
+
+    if (
+        fromMinutes !== null &&
+        toMinutes !== null &&
+        fromMinutes > toMinutes
+    ) {
+        /*
+         * Overnight range, for example 10:00 PM to 06:00 AM.
+         */
+        return (
+            rowMinutes >=
+            fromMinutes ||
+            rowMinutes <=
+            toMinutes
+        );
+    }
+
+    if (
+        fromMinutes !== null &&
+        rowMinutes < fromMinutes
+    ) {
+        return false;
+    }
+
+    if (
+        toMinutes !== null &&
+        rowMinutes > toMinutes
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
+function getChallanDateFilterModeLabel(
+    mode
+) {
+    return (
+        CHALLAN_DATE_FILTER_MODES
+            .find(
+                (option) =>
+                    option.value ===
+                    mode
+            )
+            ?.label ||
+        "Relevant Activity"
+    );
+}
+
+function getChallanDateFilterSummary({
+    mode,
+    dateFrom,
+    dateTo,
+    timeFrom,
+    timeTo,
+}) {
+    if (
+        !hasChallanDateFilter({
+            dateFrom,
+            dateTo,
+            timeFrom,
+            timeTo,
+        })
+    ) {
+        return "Date / Time";
+    }
+
+    const modeLabel =
+        getChallanDateFilterModeLabel(
+            mode
+        );
+
+    const dateText =
+        dateFrom && dateTo
+            ? dateFrom === dateTo
+                ? dateFrom
+                : `${dateFrom} → ${dateTo}`
+            : dateFrom
+                ? `From ${dateFrom}`
+                : dateTo
+                    ? `Until ${dateTo}`
+                    : "All Dates";
+
+    const timeText =
+        timeFrom || timeTo
+            ? `${timeFrom || "00:00"} – ${timeTo || "23:59"}`
+            : "";
+
+    return [
+        modeLabel,
+        dateText,
+        timeText,
+    ]
+        .filter(Boolean)
+        .join(" • ");
+}
+
 function DispatchChallans({
     showAlert,
 }) {
@@ -70,6 +524,24 @@ function DispatchChallans({
         useState(false);
 
     const [search, setSearch] =
+        useState("");
+
+    const [dateFilterOpen, setDateFilterOpen] =
+        useState(false);
+
+    const [dateFilterMode, setDateFilterMode] =
+        useState("ACTIVITY");
+
+    const [dateFilterFrom, setDateFilterFrom] =
+        useState("");
+
+    const [dateFilterTo, setDateFilterTo] =
+        useState("");
+
+    const [dateFilterTimeFrom, setDateFilterTimeFrom] =
+        useState("");
+
+    const [dateFilterTimeTo, setDateFilterTimeTo] =
         useState("");
 
     const [endTimeFilter, setEndTimeFilter] =
@@ -323,6 +795,136 @@ function DispatchChallans({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const dateFilterActive =
+        hasChallanDateFilter({
+            dateFrom:
+                dateFilterFrom,
+            dateTo:
+                dateFilterTo,
+            timeFrom:
+                dateFilterTimeFrom,
+            timeTo:
+                dateFilterTimeTo,
+        });
+
+    const dateFilterSummary =
+        getChallanDateFilterSummary({
+            mode:
+                dateFilterMode,
+            dateFrom:
+                dateFilterFrom,
+            dateTo:
+                dateFilterTo,
+            timeFrom:
+                dateFilterTimeFrom,
+            timeTo:
+                dateFilterTimeTo,
+        });
+
+    const clearChallanDateFilter =
+        () => {
+            setDateFilterFrom("");
+            setDateFilterTo("");
+            setDateFilterTimeFrom("");
+            setDateFilterTimeTo("");
+            setPageNo(1);
+        };
+
+    const applyChallanDatePreset =
+        (preset) => {
+            const now =
+                new Date();
+
+            const start =
+                new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate()
+                );
+
+            const end =
+                new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate()
+                );
+
+            if (
+                preset ===
+                "YESTERDAY"
+            ) {
+                start.setDate(
+                    start.getDate() - 1
+                );
+
+                end.setDate(
+                    end.getDate() - 1
+                );
+            }
+
+            if (
+                preset ===
+                "LAST_7_DAYS"
+            ) {
+                start.setDate(
+                    start.getDate() - 6
+                );
+            }
+
+            if (
+                preset ===
+                "THIS_MONTH"
+            ) {
+                start.setDate(1);
+            }
+
+            setDateFilterFrom(
+                toChallanDateInputValue(
+                    start
+                )
+            );
+
+            setDateFilterTo(
+                toChallanDateInputValue(
+                    end
+                )
+            );
+
+            setDateFilterTimeFrom("");
+            setDateFilterTimeTo("");
+            setPageNo(1);
+        };
+
+    const updateDateFilterFrom =
+        (value) => {
+            setDateFilterFrom(value);
+
+            if (
+                value &&
+                dateFilterTo &&
+                value > dateFilterTo
+            ) {
+                setDateFilterTo(value);
+            }
+
+            setPageNo(1);
+        };
+
+    const updateDateFilterTo =
+        (value) => {
+            setDateFilterTo(value);
+
+            if (
+                value &&
+                dateFilterFrom &&
+                value < dateFilterFrom
+            ) {
+                setDateFilterFrom(value);
+            }
+
+            setPageNo(1);
+        };
+
     const filteredRows =
         useMemo(() => {
             const q =
@@ -372,6 +974,26 @@ function DispatchChallans({
                         return false;
                     }
 
+                    if (
+                        !challanMatchesDateFilter(
+                            challan,
+                            {
+                                mode:
+                                    dateFilterMode,
+                                dateFrom:
+                                    dateFilterFrom,
+                                dateTo:
+                                    dateFilterTo,
+                                timeFrom:
+                                    dateFilterTimeFrom,
+                                timeTo:
+                                    dateFilterTimeTo,
+                            }
+                        )
+                    ) {
+                        return false;
+                    }
+
                     if (!q) {
                         return true;
                     }
@@ -389,6 +1011,12 @@ function DispatchChallans({
                             .tripStatus,
                         challan
                             .tripEndedAt,
+                        challan
+                            .tripStartedAt,
+                        challan
+                            .dispatchedAt,
+                        challan
+                            .generatedAt,
                         challan
                             .helperLoaderCount,
                     ]
@@ -457,6 +1085,11 @@ function DispatchChallans({
             search,
             helperFilter,
             endTimeFilter,
+            dateFilterMode,
+            dateFilterFrom,
+            dateFilterTo,
+            dateFilterTimeFrom,
+            dateFilterTimeTo,
         ]);
 
     useEffect(() => {
@@ -465,6 +1098,11 @@ function DispatchChallans({
         search,
         endTimeFilter,
         helperFilter,
+        dateFilterMode,
+        dateFilterFrom,
+        dateFilterTo,
+        dateFilterTimeFrom,
+        dateFilterTimeTo,
         pageSize,
     ]);
 
@@ -813,6 +1451,62 @@ function DispatchChallans({
 
                 <Box sx={searchFilterDivider} />
 
+                <Button
+                    startIcon={
+                        <CalendarMonthOutlinedIcon />
+                    }
+                    onClick={() =>
+                        setDateFilterOpen(true)
+                    }
+                    sx={dateFilterButtonSx(
+                        dateFilterActive
+                    )}
+                >
+                    <Box
+                        sx={{
+                            minWidth: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            lineHeight: 1.1,
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                color: "#fff",
+                                fontSize: 11,
+                                fontWeight: 950,
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            {dateFilterActive
+                                ? "Date Filter Active"
+                                : "Date / Time"}
+                        </Box>
+
+                        <Box
+                            sx={{
+                                maxWidth: 210,
+                                mt: 0.35,
+                                color:
+                                    dateFilterActive
+                                        ? "#bfdbfe"
+                                        : "#94a3b8",
+                                fontSize: 9.5,
+                                fontWeight: 750,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                            title={
+                                dateFilterSummary
+                            }
+                        >
+                            {dateFilterSummary}
+                        </Box>
+                    </Box>
+                </Button>
+
                 <Select
                     size="small"
                     value={endTimeFilter}
@@ -907,11 +1601,13 @@ function DispatchChallans({
             {!loading &&
                 filteredRows.length === 0 && (
                     <Box sx={emptyState}>
-                        {endTimeFilter === "ALL"
-                            ? "No dispatched challans were found."
-                            : endTimeFilter === "WITH_END_TIME"
-                                ? "No challans with an end time were found."
-                                : "No challans without an end time were found."}
+                        {dateFilterActive
+                            ? "No challans matched the selected date/time range."
+                            : endTimeFilter === "ALL"
+                                ? "No dispatched challans were found."
+                                : endTimeFilter === "WITH_END_TIME"
+                                    ? "No challans with an end time were found."
+                                    : "No challans without an end time were found."}
                     </Box>
                 )}
 
@@ -1140,6 +1836,300 @@ function DispatchChallans({
                         totalItems={filteredRows.length}
                     />
                 )}
+
+            <Dialog
+                open={dateFilterOpen}
+                onClose={() =>
+                    setDateFilterOpen(false)
+                }
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{
+                    sx: dateFilterDialogPaperSx,
+                }}
+            >
+                <DialogTitle
+                    sx={dateFilterDialogTitleSx}
+                >
+                    <Box
+                        sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.2,
+                            minWidth: 0,
+                        }}
+                    >
+                        <Box sx={dateFilterIconSx}>
+                            <CalendarMonthOutlinedIcon />
+                        </Box>
+
+                        <Box sx={{ minWidth: 0 }}>
+                            <Box sx={dateFilterTitleSx}>
+                                Date & Time Filter
+                            </Box>
+
+                            <Box sx={dateFilterSubtitleSx}>
+                                Filter challans by activity, challan, trip-start or trip-end time
+                            </Box>
+                        </Box>
+                    </Box>
+
+                    <Box
+                        sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                        }}
+                    >
+                        <Chip
+                            size="small"
+                            label={`${filteredRows.length} matching`}
+                            sx={dateFilterCountChipSx}
+                        />
+
+                        <IconButton
+                            onClick={() =>
+                                setDateFilterOpen(false)
+                            }
+                            sx={dateFilterCloseButtonSx}
+                        >
+                            <CloseIcon />
+                        </IconButton>
+                    </Box>
+                </DialogTitle>
+
+                <DialogContent sx={dateFilterContentSx}>
+                    <Box sx={dateModeSectionSx}>
+                        <Box sx={dateModeSectionLabelSx}>
+                            Date Basis
+                        </Box>
+
+                        <Box sx={dateModeGridSx}>
+                            {CHALLAN_DATE_FILTER_MODES.map(
+                                (option) => {
+                                    const activeMode =
+                                        dateFilterMode ===
+                                        option.value;
+
+                                    return (
+                                        <Button
+                                            key={option.value}
+                                            type="button"
+                                            disableRipple
+                                            onClick={() => {
+                                                setDateFilterMode(
+                                                    option.value
+                                                );
+                                                setPageNo(1);
+                                            }}
+                                            sx={dateModeCardSx(
+                                                activeMode
+                                            )}
+                                        >
+                                            <Box sx={dateModeCardTextSx}>
+                                                <Box sx={dateModeCardTitleSx}>
+                                                    {option.label}
+                                                </Box>
+
+                                                <Box sx={dateModeCardDescriptionSx}>
+                                                    {option.description}
+                                                </Box>
+                                            </Box>
+
+                                            <Box sx={dateModeCheckSx(activeMode)}>
+                                                {activeMode ? "✓" : ""}
+                                            </Box>
+                                        </Button>
+                                    );
+                                }
+                            )}
+                        </Box>
+                    </Box>
+
+                    <Box sx={datePresetRowSx}>
+                        <Button
+                            onClick={() =>
+                                applyChallanDatePreset(
+                                    "TODAY"
+                                )
+                            }
+                            sx={datePresetButtonSx}
+                        >
+                            Today
+                        </Button>
+
+                        <Button
+                            onClick={() =>
+                                applyChallanDatePreset(
+                                    "YESTERDAY"
+                                )
+                            }
+                            sx={datePresetButtonSx}
+                        >
+                            Yesterday
+                        </Button>
+
+                        <Button
+                            onClick={() =>
+                                applyChallanDatePreset(
+                                    "LAST_7_DAYS"
+                                )
+                            }
+                            sx={datePresetButtonSx}
+                        >
+                            Last 7 Days
+                        </Button>
+
+                        <Button
+                            onClick={() =>
+                                applyChallanDatePreset(
+                                    "THIS_MONTH"
+                                )
+                            }
+                            sx={datePresetButtonSx}
+                        >
+                            This Month
+                        </Button>
+                    </Box>
+
+                    <Box sx={dateFilterGridSx}>
+                        <TextField
+                            label="From Date"
+                            type="date"
+                            value={dateFilterFrom}
+                            onChange={(event) =>
+                                updateDateFilterFrom(
+                                    event.target.value
+                                )
+                            }
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            sx={dateFilterFieldSx}
+                        />
+
+                        <TextField
+                            label="To Date"
+                            type="date"
+                            value={dateFilterTo}
+                            onChange={(event) =>
+                                updateDateFilterTo(
+                                    event.target.value
+                                )
+                            }
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            sx={dateFilterFieldSx}
+                        />
+                    </Box>
+
+                    <Box sx={dateFilterGridSx}>
+                        <TextField
+                            label="From Time"
+                            type="time"
+                            value={dateFilterTimeFrom}
+                            onChange={(event) => {
+                                setDateFilterTimeFrom(
+                                    event.target.value
+                                );
+                                setPageNo(1);
+                            }}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            InputProps={{
+                                startAdornment: (
+                                    <AccessTimeOutlinedIcon
+                                        sx={dateTimeAdornmentSx}
+                                    />
+                                ),
+                            }}
+                            sx={dateFilterFieldSx}
+                        />
+
+                        <TextField
+                            label="To Time"
+                            type="time"
+                            value={dateFilterTimeTo}
+                            onChange={(event) => {
+                                setDateFilterTimeTo(
+                                    event.target.value
+                                );
+                                setPageNo(1);
+                            }}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            InputProps={{
+                                startAdornment: (
+                                    <AccessTimeOutlinedIcon
+                                        sx={dateTimeAdornmentSx}
+                                    />
+                                ),
+                            }}
+                            sx={dateFilterFieldSx}
+                        />
+                    </Box>
+
+                    <Box sx={dateFilterHintSx}>
+                        <EventAvailableOutlinedIcon
+                            sx={{
+                                fontSize: 18,
+                                color: "#6ee7b7",
+                                flexShrink: 0,
+                            }}
+                        />
+
+                        <Box>
+                            <Box
+                                sx={{
+                                    color: "#d1fae5",
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                }}
+                            >
+                                {dateFilterActive
+                                    ? dateFilterSummary
+                                    : "No date restriction applied"}
+                            </Box>
+
+                            <Box
+                                sx={{
+                                    mt: 0.3,
+                                    color: "#94a3b8",
+                                    fontSize: 10,
+                                    fontWeight: 650,
+                                }}
+                            >
+                                Time-only filters work across every date. Overnight ranges such as 10:00 PM to 06:00 AM are supported.
+                            </Box>
+                        </Box>
+                    </Box>
+
+                    <Box sx={dateFilterFooterSx}>
+                        <Button
+                            startIcon={
+                                <RestartAltOutlinedIcon />
+                            }
+                            disabled={!dateFilterActive}
+                            onClick={clearChallanDateFilter}
+                            sx={dateFilterClearButtonSx}
+                        >
+                            Clear
+                        </Button>
+
+                        <Button
+                            onClick={() =>
+                                setDateFilterOpen(false)
+                            }
+                            sx={dateFilterDoneButtonSx}
+                        >
+                            Done
+                        </Button>
+                    </Box>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={endTripDialog.open}
@@ -1837,6 +2827,422 @@ const endTimeFilterSelect = {
     "@media (max-width: 700px)": {
         width: "100%",
         minWidth: 0,
+    },
+};
+
+
+const dateFilterButtonSx = (
+    active
+) => ({
+    minWidth: 205,
+    height: 40,
+    px: 1.4,
+    borderRadius: "12px",
+    textTransform: "none",
+    justifyContent: "flex-start",
+    color: "#fff",
+    background: active
+        ? "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))"
+        : "rgba(255,255,255,.04)",
+    border: active
+        ? "1px solid rgba(96,165,250,.42)"
+        : "1px solid rgba(255,255,255,.08)",
+    boxShadow: active
+        ? "0 12px 26px rgba(37,99,235,.18)"
+        : "none",
+
+    "& .MuiButton-startIcon": {
+        color: active
+            ? "#93c5fd"
+            : "#64748b",
+    },
+
+    "&:hover": {
+        background: active
+            ? "linear-gradient(135deg,rgba(37,99,235,.42),rgba(59,130,246,.24))"
+            : "rgba(255,255,255,.075)",
+        borderColor:
+            "rgba(96,165,250,.34)",
+    },
+
+    "@media (max-width: 700px)": {
+        width: "100%",
+        minWidth: 0,
+    },
+});
+
+const dateFilterDialogPaperSx = {
+    borderRadius: "22px",
+    overflow: "hidden",
+    color: "#fff",
+    background:
+        "radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 34%), linear-gradient(180deg,#0f172a,#111827)",
+    border:
+        "1px solid rgba(148,163,184,.16)",
+    boxShadow:
+        "0 32px 90px rgba(2,6,23,.68)",
+};
+
+const dateFilterDialogTitleSx = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 1.5,
+    px: 2.2,
+    py: 1.8,
+    color: "#fff",
+    borderBottom:
+        "1px solid rgba(255,255,255,.07)",
+    background:
+        "rgba(2,6,23,.26)",
+};
+
+const dateFilterContentSx = {
+    p: 2.2,
+    maxHeight: "min(72vh, 720px)",
+    overflowY: "auto",
+    scrollbarWidth: "thin",
+    scrollbarColor:
+        "#60a5fa rgba(15,23,42,.8)",
+
+    "&::-webkit-scrollbar": {
+        width: 8,
+    },
+
+    "&::-webkit-scrollbar-track": {
+        background:
+            "rgba(15,23,42,.8)",
+        borderRadius: 999,
+    },
+
+    "&::-webkit-scrollbar-thumb": {
+        background:
+            "linear-gradient(180deg,#2563eb,#60a5fa)",
+        borderRadius: 999,
+    },
+};
+
+const dateFilterIconSx = {
+    width: 42,
+    height: 42,
+    flexShrink: 0,
+    borderRadius: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#bfdbfe",
+    background:
+        "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.14))",
+    border:
+        "1px solid rgba(96,165,250,.26)",
+    boxShadow:
+        "0 12px 24px rgba(37,99,235,.18)",
+};
+
+const dateFilterTitleSx = {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: 950,
+};
+
+const dateFilterSubtitleSx = {
+    mt: 0.35,
+    color: "#94a3b8",
+    fontSize: 10.5,
+    fontWeight: 650,
+};
+
+const dateFilterCountChipSx = {
+    height: 24,
+    color: "#6ee7b7",
+    fontSize: 10,
+    fontWeight: 950,
+    background:
+        "rgba(16,185,129,.13)",
+    border:
+        "1px solid rgba(16,185,129,.24)",
+};
+
+const dateFilterCloseButtonSx = {
+    width: 34,
+    height: 34,
+    color: "#94a3b8",
+    background:
+        "rgba(255,255,255,.04)",
+    border:
+        "1px solid rgba(255,255,255,.08)",
+
+    "&:hover": {
+        color: "#fff",
+        background:
+            "rgba(239,68,68,.16)",
+    },
+};
+
+const dateModeSectionSx = {
+    mb: 1.5,
+};
+
+const dateModeSectionLabelSx = {
+    mb: 0.8,
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: 950,
+    letterSpacing: ".10em",
+    textTransform: "uppercase",
+};
+
+const dateModeGridSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(2,minmax(0,1fr))",
+    gap: 0.9,
+
+    "@media (max-width: 560px)": {
+        gridTemplateColumns:
+            "minmax(0,1fr)",
+    },
+};
+
+const dateModeCardSx = (
+    active
+) => ({
+    minWidth: 0,
+    minHeight: 72,
+    p: 1.15,
+    borderRadius: "13px",
+    textTransform: "none",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 1,
+    textAlign: "left",
+    color: "#fff",
+    background: active
+        ? "linear-gradient(135deg,rgba(37,99,235,.30),rgba(59,130,246,.14))"
+        : "rgba(255,255,255,.035)",
+    border: active
+        ? "1px solid rgba(96,165,250,.48)"
+        : "1px solid rgba(255,255,255,.075)",
+    boxShadow: active
+        ? "0 12px 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.04)"
+        : "none",
+
+    "&:hover": {
+        transform: "translateY(-1px)",
+        background: active
+            ? "linear-gradient(135deg,rgba(37,99,235,.38),rgba(59,130,246,.20))"
+            : "rgba(255,255,255,.065)",
+        borderColor:
+            "rgba(96,165,250,.34)",
+    },
+});
+
+const dateModeCardTextSx = {
+    minWidth: 0,
+    flex: 1,
+};
+
+const dateModeCardTitleSx = {
+    color: "#fff",
+    fontSize: 11.5,
+    fontWeight: 950,
+    lineHeight: 1.25,
+};
+
+const dateModeCardDescriptionSx = {
+    mt: 0.35,
+    color: "#94a3b8",
+    fontSize: 9.5,
+    fontWeight: 650,
+    lineHeight: 1.35,
+};
+
+const dateModeCheckSx = (
+    active
+) => ({
+    width: 20,
+    height: 20,
+    flexShrink: 0,
+    borderRadius: "999px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: active
+        ? "#fff"
+        : "transparent",
+    fontSize: 11,
+    fontWeight: 950,
+    background: active
+        ? "linear-gradient(135deg,#2563eb,#60a5fa)"
+        : "rgba(255,255,255,.035)",
+    border: active
+        ? "1px solid rgba(147,197,253,.48)"
+        : "1px solid rgba(255,255,255,.10)",
+});
+
+const datePresetRowSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(4,minmax(0,1fr))",
+    gap: 0.8,
+    mb: 1.4,
+
+    "@media (max-width: 520px)": {
+        gridTemplateColumns:
+            "repeat(2,minmax(0,1fr))",
+    },
+};
+
+const datePresetButtonSx = {
+    minWidth: 0,
+    height: 34,
+    borderRadius: "11px",
+    textTransform: "none",
+    color: "#dbeafe",
+    fontSize: 10.5,
+    fontWeight: 900,
+    background:
+        "rgba(59,130,246,.09)",
+    border:
+        "1px solid rgba(96,165,250,.18)",
+
+    "&:hover": {
+        color: "#fff",
+        background:
+            "rgba(59,130,246,.18)",
+        borderColor:
+            "rgba(96,165,250,.34)",
+    },
+};
+
+const dateFilterGridSx = {
+    display: "grid",
+    gridTemplateColumns:
+        "repeat(2,minmax(0,1fr))",
+    gap: 1.2,
+    mb: 1.2,
+
+    "@media (max-width: 520px)": {
+        gridTemplateColumns:
+            "minmax(0,1fr)",
+    },
+};
+
+const dateFilterFieldSx = {
+    "& .MuiInputLabel-root": {
+        color: "#94a3b8",
+        fontSize: 12,
+        fontWeight: 800,
+    },
+
+    "& .MuiInputLabel-root.Mui-focused": {
+        color: "#93c5fd",
+    },
+
+    "& .MuiOutlinedInput-root": {
+        minHeight: 46,
+        borderRadius: "13px",
+        color: "#fff",
+        background:
+            "rgba(255,255,255,.04)",
+
+        "& fieldset": {
+            borderColor:
+                "rgba(255,255,255,.09)",
+        },
+
+        "&:hover fieldset": {
+            borderColor:
+                "rgba(96,165,250,.36)",
+        },
+
+        "&.Mui-focused fieldset": {
+            borderColor: "#60a5fa",
+            boxShadow:
+                "0 0 0 3px rgba(96,165,250,.12)",
+        },
+    },
+
+    "& input": {
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: 850,
+        colorScheme: "dark",
+    },
+
+    "& input::-webkit-calendar-picker-indicator": {
+        filter: "invert(1)",
+        opacity: 0.88,
+        cursor: "pointer",
+    },
+};
+
+const dateTimeAdornmentSx = {
+    mr: 0.8,
+    color: "#60a5fa",
+    fontSize: 18,
+};
+
+const dateFilterHintSx = {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 1,
+    p: 1.2,
+    borderRadius: "13px",
+    background:
+        "rgba(16,185,129,.075)",
+    border:
+        "1px solid rgba(16,185,129,.16)",
+};
+
+const dateFilterFooterSx = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 1,
+    mt: 1.5,
+    pt: 1.4,
+    borderTop:
+        "1px solid rgba(255,255,255,.07)",
+};
+
+const dateFilterClearButtonSx = {
+    height: 36,
+    borderRadius: "11px",
+    textTransform: "none",
+    color: "#fca5a5",
+    fontWeight: 900,
+    background:
+        "rgba(239,68,68,.08)",
+    border:
+        "1px solid rgba(239,68,68,.17)",
+
+    "&:hover": {
+        background:
+            "rgba(239,68,68,.15)",
+    },
+
+    "&.Mui-disabled": {
+        opacity: 0.35,
+        color: "#94a3b8",
+    },
+};
+
+const dateFilterDoneButtonSx = {
+    height: 36,
+    px: 2.4,
+    borderRadius: "11px",
+    textTransform: "none",
+    color: "#fff",
+    fontWeight: 950,
+    background:
+        "linear-gradient(135deg,#2563eb,#3b82f6)",
+    boxShadow:
+        "0 10px 22px rgba(37,99,235,.25)",
+
+    "&:hover": {
+        background:
+            "linear-gradient(135deg,#1d4ed8,#2563eb)",
     },
 };
 
