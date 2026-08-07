@@ -60,6 +60,10 @@ import SecurityOutlinedIcon from "@mui/icons-material/SecurityOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import DateRangeOutlinedIcon from "@mui/icons-material/DateRangeOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
@@ -270,6 +274,24 @@ const DEFAULT_FORM = {
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+const PERFORMANCE_PERIOD_OPTIONS = [
+	{ value: "TODAY", label: "Today" },
+	{ value: "7D", label: "Last 7 Days" },
+	{ value: "30D", label: "Last 30 Days" },
+	{ value: "ALL", label: "All Available" },
+];
+
+const USER_SORT_OPTIONS = [
+	["USERNAME", "Username"],
+	["ACTIVITY", "Activity Index"],
+	["OUTPUT", "Pack + Dispatch Output"],
+	["RECORDS", "Tracked Records"],
+	["STICKERS", "Sticker Generations"],
+	["DISPATCH_ITEMS", "Dispatch Items"],
+	["LAST_ACTIVITY", "Last Activity"],
+	["ACCESS_REVIEW", "Access Review First"],
+];
 
 /* =========================================================
  * HELPERS
@@ -669,10 +691,14 @@ const performanceAction = (row) => {
 const performanceTimestamp = (row) => {
 	return (
 		row?.performedAt ||
+		row?.activityAt ||
+		row?.packedAt ||
+		row?.dispatchedAt ||
+		row?.generatedAt ||
+		row?.movedAt ||
 		row?.createdAt ||
 		row?.updatedAt ||
 		row?.timestamp ||
-		row?.activityAt ||
 		null
 	);
 };
@@ -754,6 +780,203 @@ const performanceCategory = (row) => {
 	}
 
 	return "OTHER";
+};
+
+const toLocalDateTimeParam = (date) => {
+	if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+		return "";
+	}
+
+	const pad = (value) => String(value).padStart(2, "0");
+
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+		date.getDate()
+	)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+		date.getSeconds()
+	)}`;
+};
+
+const getPerformancePeriodWindow = (period) => {
+	const now = new Date();
+	const end = new Date(now);
+	end.setHours(23, 59, 59, 999);
+
+	if (period === "ALL") {
+		return {
+			key: "ALL",
+			label: "All Available",
+			start: null,
+			end: null,
+			fromParam: "",
+			toParam: "",
+		};
+	}
+
+	const start = new Date(now);
+	start.setHours(0, 0, 0, 0);
+
+	if (period === "7D") {
+		start.setDate(start.getDate() - 6);
+	} else if (period === "30D") {
+		start.setDate(start.getDate() - 29);
+	}
+
+	const label =
+		PERFORMANCE_PERIOD_OPTIONS.find((item) => item.value === period)
+			?.label || "Today";
+
+	return {
+		key: period,
+		label,
+		start,
+		end,
+		fromParam: toLocalDateTimeParam(start),
+		toParam: toLocalDateTimeParam(end),
+	};
+};
+
+const isWithinPerformanceWindow = (value, window) => {
+	if (!window || window.key === "ALL") {
+		return true;
+	}
+
+	const date = parseSmartDate(value);
+
+	if (!date) {
+		return false;
+	}
+
+	return (
+		(!window.start || date.getTime() >= window.start.getTime()) &&
+		(!window.end || date.getTime() <= window.end.getTime())
+	);
+};
+
+const localDateKey = (value) => {
+	const date = parseSmartDate(value);
+
+	if (!date) return "";
+
+	const pad = (part) => String(part).padStart(2, "0");
+
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+		date.getDate()
+	)}`;
+};
+
+const extractApiRows = (payload) => {
+	if (Array.isArray(payload)) {
+		return payload;
+	}
+
+	const candidates = [
+		payload?.rows,
+		payload?.content,
+		payload?.items,
+		payload?.results,
+		payload?.data,
+	];
+
+	return candidates.find(Array.isArray) || [];
+};
+
+const stickerTimestamp = (row) =>
+	row?.generatedAt || row?.createdAt || row?.updatedAt || null;
+
+const dispatchTimestamp = (row) =>
+	row?.dispatchedAt ||
+	row?.tripStartedAt ||
+	row?.generatedAt ||
+	row?.createdAt ||
+	null;
+
+const customChallanTimestamp = (row) =>
+	row?.generatedAt || row?.dispatchTime || row?.createdAt || null;
+
+const dispatchActor = (row) =>
+	row?.dispatchedBy || row?.generatedBy || row?.createdBy || "";
+
+const customChallanActor = (row) =>
+	row?.generatedBy || row?.createdBy || row?.dispatchedBy || "";
+
+const dispatchItemCount = (row) => {
+	const total = Number(row?.totalItems);
+
+	if (Number.isFinite(total) && total > 0) {
+		return total;
+	}
+
+	return Array.isArray(row?.items) ? row.items.length : 0;
+};
+
+const packingReportActor = (row) =>
+	row?.packedBy ||
+	row?.createdBy ||
+	row?.generatedBy ||
+	performanceActor(row);
+
+const dispatchReportActor = (row) =>
+	row?.dispatchedBy ||
+	row?.createdBy ||
+	performanceActor(row);
+
+const reportClientName = (row) =>
+	String(
+		row?.clientName ||
+		row?.client ||
+		row?.siteName ||
+		""
+	).trim();
+
+const getPackFlowAccessMatrix = (user) => {
+	const roles = userRoles(user);
+	const has = (...requested) =>
+		requested.some((role) => roles.includes(role));
+
+	const warehouse = readWarehouseAccess(user);
+
+	return [
+		{
+			key: "DASHBOARD",
+			label: "Dashboard",
+			granted: has("ADMIN", "DISPATCH", "PACKING", "WAREHOUSE", "LOGISTICS"),
+		},
+		{
+			key: "NORMAL_INVENTORY",
+			label: "Inventory Items",
+			granted: has("ADMIN", "PACKING"),
+		},
+		{
+			key: "HARDWARE_INVENTORY",
+			label: "Hardware Inventory",
+			granted: has("ADMIN", "HARDWARE_PACKING"),
+		},
+		{
+			key: "WAREHOUSE",
+			label: "Warehouse",
+			granted: warehouse,
+		},
+		{
+			key: "DISPATCH",
+			label: "Dispatched Items",
+			granted: has("ADMIN", "DISPATCH", "WAREHOUSE", "PACKING"),
+		},
+		{
+			key: "LOGISTICS",
+			label: "Logistics",
+			granted: has("ADMIN", "LOGISTICS"),
+		},
+		{
+			key: "USER_ADMIN",
+			label: "User Administration",
+			granted: has("ADMIN"),
+		},
+		{
+			key: "DRIVER_MOBILE",
+			label: "Driver Mobile",
+			granted: has("DRIVER"),
+		},
+	];
 };
 
 const getUserAccessHealth = (user) => {
@@ -914,6 +1137,15 @@ export default function UsersPage() {
 	const [activityFilter, setActivityFilter] =
 		useState("ALL");
 
+	const [performancePeriod, setPerformancePeriod] =
+		useState("7D");
+
+	const [sortBy, setSortBy] =
+		useState("ACTIVITY");
+
+	const [exportingReport, setExportingReport] =
+		useState(false);
+
 	const [performanceLoading, setPerformanceLoading] =
 		useState(false);
 
@@ -921,9 +1153,15 @@ export default function UsersPage() {
 		useState({
 			packingRows: [],
 			dispatchRows: [],
+			packingReportRows: [],
+			dispatchReportRows: [],
 			activityRows: [],
+			stickerRows: [],
+			dispatchChallans: [],
+			customChallans: [],
 			loadedAt: null,
 			errors: [],
+			sources: {},
 		});
 
 	const [performanceOpen, setPerformanceOpen] =
@@ -1075,88 +1313,163 @@ export default function UsersPage() {
 		[showMessage]
 	);
 
+	const performanceWindow = useMemo(
+		() => getPerformancePeriodWindow(performancePeriod),
+		[performancePeriod]
+	);
+
 	const loadPerformance = useCallback(
 		async () => {
 			setPerformanceLoading(true);
 
+			const traceParams = {
+				type: "all",
+				limit: 2000,
+				offset: 0,
+			};
+
+			if (performanceWindow.fromParam) {
+				traceParams.from = performanceWindow.fromParam;
+			}
+
+			if (performanceWindow.toParam) {
+				traceParams.to = performanceWindow.toParam;
+			}
+
+			const reportFrom =
+				performanceWindow.fromParam ||
+				"2000-01-01T00:00:00";
+
+			const reportTo =
+				performanceWindow.toParam ||
+				toLocalDateTimeParam(new Date());
+
 			const [
 				packingResult,
 				dispatchResult,
-				activityResult,
+				packingReportResult,
+				dispatchReportResult,
+				traceResult,
+				recentActivityResult,
+				stickerResult,
+				dispatchChallanResult,
+				customChallanResult,
 			] = await Promise.allSettled([
-				API.get(
-					"/reports/dashboard/daily-throughput/users",
-					{
-						params: {
-							type: "packing",
-						},
-					}
-				),
-				API.get(
-					"/reports/dashboard/daily-throughput/users",
-					{
-						params: {
-							type: "dispatch",
-						},
-					}
-				),
-				API.get(
-					"/reports/dashboard/activity",
-					{
-						params: {
-							limit: 250,
-						},
-					}
-				),
+				API.get("/reports/dashboard/daily-throughput/users", {
+					params: { type: "packing" },
+				}),
+				API.get("/reports/dashboard/daily-throughput/users", {
+					params: { type: "dispatch" },
+				}),
+				API.get("/reports/packing", {
+					params: { from: reportFrom, to: reportTo },
+				}),
+				API.get("/reports/dispatch", {
+					params: { from: reportFrom, to: reportTo },
+				}),
+				API.get("/reports/dashboard/inventory-trace", {
+					params: traceParams,
+				}),
+				API.get("/reports/dashboard/activity", {
+					params: { limit: 500 },
+				}),
+				API.get("/stickers/generated-history"),
+				API.get("/dispatched/challans"),
+				API.get("/chalaan/custom"),
 			]);
 
 			const errors = [];
+			const sources = {};
 
-			const unpackRows = (
-				result,
-				label
-			) => {
-				if (
-					result.status ===
-					"fulfilled"
-				) {
-					return Array.isArray(
-						result.value?.data
-					)
-						? result.value.data
-						: [];
+			const unpackRows = (result, label, sourceKey) => {
+				if (result.status === "fulfilled") {
+					const rows = extractApiRows(result.value?.data);
+					sources[sourceKey] = {
+						ok: true,
+						count: rows.length,
+					};
+					return rows;
 				}
 
-				errors.push(
-					`${label}: ${readError(
-						result.reason,
-						"Unavailable"
-					)}`
-				);
-
+				const message = readError(result.reason, "Unavailable");
+				errors.push(`${label}: ${message}`);
+				sources[sourceKey] = {
+					ok: false,
+					count: 0,
+					message,
+				};
 				return [];
 			};
+
+			const traceRows = unpackRows(
+				traceResult,
+				"Inventory trace",
+				"trace"
+			);
+
+			const recentRows = unpackRows(
+				recentActivityResult,
+				"Recent activity",
+				"activity"
+			);
+
+			/*
+			 * Trace is the preferred period-aware source. The dashboard activity
+			 * feed remains a safe fallback and also fills gaps when trace rows do
+			 * not expose an actor/action shape.
+			 */
+			const actorTraceRows = traceRows.filter((row) =>
+				Boolean(normalizeUsernameKey(performanceActor(row)))
+			);
+
+			const activityRows =
+				actorTraceRows.length > 0 ? actorTraceRows : recentRows;
 
 			setPerformanceData({
 				packingRows: unpackRows(
 					packingResult,
-					"Packing performance"
+					"Packing throughput today",
+					"packingToday"
 				),
 				dispatchRows: unpackRows(
 					dispatchResult,
-					"Dispatch performance"
+					"Dispatch throughput today",
+					"dispatchToday"
 				),
-				activityRows: unpackRows(
-					activityResult,
-					"Recent activity"
+				packingReportRows: unpackRows(
+					packingReportResult,
+					"Period packing report",
+					"packingReport"
+				),
+				dispatchReportRows: unpackRows(
+					dispatchReportResult,
+					"Period dispatch report",
+					"dispatchReport"
+				),
+				activityRows,
+				stickerRows: unpackRows(
+					stickerResult,
+					"Sticker history",
+					"stickers"
+				),
+				dispatchChallans: unpackRows(
+					dispatchChallanResult,
+					"Dispatch challans",
+					"challans"
+				),
+				customChallans: unpackRows(
+					customChallanResult,
+					"Custom challans",
+					"customChallans"
 				),
 				loadedAt: new Date(),
 				errors,
+				sources,
 			});
 
 			setPerformanceLoading(false);
 		},
-		[]
+		[performanceWindow]
 	);
 
 	useEffect(() => {
@@ -1639,187 +1952,222 @@ export default function UsersPage() {
 		const map = new Map();
 
 		users.forEach((user) => {
-			const key =
-				normalizeUsernameKey(
-					user.username
-				);
-
+			const key = normalizeUsernameKey(user.username);
 			if (!key) return;
 
 			map.set(key, {
 				packingToday: 0,
 				dispatchToday: 0,
 				todayOutput: 0,
+				packingPeriod: 0,
+				dispatchPeriod: 0,
+				periodOutput: 0,
+				clientsTouched: 0,
 				recentActions: 0,
 				packingActions: 0,
 				dispatchActions: 0,
 				movementActions: 0,
 				controlActions: 0,
 				otherActions: 0,
+				stickersGenerated: 0,
+				initialStickers: 0,
+				reprints: 0,
+				dispatchChallans: 0,
+				customChallans: 0,
+				dispatchItems: 0,
+				activeDays: 0,
+				trackedRecords: 0,
 				lastActivityAt: null,
 				recentRows: [],
 				activityScore: 0,
 				activityBand: "No recorded work",
+				_activeDayKeys: new Set(),
+				_clientKeys: new Set(),
 			});
 		});
 
-		const addDailyCount = (
-			rows,
-			field
-		) => {
+		const touchActivity = (target, timestamp) => {
+			const parsed = parseSmartDate(timestamp);
+			if (!parsed) return;
+
+			const currentLast = parseSmartDate(target.lastActivityAt);
+			if (!currentLast || parsed.getTime() > currentLast.getTime()) {
+				target.lastActivityAt = timestamp;
+			}
+
+			const dayKey = localDateKey(timestamp);
+			if (dayKey) target._activeDayKeys.add(dayKey);
+		};
+
+		const addDailyCount = (rows, field) => {
 			rows.forEach((row) => {
-				const key =
-					normalizeUsernameKey(
-						row?.username ||
-						row?.performedBy ||
-						row?.user
-					);
-
-				const target =
-					map.get(key);
-
+				const key = normalizeUsernameKey(
+					row?.username || row?.performedBy || row?.user
+				);
+				const target = map.get(key);
 				if (!target) return;
-
-				target[field] +=
-					Number(
-						row?.count || 0
-					) || 0;
+				target[field] += Number(row?.count || 0) || 0;
 			});
 		};
 
-		addDailyCount(
-			performanceData.packingRows,
-			"packingToday"
-		);
+		addDailyCount(performanceData.packingRows, "packingToday");
+		addDailyCount(performanceData.dispatchRows, "dispatchToday");
 
-		addDailyCount(
-			performanceData.dispatchRows,
-			"dispatchToday"
-		);
-
-		performanceData.activityRows
-			.forEach((row) => {
-				const key =
-					normalizeUsernameKey(
-						performanceActor(row)
-					);
-
-				const target =
-					map.get(key);
+		const addPeriodReportRows = (rows, actorGetter, field) => {
+			rows.forEach((row) => {
+				const target = map.get(
+					normalizeUsernameKey(actorGetter(row))
+				);
 
 				if (!target) return;
 
-				target.recentActions += 1;
+				target[field] += 1;
+				touchActivity(target, performanceTimestamp(row));
 
-				const category =
-					performanceCategory(row);
-
-				if (category === "PACKING") {
-					target.packingActions += 1;
-				} else if (
-					category === "DISPATCH"
-				) {
-					target.dispatchActions += 1;
-				} else if (
-					category === "MOVEMENT"
-				) {
-					target.movementActions += 1;
-				} else if (
-					category === "CONTROL"
-				) {
-					target.controlActions += 1;
-				} else {
-					target.otherActions += 1;
-				}
-
-				const timestamp =
-					performanceTimestamp(row);
-
-				const parsed =
-					parseSmartDate(timestamp);
-
-				const currentLast =
-					parseSmartDate(
-						target.lastActivityAt
-					);
-
-				if (
-					parsed &&
-					(
-						!currentLast ||
-						parsed.getTime() >
-						currentLast.getTime()
-					)
-				) {
-					target.lastActivityAt =
-						timestamp;
-				}
-
-				if (
-					target.recentRows.length < 8
-				) {
-					target.recentRows.push(row);
+				const client = reportClientName(row);
+				if (client) {
+					target._clientKeys.add(client.toUpperCase());
 				}
 			});
+		};
 
-		let maxTodayOutput = 0;
-		let maxRecentActions = 0;
+		addPeriodReportRows(
+			performanceData.packingReportRows || [],
+			packingReportActor,
+			"packingPeriod"
+		);
+
+		addPeriodReportRows(
+			performanceData.dispatchReportRows || [],
+			dispatchReportActor,
+			"dispatchPeriod"
+		);
+
+		performanceData.activityRows.forEach((row) => {
+			const timestamp = performanceTimestamp(row);
+			if (!isWithinPerformanceWindow(timestamp, performanceWindow)) return;
+
+			const target = map.get(normalizeUsernameKey(performanceActor(row)));
+			if (!target) return;
+
+			target.recentActions += 1;
+			const category = performanceCategory(row);
+
+			if (category === "PACKING") target.packingActions += 1;
+			else if (category === "DISPATCH") target.dispatchActions += 1;
+			else if (category === "MOVEMENT") target.movementActions += 1;
+			else if (category === "CONTROL") target.controlActions += 1;
+			else target.otherActions += 1;
+
+			touchActivity(target, timestamp);
+
+			if (target.recentRows.length < 12) {
+				target.recentRows.push(row);
+			}
+		});
+
+		performanceData.stickerRows.forEach((row) => {
+			const timestamp = stickerTimestamp(row);
+			if (!isWithinPerformanceWindow(timestamp, performanceWindow)) return;
+
+			const target = map.get(normalizeUsernameKey(row?.generatedBy));
+			if (!target) return;
+
+			target.stickersGenerated += 1;
+			const isReprint =
+				String(row?.reason || "").toUpperCase() === "REPRINT" ||
+				Number(row?.printIteration || 1) > 1;
+
+			if (isReprint) target.reprints += 1;
+			else target.initialStickers += 1;
+
+			touchActivity(target, timestamp);
+		});
+
+		performanceData.dispatchChallans.forEach((row) => {
+			const timestamp = dispatchTimestamp(row);
+			if (!isWithinPerformanceWindow(timestamp, performanceWindow)) return;
+
+			const target = map.get(normalizeUsernameKey(dispatchActor(row)));
+			if (!target) return;
+
+			target.dispatchChallans += 1;
+			target.dispatchItems += dispatchItemCount(row);
+			touchActivity(target, timestamp);
+		});
+
+		performanceData.customChallans.forEach((row) => {
+			const timestamp = customChallanTimestamp(row);
+			if (!isWithinPerformanceWindow(timestamp, performanceWindow)) return;
+
+			const target = map.get(normalizeUsernameKey(customChallanActor(row)));
+			if (!target) return;
+
+			target.customChallans += 1;
+			target.dispatchItems += dispatchItemCount(row);
+			touchActivity(target, timestamp);
+		});
+
+		let maxPeriodOutput = 0;
+		let maxTrackedRecords = 0;
+		let maxActions = 0;
+		let maxActiveDays = 0;
 
 		map.forEach((value) => {
-			value.todayOutput =
-				value.packingToday +
-				value.dispatchToday;
+			value.todayOutput = value.packingToday + value.dispatchToday;
+			value.periodOutput = value.packingPeriod + value.dispatchPeriod;
+			value.clientsTouched = value._clientKeys.size;
+			value.activeDays = value._activeDayKeys.size;
+			value.trackedRecords =
+				value.stickersGenerated +
+				value.dispatchChallans +
+				value.customChallans;
 
-			maxTodayOutput =
-				Math.max(
-					maxTodayOutput,
-					value.todayOutput
-				);
-
-			maxRecentActions =
-				Math.max(
-					maxRecentActions,
-					value.recentActions
-				);
+			maxPeriodOutput = Math.max(maxPeriodOutput, value.periodOutput);
+			maxTrackedRecords = Math.max(maxTrackedRecords, value.trackedRecords);
+			maxActions = Math.max(maxActions, value.recentActions);
+			maxActiveDays = Math.max(maxActiveDays, value.activeDays);
 		});
 
 		map.forEach((value) => {
-			const outputIndex =
-				maxTodayOutput > 0
-					? value.todayOutput /
-					maxTodayOutput
-					: 0;
+			const outputIndex = maxPeriodOutput
+				? value.periodOutput / maxPeriodOutput
+				: 0;
+			const recordIndex = maxTrackedRecords
+				? value.trackedRecords / maxTrackedRecords
+				: 0;
+			const actionIndex = maxActions
+				? value.recentActions / maxActions
+				: 0;
+			const dayIndex = maxActiveDays
+				? value.activeDays / maxActiveDays
+				: 0;
 
-			const activityIndex =
-				maxRecentActions > 0
-					? value.recentActions /
-					maxRecentActions
-					: 0;
-
-			value.activityScore =
-				Math.round(
-					Math.min(
-						100,
-						outputIndex * 70 +
-						activityIndex * 30
-					)
-				);
+			value.activityScore = Math.round(
+				Math.min(
+					100,
+					outputIndex * 55 +
+					recordIndex * 20 +
+					actionIndex * 15 +
+					dayIndex * 10
+				)
+			);
 
 			value.activityBand =
 				value.activityScore >= 80
-					? "Leading activity"
+					? "High recorded activity"
 					: value.activityScore >= 50
-						? "Strong activity"
+						? "Strong recorded activity"
 						: value.activityScore > 0
-							? "Active"
+							? "Recorded activity"
 							: "No recorded work";
+
+			delete value._activeDayKeys;
+			delete value._clientKeys;
 		});
 
 		return map;
-	}, [
-		users,
-		performanceData,
-	]);
+	}, [users, performanceData, performanceWindow]);
 
 	const accessHealthByUser = useMemo(() => {
 		const map = new Map();
@@ -1835,114 +2183,53 @@ export default function UsersPage() {
 	}, [users]);
 
 	const filteredRows = useMemo(() => {
-		const query =
-			search
-				.trim()
-				.toLowerCase();
+		const query = search.trim().toLowerCase();
 
-		return users.filter((user) => {
-			const roles =
-				userRoles(user);
-
-			const plants =
-				userPlantCodes(user);
-
-			const modules =
-				userModules(user);
-
+		const list = users.filter((user) => {
+			const roles = userRoles(user);
+			const plants = userPlantCodes(user);
+			const modules = userModules(user);
 			const performance =
-				performanceByUser.get(
-					normalizeUsernameKey(
-						user.username
-					)
-				) || {};
-
+				performanceByUser.get(normalizeUsernameKey(user.username)) || {};
 			const accessHealth =
-				accessHealthByUser.get(
-					String(user.id)
-				) || {
+				accessHealthByUser.get(String(user.id)) || {
 					status: "HEALTHY",
 					issues: [],
 				};
+			const screenAccess = getPackFlowAccessMatrix(user)
+				.filter((item) => item.granted)
+				.map((item) => item.label);
 
-			if (
-				statusFilter === "ENABLED" &&
-				user.enabled !== true
-			) {
+			if (statusFilter === "ENABLED" && user.enabled !== true) return false;
+			if (statusFilter === "DISABLED" && user.enabled === true) return false;
+			if (moduleFilter !== "ALL" && !modules.includes(moduleFilter)) return false;
+			if (roleFilter !== "ALL" && !roles.includes(roleFilter)) return false;
+			if (plantFilter !== "ALL" && !plants.includes(plantFilter)) return false;
+
+			const hasPeriodActivity =
+				Number(performance.periodOutput || 0) > 0 ||
+				Number(performance.trackedRecords || 0) > 0 ||
+				Number(performance.recentActions || 0) > 0 ||
+				(performancePeriod === "TODAY" && Number(performance.todayOutput || 0) > 0);
+
+			if (activityFilter === "ACTIVE_TODAY" && Number(performance.todayOutput || 0) <= 0) {
+				return false;
+			}
+			if (activityFilter === "ACTIVE_PERIOD" && !hasPeriodActivity) return false;
+			if (activityFilter === "NO_ACTIVITY" && hasPeriodActivity) return false;
+			if (activityFilter === "MULTI_ROLE" && roles.length <= 1) return false;
+			if (activityFilter === "ACCESS_REVIEW" && accessHealth.status !== "REVIEW") {
 				return false;
 			}
 
-			if (
-				statusFilter === "DISABLED" &&
-				user.enabled === true
-			) {
-				return false;
-			}
-
-			if (
-				moduleFilter !== "ALL" &&
-				!modules.includes(
-					moduleFilter
-				)
-			) {
-				return false;
-			}
-
-			if (
-				roleFilter !== "ALL" &&
-				!roles.includes(roleFilter)
-			) {
-				return false;
-			}
-
-			if (
-				plantFilter !== "ALL" &&
-				!plants.includes(plantFilter)
-			) {
-				return false;
-			}
-
-			if (
-				activityFilter === "ACTIVE_TODAY" &&
-				Number(
-					performance.todayOutput || 0
-				) <= 0
-			) {
-				return false;
-			}
-
-			if (
-				activityFilter === "NO_ACTIVITY" &&
-				Number(
-					performance.todayOutput || 0
-				) > 0
-			) {
-				return false;
-			}
-
-			if (
-				activityFilter === "MULTI_ROLE" &&
-				roles.length <= 1
-			) {
-				return false;
-			}
-
-			if (
-				activityFilter === "ACCESS_REVIEW" &&
-				accessHealth.status !== "REVIEW"
-			) {
-				return false;
-			}
-
-			if (!query) {
-				return true;
-			}
+			if (!query) return true;
 
 			const searchable = [
 				user.username,
 				...roles,
 				...plants,
 				...modules,
+				...screenAccess,
 				...accessHealth.issues,
 				performance.activityBand,
 			]
@@ -1952,6 +2239,40 @@ export default function UsersPage() {
 
 			return searchable.includes(query);
 		});
+
+		return [...list].sort((a, b) => {
+			const aPerf = performanceByUser.get(normalizeUsernameKey(a.username)) || {};
+			const bPerf = performanceByUser.get(normalizeUsernameKey(b.username)) || {};
+			const aHealth = accessHealthByUser.get(String(a.id)) || { issues: [] };
+			const bHealth = accessHealthByUser.get(String(b.id)) || { issues: [] };
+
+			if (sortBy === "USERNAME") {
+				return String(a.username || "").localeCompare(String(b.username || ""));
+			}
+			if (sortBy === "OUTPUT") {
+				return Number(bPerf.periodOutput || 0) - Number(aPerf.periodOutput || 0);
+			}
+			if (sortBy === "RECORDS") {
+				return Number(bPerf.trackedRecords || 0) - Number(aPerf.trackedRecords || 0);
+			}
+			if (sortBy === "STICKERS") {
+				return Number(bPerf.stickersGenerated || 0) - Number(aPerf.stickersGenerated || 0);
+			}
+			if (sortBy === "DISPATCH_ITEMS") {
+				return Number(bPerf.dispatchItems || 0) - Number(aPerf.dispatchItems || 0);
+			}
+			if (sortBy === "LAST_ACTIVITY") {
+				return (
+					(parseSmartDate(bPerf.lastActivityAt)?.getTime() || 0) -
+					(parseSmartDate(aPerf.lastActivityAt)?.getTime() || 0)
+				);
+			}
+			if (sortBy === "ACCESS_REVIEW") {
+				return (bHealth.issues?.length || 0) - (aHealth.issues?.length || 0);
+			}
+
+			return Number(bPerf.activityScore || 0) - Number(aPerf.activityScore || 0);
+		});
 	}, [
 		users,
 		search,
@@ -1960,6 +2281,8 @@ export default function UsersPage() {
 		roleFilter,
 		plantFilter,
 		activityFilter,
+		performancePeriod,
+		sortBy,
 		performanceByUser,
 		accessHealthByUser,
 	]);
@@ -1993,86 +2316,410 @@ export default function UsersPage() {
 	]);
 
 	const stats = useMemo(() => {
-		const enabled =
-			users.filter(
-				(user) =>
-					user.enabled === true
-			).length;
-
-		const matFlowUsers =
-			users.filter((user) =>
-				userRoles(user).some(
-					(role) =>
-						role.startsWith(
-							"MATFLOW_"
-						)
-				)
-			).length;
-
-		const bomFlowUsers =
-			users.filter((user) =>
-				userRoles(user).some(
-					(role) =>
-						role.startsWith(
-							"BOMFLOW_"
-						)
-				)
-			).length;
-
-		const multiRoleUsers =
-			users.filter(
-				(user) =>
-					userRoles(user).length > 1
-			).length;
+		const enabled = users.filter((user) => user.enabled === true).length;
+		const packFlowUsers = users.filter((user) =>
+			userModules(user).includes(MODULE_KEYS.PACKFLOW)
+		).length;
+		const matFlowUsers = users.filter((user) =>
+			userRoles(user).some((role) => role.startsWith("MATFLOW_"))
+		).length;
+		const bomFlowUsers = users.filter((user) =>
+			userRoles(user).some((role) => role.startsWith("BOMFLOW_"))
+		).length;
+		const multiRoleUsers = users.filter((user) => userRoles(user).length > 1).length;
 
 		let workToday = 0;
 		let activeToday = 0;
+		let activePeriod = 0;
+		let trackedRecords = 0;
+		let stickers = 0;
+		let reprints = 0;
+		let dispatchItems = 0;
+		let packedPeriod = 0;
+		let dispatchedPeriod = 0;
+		let activityEvents = 0;
 
 		users.forEach((user) => {
 			const performance =
-				performanceByUser.get(
-					normalizeUsernameKey(
-						user.username
-					)
-				);
+				performanceByUser.get(normalizeUsernameKey(user.username)) || {};
+			const todayOutput = Number(performance.todayOutput || 0);
+			workToday += todayOutput;
+			if (todayOutput > 0) activeToday += 1;
 
-			const output =
-				Number(
-					performance?.todayOutput || 0
-				);
+			const hasPeriodActivity =
+				Number(performance.periodOutput || 0) > 0 ||
+				Number(performance.trackedRecords || 0) > 0 ||
+				Number(performance.recentActions || 0) > 0 ||
+				(performancePeriod === "TODAY" && todayOutput > 0);
+			if (hasPeriodActivity) activePeriod += 1;
 
-			workToday += output;
-
-			if (output > 0) {
-				activeToday += 1;
-			}
+			trackedRecords += Number(performance.trackedRecords || 0);
+			stickers += Number(performance.stickersGenerated || 0);
+			reprints += Number(performance.reprints || 0);
+			dispatchItems += Number(performance.dispatchItems || 0);
+			packedPeriod += Number(performance.packingPeriod || 0);
+			dispatchedPeriod += Number(performance.dispatchPeriod || 0);
+			activityEvents += Number(performance.recentActions || 0);
 		});
 
-		const accessIssues =
-			users.filter((user) =>
-				(
-					accessHealthByUser.get(
-						String(user.id)
-					)?.issues || []
-				).length > 0
-			).length;
+		const accessIssues = users.filter(
+			(user) =>
+				(accessHealthByUser.get(String(user.id))?.issues || []).length > 0
+		).length;
 
 		return {
 			total: users.length,
 			enabled,
-			disabled:
-				users.length - enabled,
+			disabled: users.length - enabled,
+			packFlowUsers,
 			matFlowUsers,
 			bomFlowUsers,
 			multiRoleUsers,
 			workToday,
 			activeToday,
+			activePeriod,
+			trackedRecords,
+			stickers,
+			reprints,
+			dispatchItems,
+			packedPeriod,
+			dispatchedPeriod,
+			activityEvents,
 			accessIssues,
 		};
+	}, [users, performanceByUser, accessHealthByUser, performancePeriod]);
+
+	const exportUserManagementReport = useCallback(async () => {
+		if (filteredRows.length === 0) {
+			showMessage("No users match the current filters.", "warning");
+			return;
+		}
+
+		setExportingReport(true);
+
+		try {
+			const [{ default: ExcelJS }, fileSaverModule] = await Promise.all([
+				import("exceljs"),
+				import("file-saver"),
+			]);
+			const saveAs = fileSaverModule.saveAs || fileSaverModule.default;
+			const workbook = new ExcelJS.Workbook();
+			workbook.creator = "ALSORG FlowSuite";
+			workbook.company = "ALSORG";
+			workbook.subject = "Smart User Management & PackFlow Tracker";
+			workbook.created = new Date();
+
+			const border = {
+				top: { style: "thin", color: { argb: "FFE2E8F0" } },
+				left: { style: "thin", color: { argb: "FFE2E8F0" } },
+				bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+				right: { style: "thin", color: { argb: "FFE2E8F0" } },
+			};
+
+			const prepareSheet = (sheet, title, subtitle, columnCount) => {
+				sheet.views = [{ state: "frozen", ySplit: 4 }];
+				sheet.mergeCells(1, 1, 1, columnCount);
+				sheet.getCell(1, 1).value = title;
+				sheet.getCell(1, 1).font = {
+					bold: true,
+					size: 18,
+					color: { argb: "FFFFFFFF" },
+				};
+				sheet.getCell(1, 1).fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: { argb: "FF0F172A" },
+				};
+				sheet.getCell(1, 1).alignment = { vertical: "middle", horizontal: "left" };
+				sheet.getRow(1).height = 30;
+
+				sheet.mergeCells(2, 1, 2, columnCount);
+				sheet.getCell(2, 1).value = subtitle;
+				sheet.getCell(2, 1).font = { italic: true, color: { argb: "FF475569" } };
+				sheet.getRow(2).height = 22;
+			};
+
+			const styleHeader = (row) => {
+				row.height = 24;
+				row.eachCell((cell) => {
+					cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+					cell.fill = {
+						type: "pattern",
+						pattern: "solid",
+						fgColor: { argb: "FF2563EB" },
+					};
+					cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+					cell.border = border;
+				});
+			};
+
+			const finishRows = (sheet, startRow = 5) => {
+				for (let r = startRow; r <= sheet.rowCount; r += 1) {
+					const row = sheet.getRow(r);
+					row.eachCell((cell) => {
+						cell.border = border;
+						cell.alignment = { vertical: "top", wrapText: true };
+					});
+				}
+				sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: sheet.columnCount } };
+				sheet.pageSetup = {
+					orientation: "landscape",
+					fitToPage: true,
+					fitToWidth: 1,
+					fitToHeight: 0,
+				};
+			};
+
+			const exportedUserKeys = new Set(
+				filteredRows.map((user) => normalizeUsernameKey(user.username))
+			);
+
+			const summarySheet = workbook.addWorksheet("Executive Summary");
+			prepareSheet(
+				summarySheet,
+				"ALSORG — Smart User Management & Tracker",
+				`Period: ${performanceWindow.label} | Exported: ${formatSmartDateTime(new Date())} | Users in current filters: ${filteredRows.length}`,
+				4
+			);
+			const summaryHeader = summarySheet.getRow(4);
+			summaryHeader.values = ["Metric", "Value", "Metric", "Value"];
+			styleHeader(summaryHeader);
+			[
+				["Total Users", stats.total, "Enabled Users", stats.enabled],
+				["PackFlow Users", stats.packFlowUsers, "Multi-Role Users", stats.multiRoleUsers],
+				["Active in Period", stats.activePeriod, "Access Reviews", stats.accessIssues],
+				["Packed in Period", stats.packedPeriod, "Dispatched in Period", stats.dispatchedPeriod],
+				["Sticker Generations", stats.stickers, "Reprints", stats.reprints],
+				["Dispatch Items in Challans", stats.dispatchItems, "Tracked Activity Events", stats.activityEvents],
+				["Today Packing + Dispatch", stats.workToday, "Disabled Users", stats.disabled],
+			].forEach((values) => summarySheet.addRow(values));
+			summarySheet.columns = [
+				{ width: 30 }, { width: 16 }, { width: 30 }, { width: 16 },
+			];
+			finishRows(summarySheet);
+
+			const performanceSheet = workbook.addWorksheet("User Performance");
+			const performanceHeaders = [
+				"Username", "Status", "Roles", "Modules", "Plants", "Today Packing", "Today Dispatch",
+				"Period Packing", "Period Dispatch", "Period Output", "Clients Touched",
+				"Sticker Generations", "Initial Stickers", "Reprints", "Standard Challans", "Custom Challans",
+				"Dispatch Items in Challans", "Activity Events", "Active Days", "Tracked Records", "Activity Index %", "Last Activity", "Access Health",
+			];
+			prepareSheet(performanceSheet, "User Performance Register", `Period: ${performanceWindow.label}`, performanceHeaders.length);
+			performanceSheet.getRow(4).values = performanceHeaders;
+			styleHeader(performanceSheet.getRow(4));
+
+			filteredRows.forEach((user) => {
+				const perf = performanceByUser.get(normalizeUsernameKey(user.username)) || {};
+				const health = accessHealthByUser.get(String(user.id)) || { status: "HEALTHY", issues: [] };
+				performanceSheet.addRow([
+					user.username,
+					user.enabled === true ? "Enabled" : "Disabled",
+					userRoles(user).join(", "),
+					userModules(user).join(", "),
+					userRoles(user).includes("ADMIN") ? "All Plants" : userPlantCodes(user).join(", "),
+					Number(perf.packingToday || 0),
+					Number(perf.dispatchToday || 0),
+					Number(perf.packingPeriod || 0),
+					Number(perf.dispatchPeriod || 0),
+					Number(perf.periodOutput || 0),
+					Number(perf.clientsTouched || 0),
+					Number(perf.stickersGenerated || 0),
+					Number(perf.initialStickers || 0),
+					Number(perf.reprints || 0),
+					Number(perf.dispatchChallans || 0),
+					Number(perf.customChallans || 0),
+					Number(perf.dispatchItems || 0),
+					Number(perf.recentActions || 0),
+					Number(perf.activeDays || 0),
+					Number(perf.trackedRecords || 0),
+					Number(perf.activityScore || 0),
+					formatSmartDateTime(perf.lastActivityAt),
+					health.status === "HEALTHY" ? "Healthy" : health.issues.join(" | "),
+				]);
+			});
+			performanceSheet.columns = performanceHeaders.map((header) => ({ width: Math.max(14, Math.min(30, header.length + 5)) }));
+			finishRows(performanceSheet);
+
+			const accessSheet = workbook.addWorksheet("Access Matrix");
+			const accessLabels = [
+				"Dashboard", "Inventory Items", "Hardware Inventory", "Warehouse",
+				"Dispatched Items", "Logistics", "User Administration", "Driver Mobile",
+			];
+			const accessHeaders = ["Username", "Roles", "Modules", "Plants", "Warehouse Flag", ...accessLabels];
+			prepareSheet(accessSheet, "Effective PackFlow Access Matrix", "Matches the current PackFlow navigation / warehouse access rules.", accessHeaders.length);
+			accessSheet.getRow(4).values = accessHeaders;
+			styleHeader(accessSheet.getRow(4));
+			filteredRows.forEach((user) => {
+				const matrix = getPackFlowAccessMatrix(user);
+				accessSheet.addRow([
+					user.username,
+					userRoles(user).join(", "),
+					userModules(user).join(", "),
+					userRoles(user).includes("ADMIN") ? "All Plants" : userPlantCodes(user).join(", "),
+					readWarehouseAccess(user) ? "YES" : "NO",
+					...matrix.map((item) => (item.granted ? "YES" : "NO")),
+				]);
+			});
+			accessSheet.columns = accessHeaders.map((header) => ({ width: Math.max(14, Math.min(26, header.length + 4)) }));
+			finishRows(accessSheet);
+
+			const sourceSheet = workbook.addWorksheet("Data Health");
+			const sourceHeaders = ["Source", "Status", "Records", "Message"];
+			prepareSheet(sourceSheet, "Tracker Data Source Health", `Snapshot: ${formatSmartDateTime(performanceData.loadedAt)}`, sourceHeaders.length);
+			sourceSheet.getRow(4).values = sourceHeaders;
+			styleHeader(sourceSheet.getRow(4));
+			Object.entries(performanceData.sources || {}).forEach(([key, source]) => {
+				sourceSheet.addRow([
+					key.replace(/([A-Z])/g, " $1").trim(),
+					source?.ok ? "Loaded" : "Unavailable",
+					Number(source?.count || 0),
+					source?.message || "",
+				]);
+			});
+			sourceSheet.columns = [26, 18, 14, 60].map((width) => ({ width }));
+			finishRows(sourceSheet);
+
+			const packingPeriodSheet = workbook.addWorksheet("Packing Period");
+			const packingPeriodHeaders = ["Packed At", "Packed By", "Item", "Client", "PD No", "DWG No", "Packet", "Sticker No", "Status"];
+			prepareSheet(packingPeriodSheet, "Period Packing Register", `Period: ${performanceWindow.label}`, packingPeriodHeaders.length);
+			packingPeriodSheet.getRow(4).values = packingPeriodHeaders;
+			styleHeader(packingPeriodSheet.getRow(4));
+			(performanceData.packingReportRows || [])
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(packingReportActor(row))))
+				.forEach((row) => packingPeriodSheet.addRow([
+					formatSmartDateTime(performanceTimestamp(row)),
+					packingReportActor(row),
+					row?.itemName || row?.name || row?.description || "",
+					reportClientName(row),
+					row?.pdNo || row?.pdNumber || "",
+					row?.drawingNo || row?.dwgNo || row?.drawingName || "",
+					row?.packetNumber || row?.packetNo || row?.pktNo || "",
+					row?.stickerNumber || row?.stickerNo || "",
+					row?.status || row?.packingStatus || "",
+				]));
+			packingPeriodSheet.columns = [22, 20, 34, 28, 18, 18, 14, 20, 18].map((width) => ({ width }));
+			finishRows(packingPeriodSheet);
+
+			const dispatchPeriodSheet = workbook.addWorksheet("Dispatch Period");
+			const dispatchPeriodHeaders = ["Dispatched At", "Dispatched By", "Item", "Client", "PD No", "DWG No", "Packet", "Challan No", "Status"];
+			prepareSheet(dispatchPeriodSheet, "Period Dispatch Register", `Period: ${performanceWindow.label}`, dispatchPeriodHeaders.length);
+			dispatchPeriodSheet.getRow(4).values = dispatchPeriodHeaders;
+			styleHeader(dispatchPeriodSheet.getRow(4));
+			(performanceData.dispatchReportRows || [])
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(dispatchReportActor(row))))
+				.forEach((row) => dispatchPeriodSheet.addRow([
+					formatSmartDateTime(performanceTimestamp(row)),
+					dispatchReportActor(row),
+					row?.itemName || row?.name || row?.description || "",
+					reportClientName(row),
+					row?.pdNo || row?.pdNumber || "",
+					row?.drawingNo || row?.dwgNo || row?.drawingName || "",
+					row?.packetNumber || row?.packetNo || row?.pktNo || "",
+					row?.challanNumber || row?.chalaanNumber || "",
+					row?.status || row?.dispatchStatus || "",
+				]));
+			dispatchPeriodSheet.columns = [22, 20, 34, 28, 18, 18, 14, 22, 18].map((width) => ({ width }));
+			finishRows(dispatchPeriodSheet);
+
+			const activitySheet = workbook.addWorksheet("Activity Detail");
+			const activityHeaders = ["Date / Time", "User", "Category", "Action", "Role", "From Status", "To Status", "Reference / Remarks"];
+			prepareSheet(activitySheet, "Recorded PackFlow Activity", `Period: ${performanceWindow.label}`, activityHeaders.length);
+			activitySheet.getRow(4).values = activityHeaders;
+			styleHeader(activitySheet.getRow(4));
+			performanceData.activityRows
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(performanceActor(row))))
+				.filter((row) => isWithinPerformanceWindow(performanceTimestamp(row), performanceWindow))
+				.forEach((row) => {
+					activitySheet.addRow([
+						formatSmartDateTime(performanceTimestamp(row)),
+						performanceActor(row),
+						performanceCategory(row),
+						performanceAction(row),
+						row?.role || row?.performedByRole || row?.userRole || "",
+						row?.fromStatus || row?.oldStatus || row?.previousStatus || "",
+						row?.toStatus || row?.newStatus || row?.currentStatus || "",
+						row?.remarks || row?.referenceNo || row?.challanNumber || row?.zohoItemId || "",
+					]);
+				});
+			activitySheet.columns = [22, 20, 15, 40, 18, 18, 18, 36].map((width) => ({ width }));
+			finishRows(activitySheet);
+
+			const stickerSheet = workbook.addWorksheet("Sticker History");
+			const stickerHeaders = ["Generated At", "Generated By", "Reason", "Print Iteration", "Sticker No", "Packet No", "Item", "Client", "PD No", "DWG No", "SKU"];
+			prepareSheet(stickerSheet, "Sticker Generation Register", `Period: ${performanceWindow.label}`, stickerHeaders.length);
+			stickerSheet.getRow(4).values = stickerHeaders;
+			styleHeader(stickerSheet.getRow(4));
+			performanceData.stickerRows
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(row?.generatedBy)))
+				.filter((row) => isWithinPerformanceWindow(stickerTimestamp(row), performanceWindow))
+				.forEach((row) => stickerSheet.addRow([
+					formatSmartDateTime(stickerTimestamp(row)), row?.generatedBy || "", row?.reason || (Number(row?.printIteration || 1) > 1 ? "REPRINT" : "INITIAL"),
+					row?.printIteration || 1, row?.stickerNumber || "", row?.packetNumber || "", row?.itemName || "", row?.clientName || "", row?.pdNo || "", row?.drawingNo || "", row?.sku || "",
+				]));
+			stickerSheet.columns = [22, 20, 14, 14, 20, 14, 32, 26, 18, 18, 22].map((width) => ({ width }));
+			finishRows(stickerSheet);
+
+			const dispatchSheet = workbook.addWorksheet("Dispatch Register");
+			const dispatchHeaders = ["Type", "Date / Time", "User", "Challan No", "Items", "Client / From-To", "Driver", "Vehicle", "Trip Status / Challan Type"];
+			prepareSheet(dispatchSheet, "Dispatch & Custom Challan Register", `Period: ${performanceWindow.label}`, dispatchHeaders.length);
+			dispatchSheet.getRow(4).values = dispatchHeaders;
+			styleHeader(dispatchSheet.getRow(4));
+			performanceData.dispatchChallans
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(dispatchActor(row))))
+				.filter((row) => isWithinPerformanceWindow(dispatchTimestamp(row), performanceWindow))
+				.forEach((row) => dispatchSheet.addRow([
+					"Standard Dispatch", formatSmartDateTime(dispatchTimestamp(row)), dispatchActor(row), row?.challanNumber || row?.chalaanNumber || "", dispatchItemCount(row),
+					row?.clientName || row?.destination || row?.toLocation || "", row?.driverName || "", row?.vehicleNumber || "", row?.tripStatus || "",
+				]));
+			performanceData.customChallans
+				.filter((row) => exportedUserKeys.has(normalizeUsernameKey(customChallanActor(row))))
+				.filter((row) => isWithinPerformanceWindow(customChallanTimestamp(row), performanceWindow))
+				.forEach((row) => dispatchSheet.addRow([
+					"Custom Challan", formatSmartDateTime(customChallanTimestamp(row)), customChallanActor(row), row?.challanNumber || "", dispatchItemCount(row),
+					row?.clientName || `${row?.fromLocation || ""} → ${row?.toLocation || ""}`, row?.driverName || "", row?.vehicleNumber || "", row?.challanTypeLabel || row?.challanType || "",
+				]));
+			dispatchSheet.columns = [18, 22, 20, 22, 12, 34, 22, 20, 24].map((width) => ({ width }));
+			finishRows(dispatchSheet);
+
+			const reviewSheet = workbook.addWorksheet("Access Review");
+			const reviewHeaders = ["Username", "Status", "Roles", "Modules", "Plants", "Issue"];
+			prepareSheet(reviewSheet, "Access Review Queue", "Only users with access consistency findings are listed.", reviewHeaders.length);
+			reviewSheet.getRow(4).values = reviewHeaders;
+			styleHeader(reviewSheet.getRow(4));
+			filteredRows.forEach((user) => {
+				const health = accessHealthByUser.get(String(user.id));
+				(health?.issues || []).forEach((issue) => reviewSheet.addRow([
+					user.username, user.enabled === true ? "Enabled" : "Disabled", userRoles(user).join(", "), userModules(user).join(", "), userPlantCodes(user).join(", "), issue,
+				]));
+			});
+			reviewSheet.columns = [20, 14, 34, 24, 24, 60].map((width) => ({ width }));
+			finishRows(reviewSheet);
+
+			const buffer = await workbook.xlsx.writeBuffer();
+			const stamp = new Date().toISOString().slice(0, 10);
+			saveAs(
+				new Blob([buffer], {
+					type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				}),
+				`ALSORG_Smart_User_Tracker_${performancePeriod}_${stamp}.xlsx`
+			);
+			showMessage("Smart User Tracker report exported successfully.");
+		} catch (error) {
+			console.error(error);
+			showMessage(readError(error, "Unable to export user tracker report."), "error");
+		} finally {
+			setExportingReport(false);
+		}
 	}, [
-		users,
+		filteredRows,
 		performanceByUser,
 		accessHealthByUser,
+		performanceData,
+		performanceWindow,
+		performancePeriod,
+		stats,
+		showMessage,
 	]);
 
 	const clearSmartFilters = () => {
@@ -2170,81 +2817,19 @@ export default function UsersPage() {
 				</Box>
 
 				<Box sx={statsGridSx}>
-					<StatCard
-						label="Total Users"
-						value={stats.total}
-						accent="#3b82f6"
-						icon={
-							<SupervisorAccountOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Enabled Users"
-						value={stats.enabled}
-						accent="#22c55e"
-						icon={
-							<CheckCircleOutlineOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Multi-Role Users"
-						value={stats.multiRoleUsers}
-						accent="#a78bfa"
-						icon={
-							<SecurityOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Work Today"
-						value={stats.workToday}
-						accent="#06b6d4"
-						icon={
-							<AssessmentOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Active Today"
-						value={stats.activeToday}
-						accent="#14b8a6"
-						icon={
-							<TimelineOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Access Reviews"
-						value={stats.accessIssues}
-						accent={
-							stats.accessIssues > 0
-								? "#f59e0b"
-								: "#22c55e"
-						}
-						icon={
-							<AdminPanelSettingsIcon />
-						}
-					/>
-
-					<StatCard
-						label="BOMFlow Users"
-						value={stats.bomFlowUsers}
-						accent="#8b5cf6"
-						icon={
-							<AccountTreeOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="MatFlow Users"
-						value={stats.matFlowUsers}
-						accent="#2dd4bf"
-						icon={
-							<LayersOutlinedIcon />
-						}
-					/>
+					<StatCard label="Total Users" value={stats.total} accent="#3b82f6" icon={<SupervisorAccountOutlinedIcon />} />
+					<StatCard label="Enabled Users" value={stats.enabled} accent="#22c55e" icon={<CheckCircleOutlineOutlinedIcon />} />
+					<StatCard label="PackFlow Users" value={stats.packFlowUsers} accent="#38bdf8" icon={<InventoryIcon />} />
+					<StatCard label="Multi-Role Users" value={stats.multiRoleUsers} accent="#a78bfa" icon={<SecurityOutlinedIcon />} />
+					<StatCard label={`Active • ${performanceWindow.label}`} value={stats.activePeriod} accent="#14b8a6" icon={<TimelineOutlinedIcon />} />
+					<StatCard label={`Packed • ${performanceWindow.label}`} value={stats.packedPeriod} accent="#22c55e" icon={<FactCheckOutlinedIcon />} />
+					<StatCard label={`Dispatched • ${performanceWindow.label}`} value={stats.dispatchedPeriod} accent="#f97316" icon={<LocalShippingIcon />} />
+					<StatCard label={`Sticker Events • ${performanceWindow.label}`} value={stats.stickers} accent="#06b6d4" icon={<TimelineOutlinedIcon />} />
+					<StatCard label="Access Reviews" value={stats.accessIssues} accent={stats.accessIssues > 0 ? "#f59e0b" : "#22c55e"} icon={<AdminPanelSettingsIcon />} />
+					<StatCard label="Today Pack + Dispatch" value={stats.workToday} accent="#60a5fa" icon={<AssessmentOutlinedIcon />} />
+					<StatCard label="BOMFlow Users" value={stats.bomFlowUsers} accent="#8b5cf6" icon={<AccountTreeOutlinedIcon />} />
+					<StatCard label="MatFlow Users" value={stats.matFlowUsers} accent="#2dd4bf" icon={<LayersOutlinedIcon />} />
+					<StatCard label="Disabled Users" value={stats.disabled} accent="#64748b" icon={<BlockOutlinedIcon />} />
 				</Box>
 
 				<Box sx={smartControlPanelSx}>
@@ -2259,7 +2844,7 @@ export default function UsersPage() {
 							</Typography>
 
 							<Typography sx={smartControlSubSx}>
-								Manage roles and plants while reviewing today&apos;s packing / dispatch output, recent activity and access health.
+								Manage effective access while tracking PackFlow sticker generation, dispatch records, activity, active days and access consistency across a selected period.
 							</Typography>
 						</Box>
 
@@ -2278,6 +2863,15 @@ export default function UsersPage() {
 							</Button>
 
 							<Button
+								startIcon={<DownloadOutlinedIcon />}
+								onClick={exportUserManagementReport}
+								disabled={exportingReport || performanceLoading}
+								sx={reportButtonSx}
+							>
+								{exportingReport ? "Building Excel..." : "Export Smart Report"}
+							</Button>
+
+							<Button
 								startIcon={
 									<AddOutlinedIcon />
 								}
@@ -2286,6 +2880,59 @@ export default function UsersPage() {
 							>
 								Create User
 							</Button>
+						</Box>
+					</Box>
+
+					<Box sx={intelligenceToolbarSx}>
+						<Box sx={intelligenceToolbarGroupSx}>
+							<DateRangeOutlinedIcon sx={{ color: "#60a5fa", fontSize: 18 }} />
+							<Typography sx={intelligenceToolbarLabelSx}>Tracker Period</Typography>
+							<TextField
+								select
+								size="small"
+								value={performancePeriod}
+								onChange={(event) => {
+									setPerformancePeriod(event.target.value);
+									setPageNo(1);
+								}}
+								sx={{ ...fieldSx, minWidth: 165 }}
+							>
+								{PERFORMANCE_PERIOD_OPTIONS.map((option) => (
+									<MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+								))}
+							</TextField>
+						</Box>
+
+						<Box sx={intelligenceToolbarGroupSx}>
+							<AssessmentOutlinedIcon sx={{ color: "#a78bfa", fontSize: 18 }} />
+							<Typography sx={intelligenceToolbarLabelSx}>Sort</Typography>
+							<TextField
+								select
+								size="small"
+								value={sortBy}
+								onChange={(event) => {
+									setSortBy(event.target.value);
+									setPageNo(1);
+								}}
+								sx={{ ...fieldSx, minWidth: 190 }}
+							>
+								{USER_SORT_OPTIONS.map(([value, label]) => (
+									<MenuItem key={value} value={value}>{label}</MenuItem>
+								))}
+							</TextField>
+						</Box>
+
+						<Box sx={dataSourceHealthSx}>
+							<Typography sx={intelligenceToolbarLabelSx}>Data Sources</Typography>
+							{Object.entries(performanceData.sources || {}).map(([key, source]) => (
+								<Tooltip key={key} title={source.ok ? `${source.count} records loaded` : source.message || "Unavailable"}>
+									<Chip
+										label={key.replace(/([A-Z])/g, " $1")}
+										size="small"
+										sx={sourceHealthChipSx(source.ok)}
+									/>
+								</Tooltip>
+							))}
 						</Box>
 					</Box>
 
@@ -2391,8 +3038,9 @@ export default function UsersPage() {
 							}}
 							options={[
 								["ALL", "All Users"],
+								["ACTIVE_PERIOD", `Active • ${performanceWindow.label}`],
 								["ACTIVE_TODAY", "Worked Today"],
-								["NO_ACTIVITY", "No Work Today"],
+								["NO_ACTIVITY", `No Activity • ${performanceWindow.label}`],
 								["MULTI_ROLE", "Multi-Role Users"],
 								["ACCESS_REVIEW", "Access Review Needed"],
 							]}
@@ -2421,7 +3069,7 @@ export default function UsersPage() {
 							)}
 
 							<Typography sx={smartLoadedAtSx}>
-								Performance snapshot: {performanceData.loadedAt
+								Tracker snapshot: {performanceData.loadedAt
 									? formatSmartDateTime(performanceData.loadedAt)
 									: "Loading..."}
 							</Typography>
@@ -2452,7 +3100,7 @@ export default function UsersPage() {
 						<Box>Access Profile</Box>
 						<Box>Plant Access</Box>
 						<Box>Operational Access</Box>
-						<Box>Today Performance</Box>
+						<Box>{performanceWindow.label} Tracker</Box>
 						<Box>Access Health</Box>
 						<Box>Status</Box>
 						<Box>Actions</Box>
@@ -2487,6 +3135,7 @@ export default function UsersPage() {
 												String(user.id)
 											)
 										}
+										periodLabel={performanceWindow.label}
 										onPerformance={() => {
 											setPerformanceUser(user);
 											setPerformanceOpen(true);
@@ -2557,41 +3206,11 @@ export default function UsersPage() {
 						</Box>
 
 						<Box sx={pageControlsSx}>
-							<Button
-								disabled={
-									currentPage <= 1
-								}
-								onClick={() =>
-									setPageNo(
-										currentPage -
-										1
-									)
-								}
-								sx={secondaryButtonSx}
-							>
-								Previous
-							</Button>
-
-							<Chip
-								label={`Page ${currentPage} of ${totalPages}`}
-								sx={pageChipSx}
-							/>
-
-							<Button
-								disabled={
-									currentPage >=
-									totalPages
-								}
-								onClick={() =>
-									setPageNo(
-										currentPage +
-										1
-									)
-								}
-								sx={primaryButtonSx}
-							>
-								Next
-							</Button>
+							<Button disabled={currentPage <= 1} onClick={() => setPageNo(1)} sx={pagerMiniButtonSx}>First</Button>
+							<Button disabled={currentPage <= 1} onClick={() => setPageNo(currentPage - 1)} sx={pagerMiniButtonSx}>‹</Button>
+							<Chip label={`Page ${currentPage} / ${totalPages}`} sx={pageChipSx} />
+							<Button disabled={currentPage >= totalPages} onClick={() => setPageNo(currentPage + 1)} sx={pagerMiniButtonSx}>›</Button>
+							<Button disabled={currentPage >= totalPages} onClick={() => setPageNo(totalPages)} sx={pagerMiniButtonSx}>Last</Button>
 						</Box>
 
 						<Typography sx={mutedTextSx}>
@@ -2642,6 +3261,7 @@ export default function UsersPage() {
 						)
 						: null
 				}
+				periodLabel={performanceWindow.label}
 				onClose={() => {
 					setPerformanceOpen(false);
 					setPerformanceUser(null);
@@ -2836,6 +3456,7 @@ function UserRow({
 	driverName,
 	performance,
 	accessHealth,
+	periodLabel,
 	onPerformance,
 	onEdit,
 	onReset,
@@ -2870,10 +3491,21 @@ function UserRow({
 			packingToday: 0,
 			dispatchToday: 0,
 			todayOutput: 0,
+			packingPeriod: 0,
+			dispatchPeriod: 0,
+			periodOutput: 0,
+			clientsTouched: 0,
 			recentActions: 0,
+			stickersGenerated: 0,
+			initialStickers: 0,
+			reprints: 0,
+			dispatchChallans: 0,
+			customChallans: 0,
+			dispatchItems: 0,
+			activeDays: 0,
+			trackedRecords: 0,
 			activityScore: 0,
-			activityBand:
-				"No recorded work",
+			activityBand: "No recorded work",
 			lastActivityAt: null,
 		};
 
@@ -3002,28 +3634,30 @@ function UserRow({
 				)}
 
 				<Chip
-					icon={
-						<WarehouseOutlinedIcon />
-					}
-					label={
-						warehouseAccess
-							? "Warehouse Enabled"
-							: "No Warehouse Access"
-					}
+					icon={<WarehouseOutlinedIcon />}
+					label={warehouseAccess ? "Warehouse Enabled" : "No Warehouse Access"}
 					size="small"
-					sx={
-						warehouseAccess
-							? warehouseChipSx
-							: neutralChipSx
-					}
+					sx={warehouseAccess ? warehouseChipSx : neutralChipSx}
 				/>
+
+				<Tooltip title={getPackFlowAccessMatrix(user).filter((item) => item.granted).map((item) => item.label).join(" • ") || "No PackFlow screen entitlement"}>
+					<Chip
+						icon={<VisibilityOutlinedIcon />}
+						label={`${getPackFlowAccessMatrix(user).filter((item) => item.granted).length} screens`}
+						size="small"
+						sx={screenCountChipSx}
+					/>
+				</Tooltip>
 			</Box>
 
 			<Box sx={performanceCellSx}>
 				<Box sx={performanceTopSx}>
-					<Typography sx={performanceTotalSx}>
-						{smartPerformance.todayOutput}
-					</Typography>
+					<Box>
+						<Typography sx={performanceTotalSx}>
+							{smartPerformance.periodOutput}
+						</Typography>
+						<Typography sx={performancePeriodCaptionSx}>{periodLabel || "Period"} output</Typography>
+					</Box>
 
 					<Chip
 						label={`${smartPerformance.activityScore}%`}
@@ -3035,12 +3669,11 @@ function UserRow({
 				</Box>
 
 				<Box sx={performanceSplitSx}>
-					<span>
-						Pack <strong>{smartPerformance.packingToday}</strong>
-					</span>
-					<span>
-						Dispatch <strong>{smartPerformance.dispatchToday}</strong>
-					</span>
+					<span>Pack <strong>{smartPerformance.packingPeriod}</strong></span>
+					<span>Dispatch <strong>{smartPerformance.dispatchPeriod}</strong></span>
+					<span>Sticker <strong>{smartPerformance.stickersGenerated}</strong></span>
+					<span>Reprint <strong>{smartPerformance.reprints}</strong></span>
+					<span>Days <strong>{smartPerformance.activeDays}</strong></span>
 				</Box>
 
 				<Typography sx={performanceBandSx}>
@@ -3857,6 +4490,7 @@ function UserPerformanceDialog({
 	user,
 	performance,
 	accessHealth,
+	periodLabel,
 	onClose,
 }) {
 	if (!user) {
@@ -3877,15 +4511,26 @@ function UserPerformanceDialog({
 			packingToday: 0,
 			dispatchToday: 0,
 			todayOutput: 0,
+			packingPeriod: 0,
+			dispatchPeriod: 0,
+			periodOutput: 0,
+			clientsTouched: 0,
 			recentActions: 0,
 			packingActions: 0,
 			dispatchActions: 0,
 			movementActions: 0,
 			controlActions: 0,
 			otherActions: 0,
+			stickersGenerated: 0,
+			initialStickers: 0,
+			reprints: 0,
+			dispatchChallans: 0,
+			customChallans: 0,
+			dispatchItems: 0,
+			activeDays: 0,
+			trackedRecords: 0,
 			activityScore: 0,
-			activityBand:
-				"No recorded work",
+			activityBand: "No recorded work",
 			lastActivityAt: null,
 			recentRows: [],
 		};
@@ -3901,7 +4546,7 @@ function UserPerformanceDialog({
 			open={open}
 			onClose={onClose}
 			fullWidth
-			maxWidth="md"
+			maxWidth="lg"
 			PaperProps={{
 				sx: performanceDialogPaperSx,
 			}}
@@ -3923,7 +4568,7 @@ function UserPerformanceDialog({
 							</Typography>
 
 							<Typography sx={performanceDialogSubSx}>
-								Smart performance and access intelligence
+								PackFlow activity, access and traceability intelligence
 							</Typography>
 						</Box>
 					</Box>
@@ -3940,23 +4585,23 @@ function UserPerformanceDialog({
 			<DialogContent sx={performanceDialogContentSx}>
 				<Box sx={performanceHeroGridSx}>
 					<PerformanceMetricCard
-						label="Today Output"
-						value={data.todayOutput}
-						detail={`${data.packingToday} packing • ${data.dispatchToday} dispatch`}
+						label={`${periodLabel || "Period"} Output`}
+						value={data.periodOutput}
+						detail={`${data.packingPeriod} packed • ${data.dispatchPeriod} dispatched • ${data.clientsTouched} clients`}
 						accent="#3b82f6"
 					/>
 
 					<PerformanceMetricCard
-						label="Activity Score"
+						label="Activity Index"
 						value={`${data.activityScore}%`}
 						detail={data.activityBand}
 						accent="#22c55e"
 					/>
 
 					<PerformanceMetricCard
-						label="Recent Actions"
-						value={data.recentActions}
-						detail="Within latest activity snapshot"
+						label="Active Days"
+						value={data.activeDays}
+						detail={`${data.recentActions} tracked activity events`}
 						accent="#a78bfa"
 					/>
 
@@ -4020,38 +4665,42 @@ function UserPerformanceDialog({
 								<strong>{formatSmartDateTime(data.lastActivityAt)}</strong>
 							</div>
 						</Box>
+
+						<Typography sx={{ ...performanceSectionTitleSx, mt: 1.4 }}>Effective PackFlow Screens</Typography>
+						<Box sx={effectiveScreensGridSx}>
+							{getPackFlowAccessMatrix(user).map((screen) => (
+								<Chip
+									key={screen.key}
+									icon={screen.granted ? <VerifiedUserOutlinedIcon /> : <BlockOutlinedIcon />}
+									label={screen.label}
+									size="small"
+									sx={effectiveScreenChipSx(screen.granted)}
+								/>
+							))}
+						</Box>
 					</Box>
 
 					<Box sx={performanceSectionCardSx}>
 						<Typography sx={performanceSectionTitleSx}>
-							Recent Activity Mix
+							PackFlow Operational Record
 						</Typography>
 
 						<Box sx={performanceMixGridSx}>
-							<PerformanceMixItem
-								label="Packing"
-								value={data.packingActions}
-								accent="#22c55e"
-							/>
-							<PerformanceMixItem
-								label="Dispatch"
-								value={data.dispatchActions}
-								accent="#f97316"
-							/>
-							<PerformanceMixItem
-								label="Movement"
-								value={data.movementActions}
-								accent="#38bdf8"
-							/>
-							<PerformanceMixItem
-								label="Control"
-								value={data.controlActions}
-								accent="#a78bfa"
-							/>
+							<PerformanceMixItem label="Packed" value={data.packingPeriod} accent="#22c55e" />
+							<PerformanceMixItem label="Dispatched" value={data.dispatchPeriod} accent="#f97316" />
+							<PerformanceMixItem label="Clients" value={data.clientsTouched} accent="#14b8a6" />
+							<PerformanceMixItem label="Stickers" value={data.stickersGenerated} accent="#22c55e" />
+							<PerformanceMixItem label="Initial" value={data.initialStickers} accent="#38bdf8" />
+							<PerformanceMixItem label="Reprints" value={data.reprints} accent="#f59e0b" />
+							<PerformanceMixItem label="Dispatch Items" value={data.dispatchItems} accent="#f97316" />
+							<PerformanceMixItem label="Std. Challans" value={data.dispatchChallans} accent="#a78bfa" />
+							<PerformanceMixItem label="Custom Challans" value={data.customChallans} accent="#ec4899" />
+							<PerformanceMixItem label="Movement Events" value={data.movementActions} accent="#06b6d4" />
+							<PerformanceMixItem label="Control Events" value={data.controlActions} accent="#8b5cf6" />
 						</Box>
 
 						<Typography sx={performanceNoteSx}>
-							Activity Score is a relative activity index based on today&apos;s recorded packing / dispatch output and the recent activity snapshot. It is not a quality or attendance rating.
+							Activity Index is a relative operational index built from recorded PackFlow records, activity events and active days for the selected period. It is not an attendance, quality or HR rating.
 						</Typography>
 					</Box>
 				</Box>
@@ -4822,6 +5471,119 @@ const insightsButtonSx = {
 	},
 };
 
+const reportButtonSx = {
+	minHeight: 38,
+	borderRadius: "12px",
+	px: 1.6,
+	textTransform: "none",
+	fontWeight: 900,
+	color: "#bbf7d0",
+	background: "rgba(34,197,94,.08)",
+	border: "1px solid rgba(34,197,94,.20)",
+	"&:hover": {
+		background: "rgba(34,197,94,.14)",
+		borderColor: "rgba(34,197,94,.34)",
+	},
+};
+
+const intelligenceToolbarSx = {
+	mt: 1.3,
+	p: 1,
+	borderRadius: "14px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	flexWrap: "wrap",
+	background: "rgba(2,6,23,.34)",
+	border: "1px solid rgba(148,163,184,.08)",
+};
+
+const intelligenceToolbarGroupSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.8,
+	flexWrap: "wrap",
+};
+
+const intelligenceToolbarLabelSx = {
+	color: "#94a3b8",
+	fontSize: 10.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".05em",
+};
+
+const dataSourceHealthSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.55,
+	flexWrap: "wrap",
+	maxWidth: 650,
+};
+
+const sourceHealthChipSx = (ok) => ({
+	height: 22,
+	fontSize: 9,
+	fontWeight: 900,
+	textTransform: "capitalize",
+	color: ok ? "#86efac" : "#fca5a5",
+	background: ok ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)",
+	border: `1px solid ${ok ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)"}`,
+});
+
+const screenCountChipSx = {
+	height: 24,
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.08)",
+	border: "1px solid rgba(96,165,250,.16)",
+	fontWeight: 900,
+	fontSize: 9.5,
+	"& .MuiChip-icon": { color: "#60a5fa" },
+};
+
+const performancePeriodCaptionSx = {
+	mt: 0.25,
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 800,
+	textTransform: "uppercase",
+	letterSpacing: ".05em",
+};
+
+const pagerMiniButtonSx = {
+	minWidth: 38,
+	height: 34,
+	borderRadius: "10px",
+	px: 1,
+	textTransform: "none",
+	fontWeight: 900,
+	color: "#cbd5e1",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(148,163,184,.12)",
+	"&:hover": {
+		background: "rgba(59,130,246,.12)",
+		borderColor: "rgba(96,165,250,.24)",
+	},
+};
+
+const effectiveScreensGridSx = {
+	mt: 0.8,
+	display: "flex",
+	gap: 0.6,
+	flexWrap: "wrap",
+};
+
+const effectiveScreenChipSx = (granted) => ({
+	height: 24,
+	fontSize: 9.2,
+	fontWeight: 850,
+	color: granted ? "#86efac" : "#94a3b8",
+	background: granted ? "rgba(34,197,94,.08)" : "rgba(100,116,139,.07)",
+	border: `1px solid ${granted ? "rgba(34,197,94,.18)" : "rgba(100,116,139,.14)"}`,
+	"& .MuiChip-icon": { color: granted ? "#4ade80" : "#64748b" },
+});
+
 const tablePanelSx = {
 	borderRadius: "22px",
 	background:
@@ -4850,10 +5612,10 @@ const tablePanelSx = {
 };
 
 const tableHeaderSx = {
-	minWidth: 1660,
+	minWidth: 1780,
 	display: "grid",
 	gridTemplateColumns:
-		"1.05fr 1.35fr 1fr 1.05fr 1.05fr .85fr .62fr 390px",
+		"1.05fr 1.35fr 1fr 1.15fr 1.25fr .85fr .62fr 390px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
@@ -4868,10 +5630,10 @@ const tableHeaderSx = {
 };
 
 const tableRowSx = {
-	minWidth: 1660,
+	minWidth: 1780,
 	display: "grid",
 	gridTemplateColumns:
-		"1.05fr 1.35fr 1fr 1.05fr 1.05fr .85fr .62fr 390px",
+		"1.05fr 1.35fr 1fr 1.15fr 1.25fr .85fr .62fr 390px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
