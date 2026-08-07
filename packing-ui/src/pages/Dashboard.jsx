@@ -2768,8 +2768,9 @@ const inventorySectionHeader = {
 const inventorySectionTitle = {
   marginTop: 3,
   color: "#ffffff",
-  fontSize: 19,
+  fontSize: 29,
   fontWeight: 950,
+  lineHeight: 1.2,
 };
 
 const inventorySectionCount = {
