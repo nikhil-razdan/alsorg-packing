@@ -578,6 +578,8 @@ function DriverManagement({
         pageSize={pageSize}
         setPageSize={setPageSize}
         totalItems={filteredRows.length}
+        label="drivers"
+        pageSizeOptions={[10, 25, 50, 100]}
       />
 
       <CreateDriverModal

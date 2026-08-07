@@ -30,6 +30,8 @@ import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
 
+import LogisticsPagination from "./LogisticsPagination";
+
 const SOURCE = Object.freeze({
   CHALLAN: "CHALLAN",
   MANUAL: "MANUAL",
@@ -1865,66 +1867,29 @@ function LogisticsShiftModal({
               )}
             </div>
 
-            <div style={historyPagination}>
-              <div style={historyCount}>
-                Showing {filteredActivities.length} of {activitySummary.totalActivities} unified records
-              </div>
+            {filteredActivities.length > 0 && (
+              <div style={historyPaginationWrap}>
+                <div style={historyResultNote}>
+                  <span style={historyResultDot} />
 
-              <div style={historyPagerRight}>
-                <select
-                  value={historyPageSize}
-                  onChange={(event) => {
-                    setHistoryPageSize(
-                      Number(
-                        event.target.value
-                      )
-                    );
-                    setHistoryPageNo(1);
-                  }}
-                  style={pageSizeSelect}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-
-                <button
-                  type="button"
-                  style={pagerBtn}
-                  disabled={
-                    historyCurrentPage === 1
-                  }
-                  onClick={() =>
-                    setHistoryPageNo(
-                      historyCurrentPage - 1
-                    )
-                  }
-                >
-                  ◀ Previous
-                </button>
-
-                <div style={pageBadge}>
-                  Page {historyCurrentPage} of {historyTotalPages}
+                  <span>
+                    {filteredActivities.length} matching of{" "}
+                    {activitySummary.totalActivities} unified driver activities
+                  </span>
                 </div>
 
-                <button
-                  type="button"
-                  style={pagerBtn}
-                  disabled={
-                    historyCurrentPage ===
-                    historyTotalPages
-                  }
-                  onClick={() =>
-                    setHistoryPageNo(
-                      historyCurrentPage + 1
-                    )
-                  }
-                >
-                  Next ▶
-                </button>
+                <LogisticsPagination
+                  pageNo={historyCurrentPage}
+                  setPageNo={setHistoryPageNo}
+                  pageSize={historyPageSize}
+                  setPageSize={setHistoryPageSize}
+                  totalItems={filteredActivities.length}
+                  label="activities"
+                  pageSizeOptions={[5, 10, 25, 50]}
+                  compact
+                />
               </div>
-            </div>
+            )}
           </section>
         )}
 
@@ -3141,65 +3106,31 @@ const moreItemsText = {
   fontWeight: 750,
 };
 
-const historyPagination = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap",
+const historyPaginationWrap = {
   marginTop: 14,
+  paddingTop: 12,
+  borderTop:
+    "1px solid rgba(255,255,255,.055)",
 };
 
-const historyCount = {
-  color: "#94a3b8",
-  fontSize: 11,
-  fontWeight: 700,
-};
-
-const historyPagerRight = {
+const historyResultNote = {
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
+  gap: 7,
+  color: "#7f8ea3",
+  fontSize: 9.5,
+  fontWeight: 750,
+  lineHeight: 1.4,
 };
 
-const pageSizeSelect = {
-  height: 31,
-  borderRadius: 9,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
-  padding: "0 7px",
-};
-
-const pagerBtn = {
-  minWidth: 88,
-  height: 31,
-  borderRadius: 9,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "linear-gradient(180deg,#1e293b,#0f172a)",
-  color: "#fff",
-  cursor: "pointer",
-  fontSize: 10,
-  fontWeight: 800,
-};
-
-const pageBadge = {
-  height: 31,
-  display: "flex",
-  alignItems: "center",
-  padding: "0 10px",
-  borderRadius: 9,
-  background:
-    "rgba(255,255,255,.04)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
-  color: "#cbd5e1",
-  fontSize: 10,
-  fontWeight: 800,
+const historyResultDot = {
+  width: 6,
+  height: 6,
+  flexShrink: 0,
+  borderRadius: "50%",
+  background: "#60a5fa",
+  boxShadow:
+    "0 0 10px rgba(96,165,250,.55)",
 };
 
 const createSection = {

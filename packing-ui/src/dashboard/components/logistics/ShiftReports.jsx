@@ -16,6 +16,8 @@ import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
 
+import LogisticsPagination from "./LogisticsPagination";
+
 import {
   formatVehicleDate,
   getVehicleAgeFromRegistration,
@@ -653,6 +655,11 @@ function ShiftReports({
   const [search, setSearch] =
     useState("");
 
+  const [reportPageNo, setReportPageNo] =
+    useState(1);
+  const [reportPageSize, setReportPageSize] =
+    useState(15);
+
   async function loadReports() {
     try {
       setLoading(true);
@@ -1073,6 +1080,20 @@ function ShiftReports({
       ),
     [filteredRecords]
   );
+
+  useEffect(() => {
+    setReportPageNo(1);
+  }, [
+    reportMode,
+    driverId,
+    vehicleId,
+    sourceFilter,
+    statusFilter,
+    fromDate,
+    toDate,
+    search,
+    reportPageSize,
+  ]);
 
   const clearFilters = () => {
     setDriverId("");
@@ -2251,6 +2272,10 @@ function ShiftReports({
           vehicleRows={vehicleRows}
           manualRecords={manualRecords}
           complianceRows={complianceRows}
+          pageNo={reportPageNo}
+          setPageNo={setReportPageNo}
+          pageSize={reportPageSize}
+          setPageSize={setReportPageSize}
         />
       )}
     </div>
@@ -2295,92 +2320,185 @@ function ReportBody({
   vehicleRows,
   manualRecords,
   complianceRows,
+  pageNo,
+  setPageNo,
+  pageSize,
+  setPageSize,
 }) {
+  if (reportMode === "OVERVIEW") {
+    return (
+      <div style={overviewGrid}>
+        <PerformanceTable
+          title="Top Driver Activity"
+          identityLabel="Driver"
+          rows={driverRows.slice(0, 8)}
+          totalRows={driverRows.length}
+          compact
+        />
+
+        <PerformanceTable
+          title="Top Vehicle Activity"
+          identityLabel="Vehicle"
+          rows={vehicleRows.slice(0, 8)}
+          totalRows={vehicleRows.length}
+          compact
+        />
+
+        <TripTable
+          title="Recent Unified Operations"
+          records={records.slice(0, 12)}
+          totalRows={records.length}
+          compact
+        />
+
+        <ComplianceTable
+          rows={complianceRows
+            .filter(
+              (row) =>
+                row.compliance.alertCount > 0
+            )
+            .slice(0, 10)}
+          totalRows={
+            complianceRows.filter(
+              (row) =>
+                row.compliance.alertCount > 0
+            ).length
+          }
+          compact
+        />
+      </div>
+    );
+  }
+
+  let sourceRows = [];
+  let label = "records";
+
+  if (reportMode === "DRIVER") {
+    sourceRows = driverRows;
+    label = "drivers";
+  } else if (reportMode === "VEHICLE") {
+    sourceRows = vehicleRows;
+    label = "vehicles";
+  } else if (reportMode === "TRIP") {
+    sourceRows = records;
+    label = "operations";
+  } else if (reportMode === "MANUAL") {
+    sourceRows = manualRecords;
+    label = "operations";
+  } else if (reportMode === "COMPLIANCE") {
+    sourceRows = complianceRows;
+    label = "vehicles";
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      sourceRows.length /
+      pageSize
+    )
+  );
+
+  const currentPage = Math.min(
+    Math.max(
+      1,
+      Number(pageNo || 1)
+    ),
+    totalPages
+  );
+
+  const pageRows = sourceRows.slice(
+    (currentPage - 1) *
+    pageSize,
+    currentPage *
+    pageSize
+  );
+
+  const pager = sourceRows.length > 0 ? (
+    <LogisticsPagination
+      pageNo={currentPage}
+      setPageNo={setPageNo}
+      pageSize={pageSize}
+      setPageSize={setPageSize}
+      totalItems={sourceRows.length}
+      label={label}
+      pageSizeOptions={[10, 15, 25, 50, 100]}
+    />
+  ) : null;
+
   if (reportMode === "DRIVER") {
     return (
-      <PerformanceTable
-        title="Driver Performance"
-        identityLabel="Driver"
-        rows={driverRows}
-      />
+      <div style={reportTableWithPager}>
+        <PerformanceTable
+          title="Driver Performance"
+          identityLabel="Driver"
+          rows={pageRows}
+          totalRows={sourceRows.length}
+        />
+        {pager}
+      </div>
     );
   }
 
   if (reportMode === "VEHICLE") {
     return (
-      <PerformanceTable
-        title="Vehicle Performance"
-        identityLabel="Vehicle"
-        rows={vehicleRows}
-      />
+      <div style={reportTableWithPager}>
+        <PerformanceTable
+          title="Vehicle Performance"
+          identityLabel="Vehicle"
+          rows={pageRows}
+          totalRows={sourceRows.length}
+        />
+        {pager}
+      </div>
     );
   }
 
   if (reportMode === "TRIP") {
     return (
-      <TripTable
-        title="Trip / Challan Register"
-        records={records}
-      />
+      <div style={reportTableWithPager}>
+        <TripTable
+          title="Trip / Challan Register"
+          records={pageRows}
+          totalRows={sourceRows.length}
+        />
+        {pager}
+      </div>
     );
   }
 
   if (reportMode === "MANUAL") {
     return (
-      <TripTable
-        title="Manual / Legacy Operations"
-        records={manualRecords}
-      />
+      <div style={reportTableWithPager}>
+        <TripTable
+          title="Manual / Legacy Operations"
+          records={pageRows}
+          totalRows={sourceRows.length}
+        />
+        {pager}
+      </div>
     );
   }
 
   if (reportMode === "COMPLIANCE") {
     return (
-      <ComplianceTable
-        rows={complianceRows}
-      />
+      <div style={reportTableWithPager}>
+        <ComplianceTable
+          rows={pageRows}
+          totalRows={sourceRows.length}
+        />
+        {pager}
+      </div>
     );
   }
 
-  return (
-    <div style={overviewGrid}>
-      <PerformanceTable
-        title="Top Driver Activity"
-        identityLabel="Driver"
-        rows={driverRows.slice(0, 8)}
-        compact
-      />
-
-      <PerformanceTable
-        title="Top Vehicle Activity"
-        identityLabel="Vehicle"
-        rows={vehicleRows.slice(0, 8)}
-        compact
-      />
-
-      <TripTable
-        title="Recent Unified Operations"
-        records={records.slice(0, 12)}
-        compact
-      />
-
-      <ComplianceTable
-        rows={complianceRows
-          .filter(
-            (row) =>
-              row.compliance.alertCount > 0
-          )
-          .slice(0, 10)}
-        compact
-      />
-    </div>
-  );
+  return null;
 }
 
 function PerformanceTable({
   title,
   identityLabel,
   rows,
+  totalRows = rows.length,
   compact = false,
 }) {
   return (
@@ -2396,7 +2514,9 @@ function PerformanceTable({
         <div>
           <div style={tableTitle}>{title}</div>
           <div style={tableSub}>
-            {rows.length} record(s)
+            {compact && totalRows > rows.length
+              ? `Showing ${rows.length} of ${totalRows} record(s)`
+              : `${totalRows} record(s)`}
           </div>
         </div>
       </div>
@@ -2466,6 +2586,7 @@ function PerformanceTable({
 function TripTable({
   title,
   records,
+  totalRows = records.length,
   compact = false,
 }) {
   return (
@@ -2481,7 +2602,9 @@ function TripTable({
         <div>
           <div style={tableTitle}>{title}</div>
           <div style={tableSub}>
-            {records.length} operation(s)
+            {compact && totalRows > records.length
+              ? `Showing ${records.length} of ${totalRows} operation(s)`
+              : `${totalRows} operation(s)`}
           </div>
         </div>
       </div>
@@ -2556,6 +2679,7 @@ function TripTable({
 
 function ComplianceTable({
   rows,
+  totalRows = rows.length,
   compact = false,
 }) {
   return (
@@ -2574,6 +2698,11 @@ function ComplianceTable({
           </div>
           <div style={tableSub}>
             Registration age + Fitness / Insurance / PUCC validity
+            {compact && totalRows > rows.length
+              ? ` • Showing ${rows.length} of ${totalRows}`
+              : totalRows > 0
+                ? ` • ${totalRows} vehicle(s)`
+                : ""}
           </div>
         </div>
       </div>
@@ -2881,6 +3010,10 @@ const overviewGrid = {
   gridTemplateColumns:
     "repeat(auto-fit,minmax(430px,1fr))",
   gap: 14,
+};
+
+const reportTableWithPager = {
+  minWidth: 0,
 };
 
 const tableCard = {
