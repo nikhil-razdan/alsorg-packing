@@ -6,6 +6,7 @@ import {
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 
+import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 import LogisticsOperationsHub from "../dashboard/components/logistics/LogisticsOperationsHub";
 import ShiftReports from "../dashboard/components/logistics/ShiftReports";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
@@ -13,7 +14,7 @@ import VehicleManagement from "../dashboard/components/logistics/VehicleManageme
 
 function LogisticsPortalPage() {
   const [tab, setTab] =
-    useState("operations");
+    useState("dashboard");
 
   const [snackOpen, setSnackOpen] =
     useState(false);
@@ -51,7 +52,7 @@ function LogisticsPortalPage() {
             </div>
 
             <div style={subtitle}>
-              Driver, fleet and movement control center
+              Management intelligence, driver, fleet and movement control center
             </div>
           </div>
 
@@ -62,6 +63,16 @@ function LogisticsPortalPage() {
         </div>
 
         <div style={tabsRow}>
+          <SidebarButton
+            active={
+              tab === "dashboard"
+            }
+            onClick={() =>
+              setTab("dashboard")
+            }
+            label="Management Dashboard"
+          />
+
           <SidebarButton
             active={
               tab === "operations"
@@ -102,6 +113,10 @@ function LogisticsPortalPage() {
             label="Operations Reports"
           />
         </div>
+
+        {tab === "dashboard" && (
+          <LogisticsDashboard />
+        )}
 
         {tab === "operations" && (
           <LogisticsOperationsHub
