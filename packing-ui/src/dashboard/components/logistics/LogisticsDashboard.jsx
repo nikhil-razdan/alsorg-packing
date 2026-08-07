@@ -1015,6 +1015,499 @@ const styleStatusCell = (
 };
 
 
+function LogisticsDashboardScrollStyles() {
+  return (
+    <style>
+      {`
+        .logistics-pro-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(96,165,250,.72) rgba(15,23,42,.32);
+          scrollbar-gutter: stable;
+          overscroll-behavior: contain;
+        }
+
+        .logistics-pro-scroll::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        .logistics-pro-scroll::-webkit-scrollbar-track {
+          background: rgba(15,23,42,.34);
+          border-radius: 999px;
+          box-shadow: inset 0 0 0 1px rgba(148,163,184,.045);
+        }
+
+        .logistics-pro-scroll::-webkit-scrollbar-thumb {
+          min-height: 34px;
+          min-width: 34px;
+          border-radius: 999px;
+          border: 2px solid rgba(15,23,42,.72);
+          background:
+            linear-gradient(
+              135deg,
+              rgba(71,85,105,.96) 0%,
+              rgba(59,130,246,.92) 52%,
+              rgba(96,165,250,.92) 100%
+            );
+          box-shadow:
+            0 0 0 1px rgba(96,165,250,.12),
+            0 0 12px rgba(59,130,246,.18);
+        }
+
+        .logistics-pro-scroll::-webkit-scrollbar-thumb:hover {
+          background:
+            linear-gradient(
+              135deg,
+              rgba(96,165,250,1) 0%,
+              rgba(37,99,235,1) 100%
+            );
+          box-shadow:
+            0 0 0 1px rgba(147,197,253,.24),
+            0 0 16px rgba(59,130,246,.34);
+        }
+
+        .logistics-pro-scroll::-webkit-scrollbar-corner {
+          background: transparent;
+        }
+
+        .logistics-pro-scroll-x {
+          padding-bottom: 4px;
+        }
+
+        .logistics-pro-scroll-y {
+          padding-right: 4px;
+        }
+
+        .logistics-pro-scroll-soft::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        @media (max-width: 720px) {
+          .logistics-pro-scroll::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+          }
+        }
+      `}
+    </style>
+  );
+}
+
+const buildPaginationItems = (
+  currentPage,
+  totalPages,
+  siblingCount = 1
+) => {
+  if (totalPages <= 7) {
+    return Array.from(
+      { length: totalPages },
+      (_, index) => index + 1
+    );
+  }
+
+  const pages = new Set([
+    1,
+    totalPages,
+    currentPage,
+  ]);
+
+  for (
+    let offset = 1;
+    offset <= siblingCount;
+    offset += 1
+  ) {
+    pages.add(
+      currentPage - offset
+    );
+    pages.add(
+      currentPage + offset
+    );
+  }
+
+  const validPages =
+    Array.from(pages)
+      .filter(
+        (page) =>
+          page >= 1 &&
+          page <= totalPages
+      )
+      .sort((a, b) => a - b);
+
+  const result = [];
+
+  validPages.forEach(
+    (page, index) => {
+      const previous =
+        validPages[index - 1];
+
+      if (
+        index > 0 &&
+        page - previous > 1
+      ) {
+        result.push(
+          `ellipsis-${previous}-${page}`
+        );
+      }
+
+      result.push(page);
+    }
+  );
+
+  return result;
+};
+
+function ProfessionalPagination({
+  page = 1,
+  setPage,
+  pageSize = 10,
+  setPageSize,
+  totalItems = 0,
+  label = "records",
+  pageSizeOptions = [
+    5,
+    10,
+    25,
+    50,
+  ],
+  compact = false,
+}) {
+  const safeTotal =
+    Math.max(
+      0,
+      Number(totalItems || 0)
+    );
+
+  const safePageSize =
+    Math.max(
+      1,
+      Number(pageSize || 1)
+    );
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        safeTotal /
+        safePageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      totalPages,
+      Math.max(
+        1,
+        Number(page || 1)
+      )
+    );
+
+  useEffect(() => {
+    if (
+      currentPage !== page &&
+      typeof setPage ===
+      "function"
+    ) {
+      setPage(currentPage);
+    }
+  }, [
+    currentPage,
+    page,
+    setPage,
+  ]);
+
+  const pageItems =
+    useMemo(
+      () =>
+        buildPaginationItems(
+          currentPage,
+          totalPages
+        ),
+      [
+        currentPage,
+        totalPages,
+      ]
+    );
+
+  if (safeTotal <= 0) {
+    return null;
+  }
+
+  const from =
+    (
+      currentPage - 1
+    ) *
+    safePageSize +
+    1;
+
+  const to =
+    Math.min(
+      currentPage *
+      safePageSize,
+      safeTotal
+    );
+
+  const goToPage = (
+    nextPage
+  ) => {
+    if (
+      typeof setPage !==
+      "function"
+    ) {
+      return;
+    }
+
+    setPage(
+      Math.min(
+        totalPages,
+        Math.max(
+          1,
+          Number(nextPage || 1)
+        )
+      )
+    );
+  };
+
+  const handlePageSize =
+    (event) => {
+      const nextSize =
+        Number(
+          event.target.value
+        );
+
+      if (
+        typeof setPageSize ===
+        "function" &&
+        Number.isFinite(
+          nextSize
+        ) &&
+        nextSize > 0
+      ) {
+        setPageSize(
+          nextSize
+        );
+      }
+
+      if (
+        typeof setPage ===
+        "function"
+      ) {
+        setPage(1);
+      }
+    };
+
+  return (
+    <div
+      style={{
+        ...professionalPager,
+        ...(compact
+          ? professionalPagerCompact
+          : {}),
+      }}
+    >
+      <div style={pagerInfo}>
+        <div style={pagerRange}>
+          Showing{" "}
+          <strong>
+            {from}–{to}
+          </strong>{" "}
+          of{" "}
+          <strong>
+            {safeTotal}
+          </strong>{" "}
+          {label}
+        </div>
+
+        <div style={pagerMeta}>
+          Page{" "}
+          <strong>
+            {currentPage}
+          </strong>{" "}
+          of{" "}
+          <strong>
+            {totalPages}
+          </strong>
+        </div>
+      </div>
+
+      <div style={pagerControls}>
+        {typeof setPageSize ===
+          "function" && (
+            <label
+              style={{
+                ...pagerRowsControl,
+                ...(compact
+                  ? pagerRowsControlCompact
+                  : {}),
+              }}
+            >
+              <span style={pagerRowsLabel}>
+                Rows
+              </span>
+
+              <select
+                value={safePageSize}
+                onChange={
+                  handlePageSize
+                }
+                style={pagerSelect}
+                aria-label="Rows per page"
+              >
+                {pageSizeOptions.map(
+                  (size) => (
+                    <option
+                      key={size}
+                      value={size}
+                    >
+                      {size}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+          )}
+
+        <div style={pagerDivider} />
+
+        <div style={pagerButtons}>
+          <PagerButton
+            title="First page"
+            disabled={
+              currentPage === 1
+            }
+            onClick={() =>
+              goToPage(1)
+            }
+            compact={compact}
+          >
+            «
+          </PagerButton>
+
+          <PagerButton
+            title="Previous page"
+            disabled={
+              currentPage === 1
+            }
+            onClick={() =>
+              goToPage(
+                currentPage - 1
+              )
+            }
+            compact={compact}
+          >
+            ‹
+          </PagerButton>
+
+          {pageItems.map(
+            (item) => {
+              if (
+                typeof item !==
+                "number"
+              ) {
+                return (
+                  <span
+                    key={item}
+                    style={pagerEllipsis}
+                  >
+                    …
+                  </span>
+                );
+              }
+
+              return (
+                <PagerButton
+                  key={item}
+                  title={`Page ${item}`}
+                  active={
+                    item ===
+                    currentPage
+                  }
+                  onClick={() =>
+                    goToPage(item)
+                  }
+                  compact={compact}
+                >
+                  {item}
+                </PagerButton>
+              );
+            }
+          )}
+
+          <PagerButton
+            title="Next page"
+            disabled={
+              currentPage ===
+              totalPages
+            }
+            onClick={() =>
+              goToPage(
+                currentPage + 1
+              )
+            }
+            compact={compact}
+          >
+            ›
+          </PagerButton>
+
+          <PagerButton
+            title="Last page"
+            disabled={
+              currentPage ===
+              totalPages
+            }
+            onClick={() =>
+              goToPage(
+                totalPages
+              )
+            }
+            compact={compact}
+          >
+            »
+          </PagerButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PagerButton({
+  children,
+  title,
+  disabled = false,
+  active = false,
+  onClick,
+  compact = false,
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      aria-current={
+        active
+          ? "page"
+          : undefined
+      }
+      onClick={onClick}
+      style={{
+        ...pagerButton,
+        ...(compact
+          ? pagerButtonCompact
+          : {}),
+        ...(active
+          ? pagerButtonActive
+          : {}),
+        ...(disabled
+          ? pagerButtonDisabled
+          : {}),
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+
 function LogisticsDashboard({
   StatCard,
 }) {
@@ -3444,7 +3937,12 @@ function LogisticsDashboard({
     ["summary", "dispatch"].includes(section);
 
   return (
-    <div style={layout}>
+    <div
+      style={layout}
+      className="logistics-dashboard-shell"
+    >
+      <LogisticsDashboardScrollStyles />
+
       <ExecutiveSidebar
         section={section}
         setSection={setSection}
@@ -3756,37 +4254,98 @@ function RankingPanel({
   type,
   fullWidth = false,
 }) {
-  const isDriver = type === "DRIVER";
+  const isDriver =
+    type === "DRIVER";
+
+  const [page, setPage] =
+    useState(1);
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(
+    fullWidth ? 10 : 5
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    rows.length,
+    title,
+    type,
+  ]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        rows.length /
+        pageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      page,
+      totalPages
+    );
+
+  const visibleRows =
+    rows.slice(
+      (
+        currentPage - 1
+      ) *
+      pageSize,
+      currentPage *
+      pageSize
+    );
 
   return (
     <div
       style={{
         ...panelCard,
         ...(fullWidth
-          ? { gridColumn: "1 / -1", marginTop: 20 }
+          ? {
+            gridColumn:
+              "1 / -1",
+            marginTop: 20,
+          }
           : {}),
       }}
     >
       <div style={panelHeader}>
         <div>
-          <div style={panelTitle}>{title}</div>
+          <div style={panelTitle}>
+            {title}
+          </div>
+
           <div style={panelSubtitle}>
             {subtitle}
           </div>
         </div>
+
         <div style={panelCountBadge}>
           {rows.length} records
         </div>
       </div>
 
-      <div style={rankingTableWrap}>
+      <div
+        style={rankingTableWrap}
+        className="logistics-pro-scroll logistics-pro-scroll-x"
+      >
         <div style={rankingHead}>
-          <div>{isDriver ? "Driver" : "Vehicle"}</div>
+          <div>
+            {isDriver
+              ? "Driver"
+              : "Vehicle"}
+          </div>
           <div>Challans</div>
           <div>Items</div>
           <div>Active</div>
           <div>Manual</div>
-          <div>Last Activity</div>
+          <div>
+            Last Activity
+          </div>
         </div>
 
         {rows.length === 0 && (
@@ -3795,35 +4354,91 @@ function RankingPanel({
           </div>
         )}
 
-        {rows.map((row, index) => (
-          <div key={row.key} style={rankingRow}>
-            <div style={rankingIdentity}>
-              <span style={rankingNo}>
-                {index + 1}
-              </span>
-              <span>
-                {isDriver ? row.name : row.number}
-              </span>
+        {visibleRows.map(
+          (row, index) => (
+            <div
+              key={row.key}
+              style={rankingRow}
+            >
+              <div style={rankingIdentity}>
+                <span style={rankingNo}>
+                  {
+                    (
+                      currentPage -
+                      1
+                    ) *
+                    pageSize +
+                    index +
+                    1
+                  }
+                </span>
+
+                <span>
+                  {isDriver
+                    ? row.name
+                    : row.number}
+                </span>
+              </div>
+
+              <div>
+                {row.challans}
+              </div>
+
+              <div style={importantValue}>
+                {
+                  row.dispatchedItems
+                }
+              </div>
+
+              <div>
+                {
+                  row.activeChallans
+                }
+              </div>
+
+              <div>
+                {
+                  row.manualOperations
+                }
+                {row.manualTrips > 0
+                  ? ` / ${row.manualTrips} trips`
+                  : ""}
+              </div>
+
+              <div style={lastActivityText}>
+                {row.lastActivityAt
+                  ? formatDateTime(
+                    row.lastActivityAt
+                  )
+                  : "—"}
+              </div>
             </div>
-            <div>{row.challans}</div>
-            <div style={importantValue}>
-              {row.dispatchedItems}
-            </div>
-            <div>{row.activeChallans}</div>
-            <div>
-              {row.manualOperations}
-              {row.manualTrips > 0
-                ? ` / ${row.manualTrips} trips`
-                : ""}
-            </div>
-            <div style={lastActivityText}>
-              {row.lastActivityAt
-                ? formatDateTime(row.lastActivityAt)
-                : "—"}
-            </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
+
+      <ProfessionalPagination
+        page={currentPage}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={
+          setPageSize
+        }
+        totalItems={
+          rows.length
+        }
+        label={
+          isDriver
+            ? "drivers"
+            : "vehicles"
+        }
+        pageSizeOptions={
+          fullWidth
+            ? [10, 25, 50]
+            : [5, 10, 25]
+        }
+        compact={!fullWidth}
+      />
     </div>
   );
 }
@@ -3832,12 +4447,58 @@ function AttentionPanel({
   rows,
   fullWidth = false,
 }) {
+  const [page, setPage] =
+    useState(1);
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(
+    fullWidth ? 10 : 5
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    rows.length,
+    fullWidth,
+  ]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        rows.length /
+        pageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      page,
+      totalPages
+    );
+
+  const visibleRows =
+    rows.slice(
+      (
+        currentPage - 1
+      ) *
+      pageSize,
+      currentPage *
+      pageSize
+    );
+
   return (
     <div
       style={{
         ...panelCard,
         ...(fullWidth
-          ? { gridColumn: "1 / -1", marginTop: 20 }
+          ? {
+            gridColumn:
+              "1 / -1",
+            marginTop: 20,
+          }
           : {}),
       }}
     >
@@ -3846,10 +4507,12 @@ function AttentionPanel({
           <div style={panelTitle}>
             Management Attention Queue
           </div>
+
           <div style={panelSubtitle}>
             Live exceptions from running dispatch challans
           </div>
         </div>
+
         <div
           style={{
             ...panelCountBadge,
@@ -3868,28 +4531,62 @@ function AttentionPanel({
           ✓ No current dispatch exceptions need management attention.
         </div>
       ) : (
-        <div style={attentionList}>
-          {rows.slice(0, fullWidth ? 20 : 8).map((row) => (
-            <div
-              key={row.key}
-              style={attentionRow}
-            >
-              <span
-                style={severityPill(row.severity)}
-              >
-                {row.severity}
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={attentionTitle}>
-                  {row.title}
+        <>
+          <div
+            style={attentionList}
+            className="logistics-pro-scroll logistics-pro-scroll-y logistics-pro-scroll-soft"
+          >
+            {visibleRows.map(
+              (row) => (
+                <div
+                  key={row.key}
+                  style={attentionRow}
+                >
+                  <span
+                    style={severityPill(
+                      row.severity
+                    )}
+                  >
+                    {row.severity}
+                  </span>
+
+                  <div
+                    style={{
+                      minWidth: 0,
+                    }}
+                  >
+                    <div style={attentionTitle}>
+                      {row.title}
+                    </div>
+
+                    <div style={attentionDetail}>
+                      {row.detail}
+                    </div>
+                  </div>
                 </div>
-                <div style={attentionDetail}>
-                  {row.detail}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            )}
+          </div>
+
+          <ProfessionalPagination
+            page={currentPage}
+            setPage={setPage}
+            pageSize={pageSize}
+            setPageSize={
+              setPageSize
+            }
+            totalItems={
+              rows.length
+            }
+            label="issues"
+            pageSizeOptions={
+              fullWidth
+                ? [10, 20, 50]
+                : [5, 10, 20]
+            }
+            compact={!fullWidth}
+          />
+        </>
       )}
     </div>
   );
@@ -3899,6 +4596,46 @@ function RecentActivityPanel({
   rows,
   periodLabel,
 }) {
+  const [page, setPage] =
+    useState(1);
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(4);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    rows.length,
+    periodLabel,
+  ]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        rows.length /
+        pageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      page,
+      totalPages
+    );
+
+  const visibleRows =
+    rows.slice(
+      (
+        currentPage - 1
+      ) *
+      pageSize,
+      currentPage *
+      pageSize
+    );
+
   return (
     <div style={recentPanel}>
       <div style={panelHeader}>
@@ -3906,41 +4643,84 @@ function RecentActivityPanel({
           <div style={panelTitle}>
             Recent Logistics Activity
           </div>
+
           <div style={panelSubtitle}>
             Latest unified operations in {periodLabel}
           </div>
         </div>
+
+        <div style={panelCountBadge}>
+          {rows.length} records
+        </div>
       </div>
 
-      <div style={recentGrid}>
+      <div
+        style={recentGrid}
+        className="logistics-pro-scroll logistics-pro-scroll-y logistics-pro-scroll-soft"
+      >
         {rows.length === 0 && (
           <div style={panelEmpty}>
             No recent activity in the selected period.
           </div>
         )}
 
-        {rows.map((row) => (
-          <div key={row.key} style={recentRow}>
-            <div style={recentDot} />
-            <div style={{ minWidth: 0 }}>
-              <div style={recentTitleRow}>
-                <span style={recentTitle}>
-                  {row.title}
-                </span>
-                <span style={recentSource}>
-                  {row.source}
-                </span>
-              </div>
-              <div style={recentSubtitle}>
-                {row.subtitle}
-              </div>
-              <div style={recentTime}>
-                {formatDateTime(row.at)} • {row.status}
+        {visibleRows.map(
+          (row) => (
+            <div
+              key={row.key}
+              style={recentRow}
+            >
+              <div style={recentDot} />
+
+              <div
+                style={{
+                  minWidth: 0,
+                }}
+              >
+                <div style={recentTitleRow}>
+                  <span style={recentTitle}>
+                    {row.title}
+                  </span>
+
+                  <span style={recentSource}>
+                    {row.source}
+                  </span>
+                </div>
+
+                <div style={recentSubtitle}>
+                  {row.subtitle}
+                </div>
+
+                <div style={recentTime}>
+                  {formatDateTime(
+                    row.at
+                  )}{" "}
+                  • {row.status}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
+
+      <ProfessionalPagination
+        page={currentPage}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={
+          setPageSize
+        }
+        totalItems={
+          rows.length
+        }
+        label="activities"
+        pageSizeOptions={[
+          4,
+          6,
+          10,
+        ]}
+        compact
+      />
     </div>
   );
 }
@@ -3979,6 +4759,48 @@ function LogisticsReportCenter({
       (row) =>
         row.source ===
         REPORT_SOURCE.MANUAL
+    );
+
+  const [
+    tripPreviewPage,
+    setTripPreviewPage,
+  ] = useState(1);
+
+  const [
+    tripPreviewPageSize,
+    setTripPreviewPageSize,
+  ] = useState(8);
+
+  useEffect(() => {
+    setTripPreviewPage(1);
+  }, [
+    operationRows,
+  ]);
+
+  const tripPreviewTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        operationRows.length /
+        tripPreviewPageSize
+      )
+    );
+
+  const currentTripPreviewPage =
+    Math.min(
+      tripPreviewPage,
+      tripPreviewTotalPages
+    );
+
+  const visibleTripPreviewRows =
+    operationRows.slice(
+      (
+        currentTripPreviewPage -
+        1
+      ) *
+      tripPreviewPageSize,
+      currentTripPreviewPage *
+      tripPreviewPageSize
     );
 
   const completedChallans =
@@ -4235,13 +5057,13 @@ function LogisticsReportCenter({
         <ReportPreviewTable
           title="Driver Report Preview"
           identityLabel="Driver"
-          rows={driverRows.slice(0, 8)}
+          rows={driverRows}
         />
 
         <ReportPreviewTable
           title="Vehicle Report Preview"
           identityLabel="Vehicle"
-          rows={vehicleRows.slice(0, 8)}
+          rows={vehicleRows}
         />
       </div>
 
@@ -4260,7 +5082,10 @@ function LogisticsReportCenter({
           </div>
         </div>
 
-        <div style={tripPreviewScroll}>
+        <div
+          style={tripPreviewScroll}
+          className="logistics-pro-scroll logistics-pro-scroll-x"
+        >
           <div style={tripPreviewHead}>
             <div>Source</div>
             <div>Record</div>
@@ -4277,8 +5102,7 @@ function LogisticsReportCenter({
             </div>
           )}
 
-          {operationRows
-            .slice(0, 12)
+          {visibleTripPreviewRows
             .map((row) => (
               <div
                 key={row.key}
@@ -4315,6 +5139,32 @@ function LogisticsReportCenter({
               </div>
             ))}
         </div>
+
+        <ProfessionalPagination
+          page={
+            currentTripPreviewPage
+          }
+          setPage={
+            setTripPreviewPage
+          }
+          pageSize={
+            tripPreviewPageSize
+          }
+          setPageSize={
+            setTripPreviewPageSize
+          }
+          totalItems={
+            operationRows.length
+          }
+          label="operations"
+          pageSizeOptions={[
+            8,
+            12,
+            25,
+            50,
+          ]}
+          compact
+        />
       </div>
     </div>
   );
@@ -4390,6 +5240,46 @@ function ReportPreviewTable({
   identityLabel,
   rows,
 }) {
+  const [page, setPage] =
+    useState(1);
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(5);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    rows,
+    title,
+  ]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        rows.length /
+        pageSize
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      page,
+      totalPages
+    );
+
+  const visibleRows =
+    rows.slice(
+      (
+        currentPage - 1
+      ) *
+      pageSize,
+      currentPage *
+      pageSize
+    );
+
   return (
     <div style={panelCard}>
       <div style={panelHeader}>
@@ -4397,13 +5287,21 @@ function ReportPreviewTable({
           <div style={panelTitle}>
             {title}
           </div>
+
           <div style={panelSubtitle}>
             Filter-aware management summary
           </div>
         </div>
+
+        <div style={panelCountBadge}>
+          {rows.length} records
+        </div>
       </div>
 
-      <div style={reportPreviewScroll}>
+      <div
+        style={reportPreviewScroll}
+        className="logistics-pro-scroll logistics-pro-scroll-x"
+      >
         <div style={reportPreviewHead}>
           <div>{identityLabel}</div>
           <div>Challans</div>
@@ -4418,27 +5316,62 @@ function ReportPreviewTable({
           </div>
         )}
 
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            style={reportPreviewRow}
-          >
-            <div style={rankingIdentity}>
-              {row.label}
+        {visibleRows.map(
+          (row) => (
+            <div
+              key={row.key}
+              style={reportPreviewRow}
+            >
+              <div style={rankingIdentity}>
+                {row.label}
+              </div>
+
+              <div>
+                {row.challans}
+              </div>
+
+              <div style={importantValue}>
+                {row.dispatchedItems}
+              </div>
+
+              <div>
+                {row.completionRate.toFixed(
+                  0
+                )}
+                %
+              </div>
+
+              <div>
+                {row.manualOperations}
+              </div>
             </div>
-            <div>{row.challans}</div>
-            <div style={importantValue}>
-              {row.dispatchedItems}
-            </div>
-            <div>
-              {row.completionRate.toFixed(0)}%
-            </div>
-            <div>
-              {row.manualOperations}
-            </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
+
+      <ProfessionalPagination
+        page={currentPage}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={
+          setPageSize
+        }
+        totalItems={
+          rows.length
+        }
+        label={
+          identityLabel ===
+            "Driver"
+            ? "drivers"
+            : "vehicles"
+        }
+        pageSizeOptions={[
+          5,
+          10,
+          25,
+        ]}
+        compact
+      />
     </div>
   );
 }
@@ -4770,6 +5703,11 @@ const attentionList = {
   display: "flex",
   flexDirection: "column",
   gap: 7,
+  maxHeight: 385,
+  overflowY: "auto",
+  overflowX: "hidden",
+  paddingRight: 4,
+  overscrollBehavior: "contain",
 };
 
 const attentionRow = {
@@ -4836,6 +5774,11 @@ const recentGrid = {
   gridTemplateColumns:
     "repeat(auto-fit,minmax(280px,1fr))",
   gap: 8,
+  maxHeight: 360,
+  overflowY: "auto",
+  overflowX: "hidden",
+  paddingRight: 4,
+  overscrollBehavior: "contain",
 };
 
 const recentRow = {
@@ -5328,6 +6271,172 @@ const fallbackCardSubtle = {
   color: "#64748b",
   fontSize: 10,
   fontWeight: 700,
+};
+
+
+const professionalPager = {
+  marginTop: 12,
+  minHeight: 58,
+  padding: "10px 12px",
+  borderRadius: 15,
+  display: "flex",
+  alignItems: "center",
+  justifyContent:
+    "space-between",
+  gap: 11,
+  flexWrap: "wrap",
+  background:
+    "radial-gradient(circle at 8% 0%,rgba(59,130,246,.10),transparent 34%),linear-gradient(180deg,rgba(15,23,42,.92),rgba(2,6,23,.66))",
+  border:
+    "1px solid rgba(148,163,184,.09)",
+  boxShadow:
+    "0 12px 28px rgba(2,6,23,.18),inset 0 1px 0 rgba(255,255,255,.02)",
+};
+
+const professionalPagerCompact = {
+  minHeight: 49,
+  padding: "8px 9px",
+  borderRadius: 12,
+  gap: 8,
+};
+
+const pagerInfo = {
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const pagerRange = {
+  color: "#cbd5e1",
+  fontSize: 9.5,
+  fontWeight: 750,
+  lineHeight: 1.35,
+};
+
+const pagerMeta = {
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 750,
+};
+
+const pagerControls = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent:
+    "flex-end",
+  gap: 7,
+  flexWrap: "wrap",
+};
+
+const pagerRowsControl = {
+  minHeight: 32,
+  padding: "0 7px 0 9px",
+  borderRadius: 9,
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  background:
+    "rgba(255,255,255,.032)",
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const pagerRowsControlCompact = {
+  minHeight: 29,
+  padding: "0 6px 0 7px",
+};
+
+const pagerRowsLabel = {
+  color: "#718096",
+  fontSize: 8,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".05em",
+};
+
+const pagerSelect = {
+  height: 25,
+  minWidth: 50,
+  padding: "0 5px",
+  borderRadius: 7,
+  outline: "none",
+  color: "#e2e8f0",
+  background: "#0f172a",
+  border:
+    "1px solid rgba(96,165,250,.16)",
+  fontFamily: "inherit",
+  fontSize: 8.5,
+  fontWeight: 900,
+  cursor: "pointer",
+  colorScheme: "dark",
+};
+
+const pagerDivider = {
+  width: 1,
+  height: 26,
+  background:
+    "rgba(148,163,184,.10)",
+};
+
+const pagerButtons = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  flexWrap: "wrap",
+};
+
+const pagerButton = {
+  minWidth: 31,
+  height: 31,
+  padding: "0 7px",
+  borderRadius: 9,
+  border:
+    "1px solid rgba(148,163,184,.09)",
+  background:
+    "linear-gradient(180deg,rgba(30,41,59,.82),rgba(15,23,42,.86))",
+  color: "#cbd5e1",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 9.5,
+  fontWeight: 950,
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,.02)",
+  transition:
+    "transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease",
+};
+
+const pagerButtonCompact = {
+  minWidth: 28,
+  height: 28,
+  padding: "0 6px",
+  borderRadius: 8,
+  fontSize: 9,
+};
+
+const pagerButtonActive = {
+  color: "#fff",
+  border:
+    "1px solid rgba(147,197,253,.46)",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow:
+    "0 7px 16px rgba(37,99,235,.24),inset 0 1px 0 rgba(255,255,255,.11)",
+};
+
+const pagerButtonDisabled = {
+  opacity: 0.28,
+  cursor: "not-allowed",
+  boxShadow: "none",
+};
+
+const pagerEllipsis = {
+  minWidth: 16,
+  color: "#64748b",
+  textAlign: "center",
+  fontSize: 11,
+  fontWeight: 900,
+  userSelect: "none",
 };
 
 export default LogisticsDashboard;
