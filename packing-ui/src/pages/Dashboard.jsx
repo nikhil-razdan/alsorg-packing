@@ -3006,73 +3006,6 @@ const trendLabelStyle = {
   fontWeight: 750,
 };
 
-const panelSurface = {
-  display: "flex",
-  flexDirection: "column",
-  height: 430,
-  minHeight: 360,
-  padding: 16,
-  borderRadius: 22,
-  background:
-    "radial-gradient(circle at top right, rgba(34,211,238,.10), transparent 34%), rgba(15,23,42,.78)",
-  border: "1px solid rgba(255,255,255,.065)",
-  boxShadow: "0 18px 42px rgba(2,6,23,.34)",
-  overflow: "hidden",
-  backdropFilter: "blur(18px)",
-};
-
-const chartToggleWrap = {
-  position: "relative",
-  display: "inline-flex",
-  gap: 8,
-  padding: 5,
-  borderRadius: 999,
-  background: "rgba(15,23,42,.92)",
-  border: "1px solid rgba(255,255,255,.06)",
-  width: "fit-content",
-};
-
-const chartToggleBtn = {
-  width: 32,
-  height: 32,
-
-  borderRadius: "50%",
-
-  border: "none",
-
-  background: "transparent",
-
-  color: "#fff",
-
-  cursor: "pointer",
-
-  zIndex: 1,
-
-  display: "flex",
-
-  alignItems: "center",
-
-  justifyContent: "center",
-};
-
-const chartSlider = {
-  position: "absolute",
-
-  top: 5,
-  left: 5,
-
-  width: 32,
-  height: 32,
-
-  borderRadius: "50%",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
-  transition:
-    "transform .35s cubic-bezier(.4,0,.2,1)",
-};
-
 const sectionTitle = {
   fontSize: 24,
   fontWeight: 900,
@@ -4090,23 +4023,6 @@ const activityFeedShell = {
     "rgba(2,6,23,.20)",
   border:
     "1px solid rgba(148,163,184,.055)",
-};
-
-/*
- * Kept for backward compatibility with any local references in this file.
- * The inventory Recent Activity view now uses activityPanelSurface.
- */
-const panelSurface = {
-  display: "flex",
-  flexDirection: "column",
-  minHeight: 430,
-  padding: 16,
-  borderRadius: 22,
-  background:
-    "rgba(15,23,42,.78)",
-  border:
-    "1px solid rgba(255,255,255,.065)",
-  overflow: "hidden",
 };
 
 export default DashboardPage;
