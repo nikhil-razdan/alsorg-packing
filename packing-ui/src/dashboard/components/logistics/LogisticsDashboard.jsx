@@ -4889,7 +4889,6 @@ const recentTime = {
   fontWeight: 700,
 };
 
-
 const reportsNavButton = {
   height: 40,
   padding: "0 14px",

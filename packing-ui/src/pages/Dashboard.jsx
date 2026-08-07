@@ -508,8 +508,6 @@ const emptyDashboardStats = {
 };
 
 const normalizeStats = (data) => {
-  console.log("Dashboard stats API response:", data);
-
   const warehouseItems = toNumber(
     data?.warehouseItems ??
     data?.warehouse ??
@@ -610,6 +608,141 @@ const normalizeStats = (data) => {
   };
 };
 
+
+/* =========================================================
+ * FAST DASHBOARD DATA LAYER
+ *
+ * - Shows the last successful dashboard snapshot immediately.
+ * - Revalidates in the background so data stays current.
+ * - De-duplicates simultaneous stats/activity requests.
+ * - Keeps stats and activity independent, so the faster API
+ *   paints immediately instead of waiting for the slower one.
+ * ========================================================= */
+
+const DASHBOARD_CACHE_KEY =
+  "packflow:inventory-dashboard:v3";
+
+const DASHBOARD_CACHE_MAX_AGE_MS =
+  5 * 60 * 1000;
+
+let dashboardMemoryCache = null;
+let dashboardStatsInFlight = null;
+let dashboardActivityInFlight = null;
+
+function readDashboardCache() {
+  const now = Date.now();
+
+  if (
+    dashboardMemoryCache &&
+    now -
+    Number(
+      dashboardMemoryCache.cachedAt ||
+      0
+    ) <=
+    DASHBOARD_CACHE_MAX_AGE_MS
+  ) {
+    return dashboardMemoryCache;
+  }
+
+  try {
+    const raw =
+      window.sessionStorage.getItem(
+        DASHBOARD_CACHE_KEY
+      );
+
+    if (!raw) return null;
+
+    const parsed =
+      JSON.parse(raw);
+
+    const cachedAt =
+      Number(
+        parsed?.cachedAt || 0
+      );
+
+    if (
+      !cachedAt ||
+      now - cachedAt >
+      DASHBOARD_CACHE_MAX_AGE_MS
+    ) {
+      window.sessionStorage.removeItem(
+        DASHBOARD_CACHE_KEY
+      );
+
+      return null;
+    }
+
+    dashboardMemoryCache =
+      parsed;
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardCache(
+  patch = {}
+) {
+  const previous =
+    readDashboardCache() || {};
+
+  const next = {
+    ...previous,
+    ...patch,
+    cachedAt: Date.now(),
+  };
+
+  dashboardMemoryCache =
+    next;
+
+  try {
+    window.sessionStorage.setItem(
+      DASHBOARD_CACHE_KEY,
+      JSON.stringify(next)
+    );
+  } catch {
+    // Cache is only a speed optimisation.
+    // Dashboard must keep working even if storage is unavailable.
+  }
+
+  return next;
+}
+
+function requestDashboardStatsFast() {
+  if (
+    dashboardStatsInFlight
+  ) {
+    return dashboardStatsInFlight;
+  }
+
+  dashboardStatsInFlight =
+    fetchDashboardStats()
+      .finally(() => {
+        dashboardStatsInFlight =
+          null;
+      });
+
+  return dashboardStatsInFlight;
+}
+
+function requestDashboardActivityFast() {
+  if (
+    dashboardActivityInFlight
+  ) {
+    return dashboardActivityInFlight;
+  }
+
+  dashboardActivityInFlight =
+    fetchDashboardActivity(12)
+      .finally(() => {
+        dashboardActivityInFlight =
+          null;
+      });
+
+  return dashboardActivityInFlight;
+}
+
 function ThroughputUserModal({
   open,
   title,
@@ -696,9 +829,28 @@ function ThroughputUserModal({
 }
 
 function DashboardPage() {
-  const [stats, setStats] = useState(emptyDashboardStats);
+  const [stats, setStats] =
+    useState(() => {
+      const cached =
+        readDashboardCache();
 
-  const [activityLogs, setActivityLogs] = useState([]);
+      return (
+        cached?.stats ||
+        emptyDashboardStats
+      );
+    });
+
+  const [activityLogs, setActivityLogs] =
+    useState(() => {
+      const cached =
+        readDashboardCache();
+
+      return Array.isArray(
+        cached?.activityLogs
+      )
+        ? cached.activityLogs
+        : [];
+    });
   const [chartType, setChartType] = useState("donut");
 
   const [
@@ -709,7 +861,16 @@ function DashboardPage() {
   const [
     lastDashboardRefresh,
     setLastDashboardRefresh,
-  ] = useState(null);
+  ] = useState(() => {
+    const cached =
+      readDashboardCache();
+
+    return cached?.cachedAt
+      ? new Date(
+        cached.cachedAt
+      )
+      : null;
+  });
   const [mode, setMode] = useState("inventory");
   const [inventorySection, setInventorySection] =
     useState("summary");
@@ -978,59 +1139,108 @@ function DashboardPage() {
     },
   }[chartType];
 
+  const loadInventoryDashboard =
+    useCallback(
+      async ({
+        showRefreshing = false,
+      } = {}) => {
+        if (showRefreshing) {
+          setDashboardRefreshing(
+            true
+          );
+        }
+
+        /*
+         * Start both requests together, but update each section
+         * independently as soon as its own API returns.
+         *
+         * Previously the dashboard waited for BOTH API calls before
+         * painting either result.
+         */
+        const statsTask =
+          requestDashboardStatsFast()
+            .then((data) => {
+              if (!data) return;
+
+              const normalized =
+                normalizeStats(
+                  data
+                );
+
+              setStats(
+                normalized
+              );
+
+              writeDashboardCache({
+                stats:
+                  normalized,
+              });
+            })
+            .catch((error) => {
+              console.error(
+                error
+              );
+            });
+
+        const activityTask =
+          requestDashboardActivityFast()
+            .then((data) => {
+              const rows =
+                Array.isArray(data)
+                  ? data
+                  : [];
+
+              setActivityLogs(
+                rows
+              );
+
+              writeDashboardCache({
+                activityLogs:
+                  rows,
+              });
+            })
+            .catch((error) => {
+              console.error(
+                error
+              );
+
+              /*
+               * Keep cached/current activity visible on a temporary
+               * network failure instead of blanking the panel.
+               */
+            });
+
+        await Promise.allSettled([
+          statsTask,
+          activityTask,
+        ]);
+
+        const refreshedAt =
+          new Date();
+
+        setLastDashboardRefresh(
+          refreshedAt
+        );
+
+        if (showRefreshing) {
+          setDashboardRefreshing(
+            false
+          );
+        }
+      },
+      []
+    );
+
   const refreshInventoryDashboard =
-    useCallback(async () => {
-      setDashboardRefreshing(true);
-
-      const [
-        statsResult,
-        activityResult,
-      ] = await Promise.allSettled([
-        fetchDashboardStats(),
-        fetchDashboardActivity(12),
-      ]);
-
-      if (
-        statsResult.status === "fulfilled" &&
-        statsResult.value
-      ) {
-        setStats(
-          normalizeStats(
-            statsResult.value
-          )
-        );
-      } else if (
-        statsResult.status === "rejected"
-      ) {
-        console.error(
-          statsResult.reason
-        );
-      }
-
-      if (
-        activityResult.status === "fulfilled"
-      ) {
-        setActivityLogs(
-          Array.isArray(
-            activityResult.value
-          )
-            ? activityResult.value
-            : []
-        );
-      } else {
-        console.error(
-          activityResult.reason
-        );
-
-        setActivityLogs([]);
-      }
-
-      setLastDashboardRefresh(
-        new Date()
-      );
-
-      setDashboardRefreshing(false);
-    }, []);
+    useCallback(
+      () =>
+        loadInventoryDashboard({
+          showRefreshing: true,
+        }),
+      [
+        loadInventoryDashboard,
+      ]
+    );
 
   const handleAdminCenterChanged =
     useCallback(
@@ -1072,8 +1282,17 @@ function DashboardPage() {
     );
 
   useEffect(() => {
-    refreshInventoryDashboard();
-  }, [refreshInventoryDashboard]);
+    /*
+     * Cached data is already on screen from the useState initializers.
+     * Revalidate immediately in the background without forcing the
+     * dashboard into a visible loading state.
+     */
+    loadInventoryDashboard({
+      showRefreshing: false,
+    });
+  }, [
+    loadInventoryDashboard,
+  ]);
 
   const toggleStatCard = (key) => {
     setActiveStatCard((current) =>
@@ -1100,8 +1319,6 @@ function DashboardPage() {
 
     try {
       const data = await fetchDailyThroughputUsers(type);
-
-      console.log("Throughput user data:", type, data);
 
       setThroughputModal({
         open: true,
