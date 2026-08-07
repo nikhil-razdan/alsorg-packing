@@ -929,7 +929,7 @@ const actionRow = {
 const actionText = {
   minWidth: 0,
   color: "#e2e8f0",
-  fontSize: 9.5,
+  fontSize: 10.3,
   fontWeight: 950,
   lineHeight: 1.35,
   whiteSpace: "nowrap",
@@ -948,7 +948,7 @@ const typeChip = (meta) => ({
   background: meta.soft,
   border:
     `1px solid ${meta.border}`,
-  fontSize: 6.6,
+  fontSize: 8.2,
   fontWeight: 950,
   textTransform: "uppercase",
   letterSpacing: ".035em",
@@ -956,8 +956,8 @@ const typeChip = (meta) => ({
 
 const itemName = {
   marginTop: 3,
-  color: "#8b9aaf",
-  fontSize: 8.3,
+  color: "#c6d1df",
+  fontSize: 9.1,
   fontWeight: 750,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -976,12 +976,12 @@ const statusMini = {
   maxWidth: 106,
   padding: "2px 5px",
   borderRadius: 999,
-  color: "#718096",
+  color: "#aebdd0",
   background:
     "rgba(148,163,184,.04)",
   border:
     "1px solid rgba(148,163,184,.07)",
-  fontSize: 6.9,
+  fontSize: 7.7,
   fontWeight: 850,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -997,15 +997,15 @@ const statusMiniActive = (meta) => ({
 });
 
 const arrow = {
-  color: "#475569",
+  color: "#8797ad",
   fontSize: 8,
   fontWeight: 900,
 };
 
 const remarks = {
   marginTop: 5,
-  color: "#64748b",
-  fontSize: 7.4,
+  color: "#aebdd0",
+  fontSize: 8.2,
   fontWeight: 650,
   lineHeight: 1.35,
   whiteSpace: "nowrap",
@@ -1031,13 +1031,13 @@ const relativeTime = (meta) => ({
   background: meta.soft,
   border:
     `1px solid ${meta.border}`,
-  fontSize: 6.6,
+  fontSize: 8.2,
   fontWeight: 900,
 });
 
 const absoluteTime = {
-  color: "#475569",
-  fontSize: 6.8,
+  color: "#8797ad",
+  fontSize: 10,
   fontWeight: 750,
 };
 
@@ -1060,14 +1060,14 @@ const userAvatar = {
     "rgba(59,130,246,.09)",
   border:
     "1px solid rgba(96,165,250,.15)",
-  fontSize: 7.6,
+  fontSize: 10,
   fontWeight: 950,
 };
 
 const userName = {
   maxWidth: 70,
-  color: "#cbd5e1",
-  fontSize: 7.2,
+  color: "#e2e8f0",
+  fontSize: 8,
   fontWeight: 850,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -1078,7 +1078,7 @@ const roleChip = {
   maxWidth: 70,
   padding: "1px 5px",
   borderRadius: 999,
-  color: "#536177",
+  color: "#93a4ba",
   background:
     "rgba(148,163,184,.035)",
   border:
@@ -1104,8 +1104,8 @@ const pagination = {
 };
 
 const paginationMeta = {
-  color: "#536177",
-  fontSize: 7.4,
+  color: "#93a4ba",
+  fontSize: 8.2,
   fontWeight: 750,
 };
 
@@ -1144,12 +1144,12 @@ const pageIndicator = {
   borderRadius: 8,
   display: "grid",
   placeItems: "center",
-  color: "#718096",
+  color: "#aebdd0",
   background:
     "rgba(148,163,184,.035)",
   border:
     "1px solid rgba(148,163,184,.055)",
-  fontSize: 7.2,
+  fontSize: 8,
   fontWeight: 850,
 };
 
@@ -1184,8 +1184,8 @@ const emptyTitle = {
 const emptyText = {
   maxWidth: 270,
   marginTop: 4,
-  color: "#536177",
-  fontSize: 7.8,
+  color: "#93a4ba",
+  fontSize: 9.4,
   fontWeight: 700,
   lineHeight: 1.45,
 };

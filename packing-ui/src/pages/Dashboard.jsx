@@ -1361,93 +1361,6 @@ function DashboardPage() {
             <div style={inventoryMain}>
               {inventorySection === "summary" && (
                 <>
-                  <div style={inventoryPulsePanel}>
-                    <div style={inventoryPulseHeader}>
-                      <div>
-                        <div style={inventorySectionEyebrow}>
-                          INVENTORY CONTROL TOWER
-                        </div>
-
-                        <div style={inventoryPulseTitle}>
-                          Operational Pulse
-                        </div>
-
-                        <div style={inventoryPulseSubtitle}>
-                          Live inventory position, packing progress, dispatch readiness and data quality in one management view.
-                        </div>
-                      </div>
-
-                      <div style={inventoryPulseHeaderRight}>
-                        <div
-                          style={inventoryHealthBadge(
-                            dataHealthAccent
-                          )}
-                        >
-                          <span
-                            style={inventoryHealthDot(
-                              dataHealthAccent
-                            )}
-                          />
-                          Data Health: {dataHealthLabel}
-                        </div>
-
-                        <div style={inventoryRefreshMeta}>
-                          Updated{" "}
-                          {formatActivityRefreshTime(
-                            lastDashboardRefresh
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={inventoryPulseGrid}>
-                      <InventoryPulseMetric
-                        label="Live Inventory"
-                        value={finalInventoryTotal}
-                        detail="Warehouse + dispatch-ready + ready"
-                        accent="#60a5fa"
-                      />
-
-                      <InventoryPulseMetric
-                        label="Packing Completion"
-                        value={percentLabel(
-                          packetCompletionRate
-                        )}
-                        detail={`${Number(stats.packetItemsWithSticker || 0)} of ${Number(stats.packetItems || 0)} packet items stickered`}
-                        accent="#22c55e"
-                        progress={packetCompletionRate}
-                      />
-
-                      <InventoryPulseMetric
-                        label="Dispatch Ready"
-                        value={Number(
-                          stats.readyToDispatchItems ||
-                          0
-                        )}
-                        detail={`${Math.round(readyToDispatchShare)}% of live inventory`}
-                        accent="#f97316"
-                        progress={readyToDispatchShare}
-                      />
-
-                      <InventoryPulseMetric
-                        label="Today Throughput"
-                        value={dailyThroughput}
-                        detail={`${todayPackedItems} packed • ${todayDispatchedItems} dispatched`}
-                        accent="#06b6d4"
-                      />
-
-                      <InventoryPulseMetric
-                        label="Inventory Accuracy"
-                        value={percentLabel(
-                          inventoryAccuracy
-                        )}
-                        detail={`${currentInventoryExceptions} current exception${currentInventoryExceptions === 1 ? "" : "s"}`}
-                        accent={dataHealthAccent}
-                        progress={inventoryAccuracy}
-                      />
-                    </div>
-                  </div>
-
                   <div style={inventorySectionHeader}>
                     <div>
                       <div style={inventorySectionEyebrow}>
@@ -2413,8 +2326,8 @@ const heroTitle = {
 
 const heroSubtitle = {
   marginTop: 6,
-  fontSize: 14,
-  color: "rgba(255,255,255,.72)",
+  fontSize: 15,
+  color: "#d6e0ee",
 };
 
 const heroActions = {
@@ -2480,8 +2393,8 @@ const inventoryPulseHeader = {
 };
 
 const inventorySectionEyebrow = {
-  color: "#60a5fa",
-  fontSize: 9,
+  color: "#93c5fd",
+  fontSize: 10.5,
   fontWeight: 950,
   letterSpacing: ".13em",
   textTransform: "uppercase",
@@ -2627,8 +2540,8 @@ const inventoryPulseFill = (
 });
 
 const inventorySectionHeader = {
-  marginTop: 2,
-  marginBottom: -2,
+  marginTop: 4,
+  marginBottom: 2,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-end",
@@ -2637,15 +2550,15 @@ const inventorySectionHeader = {
 
 const inventorySectionTitle = {
   marginTop: 3,
-  color: "#f8fafc",
-  fontSize: 17,
+  color: "#ffffff",
+  fontSize: 19,
   fontWeight: 950,
 };
 
 const inventorySectionCount = {
-  padding: "5px 8px",
+  padding: "6px 9px",
   borderRadius: 999,
-  color: "#94a3b8",
+  color: "#dbeafe",
   background:
     "rgba(148,163,184,.06)",
   border:
@@ -2750,8 +2663,8 @@ const inventoryStatIcon = (accent) => ({
 
 const inventoryStatTitle = {
   minWidth: 0,
-  color: "#cbd5e1",
-  fontSize: 9.2,
+  color: "#f1f5f9",
+  fontSize: 10.4,
   fontWeight: 950,
   letterSpacing: ".055em",
   textTransform: "uppercase",
@@ -2819,8 +2732,8 @@ const inventoryStatSubtle = {
   zIndex: 1,
   minHeight: 29,
   marginTop: 6,
-  color: "#718096",
-  fontSize: 9.5,
+  color: "#bcc8d8",
+  fontSize: 10.5,
   fontWeight: 700,
   lineHeight: 1.42,
 };
@@ -2837,8 +2750,8 @@ const inventoryProgressMeta = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 8,
-  color: "#64748b",
-  fontSize: 8.5,
+  color: "#aebdd0",
+  fontSize: 9.4,
   fontWeight: 800,
 };
 
@@ -2878,8 +2791,8 @@ const inventoryStatFooter = {
 
 const inventoryTrendLabel = {
   minWidth: 0,
-  color: "#64748b",
-  fontSize: 8.5,
+  color: "#9fb0c6",
+  fontSize: 9.3,
   fontWeight: 750,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -2891,8 +2804,8 @@ const inventoryLiveDotWrap = {
   display: "inline-flex",
   alignItems: "center",
   gap: 4,
-  color: "#64748b",
-  fontSize: 7.8,
+  color: "#9fb0c6",
+  fontSize: 8.5,
   fontWeight: 950,
   letterSpacing: ".055em",
 };
@@ -3001,8 +2914,8 @@ const trendLabelStyle = {
   position: "relative",
   zIndex: 1,
   marginTop: 7,
-  color: "rgba(255,255,255,.42)",
-  fontSize: 11,
+  color: "rgba(255,255,255,.68)",
+  fontSize: 11.2,
   fontWeight: 750,
 };
 
@@ -3013,9 +2926,9 @@ const sectionTitle = {
 };
 
 const sectionSubtitle = {
-  fontSize: 13,
+  fontSize: 14,
   marginTop: 4,
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(255,255,255,.82)",
 };
 
 
@@ -3064,7 +2977,7 @@ const statCard = (accent, clickable = false, active = false) => ({
 const statTitle = {
   position: "relative",
   zIndex: 1,
-  color: "rgba(255,255,255,.56)",
+  color: "rgba(255,255,255,.82)",
   marginBottom: 7,
   fontSize: 10.5,
   fontWeight: 950,
@@ -3086,9 +2999,9 @@ const statSubtle = {
   position: "relative",
   zIndex: 1,
   marginTop: 7,
-  fontSize: 10.5,
-  fontWeight: 700,
-  color: "rgba(255,255,255,.50)",
+  fontSize: 11,
+  fontWeight: 750,
+  color: "rgba(255,255,255,.74)",
 };
 
 const statClickHint = {
@@ -3132,8 +3045,8 @@ const detailTitle = {
 
 const detailSubtitle = {
   marginTop: 4,
-  fontSize: 13,
-  color: "rgba(255,255,255,.58)",
+  fontSize: 13.5,
+  color: "rgba(255,255,255,.78)",
 };
 
 const detailTotalBox = {
@@ -3150,9 +3063,9 @@ const detailTotalBox = {
   flexDirection: "column",
   gap: 4,
 
-  color: "rgba(255,255,255,.68)",
+  color: "rgba(255,255,255,.84)",
 
-  fontSize: 12,
+  fontSize: 12.5,
   fontWeight: 700,
 };
 
@@ -3252,8 +3165,8 @@ const modalTitle = {
 
 const modalSubtitle = {
   marginTop: 5,
-  fontSize: 13,
-  color: "rgba(255,255,255,.56)",
+  fontSize: 13.5,
+  color: "rgba(255,255,255,.78)",
 };
 
 const modalCloseBtn = {
@@ -3380,9 +3293,9 @@ const modalError = {
 };
 
 const detailItemLabel = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "rgba(255,255,255,.62)",
+  fontSize: 12.5,
+  fontWeight: 850,
+  color: "rgba(255,255,255,.82)",
   textTransform: "uppercase",
   letterSpacing: ".06em",
 };
@@ -3396,8 +3309,8 @@ const detailItemValue = {
 
 const detailItemSubtle = {
   marginTop: 6,
-  fontSize: 12,
-  color: "rgba(255,255,255,.52)",
+  fontSize: 12.3,
+  color: "rgba(255,255,255,.72)",
 };
 
 const adminPanel = {
@@ -3440,9 +3353,11 @@ const metricValue = {
 const metricSubtle = {
   marginTop: 8,
 
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(255,255,255,.78)",
 
-  fontSize: 13,
+  fontSize: 13.5,
+  fontWeight: 650,
+  lineHeight: 1.5,
 };
 
 const agingGrid = {
@@ -3484,11 +3399,11 @@ const insightItem = {
   background:
     "rgba(255,255,255,.04)",
 
-  color: "rgba(255,255,255,.82)",
+  color: "rgba(255,255,255,.92)",
 
   fontSize: 14,
 
-  fontWeight: 600,
+  fontWeight: 650,
 
   border:
     "1px solid rgba(255,255,255,.05)",
@@ -3611,9 +3526,9 @@ const throughputMiniValue = {
 
 const throughputMiniSubtle = {
   marginTop: 6,
-  fontSize: 12,
-  fontWeight: 700,
-  color: "rgba(255,255,255,.56)",
+  fontSize: 12.3,
+  fontWeight: 750,
+  color: "rgba(255,255,255,.76)",
 };
 
 const throughputMiniHint = {
@@ -3670,8 +3585,8 @@ const chartPanelTitle = {
 const chartPanelSubtitle = {
   maxWidth: 560,
   marginTop: 4,
-  fontSize: 10.5,
-  color: "#8795aa",
+  fontSize: 11.5,
+  color: "#c0cad8",
   fontWeight: 650,
   lineHeight: 1.5,
 };
@@ -3698,14 +3613,14 @@ const chartModeBtn = (active) => ({
   alignItems: "center",
   gap: 6,
   color: active
-    ? "#e0f2fe"
-    : "#64748b",
+    ? "#ffffff"
+    : "#b1bfd0",
   background: active
     ? "linear-gradient(135deg,rgba(37,99,235,.28),rgba(59,130,246,.13))"
     : "transparent",
   cursor: "pointer",
   fontFamily: "inherit",
-  fontSize: 8.8,
+  fontSize: 9.8,
   fontWeight: 900,
   transition:
     "background .16s ease,border-color .16s ease,color .16s ease",
@@ -3753,8 +3668,8 @@ const chartStatusCopy = {
 };
 
 const chartStatusLabel = {
-  color: "#8b9aaf",
-  fontSize: 8.4,
+  color: "#d4deea",
+  fontSize: 9.4,
   fontWeight: 850,
   textTransform: "uppercase",
   letterSpacing: ".045em",
@@ -3766,8 +3681,8 @@ const chartStatusValueRow = {
   justifyContent: "space-between",
   alignItems: "baseline",
   gap: 7,
-  color: "#64748b",
-  fontSize: 8.5,
+  color: "#aebdd0",
+  fontSize: 9.4,
   fontWeight: 800,
 };
 
@@ -3838,8 +3753,8 @@ const chartInsightItem = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  color: "#7f8ea3",
-  fontSize: 8.8,
+  color: "#b5c1d1",
+  fontSize: 9.6,
   fontWeight: 700,
 };
 
@@ -3890,8 +3805,8 @@ const activityPanelTitle = {
 const activityPanelSubtitle = {
   maxWidth: 360,
   marginTop: 4,
-  color: "#8795aa",
-  fontSize: 10.5,
+  color: "#c0cad8",
+  fontSize: 11.5,
   fontWeight: 650,
   lineHeight: 1.45,
 };
@@ -3975,8 +3890,8 @@ const activitySignalDot = (accent) => ({
 });
 
 const activitySignalLabel = {
-  color: "#64748b",
-  fontSize: 7.6,
+  color: "#aebdd0",
+  fontSize: 8.5,
   fontWeight: 850,
   textTransform: "uppercase",
   letterSpacing: ".04em",
@@ -3990,22 +3905,22 @@ const activitySignalValue = {
 };
 
 const activityLatestMeta = {
-  minHeight: 30,
+  minHeight: 32,
   marginTop: 8,
-  padding: "6px 8px",
+  padding: "7px 9px",
   borderRadius: 9,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
-  color: "#64748b",
+  color: "#aebdd0",
   background:
     "rgba(148,163,184,.025)",
   border:
     "1px solid rgba(148,163,184,.045)",
-  fontSize: 7.9,
-  fontWeight: 700,
+  fontSize: 8.9,
+  fontWeight: 800,
 };
 
 const activityFeedShell = {

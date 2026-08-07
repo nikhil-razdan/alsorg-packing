@@ -348,8 +348,8 @@ const summaryStrip = {
 };
 
 const summaryLabel = {
-  color: "#536177",
-  fontSize: 7.2,
+  color: "#93a4ba",
+  fontSize: 8,
   fontWeight: 950,
   textTransform: "uppercase",
   letterSpacing: ".075em",
@@ -357,8 +357,8 @@ const summaryLabel = {
 
 const summaryValue = {
   marginTop: 3,
-  color: "#dbe4ef",
-  fontSize: 9.3,
+  color: "#f1f5f9",
+  fontSize: 10.1,
   fontWeight: 900,
 };
 
@@ -372,8 +372,8 @@ const summaryMetric = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-end",
-  color: "#536177",
-  fontSize: 6.8,
+  color: "#93a4ba",
+  fontSize: 10,
   fontWeight: 800,
 };
 
@@ -430,8 +430,8 @@ const legendDot = {
 };
 
 const legendLabel = {
-  color: "#cbd5e1",
-  fontSize: 8.3,
+  color: "#e2e8f0",
+  fontSize: 9.1,
   fontWeight: 850,
 };
 
@@ -440,8 +440,8 @@ const legendNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 4,
-  color: "#64748b",
-  fontSize: 7.2,
+  color: "#aebdd0",
+  fontSize: 8,
   fontWeight: 800,
 };
 
@@ -464,8 +464,8 @@ const emptyState = {
   minHeight: 280,
   display: "grid",
   placeItems: "center",
-  color: "#536177",
-  fontSize: 8.5,
+  color: "#93a4ba",
+  fontSize: 10.1,
   fontWeight: 800,
 };
 

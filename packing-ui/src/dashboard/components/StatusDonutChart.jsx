@@ -282,8 +282,8 @@ const donutCenter = {
 };
 
 const donutCenterLabel = {
-  color: "#64748b",
-  fontSize: 7.8,
+  color: "#aebdd0",
+  fontSize: 9.4,
   fontWeight: 950,
   letterSpacing: ".07em",
   textTransform: "uppercase",
@@ -300,8 +300,8 @@ const donutCenterValue = {
 
 const donutCenterSub = {
   marginTop: 5,
-  color: "#475569",
-  fontSize: 7.5,
+  color: "#8797ad",
+  fontSize: 9.1,
   fontWeight: 750,
 };
 
@@ -317,8 +317,8 @@ const legendPanel = {
 
 const legendEyebrow = {
   marginBottom: 5,
-  color: "#536177",
-  fontSize: 7.2,
+  color: "#93a4ba",
+  fontSize: 8,
   fontWeight: 950,
   letterSpacing: ".09em",
 };
@@ -355,15 +355,15 @@ const legendTextWrap = {
 };
 
 const legendLabel = {
-  color: "#dbe4ef",
-  fontSize: 8.6,
+  color: "#f1f5f9",
+  fontSize: 9.4,
   fontWeight: 900,
 };
 
 const legendDetail = {
   marginTop: 2,
-  color: "#475569",
-  fontSize: 6.8,
+  color: "#8797ad",
+  fontSize: 10,
   fontWeight: 700,
 };
 
@@ -372,8 +372,8 @@ const legendNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 5,
-  color: "#64748b",
-  fontSize: 7.4,
+  color: "#aebdd0",
+  fontSize: 8.2,
   fontWeight: 800,
 };
 
@@ -393,8 +393,8 @@ const shareFill = {
 
 const legendFooter = {
   paddingTop: 7,
-  color: "#475569",
-  fontSize: 6.7,
+  color: "#8797ad",
+  fontSize: 9.1,
   fontWeight: 650,
   lineHeight: 1.4,
 };
@@ -424,8 +424,8 @@ const emptyTitle = {
 const emptyText = {
   maxWidth: 250,
   marginTop: 4,
-  color: "#536177",
-  fontSize: 7.6,
+  color: "#93a4ba",
+  fontSize: 10,
   lineHeight: 1.45,
   fontWeight: 700,
 };

@@ -222,14 +222,14 @@ const summaryRow = {
 
 const eyebrow = {
   color: "#60a5fa",
-  fontSize: 7.1,
+  fontSize: 7.9,
   fontWeight: 950,
   letterSpacing: ".085em",
 };
 
 const summaryTitle = {
   marginTop: 3,
-  color: "#dbe4ef",
+  color: "#f1f5f9",
   fontSize: 9.7,
   fontWeight: 900,
 };
@@ -246,7 +246,7 @@ const summaryBadge = {
     "rgba(249,115,22,.06)",
   border:
     "1px solid rgba(249,115,22,.13)",
-  fontSize: 6.8,
+  fontSize: 10,
   fontWeight: 850,
 };
 
@@ -278,7 +278,7 @@ const stepBadge = (accent) => ({
   color: accent,
   background: `${accent}0E`,
   border: `1px solid ${accent}22`,
-  fontSize: 7.8,
+  fontSize: 9.4,
   fontWeight: 950,
 });
 
@@ -294,15 +294,15 @@ const flowHeader = {
 };
 
 const flowLabel = {
-  color: "#dbe4ef",
-  fontSize: 8.8,
+  color: "#f1f5f9",
+  fontSize: 9.6,
   fontWeight: 900,
 };
 
 const flowNote = {
   marginTop: 2,
-  color: "#475569",
-  fontSize: 6.8,
+  color: "#8797ad",
+  fontSize: 10,
   fontWeight: 700,
 };
 
@@ -310,8 +310,8 @@ const flowNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 5,
-  color: "#64748b",
-  fontSize: 7.3,
+  color: "#aebdd0",
+  fontSize: 8.1,
   fontWeight: 800,
 };
 
@@ -358,12 +358,12 @@ const footerMetric = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 5,
-  color: "#536177",
+  color: "#93a4ba",
   background:
     "rgba(2,6,23,.20)",
   border:
     "1px solid rgba(148,163,184,.045)",
-  fontSize: 6.8,
+  fontSize: 10,
   fontWeight: 750,
 };
 
@@ -372,8 +372,8 @@ const emptyState = {
   minHeight: 280,
   display: "grid",
   placeItems: "center",
-  color: "#536177",
-  fontSize: 8.5,
+  color: "#93a4ba",
+  fontSize: 10.1,
   fontWeight: 800,
 };
 
