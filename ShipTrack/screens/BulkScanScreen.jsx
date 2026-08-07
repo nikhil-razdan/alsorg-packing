@@ -375,6 +375,7 @@ export default function BulkScanScreen({
       driverId: "",
       vehicleId: "",
       tripStart: getNowDateTimeLocal(),
+      helperLoaderCount: "",
       remarks: "",
     });
 
@@ -1264,6 +1265,9 @@ export default function BulkScanScreen({
           tripStart:
             selectedDispatchTime,
 
+          helperLoaderCount:
+            form.helperLoaderCount,
+
           remarks:
             form.remarks || "",
         });
@@ -1288,6 +1292,7 @@ export default function BulkScanScreen({
 
               setForm((prev) => ({
                 ...prev,
+                helperLoaderCount: "",
                 remarks: "",
                 tripStart: getNowDateTimeLocal(),
               }));
@@ -1696,6 +1701,30 @@ export default function BulkScanScreen({
               update("tripStart", value)
             }
           />
+
+          <Field label="Helpers / Loaders (Optional)">
+            <TextInput
+              value={form.helperLoaderCount}
+              onChangeText={(value) =>
+                update(
+                  "helperLoaderCount",
+                  String(value || "")
+                    .replace(/\D/g, "")
+                    .slice(0, 3)
+                )
+              }
+              placeholder="Enter total helpers / loaders"
+              placeholderTextColor="#64748b"
+              keyboardType="number-pad"
+              maxLength={3}
+              editable={!dispatching}
+              style={styles.input}
+            />
+
+            <Text style={styles.fieldHint}>
+              Enter a whole number from 0 to 999. Blank or 0 means not specified.
+            </Text>
+          </Field>
 
           <Field label="Remarks">
             <TextInput
@@ -3279,6 +3308,14 @@ const styles = {
     color: "#fff",
     paddingHorizontal: 14,
     fontWeight: "700",
+  },
+
+  fieldHint: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 15,
+    marginTop: 7,
   },
 
   textarea: {
