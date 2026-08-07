@@ -7,302 +7,374 @@ function StatusCorporateChart({
     {
       key: "warehouse",
       label: "Warehouse",
-      short: "WH",
-      value: Number(warehouse || 0),
-      color: "#60a5fa",
+      short: "01",
+      value: Number(
+        warehouse || 0
+      ),
+      color: "#38bdf8",
       note: "Stored inventory",
     },
     {
       key: "readyToDispatch",
-      label: "Ready to Dispatch",
-      short: "RTD",
-      value: Number(readyToDispatch || 0),
-      color: "#f59e0b",
-      note: "Dispatch pending",
+      label:
+        "Ready to Dispatch",
+      short: "02",
+      value: Number(
+        readyToDispatch || 0
+      ),
+      color: "#f97316",
+      note: "Dispatch queue",
     },
     {
       key: "ready",
       label: "Ready",
-      short: "RDY",
-      value: Number(ready || 0),
-      color: "#34d399",
-      note: "Operational ready stock",
+      short: "03",
+      value: Number(
+        ready || 0
+      ),
+      color: "#22c55e",
+      note:
+        "Processed / ready stock",
     },
   ];
 
   const total =
-    rows.reduce((sum, row) => sum + row.value, 0);
+    rows.reduce(
+      (sum, row) =>
+        sum + row.value,
+      0
+    );
 
   const max =
-    Math.max(...rows.map((row) => row.value), 1);
+    Math.max(
+      ...rows.map(
+        (row) =>
+          row.value
+      ),
+      1
+    );
+
+  if (total <= 0) {
+    return (
+      <div style={emptyState}>
+        No operational flow data available
+      </div>
+    );
+  }
 
   return (
-    <div style={card}>
-      <div style={chartHeader}>
+    <div style={root}>
+      <div style={summaryRow}>
         <div>
-          <div style={chartTitle}>
-            Inventory Board
+          <div style={eyebrow}>
+            CURRENT FLOW POSITION
           </div>
 
-          <div style={chartSubtitle}>
-            Board-room view of stock distribution
+          <div style={summaryTitle}>
+            {total} tracked inventory items
           </div>
         </div>
 
-        <div style={totalBadge}>
-          <span>Total</span>
-          <strong>{total}</strong>
+        <div style={summaryBadge}>
+          <span>
+            Dispatch-ready
+          </span>
+          <strong>
+            {Number(
+              readyToDispatch ||
+              0
+            )}
+          </strong>
         </div>
       </div>
 
-      <div style={body}>
-        <div style={scoreGrid}>
-          {rows.map((row) => {
-            const percentage =
-              total > 0
-                ? Math.round((row.value / total) * 100)
-                : 0;
+      <div style={flowList}>
+        {rows.map(
+          (row, index) => {
+            const share =
+              (
+                row.value /
+                total
+              ) *
+              100;
+
+            const relative =
+              (
+                row.value /
+                max
+              ) *
+              100;
 
             return (
               <div
                 key={row.key}
-                style={scoreCard(row.color)}
+                style={flowRow}
               >
-                <div style={scoreTop}>
-                  <span style={scoreDot(row.color)} />
-                  <span>{row.short}</span>
+                <div
+                  style={stepBadge(
+                    row.color
+                  )}
+                >
+                  {row.short}
                 </div>
 
-                <div style={scoreValue}>
-                  {row.value}
-                </div>
+                <div style={flowMain}>
+                  <div style={flowHeader}>
+                    <div>
+                      <div style={flowLabel}>
+                        {row.label}
+                      </div>
+                      <div style={flowNote}>
+                        {row.note}
+                      </div>
+                    </div>
 
-                <div style={scoreLabel}>
-                  {percentage}% • {row.note}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={barPanel}>
-          {rows.map((row) => {
-            const width =
-              Math.max(
-                4,
-                Math.round((row.value / max) * 100)
-              );
-
-            const percentage =
-              total > 0
-                ? Math.round((row.value / total) * 100)
-                : 0;
-
-            return (
-              <div
-                key={row.key}
-                style={barRow}
-              >
-                <div style={barHead}>
-                  <div style={barName}>
-                    <span style={scoreDot(row.color)} />
-                    {row.label}
+                    <div style={flowNumbers}>
+                      <strong>
+                        {row.value}
+                      </strong>
+                      <span>
+                        {share.toFixed(
+                          share >= 10
+                            ? 0
+                            : 1
+                        )}
+                        %
+                      </span>
+                    </div>
                   </div>
 
-                  <div style={barValue}>
-                    {row.value} / {percentage}%
+                  <div style={barTrack}>
+                    <div
+                      style={{
+                        ...barFill,
+                        width:
+                          `${relative}%`,
+                        background:
+                          `linear-gradient(90deg,${row.color}88,${row.color})`,
+                        boxShadow:
+                          `0 0 10px ${row.color}36`,
+                      }}
+                    />
                   </div>
                 </div>
 
-                <div style={track}>
-                  <div
-                    style={{
-                      ...fill(row.color),
-                      width: `${width}%`,
-                    }}
-                  />
-                </div>
+                {index <
+                  rows.length -
+                  1 && (
+                    <div style={connector}>
+                      ↓
+                    </div>
+                  )}
               </div>
             );
-          })}
-        </div>
+          }
+        )}
+      </div>
+
+      <div style={footer}>
+        {rows.map((row) => {
+          const share =
+            (
+              row.value /
+              total
+            ) *
+            100;
+
+          return (
+            <div
+              key={row.key}
+              style={footerMetric}
+            >
+              <span>
+                {row.label}
+              </span>
+              <strong>
+                {share.toFixed(0)}%
+              </strong>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-const card = {
+const root = {
   width: "100%",
   height: "100%",
-  minHeight: 0,
-  overflow: "hidden",
-  color: "#fff",
+  minHeight: 300,
+  padding: 3,
   display: "flex",
   flexDirection: "column",
 };
 
-const chartHeader = {
-  flexShrink: 0,
+const summaryRow = {
+  minHeight: 48,
   display: "flex",
+  alignItems: "center",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 10,
+  gap: 10,
+  padding: "3px 4px 9px",
+  borderBottom:
+    "1px solid rgba(148,163,184,.055)",
 };
 
-const chartTitle = {
-  fontSize: 17,
+const eyebrow = {
+  color: "#60a5fa",
+  fontSize: 7.1,
   fontWeight: 950,
-  color: "#fff",
-  letterSpacing: "-.02em",
+  letterSpacing: ".085em",
 };
 
-const chartSubtitle = {
+const summaryTitle = {
   marginTop: 3,
-  fontSize: 10.5,
-  color: "rgba(255,255,255,.52)",
-  fontWeight: 650,
+  color: "#dbe4ef",
+  fontSize: 9.7,
+  fontWeight: 900,
 };
 
-const totalBadge = {
-  minWidth: 66,
-  padding: "7px 9px",
-  borderRadius: 13,
-  background: "rgba(37,99,235,.14)",
-  border: "1px solid rgba(96,165,250,.24)",
+const summaryBadge = {
+  minWidth: 94,
+  padding: "6px 8px",
+  borderRadius: 10,
   display: "flex",
   flexDirection: "column",
-  gap: 2,
-  textAlign: "right",
-  color: "rgba(255,255,255,.72)",
-  fontSize: 10,
+  alignItems: "flex-end",
+  color: "#f97316",
+  background:
+    "rgba(249,115,22,.06)",
+  border:
+    "1px solid rgba(249,115,22,.13)",
+  fontSize: 6.8,
   fontWeight: 850,
 };
 
-const body = {
+const flowList = {
   flex: 1,
-  minHeight: 0,
-  overflow: "hidden",
-  display: "grid",
-  gridTemplateColumns: "minmax(190px,.72fr) minmax(0,1.28fr)",
-  gap: 12,
-  alignItems: "stretch",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  gap: 5,
+  padding: "7px 4px",
 };
 
-const scoreGrid = {
-  minHeight: 0,
+const flowRow = {
+  position: "relative",
+  minHeight: 66,
   display: "grid",
-  gridTemplateRows: "repeat(3,minmax(0,1fr))",
+  gridTemplateColumns:
+    "33px minmax(0,1fr)",
+  gap: 9,
+  alignItems: "center",
+};
+
+const stepBadge = (accent) => ({
+  width: 30,
+  height: 30,
+  borderRadius: 9,
+  display: "grid",
+  placeItems: "center",
+  color: accent,
+  background: `${accent}0E`,
+  border: `1px solid ${accent}22`,
+  fontSize: 7.8,
+  fontWeight: 950,
+});
+
+const flowMain = {
+  minWidth: 0,
+};
+
+const flowHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 8,
 };
 
-const scoreCard = (accent) => ({
-  minHeight: 0,
-  overflow: "hidden",
-  padding: "9px 10px",
-  borderRadius: 14,
-  background:
-    `radial-gradient(circle at top right, ${accent}1F, transparent 42%), rgba(255,255,255,.034)`,
-  border: `1px solid ${accent}30`,
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-});
-
-const scoreTop = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  color: "rgba(255,255,255,.62)",
-  fontSize: 9.5,
-  fontWeight: 950,
-  letterSpacing: ".07em",
+const flowLabel = {
+  color: "#dbe4ef",
+  fontSize: 8.8,
+  fontWeight: 900,
 };
 
-const scoreDot = (accent) => ({
-  width: 7,
-  height: 7,
+const flowNote = {
+  marginTop: 2,
+  color: "#475569",
+  fontSize: 6.8,
+  fontWeight: 700,
+};
+
+const flowNumbers = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: 5,
+  color: "#64748b",
+  fontSize: 7.3,
+  fontWeight: 800,
+};
+
+const barTrack = {
+  height: 6,
+  marginTop: 7,
+  overflow: "hidden",
   borderRadius: 999,
-  background: accent,
-  boxShadow: `0 0 12px ${accent}88`,
-  flexShrink: 0,
-});
-
-const scoreValue = {
-  marginTop: 5,
-  fontSize: 20,
-  lineHeight: 1,
-  fontWeight: 950,
-};
-
-const scoreLabel = {
-  marginTop: 4,
-  color: "rgba(255,255,255,.46)",
-  fontSize: 9.5,
-  fontWeight: 750,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const barPanel = {
-  minHeight: 0,
-  overflow: "hidden",
-  padding: 12,
-  borderRadius: 16,
   background:
-    "linear-gradient(180deg, rgba(2,6,23,.36), rgba(2,6,23,.22))",
-  border: "1px solid rgba(255,255,255,.055)",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  gap: 13,
+    "rgba(148,163,184,.07)",
 };
 
-const barRow = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
+const barFill = {
+  height: "100%",
+  minWidth: 3,
+  borderRadius: 999,
 };
 
-const barHead = {
+const connector = {
+  position: "absolute",
+  left: 10,
+  bottom: -7,
+  color: "#334155",
+  fontSize: 9,
+  fontWeight: 900,
+};
+
+const footer = {
+  minHeight: 42,
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3,minmax(0,1fr))",
+  gap: 5,
+  paddingTop: 7,
+  borderTop:
+    "1px solid rgba(148,163,184,.055)",
+};
+
+const footerMetric = {
+  minWidth: 0,
+  padding: "6px 7px",
+  borderRadius: 8,
   display: "flex",
   justifyContent: "space-between",
-  gap: 10,
   alignItems: "center",
+  gap: 5,
+  color: "#536177",
+  background:
+    "rgba(2,6,23,.20)",
+  border:
+    "1px solid rgba(148,163,184,.045)",
+  fontSize: 6.8,
+  fontWeight: 750,
 };
 
-const barName = {
-  display: "flex",
-  alignItems: "center",
-  gap: 7,
-  color: "#fff",
-  fontSize: 11.5,
-  fontWeight: 950,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
+const emptyState = {
+  width: "100%",
+  minHeight: 280,
+  display: "grid",
+  placeItems: "center",
+  color: "#536177",
+  fontSize: 8.5,
+  fontWeight: 800,
 };
-
-const barValue = {
-  color: "rgba(255,255,255,.58)",
-  fontSize: 10.5,
-  fontWeight: 900,
-  whiteSpace: "nowrap",
-};
-
-const track = {
-  height: 8,
-  borderRadius: 999,
-  background: "rgba(255,255,255,.07)",
-  overflow: "hidden",
-};
-
-const fill = (accent) => ({
-  height: "100%",
-  borderRadius: 999,
-  background: `linear-gradient(90deg, ${accent}, ${accent}99)`,
-  boxShadow: `0 0 16px ${accent}55`,
-});
 
 export default StatusCorporateChart;

@@ -7,239 +7,316 @@ function StatusBarChart({
     {
       key: "warehouse",
       label: "Warehouse",
-      value: Number(warehouse || 0),
-      color: "#60a5fa",
-      soft: "rgba(96,165,250,.16)",
-      gradientId: "barWarehouseGradient",
+      short: "WH",
+      value: Number(
+        warehouse || 0
+      ),
+      color: "#38bdf8",
+      gradientId:
+        "inventoryBarWarehouse",
     },
     {
       key: "readyToDispatch",
-      label: "Ready to Dispatch",
-      value: Number(readyToDispatch || 0),
-      color: "#f59e0b",
-      soft: "rgba(245,158,11,.16)",
-      gradientId: "barDispatchGradient",
+      label:
+        "Ready to Dispatch",
+      short: "RTD",
+      value: Number(
+        readyToDispatch || 0
+      ),
+      color: "#f97316",
+      gradientId:
+        "inventoryBarDispatch",
     },
     {
       key: "ready",
       label: "Ready",
-      value: Number(ready || 0),
-      color: "#34d399",
-      soft: "rgba(52,211,153,.16)",
-      gradientId: "barReadyGradient",
+      short: "RDY",
+      value: Number(
+        ready || 0
+      ),
+      color: "#22c55e",
+      gradientId:
+        "inventoryBarReady",
     },
   ];
 
-  const total = items.reduce(
-    (sum, item) => sum + item.value,
-    0
-  );
+  const total =
+    items.reduce(
+      (sum, item) =>
+        sum + item.value,
+      0
+    );
 
-  const max = Math.max(
-    ...items.map((item) => item.value),
-    1
-  );
+  const max =
+    Math.max(
+      ...items.map(
+        (item) =>
+          item.value
+      ),
+      1
+    );
 
-  const baseY = 178;
-  const maxBarHeight = 112;
+  const highest =
+    [...items].sort(
+      (a, b) =>
+        b.value -
+        a.value
+    )[0];
+
+  const baseY = 185;
+  const maxBarHeight = 120;
+
+  if (total <= 0) {
+    return (
+      <div style={emptyState}>
+        No inventory volume available
+      </div>
+    );
+  }
 
   return (
-    <div style={chartCard}>
-      <div style={chartHeader}>
+    <div style={root}>
+      <div style={summaryStrip}>
         <div>
-          <div style={chartTitle}>Status Volume</div>
-
-          <div style={chartSubtitle}>
-            Stage-wise count comparison across current stock status
+          <div style={summaryLabel}>
+            Largest Stock Bucket
+          </div>
+          <div style={summaryValue}>
+            {highest.label}
           </div>
         </div>
 
-        <div style={totalBadge}>
-          <span>Total</span>
-          <strong>{total}</strong>
+        <div style={summaryRight}>
+          <div style={summaryMetric}>
+            <span>Total</span>
+            <strong>
+              {total}
+            </strong>
+          </div>
+
+          <div style={summaryMetric}>
+            <span>Largest</span>
+            <strong>
+              {highest.value}
+            </strong>
+          </div>
         </div>
       </div>
 
-      <div style={barLayout}>
+      <div style={chartLayout}>
         <div style={barWrap}>
           <svg
             width="100%"
             height="100%"
-            viewBox="0 0 220 220"
+            viewBox="0 0 260 230"
             preserveAspectRatio="xMidYMid meet"
           >
             <defs>
               <linearGradient
-                id="barWarehouseGradient"
+                id="inventoryBarWarehouse"
                 x1="0"
                 x2="0"
                 y1="0"
                 y2="1"
               >
-                <stop offset="0%" stopColor="#bfdbfe" />
-                <stop offset="100%" stopColor="#3b82f6" />
-              </linearGradient>
-
-              <linearGradient
-                id="barDispatchGradient"
-                x1="0"
-                x2="0"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#fde68a" />
-                <stop offset="100%" stopColor="#f59e0b" />
-              </linearGradient>
-
-              <linearGradient
-                id="barReadyGradient"
-                x1="0"
-                x2="0"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#a7f3d0" />
-                <stop offset="100%" stopColor="#10b981" />
-              </linearGradient>
-
-              <filter
-                id="barGlow"
-                x="-30%"
-                y="-30%"
-                width="160%"
-                height="160%"
-              >
-                <feGaussianBlur
-                  stdDeviation="3"
-                  result="blur"
+                <stop
+                  offset="0%"
+                  stopColor="#7dd3fc"
                 />
+                <stop
+                  offset="100%"
+                  stopColor="#0284c7"
+                />
+              </linearGradient>
 
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
+              <linearGradient
+                id="inventoryBarDispatch"
+                x1="0"
+                x2="0"
+                y1="0"
+                y2="1"
+              >
+                <stop
+                  offset="0%"
+                  stopColor="#fdba74"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="#ea580c"
+                />
+              </linearGradient>
+
+              <linearGradient
+                id="inventoryBarReady"
+                x1="0"
+                x2="0"
+                y1="0"
+                y2="1"
+              >
+                <stop
+                  offset="0%"
+                  stopColor="#86efac"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="#16a34a"
+                />
+              </linearGradient>
             </defs>
 
-            {[66, 94, 122, 150, 178].map((y) => (
-              <line
-                key={y}
-                x1="26"
-                y1={y}
-                x2="198"
-                y2={y}
-                stroke="rgba(255,255,255,.07)"
-                strokeDasharray="4 7"
-              />
-            ))}
+            {[65, 95, 125, 155, 185].map(
+              (y) => (
+                <line
+                  key={y}
+                  x1="30"
+                  y1={y}
+                  x2="232"
+                  y2={y}
+                  stroke="rgba(148,163,184,.08)"
+                  strokeDasharray="4 6"
+                />
+              )
+            )}
 
             <line
-              x1="26"
+              x1="30"
               y1={baseY}
-              x2="198"
+              x2="232"
               y2={baseY}
-              stroke="rgba(255,255,255,.16)"
+              stroke="rgba(148,163,184,.16)"
             />
 
-            {items.map((item, index) => {
-              const x = 44 + index * 56;
+            {items.map(
+              (item, index) => {
+                const x =
+                  53 +
+                  index * 67;
 
-              const height =
-                item.value === 0
-                  ? 5
-                  : Math.max(
-                    (item.value / max) * maxBarHeight,
-                    9
-                  );
+                const height =
+                  item.value === 0
+                    ? 4
+                    : Math.max(
+                      (
+                        item.value /
+                        max
+                      ) *
+                      maxBarHeight,
+                      8
+                    );
 
-              const y = baseY - height;
+                const y =
+                  baseY -
+                  height;
 
-              return (
-                <g key={item.key}>
-                  <rect
-                    x={x - 6}
-                    y="58"
-                    width="42"
-                    height="120"
-                    rx="14"
-                    fill="rgba(255,255,255,.025)"
-                    stroke="rgba(255,255,255,.045)"
-                  />
-
-                  <rect
-                    x={x}
-                    y={y}
-                    width="30"
-                    height={height}
-                    rx="10"
-                    fill={`url(#${item.gradientId})`}
-                    filter="url(#barGlow)"
-                  />
-
-                  <text
-                    x={x + 15}
-                    y={y - 9}
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    fontSize="12"
-                    fontWeight="900"
+                return (
+                  <g
+                    key={item.key}
                   >
-                    {item.value}
-                  </text>
+                    <rect
+                      x={x - 7}
+                      y="58"
+                      width="42"
+                      height="127"
+                      rx="12"
+                      fill="rgba(148,163,184,.025)"
+                      stroke="rgba(148,163,184,.045)"
+                    />
 
-                  <text
-                    x={x + 15}
-                    y="205"
-                    textAnchor="middle"
-                    fill="rgba(255,255,255,.58)"
-                    fontSize="10"
-                    fontWeight="900"
-                  >
-                    {shortLabel(item.label)}
-                  </text>
-                </g>
-              );
-            })}
+                    <rect
+                      x={x}
+                      y={y}
+                      width="28"
+                      height={
+                        height
+                      }
+                      rx="8"
+                      fill={`url(#${item.gradientId})`}
+                    />
+
+                    <text
+                      x={x + 14}
+                      y={y - 8}
+                      textAnchor="middle"
+                      fill="#e2e8f0"
+                      fontSize="10"
+                      fontWeight="900"
+                    >
+                      {item.value}
+                    </text>
+
+                    <text
+                      x={x + 14}
+                      y="211"
+                      textAnchor="middle"
+                      fill="#64748b"
+                      fontSize="8.5"
+                      fontWeight="900"
+                    >
+                      {item.short}
+                    </text>
+                  </g>
+                );
+              }
+            )}
           </svg>
         </div>
 
         <div style={legendPanel}>
           {items.map((item) => {
-            const percentage =
-              total > 0
-                ? Math.round((item.value / total) * 100)
-                : 0;
+            const share =
+              (
+                item.value /
+                total
+              ) *
+              100;
 
             return (
-              <div key={item.key} style={legendRow}>
-                <div style={legendLeft}>
-                  <span
-                    style={{
-                      ...legendDot,
-                      background: item.color,
-                      boxShadow: `0 0 18px ${item.color}66`,
-                    }}
-                  />
+              <div
+                key={item.key}
+                style={legendRow}
+              >
+                <div style={legendTop}>
+                  <div style={legendIdentity}>
+                    <span
+                      style={{
+                        ...legendDot,
+                        background:
+                          item.color,
+                        boxShadow:
+                          `0 0 8px ${item.color}55`,
+                      }}
+                    />
 
-                  <div style={legendTextWrap}>
-                    <div style={legendLabel}>
+                    <span style={legendLabel}>
                       {item.label}
-                    </div>
+                    </span>
+                  </div>
 
-                    <div style={legendPercent}>
-                      {percentage}% of inventory
-                    </div>
+                  <div style={legendNumbers}>
+                    <strong>
+                      {item.value}
+                    </strong>
+                    <span>
+                      {share.toFixed(
+                        share >= 10
+                          ? 0
+                          : 1
+                      )}
+                      %
+                    </span>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    ...legendValue,
-                    background: item.soft,
-                    color: item.color,
-                  }}
-                >
-                  {item.value}
+                <div style={shareTrack}>
+                  <div
+                    style={{
+                      ...shareFill,
+                      width:
+                        `${share}%`,
+                      background:
+                        item.color,
+                    }}
+                  />
                 </div>
               </div>
             );
@@ -250,159 +327,146 @@ function StatusBarChart({
   );
 }
 
-const shortLabel = (label) => {
-  if (label === "Warehouse") return "WH";
-  if (label === "Ready to Dispatch") return "RTD";
-  return "RDY";
-};
-
-const chartCard = {
+const root = {
   width: "100%",
   height: "100%",
-
-  minHeight: 0,
-
-  color: "#fff",
-
+  minHeight: 300,
   display: "flex",
   flexDirection: "column",
 };
 
-const chartHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 16,
-  marginBottom: 18,
-};
-
-const chartTitle = {
-  fontSize: 17,
-  fontWeight: 950,
-  color: "#fff",
-};
-
-const chartSubtitle = {
-  marginTop: 4,
-  fontSize: 11,
-  color: "rgba(255,255,255,.52)",
-  fontWeight: 650,
-};
-
-const chartBadge = {
-  minWidth: 38,
-  height: 38,
-  borderRadius: 14,
+const summaryStrip = {
+  minHeight: 43,
+  padding: "0 4px 7px",
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
-  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-  boxShadow: "0 10px 22px rgba(37,99,235,.26)",
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 950,
+  justifyContent:
+    "space-between",
+  gap: 10,
+  borderBottom:
+    "1px solid rgba(148,163,184,.055)",
 };
 
-const barLayout = {
+const summaryLabel = {
+  color: "#536177",
+  fontSize: 7.2,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".075em",
+};
+
+const summaryValue = {
+  marginTop: 3,
+  color: "#dbe4ef",
+  fontSize: 9.3,
+  fontWeight: 900,
+};
+
+const summaryRight = {
+  display: "flex",
+  alignItems: "center",
+  gap: 15,
+};
+
+const summaryMetric = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  color: "#536177",
+  fontSize: 6.8,
+  fontWeight: 800,
+};
+
+const chartLayout = {
   flex: 1,
-
   minHeight: 0,
-
   display: "grid",
-
-  gridTemplateColumns: "minmax(210px,240px) minmax(0,1fr)",
-
-  gap: 24,
-
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 10,
   alignItems: "center",
-};
-
-const totalBadge = {
-  minWidth: 66,
-  padding: "7px 9px",
-  borderRadius: 13,
-  background: "rgba(37,99,235,.14)",
-  border: "1px solid rgba(96,165,250,.24)",
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-  textAlign: "right",
-  color: "rgba(255,255,255,.72)",
-  fontSize: 10,
-  fontWeight: 850,
 };
 
 const barWrap = {
-  position: "relative",
-  width: "100%",
-  aspectRatio: "1 / 1",
-  maxHeight: 220,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+  height: 260,
+  minWidth: 0,
 };
 
 const legendPanel = {
-  display: "flex",
-
-  flexDirection: "column",
-
-  gap: 12,
+  minWidth: 0,
+  padding: 10,
+  borderRadius: 13,
+  background:
+    "rgba(2,6,23,.22)",
+  border:
+    "1px solid rgba(148,163,184,.05)",
 };
 
 const legendRow = {
+  padding: "9px 0",
+  borderBottom:
+    "1px solid rgba(148,163,184,.045)",
+};
+
+const legendTop = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 10,
-  padding: "10px 11px",
-  borderRadius: 14,
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.050), rgba(255,255,255,.022))",
-  border: "1px solid rgba(255,255,255,.065)",
+  gap: 8,
 };
 
-const legendLeft = {
+const legendIdentity = {
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
-  gap: 10,
-  minWidth: 0,
-};
-
-const legendTextWrap = {
-  minWidth: 0,
+  gap: 7,
 };
 
 const legendDot = {
-  width: 11,
-  height: 11,
-  borderRadius: 999,
-  flex: "0 0 auto",
+  width: 6,
+  height: 6,
+  flexShrink: 0,
+  borderRadius: "50%",
 };
 
 const legendLabel = {
-  fontSize: 12,
-  fontWeight: 950,
-  color: "#fff",
-  whiteSpace: "nowrap",
+  color: "#cbd5e1",
+  fontSize: 8.3,
+  fontWeight: 850,
+};
+
+const legendNumbers = {
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "baseline",
+  gap: 4,
+  color: "#64748b",
+  fontSize: 7.2,
+  fontWeight: 800,
+};
+
+const shareTrack = {
+  height: 3,
+  marginTop: 6,
   overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const legendPercent = {
-  marginTop: 2,
-  fontSize: 10,
-  color: "rgba(255,255,255,.45)",
-  fontWeight: 750,
-};
-
-const legendValue = {
-  minWidth: 44,
-  padding: "6px 9px",
   borderRadius: 999,
-  textAlign: "center",
-  fontSize: 12,
-  fontWeight: 950,
+  background:
+    "rgba(148,163,184,.07)",
+};
+
+const shareFill = {
+  height: "100%",
+  borderRadius: 999,
+};
+
+const emptyState = {
+  width: "100%",
+  minHeight: 280,
+  display: "grid",
+  placeItems: "center",
+  color: "#536177",
+  fontSize: 8.5,
+  fontWeight: 800,
 };
 
 export default StatusBarChart;

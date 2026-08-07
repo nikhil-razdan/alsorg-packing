@@ -80,6 +80,279 @@ function StatCard({
   );
 }
 
+function InventoryStatCard({
+  title,
+  value,
+  subtle,
+  accent = "#60a5fa",
+  icon = "◇",
+  trend,
+  trendLabel,
+  onClick,
+  active = false,
+  progress,
+  progressLabel,
+}) {
+  const clickable = Boolean(onClick);
+
+  const normalizedProgress =
+    Number.isFinite(Number(progress))
+      ? Math.max(
+        0,
+        Math.min(
+          100,
+          Number(progress)
+        )
+      )
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={inventoryStatCard(
+        accent,
+        clickable,
+        active
+      )}
+    >
+      <div style={inventoryCardAmbient(accent)} />
+      <div style={inventoryCardTopLine(accent)} />
+
+      <div style={inventoryStatTopRow}>
+        <div style={inventoryStatIdentity}>
+          <div style={inventoryStatIcon(accent)}>
+            {icon}
+          </div>
+
+          <div style={inventoryStatTitle}>
+            {title}
+          </div>
+        </div>
+
+        {trend !== undefined &&
+          trend !== null && (
+            <div style={inventoryTrendPill(accent)}>
+              {trend}
+            </div>
+          )}
+      </div>
+
+      <div style={inventoryStatValueRow}>
+        <div style={inventoryStatValue}>
+          {value}
+        </div>
+
+        {clickable && (
+          <div style={inventoryOpenIndicator(active)}>
+            {active ? "−" : "↗"}
+          </div>
+        )}
+      </div>
+
+      {subtle && (
+        <div style={inventoryStatSubtle}>
+          {subtle}
+        </div>
+      )}
+
+      {normalizedProgress !== null && (
+        <div style={inventoryProgressWrap}>
+          <div style={inventoryProgressMeta}>
+            <span>
+              {progressLabel ||
+                "Progress"}
+            </span>
+            <strong>
+              {Math.round(
+                normalizedProgress
+              )}
+              %
+            </strong>
+          </div>
+
+          <div style={inventoryProgressTrack}>
+            <div
+              style={inventoryProgressFill(
+                accent,
+                normalizedProgress
+              )}
+            />
+          </div>
+        </div>
+      )}
+
+      <div style={inventoryStatFooter}>
+        <div style={inventoryTrendLabel}>
+          {trendLabel ||
+            (clickable
+              ? "Open detailed breakdown"
+              : "Live inventory metric")}
+        </div>
+
+        <div style={inventoryLiveDotWrap}>
+          <span style={inventoryLiveDot(accent)} />
+          LIVE
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function InventoryPulseMetric({
+  label,
+  value,
+  detail,
+  accent = "#60a5fa",
+  progress,
+}) {
+  const normalizedProgress =
+    Number.isFinite(Number(progress))
+      ? Math.max(
+        0,
+        Math.min(
+          100,
+          Number(progress)
+        )
+      )
+      : null;
+
+  return (
+    <div style={inventoryPulseMetric(accent)}>
+      <div style={inventoryPulseMetricTop}>
+        <div style={inventoryPulseMetricLabel}>
+          {label}
+        </div>
+
+        <span style={inventoryPulseDot(accent)} />
+      </div>
+
+      <div style={inventoryPulseMetricValue}>
+        {value}
+      </div>
+
+      <div style={inventoryPulseMetricDetail}>
+        {detail}
+      </div>
+
+      {normalizedProgress !== null && (
+        <div style={inventoryPulseTrack}>
+          <div
+            style={inventoryPulseFill(
+              accent,
+              normalizedProgress
+            )}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChartStatusMetric({
+  label,
+  value,
+  share,
+  accent,
+  icon,
+}) {
+  return (
+    <div style={chartStatusMetric(accent)}>
+      <div style={chartStatusIcon(accent)}>
+        {icon}
+      </div>
+
+      <div style={chartStatusCopy}>
+        <div style={chartStatusLabel}>
+          {label}
+        </div>
+
+        <div style={chartStatusValueRow}>
+          <strong style={chartStatusValue}>
+            {value}
+          </strong>
+          <span>
+            {Math.round(share || 0)}%
+          </span>
+        </div>
+      </div>
+
+      <div style={chartStatusProgress}>
+        <div
+          style={chartStatusProgressFill(
+            accent,
+            share
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActivitySignal({
+  label,
+  value,
+  accent,
+}) {
+  return (
+    <div style={activitySignal}>
+      <span style={activitySignalDot(accent)} />
+
+      <div>
+        <div style={activitySignalLabel}>
+          {label}
+        </div>
+        <div style={activitySignalValue}>
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const getActivityText = (activity) => {
+  try {
+    return JSON.stringify(
+      activity || {}
+    ).toUpperCase();
+  } catch {
+    return String(
+      activity || ""
+    ).toUpperCase();
+  }
+};
+
+const getActivityTimestamp = (activity) =>
+  activity?.createdAt ||
+  activity?.updatedAt ||
+  activity?.timestamp ||
+  activity?.activityAt ||
+  activity?.time ||
+  activity?.date ||
+  null;
+
+const formatActivityRefreshTime = (value) => {
+  if (!value) return "Not refreshed yet";
+
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Recently updated";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(date);
+};
+
 function DetailStatCard({
   title,
   subtitle,
@@ -427,6 +700,16 @@ function DashboardPage() {
 
   const [activityLogs, setActivityLogs] = useState([]);
   const [chartType, setChartType] = useState("donut");
+
+  const [
+    dashboardRefreshing,
+    setDashboardRefreshing,
+  ] = useState(false);
+
+  const [
+    lastDashboardRefresh,
+    setLastDashboardRefresh,
+  ] = useState(null);
   const [mode, setMode] = useState("inventory");
   const [inventorySection, setInventorySection] =
     useState("summary");
@@ -485,7 +768,7 @@ function DashboardPage() {
       "DISPATCH",
       "LOGISTICS"
     );
-    
+
   const clampPercent = (value) => {
     if (!Number.isFinite(value)) return 0;
 
@@ -563,14 +846,142 @@ function DashboardPage() {
         Number(stats.packetItems || 0)
       ) * 100;
 
-  const chartIndex = {
-    donut: 0,
-    bar: 1,
-    corporate: 2,
-  }[chartType] || 0;
+  const warehouseShare =
+    finalInventoryTotal === 0
+      ? 0
+      : (
+        Number(stats.warehouseItems || 0) /
+        finalInventoryTotal
+      ) * 100;
+
+  const readyToDispatchShare =
+    finalInventoryTotal === 0
+      ? 0
+      : (
+        Number(
+          stats.readyToDispatchItems ||
+          0
+        ) /
+        finalInventoryTotal
+      ) * 100;
+
+  const readyShare =
+    finalInventoryTotal === 0
+      ? 0
+      : (
+        Number(stats.readyItems || 0) /
+        finalInventoryTotal
+      ) * 100;
+
+  const masterCompletionRate =
+    Number(stats.masterItems || 0) ===
+      0
+      ? 0
+      : (
+        Number(
+          stats.fullyPackedMasterItems ||
+          0
+        ) /
+        Number(stats.masterItems || 0)
+      ) * 100;
+
+  const tripCloseRate =
+    Number(stats.runningTrips || 0) +
+      Number(stats.endedTrips || 0) ===
+      0
+      ? 100
+      : (
+        Number(stats.endedTrips || 0) /
+        (
+          Number(stats.runningTrips || 0) +
+          Number(stats.endedTrips || 0)
+        )
+      ) * 100;
+
+  const activitySignals =
+    activityLogs.reduce(
+      (result, activity) => {
+        const text =
+          getActivityText(activity);
+
+        if (
+          text.includes("PACK") ||
+          text.includes("STICKER")
+        ) {
+          result.packing += 1;
+        }
+
+        if (
+          text.includes("DISPATCH") ||
+          text.includes("CHALLAN")
+        ) {
+          result.dispatch += 1;
+        }
+
+        if (
+          text.includes("WAREHOUSE") ||
+          text.includes("FG") ||
+          text.includes("MOVE") ||
+          text.includes("TRANSFER")
+        ) {
+          result.movement += 1;
+        }
+
+        return result;
+      },
+      {
+        packing: 0,
+        dispatch: 0,
+        movement: 0,
+      }
+    );
+
+  const latestActivityAt =
+    activityLogs.length > 0
+      ? getActivityTimestamp(
+        activityLogs[0]
+      )
+      : null;
+
+  const dataHealthLabel =
+    currentInventoryExceptions === 0
+      ? "Healthy"
+      : currentInventoryExceptions <= 5
+        ? "Monitor"
+        : "Attention";
+
+  const dataHealthAccent =
+    currentInventoryExceptions === 0
+      ? "#22c55e"
+      : currentInventoryExceptions <= 5
+        ? "#f59e0b"
+        : "#ef4444";
+
+  const chartMeta = {
+    donut: {
+      eyebrow: "STOCK COMPOSITION",
+      title: "Inventory Position",
+      subtitle:
+        "Share of live inventory across warehouse, dispatch-ready and ready stock.",
+    },
+    bar: {
+      eyebrow: "STATUS COMPARISON",
+      title: "Inventory Volume",
+      subtitle:
+        "Compare operational stock buckets side by side for faster management review.",
+    },
+    corporate: {
+      eyebrow: "OPERATIONAL FLOW",
+      title: "Inventory Flow",
+      subtitle:
+        "Management view of how current inventory is distributed through the active flow.",
+    },
+  }[chartType];
 
   const refreshInventoryDashboard =
     useCallback(async () => {
+      setDashboardRefreshing(true);
+
       const [
         statsResult,
         activityResult,
@@ -613,6 +1024,12 @@ function DashboardPage() {
 
         setActivityLogs([]);
       }
+
+      setLastDashboardRefresh(
+        new Date()
+      );
+
+      setDashboardRefreshing(false);
     }, []);
 
   const handleAdminCenterChanged =
@@ -729,6 +1146,8 @@ function DashboardPage() {
       subtle: "Warehouse + Ready To Dispatch + Ready",
       trend: percentLabel(packetCompletionRate),
       trendLabel: "packet completion",
+      progress: packetCompletionRate,
+      progressLabel: "Packing completion",
       active: activeStatCard === "inventoryItems",
       onClick: () => toggleStatCard("inventoryItems"),
     },
@@ -753,6 +1172,8 @@ function DashboardPage() {
       subtle: "Parent item register",
       trend: `${Number(stats.fullyPackedMasterItems || 0)} full`,
       trendLabel: "click to open full list",
+      progress: masterCompletionRate,
+      progressLabel: "Fully packed masters",
       active: masterItemsModalOpen,
       onClick: () => setMasterItemsModalOpen(true),
     },
@@ -765,6 +1186,8 @@ function DashboardPage() {
       value: Number(stats.packetItems || 0),
       subtle: "Operational packet-level rows",
       trend: `${Number(stats.totalPackets || 0)} packets`,
+      progress: packetCompletionRate,
+      progressLabel: "Sticker completion",
       active: activeStatCard === "packetItems",
       onClick: () => toggleStatCard("packetItems"),
     },
@@ -777,6 +1200,8 @@ function DashboardPage() {
       value: Number(stats.stickersGenerated || 0),
       subtle: "Sticker history records",
       trend: `${Number(stats.stickerReprints || 0)} reprints`,
+      progress: packetCompletionRate,
+      progressLabel: "Packet items stickered",
     },
 
     {
@@ -787,6 +1212,8 @@ function DashboardPage() {
       value: Number(stats.packedItems || 0),
       subtle: "Sticker / packed packet items",
       trend: percentLabel(packetCompletionRate),
+      progress: packetCompletionRate,
+      progressLabel: "Packing completion",
     },
 
     {
@@ -797,6 +1224,14 @@ function DashboardPage() {
       value: pending,
       subtle: "Packet items pending sticker",
       trend: `${Number(stats.packetItemsPendingSticker || 0)} pending`,
+      progress:
+        Number(stats.packetItems || 0) === 0
+          ? 0
+          : (
+            Number(stats.pendingItems || 0) /
+            Number(stats.packetItems || 0)
+          ) * 100,
+      progressLabel: "Pending share",
     },
 
     {
@@ -819,6 +1254,8 @@ function DashboardPage() {
       value: Number(stats.readyToDispatchItems || 0),
       subtle: "Dispatch action pending",
       trend: `${Number(stats.queuedItems || 0)} queued`,
+      progress: readyToDispatchShare,
+      progressLabel: "Share of live inventory",
     },
 
     {
@@ -829,6 +1266,8 @@ function DashboardPage() {
       value: percentLabel(inventoryAccuracy),
       subtle: "Based on current exceptions",
       trend: `${currentInventoryExceptions} issues`,
+      progress: inventoryAccuracy,
+      progressLabel: "Data health",
     },
 
     {
@@ -839,6 +1278,8 @@ function DashboardPage() {
       value: Number(stats.normalDispatchChallans || 0),
       subtle: `${Number(stats.runningTrips || 0)} running trips`,
       trend: `${Number(stats.todayDispatchChallans || 0)} today`,
+      progress: tripCloseRate,
+      progressLabel: "Trip closure",
       active: activeStatCard === "challans",
       onClick: () => toggleStatCard("challans"),
     },
@@ -875,6 +1316,8 @@ function DashboardPage() {
       value: percentLabel(operationalEfficiency),
       subtle: "Dispatched / packet items",
       trend: "live",
+      progress: operationalEfficiency,
+      progressLabel: "Dispatch conversion",
     },
   ].filter(Boolean);
 
@@ -918,9 +1361,111 @@ function DashboardPage() {
             <div style={inventoryMain}>
               {inventorySection === "summary" && (
                 <>
+                  <div style={inventoryPulsePanel}>
+                    <div style={inventoryPulseHeader}>
+                      <div>
+                        <div style={inventorySectionEyebrow}>
+                          INVENTORY CONTROL TOWER
+                        </div>
+
+                        <div style={inventoryPulseTitle}>
+                          Operational Pulse
+                        </div>
+
+                        <div style={inventoryPulseSubtitle}>
+                          Live inventory position, packing progress, dispatch readiness and data quality in one management view.
+                        </div>
+                      </div>
+
+                      <div style={inventoryPulseHeaderRight}>
+                        <div
+                          style={inventoryHealthBadge(
+                            dataHealthAccent
+                          )}
+                        >
+                          <span
+                            style={inventoryHealthDot(
+                              dataHealthAccent
+                            )}
+                          />
+                          Data Health: {dataHealthLabel}
+                        </div>
+
+                        <div style={inventoryRefreshMeta}>
+                          Updated{" "}
+                          {formatActivityRefreshTime(
+                            lastDashboardRefresh
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={inventoryPulseGrid}>
+                      <InventoryPulseMetric
+                        label="Live Inventory"
+                        value={finalInventoryTotal}
+                        detail="Warehouse + dispatch-ready + ready"
+                        accent="#60a5fa"
+                      />
+
+                      <InventoryPulseMetric
+                        label="Packing Completion"
+                        value={percentLabel(
+                          packetCompletionRate
+                        )}
+                        detail={`${Number(stats.packetItemsWithSticker || 0)} of ${Number(stats.packetItems || 0)} packet items stickered`}
+                        accent="#22c55e"
+                        progress={packetCompletionRate}
+                      />
+
+                      <InventoryPulseMetric
+                        label="Dispatch Ready"
+                        value={Number(
+                          stats.readyToDispatchItems ||
+                          0
+                        )}
+                        detail={`${Math.round(readyToDispatchShare)}% of live inventory`}
+                        accent="#f97316"
+                        progress={readyToDispatchShare}
+                      />
+
+                      <InventoryPulseMetric
+                        label="Today Throughput"
+                        value={dailyThroughput}
+                        detail={`${todayPackedItems} packed • ${todayDispatchedItems} dispatched`}
+                        accent="#06b6d4"
+                      />
+
+                      <InventoryPulseMetric
+                        label="Inventory Accuracy"
+                        value={percentLabel(
+                          inventoryAccuracy
+                        )}
+                        detail={`${currentInventoryExceptions} current exception${currentInventoryExceptions === 1 ? "" : "s"}`}
+                        accent={dataHealthAccent}
+                        progress={inventoryAccuracy}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={inventorySectionHeader}>
+                    <div>
+                      <div style={inventorySectionEyebrow}>
+                        LIVE MANAGEMENT METRICS
+                      </div>
+                      <div style={inventorySectionTitle}>
+                        Inventory KPIs
+                      </div>
+                    </div>
+
+                    <div style={inventorySectionCount}>
+                      {summaryKpis.length} live metrics
+                    </div>
+                  </div>
+
                   <div style={kpiGrid}>
                     {summaryKpis.map((card) => (
-                      <StatCard
+                      <InventoryStatCard
                         key={card.key}
                         icon={card.icon}
                         accent={card.accent}
@@ -929,6 +1474,8 @@ function DashboardPage() {
                         subtle={card.subtle}
                         trend={card.trend}
                         trendLabel={card.trendLabel}
+                        progress={card.progress}
+                        progressLabel={card.progressLabel}
                         active={card.active}
                         onClick={card.onClick}
                       />
@@ -1202,81 +1749,274 @@ function DashboardPage() {
                     <div style={chartPanelSurface}>
                       <div style={chartPanelTop}>
                         <div>
+                          <div style={inventorySectionEyebrow}>
+                            {chartMeta.eyebrow}
+                          </div>
+
                           <div style={chartPanelTitle}>
-                            Inventory Visualization
+                            {chartMeta.title}
                           </div>
 
                           <div style={chartPanelSubtitle}>
-                            Switch between donut, flow and volume charts
+                            {chartMeta.subtitle}
                           </div>
                         </div>
 
                         <div style={chartToggleWrap}>
-                          <div
-                            style={{
-                              ...chartSlider,
-                              transform: `translateX(${chartIndex * 40}px)`,
-                            }}
-                          />
-
                           <button
                             type="button"
-                            title="Donut chart"
-                            style={chartToggleBtn}
-                            onClick={() => setChartType("donut")}
+                            style={chartModeBtn(
+                              chartType === "donut"
+                            )}
+                            onClick={() =>
+                              setChartType("donut")
+                            }
                           >
                             <DonutIcon />
+                            <span>Composition</span>
                           </button>
 
                           <button
                             type="button"
-                            title="Bar chart"
-                            style={chartToggleBtn}
-                            onClick={() => setChartType("bar")}
+                            style={chartModeBtn(
+                              chartType === "bar"
+                            )}
+                            onClick={() =>
+                              setChartType("bar")
+                            }
                           >
                             <BarIcon />
+                            <span>Volume</span>
                           </button>
 
                           <button
                             type="button"
-                            title="Corporate chart"
-                            style={chartToggleBtn}
-                            onClick={() => setChartType("corporate")}
+                            style={chartModeBtn(
+                              chartType === "corporate"
+                            )}
+                            onClick={() =>
+                              setChartType(
+                                "corporate"
+                              )
+                            }
                           >
                             <CorporateIcon />
+                            <span>Flow</span>
                           </button>
                         </div>
+                      </div>
+
+                      <div style={chartStatusStrip}>
+                        <ChartStatusMetric
+                          label="Warehouse"
+                          value={Number(
+                            stats.warehouseItems || 0
+                          )}
+                          share={warehouseShare}
+                          accent="#38bdf8"
+                          icon="🏢"
+                        />
+
+                        <ChartStatusMetric
+                          label="Ready to Dispatch"
+                          value={Number(
+                            stats.readyToDispatchItems ||
+                            0
+                          )}
+                          share={readyToDispatchShare}
+                          accent="#f97316"
+                          icon="🚚"
+                        />
+
+                        <ChartStatusMetric
+                          label="Ready"
+                          value={Number(
+                            stats.readyItems || 0
+                          )}
+                          share={readyShare}
+                          accent="#22c55e"
+                          icon="✓"
+                        />
                       </div>
 
                       <div style={chartPanelBody}>
                         {chartType === "donut" && (
                           <StatusDonutChart
-                            warehouse={stats.warehouseItems}
-                            readyToDispatch={stats.readyToDispatchItems}
-                            ready={stats.readyItems}
+                            warehouse={
+                              stats.warehouseItems
+                            }
+                            readyToDispatch={
+                              stats.readyToDispatchItems
+                            }
+                            ready={
+                              stats.readyItems
+                            }
                           />
                         )}
 
                         {chartType === "bar" && (
                           <StatusBarChart
-                            warehouse={stats.warehouseItems}
-                            readyToDispatch={stats.readyToDispatchItems}
-                            ready={stats.readyItems}
+                            warehouse={
+                              stats.warehouseItems
+                            }
+                            readyToDispatch={
+                              stats.readyToDispatchItems
+                            }
+                            ready={
+                              stats.readyItems
+                            }
                           />
                         )}
 
-                        {chartType === "corporate" && (
-                          <StatusCorporateChart
-                            warehouse={stats.warehouseItems}
-                            readyToDispatch={stats.readyToDispatchItems}
-                            ready={stats.readyItems}
-                          />
-                        )}
+                        {chartType ===
+                          "corporate" && (
+                            <StatusCorporateChart
+                              warehouse={
+                                stats.warehouseItems
+                              }
+                              readyToDispatch={
+                                stats.readyToDispatchItems
+                              }
+                              ready={
+                                stats.readyItems
+                              }
+                            />
+                          )}
+                      </div>
+
+                      <div style={chartInsightFooter}>
+                        <div style={chartInsightItem}>
+                          <span style={chartInsightDot("#60a5fa")} />
+                          <span>
+                            <strong>{finalInventoryTotal}</strong>{" "}
+                            tracked inventory items
+                          </span>
+                        </div>
+
+                        <div style={chartInsightItem}>
+                          <span style={chartInsightDot("#f97316")} />
+                          <span>
+                            <strong>
+                              {Math.round(
+                                readyToDispatchShare
+                              )}
+                              %
+                            </strong>{" "}
+                            currently dispatch-ready
+                          </span>
+                        </div>
+
+                        <div style={chartInsightItem}>
+                          <span style={chartInsightDot("#22c55e")} />
+                          <span>
+                            <strong>
+                              {percentLabel(
+                                packetCompletionRate
+                              )}
+                            </strong>{" "}
+                            packing completion
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={panelSurface}>
-                      <ActivityFeed logs={activityLogs} />
+                    <div style={activityPanelSurface}>
+                      <div style={activityPanelHeader}>
+                        <div>
+                          <div style={inventorySectionEyebrow}>
+                            LIVE EVENT STREAM
+                          </div>
+
+                          <div style={activityPanelTitle}>
+                            Recent Activity
+                          </div>
+
+                          <div style={activityPanelSubtitle}>
+                            Latest packing, dispatch and inventory movement events.
+                          </div>
+                        </div>
+
+                        <div style={activityHeaderActions}>
+                          <div style={activityLiveBadge}>
+                            <span style={activityLivePulse} />
+                            LIVE
+                          </div>
+
+                          <button
+                            type="button"
+                            style={activityRefreshBtn}
+                            onClick={
+                              refreshInventoryDashboard
+                            }
+                            disabled={
+                              dashboardRefreshing
+                            }
+                          >
+                            {dashboardRefreshing
+                              ? "Refreshing…"
+                              : "↻ Refresh"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={activitySignalsRow}>
+                        <ActivitySignal
+                          label="Events"
+                          value={
+                            activityLogs.length
+                          }
+                          accent="#60a5fa"
+                        />
+
+                        <ActivitySignal
+                          label="Packing"
+                          value={
+                            activitySignals.packing
+                          }
+                          accent="#22c55e"
+                        />
+
+                        <ActivitySignal
+                          label="Dispatch"
+                          value={
+                            activitySignals.dispatch
+                          }
+                          accent="#f97316"
+                        />
+
+                        <ActivitySignal
+                          label="Movement"
+                          value={
+                            activitySignals.movement
+                          }
+                          accent="#a78bfa"
+                        />
+                      </div>
+
+                      <div style={activityLatestMeta}>
+                        <span>
+                          Latest event:{" "}
+                          <strong>
+                            {formatActivityRefreshTime(
+                              latestActivityAt
+                            )}
+                          </strong>
+                        </span>
+
+                        <span>
+                          Showing latest{" "}
+                          <strong>
+                            {activityLogs.length}
+                          </strong>{" "}
+                          records
+                        </span>
+                      </div>
+
+                      <div style={activityFeedShell}>
+                        <ActivityFeed
+                          logs={activityLogs}
+                        />
+                      </div>
                     </div>
                   </div>
                 </>
@@ -1713,9 +2453,457 @@ const modeBtn = (active) => ({
 const kpiGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(190px,1fr))",
-  gap: 14,
+    "repeat(auto-fit,minmax(215px,1fr))",
+  gap: 13,
 };
+
+const inventoryPulsePanel = {
+  position: "relative",
+  overflow: "hidden",
+  padding: 18,
+  borderRadius: 24,
+  background:
+    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.16),transparent 30%), radial-gradient(circle at 100% 100%,rgba(14,165,233,.09),transparent 28%), linear-gradient(135deg,rgba(15,23,42,.96),rgba(8,15,30,.92))",
+  border:
+    "1px solid rgba(148,163,184,.10)",
+  boxShadow:
+    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
+};
+
+const inventoryPulseHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
+  marginBottom: 14,
+};
+
+const inventorySectionEyebrow = {
+  color: "#60a5fa",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".13em",
+  textTransform: "uppercase",
+};
+
+const inventoryPulseTitle = {
+  marginTop: 4,
+  color: "#f8fafc",
+  fontSize: 21,
+  fontWeight: 950,
+  letterSpacing: "-.025em",
+};
+
+const inventoryPulseSubtitle = {
+  maxWidth: 720,
+  marginTop: 5,
+  color: "#94a3b8",
+  fontSize: 11.5,
+  fontWeight: 650,
+  lineHeight: 1.55,
+};
+
+const inventoryPulseHeaderRight = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  gap: 6,
+};
+
+const inventoryHealthBadge = (accent) => ({
+  minHeight: 29,
+  padding: "0 10px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  color: "#e2e8f0",
+  background: `${accent}14`,
+  border: `1px solid ${accent}35`,
+  fontSize: 9.5,
+  fontWeight: 900,
+});
+
+const inventoryHealthDot = (accent) => ({
+  width: 7,
+  height: 7,
+  borderRadius: "50%",
+  background: accent,
+  boxShadow: `0 0 10px ${accent}80`,
+});
+
+const inventoryRefreshMeta = {
+  color: "#64748b",
+  fontSize: 9,
+  fontWeight: 750,
+};
+
+const inventoryPulseGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(175px,1fr))",
+  gap: 9,
+};
+
+const inventoryPulseMetric = (accent) => ({
+  minWidth: 0,
+  minHeight: 105,
+  padding: 12,
+  borderRadius: 15,
+  background:
+    `radial-gradient(circle at 100% 0%,${accent}16,transparent 42%), rgba(2,6,23,.34)`,
+  border: `1px solid ${accent}20`,
+});
+
+const inventoryPulseMetricTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const inventoryPulseMetricLabel = {
+  color: "#94a3b8",
+  fontSize: 8.8,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".065em",
+};
+
+const inventoryPulseDot = (accent) => ({
+  width: 7,
+  height: 7,
+  flexShrink: 0,
+  borderRadius: "50%",
+  background: accent,
+  boxShadow: `0 0 9px ${accent}66`,
+});
+
+const inventoryPulseMetricValue = {
+  marginTop: 7,
+  color: "#fff",
+  fontSize: 24,
+  fontWeight: 950,
+  lineHeight: 1,
+  letterSpacing: "-.025em",
+};
+
+const inventoryPulseMetricDetail = {
+  minHeight: 27,
+  marginTop: 6,
+  color: "#64748b",
+  fontSize: 9.3,
+  fontWeight: 700,
+  lineHeight: 1.4,
+};
+
+const inventoryPulseTrack = {
+  height: 3,
+  marginTop: 8,
+  overflow: "hidden",
+  borderRadius: 999,
+  background:
+    "rgba(148,163,184,.10)",
+};
+
+const inventoryPulseFill = (
+  accent,
+  progress
+) => ({
+  width: `${Math.max(
+    0,
+    Math.min(
+      100,
+      Number(progress || 0)
+    )
+  )}%`,
+  height: "100%",
+  borderRadius: 999,
+  background:
+    `linear-gradient(90deg,${accent}A8,${accent})`,
+  boxShadow:
+    `0 0 9px ${accent}60`,
+});
+
+const inventorySectionHeader = {
+  marginTop: 2,
+  marginBottom: -2,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-end",
+  gap: 12,
+};
+
+const inventorySectionTitle = {
+  marginTop: 3,
+  color: "#f8fafc",
+  fontSize: 17,
+  fontWeight: 950,
+};
+
+const inventorySectionCount = {
+  padding: "5px 8px",
+  borderRadius: 999,
+  color: "#94a3b8",
+  background:
+    "rgba(148,163,184,.06)",
+  border:
+    "1px solid rgba(148,163,184,.09)",
+  fontSize: 9,
+  fontWeight: 850,
+};
+
+const inventoryStatCard = (
+  accent,
+  clickable = false,
+  active = false
+) => ({
+  position: "relative",
+  minWidth: 0,
+  minHeight: 172,
+  overflow: "hidden",
+  padding: 14,
+  borderRadius: 18,
+  textAlign: "left",
+  width: "100%",
+  color: "#fff",
+  fontFamily: "inherit",
+  cursor: clickable
+    ? "pointer"
+    : "default",
+
+  background: active
+    ? `linear-gradient(160deg,${accent}16,rgba(15,23,42,.96) 44%,rgba(8,15,30,.94))`
+    : "linear-gradient(160deg,rgba(30,41,59,.72),rgba(15,23,42,.90) 48%,rgba(8,15,30,.90))",
+
+  border: active
+    ? `1px solid ${accent}55`
+    : "1px solid rgba(148,163,184,.09)",
+
+  boxShadow: active
+    ? `0 18px 38px ${accent}1D, inset 0 1px 0 rgba(255,255,255,.035)`
+    : "0 12px 28px rgba(2,6,23,.22), inset 0 1px 0 rgba(255,255,255,.018)",
+
+  backdropFilter: "blur(18px)",
+
+  transition:
+    "transform .18s ease,border-color .18s ease,box-shadow .18s ease",
+});
+
+const inventoryCardAmbient = (accent) => ({
+  position: "absolute",
+  width: 130,
+  height: 130,
+  top: -70,
+  right: -48,
+  borderRadius: "50%",
+  background: accent,
+  opacity: 0.08,
+  filter: "blur(28px)",
+  pointerEvents: "none",
+});
+
+const inventoryCardTopLine = (accent) => ({
+  position: "absolute",
+  top: 0,
+  left: 18,
+  right: 18,
+  height: 2,
+  borderRadius:
+    "0 0 999px 999px",
+  background:
+    `linear-gradient(90deg,transparent,${accent},transparent)`,
+  opacity: 0.85,
+});
+
+const inventoryStatTopRow = {
+  position: "relative",
+  zIndex: 1,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const inventoryStatIdentity = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const inventoryStatIcon = (accent) => ({
+  width: 31,
+  height: 31,
+  flexShrink: 0,
+  borderRadius: 10,
+  display: "grid",
+  placeItems: "center",
+  color: "#fff",
+  background: `${accent}17`,
+  border: `1px solid ${accent}2E`,
+  fontSize: 14,
+  boxShadow:
+    `inset 0 1px 0 ${accent}18`,
+});
+
+const inventoryStatTitle = {
+  minWidth: 0,
+  color: "#cbd5e1",
+  fontSize: 9.2,
+  fontWeight: 950,
+  letterSpacing: ".055em",
+  textTransform: "uppercase",
+  lineHeight: 1.3,
+};
+
+const inventoryTrendPill = (accent) => ({
+  flexShrink: 0,
+  maxWidth: 92,
+  minHeight: 23,
+  padding: "0 7px",
+  borderRadius: 999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: accent,
+  background: `${accent}12`,
+  border: `1px solid ${accent}29`,
+  fontSize: 9.2,
+  fontWeight: 950,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
+
+const inventoryStatValueRow = {
+  position: "relative",
+  zIndex: 1,
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const inventoryStatValue = {
+  color: "#fff",
+  fontSize: 29,
+  fontWeight: 950,
+  lineHeight: 1,
+  letterSpacing: "-.035em",
+};
+
+const inventoryOpenIndicator = (active) => ({
+  width: 27,
+  height: 27,
+  flexShrink: 0,
+  borderRadius: 9,
+  display: "grid",
+  placeItems: "center",
+  color: active
+    ? "#bfdbfe"
+    : "#64748b",
+  background: active
+    ? "rgba(59,130,246,.14)"
+    : "rgba(148,163,184,.055)",
+  border:
+    "1px solid rgba(148,163,184,.08)",
+  fontSize: 12,
+  fontWeight: 950,
+});
+
+const inventoryStatSubtle = {
+  position: "relative",
+  zIndex: 1,
+  minHeight: 29,
+  marginTop: 6,
+  color: "#718096",
+  fontSize: 9.5,
+  fontWeight: 700,
+  lineHeight: 1.42,
+};
+
+const inventoryProgressWrap = {
+  position: "relative",
+  zIndex: 1,
+  marginTop: 8,
+};
+
+const inventoryProgressMeta = {
+  marginBottom: 5,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 800,
+};
+
+const inventoryProgressTrack = {
+  height: 4,
+  overflow: "hidden",
+  borderRadius: 999,
+  background:
+    "rgba(148,163,184,.10)",
+};
+
+const inventoryProgressFill = (
+  accent,
+  progress
+) => ({
+  width: `${progress}%`,
+  height: "100%",
+  borderRadius: 999,
+  background:
+    `linear-gradient(90deg,${accent}A6,${accent})`,
+  boxShadow:
+    `0 0 10px ${accent}55`,
+});
+
+const inventoryStatFooter = {
+  position: "relative",
+  zIndex: 1,
+  marginTop: 10,
+  paddingTop: 8,
+  borderTop:
+    "1px solid rgba(148,163,184,.065)",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const inventoryTrendLabel = {
+  minWidth: 0,
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 750,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const inventoryLiveDotWrap = {
+  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  color: "#64748b",
+  fontSize: 7.8,
+  fontWeight: 950,
+  letterSpacing: ".055em",
+};
+
+const inventoryLiveDot = (accent) => ({
+  width: 5,
+  height: 5,
+  borderRadius: "50%",
+  background: accent,
+  boxShadow: `0 0 7px ${accent}66`,
+});
 
 const pulseWrap = {
   display: "grid",
@@ -2504,25 +3692,25 @@ const throughputMiniHint = {
 
 const workspaceGrid = {
   display: "grid",
-  gridTemplateColumns: "minmax(0,1.05fr) minmax(360px,.72fr)",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(360px,1fr))",
   gap: 14,
-  alignItems: "start",
-
-  "@media (max-width: 1180px)": {
-    gridTemplateColumns: "1fr",
-  },
+  alignItems: "stretch",
 };
 
 const chartPanelSurface = {
   position: "relative",
-  height: 430,
-  minHeight: 430,
-  padding: 16,
-  borderRadius: 22,
+  minWidth: 0,
+  height: 555,
+  minHeight: 555,
+  padding: 17,
+  borderRadius: 24,
   background:
-    "radial-gradient(circle at top left, rgba(37,99,235,.15), transparent 32%), linear-gradient(180deg, rgba(15,23,42,.88), rgba(15,23,42,.70))",
-  border: "1px solid rgba(255,255,255,.075)",
-  boxShadow: "0 18px 42px rgba(2,6,23,.34)",
+    "radial-gradient(circle at 0% 0%,rgba(37,99,235,.14),transparent 31%), radial-gradient(circle at 100% 100%,rgba(34,197,94,.05),transparent 28%), linear-gradient(180deg,rgba(15,23,42,.95),rgba(8,15,30,.93))",
+  border:
+    "1px solid rgba(148,163,184,.10)",
+  boxShadow:
+    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
   backdropFilter: "blur(18px)",
   overflow: "hidden",
   display: "flex",
@@ -2534,35 +3722,391 @@ const chartPanelTop = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
+  flexWrap: "wrap",
   marginBottom: 12,
 };
 
 const chartPanelTitle = {
-  fontSize: 16,
+  marginTop: 3,
+  fontSize: 18,
   fontWeight: 950,
-  color: "#fff",
-  letterSpacing: "-.02em",
+  color: "#f8fafc",
+  letterSpacing: "-.025em",
 };
 
 const chartPanelSubtitle = {
+  maxWidth: 560,
   marginTop: 4,
-  fontSize: 11,
-  color: "rgba(255,255,255,.54)",
+  fontSize: 10.5,
+  color: "#8795aa",
   fontWeight: 650,
+  lineHeight: 1.5,
 };
+
+const chartToggleWrap = {
+  display: "inline-flex",
+  gap: 4,
+  padding: 4,
+  borderRadius: 12,
+  background:
+    "rgba(2,6,23,.52)",
+  border:
+    "1px solid rgba(148,163,184,.09)",
+};
+
+const chartModeBtn = (active) => ({
+  height: 31,
+  padding: "0 9px",
+  borderRadius: 8,
+  border: active
+    ? "1px solid rgba(96,165,250,.26)"
+    : "1px solid transparent",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  color: active
+    ? "#e0f2fe"
+    : "#64748b",
+  background: active
+    ? "linear-gradient(135deg,rgba(37,99,235,.28),rgba(59,130,246,.13))"
+    : "transparent",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 8.8,
+  fontWeight: 900,
+  transition:
+    "background .16s ease,border-color .16s ease,color .16s ease",
+});
+
+const chartStatusStrip = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3,minmax(0,1fr))",
+  gap: 7,
+  marginBottom: 10,
+};
+
+const chartStatusMetric = (accent) => ({
+  minWidth: 0,
+  position: "relative",
+  overflow: "hidden",
+  display: "grid",
+  gridTemplateColumns:
+    "31px minmax(0,1fr)",
+  gap: 8,
+  alignItems: "center",
+  padding: "9px 10px 11px",
+  borderRadius: 13,
+  background:
+    `linear-gradient(135deg,${accent}0D,rgba(2,6,23,.34))`,
+  border: `1px solid ${accent}1C`,
+});
+
+const chartStatusIcon = (accent) => ({
+  width: 31,
+  height: 31,
+  borderRadius: 9,
+  display: "grid",
+  placeItems: "center",
+  color: accent,
+  background: `${accent}12`,
+  border: `1px solid ${accent}25`,
+  fontSize: 12,
+  fontWeight: 950,
+});
+
+const chartStatusCopy = {
+  minWidth: 0,
+};
+
+const chartStatusLabel = {
+  color: "#8b9aaf",
+  fontSize: 8.4,
+  fontWeight: 850,
+  textTransform: "uppercase",
+  letterSpacing: ".045em",
+};
+
+const chartStatusValueRow = {
+  marginTop: 3,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "baseline",
+  gap: 7,
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 800,
+};
+
+const chartStatusValue = {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 950,
+};
+
+const chartStatusProgress = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: 2,
+  background:
+    "rgba(148,163,184,.06)",
+};
+
+const chartStatusProgressFill = (
+  accent,
+  share
+) => ({
+  width: `${Math.max(
+    0,
+    Math.min(
+      100,
+      Number(share || 0)
+    )
+  )}%`,
+  height: "100%",
+  background: accent,
+  boxShadow:
+    `0 0 8px ${accent}66`,
+});
 
 const chartPanelBody = {
   flex: 1,
-  minHeight: 0,
+  minHeight: 330,
   overflow: "hidden",
-  padding: 12,
-  borderRadius: 18,
+  padding: 9,
+  borderRadius: 17,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.040), rgba(255,255,255,.018))",
-  border: "1px solid rgba(255,255,255,.055)",
+    "radial-gradient(circle at 50% 45%,rgba(59,130,246,.055),transparent 48%), linear-gradient(180deg,rgba(2,6,23,.34),rgba(2,6,23,.18))",
+  border:
+    "1px solid rgba(148,163,184,.07)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+};
+
+const chartInsightFooter = {
+  marginTop: 10,
+  minHeight: 37,
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  padding: "8px 10px",
+  borderRadius: 12,
+  background:
+    "rgba(2,6,23,.28)",
+  border:
+    "1px solid rgba(148,163,184,.06)",
+};
+
+const chartInsightItem = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  color: "#7f8ea3",
+  fontSize: 8.8,
+  fontWeight: 700,
+};
+
+const chartInsightDot = (accent) => ({
+  width: 6,
+  height: 6,
+  flexShrink: 0,
+  borderRadius: "50%",
+  background: accent,
+  boxShadow:
+    `0 0 8px ${accent}55`,
+});
+
+const activityPanelSurface = {
+  minWidth: 0,
+  height: 555,
+  minHeight: 555,
+  padding: 17,
+  borderRadius: 24,
+  background:
+    "radial-gradient(circle at 100% 0%,rgba(34,211,238,.08),transparent 31%), linear-gradient(180deg,rgba(15,23,42,.95),rgba(8,15,30,.93))",
+  border:
+    "1px solid rgba(148,163,184,.10)",
+  boxShadow:
+    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
+  backdropFilter: "blur(18px)",
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+};
+
+const activityPanelHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const activityPanelTitle = {
+  marginTop: 3,
+  color: "#f8fafc",
+  fontSize: 18,
+  fontWeight: 950,
+  letterSpacing: "-.025em",
+};
+
+const activityPanelSubtitle = {
+  maxWidth: 360,
+  marginTop: 4,
+  color: "#8795aa",
+  fontSize: 10.5,
+  fontWeight: 650,
+  lineHeight: 1.45,
+};
+
+const activityHeaderActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const activityLiveBadge = {
+  height: 27,
+  padding: "0 8px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  color: "#86efac",
+  background:
+    "rgba(34,197,94,.08)",
+  border:
+    "1px solid rgba(34,197,94,.14)",
+  fontSize: 7.8,
+  fontWeight: 950,
+  letterSpacing: ".06em",
+};
+
+const activityLivePulse = {
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  background: "#22c55e",
+  boxShadow:
+    "0 0 9px rgba(34,197,94,.72)",
+};
+
+const activityRefreshBtn = {
+  height: 27,
+  padding: "0 8px",
+  borderRadius: 8,
+  border:
+    "1px solid rgba(96,165,250,.12)",
+  background:
+    "rgba(59,130,246,.06)",
+  color: "#93c5fd",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 8.5,
+  fontWeight: 850,
+};
+
+const activitySignalsRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(4,minmax(0,1fr))",
+  gap: 6,
+  marginTop: 12,
+};
+
+const activitySignal = {
+  minWidth: 0,
+  padding: "8px 9px",
+  borderRadius: 11,
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  background:
+    "rgba(2,6,23,.31)",
+  border:
+    "1px solid rgba(148,163,184,.065)",
+};
+
+const activitySignalDot = (accent) => ({
+  width: 6,
+  height: 6,
+  flexShrink: 0,
+  borderRadius: "50%",
+  background: accent,
+  boxShadow:
+    `0 0 8px ${accent}55`,
+});
+
+const activitySignalLabel = {
+  color: "#64748b",
+  fontSize: 7.6,
+  fontWeight: 850,
+  textTransform: "uppercase",
+  letterSpacing: ".04em",
+};
+
+const activitySignalValue = {
+  marginTop: 1,
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 950,
+};
+
+const activityLatestMeta = {
+  minHeight: 30,
+  marginTop: 8,
+  padding: "6px 8px",
+  borderRadius: 9,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  color: "#64748b",
+  background:
+    "rgba(148,163,184,.025)",
+  border:
+    "1px solid rgba(148,163,184,.045)",
+  fontSize: 7.9,
+  fontWeight: 700,
+};
+
+const activityFeedShell = {
+  flex: 1,
+  minHeight: 0,
+  marginTop: 8,
+  overflowY: "auto",
+  overflowX: "hidden",
+  overscrollBehavior: "contain",
+  scrollbarWidth: "thin",
+  scrollbarColor:
+    "#334155 transparent",
+  borderRadius: 14,
+  background:
+    "rgba(2,6,23,.20)",
+  border:
+    "1px solid rgba(148,163,184,.055)",
+};
+
+/*
+ * Kept for backward compatibility with any local references in this file.
+ * The inventory Recent Activity view now uses activityPanelSurface.
+ */
+const panelSurface = {
+  display: "flex",
+  flexDirection: "column",
+  minHeight: 430,
+  padding: 16,
+  borderRadius: 22,
+  background:
+    "rgba(15,23,42,.78)",
+  border:
+    "1px solid rgba(255,255,255,.065)",
+  overflow: "hidden",
 };
 
 export default DashboardPage;

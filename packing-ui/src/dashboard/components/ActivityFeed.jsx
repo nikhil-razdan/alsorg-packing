@@ -5,7 +5,6 @@ import {
 } from "react";
 
 const IST_OFFSET_MINUTES = 330;
-
 const ITEMS_PER_PAGE = 3;
 
 const ACTION_LABELS = {
@@ -26,9 +25,7 @@ const ACTION_LABELS = {
 };
 
 function parseServerDate(value) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
 
   if (value instanceof Date) {
     return Number.isNaN(value.getTime())
@@ -37,19 +34,16 @@ function parseServerDate(value) {
   }
 
   if (typeof value === "number") {
-    const date =
-      new Date(value);
-
+    const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? null
       : date;
   }
 
-  /*
-   * Handles Jackson array style:
-   * [2026, 7, 4, 13, 22, 10]
-   */
-  if (Array.isArray(value) && value.length >= 3) {
+  if (
+    Array.isArray(value) &&
+    value.length >= 3
+  ) {
     const utcMs =
       Date.UTC(
         Number(value[0]),
@@ -59,12 +53,15 @@ function parseServerDate(value) {
         Number(value[4] || 0),
         Number(value[5] || 0)
       ) -
-      IST_OFFSET_MINUTES * 60 * 1000;
+      IST_OFFSET_MINUTES *
+      60 *
+      1000;
 
-    const date =
-      new Date(utcMs);
+    const date = new Date(utcMs);
 
-    return Number.isNaN(date.getTime())
+    return Number.isNaN(
+      date.getTime()
+    )
       ? null
       : date;
   }
@@ -74,48 +71,36 @@ function parseServerDate(value) {
       .trim()
       .replace(" ", "T");
 
-  if (!raw) {
-    return null;
-  }
+  if (!raw) return null;
 
-  /*
-   * If backend sends:
-   * 2026-07-04T13:22:10+05:30
-   * or
-   * 2026-07-04T07:52:10Z
-   *
-   * Browser can parse it correctly.
-   */
   const hasTimezone =
     /[zZ]$/.test(raw) ||
-    /[+-]\d{2}:?\d{2}$/.test(raw);
+    /[+-]\d{2}:?\d{2}$/.test(
+      raw
+    );
 
   if (hasTimezone) {
-    const date =
-      new Date(raw);
+    const date = new Date(raw);
 
-    return Number.isNaN(date.getTime())
+    return Number.isNaN(
+      date.getTime()
+    )
       ? null
       : date;
   }
 
-  /*
-   * Backend LocalDateTime without offset:
-   * 2026-07-04T13:22:10
-   *
-   * This is India local time in our app.
-   * Convert IST local timestamp into a real JS Date instant.
-   */
   const match =
     raw.match(
-      /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?)?$/
+      /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/
     );
 
   if (!match) {
     const fallback =
       new Date(raw);
 
-    return Number.isNaN(fallback.getTime())
+    return Number.isNaN(
+      fallback.getTime()
+    )
       ? null
       : fallback;
   }
@@ -129,12 +114,15 @@ function parseServerDate(value) {
       Number(match[5] || 0),
       Number(match[6] || 0)
     ) -
-    IST_OFFSET_MINUTES * 60 * 1000;
+    IST_OFFSET_MINUTES *
+    60 *
+    1000;
 
-  const date =
-    new Date(utcMs);
+  const date = new Date(utcMs);
 
-  return Number.isNaN(date.getTime())
+  return Number.isNaN(
+    date.getTime()
+  )
     ? null
     : date;
 }
@@ -163,7 +151,10 @@ function getItemName(log) {
   );
 }
 
-function normalizeText(value, fallback = "") {
+function normalizeText(
+  value,
+  fallback = ""
+) {
   const text =
     String(value ?? "")
       .trim();
@@ -171,14 +162,14 @@ function normalizeText(value, fallback = "") {
   return text || fallback;
 }
 
-function normalizeActionLabel(action = "") {
+function normalizeActionLabel(
+  action = ""
+) {
   const value =
     String(action || "")
       .trim();
 
-  if (!value) {
-    return "Activity";
-  }
+  if (!value) return "Activity";
 
   const upper =
     value.toUpperCase();
@@ -190,15 +181,25 @@ function normalizeActionLabel(action = "") {
   const lower =
     value.toLowerCase();
 
-  if (lower.includes("item packed")) {
+  if (
+    lower.includes(
+      "item packed"
+    )
+  ) {
     return "Item Packed";
   }
 
-  if (lower.includes("sticker reprinted")) {
+  if (
+    lower.includes(
+      "sticker reprinted"
+    )
+  ) {
     return "Sticker Reprinted";
   }
 
-  if (lower.includes("sticker")) {
+  if (
+    lower.includes("sticker")
+  ) {
     return "Sticker Activity";
   }
 
@@ -206,15 +207,27 @@ function normalizeActionLabel(action = "") {
     return "Item Dispatched";
   }
 
-  if (lower.includes("ready_to_dispatch")) {
+  if (
+    lower.includes(
+      "ready_to_dispatch"
+    )
+  ) {
     return "Ready To Dispatch";
   }
 
-  if (lower.includes("warehouse approved")) {
+  if (
+    lower.includes(
+      "warehouse approved"
+    )
+  ) {
     return "Warehouse Approved";
   }
 
-  if (lower.includes("warehouse requested")) {
+  if (
+    lower.includes(
+      "warehouse requested"
+    )
+  ) {
     return "Warehouse Requested";
   }
 
@@ -223,24 +236,36 @@ function normalizeActionLabel(action = "") {
     .replaceAll("→", " → ")
     .replace(/\s+/g, " ")
     .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase()
+    );
 }
 
-function activityMeta(action = "", role = "") {
+function activityMeta(
+  action = "",
+  role = ""
+) {
   const value =
-    `${action} ${role}`.toLowerCase();
+    `${action} ${role}`
+      .toLowerCase();
 
   if (
-    value.includes("item packed") ||
+    value.includes(
+      "item packed"
+    ) ||
     value.includes("sticker") ||
     value.includes("packing")
   ) {
     return {
-      icon: "📦",
+      icon: "✓",
       label: "Packing",
-      accent: "#34d399",
-      soft: "rgba(52,211,153,.13)",
-      border: "rgba(52,211,153,.28)",
+      accent: "#22c55e",
+      soft:
+        "rgba(34,197,94,.09)",
+      border:
+        "rgba(34,197,94,.18)",
     };
   }
 
@@ -250,41 +275,55 @@ function activityMeta(action = "", role = "") {
     value.includes("challan")
   ) {
     return {
-      icon: "🚚",
+      icon: "↗",
       label: "Dispatch",
-      accent: "#f59e0b",
-      soft: "rgba(245,158,11,.13)",
-      border: "rgba(245,158,11,.28)",
+      accent: "#f97316",
+      soft:
+        "rgba(249,115,22,.09)",
+      border:
+        "rgba(249,115,22,.18)",
     };
   }
 
-  if (value.includes("warehouse")) {
+  if (
+    value.includes("warehouse")
+  ) {
     return {
-      icon: "🏬",
+      icon: "▣",
       label: "Warehouse",
-      accent: "#60a5fa",
-      soft: "rgba(96,165,250,.13)",
-      border: "rgba(96,165,250,.28)",
+      accent: "#38bdf8",
+      soft:
+        "rgba(56,189,248,.09)",
+      border:
+        "rgba(56,189,248,.18)",
     };
   }
 
-  if (value.includes("restore")) {
+  if (
+    value.includes("restore")
+  ) {
     return {
-      icon: "↩️",
+      icon: "↶",
       label: "Restore",
       accent: "#a78bfa",
-      soft: "rgba(167,139,250,.13)",
-      border: "rgba(167,139,250,.28)",
+      soft:
+        "rgba(167,139,250,.09)",
+      border:
+        "rgba(167,139,250,.18)",
     };
   }
 
-  if (value.includes("return")) {
+  if (
+    value.includes("return")
+  ) {
     return {
-      icon: "🔁",
+      icon: "↔",
       label: "Return",
-      accent: "#22c55e",
-      soft: "rgba(34,197,94,.13)",
-      border: "rgba(34,197,94,.28)",
+      accent: "#14b8a6",
+      soft:
+        "rgba(20,184,166,.09)",
+      border:
+        "rgba(20,184,166,.18)",
     };
   }
 
@@ -294,20 +333,24 @@ function activityMeta(action = "", role = "") {
     value.includes("location")
   ) {
     return {
-      icon: "📍",
-      label: "Location",
-      accent: "#38bdf8",
-      soft: "rgba(56,189,248,.13)",
-      border: "rgba(56,189,248,.28)",
+      icon: "⌖",
+      label: "Movement",
+      accent: "#60a5fa",
+      soft:
+        "rgba(96,165,250,.09)",
+      border:
+        "rgba(96,165,250,.18)",
     };
   }
 
   return {
-    icon: "⚙️",
+    icon: "•",
     label: "Inventory",
-    accent: "#38bdf8",
-    soft: "rgba(56,189,248,.13)",
-    border: "rgba(56,189,248,.28)",
+    accent: "#60a5fa",
+    soft:
+      "rgba(96,165,250,.08)",
+    border:
+      "rgba(96,165,250,.16)",
   };
 }
 
@@ -315,22 +358,27 @@ function formatDate(value) {
   const date =
     parseServerDate(value);
 
-  if (!date) {
-    return "—";
-  }
+  if (!date) return "—";
 
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      timeZone:
+        "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(date);
 }
 
-function formatRelativeTime(value, nowMs) {
+function formatRelativeTime(
+  value,
+  nowMs
+) {
   const date =
     parseServerDate(value);
 
@@ -339,13 +387,14 @@ function formatRelativeTime(value, nowMs) {
   }
 
   const diffMs =
-    nowMs - date.getTime();
+    nowMs -
+    date.getTime();
 
-  /*
-   * Small future difference can happen because browser/server clocks
-   * may differ slightly. Treat as live.
-   */
-  if (diffMs < 0 && Math.abs(diffMs) < 2 * 60000) {
+  if (
+    diffMs < 0 &&
+    Math.abs(diffMs) <
+    2 * 60000
+  ) {
     return "Just now";
   }
 
@@ -354,7 +403,9 @@ function formatRelativeTime(value, nowMs) {
   }
 
   const diffMin =
-    Math.floor(diffMs / 60000);
+    Math.floor(
+      diffMs / 60000
+    );
 
   if (diffMin < 1) {
     return "Just now";
@@ -365,14 +416,18 @@ function formatRelativeTime(value, nowMs) {
   }
 
   const diffHours =
-    Math.floor(diffMin / 60);
+    Math.floor(
+      diffMin / 60
+    );
 
   if (diffHours < 24) {
     return `${diffHours} hr ago`;
   }
 
   const diffDays =
-    Math.floor(diffHours / 24);
+    Math.floor(
+      diffHours / 24
+    );
 
   if (diffDays === 1) {
     return "Yesterday";
@@ -383,30 +438,31 @@ function formatRelativeTime(value, nowMs) {
   }
 
   const diffMonths =
-    Math.floor(diffDays / 30);
+    Math.floor(
+      diffDays / 30
+    );
 
-  if (diffMonths === 1) {
-    return "1 month ago";
-  }
-
-  return `${diffMonths} months ago`;
+  return diffMonths === 1
+    ? "1 month ago"
+    : `${diffMonths} months ago`;
 }
 
 function initials(value = "") {
   const clean =
-    String(value || "SYSTEM")
-      .trim();
+    String(
+      value || "SYSTEM"
+    ).trim();
 
-  if (!clean) {
-    return "S";
-  }
+  if (!clean) return "S";
 
   return clean
     .split(/[.\s_-]+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) =>
-      part.charAt(0).toUpperCase()
+      part
+        .charAt(0)
+        .toUpperCase()
     )
     .join("");
 }
@@ -440,49 +496,95 @@ function ActivityFeed({
       );
 
     return () => {
-      window.clearInterval(timer);
+      window.clearInterval(
+        timer
+      );
     };
   }, []);
 
   const normalizedLogs =
     useMemo(() => {
       return [...logs]
-        .map((log, index) => {
-          const activityTime =
-            getActivityTime(log);
+        .map(
+          (log, index) => {
+            const activityTime =
+              getActivityTime(
+                log
+              );
 
-          const date =
-            parseServerDate(activityTime);
+            const date =
+              parseServerDate(
+                activityTime
+              );
 
-          return {
-            ...log,
-            _index: index,
-            _activityTime: activityTime,
-            _timeMs: date
-              ? date.getTime()
-              : 0,
-            _itemName: getItemName(log),
-            _actionLabel: normalizeActionLabel(log.action),
-            _performedBy: normalizeText(log.performedBy, "SYSTEM"),
-            _role: normalizeText(log.role, "SYSTEM"),
-            _fromStatus: normalizeText(log.fromStatus),
-            _toStatus: normalizeText(log.toStatus),
-            _remarks: normalizeText(log.remarks),
-          };
-        })
+            return {
+              ...log,
+              _index: index,
+              _activityTime:
+                activityTime,
+              _timeMs: date
+                ? date.getTime()
+                : 0,
+              _itemName:
+                getItemName(log),
+              _actionLabel:
+                normalizeActionLabel(
+                  log.action
+                ),
+              _performedBy:
+                normalizeText(
+                  log.performedBy,
+                  "SYSTEM"
+                ),
+              _role:
+                normalizeText(
+                  log.role,
+                  "SYSTEM"
+                ),
+              _fromStatus:
+                normalizeText(
+                  log.fromStatus
+                ),
+              _toStatus:
+                normalizeText(
+                  log.toStatus
+                ),
+              _remarks:
+                normalizeText(
+                  log.remarks
+                ),
+            };
+          }
+        )
         .sort((a, b) => {
-          if (b._timeMs !== a._timeMs) {
-            return b._timeMs - a._timeMs;
+          if (
+            b._timeMs !==
+            a._timeMs
+          ) {
+            return (
+              b._timeMs -
+              a._timeMs
+            );
           }
 
-          return Number(b.id || 0) - Number(a.id || 0);
+          return (
+            Number(
+              b.id || 0
+            ) -
+            Number(
+              a.id || 0
+            )
+          );
         });
     }, [logs]);
 
   const totalPages =
     Math.max(
       1,
-      Math.ceil(normalizedLogs.length / ITEMS_PER_PAGE)
+      Math.ceil(
+        normalizedLogs.length /
+        ITEMS_PER_PAGE
+      )
     );
 
   const safePage =
@@ -496,342 +598,272 @@ function ActivityFeed({
   }, [logs.length]);
 
   const paginatedLogs =
-    useMemo(() => {
-      return normalizedLogs.slice(
-        safePage * ITEMS_PER_PAGE,
-        safePage * ITEMS_PER_PAGE + ITEMS_PER_PAGE
-      );
-    }, [normalizedLogs, safePage]);
+    useMemo(
+      () =>
+        normalizedLogs.slice(
+          safePage *
+          ITEMS_PER_PAGE,
+          safePage *
+          ITEMS_PER_PAGE +
+          ITEMS_PER_PAGE
+        ),
+      [
+        normalizedLogs,
+        safePage,
+      ]
+    );
 
   return (
     <div style={wrapper}>
-      <div style={topBar}>
-        <div>
-          <div style={headingRow}>
-            <span style={headingIcon}>⚡</span>
-
-            <div>
-              <div style={heading}>
-                Recent Activity
-              </div>
-
-              <div style={subHeading}>
-                Live packing, warehouse, location and dispatch movement
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style={headerRight}>
-          <div style={livePill}>
-            <span style={liveDot} />
-            Live
-          </div>
-
-          <div style={countBadge}>
-            {normalizedLogs.length}
-          </div>
-        </div>
-      </div>
-
       <div style={feedArea}>
-        {paginatedLogs.map((log, index) => {
-          const meta =
-            activityMeta(
-              log.action,
-              log.role
-            );
+        {paginatedLogs.map(
+          (log, index) => {
+            const meta =
+              activityMeta(
+                log.action,
+                log.role
+              );
 
-          const activityTime =
-            log.createdAt ||
-            log.created_at ||
-            log.performedAt ||
-            log.performed_at ||
-            log.timestamp ||
-            log.time;
+            const activityTime =
+              log._activityTime;
 
-          const hasStatusFlow =
-            log._fromStatus ||
-            log._toStatus;
+            const hasStatusFlow =
+              Boolean(
+                log._fromStatus ||
+                log._toStatus
+              );
 
-          return (
-            <div
-              key={log.id || `${activityTime}-${index}`}
-              style={{
-                ...activityCard,
-                border: `1px solid ${meta.border}`,
-              }}
-            >
+            return (
               <div
-                style={{
-                  ...leftGlow,
-                  background: meta.accent,
-                  boxShadow: `0 0 28px ${meta.accent}77`,
-                }}
-              />
-
-              <div
-                style={{
-                  ...iconBubble,
-                  background: meta.soft,
-                  border: `1px solid ${meta.border}`,
-                }}
+                key={
+                  log.id ||
+                  `${activityTime}-${index}`
+                }
+                style={activityCard}
               >
-                {meta.icon}
-              </div>
+                <div
+                  style={leftRail(
+                    meta.accent
+                  )}
+                />
 
-              <div style={contentArea}>
-                <div style={actionRow}>
-                  <div style={actionText}>
-                    {log._actionLabel}
+                <div
+                  style={iconBubble(
+                    meta
+                  )}
+                >
+                  {meta.icon}
+                </div>
+
+                <div style={contentArea}>
+                  <div style={actionRow}>
+                    <div style={actionText}>
+                      {log._actionLabel}
+                    </div>
+
+                    <span
+                      style={typeChip(
+                        meta
+                      )}
+                    >
+                      {meta.label}
+                    </span>
+                  </div>
+
+                  <div style={itemName}>
+                    {log._itemName}
+                  </div>
+
+                  {hasStatusFlow && (
+                    <div style={statusFlow}>
+                      <span style={statusMini}>
+                        {statusLabel(
+                          log._fromStatus
+                        ) || "—"}
+                      </span>
+
+                      <span style={arrow}>
+                        →
+                      </span>
+
+                      <span
+                        style={statusMiniActive(
+                          meta
+                        )}
+                      >
+                        {statusLabel(
+                          log._toStatus
+                        ) || "—"}
+                      </span>
+                    </div>
+                  )}
+
+                  {log._remarks && (
+                    <div
+                      style={remarks}
+                      title={
+                        log._remarks
+                      }
+                    >
+                      {log._remarks}
+                    </div>
+                  )}
+
+                  <div style={timeRow}>
+                    <span
+                      style={relativeTime(
+                        meta
+                      )}
+                    >
+                      {formatRelativeTime(
+                        activityTime,
+                        nowMs
+                      )}
+                    </span>
+
+                    <span style={absoluteTime}>
+                      {formatDate(
+                        activityTime
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={userArea}>
+                  <div style={userAvatar}>
+                    {initials(
+                      log._performedBy
+                    )}
                   </div>
 
                   <div
-                    style={{
-                      ...typeChip,
-                      color: meta.accent,
-                      background: meta.soft,
-                      border: `1px solid ${meta.border}`,
-                    }}
+                    style={userName}
+                    title={
+                      log._performedBy
+                    }
                   >
-                    {meta.label}
+                    {log._performedBy}
                   </div>
-                </div>
 
-                <div style={itemName}>
-                  {log._itemName}
-                </div>
-
-                {hasStatusFlow && (
-                  <div style={statusFlow}>
-                    <span style={statusMini}>
-                      {statusLabel(log._fromStatus) || "—"}
-                    </span>
-
-                    <span style={arrow}>
-                      →
-                    </span>
-
-                    <span
-                      style={{
-                        ...statusMini,
-                        color: meta.accent,
-                        border: `1px solid ${meta.border}`,
-                        background: meta.soft,
-                      }}
-                    >
-                      {statusLabel(log._toStatus) || "—"}
-                    </span>
-                  </div>
-                )}
-
-                {log._remarks && (
-                  <div style={remarks}>
-                    {log._remarks}
-                  </div>
-                )}
-
-                <div style={timeRow}>
-                  <span
-                    style={{
-                      ...relativeTime,
-                      color: meta.accent,
-                      background: meta.soft,
-                      border: `1px solid ${meta.border}`,
-                    }}
+                  <div
+                    style={roleChip}
+                    title={log._role}
                   >
-                    {formatRelativeTime(activityTime, nowMs)}
-                  </span>
-
-                  <span style={absoluteTime}>
-                    {formatDate(activityTime)}
-                  </span>
+                    {log._role}
+                  </div>
                 </div>
               </div>
+            );
+          }
+        )}
 
-              <div style={userArea}>
-                <div style={userAvatar}>
-                  {initials(log._performedBy)}
-                </div>
+        {paginatedLogs.length ===
+          0 && (
+            <div style={empty}>
+              <div style={emptyIcon}>
+                ◎
+              </div>
 
-                <div style={userName}>
-                  {log._performedBy}
-                </div>
+              <div style={emptyTitle}>
+                No recent activity
+              </div>
 
-                <div style={roleChip}>
-                  {log._role}
-                </div>
+              <div style={emptyText}>
+                Packing, warehouse, FG movement, challan and dispatch actions will appear here.
               </div>
             </div>
-          );
-        })}
+          )}
+      </div>
 
-        {paginatedLogs.length === 0 && (
-          <div style={empty}>
-            <div style={emptyIcon}>
-              🕘
+      {normalizedLogs.length >
+        ITEMS_PER_PAGE && (
+          <div style={pagination}>
+            <div style={paginationMeta}>
+              Showing{" "}
+              <strong>
+                {safePage *
+                  ITEMS_PER_PAGE +
+                  1}
+                –
+                {Math.min(
+                  (
+                    safePage + 1
+                  ) *
+                  ITEMS_PER_PAGE,
+                  normalizedLogs.length
+                )}
+              </strong>{" "}
+              of{" "}
+              <strong>
+                {normalizedLogs.length}
+              </strong>
             </div>
 
-            <div style={emptyTitle}>
-              No recent activity yet
-            </div>
+            <div style={paginationControls}>
+              <button
+                type="button"
+                style={pageButton(
+                  safePage === 0
+                )}
+                disabled={
+                  safePage === 0
+                }
+                onClick={() =>
+                  setPage((current) =>
+                    Math.max(
+                      0,
+                      current - 1
+                    )
+                  )
+                }
+              >
+                ‹
+              </button>
 
-            <div style={emptyText}>
-              Packing, warehouse, FG movement, challan and dispatch actions will appear here.
+              <div style={pageIndicator}>
+                {safePage + 1} /{" "}
+                {totalPages}
+              </div>
+
+              <button
+                type="button"
+                style={pageButton(
+                  safePage >=
+                  totalPages - 1
+                )}
+                disabled={
+                  safePage >=
+                  totalPages - 1
+                }
+                onClick={() =>
+                  setPage((current) =>
+                    Math.min(
+                      totalPages - 1,
+                      current + 1
+                    )
+                  )
+                }
+              >
+                ›
+              </button>
             </div>
           </div>
         )}
-      </div>
-
-      {normalizedLogs.length > ITEMS_PER_PAGE && (
-        <div style={pagination}>
-          <button
-            type="button"
-            style={{
-              ...pageBtn,
-              opacity: safePage === 0 ? 0.45 : 1,
-              cursor: safePage === 0 ? "not-allowed" : "pointer",
-            }}
-            disabled={safePage === 0}
-            onClick={() =>
-              setPage((p) =>
-                Math.max(0, p - 1)
-              )
-            }
-          >
-            ← Prev
-          </button>
-
-          <div style={pageIndicator}>
-            Page {safePage + 1} of {totalPages}
-          </div>
-
-          <button
-            type="button"
-            style={{
-              ...pageBtn,
-              opacity: safePage >= totalPages - 1 ? 0.45 : 1,
-              cursor:
-                safePage >= totalPages - 1
-                  ? "not-allowed"
-                  : "pointer",
-            }}
-            disabled={safePage >= totalPages - 1}
-            onClick={() =>
-              setPage((p) =>
-                p < totalPages - 1
-                  ? p + 1
-                  : p
-              )
-            }
-          >
-            Next →
-          </button>
-        </div>
-      )}
     </div>
   );
 }
 
 const wrapper = {
+  width: "100%",
+  minHeight: "100%",
   display: "flex",
   flexDirection: "column",
-  height: "100%",
-  minHeight: 0,
-  color: "#fff",
-};
-
-const topBar = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 10,
-  marginBottom: 9,
-};
-
-const headingRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-};
-
-const headingIcon = {
-  width: 30,
-  height: 30,
-  borderRadius: 12,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background:
-    "linear-gradient(135deg, rgba(37,99,235,.30), rgba(14,165,233,.14))",
-  border: "1px solid rgba(96,165,250,.22)",
-  boxShadow: "0 8px 18px rgba(37,99,235,.16)",
-  fontSize: 14,
-};
-
-const heading = {
-  fontSize: 16,
-  fontWeight: 950,
-  color: "#fff",
-  letterSpacing: "-.02em",
-};
-
-const subHeading = {
-  fontSize: 10,
-  color: "rgba(255,255,255,.50)",
-  marginTop: 2,
-  fontWeight: 650,
-};
-
-const headerRight = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-};
-
-const livePill = {
-  height: 28,
-  padding: "0 10px",
-  borderRadius: 999,
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  background: "rgba(34,197,94,.10)",
-  border: "1px solid rgba(34,197,94,.20)",
-  color: "#86efac",
-  fontSize: 10,
-  fontWeight: 950,
-};
-
-const liveDot = {
-  width: 7,
-  height: 7,
-  borderRadius: 999,
-  background: "#22c55e",
-  boxShadow:
-    "0 0 14px rgba(34,197,94,.8)",
-};
-
-const countBadge = {
-  minWidth: 32,
-  height: 32,
-  borderRadius: 999,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-  boxShadow: "0 10px 22px rgba(37,99,235,.26)",
-  fontWeight: 950,
-  fontSize: 12,
   color: "#fff",
 };
 
 const feedArea = {
   flex: "1 1 auto",
   minHeight: 0,
-  overflow: "hidden",
-  paddingRight: 0,
-  paddingBottom: 0,
   display: "flex",
   flexDirection: "column",
   gap: 7,
@@ -839,187 +871,204 @@ const feedArea = {
 
 const activityCard = {
   position: "relative",
+  minWidth: 0,
   display: "grid",
-  gridTemplateColumns: "30px minmax(0,1fr) 68px",
-  gap: 8,
+  gridTemplateColumns:
+    "30px minmax(0,1fr) 72px",
+  gap: 9,
   alignItems: "center",
-  padding: "8px 10px 8px 12px",
-  borderRadius: 15,
-  marginBottom: 0,
+  padding: "9px 10px 9px 12px",
+  borderRadius: 13,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.052), rgba(255,255,255,.020))",
-  boxShadow: "0 9px 18px rgba(2,6,23,.14)",
-  backdropFilter: "blur(14px)",
+    "linear-gradient(180deg,rgba(30,41,59,.44),rgba(15,23,42,.36))",
+  border:
+    "1px solid rgba(148,163,184,.07)",
+  boxShadow:
+    "0 7px 18px rgba(2,6,23,.12)",
   overflow: "hidden",
 };
 
-const leftGlow = {
+const leftRail = (accent) => ({
   position: "absolute",
+  top: 9,
+  bottom: 9,
   left: 0,
-  top: 11,
-  bottom: 11,
-  width: 3,
-  borderRadius: "0 999px 999px 0",
-};
+  width: 2,
+  borderRadius:
+    "0 999px 999px 0",
+  background: accent,
+  boxShadow:
+    `0 0 10px ${accent}55`,
+});
+
+const iconBubble = (meta) => ({
+  width: 28,
+  height: 28,
+  borderRadius: 9,
+  display: "grid",
+  placeItems: "center",
+  color: meta.accent,
+  background: meta.soft,
+  border:
+    `1px solid ${meta.border}`,
+  fontSize: 10,
+  fontWeight: 950,
+});
 
 const contentArea = {
   minWidth: 0,
 };
 
 const actionRow = {
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  minWidth: 0,
+  gap: 6,
 };
 
-const remarks = {
-  marginTop: 7,
-  maxWidth: "100%",
-  color: "rgba(255,255,255,.52)",
-  fontSize: 11,
-  lineHeight: 1.45,
-  fontWeight: 650,
+const actionText = {
+  minWidth: 0,
+  color: "#e2e8f0",
+  fontSize: 9.5,
+  fontWeight: 950,
+  lineHeight: 1.35,
+  whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
-const userArea = {
+const typeChip = (meta) => ({
+  flexShrink: 0,
+  minHeight: 18,
+  padding: "0 6px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  color: meta.accent,
+  background: meta.soft,
+  border:
+    `1px solid ${meta.border}`,
+  fontSize: 6.6,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".035em",
+});
+
+const itemName = {
+  marginTop: 3,
+  color: "#8b9aaf",
+  fontSize: 8.3,
+  fontWeight: 750,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const statusFlow = {
+  marginTop: 5,
   display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-end",
+  alignItems: "center",
   gap: 4,
   minWidth: 0,
+};
+
+const statusMini = {
+  maxWidth: 106,
+  padding: "2px 5px",
+  borderRadius: 999,
+  color: "#718096",
+  background:
+    "rgba(148,163,184,.04)",
+  border:
+    "1px solid rgba(148,163,184,.07)",
+  fontSize: 6.9,
+  fontWeight: 850,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const statusMiniActive = (meta) => ({
   ...statusMini,
   color: meta.accent,
   background: meta.soft,
-  border: `1px solid ${meta.border}`,
+  border:
+    `1px solid ${meta.border}`,
 });
 
 const arrow = {
-  color: "rgba(255,255,255,.42)",
-  fontSize: 12,
+  color: "#475569",
+  fontSize: 8,
   fontWeight: 900,
 };
 
-const remarksText = {
-  marginTop: 7,
-  maxWidth: "100%",
-  color: "rgba(255,255,255,.52)",
-  fontSize: 11,
-  lineHeight: 1.45,
+const remarks = {
+  marginTop: 5,
+  color: "#64748b",
+  fontSize: 7.4,
   fontWeight: 650,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const iconBubble = {
-  width: 28,
-  height: 28,
-  borderRadius: 11,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 13,
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)",
-};
-
-const actionText = {
-  fontWeight: 950,
-  fontSize: 11.5,
-  color: "#fff",
+  lineHeight: 1.35,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
-  minWidth: 0,
-};
-
-const typeChip = {
-  flex: "0 0 auto",
-  padding: "2px 6px",
-  borderRadius: 999,
-  fontSize: 8.5,
-  fontWeight: 950,
-};
-
-const itemName = {
-  marginTop: 2,
-  fontSize: 10.5,
-  color: "rgba(255,255,255,.70)",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  fontWeight: 750,
-};
-
-const statusFlow = {
-  marginTop: 4,
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  flexWrap: "wrap",
 };
 
 const timeRow = {
-  marginTop: 4,
+  marginTop: 5,
   display: "flex",
   alignItems: "center",
   gap: 5,
   flexWrap: "wrap",
 };
 
-const statusMini = {
-  maxWidth: 108,
-  padding: "2px 6px",
+const relativeTime = (meta) => ({
+  minHeight: 17,
+  padding: "0 5px",
   borderRadius: 999,
-  background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.07)",
-  color: "rgba(255,255,255,.58)",
-  fontSize: 8.5,
-  fontWeight: 950,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const relativeTime = {
-  padding: "2px 6px",
-  borderRadius: 999,
-  fontSize: 8.5,
-  fontWeight: 950,
-};
+  display: "inline-flex",
+  alignItems: "center",
+  color: meta.accent,
+  background: meta.soft,
+  border:
+    `1px solid ${meta.border}`,
+  fontSize: 6.6,
+  fontWeight: 900,
+});
 
 const absoluteTime = {
-  fontSize: 9,
-  color: "rgba(255,255,255,.46)",
+  color: "#475569",
+  fontSize: 6.8,
   fontWeight: 750,
 };
 
-const userAvatar = {
-  width: 25,
-  height: 25,
-  borderRadius: 999,
+const userArea = {
+  minWidth: 0,
   display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  gap: 3,
+};
+
+const userAvatar = {
+  width: 24,
+  height: 24,
+  borderRadius: 8,
+  display: "grid",
+  placeItems: "center",
+  color: "#bfdbfe",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,.24), rgba(147,197,253,.10))",
-  border: "1px solid rgba(147,197,253,.20)",
-  color: "#dbeafe",
-  fontSize: 9,
+    "rgba(59,130,246,.09)",
+  border:
+    "1px solid rgba(96,165,250,.15)",
+  fontSize: 7.6,
   fontWeight: 950,
 };
 
 const userName = {
-  maxWidth: 68,
-  color: "#fff",
-  fontSize: 9,
-  fontWeight: 950,
+  maxWidth: 70,
+  color: "#cbd5e1",
+  fontSize: 7.2,
+  fontWeight: 850,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -1027,96 +1076,118 @@ const userName = {
 
 const roleChip = {
   maxWidth: 70,
-  padding: "2px 5px",
+  padding: "1px 5px",
   borderRadius: 999,
-  background: "rgba(255,255,255,.05)",
-  border: "1px solid rgba(255,255,255,.06)",
-  color: "rgba(255,255,255,.62)",
-  fontSize: 7.5,
-  fontWeight: 950,
+  color: "#536177",
+  background:
+    "rgba(148,163,184,.035)",
+  border:
+    "1px solid rgba(148,163,184,.055)",
+  fontSize: 5.9,
+  fontWeight: 850,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
+
 const pagination = {
   flexShrink: 0,
+  minHeight: 35,
+  marginTop: 7,
+  paddingTop: 7,
+  borderTop:
+    "1px solid rgba(148,163,184,.055)",
   display: "flex",
-  justifyContent: "center",
+  justifyContent: "space-between",
   alignItems: "center",
-  gap: 6,
-  paddingTop: 6,
-  marginTop: 6,
-  borderTop: "1px solid rgba(255,255,255,.055)",
+  gap: 8,
 };
 
-const pageBtn = {
-  height: 26,
-  padding: "0 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,.08)",
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.045))",
-  color: "#fff",
-  fontWeight: 950,
-  fontSize: 10,
+const paginationMeta = {
+  color: "#536177",
+  fontSize: 7.4,
+  fontWeight: 750,
 };
+
+const paginationControls = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+};
+
+const pageButton = (
+  disabled
+) => ({
+  width: 26,
+  height: 26,
+  borderRadius: 8,
+  border:
+    "1px solid rgba(96,165,250,.10)",
+  background:
+    "rgba(59,130,246,.05)",
+  color: "#93c5fd",
+  cursor: disabled
+    ? "not-allowed"
+    : "pointer",
+  opacity: disabled
+    ? 0.35
+    : 1,
+  fontFamily: "inherit",
+  fontSize: 13,
+  fontWeight: 900,
+});
 
 const pageIndicator = {
+  minWidth: 42,
   height: 26,
-  padding: "0 9px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.06)",
-  fontSize: 9.5,
-  color: "rgba(255,255,255,.62)",
-  fontWeight: 950,
-  display: "flex",
-  alignItems: "center",
+  padding: "0 6px",
+  borderRadius: 8,
+  display: "grid",
+  placeItems: "center",
+  color: "#718096",
+  background:
+    "rgba(148,163,184,.035)",
+  border:
+    "1px solid rgba(148,163,184,.055)",
+  fontSize: 7.2,
+  fontWeight: 850,
 };
 
 const empty = {
-  minHeight: 210,
-  borderRadius: 24,
-  background:
-    "radial-gradient(circle at top, rgba(59,130,246,.14), transparent 38%), rgba(255,255,255,.035)",
-  border:
-    "1px dashed rgba(255,255,255,.14)",
+  flex: 1,
+  minHeight: 245,
+  borderRadius: 14,
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
   textAlign: "center",
-  padding: 22,
+  padding: 18,
+  background:
+    "radial-gradient(circle at top,rgba(59,130,246,.07),transparent 38%),rgba(2,6,23,.19)",
+  border:
+    "1px dashed rgba(148,163,184,.09)",
 };
 
 const emptyIcon = {
-  width: 52,
-  height: 52,
-  borderRadius: 20,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background:
-    "rgba(59,130,246,.14)",
-  border:
-    "1px solid rgba(59,130,246,.22)",
-  fontSize: 24,
-  marginBottom: 14,
+  color: "#60a5fa",
+  fontSize: 26,
 };
 
 const emptyTitle = {
-  fontSize: 15,
+  marginTop: 6,
+  color: "#dbeafe",
+  fontSize: 10,
   fontWeight: 900,
-  color: "#fff",
 };
 
 const emptyText = {
-  marginTop: 6,
-  maxWidth: 340,
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: "rgba(255,255,255,.56)",
+  maxWidth: 270,
+  marginTop: 4,
+  color: "#536177",
+  fontSize: 7.8,
   fontWeight: 700,
+  lineHeight: 1.45,
 };
 
 export default ActivityFeed;
