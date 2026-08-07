@@ -4392,6 +4392,9 @@ function RankingPanel({
     <div
       style={{
         ...panelCard,
+        ...(!fullWidth
+          ? managementPanelShell
+          : {}),
         ...(fullWidth
           ? {
             gridColumn:
@@ -4505,28 +4508,36 @@ function RankingPanel({
         )}
       </div>
 
-      <ProfessionalPagination
-        page={currentPage}
-        setPage={setPage}
-        pageSize={pageSize}
-        setPageSize={
-          setPageSize
+      <div
+        style={
+          !fullWidth
+            ? managementPanelPagerDock
+            : undefined
         }
-        totalItems={
-          rows.length
-        }
-        label={
-          isDriver
-            ? "drivers"
-            : "vehicles"
-        }
-        pageSizeOptions={
-          fullWidth
-            ? [10, 25, 50]
-            : [5, 10, 25]
-        }
-        compact={!fullWidth}
-      />
+      >
+        <ProfessionalPagination
+          page={currentPage}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={
+            setPageSize
+          }
+          totalItems={
+            rows.length
+          }
+          label={
+            isDriver
+              ? "drivers"
+              : "vehicles"
+          }
+          pageSizeOptions={
+            fullWidth
+              ? [10, 25, 50]
+              : [5, 10, 25]
+          }
+          compact={!fullWidth}
+        />
+      </div>
     </div>
   );
 }
@@ -4815,6 +4826,9 @@ function AttentionPanel({
     <div
       style={{
         ...panelCard,
+        ...(!fullWidth
+          ? managementPanelShell
+          : {}),
         ...(fullWidth
           ? {
             gridColumn:
@@ -5171,24 +5185,32 @@ function AttentionPanel({
                 )}
               </div>
 
-              <ProfessionalPagination
-                page={currentPage}
-                setPage={setPage}
-                pageSize={pageSize}
-                setPageSize={
-                  setPageSize
+              <div
+                style={
+                  !fullWidth
+                    ? managementPanelPagerDock
+                    : undefined
                 }
-                totalItems={
-                  filteredRows.length
-                }
-                label="issues"
-                pageSizeOptions={
-                  fullWidth
-                    ? [10, 20, 50]
-                    : [5, 10, 20]
-                }
-                compact={!fullWidth}
-              />
+              >
+                <ProfessionalPagination
+                  page={currentPage}
+                  setPage={setPage}
+                  pageSize={pageSize}
+                  setPageSize={
+                    setPageSize
+                  }
+                  totalItems={
+                    filteredRows.length
+                  }
+                  label="issues"
+                  pageSizeOptions={
+                    fullWidth
+                      ? [10, 20, 50]
+                      : [5, 10, 20]
+                  }
+                  compact={!fullWidth}
+                />
+              </div>
             </>
           )}
         </>
@@ -6175,6 +6197,7 @@ const managementPanelsGrid = {
   gridTemplateColumns:
     "repeat(auto-fit,minmax(360px,1fr))",
   gap: 16,
+  alignItems: "stretch",
 };
 
 const sourceNote = {
@@ -6201,7 +6224,24 @@ const panelCard = {
     "1px solid rgba(255,255,255,.065)",
 };
 
+const managementPanelShell = {
+  height: "100%",
+  minHeight: 520,
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+};
+
+const managementPanelPagerDock = {
+  marginTop: "auto",
+  paddingTop: 12,
+  flexShrink: 0,
+};
+
 const panelHeader = {
+  minHeight: 38,
+  flexShrink: 0,
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
@@ -6234,9 +6274,15 @@ const panelCountBadge = {
 };
 
 const rankingTableWrap = {
+  flex: "1 1 auto",
+  minHeight: 0,
   overflowX: "auto",
+  overflowY: "hidden",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,.05)",
+  background:
+    "rgba(2,6,23,.16)",
+  border:
+    "1px solid rgba(255,255,255,.05)",
 };
 
 const rankingHead = {
@@ -6340,6 +6386,7 @@ const attentionSummaryBadge = (
 };
 
 const attentionFilterCard = {
+  flexShrink: 0,
   marginBottom: 11,
   padding: 10,
   borderRadius: 13,
@@ -6452,10 +6499,11 @@ const attentionClearButtonDisabled = {
 };
 
 const attentionList = {
+  flex: "1 1 0",
+  minHeight: 0,
   display: "flex",
   flexDirection: "column",
   gap: 7,
-  maxHeight: 385,
   overflowY: "auto",
   overflowX: "hidden",
   paddingRight: 4,
