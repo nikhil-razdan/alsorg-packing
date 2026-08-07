@@ -1003,10 +1003,11 @@ const HARDWARE_UOM_OPTIONS = [
   "Box",
   "Packet",
   "Meter",
-  "LTR",
+  "Ltr",
   "Kg",
   "Gram",
   "MM",
+  "ML"
 ];
 
 /*
