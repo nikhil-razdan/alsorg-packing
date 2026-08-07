@@ -48,6 +48,14 @@ function Sidebar() {
 			user
 		);
 
+	const canOpenDispatch =
+		hasAnyRole(
+			"ADMIN",
+			"DISPATCH",
+			"WAREHOUSE",
+			"PACKING"
+		);
+
 	/*
 	 * Calculate this only after
 	 * canOpenNormalInventory is initialized.
@@ -123,12 +131,9 @@ function Sidebar() {
 		{
 			path: "/packflow/dispatched-items",
 			label: "Dispatched Items",
-			roles: [
-				"ADMIN",
-				"DISPATCH",
-				"WAREHOUSE",
-				"PACKING",
-			],
+			roles: [],
+			customAccess:
+				canOpenDispatch,
 			icon: (
 				<LocalShippingOutlinedIcon
 					fontSize="small"

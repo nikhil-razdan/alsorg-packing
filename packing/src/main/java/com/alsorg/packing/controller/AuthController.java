@@ -199,6 +199,20 @@ public class AuthController {
         response.put("id", user.getId());
         response.put("username", user.getUsername());
         response.put("role", role);
+
+        /*
+         * IMPORTANT FOR MULTI-ROLE USERS:
+         *
+         * The frontend AuthContext builds its effective role list from this
+         * field.  Omitting it caused users such as
+         * HARDWARE_PACKING + DISPATCH to collapse back to only the legacy
+         * primary role after /login or /auth/me.
+         */
+        response.put(
+                "roles",
+                user.getEffectiveRoles()
+        );
+
         response.put("enabled", user.isEnabled());
 
         response.put(
@@ -232,12 +246,18 @@ public class AuthController {
     private boolean hasWarehouseAccess(
             User user
     ) {
-        String role =
-                normalizeRole(user.getRole());
+        if (user == null) {
+            return false;
+        }
 
         return user.isWarehouseAccess()
-                || "ADMIN".equals(role)
-                || "WAREHOUSE".equals(role);
+                || user.getEffectiveRoles()
+                        .stream()
+                        .map(this::normalizeRole)
+                        .anyMatch(role ->
+                                "ADMIN".equals(role)
+                                        || "WAREHOUSE".equals(role)
+                                        || "DISPATCH".equals(role));
     }
 
     private boolean isMobileClient(

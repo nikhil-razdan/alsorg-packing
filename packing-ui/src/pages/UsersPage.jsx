@@ -54,6 +54,12 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import SecurityOutlinedIcon from "@mui/icons-material/SecurityOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
@@ -626,9 +632,216 @@ const userModules = (user) => {
 		);
 	}
 
-	return modulesForRole(
-		user?.role
+	return modulesForRoles(
+		userRoles(user)
 	);
+};
+
+const normalizeUsernameKey = (value) => {
+	return String(value || "")
+		.trim()
+		.toLowerCase();
+};
+
+const performanceActor = (row) => {
+	return (
+		row?.username ||
+		row?.performedBy ||
+		row?.actor ||
+		row?.user ||
+		row?.generatedBy ||
+		row?.createdBy ||
+		""
+	);
+};
+
+const performanceAction = (row) => {
+	return String(
+		row?.action ||
+		row?.event ||
+		row?.eventType ||
+		row?.message ||
+		row?.activity ||
+		"Activity"
+	).trim();
+};
+
+const performanceTimestamp = (row) => {
+	return (
+		row?.performedAt ||
+		row?.createdAt ||
+		row?.updatedAt ||
+		row?.timestamp ||
+		row?.activityAt ||
+		null
+	);
+};
+
+const parseSmartDate = (value) => {
+	if (!value) {
+		return null;
+	}
+
+	const date =
+		value instanceof Date
+			? value
+			: new Date(value);
+
+	return Number.isNaN(
+		date.getTime()
+	)
+		? null
+		: date;
+};
+
+const formatSmartDateTime = (value) => {
+	const date =
+		parseSmartDate(value);
+
+	if (!date) {
+		return "No recent activity";
+	}
+
+	return new Intl.DateTimeFormat(
+		"en-IN",
+		{
+			day: "2-digit",
+			month: "short",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+			hour12: true,
+		}
+	).format(date);
+};
+
+const performanceCategory = (row) => {
+	const text =
+		`${performanceAction(row)} ${row?.role || ""}`
+			.toUpperCase();
+
+	if (
+		text.includes("PACK") ||
+		text.includes("STICKER")
+	) {
+		return "PACKING";
+	}
+
+	if (
+		text.includes("DISPATCH") ||
+		text.includes("CHALLAN") ||
+		text.includes("CHALAAN")
+	) {
+		return "DISPATCH";
+	}
+
+	if (
+		text.includes("WAREHOUSE") ||
+		text.includes("FG") ||
+		text.includes("MOVE") ||
+		text.includes("TRANSFER")
+	) {
+		return "MOVEMENT";
+	}
+
+	if (
+		text.includes("APPROVE") ||
+		text.includes("REJECT") ||
+		text.includes("RESTORE") ||
+		text.includes("RETURN")
+	) {
+		return "CONTROL";
+	}
+
+	return "OTHER";
+};
+
+const getUserAccessHealth = (user) => {
+	const roles =
+		userRoles(user);
+
+	const modules =
+		userModules(user);
+
+	const plants =
+		userPlantCodes(user);
+
+	const issues = [];
+
+	const requiredModules =
+		modulesForRoles(roles);
+
+	requiredModules.forEach(
+		(module) => {
+			if (
+				!modules.includes(module)
+			) {
+				issues.push(
+					`${module} module missing for assigned role.`
+				);
+			}
+		}
+	);
+
+	if (
+		rolesRequirePlantAccess(
+			roles
+		) &&
+		plants.length === 0
+	) {
+		issues.push(
+			"Plant access is required but no plant is assigned."
+		);
+	}
+
+	if (
+		rolesRequireDriver(roles) &&
+		!user?.driverId
+	) {
+		issues.push(
+			"DRIVER role has no linked driver profile."
+		);
+	}
+
+	if (
+		roles.includes("DISPATCH") &&
+		!readWarehouseAccess(user)
+	) {
+		issues.push(
+			"DISPATCH role should include warehouse access."
+		);
+	}
+
+	const hardwareOnly =
+		roles.includes(
+			"HARDWARE_PACKING"
+		) &&
+		!roles.some((role) =>
+			[
+				"ADMIN",
+				"PACKING",
+				"WAREHOUSE",
+				"DISPATCH",
+				"LOGISTICS",
+			].includes(role)
+		);
+
+	if (
+		hardwareOnly &&
+		readWarehouseAccess(user)
+	) {
+		issues.push(
+			"Hardware-only profile has unexpected warehouse access."
+		);
+	}
+
+	return {
+		status:
+			issues.length === 0
+				? "HEALTHY"
+				: "REVIEW",
+		issues,
+	};
 };
 
 /* =========================================================
@@ -685,6 +898,39 @@ export default function UsersPage() {
 
 	const [search, setSearch] =
 		useState("");
+
+	const [statusFilter, setStatusFilter] =
+		useState("ALL");
+
+	const [moduleFilter, setModuleFilter] =
+		useState("ALL");
+
+	const [roleFilter, setRoleFilter] =
+		useState("ALL");
+
+	const [plantFilter, setPlantFilter] =
+		useState("ALL");
+
+	const [activityFilter, setActivityFilter] =
+		useState("ALL");
+
+	const [performanceLoading, setPerformanceLoading] =
+		useState(false);
+
+	const [performanceData, setPerformanceData] =
+		useState({
+			packingRows: [],
+			dispatchRows: [],
+			activityRows: [],
+			loadedAt: null,
+			errors: [],
+		});
+
+	const [performanceOpen, setPerformanceOpen] =
+		useState(false);
+
+	const [performanceUser, setPerformanceUser] =
+		useState(null);
 
 	const [pageNo, setPageNo] =
 		useState(1);
@@ -829,9 +1075,97 @@ export default function UsersPage() {
 		[showMessage]
 	);
 
+	const loadPerformance = useCallback(
+		async () => {
+			setPerformanceLoading(true);
+
+			const [
+				packingResult,
+				dispatchResult,
+				activityResult,
+			] = await Promise.allSettled([
+				API.get(
+					"/reports/dashboard/daily-throughput/users",
+					{
+						params: {
+							type: "packing",
+						},
+					}
+				),
+				API.get(
+					"/reports/dashboard/daily-throughput/users",
+					{
+						params: {
+							type: "dispatch",
+						},
+					}
+				),
+				API.get(
+					"/reports/dashboard/activity",
+					{
+						params: {
+							limit: 250,
+						},
+					}
+				),
+			]);
+
+			const errors = [];
+
+			const unpackRows = (
+				result,
+				label
+			) => {
+				if (
+					result.status ===
+					"fulfilled"
+				) {
+					return Array.isArray(
+						result.value?.data
+					)
+						? result.value.data
+						: [];
+				}
+
+				errors.push(
+					`${label}: ${readError(
+						result.reason,
+						"Unavailable"
+					)}`
+				);
+
+				return [];
+			};
+
+			setPerformanceData({
+				packingRows: unpackRows(
+					packingResult,
+					"Packing performance"
+				),
+				dispatchRows: unpackRows(
+					dispatchResult,
+					"Dispatch performance"
+				),
+				activityRows: unpackRows(
+					activityResult,
+					"Recent activity"
+				),
+				loadedAt: new Date(),
+				errors,
+			});
+
+			setPerformanceLoading(false);
+		},
+		[]
+	);
+
 	useEffect(() => {
 		loadPageData();
-	}, [loadPageData]);
+		loadPerformance();
+	}, [
+		loadPageData,
+		loadPerformance,
+	]);
 
 	const plantName = useCallback(
 		(code) => {
@@ -1301,42 +1635,334 @@ export default function UsersPage() {
 		}
 	};
 
+	const performanceByUser = useMemo(() => {
+		const map = new Map();
+
+		users.forEach((user) => {
+			const key =
+				normalizeUsernameKey(
+					user.username
+				);
+
+			if (!key) return;
+
+			map.set(key, {
+				packingToday: 0,
+				dispatchToday: 0,
+				todayOutput: 0,
+				recentActions: 0,
+				packingActions: 0,
+				dispatchActions: 0,
+				movementActions: 0,
+				controlActions: 0,
+				otherActions: 0,
+				lastActivityAt: null,
+				recentRows: [],
+				activityScore: 0,
+				activityBand: "No recorded work",
+			});
+		});
+
+		const addDailyCount = (
+			rows,
+			field
+		) => {
+			rows.forEach((row) => {
+				const key =
+					normalizeUsernameKey(
+						row?.username ||
+						row?.performedBy ||
+						row?.user
+					);
+
+				const target =
+					map.get(key);
+
+				if (!target) return;
+
+				target[field] +=
+					Number(
+						row?.count || 0
+					) || 0;
+			});
+		};
+
+		addDailyCount(
+			performanceData.packingRows,
+			"packingToday"
+		);
+
+		addDailyCount(
+			performanceData.dispatchRows,
+			"dispatchToday"
+		);
+
+		performanceData.activityRows
+			.forEach((row) => {
+				const key =
+					normalizeUsernameKey(
+						performanceActor(row)
+					);
+
+				const target =
+					map.get(key);
+
+				if (!target) return;
+
+				target.recentActions += 1;
+
+				const category =
+					performanceCategory(row);
+
+				if (category === "PACKING") {
+					target.packingActions += 1;
+				} else if (
+					category === "DISPATCH"
+				) {
+					target.dispatchActions += 1;
+				} else if (
+					category === "MOVEMENT"
+				) {
+					target.movementActions += 1;
+				} else if (
+					category === "CONTROL"
+				) {
+					target.controlActions += 1;
+				} else {
+					target.otherActions += 1;
+				}
+
+				const timestamp =
+					performanceTimestamp(row);
+
+				const parsed =
+					parseSmartDate(timestamp);
+
+				const currentLast =
+					parseSmartDate(
+						target.lastActivityAt
+					);
+
+				if (
+					parsed &&
+					(
+						!currentLast ||
+						parsed.getTime() >
+						currentLast.getTime()
+					)
+				) {
+					target.lastActivityAt =
+						timestamp;
+				}
+
+				if (
+					target.recentRows.length < 8
+				) {
+					target.recentRows.push(row);
+				}
+			});
+
+		let maxTodayOutput = 0;
+		let maxRecentActions = 0;
+
+		map.forEach((value) => {
+			value.todayOutput =
+				value.packingToday +
+				value.dispatchToday;
+
+			maxTodayOutput =
+				Math.max(
+					maxTodayOutput,
+					value.todayOutput
+				);
+
+			maxRecentActions =
+				Math.max(
+					maxRecentActions,
+					value.recentActions
+				);
+		});
+
+		map.forEach((value) => {
+			const outputIndex =
+				maxTodayOutput > 0
+					? value.todayOutput /
+					maxTodayOutput
+					: 0;
+
+			const activityIndex =
+				maxRecentActions > 0
+					? value.recentActions /
+					maxRecentActions
+					: 0;
+
+			value.activityScore =
+				Math.round(
+					Math.min(
+						100,
+						outputIndex * 70 +
+						activityIndex * 30
+					)
+				);
+
+			value.activityBand =
+				value.activityScore >= 80
+					? "Leading activity"
+					: value.activityScore >= 50
+						? "Strong activity"
+						: value.activityScore > 0
+							? "Active"
+							: "No recorded work";
+		});
+
+		return map;
+	}, [
+		users,
+		performanceData,
+	]);
+
+	const accessHealthByUser = useMemo(() => {
+		const map = new Map();
+
+		users.forEach((user) => {
+			map.set(
+				String(user.id),
+				getUserAccessHealth(user)
+			);
+		});
+
+		return map;
+	}, [users]);
+
 	const filteredRows = useMemo(() => {
 		const query =
 			search
 				.trim()
 				.toLowerCase();
 
-		if (!query) {
-			return users;
-		}
-
 		return users.filter((user) => {
-			const plantsText =
-				userPlantCodes(user)
-					.join(" ")
-					.toLowerCase();
+			const roles =
+				userRoles(user);
 
-			const modulesText =
-				userModules(user)
-					.join(" ")
-					.toLowerCase();
+			const plants =
+				userPlantCodes(user);
 
-			const rolesText =
-				userRoles(user)
-					.join(" ")
-					.toLowerCase();
+			const modules =
+				userModules(user);
 
-			return (
-				String(user.username || "")
-					.toLowerCase()
-					.includes(query) ||
-				rolesText.includes(query) ||
-				plantsText.includes(query) ||
-				modulesText.includes(query)
-			);
+			const performance =
+				performanceByUser.get(
+					normalizeUsernameKey(
+						user.username
+					)
+				) || {};
+
+			const accessHealth =
+				accessHealthByUser.get(
+					String(user.id)
+				) || {
+					status: "HEALTHY",
+					issues: [],
+				};
+
+			if (
+				statusFilter === "ENABLED" &&
+				user.enabled !== true
+			) {
+				return false;
+			}
+
+			if (
+				statusFilter === "DISABLED" &&
+				user.enabled === true
+			) {
+				return false;
+			}
+
+			if (
+				moduleFilter !== "ALL" &&
+				!modules.includes(
+					moduleFilter
+				)
+			) {
+				return false;
+			}
+
+			if (
+				roleFilter !== "ALL" &&
+				!roles.includes(roleFilter)
+			) {
+				return false;
+			}
+
+			if (
+				plantFilter !== "ALL" &&
+				!plants.includes(plantFilter)
+			) {
+				return false;
+			}
+
+			if (
+				activityFilter === "ACTIVE_TODAY" &&
+				Number(
+					performance.todayOutput || 0
+				) <= 0
+			) {
+				return false;
+			}
+
+			if (
+				activityFilter === "NO_ACTIVITY" &&
+				Number(
+					performance.todayOutput || 0
+				) > 0
+			) {
+				return false;
+			}
+
+			if (
+				activityFilter === "MULTI_ROLE" &&
+				roles.length <= 1
+			) {
+				return false;
+			}
+
+			if (
+				activityFilter === "ACCESS_REVIEW" &&
+				accessHealth.status !== "REVIEW"
+			) {
+				return false;
+			}
+
+			if (!query) {
+				return true;
+			}
+
+			const searchable = [
+				user.username,
+				...roles,
+				...plants,
+				...modules,
+				...accessHealth.issues,
+				performance.activityBand,
+			]
+				.filter(Boolean)
+				.join(" ")
+				.toLowerCase();
+
+			return searchable.includes(query);
 		});
-	}, [users, search]);
+	}, [
+		users,
+		search,
+		statusFilter,
+		moduleFilter,
+		roleFilter,
+		plantFilter,
+		activityFilter,
+		performanceByUser,
+		accessHealthByUser,
+	]);
 
 	const totalPages = Math.max(
 		1,
@@ -1393,6 +2019,44 @@ export default function UsersPage() {
 				)
 			).length;
 
+		const multiRoleUsers =
+			users.filter(
+				(user) =>
+					userRoles(user).length > 1
+			).length;
+
+		let workToday = 0;
+		let activeToday = 0;
+
+		users.forEach((user) => {
+			const performance =
+				performanceByUser.get(
+					normalizeUsernameKey(
+						user.username
+					)
+				);
+
+			const output =
+				Number(
+					performance?.todayOutput || 0
+				);
+
+			workToday += output;
+
+			if (output > 0) {
+				activeToday += 1;
+			}
+		});
+
+		const accessIssues =
+			users.filter((user) =>
+				(
+					accessHealthByUser.get(
+						String(user.id)
+					)?.issues || []
+				).length > 0
+			).length;
+
 		return {
 			total: users.length,
 			enabled,
@@ -1400,8 +2064,35 @@ export default function UsersPage() {
 				users.length - enabled,
 			matFlowUsers,
 			bomFlowUsers,
+			multiRoleUsers,
+			workToday,
+			activeToday,
+			accessIssues,
 		};
-	}, [users]);
+	}, [
+		users,
+		performanceByUser,
+		accessHealthByUser,
+	]);
+
+	const clearSmartFilters = () => {
+		setSearch("");
+		setStatusFilter("ALL");
+		setModuleFilter("ALL");
+		setRoleFilter("ALL");
+		setPlantFilter("ALL");
+		setActivityFilter("ALL");
+		setPageNo(1);
+	};
+
+	const activeFilterCount = [
+		Boolean(search.trim()),
+		statusFilter !== "ALL",
+		moduleFilter !== "ALL",
+		roleFilter !== "ALL",
+		plantFilter !== "ALL",
+		activityFilter !== "ALL",
+	].filter(Boolean).length;
 
 	const logout = async () => {
 		await authLogout();
@@ -1468,7 +2159,7 @@ export default function UsersPage() {
 						sx={breadcrumbTextSx}
 					>
 						FlowSuite / Administration /
-						User Management
+						Smart User Management
 					</Typography>
 
 					<Chip
@@ -1489,7 +2180,7 @@ export default function UsersPage() {
 					/>
 
 					<StatCard
-						label="Enabled"
+						label="Enabled Users"
 						value={stats.enabled}
 						accent="#22c55e"
 						icon={
@@ -1498,75 +2189,262 @@ export default function UsersPage() {
 					/>
 
 					<StatCard
-						label="Disabled"
-						value={stats.disabled}
-						accent="#ef4444"
+						label="Multi-Role Users"
+						value={stats.multiRoleUsers}
+						accent="#a78bfa"
 						icon={
-							<BlockOutlinedIcon />
+							<SecurityOutlinedIcon />
 						}
 					/>
 
 					<StatCard
-						label="MatFlow Users"
-						value={
-							stats.matFlowUsers
+						label="Work Today"
+						value={stats.workToday}
+						accent="#06b6d4"
+						icon={
+							<AssessmentOutlinedIcon />
 						}
+					/>
+
+					<StatCard
+						label="Active Today"
+						value={stats.activeToday}
 						accent="#14b8a6"
 						icon={
-							<LayersOutlinedIcon />
+							<TimelineOutlinedIcon />
+						}
+					/>
+
+					<StatCard
+						label="Access Reviews"
+						value={stats.accessIssues}
+						accent={
+							stats.accessIssues > 0
+								? "#f59e0b"
+								: "#22c55e"
+						}
+						icon={
+							<AdminPanelSettingsIcon />
 						}
 					/>
 
 					<StatCard
 						label="BOMFlow Users"
-						value={
-							stats.bomFlowUsers
-						}
+						value={stats.bomFlowUsers}
 						accent="#8b5cf6"
 						icon={
 							<AccountTreeOutlinedIcon />
 						}
 					/>
-				</Box>
 
-				<Box sx={searchPanelSx}>
-					<TextField
-						fullWidth
-						value={search}
-						onChange={(event) => {
-							setSearch(
-								event.target.value
-							);
-							setPageNo(1);
-						}}
-						placeholder="Search by username, role, module or plant..."
-						size="small"
-						sx={fieldSx}
-						InputProps={{
-							startAdornment: (
-								<InputAdornment position="start">
-									<SearchIcon
-										sx={{
-											color: "#64748b",
-										}}
-									/>
-								</InputAdornment>
-							),
-						}}
+					<StatCard
+						label="MatFlow Users"
+						value={stats.matFlowUsers}
+						accent="#2dd4bf"
+						icon={
+							<LayersOutlinedIcon />
+						}
 					/>
-
-					<Button
-						startIcon={
-							<AddOutlinedIcon />
-						}
-						onClick={
-							openCreateDrawer
-						}
-						sx={primaryButtonSx}
-					>
-						Create User
-					</Button>
 				</Box>
+
+				<Box sx={smartControlPanelSx}>
+					<Box sx={smartControlHeaderSx}>
+						<Box>
+							<Box sx={smartControlEyebrowSx}>
+								SMART USER MANAGEMENT
+							</Box>
+
+							<Typography sx={smartControlTitleSx}>
+								Access, Performance & User Intelligence
+							</Typography>
+
+							<Typography sx={smartControlSubSx}>
+								Manage roles and plants while reviewing today&apos;s packing / dispatch output, recent activity and access health.
+							</Typography>
+						</Box>
+
+						<Box sx={smartControlActionsSx}>
+							<Button
+								startIcon={
+									<RefreshOutlinedIcon />
+								}
+								onClick={loadPerformance}
+								disabled={performanceLoading}
+								sx={secondaryButtonSx}
+							>
+								{performanceLoading
+									? "Refreshing..."
+									: "Refresh Intelligence"}
+							</Button>
+
+							<Button
+								startIcon={
+									<AddOutlinedIcon />
+								}
+								onClick={openCreateDrawer}
+								sx={primaryButtonSx}
+							>
+								Create User
+							</Button>
+						</Box>
+					</Box>
+
+					<Box sx={smartSearchRowSx}>
+						<TextField
+							fullWidth
+							value={search}
+							onChange={(event) => {
+								setSearch(
+									event.target.value
+								);
+								setPageNo(1);
+							}}
+							placeholder="Smart search: username, role, module, plant, access issue or activity band..."
+							size="small"
+							sx={fieldSx}
+							InputProps={{
+								startAdornment: (
+									<InputAdornment position="start">
+										<SearchIcon
+											sx={{
+												color: "#94a3b8",
+											}}
+										/>
+									</InputAdornment>
+								),
+							}}
+						/>
+					</Box>
+
+					<Box sx={smartFiltersGridSx}>
+						<SmartFilterSelect
+							label="Status"
+							value={statusFilter}
+							onChange={(value) => {
+								setStatusFilter(value);
+								setPageNo(1);
+							}}
+							options={[
+								["ALL", "All Statuses"],
+								["ENABLED", "Enabled"],
+								["DISABLED", "Disabled"],
+							]}
+						/>
+
+						<SmartFilterSelect
+							label="Module"
+							value={moduleFilter}
+							onChange={(value) => {
+								setModuleFilter(value);
+								setPageNo(1);
+							}}
+							options={[
+								["ALL", "All Modules"],
+								[MODULE_KEYS.PACKFLOW, "PackFlow"],
+								[MODULE_KEYS.BOMFLOW, "BOMFlow"],
+								[MODULE_KEYS.MATFLOW, "MatFlow"],
+							]}
+						/>
+
+						<SmartFilterSelect
+							label="Role"
+							value={roleFilter}
+							onChange={(value) => {
+								setRoleFilter(value);
+								setPageNo(1);
+							}}
+							options={[
+								["ALL", "All Roles"],
+								...Object.values(ROLE_META).map(
+									(meta) => [
+										meta.value,
+										meta.label,
+									]
+								),
+							]}
+						/>
+
+						<SmartFilterSelect
+							label="Plant"
+							value={plantFilter}
+							onChange={(value) => {
+								setPlantFilter(value);
+								setPageNo(1);
+							}}
+							options={[
+								["ALL", "All Plants"],
+								...plants.map((plant) => [
+									plant.plantCode,
+									plantName(
+										plant.plantCode
+									),
+								]),
+							]}
+						/>
+
+						<SmartFilterSelect
+							label="Intelligence"
+							value={activityFilter}
+							onChange={(value) => {
+								setActivityFilter(value);
+								setPageNo(1);
+							}}
+							options={[
+								["ALL", "All Users"],
+								["ACTIVE_TODAY", "Worked Today"],
+								["NO_ACTIVITY", "No Work Today"],
+								["MULTI_ROLE", "Multi-Role Users"],
+								["ACCESS_REVIEW", "Access Review Needed"],
+							]}
+						/>
+					</Box>
+
+					<Box sx={smartFilterFooterSx}>
+						<Box sx={smartFilterSummarySx}>
+							<FilterAltOutlinedIcon
+								sx={{
+									fontSize: 17,
+									color: "#60a5fa",
+								}}
+							/>
+
+							<Typography sx={mutedTextSx}>
+								Showing {filteredRows.length} of {users.length} users
+							</Typography>
+
+							{activeFilterCount > 0 && (
+								<Chip
+									label={`${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`}
+									size="small"
+									sx={smartFilterChipSx}
+								/>
+							)}
+
+							<Typography sx={smartLoadedAtSx}>
+								Performance snapshot: {performanceData.loadedAt
+									? formatSmartDateTime(performanceData.loadedAt)
+									: "Loading..."}
+							</Typography>
+						</Box>
+
+						<Button
+							onClick={clearSmartFilters}
+							disabled={activeFilterCount === 0}
+							sx={secondaryButtonSx}
+						>
+							Clear Filters
+						</Button>
+					</Box>
+				</Box>
+
+				{performanceData.errors.length > 0 && (
+					<Alert
+						severity="warning"
+						sx={performanceWarningSx}
+					>
+						User administration is available, but part of the performance snapshot could not be loaded. {performanceData.errors.join(" • ")}
+					</Alert>
+				)}
 
 				<Box sx={tablePanelSx}>
 					<Box sx={tableHeaderSx}>
@@ -1574,6 +2452,8 @@ export default function UsersPage() {
 						<Box>Access Profile</Box>
 						<Box>Plant Access</Box>
 						<Box>Operational Access</Box>
+						<Box>Today Performance</Box>
+						<Box>Access Health</Box>
 						<Box>Status</Box>
 						<Box>Actions</Box>
 					</Box>
@@ -1595,6 +2475,22 @@ export default function UsersPage() {
 										driverName={
 											driverName
 										}
+										performance={
+											performanceByUser.get(
+												normalizeUsernameKey(
+													user.username
+												)
+											)
+										}
+										accessHealth={
+											accessHealthByUser.get(
+												String(user.id)
+											)
+										}
+										onPerformance={() => {
+											setPerformanceUser(user);
+											setPerformanceOpen(true);
+										}}
 										onEdit={() =>
 											openEditDrawer(
 												user
@@ -1617,8 +2513,7 @@ export default function UsersPage() {
 							{paginatedRows.length ===
 								0 && (
 									<Box sx={emptyStateSx}>
-										No users match the
-										current search.
+										No users match the current smart filters.
 									</Box>
 								)}
 						</Box>
@@ -1700,10 +2595,13 @@ export default function UsersPage() {
 						</Box>
 
 						<Typography sx={mutedTextSx}>
-							{filteredRows.length} user
-							{filteredRows.length === 1
-								? ""
-								: "s"}
+							Showing {filteredRows.length === 0
+								? 0
+								: (currentPage - 1) * pageSize + 1}
+							–{Math.min(
+								currentPage * pageSize,
+								filteredRows.length
+							)} of {filteredRows.length} users
 						</Typography>
 					</Box>
 				</Box>
@@ -1723,6 +2621,31 @@ export default function UsersPage() {
 					handleRolesChange
 				}
 				plantName={plantName}
+			/>
+
+			<UserPerformanceDialog
+				open={performanceOpen}
+				user={performanceUser}
+				performance={
+					performanceUser
+						? performanceByUser.get(
+							normalizeUsernameKey(
+								performanceUser.username
+							)
+						)
+						: null
+				}
+				accessHealth={
+					performanceUser
+						? accessHealthByUser.get(
+							String(performanceUser.id)
+						)
+						: null
+				}
+				onClose={() => {
+					setPerformanceOpen(false);
+					setPerformanceUser(null);
+				}}
 			/>
 
 			<PasswordResetDialog
@@ -1824,13 +2747,13 @@ function PageHeader({
 				</Box>
 
 				<Typography sx={pageTitleSx}>
-					User Management
+					Smart User Management
 				</Typography>
 
 				<Typography sx={pageSubtitleSx}>
-					Create users and assign one controlled
-					access profile with its required module,
-					role, plants and operational permissions.
+					Create and govern users, combine PackFlow responsibilities,
+					monitor access health and review recorded operational performance
+					from one administrator workspace.
 				</Typography>
 			</Box>
 
@@ -1911,6 +2834,9 @@ function UserRow({
 	user,
 	plantName,
 	driverName,
+	performance,
+	accessHealth,
+	onPerformance,
 	onEdit,
 	onReset,
 	onDisable,
@@ -1938,6 +2864,24 @@ function UserRow({
 
 	const enabled =
 		user.enabled === true;
+
+	const smartPerformance =
+		performance || {
+			packingToday: 0,
+			dispatchToday: 0,
+			todayOutput: 0,
+			recentActions: 0,
+			activityScore: 0,
+			activityBand:
+				"No recorded work",
+			lastActivityAt: null,
+		};
+
+	const smartAccessHealth =
+		accessHealth || {
+			status: "HEALTHY",
+			issues: [],
+		};
 
 	return (
 		<Box
@@ -2075,6 +3019,72 @@ function UserRow({
 				/>
 			</Box>
 
+			<Box sx={performanceCellSx}>
+				<Box sx={performanceTopSx}>
+					<Typography sx={performanceTotalSx}>
+						{smartPerformance.todayOutput}
+					</Typography>
+
+					<Chip
+						label={`${smartPerformance.activityScore}%`}
+						size="small"
+						sx={performanceScoreChipSx(
+							smartPerformance.activityScore
+						)}
+					/>
+				</Box>
+
+				<Box sx={performanceSplitSx}>
+					<span>
+						Pack <strong>{smartPerformance.packingToday}</strong>
+					</span>
+					<span>
+						Dispatch <strong>{smartPerformance.dispatchToday}</strong>
+					</span>
+				</Box>
+
+				<Typography sx={performanceBandSx}>
+					{smartPerformance.activityBand}
+				</Typography>
+
+				<Typography sx={performanceLastSx}>
+					{formatSmartDateTime(
+						smartPerformance.lastActivityAt
+					)}
+				</Typography>
+			</Box>
+
+			<Box sx={accessHealthCellSx}>
+				<Chip
+					icon={
+						smartAccessHealth.status === "HEALTHY"
+							? <CheckCircleOutlineOutlinedIcon />
+							: <AdminPanelSettingsIcon />
+					}
+					label={
+						smartAccessHealth.status === "HEALTHY"
+							? "Healthy"
+							: `${smartAccessHealth.issues.length} Review${smartAccessHealth.issues.length === 1 ? "" : "s"}`
+					}
+					size="small"
+					sx={
+						smartAccessHealth.status === "HEALTHY"
+							? accessHealthyChipSx
+							: accessReviewChipSx
+					}
+				/>
+
+				{smartAccessHealth.issues.length > 0 && (
+					<Tooltip
+						title={smartAccessHealth.issues.join(" • ")}
+					>
+						<Typography sx={accessIssueHintSx}>
+							Review access
+						</Typography>
+					</Tooltip>
+				)}
+			</Box>
+
 			<Box>
 				<Chip
 					icon={
@@ -2099,6 +3109,14 @@ function UserRow({
 			</Box>
 
 			<Box sx={actionsSx}>
+				<Button
+					startIcon={<InsightsOutlinedIcon />}
+					onClick={onPerformance}
+					sx={insightsButtonSx}
+				>
+					Insights
+				</Button>
+
 				<Button
 					startIcon={<EditIcon />}
 					onClick={onEdit}
@@ -2801,6 +3819,353 @@ function AccessProfileSelector({
 	);
 }
 
+function SmartFilterSelect({
+	label,
+	value,
+	onChange,
+	options = [],
+}) {
+	return (
+		<TextField
+			select
+			size="small"
+			label={label}
+			value={value}
+			onChange={(event) =>
+				onChange(
+					event.target.value
+				)
+			}
+			sx={fieldSx}
+		>
+			{options.map(
+				([optionValue, optionLabel]) => (
+					<MenuItem
+						key={optionValue}
+						value={optionValue}
+					>
+						{optionLabel}
+					</MenuItem>
+				)
+			)}
+		</TextField>
+	);
+}
+
+function UserPerformanceDialog({
+	open,
+	user,
+	performance,
+	accessHealth,
+	onClose,
+}) {
+	if (!user) {
+		return null;
+	}
+
+	const roles =
+		userRoles(user);
+
+	const modules =
+		userModules(user);
+
+	const plants =
+		userPlantCodes(user);
+
+	const data =
+		performance || {
+			packingToday: 0,
+			dispatchToday: 0,
+			todayOutput: 0,
+			recentActions: 0,
+			packingActions: 0,
+			dispatchActions: 0,
+			movementActions: 0,
+			controlActions: 0,
+			otherActions: 0,
+			activityScore: 0,
+			activityBand:
+				"No recorded work",
+			lastActivityAt: null,
+			recentRows: [],
+		};
+
+	const health =
+		accessHealth || {
+			status: "HEALTHY",
+			issues: [],
+		};
+
+	return (
+		<Dialog
+			open={open}
+			onClose={onClose}
+			fullWidth
+			maxWidth="md"
+			PaperProps={{
+				sx: performanceDialogPaperSx,
+			}}
+		>
+			<DialogTitle sx={performanceDialogTitleSx}>
+				<Box sx={performanceDialogTitleRowSx}>
+					<Box sx={performanceDialogIdentitySx}>
+						<Box sx={performanceAvatarSx}>
+							{String(
+								user.username || "U"
+							)
+								.charAt(0)
+								.toUpperCase()}
+						</Box>
+
+						<Box>
+							<Typography sx={performanceDialogNameSx}>
+								{user.username}
+							</Typography>
+
+							<Typography sx={performanceDialogSubSx}>
+								Smart performance and access intelligence
+							</Typography>
+						</Box>
+					</Box>
+
+					<Button
+						onClick={onClose}
+						sx={closeButtonSx}
+					>
+						<CloseOutlinedIcon />
+					</Button>
+				</Box>
+			</DialogTitle>
+
+			<DialogContent sx={performanceDialogContentSx}>
+				<Box sx={performanceHeroGridSx}>
+					<PerformanceMetricCard
+						label="Today Output"
+						value={data.todayOutput}
+						detail={`${data.packingToday} packing • ${data.dispatchToday} dispatch`}
+						accent="#3b82f6"
+					/>
+
+					<PerformanceMetricCard
+						label="Activity Score"
+						value={`${data.activityScore}%`}
+						detail={data.activityBand}
+						accent="#22c55e"
+					/>
+
+					<PerformanceMetricCard
+						label="Recent Actions"
+						value={data.recentActions}
+						detail="Within latest activity snapshot"
+						accent="#a78bfa"
+					/>
+
+					<PerformanceMetricCard
+						label="Access Health"
+						value={
+							health.status === "HEALTHY"
+								? "Healthy"
+								: `${health.issues.length} review${health.issues.length === 1 ? "" : "s"}`
+						}
+						detail={
+							health.status === "HEALTHY"
+								? "Role and module assignment is consistent"
+								: "Review access configuration"
+						}
+						accent={
+							health.status === "HEALTHY"
+								? "#14b8a6"
+								: "#f59e0b"
+						}
+					/>
+				</Box>
+
+				<Box sx={performanceSectionGridSx}>
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Access Profile
+						</Typography>
+
+						<Box sx={chipWrapSx}>
+							{roles.map((role) => (
+								<Chip
+									key={role}
+									label={roleMeta(role).label}
+									size="small"
+									sx={roleChipSx(
+										roleMeta(role).accent
+									)}
+								/>
+							))}
+						</Box>
+
+						<Box sx={performanceAccessListSx}>
+							<div>
+								<span>Modules</span>
+								<strong>{modules.join(", ") || "None"}</strong>
+							</div>
+
+							<div>
+								<span>Plants</span>
+								<strong>{roles.includes("ADMIN") ? "All Plants" : plants.join(", ") || "None"}</strong>
+							</div>
+
+							<div>
+								<span>Warehouse</span>
+								<strong>{readWarehouseAccess(user) ? "Enabled" : "Not enabled"}</strong>
+							</div>
+
+							<div>
+								<span>Last Activity</span>
+								<strong>{formatSmartDateTime(data.lastActivityAt)}</strong>
+							</div>
+						</Box>
+					</Box>
+
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Recent Activity Mix
+						</Typography>
+
+						<Box sx={performanceMixGridSx}>
+							<PerformanceMixItem
+								label="Packing"
+								value={data.packingActions}
+								accent="#22c55e"
+							/>
+							<PerformanceMixItem
+								label="Dispatch"
+								value={data.dispatchActions}
+								accent="#f97316"
+							/>
+							<PerformanceMixItem
+								label="Movement"
+								value={data.movementActions}
+								accent="#38bdf8"
+							/>
+							<PerformanceMixItem
+								label="Control"
+								value={data.controlActions}
+								accent="#a78bfa"
+							/>
+						</Box>
+
+						<Typography sx={performanceNoteSx}>
+							Activity Score is a relative activity index based on today&apos;s recorded packing / dispatch output and the recent activity snapshot. It is not a quality or attendance rating.
+						</Typography>
+					</Box>
+				</Box>
+
+				{health.issues.length > 0 && (
+					<Box sx={performanceReviewCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Access Review Required
+						</Typography>
+
+						{health.issues.map((issue) => (
+							<Box
+								key={issue}
+								sx={performanceIssueRowSx}
+							>
+								<span>!</span>
+								{issue}
+							</Box>
+						))}
+					</Box>
+				)}
+
+				<Box sx={performanceRecentCardSx}>
+					<Box sx={performanceRecentHeaderSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Recent Recorded Actions
+						</Typography>
+
+						<Chip
+							label={`${data.recentRows?.length || 0} shown`}
+							size="small"
+							sx={moduleChipSx}
+						/>
+					</Box>
+
+					{(!data.recentRows || data.recentRows.length === 0) ? (
+						<Box sx={performanceEmptySx}>
+							No recent activity was found in the loaded snapshot.
+						</Box>
+					) : (
+						<Box sx={performanceRecentListSx}>
+							{data.recentRows.map((row, index) => (
+								<Box
+									key={`${performanceAction(row)}-${index}`}
+									sx={performanceRecentRowSx}
+								>
+									<Box sx={performanceRecentDotSx(
+										performanceCategory(row)
+									)} />
+
+									<Box sx={{ minWidth: 0 }}>
+										<Typography sx={performanceRecentActionSx}>
+											{performanceAction(row)}
+										</Typography>
+
+										<Typography sx={performanceRecentMetaSx}>
+											{formatSmartDateTime(performanceTimestamp(row))}
+										</Typography>
+									</Box>
+								</Box>
+							))}
+						</Box>
+					)}
+				</Box>
+			</DialogContent>
+
+			<DialogActions sx={dialogActionsSx}>
+				<Button
+					onClick={onClose}
+					sx={primaryButtonSx}
+				>
+					Close Insights
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+function PerformanceMetricCard({
+	label,
+	value,
+	detail,
+	accent,
+}) {
+	return (
+		<Box sx={performanceMetricCardSx(accent)}>
+			<Typography sx={performanceMetricLabelSx}>
+				{label}
+			</Typography>
+
+			<Typography sx={performanceMetricValueSx}>
+				{value}
+			</Typography>
+
+			<Typography sx={performanceMetricDetailSx}>
+				{detail}
+			</Typography>
+		</Box>
+	);
+}
+
+function PerformanceMixItem({
+	label,
+	value,
+	accent,
+}) {
+	return (
+		<Box sx={performanceMixItemSx(accent)}>
+			<span>{label}</span>
+			<strong>{value}</strong>
+		</Box>
+	);
+}
+
 /* =========================================================
  * DIALOGS
  * ========================================================= */
@@ -3167,7 +4532,7 @@ const statsGridSx = {
 	gridTemplateColumns: {
 		xs: "1fr",
 		sm: "repeat(2,minmax(0,1fr))",
-		lg: "repeat(5,minmax(0,1fr))",
+		lg: "repeat(4,minmax(0,1fr))",
 	},
 	gap: 1.2,
 };
@@ -3225,6 +4590,238 @@ const searchPanelSx = {
 		"0 18px 38px rgba(2,6,23,.28)",
 };
 
+const smartControlPanelSx = {
+	p: 1.5,
+	borderRadius: "20px",
+	background:
+		"radial-gradient(circle at top left,rgba(59,130,246,.10),transparent 35%),linear-gradient(180deg,rgba(15,23,42,.88),rgba(2,6,23,.68))",
+	border:
+		"1px solid rgba(96,165,250,.10)",
+	boxShadow:
+		"0 18px 42px rgba(2,6,23,.28)",
+};
+
+const smartControlHeaderSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "flex-start",
+	gap: 2,
+	flexWrap: "wrap",
+};
+
+const smartControlEyebrowSx = {
+	color: "#60a5fa",
+	fontSize: 10,
+	fontWeight: 950,
+	letterSpacing: ".11em",
+};
+
+const smartControlTitleSx = {
+	mt: 0.3,
+	fontSize: 20,
+	fontWeight: 950,
+	color: "#f8fafc",
+};
+
+const smartControlSubSx = {
+	mt: 0.4,
+	maxWidth: 850,
+	color: "#94a3b8",
+	fontSize: 12,
+	fontWeight: 650,
+	lineHeight: 1.5,
+};
+
+const smartControlActionsSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const smartSearchRowSx = {
+	mt: 1.3,
+};
+
+const smartFiltersGridSx = {
+	mt: 1.1,
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		sm: "repeat(2,minmax(0,1fr))",
+		lg: "repeat(5,minmax(0,1fr))",
+	},
+	gap: 1,
+};
+
+const smartFilterFooterSx = {
+	mt: 1.1,
+	pt: 1,
+	borderTop:
+		"1px solid rgba(148,163,184,.07)",
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const smartFilterSummarySx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const smartFilterChipSx = {
+	height: 23,
+	color: "#93c5fd",
+	background: "rgba(59,130,246,.10)",
+	border:
+		"1px solid rgba(96,165,250,.16)",
+	fontWeight: 900,
+	fontSize: 9.5,
+};
+
+const smartLoadedAtSx = {
+	color: "#64748b",
+	fontSize: 10.5,
+	fontWeight: 700,
+};
+
+const performanceWarningSx = {
+	borderRadius: "14px",
+	background: "rgba(245,158,11,.08)",
+	border:
+		"1px solid rgba(245,158,11,.18)",
+	color: "#fde68a",
+};
+
+const performanceCellSx = {
+	minWidth: 0,
+	padding: "7px 8px",
+	borderRadius: "11px",
+	background: "rgba(2,6,23,.25)",
+	border:
+		"1px solid rgba(148,163,184,.06)",
+};
+
+const performanceTopSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+};
+
+const performanceTotalSx = {
+	fontSize: 20,
+	fontWeight: 950,
+	color: "#fff",
+	lineHeight: 1,
+};
+
+const performanceScoreChipSx = (score) => {
+	const accent =
+		score >= 80
+			? "#22c55e"
+			: score >= 50
+				? "#3b82f6"
+				: score > 0
+					? "#f59e0b"
+					: "#64748b";
+
+	return {
+		height: 21,
+		color: accent,
+		background: `${accent}14`,
+		border: `1px solid ${accent}2b`,
+		fontWeight: 950,
+		fontSize: 9,
+	};
+};
+
+const performanceSplitSx = {
+	mt: 0.6,
+	display: "flex",
+	gap: 1,
+	flexWrap: "wrap",
+	color: "#94a3b8",
+	fontSize: 9.5,
+	fontWeight: 700,
+};
+
+const performanceBandSx = {
+	mt: 0.4,
+	color: "#cbd5e1",
+	fontSize: 9.5,
+	fontWeight: 850,
+};
+
+const performanceLastSx = {
+	mt: 0.25,
+	color: "#64748b",
+	fontSize: 8.8,
+	fontWeight: 650,
+};
+
+const accessHealthCellSx = {
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "flex-start",
+	gap: 0.5,
+};
+
+const accessHealthyChipSx = {
+	height: 24,
+	color: "#4ade80",
+	background: "rgba(34,197,94,.10)",
+	border:
+		"1px solid rgba(34,197,94,.20)",
+	fontWeight: 900,
+	fontSize: 9.5,
+	"& .MuiChip-icon": {
+		color: "#4ade80",
+	},
+};
+
+const accessReviewChipSx = {
+	height: 24,
+	color: "#fbbf24",
+	background: "rgba(245,158,11,.10)",
+	border:
+		"1px solid rgba(245,158,11,.20)",
+	fontWeight: 900,
+	fontSize: 9.5,
+	"& .MuiChip-icon": {
+		color: "#fbbf24",
+	},
+};
+
+const accessIssueHintSx = {
+	color: "#fcd34d",
+	fontSize: 9,
+	fontWeight: 750,
+	cursor: "help",
+};
+
+const insightsButtonSx = {
+	minHeight: 36,
+	borderRadius: "11px",
+	px: 1.35,
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#bfdbfe",
+	background: "rgba(59,130,246,.08)",
+	border:
+		"1px solid rgba(96,165,250,.16)",
+	"&:hover": {
+		background:
+			"rgba(59,130,246,.15)",
+		borderColor:
+			"rgba(96,165,250,.30)",
+	},
+};
+
 const tablePanelSx = {
 	borderRadius: "22px",
 	background:
@@ -3234,13 +4831,29 @@ const tablePanelSx = {
 	boxShadow:
 		"0 24px 64px rgba(2,6,23,.34)",
 	overflowX: "auto",
+	scrollbarWidth: "thin",
+	scrollbarColor:
+		"rgba(96,165,250,.72) rgba(15,23,42,.35)",
+	"&::-webkit-scrollbar": {
+		height: 10,
+	},
+	"&::-webkit-scrollbar-track": {
+		background: "rgba(15,23,42,.35)",
+		borderRadius: 999,
+	},
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			"linear-gradient(90deg,#334155,#3b82f6,#60a5fa)",
+		borderRadius: 999,
+		border: "2px solid #0f172a",
+	},
 };
 
 const tableHeaderSx = {
-	minWidth: 1260,
+	minWidth: 1660,
 	display: "grid",
 	gridTemplateColumns:
-		"1.15fr 1.45fr 1.2fr 1.2fr .7fr 310px",
+		"1.05fr 1.35fr 1fr 1.05fr 1.05fr .85fr .62fr 390px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
@@ -3255,10 +4868,10 @@ const tableHeaderSx = {
 };
 
 const tableRowSx = {
-	minWidth: 1260,
+	minWidth: 1660,
 	display: "grid",
 	gridTemplateColumns:
-		"1.15fr 1.45fr 1.2fr 1.2fr .7fr 310px",
+		"1.05fr 1.35fr 1fr 1.05fr 1.05fr .85fr .62fr 390px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
@@ -3318,6 +4931,8 @@ const chipWrapSx = {
 const operationalCellSx = {
 	display: "flex",
 	alignItems: "center",
+	gap: 0.6,
+	flexWrap: "wrap",
 	minWidth: 0,
 };
 
@@ -3459,7 +5074,7 @@ const disabledChipSx = {
 };
 
 const loadingSx = {
-	minWidth: 1260,
+	minWidth: 1660,
 	minHeight: 340,
 	display: "grid",
 	placeItems: "center",
@@ -3470,7 +5085,7 @@ const loadingSx = {
 };
 
 const emptyStateSx = {
-	minWidth: 1260,
+	minWidth: 1660,
 	p: 5,
 	textAlign: "center",
 	color: "#94a3b8",
@@ -3478,7 +5093,7 @@ const emptyStateSx = {
 };
 
 const paginationSx = {
-	minWidth: 1000,
+	minWidth: 1400,
 	p: 1.5,
 	display: "flex",
 	alignItems: "center",
@@ -3882,6 +5497,301 @@ const drawerFooterSx = {
 	borderTop:
 		"1px solid rgba(255,255,255,.08)",
 	background: "rgba(2,6,23,.65)",
+};
+
+const performanceDialogPaperSx = {
+	background:
+		"linear-gradient(180deg,#071120,#0f172a)",
+	color: "#fff",
+	borderRadius: "22px",
+	border:
+		"1px solid rgba(96,165,250,.12)",
+	boxShadow:
+		"0 30px 80px rgba(2,6,23,.58)",
+	maxHeight: "90vh",
+};
+
+const performanceDialogTitleSx = {
+	p: 2.2,
+	borderBottom:
+		"1px solid rgba(148,163,184,.08)",
+};
+
+const performanceDialogTitleRowSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 2,
+};
+
+const performanceDialogIdentitySx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+};
+
+const performanceAvatarSx = {
+	width: 44,
+	height: 44,
+	borderRadius: "13px",
+	display: "grid",
+	placeItems: "center",
+	color: "#bfdbfe",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.24),rgba(59,130,246,.10))",
+	border:
+		"1px solid rgba(96,165,250,.22)",
+	fontWeight: 950,
+};
+
+const performanceDialogNameSx = {
+	fontSize: 20,
+	fontWeight: 950,
+};
+
+const performanceDialogSubSx = {
+	mt: 0.25,
+	color: "#94a3b8",
+	fontSize: 11.5,
+	fontWeight: 650,
+};
+
+const performanceDialogContentSx = {
+	p: 2.2,
+	"&::-webkit-scrollbar": {
+		width: 8,
+	},
+	"&::-webkit-scrollbar-thumb": {
+		background: "#334155",
+		borderRadius: 999,
+	},
+};
+
+const performanceHeroGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "repeat(2,minmax(0,1fr))",
+		md: "repeat(4,minmax(0,1fr))",
+	},
+	gap: 1,
+};
+
+const performanceMetricCardSx = (accent) => ({
+	p: 1.4,
+	borderRadius: "14px",
+	background:
+		`radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(2,6,23,.28)`,
+	border: `1px solid ${accent}26`,
+});
+
+const performanceMetricLabelSx = {
+	color: "#94a3b8",
+	fontSize: 9.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".06em",
+};
+
+const performanceMetricValueSx = {
+	mt: 0.6,
+	fontSize: 24,
+	fontWeight: 950,
+	color: "#fff",
+};
+
+const performanceMetricDetailSx = {
+	mt: 0.4,
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 700,
+	lineHeight: 1.4,
+};
+
+const performanceSectionGridSx = {
+	mt: 1.5,
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2,minmax(0,1fr))",
+	},
+	gap: 1.2,
+};
+
+const performanceSectionCardSx = {
+	p: 1.5,
+	borderRadius: "15px",
+	background: "rgba(2,6,23,.25)",
+	border:
+		"1px solid rgba(148,163,184,.07)",
+};
+
+const performanceSectionTitleSx = {
+	color: "#f1f5f9",
+	fontSize: 12.5,
+	fontWeight: 950,
+	mb: 1,
+};
+
+const performanceAccessListSx = {
+	mt: 1.2,
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.7,
+	"& > div": {
+		display: "flex",
+		justifyContent: "space-between",
+		gap: 1,
+		color: "#64748b",
+		fontSize: 10.5,
+	},
+	"& strong": {
+		color: "#cbd5e1",
+		fontWeight: 850,
+		textAlign: "right",
+	},
+};
+
+const performanceMixGridSx = {
+	display: "grid",
+	gridTemplateColumns:
+		"repeat(2,minmax(0,1fr))",
+	gap: 0.8,
+};
+
+const performanceMixItemSx = (accent) => ({
+	p: 1,
+	borderRadius: "10px",
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	color: "#94a3b8",
+	background: `${accent}0d`,
+	border: `1px solid ${accent}1f`,
+	fontSize: 10,
+	fontWeight: 800,
+	"& strong": {
+		color: accent,
+		fontSize: 15,
+	},
+});
+
+const performanceNoteSx = {
+	mt: 1.1,
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 650,
+	lineHeight: 1.45,
+};
+
+const performanceReviewCardSx = {
+	mt: 1.3,
+	p: 1.5,
+	borderRadius: "15px",
+	background: "rgba(245,158,11,.06)",
+	border:
+		"1px solid rgba(245,158,11,.16)",
+};
+
+const performanceIssueRowSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.8,
+	py: 0.55,
+	color: "#fde68a",
+	fontSize: 10.5,
+	fontWeight: 750,
+	"& span": {
+		width: 18,
+		height: 18,
+		borderRadius: "50%",
+		display: "grid",
+		placeItems: "center",
+		background: "rgba(245,158,11,.14)",
+		fontWeight: 950,
+	},
+};
+
+const performanceRecentCardSx = {
+	mt: 1.3,
+	p: 1.5,
+	borderRadius: "15px",
+	background: "rgba(2,6,23,.25)",
+	border:
+		"1px solid rgba(148,163,184,.07)",
+};
+
+const performanceRecentHeaderSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 1,
+};
+
+const performanceRecentListSx = {
+	maxHeight: 250,
+	overflowY: "auto",
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.6,
+	pr: 0.5,
+	scrollbarWidth: "thin",
+	scrollbarColor: "#334155 transparent",
+};
+
+const performanceRecentRowSx = {
+	display: "grid",
+	gridTemplateColumns: "9px minmax(0,1fr)",
+	gap: 1,
+	alignItems: "center",
+	p: 0.9,
+	borderRadius: "10px",
+	background: "rgba(255,255,255,.025)",
+	border:
+		"1px solid rgba(255,255,255,.045)",
+};
+
+const performanceRecentDotSx = (category) => {
+	const colors = {
+		PACKING: "#22c55e",
+		DISPATCH: "#f97316",
+		MOVEMENT: "#38bdf8",
+		CONTROL: "#a78bfa",
+		OTHER: "#64748b",
+	};
+
+	const color =
+		colors[category] ||
+		colors.OTHER;
+
+	return {
+		width: 7,
+		height: 7,
+		borderRadius: "50%",
+		background: color,
+		boxShadow: `0 0 8px ${color}66`,
+	};
+};
+
+const performanceRecentActionSx = {
+	color: "#e2e8f0",
+	fontSize: 10.5,
+	fontWeight: 850,
+};
+
+const performanceRecentMetaSx = {
+	mt: 0.2,
+	color: "#64748b",
+	fontSize: 9,
+	fontWeight: 650,
+};
+
+const performanceEmptySx = {
+	p: 2,
+	borderRadius: "12px",
+	textAlign: "center",
+	color: "#64748b",
+	background: "rgba(255,255,255,.02)",
+	fontSize: 10.5,
 };
 
 const dialogPaperSx = {
