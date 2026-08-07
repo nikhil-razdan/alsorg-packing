@@ -3393,52 +3393,127 @@ function LogisticsDashboard({
     const rows = [];
 
     runningChallans.forEach((challan) => {
-      const startAt = getChallanStart(challan);
+      const startAt =
+        getChallanStart(challan);
+
       const runningMinutes =
-        calculateRunningMinutes(startAt);
+        calculateRunningMinutes(
+          startAt
+        );
+
       const challanNumber =
-        challan?.challanNumber || "—";
+        challan?.challanNumber ||
+        challan?.chalaanNumber ||
+        "—";
 
-      if (runningMinutes > 12 * 60) {
+      const driverName =
+        isMissingValue(
+          challan?.driverName
+        )
+          ? "Unassigned"
+          : String(
+            challan?.driverName
+          ).trim();
+
+      const vehicleNumber =
+        isMissingValue(
+          challan?.vehicleNumber
+        )
+          ? "Unassigned"
+          : String(
+            challan?.vehicleNumber
+          ).trim();
+
+      const baseAlert = {
+        challanNumber,
+        driverName,
+        vehicleNumber,
+        startedAt: startAt,
+        runningMinutes,
+      };
+
+      if (
+        runningMinutes >
+        12 * 60
+      ) {
         rows.push({
-          key: `LONG:${challanNumber}`,
+          ...baseAlert,
+          key:
+            `LONG:${challanNumber}`,
+          issueType:
+            "LONG_RUNNING",
+          issueLabel:
+            "Long Running Trip",
           severity: "HIGH",
-          title: "Long running challan trip",
-          detail: `${challanNumber} • ${formatDuration(
-            runningMinutes
-          )} running • ${challan?.driverName || "No driver"
-            } • ${challan?.vehicleNumber || "No vehicle"
-            }`,
-          startedAt: startAt,
+          title:
+            "Long running challan trip",
+          detail:
+            `${challanNumber} • ${formatDuration(
+              runningMinutes
+            )} running • ${driverName} • ${vehicleNumber}`,
         });
       }
 
-      if (isMissingValue(challan?.driverName)) {
+      if (
+        isMissingValue(
+          challan?.driverName
+        )
+      ) {
         rows.push({
-          key: `DRIVER:${challanNumber}`,
+          ...baseAlert,
+          key:
+            `DRIVER:${challanNumber}`,
+          issueType:
+            "MISSING_DRIVER",
+          issueLabel:
+            "Missing Driver",
           severity: "MEDIUM",
-          title: "Driver missing",
-          detail: `${challanNumber} has no driver assigned`,
-          startedAt: startAt,
+          title:
+            "Driver missing",
+          detail:
+            `${challanNumber} has no driver assigned`,
         });
       }
 
-      if (isMissingValue(challan?.vehicleNumber)) {
+      if (
+        isMissingValue(
+          challan?.vehicleNumber
+        )
+      ) {
         rows.push({
-          key: `VEHICLE:${challanNumber}`,
+          ...baseAlert,
+          key:
+            `VEHICLE:${challanNumber}`,
+          issueType:
+            "MISSING_VEHICLE",
+          issueLabel:
+            "Missing Vehicle",
           severity: "MEDIUM",
-          title: "Vehicle missing",
-          detail: `${challanNumber} has no vehicle assigned`,
-          startedAt: startAt,
+          title:
+            "Vehicle missing",
+          detail:
+            `${challanNumber} has no vehicle assigned`,
         });
       }
 
-      if (!parseBusinessDateTime(startAt)) {
+      if (
+        !parseBusinessDateTime(
+          startAt
+        )
+      ) {
         rows.push({
-          key: `START:${challanNumber}`,
+          ...baseAlert,
+          key:
+            `START:${challanNumber}`,
+          issueType:
+            "MISSING_START",
+          issueLabel:
+            "Missing Start Time",
           severity: "MEDIUM",
-          title: "Trip start time missing",
-          detail: `${challanNumber} is running without a valid start timestamp`,
+          title:
+            "Trip start time missing",
+          detail:
+            `${challanNumber} is running without a valid start timestamp`,
           startedAt: null,
         });
       }
@@ -3452,17 +3527,30 @@ function LogisticsDashboard({
       };
 
       const rankDiff =
-        (severityRank[b.severity] || 0) -
-        (severityRank[a.severity] || 0);
+        (
+          severityRank[
+          b.severity
+          ] || 0
+        ) -
+        (
+          severityRank[
+          a.severity
+          ] || 0
+        );
 
-      if (rankDiff !== 0) return rankDiff;
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
 
       const aTime =
-        parseBusinessDateTime(a.startedAt)
-          ?.getTime() || 0;
+        parseBusinessDateTime(
+          a.startedAt
+        )?.getTime() || 0;
+
       const bTime =
-        parseBusinessDateTime(b.startedAt)
-          ?.getTime() || 0;
+        parseBusinessDateTime(
+          b.startedAt
+        )?.getTime() || 0;
 
       return aTime - bTime;
     });
@@ -4457,18 +4545,252 @@ function AttentionPanel({
     fullWidth ? 10 : 5
   );
 
+  const [
+    issueType,
+    setIssueType,
+  ] = useState("ALL");
+
+  const [
+    severity,
+    setSeverity,
+  ] = useState("ALL");
+
+  const [
+    driverFilter,
+    setDriverFilter,
+  ] = useState("ALL");
+
+  const [
+    vehicleFilter,
+    setVehicleFilter,
+  ] = useState("ALL");
+
+  const [
+    search,
+    setSearch,
+  ] = useState("");
+
+  const issueTypeOptions =
+    useMemo(() => {
+      const knownOrder = [
+        {
+          value:
+            "LONG_RUNNING",
+          label:
+            "Long Running Trip",
+        },
+        {
+          value:
+            "MISSING_DRIVER",
+          label:
+            "Missing Driver",
+        },
+        {
+          value:
+            "MISSING_VEHICLE",
+          label:
+            "Missing Vehicle",
+        },
+        {
+          value:
+            "MISSING_START",
+          label:
+            "Missing Start Time",
+        },
+      ];
+
+      const present =
+        new Set(
+          rows
+            .map(
+              (row) =>
+                row.issueType
+            )
+            .filter(Boolean)
+        );
+
+      return knownOrder.filter(
+        (option) =>
+          present.has(
+            option.value
+          )
+      );
+    }, [rows]);
+
+  const driverOptions =
+    useMemo(() => {
+      return Array.from(
+        new Set(
+          rows
+            .map(
+              (row) =>
+                String(
+                  row.driverName ||
+                  "Unassigned"
+                ).trim()
+            )
+            .filter(Boolean)
+        )
+      ).sort((a, b) =>
+        a.localeCompare(b)
+      );
+    }, [rows]);
+
+  const vehicleOptions =
+    useMemo(() => {
+      return Array.from(
+        new Set(
+          rows
+            .map(
+              (row) =>
+                String(
+                  row.vehicleNumber ||
+                  "Unassigned"
+                ).trim()
+            )
+            .filter(Boolean)
+        )
+      ).sort((a, b) =>
+        a.localeCompare(b)
+      );
+    }, [rows]);
+
+  const filteredRows =
+    useMemo(() => {
+      const searchTerm =
+        search
+          .trim()
+          .toLowerCase();
+
+      return rows.filter(
+        (row) => {
+          if (
+            issueType !==
+            "ALL" &&
+            row.issueType !==
+            issueType
+          ) {
+            return false;
+          }
+
+          if (
+            severity !==
+            "ALL" &&
+            normalizeStatus(
+              row.severity
+            ) !== severity
+          ) {
+            return false;
+          }
+
+          if (
+            driverFilter !==
+            "ALL" &&
+            String(
+              row.driverName ||
+              "Unassigned"
+            ) !== driverFilter
+          ) {
+            return false;
+          }
+
+          if (
+            vehicleFilter !==
+            "ALL" &&
+            String(
+              row.vehicleNumber ||
+              "Unassigned"
+            ) !==
+            vehicleFilter
+          ) {
+            return false;
+          }
+
+          if (searchTerm) {
+            const searchable = [
+              row.challanNumber,
+              row.issueLabel,
+              row.title,
+              row.detail,
+              row.driverName,
+              row.vehicleNumber,
+              row.severity,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            if (
+              !searchable.includes(
+                searchTerm
+              )
+            ) {
+              return false;
+            }
+          }
+
+          return true;
+        }
+      );
+    }, [
+      rows,
+      issueType,
+      severity,
+      driverFilter,
+      vehicleFilter,
+      search,
+    ]);
+
+  const activeFilterCount =
+    [
+      issueType !== "ALL",
+      severity !== "ALL",
+      driverFilter !== "ALL",
+      vehicleFilter !== "ALL",
+      Boolean(search.trim()),
+    ].filter(Boolean).length;
+
+  const highCount =
+    filteredRows.filter(
+      (row) =>
+        row.severity ===
+        "HIGH"
+    ).length;
+
+  const mediumCount =
+    filteredRows.filter(
+      (row) =>
+        row.severity ===
+        "MEDIUM"
+    ).length;
+
+  const clearFilters = () => {
+    setIssueType("ALL");
+    setSeverity("ALL");
+    setDriverFilter("ALL");
+    setVehicleFilter("ALL");
+    setSearch("");
+    setPage(1);
+  };
+
   useEffect(() => {
     setPage(1);
   }, [
     rows.length,
     fullWidth,
+    issueType,
+    severity,
+    driverFilter,
+    vehicleFilter,
+    search,
+    pageSize,
   ]);
 
   const totalPages =
     Math.max(
       1,
       Math.ceil(
-        rows.length /
+        filteredRows.length /
         pageSize
       )
     );
@@ -4480,7 +4802,7 @@ function AttentionPanel({
     );
 
   const visibleRows =
-    rows.slice(
+    filteredRows.slice(
       (
         currentPage - 1
       ) *
@@ -4513,16 +4835,40 @@ function AttentionPanel({
           </div>
         </div>
 
-        <div
-          style={{
-            ...panelCountBadge,
-            color:
-              rows.length > 0
-                ? "#f87171"
-                : "#4ade80",
-          }}
-        >
-          {rows.length} issues
+        <div style={attentionHeaderBadges}>
+          {highCount > 0 && (
+            <span
+              style={attentionSummaryBadge(
+                "HIGH"
+              )}
+            >
+              {highCount} High
+            </span>
+          )}
+
+          {mediumCount > 0 && (
+            <span
+              style={attentionSummaryBadge(
+                "MEDIUM"
+              )}
+            >
+              {mediumCount} Medium
+            </span>
+          )}
+
+          <div
+            style={{
+              ...panelCountBadge,
+              color:
+                rows.length > 0
+                  ? "#f87171"
+                  : "#4ade80",
+            }}
+          >
+            {activeFilterCount > 0
+              ? `${filteredRows.length} / ${rows.length} issues`
+              : `${rows.length} issues`}
+          </div>
         </div>
       </div>
 
@@ -4532,60 +4878,319 @@ function AttentionPanel({
         </div>
       ) : (
         <>
-          <div
-            style={attentionList}
-            className="logistics-pro-scroll logistics-pro-scroll-y logistics-pro-scroll-soft"
-          >
-            {visibleRows.map(
-              (row) => (
-                <div
-                  key={row.key}
-                  style={attentionRow}
+          <div style={attentionFilterCard}>
+            <div style={attentionFilterGrid}>
+              <label style={attentionFilterField}>
+                <span style={attentionFilterLabel}>
+                  Issue Type
+                </span>
+
+                <select
+                  value={issueType}
+                  onChange={(event) =>
+                    setIssueType(
+                      event.target.value
+                    )
+                  }
+                  style={attentionFilterInput}
                 >
-                  <span
-                    style={severityPill(
-                      row.severity
-                    )}
-                  >
-                    {row.severity}
+                  <option value="ALL">
+                    All Issues
+                  </option>
+
+                  {issueTypeOptions.map(
+                    (option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label style={attentionFilterField}>
+                <span style={attentionFilterLabel}>
+                  Severity
+                </span>
+
+                <select
+                  value={severity}
+                  onChange={(event) =>
+                    setSeverity(
+                      event.target.value
+                    )
+                  }
+                  style={attentionFilterInput}
+                >
+                  <option value="ALL">
+                    All Severities
+                  </option>
+                  <option value="HIGH">
+                    High Priority
+                  </option>
+                  <option value="MEDIUM">
+                    Medium Priority
+                  </option>
+                </select>
+              </label>
+
+              <label style={attentionFilterField}>
+                <span style={attentionFilterLabel}>
+                  Driver
+                </span>
+
+                <select
+                  value={driverFilter}
+                  onChange={(event) =>
+                    setDriverFilter(
+                      event.target.value
+                    )
+                  }
+                  style={attentionFilterInput}
+                >
+                  <option value="ALL">
+                    All Drivers
+                  </option>
+
+                  {driverOptions.map(
+                    (driver) => (
+                      <option
+                        key={driver}
+                        value={driver}
+                      >
+                        {driver}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label style={attentionFilterField}>
+                <span style={attentionFilterLabel}>
+                  Vehicle
+                </span>
+
+                <select
+                  value={vehicleFilter}
+                  onChange={(event) =>
+                    setVehicleFilter(
+                      event.target.value
+                    )
+                  }
+                  style={attentionFilterInput}
+                >
+                  <option value="ALL">
+                    All Vehicles
+                  </option>
+
+                  {vehicleOptions.map(
+                    (vehicle) => (
+                      <option
+                        key={vehicle}
+                        value={vehicle}
+                      >
+                        {vehicle}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label
+                style={{
+                  ...attentionFilterField,
+                  ...attentionSearchField,
+                }}
+              >
+                <span style={attentionFilterLabel}>
+                  Search Queue
+                </span>
+
+                <input
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Challan, driver, vehicle, issue..."
+                  style={attentionFilterInput}
+                />
+              </label>
+            </div>
+
+            <div style={attentionFilterFooter}>
+              <div style={attentionFilterSummary}>
+                <span>
+                  Showing{" "}
+                  <strong>
+                    {filteredRows.length}
+                  </strong>{" "}
+                  of{" "}
+                  <strong>
+                    {rows.length}
+                  </strong>{" "}
+                  live issues
+                </span>
+
+                {activeFilterCount > 0 && (
+                  <span style={attentionActiveFilterPill}>
+                    {activeFilterCount} filter
+                    {activeFilterCount === 1
+                      ? ""
+                      : "s"}{" "}
+                    active
                   </span>
+                )}
+              </div>
 
-                  <div
-                    style={{
-                      minWidth: 0,
-                    }}
-                  >
-                    <div style={attentionTitle}>
-                      {row.title}
-                    </div>
-
-                    <div style={attentionDetail}>
-                      {row.detail}
-                    </div>
-                  </div>
-                </div>
-              )
-            )}
+              <button
+                type="button"
+                onClick={clearFilters}
+                disabled={
+                  activeFilterCount ===
+                  0
+                }
+                style={{
+                  ...attentionClearButton,
+                  ...(activeFilterCount ===
+                    0
+                    ? attentionClearButtonDisabled
+                    : {}),
+                }}
+              >
+                Clear Filters
+              </button>
+            </div>
           </div>
 
-          <ProfessionalPagination
-            page={currentPage}
-            setPage={setPage}
-            pageSize={pageSize}
-            setPageSize={
-              setPageSize
-            }
-            totalItems={
-              rows.length
-            }
-            label="issues"
-            pageSizeOptions={
-              fullWidth
-                ? [10, 20, 50]
-                : [5, 10, 20]
-            }
-            compact={!fullWidth}
-          />
+          {filteredRows.length ===
+            0 ? (
+            <div style={attentionNoMatch}>
+              <div style={attentionNoMatchIcon}>
+                ◌
+              </div>
+
+              <div style={attentionNoMatchTitle}>
+                No attention items match these filters
+              </div>
+
+              <div style={attentionNoMatchText}>
+                Change the issue type, severity, driver, vehicle or search value to broaden the queue.
+              </div>
+
+              <button
+                type="button"
+                onClick={clearFilters}
+                style={attentionNoMatchButton}
+              >
+                Reset Attention Filters
+              </button>
+            </div>
+          ) : (
+            <>
+              <div
+                style={attentionList}
+                className="logistics-pro-scroll logistics-pro-scroll-y logistics-pro-scroll-soft"
+              >
+                {visibleRows.map(
+                  (row) => (
+                    <div
+                      key={row.key}
+                      style={attentionRow}
+                    >
+                      <div style={attentionRowBadges}>
+                        <span
+                          style={severityPill(
+                            row.severity
+                          )}
+                        >
+                          {row.severity}
+                        </span>
+
+                        <span style={issueTypePill}>
+                          {row.issueLabel ||
+                            row.title}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          minWidth: 0,
+                        }}
+                      >
+                        <div style={attentionTitleRow}>
+                          <div style={attentionTitle}>
+                            {row.title}
+                          </div>
+
+                          <div style={attentionChallan}>
+                            {row.challanNumber ||
+                              "—"}
+                          </div>
+                        </div>
+
+                        <div style={attentionDetail}>
+                          {row.detail}
+                        </div>
+
+                        <div style={attentionMetaRow}>
+                          <span>
+                            Driver:{" "}
+                            <strong>
+                              {row.driverName ||
+                                "Unassigned"}
+                            </strong>
+                          </span>
+
+                          <span>
+                            Vehicle:{" "}
+                            <strong>
+                              {row.vehicleNumber ||
+                                "Unassigned"}
+                            </strong>
+                          </span>
+
+                          {row.startedAt && (
+                            <span>
+                              Started:{" "}
+                              <strong>
+                                {formatDateTime(
+                                  row.startedAt
+                                )}
+                              </strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              <ProfessionalPagination
+                page={currentPage}
+                setPage={setPage}
+                pageSize={pageSize}
+                setPageSize={
+                  setPageSize
+                }
+                totalItems={
+                  filteredRows.length
+                }
+                label="issues"
+                pageSizeOptions={
+                  fullWidth
+                    ? [10, 20, 50]
+                    : [5, 10, 20]
+                }
+                compact={!fullWidth}
+              />
+            </>
+          )}
         </>
       )}
     </div>
@@ -5699,6 +6304,153 @@ const panelEmpty = {
   fontWeight: 750,
 };
 
+const attentionHeaderBadges = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 6,
+  flexWrap: "wrap",
+};
+
+const attentionSummaryBadge = (
+  severity
+) => {
+  const high =
+    severity === "HIGH";
+
+  return {
+    minHeight: 24,
+    padding: "0 8px",
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    color: high
+      ? "#fca5a5"
+      : "#fcd34d",
+    background: high
+      ? "rgba(239,68,68,.10)"
+      : "rgba(245,158,11,.10)",
+    border: high
+      ? "1px solid rgba(248,113,113,.16)"
+      : "1px solid rgba(251,191,36,.16)",
+    fontSize: 8.2,
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+  };
+};
+
+const attentionFilterCard = {
+  marginBottom: 11,
+  padding: 10,
+  borderRadius: 13,
+  background:
+    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.07),transparent 36%),rgba(2,6,23,.32)",
+  border:
+    "1px solid rgba(148,163,184,.07)",
+};
+
+const attentionFilterGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(128px,1fr))",
+  gap: 7,
+};
+
+const attentionFilterField = {
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+};
+
+const attentionSearchField = {
+  gridColumn:
+    "span 2",
+};
+
+const attentionFilterLabel = {
+  color: "#94a3b8",
+  fontSize: 7.6,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".055em",
+};
+
+const attentionFilterInput = {
+  width: "100%",
+  height: 33,
+  boxSizing: "border-box",
+  padding: "0 9px",
+  borderRadius: 9,
+  outline: "none",
+  color: "#e2e8f0",
+  background:
+    "rgba(15,23,42,.90)",
+  border:
+    "1px solid rgba(148,163,184,.10)",
+  fontFamily: "inherit",
+  fontSize: 9.2,
+  fontWeight: 800,
+  colorScheme: "dark",
+};
+
+const attentionFilterFooter = {
+  marginTop: 8,
+  paddingTop: 8,
+  borderTop:
+    "1px solid rgba(148,163,184,.055)",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const attentionFilterSummary = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  flexWrap: "wrap",
+  color: "#718096",
+  fontSize: 8.2,
+  fontWeight: 750,
+};
+
+const attentionActiveFilterPill = {
+  minHeight: 20,
+  padding: "0 7px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  color: "#93c5fd",
+  background:
+    "rgba(59,130,246,.08)",
+  border:
+    "1px solid rgba(96,165,250,.13)",
+  fontSize: 7.4,
+  fontWeight: 900,
+};
+
+const attentionClearButton = {
+  minHeight: 29,
+  padding: "0 9px",
+  borderRadius: 8,
+  border:
+    "1px solid rgba(96,165,250,.15)",
+  color: "#bfdbfe",
+  background:
+    "rgba(59,130,246,.06)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 8.2,
+  fontWeight: 900,
+};
+
+const attentionClearButtonDisabled = {
+  opacity: 0.36,
+  cursor: "not-allowed",
+};
+
 const attentionList = {
   display: "flex",
   flexDirection: "column",
@@ -5712,12 +6464,120 @@ const attentionList = {
 
 const attentionRow = {
   display: "grid",
-  gridTemplateColumns: "auto 1fr",
-  gap: 9,
+  gridTemplateColumns:
+    "minmax(92px,auto) minmax(0,1fr)",
+  gap: 10,
   padding: 10,
   borderRadius: 11,
-  background: "rgba(255,255,255,.025)",
-  border: "1px solid rgba(255,255,255,.045)",
+  background:
+    "linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.018))",
+  border:
+    "1px solid rgba(255,255,255,.05)",
+};
+
+const attentionRowBadges = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: 5,
+};
+
+const issueTypePill = {
+  maxWidth: 112,
+  padding: "4px 6px",
+  borderRadius: 7,
+  color: "#bfdbfe",
+  background:
+    "rgba(59,130,246,.07)",
+  border:
+    "1px solid rgba(96,165,250,.12)",
+  fontSize: 7.2,
+  fontWeight: 900,
+  lineHeight: 1.25,
+};
+
+const attentionTitleRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 8,
+};
+
+const attentionChallan = {
+  flexShrink: 0,
+  padding: "3px 6px",
+  borderRadius: 7,
+  color: "#93c5fd",
+  background:
+    "rgba(59,130,246,.06)",
+  border:
+    "1px solid rgba(96,165,250,.10)",
+  fontFamily: "monospace",
+  fontSize: 7.6,
+  fontWeight: 900,
+};
+
+const attentionMetaRow = {
+  marginTop: 6,
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  flexWrap: "wrap",
+  color: "#64748b",
+  fontSize: 7.7,
+  fontWeight: 700,
+};
+
+const attentionNoMatch = {
+  minHeight: 190,
+  padding: 18,
+  borderRadius: 12,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  background:
+    "rgba(2,6,23,.24)",
+  border:
+    "1px dashed rgba(148,163,184,.09)",
+};
+
+const attentionNoMatchIcon = {
+  color: "#60a5fa",
+  fontSize: 24,
+};
+
+const attentionNoMatchTitle = {
+  marginTop: 6,
+  color: "#e2e8f0",
+  fontSize: 10.5,
+  fontWeight: 900,
+};
+
+const attentionNoMatchText = {
+  maxWidth: 390,
+  marginTop: 4,
+  color: "#64748b",
+  fontSize: 8.3,
+  fontWeight: 700,
+  lineHeight: 1.45,
+};
+
+const attentionNoMatchButton = {
+  marginTop: 10,
+  minHeight: 30,
+  padding: "0 10px",
+  borderRadius: 8,
+  border:
+    "1px solid rgba(96,165,250,.15)",
+  color: "#bfdbfe",
+  background:
+    "rgba(59,130,246,.07)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 8.3,
+  fontWeight: 900,
 };
 
 const severityPill = (severity) => ({
