@@ -4,6 +4,8 @@ import {
   useState,
 } from "react";
 
+import "./logisticsScrollbars.css";
+
 import {
   getBackendMessage,
 } from "./logisticsAlertUtils";
@@ -359,7 +361,7 @@ function DriverManagement({
   }
 
   return (
-    <div style={wrap}>
+    <div className="logistics-scroll-scope" style={wrap}>
       <div style={header}>
         <div>
           <div style={title}>
@@ -448,7 +450,7 @@ function DriverManagement({
         </div>
       </div>
 
-      <div style={table}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={table}>
         <div style={head}>
           <div>Driver</div>
           <div>Phone / License</div>

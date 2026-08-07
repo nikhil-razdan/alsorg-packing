@@ -1,0 +1,179 @@
+/*
+ * ALSORG Logistics — Professional Scrollbars
+ * Shared by Driver Management, Fleet Management, Legacy Operations,
+ * Logistics Reports, Driver 360° and logistics modal content.
+ *
+ * Chromium / Edge / Safari use ::-webkit-scrollbar.
+ * Firefox uses scrollbar-width / scrollbar-color.
+ */
+
+/* Scope defaults: subtle dark rail with a visible, high-contrast thumb. */
+.logistics-scroll-scope,
+.logistics-scroll-scope * {
+    scrollbar-width: thin;
+    scrollbar-color: #52627a #0b1220;
+}
+
+/* Scroll behavior helpers. */
+.logistics-scrollbar {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.logistics-scrollbar-x {
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+}
+
+.logistics-scrollbar-y {
+    overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
+}
+
+.logistics-scrollbar-stable {
+    scrollbar-gutter: stable;
+}
+
+/* Chromium / Edge / Safari — scoped scrollbars. */
+.logistics-scroll-scope::-webkit-scrollbar,
+.logistics-scroll-scope *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.logistics-scroll-scope::-webkit-scrollbar-track,
+.logistics-scroll-scope *::-webkit-scrollbar-track {
+    background:
+        linear-gradient(180deg,
+            rgba(2, 6, 23, 0.72),
+            rgba(15, 23, 42, 0.72));
+    border-radius: 999px;
+    box-shadow:
+        inset 0 0 0 1px rgba(148, 163, 184, 0.045);
+}
+
+.logistics-scroll-scope::-webkit-scrollbar-thumb,
+.logistics-scroll-scope *::-webkit-scrollbar-thumb {
+    min-height: 42px;
+    min-width: 42px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg,
+            rgba(100, 116, 139, 0.94),
+            rgba(51, 65, 85, 0.94));
+    background-clip: padding-box;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+}
+
+.logistics-scroll-scope::-webkit-scrollbar-thumb:hover,
+.logistics-scroll-scope *::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(180deg,
+            rgba(96, 165, 250, 0.98),
+            rgba(37, 99, 235, 0.98));
+    background-clip: padding-box;
+}
+
+.logistics-scroll-scope::-webkit-scrollbar-thumb:active,
+.logistics-scroll-scope *::-webkit-scrollbar-thumb:active {
+    background:
+        linear-gradient(180deg,
+            rgba(147, 197, 253, 1),
+            rgba(37, 99, 235, 1));
+    background-clip: padding-box;
+}
+
+.logistics-scroll-scope::-webkit-scrollbar-corner,
+.logistics-scroll-scope *::-webkit-scrollbar-corner {
+    background: #0b1220;
+}
+
+/* Horizontal data tables get a slightly stronger blue treatment. */
+.logistics-scrollbar-x::-webkit-scrollbar {
+    height: 11px;
+}
+
+.logistics-scrollbar-x::-webkit-scrollbar-track {
+    margin-inline: 8px;
+    background:
+        linear-gradient(90deg,
+            rgba(2, 6, 23, 0.78),
+            rgba(15, 23, 42, 0.82),
+            rgba(2, 6, 23, 0.78));
+}
+
+.logistics-scrollbar-x::-webkit-scrollbar-thumb {
+    background:
+        linear-gradient(90deg,
+            rgba(71, 85, 105, 0.98),
+            rgba(96, 165, 250, 0.86),
+            rgba(71, 85, 105, 0.98));
+    background-clip: padding-box;
+}
+
+/* Main modal vertical rail: a little wider and easier to grab. */
+.logistics-modal-scroll::-webkit-scrollbar {
+    width: 11px;
+}
+
+.logistics-modal-scroll::-webkit-scrollbar-track {
+    margin-block: 14px;
+    background:
+        linear-gradient(180deg,
+            rgba(2, 6, 23, 0.80),
+            rgba(15, 23, 42, 0.72));
+}
+
+.logistics-modal-scroll::-webkit-scrollbar-thumb {
+    background:
+        linear-gradient(180deg,
+            rgba(71, 85, 105, 0.95),
+            rgba(59, 130, 246, 0.82));
+    background-clip: padding-box;
+}
+
+/* Keep horizontal rails away from table content and rounded card edges. */
+.logistics-table-scroll {
+    padding-bottom: 3px;
+}
+
+/* Smaller rail for compact nested areas. */
+.logistics-scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+/* Accessible focus treatment when a scroll area is keyboard-focused. */
+.logistics-scrollbar:focus-visible {
+    outline: 1px solid rgba(96, 165, 250, 0.55);
+    outline-offset: 2px;
+}
+
+/* Avoid strong decorative motion when the OS requests reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+
+    .logistics-scrollbar-x,
+    .logistics-scrollbar-y {
+        scroll-behavior: auto;
+    }
+}
+
+/* Mobile: retain a visible but compact rail. */
+@media (max-width: 720px) {
+
+    .logistics-scroll-scope::-webkit-scrollbar,
+    .logistics-scroll-scope *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .logistics-scrollbar-x::-webkit-scrollbar {
+        height: 9px;
+    }
+
+    .logistics-modal-scroll::-webkit-scrollbar {
+        width: 9px;
+    }
+}

@@ -4,6 +4,8 @@ import {
   useState,
 } from "react";
 
+import "./logisticsScrollbars.css";
+
 import {
   formatShiftDate,
   formatShiftTimeRange,
@@ -1438,10 +1440,12 @@ function LogisticsShiftModal({
 
   return (
     <div
+      className="logistics-scroll-scope"
       style={overlay}
       onClick={onClose}
     >
       <div
+        className="logistics-scrollbar logistics-scrollbar-y logistics-scrollbar-stable logistics-modal-scroll"
         style={modal}
         onClick={(event) =>
           event.stopPropagation()
@@ -1646,7 +1650,7 @@ function LogisticsShiftModal({
               </button>
             </div>
 
-            <div style={historyTable}>
+            <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={historyTable}>
               <div style={historyHead}>
                 <div>Date / Time</div>
                 <div>Source</div>
@@ -2605,7 +2609,10 @@ const modal = {
   boxShadow:
     "0 28px 80px rgba(0,0,0,0.55)",
   maxHeight: "92vh",
+  overflowX: "hidden",
   overflowY: "auto",
+  overscrollBehavior: "contain",
+  scrollbarGutter: "stable",
 };
 
 const header = {

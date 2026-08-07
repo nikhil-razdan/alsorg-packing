@@ -1,5 +1,7 @@
 import React from "react";
 
+import "./logisticsScrollbars.css";
+
 function buildPageItems(
   currentPage,
   totalPages,
@@ -179,6 +181,7 @@ function LogisticsPagination({
 
   return (
     <div
+      className="logistics-scroll-scope"
       style={{
         ...paginationShell,
         ...(compact

@@ -4,6 +4,8 @@ import {
   useState,
 } from "react";
 
+import "./logisticsScrollbars.css";
+
 import {
   fetchDrivers,
   fetchVehicles,
@@ -1981,7 +1983,7 @@ function ShiftReports({
   }
 
   return (
-    <div style={wrap}>
+    <div className="logistics-scroll-scope" style={wrap}>
       <div style={header}>
         <div>
           <div style={title}>
@@ -2521,7 +2523,7 @@ function PerformanceTable({
         </div>
       </div>
 
-      <div style={scrollTable}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={scrollTable}>
         <div style={performanceHead}>
           <div>{identityLabel}</div>
           <div>Records</div>
@@ -2609,7 +2611,7 @@ function TripTable({
         </div>
       </div>
 
-      <div style={scrollTable}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={scrollTable}>
         <div style={tripHead}>
           <div>Source</div>
           <div>Challan / Operation</div>
@@ -2707,7 +2709,7 @@ function ComplianceTable({
         </div>
       </div>
 
-      <div style={scrollTable}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={scrollTable}>
         <div style={complianceHead}>
           <div>Vehicle</div>
           <div>Age</div>
@@ -3049,6 +3051,8 @@ const tableSub = {
 
 const scrollTable = {
   overflowX: "auto",
+  overflowY: "hidden",
+  overscrollBehaviorX: "contain",
   borderRadius: 12,
   border:
     "1px solid rgba(255,255,255,.05)",

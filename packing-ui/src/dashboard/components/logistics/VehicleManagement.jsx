@@ -4,6 +4,8 @@ import {
   useState,
 } from "react";
 
+import "./logisticsScrollbars.css";
+
 import {
   Dialog,
   DialogTitle,
@@ -288,7 +290,7 @@ function VehicleManagement({
   }
 
   return (
-    <div style={wrap}>
+    <div className="logistics-scroll-scope" style={wrap}>
       <div style={header}>
         <div>
           <div style={title}>
@@ -407,7 +409,7 @@ function VehicleManagement({
         </div>
       </div>
 
-      <div style={table}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={table}>
         <div style={tableHead}>
           <div>Vehicle</div>
           <div>Driver</div>
@@ -588,6 +590,8 @@ function VehicleManagement({
         open={deleteOpen}
         onClose={closeDelete}
         PaperProps={{
+          className:
+            "logistics-scrollbar logistics-scrollbar-y logistics-modal-scroll",
           sx: {
             background:
               "linear-gradient(180deg,#0f172a,#111827)",
@@ -906,6 +910,8 @@ const resultCount = {
 const table = {
   borderRadius: 18,
   overflowX: "auto",
+  overflowY: "hidden",
+  overscrollBehaviorX: "contain",
   border:
     "1px solid rgba(255,255,255,.06)",
 };

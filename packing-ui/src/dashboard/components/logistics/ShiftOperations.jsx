@@ -3,6 +3,8 @@ import {
   useState,
 } from "react";
 
+import "./logisticsScrollbars.css";
+
 import LogisticsShiftModal from "./LogisticsShiftModal";
 import LogisticsPagination from "./LogisticsPagination";
 
@@ -343,7 +345,7 @@ function ShiftOperations({
   };
 
   return (
-    <div style={wrap}>
+    <div className="logistics-scroll-scope" style={wrap}>
       <div style={header}>
         <div>
           <div style={title}>
@@ -448,7 +450,7 @@ function ShiftOperations({
         )}
       </div>
 
-      <div style={table}>
+      <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={table}>
         <div style={head}>
           <div>
             <input
@@ -667,11 +669,16 @@ const button = {
 };
 
 const table = {
-  overflow: "hidden",
+  overflowX: "auto",
+  overflowY: "hidden",
+  overscrollBehaviorX: "contain",
   borderRadius: 18,
+  border:
+    "1px solid rgba(255,255,255,.05)",
 };
 
 const head = {
+  minWidth: 1080,
   display: "grid",
   gridTemplateColumns:
     ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
@@ -682,6 +689,7 @@ const head = {
 };
 
 const row = {
+  minWidth: 1080,
   display: "grid",
   gridTemplateColumns:
     ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
