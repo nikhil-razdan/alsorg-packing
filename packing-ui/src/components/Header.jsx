@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import LogoutIcon from "@mui/icons-material/Logout";
@@ -27,6 +27,14 @@ import {
 } from "@mui/material";
 
 import { useAuth } from "../auth/AuthContext";
+
+import {
+	fetchVehicles,
+} from "../dashboard/api/logisticsApi";
+
+import {
+	buildVehicleComplianceNotifications,
+} from "../dashboard/components/logistics/vehicleComplianceUtils";
 
 function Header() {
 	const navigate = useNavigate();
@@ -77,32 +85,90 @@ function Header() {
 		useState(false);
 
 	const [notifications, setNotifications] =
-		useState([
-			{
-				id: 1,
-				title: "Warehouse pending review",
-				message:
-					"Some warehouse items may need status verification.",
-				type: "WAREHOUSE",
-				read: false,
-			},
-			{
-				id: 2,
-				title: "Dispatch queue active",
-				message:
-					"Dispatch module has active movement records.",
-				type: "DISPATCH",
-				read: false,
-			},
-			{
-				id: 3,
-				title: "Logistics module online",
-				message:
-					"Fleet and driver controls are available.",
-				type: "LOGISTICS",
-				read: true,
-			},
-		]);
+		useState([]);
+
+	const [notificationsLoading, setNotificationsLoading] =
+		useState(false);
+
+	const canViewFleetCompliance =
+		hasAnyRole(
+			"ADMIN",
+			"LOGISTICS",
+			"DISPATCH"
+		);
+
+	useEffect(() => {
+		if (!canViewFleetCompliance) {
+			setNotifications([]);
+			return undefined;
+		}
+
+		let active = true;
+
+		async function loadFleetNotifications() {
+			try {
+				setNotificationsLoading(true);
+
+				const vehicles =
+					await fetchVehicles();
+
+				if (!active) return;
+
+				const alerts =
+					buildVehicleComplianceNotifications(
+						Array.isArray(vehicles)
+							? vehicles
+							: []
+					);
+
+				setNotifications((previous) => {
+					const previousReadState =
+						new Map(
+							previous.map(
+								(item) => [
+									item.id,
+									item.read,
+								]
+							)
+						);
+
+					return alerts.map(
+						(alert) => ({
+							...alert,
+							read:
+								previousReadState.get(
+									alert.id
+								) ?? false,
+						})
+					);
+				});
+			} catch (error) {
+				console.error(
+					"Fleet compliance notifications failed",
+					error
+				);
+			} finally {
+				if (active) {
+					setNotificationsLoading(false);
+				}
+			}
+		}
+
+		loadFleetNotifications();
+
+		const intervalId =
+			window.setInterval(
+				loadFleetNotifications,
+				5 * 60 * 1000
+			);
+
+		return () => {
+			active = false;
+			window.clearInterval(
+				intervalId
+			);
+		};
+	}, [canViewFleetCompliance]);
 
 	const moduleLinks = useMemo(
 		() => [
@@ -171,6 +237,32 @@ function Header() {
 		notifications.filter((n) => !n.read)
 			.length;
 
+	const criticalNotificationCount =
+		notifications.filter(
+			(item) =>
+				item.severity === "error"
+		).length;
+
+	const warningNotificationCount =
+		notifications.filter(
+			(item) =>
+				item.severity === "warning"
+		).length;
+
+	const healthLabel =
+		criticalNotificationCount > 0
+			? "● ACTION NEEDED"
+			: warningNotificationCount > 0
+				? "● FLEET ATTENTION"
+				: "● SYSTEM HEALTHY";
+
+	const healthSeverity =
+		criticalNotificationCount > 0
+			? "error"
+			: warningNotificationCount > 0
+				? "warning"
+				: "ok";
+
 	const handleLogout = async () => {
 		await logout();
 		navigate("/login", { replace: true });
@@ -213,12 +305,12 @@ function Header() {
 
 				<div style={right}>
 					<button
-						style={statusBadge}
+						style={statusBadge(healthSeverity)}
 						onClick={(e) =>
 							setHealthAnchor(e.currentTarget)
 						}
 					>
-						● SYSTEM HEALTHY
+						{healthLabel}
 					</button>
 
 					<Tooltip title="Open modules">
@@ -412,8 +504,13 @@ function Header() {
 				}}
 			>
 				<Box sx={popoverHeader}>
-					<Box sx={popoverTitle}>
-						Notifications
+					<Box>
+						<Box sx={popoverTitle}>
+							Notifications
+						</Box>
+						<Box sx={notificationHeaderSub}>
+							Fleet document compliance alerts
+						</Box>
 					</Box>
 
 					<Button
@@ -427,22 +524,37 @@ function Header() {
 
 				<Divider sx={dividerSx} />
 
-				<Box sx={{ width: 360 }}>
-					{notifications.length === 0 && (
-						<Box sx={emptyState}>
-							No notifications
-						</Box>
-					)}
+				<Box sx={{ width: 390, maxHeight: 460, overflowY: "auto" }}>
+					{notificationsLoading &&
+						notifications.length === 0 && (
+							<Box sx={emptyState}>
+								Checking fleet compliance...
+							</Box>
+						)}
+
+					{!notificationsLoading &&
+						notifications.length === 0 && (
+							<Box sx={healthyNotificationState}>
+								✓ No PUCC, Insurance or Fitness expiry alerts.
+							</Box>
+						)}
 
 					{notifications.map((n) => (
 						<Box
 							key={n.id}
 							sx={{
 								...notificationItem,
-								opacity: n.read ? 0.58 : 1,
+								...(n.severity === "error"
+									? notificationItemError
+									: notificationItemWarning),
+								opacity: n.read ? 0.56 : 1,
 							}}
 						>
-							<Box sx={notificationDot}>
+							<Box
+								sx={notificationDotBySeverity(
+									n.severity
+								)}
+							>
 								{!n.read ? "●" : ""}
 							</Box>
 
@@ -508,6 +620,16 @@ function Header() {
 						fontSize="small"
 					/>
 					Secure Cookie Mode
+				</Box>
+
+				<Box sx={healthDivider} />
+
+				<Box
+					sx={fleetHealthRow(
+						healthSeverity
+					)}
+				>
+					Fleet Compliance: {criticalNotificationCount} critical • {warningNotificationCount} warning
 				</Box>
 			</Popover>
 
@@ -686,22 +808,35 @@ const right = {
 	gap: 12,
 };
 
-const statusBadge = {
+const statusBadge = (severity) => ({
 	height: 38,
 	padding: "0 16px",
 	borderRadius: 999,
 	display: "flex",
 	alignItems: "center",
 	background:
-		"rgba(34,197,94,.12)",
-	color: "#4ade80",
+		severity === "error"
+			? "rgba(239,68,68,.13)"
+			: severity === "warning"
+				? "rgba(245,158,11,.13)"
+				: "rgba(34,197,94,.12)",
+	color:
+		severity === "error"
+			? "#f87171"
+			: severity === "warning"
+				? "#fbbf24"
+				: "#4ade80",
 	border:
-		"1px solid rgba(34,197,94,.22)",
+		severity === "error"
+			? "1px solid rgba(239,68,68,.26)"
+			: severity === "warning"
+				? "1px solid rgba(245,158,11,.25)"
+				: "1px solid rgba(34,197,94,.22)",
 	fontWeight: 800,
 	fontSize: 12,
 	letterSpacing: 1,
 	cursor: "pointer",
-};
+});
 
 const iconBtnSx = {
 	width: 42,
@@ -822,10 +957,30 @@ const notificationItem = {
 	mb: 1,
 };
 
-const notificationDot = {
-	color: "#60a5fa",
+const notificationDotBySeverity = (severity) => ({
+	color:
+		severity === "error"
+			? "#f87171"
+			: "#fbbf24",
 	fontSize: 12,
 	pt: 0.3,
+});
+
+const notificationItemError = {
+	background: "rgba(239,68,68,.065)",
+	border: "1px solid rgba(239,68,68,.14)",
+};
+
+const notificationItemWarning = {
+	background: "rgba(245,158,11,.055)",
+	border: "1px solid rgba(245,158,11,.13)",
+};
+
+const notificationHeaderSub = {
+	mt: 0.35,
+	color: "#64748b",
+	fontSize: 10,
+	fontWeight: 750,
 };
 
 const notificationTitle = {
@@ -875,6 +1030,37 @@ const healthRow = {
 		color: "#4ade80",
 	},
 };
+
+const healthyNotificationState = {
+	color: "#4ade80",
+	fontSize: 12,
+	py: 3,
+	px: 2,
+	textAlign: "center",
+	fontWeight: 800,
+	background: "rgba(34,197,94,.06)",
+	borderRadius: "14px",
+	border: "1px solid rgba(34,197,94,.12)",
+};
+
+const healthDivider = {
+	height: "1px",
+	background: "rgba(255,255,255,.08)",
+	my: 1,
+};
+
+const fleetHealthRow = (severity) => ({
+	minWidth: 260,
+	py: 1,
+	color:
+		severity === "error"
+			? "#f87171"
+			: severity === "warning"
+				? "#fbbf24"
+				: "#4ade80",
+	fontSize: 12,
+	fontWeight: 850,
+});
 
 const settingsDrawer = {
 	width: 390,

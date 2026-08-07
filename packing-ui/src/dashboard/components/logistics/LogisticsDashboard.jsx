@@ -362,6 +362,659 @@ const getVehicleIdentity = (
   return null;
 };
 
+
+const REPORT_SOURCE = Object.freeze({
+  CHALLAN: "Dispatch Challan",
+  MANUAL: "Manual / Legacy",
+});
+
+const buildReportOperationRows = (
+  periodChallans,
+  periodShifts,
+  driverLookup,
+  vehicleLookup
+) => {
+  const rows = [];
+
+  periodChallans.forEach((challan, index) => {
+    const driver = getDriverIdentity(
+      challan?.driverId || challan?.driver?.id,
+      challan?.driverName || challan?.driver?.name,
+      driverLookup
+    );
+
+    const vehicle = getVehicleIdentity(
+      challan?.vehicleId || challan?.vehicle?.id,
+      challan?.vehicleNumber ||
+      challan?.vehicle?.vehicleNumber,
+      vehicleLookup
+    );
+
+    const startAt = getChallanStart(challan);
+    const endAt =
+      challan?.tripEndedAt ||
+      challan?.deliveredAt ||
+      null;
+
+    const lifecycle =
+      getChallanLifecycleStatus(challan);
+
+    rows.push({
+      key:
+        `CHALLAN:${challan?.challanNumber || challan?.id || index}`,
+      source: REPORT_SOURCE.CHALLAN,
+      recordId:
+        challan?.challanNumber ||
+        challan?.chalaanNumber ||
+        challan?.id ||
+        `Challan ${index + 1}`,
+      challanNumber:
+        challan?.challanNumber ||
+        challan?.chalaanNumber ||
+        "",
+      driverKey: driver?.key || "",
+      driverName:
+        driver?.name ||
+        challan?.driverName ||
+        "Unassigned",
+      vehicleKey: vehicle?.key || "",
+      vehicleNumber:
+        vehicle?.number ||
+        challan?.vehicleNumber ||
+        "Unassigned",
+      startAt,
+      endAt,
+      durationMinutes:
+        lifecycle === "RUNNING"
+          ? calculateRunningMinutes(startAt)
+          : calculateDurationMinutes(
+            startAt,
+            endAt,
+            challan?.tripDurationMinutes
+          ),
+      status: lifecycle,
+      itemCount:
+        safeNumber(challan?.totalItems) ||
+        (Array.isArray(challan?.items)
+          ? challan.items.length
+          : 0),
+      tripCount: 1,
+      helperCount:
+        safeNumber(
+          challan?.helperLoaderCount ??
+          challan?.helpers ??
+          challan?.totalHelpers
+        ),
+      routeCategory:
+        challan?.routeCategory ||
+        challan?.destination ||
+        challan?.toLocation ||
+        "",
+      distance: 0,
+      fuel: 0,
+      overtimeHours: 0,
+      dispatchedBy:
+        challan?.dispatchedBy ||
+        challan?.generatedBy ||
+        "",
+      remarks:
+        challan?.remarks ||
+        challan?.deliveryRemarks ||
+        "",
+      rawItems:
+        Array.isArray(challan?.items)
+          ? challan.items
+          : [],
+    });
+  });
+
+  periodShifts.forEach((shift, index) => {
+    const driver = getDriverIdentity(
+      shift?.driver?.id || shift?.driverId,
+      shift?.driver?.name || shift?.driverName,
+      driverLookup
+    );
+
+    const vehicle = getVehicleIdentity(
+      shift?.vehicle?.id || shift?.vehicleId,
+      shift?.vehicle?.vehicleNumber ||
+      shift?.vehicleNumber,
+      vehicleLookup
+    );
+
+    const startAt = getShiftStart(shift);
+    const endAt =
+      shift?.shiftEnd ||
+      shift?.tripEnd ||
+      null;
+
+    rows.push({
+      key:
+        `MANUAL:${shift?.id || startAt || index}`,
+      source: REPORT_SOURCE.MANUAL,
+      recordId:
+        shift?.id
+          ? `MANUAL-${shift.id}`
+          : `Manual ${index + 1}`,
+      challanNumber: "",
+      driverKey: driver?.key || "",
+      driverName:
+        driver?.name ||
+        shift?.driver?.name ||
+        shift?.driverName ||
+        "Unassigned",
+      vehicleKey: vehicle?.key || "",
+      vehicleNumber:
+        vehicle?.number ||
+        shift?.vehicle?.vehicleNumber ||
+        shift?.vehicleNumber ||
+        "Unassigned",
+      startAt,
+      endAt,
+      durationMinutes:
+        calculateDurationMinutes(
+          startAt,
+          endAt,
+          null
+        ),
+      status:
+        normalizeStatus(
+          shift?.status || "WORKING"
+        ),
+      itemCount: 0,
+      tripCount:
+        safeNumber(shift?.totalTrips),
+      helperCount:
+        safeNumber(
+          shift?.totalLoaders ??
+          shift?.totalHelpers
+        ),
+      routeCategory:
+        shift?.routeCategory || "",
+      distance:
+        safeNumber(shift?.totalDistance),
+      fuel:
+        safeNumber(shift?.fuelUsed),
+      overtimeHours:
+        safeNumber(shift?.overtimeHours),
+      dispatchedBy: "",
+      remarks: shift?.remarks || "",
+      rawItems: [],
+    });
+  });
+
+  return rows.sort((a, b) => {
+    const aTime =
+      parseBusinessDateTime(a.startAt)
+        ?.getTime() || 0;
+    const bTime =
+      parseBusinessDateTime(b.startAt)
+        ?.getTime() || 0;
+
+    return bTime - aTime;
+  });
+};
+
+const aggregateReportRows = (
+  operationRows,
+  dimension
+) => {
+  const isDriver =
+    dimension === "DRIVER";
+
+  const map = new Map();
+
+  operationRows.forEach((operation) => {
+    const key = isDriver
+      ? operation.driverKey ||
+      `DRIVER:${normalizeText(
+        operation.driverName
+      )}`
+      : operation.vehicleKey ||
+      `VEHICLE:${normalizeText(
+        operation.vehicleNumber
+      )}`;
+
+    const label = isDriver
+      ? operation.driverName
+      : operation.vehicleNumber;
+
+    if (!key || isMissingValue(label)) {
+      return;
+    }
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label,
+        challans: 0,
+        completedChallans: 0,
+        runningChallans: 0,
+        cancelledChallans: 0,
+        dispatchedItems: 0,
+        manualOperations: 0,
+        manualTrips: 0,
+        helpers: 0,
+        distance: 0,
+        fuel: 0,
+        overtimeHours: 0,
+        durationTotal: 0,
+        durationCount: 0,
+        lastActivityAt: null,
+      });
+    }
+
+    const row = map.get(key);
+
+    if (
+      operation.source ===
+      REPORT_SOURCE.CHALLAN
+    ) {
+      row.challans += 1;
+      row.dispatchedItems +=
+        safeNumber(operation.itemCount);
+
+      if (
+        operation.status ===
+        "COMPLETED"
+      ) {
+        row.completedChallans += 1;
+      } else if (
+        operation.status ===
+        "RUNNING"
+      ) {
+        row.runningChallans += 1;
+      } else if (
+        operation.status ===
+        "CANCELLED"
+      ) {
+        row.cancelledChallans += 1;
+      }
+    } else {
+      row.manualOperations += 1;
+      row.manualTrips +=
+        safeNumber(operation.tripCount);
+      row.helpers +=
+        safeNumber(operation.helperCount);
+      row.distance +=
+        safeNumber(operation.distance);
+      row.fuel +=
+        safeNumber(operation.fuel);
+      row.overtimeHours +=
+        safeNumber(operation.overtimeHours);
+    }
+
+    if (
+      safeNumber(operation.durationMinutes) >
+      0
+    ) {
+      row.durationTotal +=
+        safeNumber(
+          operation.durationMinutes
+        );
+      row.durationCount += 1;
+    }
+
+    const activityAt =
+      parseBusinessDateTime(
+        operation.startAt
+      );
+
+    if (
+      activityAt &&
+      (
+        !row.lastActivityAt ||
+        activityAt.getTime() >
+        row.lastActivityAt.getTime()
+      )
+    ) {
+      row.lastActivityAt =
+        activityAt;
+    }
+  });
+
+  return Array.from(map.values())
+    .map((row) => ({
+      ...row,
+      completionRate:
+        row.challans > 0
+          ? (
+            row.completedChallans /
+            row.challans
+          ) * 100
+          : 0,
+      averageDurationMinutes:
+        row.durationCount > 0
+          ? row.durationTotal /
+          row.durationCount
+          : 0,
+      totalActivities:
+        row.challans +
+        row.manualOperations,
+    }))
+    .sort((a, b) =>
+      b.totalActivities -
+      a.totalActivities ||
+      b.dispatchedItems -
+      a.dispatchedItems ||
+      a.label.localeCompare(b.label)
+    );
+};
+
+const createReportFilterSummary = ({
+  periodLabel,
+  driverLabel,
+  vehicleLabel,
+  status,
+  search,
+}) => {
+  return [
+    `Period: ${periodLabel}`,
+    `Driver: ${driverLabel || "All Drivers"}`,
+    `Vehicle: ${vehicleLabel || "All Vehicles"}`,
+    `Status: ${status === "ALL" ? "All Statuses" : status}`,
+    search
+      ? `Search: ${search}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+};
+
+const styleReportTitle = (
+  worksheet,
+  title,
+  subtitle,
+  columnCount
+) => {
+  const endColumn =
+    worksheet.getColumn(columnCount).letter;
+
+  worksheet.mergeCells(
+    `A1:${endColumn}1`
+  );
+
+  const titleCell =
+    worksheet.getCell("A1");
+
+  titleCell.value = title;
+  titleCell.font = {
+    bold: true,
+    size: 18,
+    color: {
+      argb: "FFFFFFFF",
+    },
+  };
+  titleCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: {
+      argb: "FF0F172A",
+    },
+  };
+  titleCell.alignment = {
+    vertical: "middle",
+    horizontal: "left",
+  };
+  worksheet.getRow(1).height = 30;
+
+  worksheet.mergeCells(
+    `A2:${endColumn}2`
+  );
+
+  const subtitleCell =
+    worksheet.getCell("A2");
+
+  subtitleCell.value = subtitle;
+  subtitleCell.font = {
+    italic: true,
+    size: 10,
+    color: {
+      argb: "FF475569",
+    },
+  };
+  subtitleCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: {
+      argb: "FFF8FAFC",
+    },
+  };
+  subtitleCell.alignment = {
+    vertical: "middle",
+    horizontal: "left",
+  };
+
+  worksheet.getRow(2).height = 24;
+};
+
+const styleReportHeader = (
+  row
+) => {
+  row.height = 24;
+
+  row.eachCell((cell) => {
+    cell.font = {
+      bold: true,
+      color: {
+        argb: "FFFFFFFF",
+      },
+      size: 10,
+    };
+
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: {
+        argb: "FF1D4ED8",
+      },
+    };
+
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+      wrapText: true,
+    };
+
+    cell.border = {
+      top: {
+        style: "thin",
+        color: {
+          argb: "FFBFDBFE",
+        },
+      },
+      bottom: {
+        style: "thin",
+        color: {
+          argb: "FFBFDBFE",
+        },
+      },
+      left: {
+        style: "thin",
+        color: {
+          argb: "FFBFDBFE",
+        },
+      },
+      right: {
+        style: "thin",
+        color: {
+          argb: "FFBFDBFE",
+        },
+      },
+    };
+  });
+};
+
+const styleReportBody = (
+  worksheet,
+  startRow,
+  endRow
+) => {
+  for (
+    let rowNumber = startRow;
+    rowNumber <= endRow;
+    rowNumber += 1
+  ) {
+    const row =
+      worksheet.getRow(rowNumber);
+
+    row.height = 22;
+
+    row.eachCell((cell) => {
+      cell.alignment = {
+        vertical: "middle",
+        wrapText: true,
+      };
+
+      cell.border = {
+        bottom: {
+          style: "hair",
+          color: {
+            argb: "FFE2E8F0",
+          },
+        },
+      };
+
+      if (rowNumber % 2 === 0) {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: {
+            argb: "FFF8FAFC",
+          },
+        };
+      }
+    });
+  }
+};
+
+const finalizeReportSheet = (
+  worksheet,
+  {
+    headerRow,
+    columnWidths = [],
+    landscape = true,
+  }
+) => {
+  worksheet.views = [
+    {
+      state: "frozen",
+      ySplit: headerRow,
+    },
+  ];
+
+  if (
+    worksheet.rowCount >= headerRow
+  ) {
+    worksheet.autoFilter = {
+      from: {
+        row: headerRow,
+        column: 1,
+      },
+      to: {
+        row: headerRow,
+        column:
+          worksheet.columnCount,
+      },
+    };
+  }
+
+  columnWidths.forEach(
+    (width, index) => {
+      worksheet.getColumn(
+        index + 1
+      ).width = width;
+    }
+  );
+
+  worksheet.pageSetup = {
+    orientation:
+      landscape
+        ? "landscape"
+        : "portrait",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.45,
+      bottom: 0.45,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
+
+  worksheet.headerFooter = {
+    oddFooter:
+      "&LALSORG Logistics&RPage &P of &N",
+  };
+};
+
+const styleStatusCell = (
+  cell,
+  status
+) => {
+  const normalized =
+    normalizeStatus(status);
+
+  const map = {
+    COMPLETED: {
+      bg: "FFDCFCE7",
+      fg: "FF166534",
+    },
+    RUNNING: {
+      bg: "FFDBEAFE",
+      fg: "FF1D4ED8",
+    },
+    WORKING: {
+      bg: "FFEDE9FE",
+      fg: "FF6D28D9",
+    },
+    CANCELLED: {
+      bg: "FFFEE2E2",
+      fg: "FFB91C1C",
+    },
+    OFF: {
+      bg: "FFFEF3C7",
+      fg: "FF92400E",
+    },
+    ON_LEAVE: {
+      bg: "FFFEF3C7",
+      fg: "FF92400E",
+    },
+  };
+
+  const tone =
+    map[normalized];
+
+  if (!tone) {
+    return;
+  }
+
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: {
+      argb: tone.bg,
+    },
+  };
+
+  cell.font = {
+    bold: true,
+    color: {
+      argb: tone.fg,
+    },
+  };
+
+  cell.alignment = {
+    vertical: "middle",
+    horizontal: "center",
+  };
+};
+
+
 function LogisticsDashboard({
   StatCard,
 }) {
@@ -383,6 +1036,31 @@ function LogisticsDashboard({
     useState([]);
   const [vehicles, setVehicles] =
     useState([]);
+
+  const [
+    reportDriverKey,
+    setReportDriverKey,
+  ] = useState("");
+
+  const [
+    reportVehicleKey,
+    setReportVehicleKey,
+  ] = useState("");
+
+  const [
+    reportStatus,
+    setReportStatus,
+  ] = useState("ALL");
+
+  const [
+    reportSearch,
+    setReportSearch,
+  ] = useState("");
+
+  const [
+    reportGenerating,
+    setReportGenerating,
+  ] = useState("");
 
   const mountedRef = useRef(true);
   const latestRequestRef = useRef(0);
@@ -1126,6 +1804,1098 @@ function LogisticsDashboard({
     vehicleLookup,
   ]);
 
+  const reportOperationRows =
+    useMemo(
+      () =>
+        buildReportOperationRows(
+          periodChallans,
+          periodShifts,
+          driverLookup,
+          vehicleLookup
+        ),
+      [
+        periodChallans,
+        periodShifts,
+        driverLookup,
+        vehicleLookup,
+      ]
+    );
+
+  const reportDriverOptions =
+    useMemo(
+      () =>
+        aggregateReportRows(
+          reportOperationRows,
+          "DRIVER"
+        ),
+      [reportOperationRows]
+    );
+
+  const reportVehicleOptions =
+    useMemo(
+      () =>
+        aggregateReportRows(
+          reportOperationRows,
+          "VEHICLE"
+        ),
+      [reportOperationRows]
+    );
+
+  const filteredReportOperations =
+    useMemo(() => {
+      const searchTerm =
+        reportSearch
+          .trim()
+          .toLowerCase();
+
+      return reportOperationRows.filter(
+        (operation) => {
+          if (
+            reportDriverKey &&
+            operation.driverKey !==
+            reportDriverKey
+          ) {
+            return false;
+          }
+
+          if (
+            reportVehicleKey &&
+            operation.vehicleKey !==
+            reportVehicleKey
+          ) {
+            return false;
+          }
+
+          if (
+            reportStatus !== "ALL" &&
+            normalizeStatus(
+              operation.status
+            ) !== reportStatus
+          ) {
+            return false;
+          }
+
+          if (searchTerm) {
+            const searchable = [
+              operation.source,
+              operation.recordId,
+              operation.challanNumber,
+              operation.driverName,
+              operation.vehicleNumber,
+              operation.routeCategory,
+              operation.status,
+              operation.dispatchedBy,
+              operation.remarks,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            if (
+              !searchable.includes(
+                searchTerm
+              )
+            ) {
+              return false;
+            }
+          }
+
+          return true;
+        }
+      );
+    }, [
+      reportOperationRows,
+      reportDriverKey,
+      reportVehicleKey,
+      reportStatus,
+      reportSearch,
+    ]);
+
+  const reportDriverRows =
+    useMemo(
+      () =>
+        aggregateReportRows(
+          filteredReportOperations,
+          "DRIVER"
+        ),
+      [filteredReportOperations]
+    );
+
+  const reportVehicleRows =
+    useMemo(
+      () =>
+        aggregateReportRows(
+          filteredReportOperations,
+          "VEHICLE"
+        ),
+      [filteredReportOperations]
+    );
+
+  const reportItemRows =
+    useMemo(() => {
+      const rows = [];
+
+      filteredReportOperations
+        .filter(
+          (operation) =>
+            operation.source ===
+            REPORT_SOURCE.CHALLAN
+        )
+        .forEach((operation) => {
+          const items =
+            Array.isArray(
+              operation.rawItems
+            )
+              ? operation.rawItems
+              : [];
+
+          items.forEach(
+            (item, index) => {
+              rows.push({
+                key:
+                  `${operation.key}:ITEM:${item?.id || item?.zohoItemId || index}`,
+                challanNumber:
+                  operation.challanNumber ||
+                  operation.recordId,
+                dispatchAt:
+                  operation.startAt,
+                driverName:
+                  operation.driverName,
+                vehicleNumber:
+                  operation.vehicleNumber,
+                itemName:
+                  item?.name ||
+                  item?.itemName ||
+                  "—",
+                sku:
+                  item?.sku ||
+                  item?.codeSku ||
+                  "—",
+                pdNo:
+                  item?.pdNo ||
+                  item?.packetNo ||
+                  "—",
+                drawingNo:
+                  item?.drawingNo ||
+                  item?.dwgNo ||
+                  "—",
+                clientName:
+                  item?.clientName ||
+                  item?.customerName ||
+                  "—",
+                plantCode:
+                  item?.plantCode ||
+                  item?.plant ||
+                  "—",
+                description:
+                  item?.description ||
+                  "—",
+                status:
+                  item?.status ||
+                  operation.status,
+              });
+            }
+          );
+        });
+
+      return rows;
+    }, [filteredReportOperations]);
+
+  const reportFilterSummary =
+    useMemo(() => {
+      const driverLabel =
+        reportDriverOptions.find(
+          (row) =>
+            row.key ===
+            reportDriverKey
+        )?.label || "";
+
+      const vehicleLabel =
+        reportVehicleOptions.find(
+          (row) =>
+            row.key ===
+            reportVehicleKey
+        )?.label || "";
+
+      return createReportFilterSummary({
+        periodLabel:
+          analytics.periodLabel,
+        driverLabel,
+        vehicleLabel,
+        status: reportStatus,
+        search: reportSearch.trim(),
+      });
+    }, [
+      analytics.periodLabel,
+      reportDriverOptions,
+      reportVehicleOptions,
+      reportDriverKey,
+      reportVehicleKey,
+      reportStatus,
+      reportSearch,
+    ]);
+
+  const clearReportFilters = () => {
+    setReportDriverKey("");
+    setReportVehicleKey("");
+    setReportStatus("ALL");
+    setReportSearch("");
+  };
+
+  const downloadLogisticsWorkbook =
+    async (mode) => {
+      if (reportGenerating) {
+        return;
+      }
+
+      try {
+        setReportGenerating(mode);
+
+        const [
+          excelModule,
+          fileSaverModule,
+        ] = await Promise.all([
+          import("exceljs"),
+          import("file-saver"),
+        ]);
+
+        const ExcelJS =
+          excelModule.default ||
+          excelModule;
+
+        const saveAs =
+          fileSaverModule.saveAs ||
+          fileSaverModule.default
+            ?.saveAs ||
+          fileSaverModule.default;
+
+        if (
+          !ExcelJS?.Workbook ||
+          typeof saveAs !==
+          "function"
+        ) {
+          throw new Error(
+            "Excel export dependencies are unavailable"
+          );
+        }
+
+        const workbook =
+          new ExcelJS.Workbook();
+
+        workbook.creator =
+          "ALSORG Logistics Management";
+        workbook.company =
+          "ALSORG";
+        workbook.subject =
+          "Logistics Management Report";
+        workbook.title =
+          "ALSORG Logistics Management Report";
+        workbook.created =
+          new Date();
+
+        const generatedAt =
+          new Intl.DateTimeFormat(
+            "en-IN",
+            {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            }
+          ).format(new Date());
+
+        const reportTitle =
+          mode === "DRIVER"
+            ? "Driver Performance Report"
+            : mode === "VEHICLE"
+              ? "Vehicle Performance Report"
+              : mode === "TRIP"
+                ? "Trip & Challan Register"
+                : "Logistics Management Pack";
+
+        const subtitle =
+          `${reportFilterSummary} • Generated: ${generatedAt}`;
+
+        const addExecutiveSummary =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Executive Summary"
+              );
+
+            styleReportTitle(
+              sheet,
+              "ALSORG Logistics Management Summary",
+              subtitle,
+              4
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "KPI",
+              "Value",
+              "Business Meaning",
+              "Scope",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            const completed =
+              filteredReportOperations.filter(
+                (row) =>
+                  row.source ===
+                  REPORT_SOURCE.CHALLAN &&
+                  row.status ===
+                  "COMPLETED"
+              ).length;
+
+            const challanCount =
+              filteredReportOperations.filter(
+                (row) =>
+                  row.source ===
+                  REPORT_SOURCE.CHALLAN
+              ).length;
+
+            const running =
+              filteredReportOperations.filter(
+                (row) =>
+                  row.source ===
+                  REPORT_SOURCE.CHALLAN &&
+                  row.status ===
+                  "RUNNING"
+              ).length;
+
+            const dispatchedItems =
+              filteredReportOperations.reduce(
+                (sum, row) =>
+                  sum +
+                  safeNumber(
+                    row.itemCount
+                  ),
+                0
+              );
+
+            const manualOps =
+              filteredReportOperations.filter(
+                (row) =>
+                  row.source ===
+                  REPORT_SOURCE.MANUAL
+              );
+
+            const manualTrips =
+              manualOps.reduce(
+                (sum, row) =>
+                  sum +
+                  safeNumber(
+                    row.tripCount
+                  ),
+                0
+              );
+
+            const totalDistance =
+              manualOps.reduce(
+                (sum, row) =>
+                  sum +
+                  safeNumber(
+                    row.distance
+                  ),
+                0
+              );
+
+            const totalFuel =
+              manualOps.reduce(
+                (sum, row) =>
+                  sum +
+                  safeNumber(
+                    row.fuel
+                  ),
+                0
+              );
+
+            const summaryRows = [
+              [
+                "Dispatch Challans",
+                challanCount,
+                "Item-based dispatch trips in selected report filters",
+                analytics.periodLabel,
+              ],
+              [
+                "Completed Challans",
+                completed,
+                "Challans with trip end/completed status",
+                analytics.periodLabel,
+              ],
+              [
+                "Running Challans",
+                running,
+                "Open challan trips requiring operational tracking",
+                "Live + selected filters",
+              ],
+              [
+                "Completion Rate",
+                challanCount
+                  ? completed /
+                  challanCount
+                  : 0,
+                "Completed challans divided by dispatch challans",
+                analytics.periodLabel,
+              ],
+              [
+                "Dispatched Items",
+                dispatchedItems,
+                "Total packet/item rows carried by dispatch challans",
+                analytics.periodLabel,
+              ],
+              [
+                "Drivers Represented",
+                reportDriverRows.length,
+                "Drivers with activity in filtered report",
+                analytics.periodLabel,
+              ],
+              [
+                "Vehicles Represented",
+                reportVehicleRows.length,
+                "Vehicles with activity in filtered report",
+                analytics.periodLabel,
+              ],
+              [
+                "Manual Operations",
+                manualOps.length,
+                "Non-challan / legacy movement records",
+                analytics.periodLabel,
+              ],
+              [
+                "Manual Trip Entries",
+                manualTrips,
+                "Trip count recorded inside manual operations",
+                "Manual records only",
+              ],
+              [
+                "Manual Distance",
+                totalDistance,
+                "Distance recorded in manual operations",
+                "Manual records only",
+              ],
+              [
+                "Manual Fuel",
+                totalFuel,
+                "Fuel recorded in manual operations",
+                "Manual records only",
+              ],
+            ];
+
+            summaryRows.forEach(
+              (values) => {
+                sheet.addRow(values);
+              }
+            );
+
+            sheet.getColumn(2)
+              .numFmt = "0.00";
+
+            const completionRow =
+              sheet.getRow(8);
+
+            completionRow.getCell(2)
+              .numFmt = "0.0%";
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  26,
+                  16,
+                  52,
+                  24,
+                ],
+                landscape: false,
+              }
+            );
+          };
+
+        const addDriverSheet =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Driver Performance"
+              );
+
+            styleReportTitle(
+              sheet,
+              "Driver Performance Report",
+              subtitle,
+              14
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "Driver",
+              "Activities",
+              "Challans",
+              "Completed",
+              "Running",
+              "Completion %",
+              "Dispatched Items",
+              "Manual Ops",
+              "Manual Trips",
+              "Helpers",
+              "Distance",
+              "Fuel",
+              "Avg Duration",
+              "Last Activity",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            reportDriverRows.forEach(
+              (row) => {
+                const excelRow =
+                  sheet.addRow([
+                    row.label,
+                    row.totalActivities,
+                    row.challans,
+                    row.completedChallans,
+                    row.runningChallans,
+                    row.completionRate /
+                    100,
+                    row.dispatchedItems,
+                    row.manualOperations,
+                    row.manualTrips,
+                    row.helpers,
+                    row.distance,
+                    row.fuel,
+                    formatDuration(
+                      row.averageDurationMinutes
+                    ),
+                    row.lastActivityAt
+                      ? formatDateTime(
+                        row.lastActivityAt
+                      )
+                      : "—",
+                  ]);
+
+                excelRow.getCell(6)
+                  .numFmt =
+                  "0.0%";
+                excelRow.getCell(11)
+                  .numFmt =
+                  "0.00";
+                excelRow.getCell(12)
+                  .numFmt =
+                  "0.00";
+              }
+            );
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  24,
+                  12,
+                  11,
+                  11,
+                  10,
+                  14,
+                  16,
+                  13,
+                  13,
+                  10,
+                  12,
+                  10,
+                  16,
+                  22,
+                ],
+              }
+            );
+          };
+
+        const addVehicleSheet =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Vehicle Performance"
+              );
+
+            styleReportTitle(
+              sheet,
+              "Vehicle Performance Report",
+              subtitle,
+              14
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "Vehicle",
+              "Activities",
+              "Challans",
+              "Completed",
+              "Running",
+              "Completion %",
+              "Dispatched Items",
+              "Manual Ops",
+              "Manual Trips",
+              "Helpers",
+              "Distance",
+              "Fuel",
+              "Avg Duration",
+              "Last Activity",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            reportVehicleRows.forEach(
+              (row) => {
+                const excelRow =
+                  sheet.addRow([
+                    row.label,
+                    row.totalActivities,
+                    row.challans,
+                    row.completedChallans,
+                    row.runningChallans,
+                    row.completionRate /
+                    100,
+                    row.dispatchedItems,
+                    row.manualOperations,
+                    row.manualTrips,
+                    row.helpers,
+                    row.distance,
+                    row.fuel,
+                    formatDuration(
+                      row.averageDurationMinutes
+                    ),
+                    row.lastActivityAt
+                      ? formatDateTime(
+                        row.lastActivityAt
+                      )
+                      : "—",
+                  ]);
+
+                excelRow.getCell(6)
+                  .numFmt =
+                  "0.0%";
+                excelRow.getCell(11)
+                  .numFmt =
+                  "0.00";
+                excelRow.getCell(12)
+                  .numFmt =
+                  "0.00";
+              }
+            );
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  22,
+                  12,
+                  11,
+                  11,
+                  10,
+                  14,
+                  16,
+                  13,
+                  13,
+                  10,
+                  12,
+                  10,
+                  16,
+                  22,
+                ],
+              }
+            );
+          };
+
+        const addTripSheet =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Trip Register"
+              );
+
+            styleReportTitle(
+              sheet,
+              "Trip / Challan Activity Register",
+              subtitle,
+              17
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "Source",
+              "Record / Challan",
+              "Driver",
+              "Vehicle",
+              "Start Date & Time",
+              "End Date & Time",
+              "Duration",
+              "Status",
+              "Items",
+              "Trips",
+              "Helpers",
+              "Route",
+              "Distance",
+              "Fuel",
+              "Overtime",
+              "Dispatched By",
+              "Remarks",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            filteredReportOperations.forEach(
+              (operation) => {
+                const excelRow =
+                  sheet.addRow([
+                    operation.source,
+                    operation.recordId,
+                    operation.driverName,
+                    operation.vehicleNumber,
+                    formatDateTime(
+                      operation.startAt
+                    ),
+                    formatDateTime(
+                      operation.endAt
+                    ),
+                    formatDuration(
+                      operation.durationMinutes
+                    ),
+                    operation.status,
+                    operation.itemCount,
+                    operation.tripCount,
+                    operation.helperCount,
+                    operation.routeCategory ||
+                    "—",
+                    operation.distance,
+                    operation.fuel,
+                    operation.overtimeHours,
+                    operation.dispatchedBy ||
+                    "—",
+                    operation.remarks ||
+                    "—",
+                  ]);
+
+                styleStatusCell(
+                  excelRow.getCell(8),
+                  operation.status
+                );
+
+                excelRow.getCell(13)
+                  .numFmt =
+                  "0.00";
+                excelRow.getCell(14)
+                  .numFmt =
+                  "0.00";
+                excelRow.getCell(15)
+                  .numFmt =
+                  "0.00";
+              }
+            );
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  18,
+                  22,
+                  22,
+                  18,
+                  23,
+                  23,
+                  16,
+                  14,
+                  10,
+                  10,
+                  10,
+                  18,
+                  12,
+                  10,
+                  12,
+                  20,
+                  36,
+                ],
+              }
+            );
+          };
+
+        const addItemSheet =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Dispatch Item Detail"
+              );
+
+            styleReportTitle(
+              sheet,
+              "Dispatch Item Detail",
+              subtitle,
+              12
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "Challan",
+              "Dispatch Date & Time",
+              "Driver",
+              "Vehicle",
+              "Item",
+              "SKU",
+              "PD No.",
+              "DWG No.",
+              "Client",
+              "Plant",
+              "Description",
+              "Status",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            reportItemRows.forEach(
+              (item) => {
+                const excelRow =
+                  sheet.addRow([
+                    item.challanNumber,
+                    formatDateTime(
+                      item.dispatchAt
+                    ),
+                    item.driverName,
+                    item.vehicleNumber,
+                    item.itemName,
+                    item.sku,
+                    item.pdNo,
+                    item.drawingNo,
+                    item.clientName,
+                    item.plantCode,
+                    item.description,
+                    item.status,
+                  ]);
+
+                styleStatusCell(
+                  excelRow.getCell(12),
+                  item.status
+                );
+              }
+            );
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  22,
+                  23,
+                  22,
+                  18,
+                  30,
+                  22,
+                  16,
+                  16,
+                  24,
+                  14,
+                  42,
+                  14,
+                ],
+              }
+            );
+          };
+
+        const addDefinitionsSheet =
+          () => {
+            const sheet =
+              workbook.addWorksheet(
+                "Report Notes"
+              );
+
+            styleReportTitle(
+              sheet,
+              "ALSORG Logistics Report Definitions",
+              subtitle,
+              3
+            );
+
+            const header =
+              sheet.getRow(4);
+
+            header.values = [
+              "Metric / Source",
+              "Definition",
+              "Important Note",
+            ];
+
+            styleReportHeader(
+              header
+            );
+
+            [
+              [
+                "Dispatch Challan",
+                "Current item-based trip created from dispatched packet/item rows.",
+                "Primary current trip source.",
+              ],
+              [
+                "Manual / Legacy",
+                "Non-challan movement or historical shift record.",
+                "Used for route, fuel, distance, helper and overtime metrics.",
+              ],
+              [
+                "Completion Rate",
+                "Completed dispatch challans divided by dispatch challans in the filtered report.",
+                "Manual records are not included in this percentage.",
+              ],
+              [
+                "Fuel / Distance / Overtime",
+                "Values recorded on manual operations.",
+                "Not inferred for dispatch challans where backend data does not provide them.",
+              ],
+              [
+                "Driver / Vehicle Matching",
+                "Master ID is used first; normalized name/vehicle number is used as fallback.",
+                "This prevents duplicate identities where possible.",
+              ],
+              [
+                "Report Filters",
+                reportFilterSummary,
+                "Every workbook sheet uses the same active filters.",
+              ],
+            ].forEach(
+              (values) =>
+                sheet.addRow(values)
+            );
+
+            styleReportBody(
+              sheet,
+              5,
+              sheet.rowCount
+            );
+
+            finalizeReportSheet(
+              sheet,
+              {
+                headerRow: 4,
+                columnWidths: [
+                  28,
+                  62,
+                  62,
+                ],
+                landscape: false,
+              }
+            );
+          };
+
+        if (mode === "ALL") {
+          addExecutiveSummary();
+          addDriverSheet();
+          addVehicleSheet();
+          addTripSheet();
+          addItemSheet();
+          addDefinitionsSheet();
+        } else if (
+          mode === "DRIVER"
+        ) {
+          addDriverSheet();
+          addTripSheet();
+          addDefinitionsSheet();
+        } else if (
+          mode === "VEHICLE"
+        ) {
+          addVehicleSheet();
+          addTripSheet();
+          addDefinitionsSheet();
+        } else {
+          addTripSheet();
+          addItemSheet();
+          addDefinitionsSheet();
+        }
+
+        const buffer =
+          await workbook.xlsx
+            .writeBuffer();
+
+        const dateStamp =
+          new Date()
+            .toISOString()
+            .slice(0, 10);
+
+        const fileName =
+          `ALSORG_Logistics_${mode}_${analytics.periodLabel.replace(/\s+/g, "_")}_${dateStamp}.xlsx`;
+
+        saveAs(
+          new Blob([buffer], {
+            type:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          }),
+          fileName
+        );
+      } catch (error) {
+        console.error(
+          "Logistics report export failed",
+          error
+        );
+
+        window.alert(
+          error?.message ||
+          "Unable to generate logistics Excel report"
+        );
+      } finally {
+        setReportGenerating("");
+      }
+    };
+
   const attentionRows = useMemo(() => {
     const rows = [];
 
@@ -1573,6 +3343,46 @@ function LogisticsDashboard({
           ],
         };
 
+      case "reports":
+        return {
+          title: "Logistics Reports & Excel Center",
+          subtitle: `${analytics.periodLabel} professional management reporting by driver, vehicle and trip`,
+          cards: [
+            {
+              title: "Filtered Activities",
+              value:
+                filteredReportOperations.length,
+              subtle:
+                "Challan + manual records",
+              accent: "#60a5fa",
+            },
+            {
+              title: "Drivers in Report",
+              value:
+                reportDriverRows.length,
+              subtle:
+                "Matched operational drivers",
+              accent: "#8b5cf6",
+            },
+            {
+              title: "Vehicles in Report",
+              value:
+                reportVehicleRows.length,
+              subtle:
+                "Matched fleet records",
+              accent: "#22c55e",
+            },
+            {
+              title: "Dispatch Item Rows",
+              value:
+                reportItemRows.length,
+              subtle:
+                "Item-level challan detail",
+              accent: "#f59e0b",
+            },
+          ],
+        };
+
       default:
         return {
           title: "Unified Logistics Command Center",
@@ -1610,7 +3420,14 @@ function LogisticsDashboard({
           ],
         };
     }
-  }, [section, analytics]);
+  }, [
+    section,
+    analytics,
+    filteredReportOperations.length,
+    reportDriverRows.length,
+    reportVehicleRows.length,
+    reportItemRows.length,
+  ]);
 
   const CardComponent =
     StatCard || DashboardStatCard;
@@ -1664,6 +3481,27 @@ function LogisticsDashboard({
                 </button>
               ))}
             </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSection(
+                  section === "reports"
+                    ? "summary"
+                    : "reports"
+                )
+              }
+              style={{
+                ...reportsNavButton,
+                ...(section === "reports"
+                  ? reportsNavButtonActive
+                  : {}),
+              }}
+            >
+              {section === "reports"
+                ? "← Management Overview"
+                : "📊 Reports & Excel"}
+            </button>
 
             <button
               type="button"
@@ -1722,109 +3560,173 @@ function LogisticsDashboard({
               ))}
             </div>
 
-            <div style={managementPulseGrid}>
-              <PulseMetric
-                label="Completion Rate"
-                value={`${analytics.completionRate.toFixed(0)}%`}
-                detail={`${analytics.completedChallans}/${analytics.totalChallans || 0} challans`}
+            {section === "reports" ? (
+              <LogisticsReportCenter
+                periodLabel={
+                  analytics.periodLabel
+                }
+                filterSummary={
+                  reportFilterSummary
+                }
+                driverOptions={
+                  reportDriverOptions
+                }
+                vehicleOptions={
+                  reportVehicleOptions
+                }
+                driverKey={
+                  reportDriverKey
+                }
+                vehicleKey={
+                  reportVehicleKey
+                }
+                status={
+                  reportStatus
+                }
+                search={
+                  reportSearch
+                }
+                onDriverChange={
+                  setReportDriverKey
+                }
+                onVehicleChange={
+                  setReportVehicleKey
+                }
+                onStatusChange={
+                  setReportStatus
+                }
+                onSearchChange={
+                  setReportSearch
+                }
+                onClear={
+                  clearReportFilters
+                }
+                operationRows={
+                  filteredReportOperations
+                }
+                driverRows={
+                  reportDriverRows
+                }
+                vehicleRows={
+                  reportVehicleRows
+                }
+                itemRowCount={
+                  reportItemRows.length
+                }
+                generating={
+                  reportGenerating
+                }
+                onDownload={
+                  downloadLogisticsWorkbook
+                }
               />
-              <PulseMetric
-                label="Avg Trip Duration"
-                value={formatDuration(
-                  analytics.avgTripDuration
-                )}
-                detail="Completed challans"
-              />
-              <PulseMetric
-                label="Driver Assignment"
-                value={`${analytics.driverAssignmentRate.toFixed(0)}%`}
-                detail={`${analytics.activeDrivers}/${analytics.totalDrivers} active now`}
-              />
-              <PulseMetric
-                label="Fleet Utilization"
-                value={`${analytics.vehicleUtilization.toFixed(0)}%`}
-                detail={`${analytics.activeVehicles}/${analytics.totalVehicles} active now`}
-              />
-              <PulseMetric
-                label="Items Running"
-                value={analytics.activeDispatchedItems}
-                detail="On active challans"
-              />
-            </div>
-
-            <div style={sourceNote}>
-              <strong>Management data model:</strong> current item-based trips come from Dispatch Challans. Manual / legacy operations remain separate for fuel, distance, route, helper and overtime analytics, preventing double counting.
-            </div>
-
-            <div style={chartsGrid}>
-              <TripsLineChart data={timelineData} />
-              <StatusDistributionChart
-                data={statusData}
-              />
-            </div>
-
-            {(showDriverPanel ||
-              showVehiclePanel ||
-              showAttentionPanel) && (
-                <div style={managementPanelsGrid}>
-                  {showDriverPanel && (
-                    <RankingPanel
-                      title="Driver Activity & Output"
-                      subtitle={`${analytics.periodLabel} • challans, items and manual work`}
-                      rows={driverPerformance.slice(0, 8)}
-                      type="DRIVER"
-                    />
-                  )}
-
-                  {showVehiclePanel && (
-                    <RankingPanel
-                      title="Fleet Activity & Throughput"
-                      subtitle={`${analytics.periodLabel} • challans, items and manual work`}
-                      rows={vehiclePerformance.slice(0, 10)}
-                      type="VEHICLE"
-                    />
-                  )}
-
-                  {showAttentionPanel && (
-                    <AttentionPanel
-                      rows={attentionRows}
-                    />
-                  )}
+            ) : (
+              <>
+                <div style={managementPulseGrid}>
+                  <PulseMetric
+                    label="Completion Rate"
+                    value={`${analytics.completionRate.toFixed(0)}%`}
+                    detail={`${analytics.completedChallans}/${analytics.totalChallans || 0} challans`}
+                  />
+                  <PulseMetric
+                    label="Avg Trip Duration"
+                    value={formatDuration(
+                      analytics.avgTripDuration
+                    )}
+                    detail="Completed challans"
+                  />
+                  <PulseMetric
+                    label="Driver Assignment"
+                    value={`${analytics.driverAssignmentRate.toFixed(0)}%`}
+                    detail={`${analytics.activeDrivers}/${analytics.totalDrivers} active now`}
+                  />
+                  <PulseMetric
+                    label="Fleet Utilization"
+                    value={`${analytics.vehicleUtilization.toFixed(0)}%`}
+                    detail={`${analytics.activeVehicles}/${analytics.totalVehicles} active now`}
+                  />
+                  <PulseMetric
+                    label="Items Running"
+                    value={analytics.activeDispatchedItems}
+                    detail="On active challans"
+                  />
                 </div>
-              )}
 
-            {showRecentPanel && (
-              <RecentActivityPanel
-                rows={recentActivity}
-                periodLabel={analytics.periodLabel}
-              />
-            )}
+                <div style={sourceNote}>
+                  <strong>Management data model:</strong> current item-based trips come from Dispatch Challans. Manual / legacy operations remain separate for fuel, distance, route, helper and overtime analytics, preventing double counting.
+                </div>
 
-            {section === "drivers" && (
-              <RankingPanel
-                title="Complete Driver Workload Table"
-                subtitle={`${analytics.periodLabel} driver-wise operational contribution`}
-                rows={driverPerformance}
-                type="DRIVER"
-                fullWidth
-              />
-            )}
+                <div style={chartsGrid}>
+                  <TripsLineChart data={timelineData} />
+                  <StatusDistributionChart
+                    data={statusData}
+                  />
+                </div>
 
-            {section === "vehicles" && (
-              <RankingPanel
-                title="Complete Vehicle Workload Table"
-                subtitle={`${analytics.periodLabel} vehicle-wise operational contribution`}
-                rows={vehiclePerformance}
-                type="VEHICLE"
-                fullWidth
-              />
-            )}
+                {(showDriverPanel ||
+                  showVehiclePanel ||
+                  showAttentionPanel) && (
+                    <div style={managementPanelsGrid}>
+                      {showDriverPanel && (
+                        <RankingPanel
+                          title="Driver Activity & Output"
+                          subtitle={`${analytics.periodLabel} • challans, items and manual work`}
+                          rows={driverPerformance.slice(0, 8)}
+                          type="DRIVER"
+                        />
+                      )}
 
-            {section === "alerts" && (
-              <AttentionPanel
-                rows={attentionRows}
-                fullWidth
-              />
+                      {showVehiclePanel && (
+                        <RankingPanel
+                          title="Fleet Activity & Throughput"
+                          subtitle={`${analytics.periodLabel} • challans, items and manual work`}
+                          rows={vehiclePerformance.slice(0, 10)}
+                          type="VEHICLE"
+                        />
+                      )}
+
+                      {showAttentionPanel && (
+                        <AttentionPanel
+                          rows={attentionRows}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                {showRecentPanel && (
+                  <RecentActivityPanel
+                    rows={recentActivity}
+                    periodLabel={analytics.periodLabel}
+                  />
+                )}
+
+                {section === "drivers" && (
+                  <RankingPanel
+                    title="Complete Driver Workload Table"
+                    subtitle={`${analytics.periodLabel} driver-wise operational contribution`}
+                    rows={driverPerformance}
+                    type="DRIVER"
+                    fullWidth
+                  />
+                )}
+
+                {section === "vehicles" && (
+                  <RankingPanel
+                    title="Complete Vehicle Workload Table"
+                    subtitle={`${analytics.periodLabel} vehicle-wise operational contribution`}
+                    rows={vehiclePerformance}
+                    type="VEHICLE"
+                    fullWidth
+                  />
+                )}
+
+                {section === "alerts" && (
+                  <AttentionPanel
+                    rows={attentionRows}
+                    fullWidth
+                  />
+                )}
+              </>
             )}
           </>
         )}
@@ -2035,6 +3937,504 @@ function RecentActivityPanel({
               <div style={recentTime}>
                 {formatDateTime(row.at)} • {row.status}
               </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function LogisticsReportCenter({
+  periodLabel,
+  filterSummary,
+  driverOptions,
+  vehicleOptions,
+  driverKey,
+  vehicleKey,
+  status,
+  search,
+  onDriverChange,
+  onVehicleChange,
+  onStatusChange,
+  onSearchChange,
+  onClear,
+  operationRows,
+  driverRows,
+  vehicleRows,
+  itemRowCount,
+  generating,
+  onDownload,
+}) {
+  const challanRows =
+    operationRows.filter(
+      (row) =>
+        row.source ===
+        REPORT_SOURCE.CHALLAN
+    );
+
+  const manualRows =
+    operationRows.filter(
+      (row) =>
+        row.source ===
+        REPORT_SOURCE.MANUAL
+    );
+
+  const completedChallans =
+    challanRows.filter(
+      (row) =>
+        row.status === "COMPLETED"
+    ).length;
+
+  const completionRate =
+    challanRows.length > 0
+      ? (
+        completedChallans /
+        challanRows.length
+      ) * 100
+      : 0;
+
+  return (
+    <div style={reportCenter}>
+      <div style={reportHero}>
+        <div>
+          <div style={reportEyebrow}>
+            MANAGEMENT REPORTING
+          </div>
+
+          <div style={reportHeroTitle}>
+            Logistics Reports & Excel Downloads
+          </div>
+
+          <div style={reportHeroSub}>
+            Driver, vehicle and trip-level reporting from the same live data powering this management dashboard.
+          </div>
+        </div>
+
+        <div style={reportPeriodBadge}>
+          {periodLabel}
+        </div>
+      </div>
+
+      <div style={reportFilterCard}>
+        <div style={reportFilterGrid}>
+          <label style={reportField}>
+            <span>Driver</span>
+            <select
+              value={driverKey}
+              onChange={(event) =>
+                onDriverChange(
+                  event.target.value
+                )
+              }
+              style={reportInput}
+            >
+              <option value="">
+                All Drivers
+              </option>
+
+              {driverOptions.map(
+                (row) => (
+                  <option
+                    key={row.key}
+                    value={row.key}
+                  >
+                    {row.label}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label style={reportField}>
+            <span>Vehicle</span>
+            <select
+              value={vehicleKey}
+              onChange={(event) =>
+                onVehicleChange(
+                  event.target.value
+                )
+              }
+              style={reportInput}
+            >
+              <option value="">
+                All Vehicles
+              </option>
+
+              {vehicleOptions.map(
+                (row) => (
+                  <option
+                    key={row.key}
+                    value={row.key}
+                  >
+                    {row.label}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label style={reportField}>
+            <span>Status</span>
+            <select
+              value={status}
+              onChange={(event) =>
+                onStatusChange(
+                  event.target.value
+                )
+              }
+              style={reportInput}
+            >
+              <option value="ALL">
+                All Statuses
+              </option>
+              <option value="RUNNING">
+                Running Challans
+              </option>
+              <option value="COMPLETED">
+                Completed
+              </option>
+              <option value="CANCELLED">
+                Cancelled
+              </option>
+              <option value="WORKING">
+                Manual Working
+              </option>
+              <option value="OFF">
+                Off
+              </option>
+              <option value="ON_LEAVE">
+                On Leave
+              </option>
+            </select>
+          </label>
+
+          <label style={reportField}>
+            <span>Search</span>
+            <input
+              value={search}
+              onChange={(event) =>
+                onSearchChange(
+                  event.target.value
+                )
+              }
+              placeholder="Challan, driver, vehicle, route..."
+              style={reportInput}
+            />
+          </label>
+        </div>
+
+        <div style={reportFilterFooter}>
+          <div style={reportFilterSummaryText}>
+            {filterSummary}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClear}
+            style={reportClearButton}
+          >
+            Clear Report Filters
+          </button>
+        </div>
+      </div>
+
+      <div style={reportSnapshotGrid}>
+        <ReportSnapshot
+          label="Dispatch Challans"
+          value={challanRows.length}
+          detail={`${completedChallans} completed`}
+        />
+        <ReportSnapshot
+          label="Completion Rate"
+          value={`${completionRate.toFixed(0)}%`}
+          detail="Filtered challans"
+        />
+        <ReportSnapshot
+          label="Manual Operations"
+          value={manualRows.length}
+          detail="Legacy / non-challan"
+        />
+        <ReportSnapshot
+          label="Drivers"
+          value={driverRows.length}
+          detail="In current report"
+        />
+        <ReportSnapshot
+          label="Vehicles"
+          value={vehicleRows.length}
+          detail="In current report"
+        />
+        <ReportSnapshot
+          label="Item Detail Rows"
+          value={itemRowCount}
+          detail="Available challan items"
+        />
+      </div>
+
+      <div style={downloadGrid}>
+        <ReportDownloadCard
+          icon="📘"
+          title="Management Pack"
+          description="Executive summary, driver performance, vehicle performance, trip register, dispatch item detail and report definitions."
+          buttonText="Download Complete Workbook"
+          generating={
+            generating === "ALL"
+          }
+          disabled={Boolean(generating)}
+          onClick={() =>
+            onDownload("ALL")
+          }
+        />
+
+        <ReportDownloadCard
+          icon="👤"
+          title="Driver Performance"
+          description="Driver-wise challans, completion, dispatched items, manual trips, helpers, distance, fuel and average duration."
+          buttonText="Download Driver Report"
+          generating={
+            generating === "DRIVER"
+          }
+          disabled={Boolean(generating)}
+          onClick={() =>
+            onDownload("DRIVER")
+          }
+        />
+
+        <ReportDownloadCard
+          icon="🚚"
+          title="Vehicle Performance"
+          description="Vehicle-wise activity, challan throughput, active/completed work, manual trips, distance, fuel and utilization detail."
+          buttonText="Download Vehicle Report"
+          generating={
+            generating === "VEHICLE"
+          }
+          disabled={Boolean(generating)}
+          onClick={() =>
+            onDownload("VEHICLE")
+          }
+        />
+
+        <ReportDownloadCard
+          icon="📄"
+          title="Trip / Challan Register"
+          description="Detailed activity register with source, challan, driver, vehicle, start/end, duration, status, items, helpers and route."
+          buttonText="Download Trip Report"
+          generating={
+            generating === "TRIP"
+          }
+          disabled={Boolean(generating)}
+          onClick={() =>
+            onDownload("TRIP")
+          }
+        />
+      </div>
+
+      <div style={reportPreviewGrid}>
+        <ReportPreviewTable
+          title="Driver Report Preview"
+          identityLabel="Driver"
+          rows={driverRows.slice(0, 8)}
+        />
+
+        <ReportPreviewTable
+          title="Vehicle Report Preview"
+          identityLabel="Vehicle"
+          rows={vehicleRows.slice(0, 8)}
+        />
+      </div>
+
+      <div style={tripPreviewCard}>
+        <div style={panelHeader}>
+          <div>
+            <div style={panelTitle}>
+              Trip / Challan Preview
+            </div>
+            <div style={panelSubtitle}>
+              Latest filtered activity rows before Excel export
+            </div>
+          </div>
+          <div style={panelCountBadge}>
+            {operationRows.length} records
+          </div>
+        </div>
+
+        <div style={tripPreviewScroll}>
+          <div style={tripPreviewHead}>
+            <div>Source</div>
+            <div>Record</div>
+            <div>Driver</div>
+            <div>Vehicle</div>
+            <div>Start</div>
+            <div>Status</div>
+            <div>Load</div>
+          </div>
+
+          {operationRows.length === 0 && (
+            <div style={panelEmpty}>
+              No operations match the selected report filters.
+            </div>
+          )}
+
+          {operationRows
+            .slice(0, 12)
+            .map((row) => (
+              <div
+                key={row.key}
+                style={tripPreviewRow}
+              >
+                <div style={reportSourceText}>
+                  {row.source}
+                </div>
+                <div style={reportRecordText}>
+                  {row.recordId}
+                </div>
+                <div>{row.driverName}</div>
+                <div>{row.vehicleNumber}</div>
+                <div style={lastActivityText}>
+                  {formatDateTime(
+                    row.startAt
+                  )}
+                </div>
+                <div>
+                  <span
+                    style={reportStatusPill(
+                      row.status
+                    )}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+                <div>
+                  {row.source ===
+                    REPORT_SOURCE.CHALLAN
+                    ? `${row.itemCount} items`
+                    : `${row.tripCount} trips`}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportSnapshot({
+  label,
+  value,
+  detail,
+}) {
+  return (
+    <div style={reportSnapshotCard}>
+      <div style={reportSnapshotLabel}>
+        {label}
+      </div>
+      <div style={reportSnapshotValue}>
+        {value}
+      </div>
+      <div style={reportSnapshotDetail}>
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function ReportDownloadCard({
+  icon,
+  title,
+  description,
+  buttonText,
+  generating,
+  disabled,
+  onClick,
+}) {
+  return (
+    <div style={downloadCard}>
+      <div style={downloadCardIcon}>
+        {icon}
+      </div>
+
+      <div style={downloadCardTitle}>
+        {title}
+      </div>
+
+      <div style={downloadCardText}>
+        {description}
+      </div>
+
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+          ...downloadButton,
+          opacity:
+            disabled ? 0.62 : 1,
+          cursor:
+            disabled
+              ? "not-allowed"
+              : "pointer",
+        }}
+      >
+        {generating
+          ? "Generating Excel..."
+          : buttonText}
+      </button>
+    </div>
+  );
+}
+
+function ReportPreviewTable({
+  title,
+  identityLabel,
+  rows,
+}) {
+  return (
+    <div style={panelCard}>
+      <div style={panelHeader}>
+        <div>
+          <div style={panelTitle}>
+            {title}
+          </div>
+          <div style={panelSubtitle}>
+            Filter-aware management summary
+          </div>
+        </div>
+      </div>
+
+      <div style={reportPreviewScroll}>
+        <div style={reportPreviewHead}>
+          <div>{identityLabel}</div>
+          <div>Challans</div>
+          <div>Items</div>
+          <div>Completion</div>
+          <div>Manual</div>
+        </div>
+
+        {rows.length === 0 && (
+          <div style={panelEmpty}>
+            No data for the current report filters.
+          </div>
+        )}
+
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            style={reportPreviewRow}
+          >
+            <div style={rankingIdentity}>
+              {row.label}
+            </div>
+            <div>{row.challans}</div>
+            <div style={importantValue}>
+              {row.dispatchedItems}
+            </div>
+            <div>
+              {row.completionRate.toFixed(0)}%
+            </div>
+            <div>
+              {row.manualOperations}
             </div>
           </div>
         ))}
@@ -2487,6 +4887,396 @@ const recentTime = {
   fontSize: 8.5,
   marginTop: 5,
   fontWeight: 700,
+};
+
+
+const reportsNavButton = {
+  height: 40,
+  padding: "0 14px",
+  borderRadius: 11,
+  border:
+    "1px solid rgba(96,165,250,.18)",
+  color: "#93c5fd",
+  background:
+    "rgba(59,130,246,.08)",
+  fontWeight: 850,
+  fontFamily: "inherit",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const reportsNavButtonActive = {
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  border:
+    "1px solid rgba(96,165,250,.42)",
+  boxShadow:
+    "0 8px 20px rgba(37,99,235,.24)",
+};
+
+const reportCenter = {
+  marginTop: 14,
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+};
+
+const reportHero = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+  padding: 18,
+  borderRadius: 18,
+  background:
+    "radial-gradient(circle at top right,rgba(59,130,246,.16),transparent 40%),linear-gradient(135deg,rgba(15,23,42,.92),rgba(2,6,23,.72))",
+  border:
+    "1px solid rgba(96,165,250,.15)",
+};
+
+const reportEyebrow = {
+  color: "#60a5fa",
+  fontSize: 9.5,
+  fontWeight: 950,
+  letterSpacing: ".12em",
+};
+
+const reportHeroTitle = {
+  marginTop: 5,
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: 950,
+};
+
+const reportHeroSub = {
+  marginTop: 5,
+  maxWidth: 760,
+  color: "#94a3b8",
+  fontSize: 11,
+  lineHeight: 1.55,
+  fontWeight: 650,
+};
+
+const reportPeriodBadge = {
+  padding: "8px 12px",
+  borderRadius: 999,
+  color: "#bfdbfe",
+  background:
+    "rgba(59,130,246,.12)",
+  border:
+    "1px solid rgba(96,165,250,.20)",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const reportFilterCard = {
+  padding: 14,
+  borderRadius: 16,
+  background:
+    "rgba(15,23,42,.72)",
+  border:
+    "1px solid rgba(255,255,255,.06)",
+};
+
+const reportFilterGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(180px,1fr))",
+  gap: 10,
+};
+
+const reportField = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  color: "#64748b",
+  fontSize: 9.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".04em",
+};
+
+const reportInput = {
+  width: "100%",
+  height: 40,
+  padding: "0 11px",
+  boxSizing: "border-box",
+  borderRadius: 10,
+  outline: "none",
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background: "#020617",
+  color: "#e2e8f0",
+  fontFamily: "inherit",
+  fontSize: 11,
+  fontWeight: 750,
+};
+
+const reportFilterFooter = {
+  marginTop: 11,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const reportFilterSummaryText = {
+  color: "#64748b",
+  fontSize: 9.5,
+  fontWeight: 700,
+  lineHeight: 1.45,
+};
+
+const reportClearButton = {
+  height: 32,
+  padding: "0 11px",
+  borderRadius: 9,
+  border:
+    "1px solid rgba(255,255,255,.08)",
+  background:
+    "rgba(255,255,255,.035)",
+  color: "#cbd5e1",
+  fontSize: 9.5,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const reportSnapshotGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(135px,1fr))",
+  gap: 9,
+};
+
+const reportSnapshotCard = {
+  padding: 12,
+  borderRadius: 13,
+  background:
+    "rgba(2,6,23,.42)",
+  border:
+    "1px solid rgba(255,255,255,.055)",
+};
+
+const reportSnapshotLabel = {
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+};
+
+const reportSnapshotValue = {
+  marginTop: 4,
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: 950,
+};
+
+const reportSnapshotDetail = {
+  marginTop: 2,
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 700,
+};
+
+const downloadGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 11,
+};
+
+const downloadCard = {
+  display: "flex",
+  flexDirection: "column",
+  minHeight: 190,
+  padding: 15,
+  borderRadius: 16,
+  background:
+    "linear-gradient(180deg,rgba(30,41,59,.78),rgba(15,23,42,.78))",
+  border:
+    "1px solid rgba(255,255,255,.065)",
+};
+
+const downloadCardIcon = {
+  width: 36,
+  height: 36,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 11,
+  background:
+    "rgba(59,130,246,.12)",
+  fontSize: 16,
+};
+
+const downloadCardTitle = {
+  marginTop: 10,
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 900,
+};
+
+const downloadCardText = {
+  marginTop: 5,
+  flex: 1,
+  color: "#64748b",
+  fontSize: 9.5,
+  fontWeight: 650,
+  lineHeight: 1.5,
+};
+
+const downloadButton = {
+  marginTop: 12,
+  height: 36,
+  borderRadius: 10,
+  border: "none",
+  color: "#fff",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  fontSize: 10,
+  fontWeight: 900,
+  fontFamily: "inherit",
+};
+
+const reportPreviewGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(340px,1fr))",
+  gap: 12,
+};
+
+const reportPreviewScroll = {
+  overflowX: "auto",
+  borderRadius: 11,
+  border:
+    "1px solid rgba(255,255,255,.045)",
+};
+
+const reportPreviewHead = {
+  minWidth: 560,
+  display: "grid",
+  gridTemplateColumns:
+    "1.4fr .65fr .65fr .8fr .65fr",
+  gap: 8,
+  padding: "9px 10px",
+  background: "rgba(2,6,23,.72)",
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+};
+
+const reportPreviewRow = {
+  minWidth: 560,
+  display: "grid",
+  gridTemplateColumns:
+    "1.4fr .65fr .65fr .8fr .65fr",
+  gap: 8,
+  padding: "9px 10px",
+  alignItems: "center",
+  color: "#cbd5e1",
+  fontSize: 9.5,
+  borderTop:
+    "1px solid rgba(255,255,255,.04)",
+};
+
+const tripPreviewCard = {
+  padding: 16,
+  borderRadius: 18,
+  background:
+    "linear-gradient(180deg,rgba(15,23,42,.82),rgba(2,6,23,.60))",
+  border:
+    "1px solid rgba(255,255,255,.065)",
+};
+
+const tripPreviewScroll = {
+  overflowX: "auto",
+  borderRadius: 11,
+  border:
+    "1px solid rgba(255,255,255,.045)",
+};
+
+const tripPreviewHead = {
+  minWidth: 850,
+  display: "grid",
+  gridTemplateColumns:
+    ".9fr 1.05fr 1.05fr .9fr 1.1fr .7fr .7fr",
+  gap: 8,
+  padding: "9px 10px",
+  background: "rgba(2,6,23,.72)",
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+};
+
+const tripPreviewRow = {
+  minWidth: 850,
+  display: "grid",
+  gridTemplateColumns:
+    ".9fr 1.05fr 1.05fr .9fr 1.1fr .7fr .7fr",
+  gap: 8,
+  padding: "10px",
+  alignItems: "center",
+  color: "#cbd5e1",
+  fontSize: 9.5,
+  borderTop:
+    "1px solid rgba(255,255,255,.04)",
+};
+
+const reportSourceText = {
+  color: "#60a5fa",
+  fontWeight: 850,
+};
+
+const reportRecordText = {
+  color: "#fff",
+  fontWeight: 850,
+  fontFamily: "monospace",
+};
+
+const reportStatusPill = (
+  value
+) => {
+  const normalized =
+    normalizeStatus(value);
+
+  const tone =
+    normalized === "COMPLETED"
+      ? {
+        color: "#4ade80",
+        background:
+          "rgba(34,197,94,.12)",
+      }
+      : normalized === "RUNNING" ||
+        normalized === "WORKING"
+        ? {
+          color: "#60a5fa",
+          background:
+            "rgba(59,130,246,.12)",
+        }
+        : normalized === "CANCELLED"
+          ? {
+            color: "#f87171",
+            background:
+              "rgba(239,68,68,.12)",
+          }
+          : {
+            color: "#fbbf24",
+            background:
+              "rgba(245,158,11,.12)",
+          };
+
+  return {
+    display: "inline-flex",
+    padding: "4px 7px",
+    borderRadius: 999,
+    fontSize: 8.5,
+    fontWeight: 900,
+    ...tone,
+  };
 };
 
 const warningBox = {

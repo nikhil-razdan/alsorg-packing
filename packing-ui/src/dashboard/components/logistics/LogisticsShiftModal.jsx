@@ -20,6 +20,8 @@ import {
   fetchLogisticsTrips,
   fetchDispatchChallanPdf,
   downloadTripChallan,
+  endDispatchChallanTrip,
+  updateDispatchChallanHelpers,
   createShift,
   updateShift,
 } from "../../api/logisticsApi";
@@ -313,6 +315,27 @@ function LogisticsShiftModal({
   const [downloadingKey, setDownloadingKey] =
     useState("");
 
+  const [pdfPreview, setPdfPreview] = useState({
+    open: false,
+    url: "",
+    challanNumber: "",
+  });
+
+  const [endTripDialog, setEndTripDialog] = useState({
+    open: false,
+    challanNumber: "",
+    endTime: "",
+  });
+
+  const [helperDialog, setHelperDialog] = useState({
+    open: false,
+    challanNumber: "",
+    helperLoaderCount: "",
+  });
+
+  const [challanActionSaving, setChallanActionSaving] =
+    useState(false);
+
   const [form, setForm] = useState(() =>
     buildInitialForm({
       initialDriverId,
@@ -337,7 +360,27 @@ function LogisticsShiftModal({
     setHistoryStatusFilter("ALL");
     setHistorySearch("");
     setExpandedActivityKey("");
+    setEndTripDialog({
+      open: false,
+      challanNumber: "",
+      endTime: "",
+    });
+    setHelperDialog({
+      open: false,
+      challanNumber: "",
+      helperLoaderCount: "",
+    });
   }, [open, initialDriverId, shift]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreview.url) {
+        URL.revokeObjectURL(
+          pdfPreview.url
+        );
+      }
+    };
+  }, [pdfPreview.url]);
 
   useEffect(() => {
     if (!open) return;
@@ -1177,6 +1220,220 @@ function LogisticsShiftModal({
     }
   }
 
+
+  async function previewActivityChallan(activity) {
+    if (
+      !activity ||
+      activity.source !== SOURCE.CHALLAN
+    ) {
+      return;
+    }
+
+    try {
+      if (
+        !activity.challanNumber ||
+        activity.challanNumber === "—"
+      ) {
+        throw new Error(
+          "Challan number missing"
+        );
+      }
+
+      setDownloadingKey(
+        `PREVIEW:${activity.key}`
+      );
+
+      const blob =
+        await fetchDispatchChallanPdf(
+          activity.challanNumber
+        );
+
+      const url = URL.createObjectURL(blob);
+
+      setPdfPreview((previous) => {
+        if (previous.url) {
+          URL.revokeObjectURL(
+            previous.url
+          );
+        }
+
+        return {
+          open: true,
+          url,
+          challanNumber:
+            activity.challanNumber,
+        };
+      });
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        getBackendMessage(
+          error,
+          "Unable to preview challan"
+        ),
+        "error"
+      );
+    } finally {
+      setDownloadingKey("");
+    }
+  }
+
+  function closePdfPreview() {
+    setPdfPreview((previous) => {
+      if (previous.url) {
+        URL.revokeObjectURL(
+          previous.url
+        );
+      }
+
+      return {
+        open: false,
+        url: "",
+        challanNumber: "",
+      };
+    });
+  }
+
+  function openActivityEndTrip(activity) {
+    if (
+      !activity ||
+      activity.source !== SOURCE.CHALLAN
+    ) {
+      return;
+    }
+
+    setEndTripDialog({
+      open: true,
+      challanNumber:
+        activity.challanNumber || "",
+      endTime:
+        toDateTimeLocal(
+          activity.endAt || new Date()
+        ) || toDateTimeLocal(new Date()),
+    });
+  }
+
+  async function submitActivityEndTrip() {
+    if (
+      !endTripDialog.challanNumber ||
+      !endTripDialog.endTime
+    ) {
+      showAlert(
+        "Challan number and end time are required",
+        "error"
+      );
+      return;
+    }
+
+    try {
+      setChallanActionSaving(true);
+
+      await endDispatchChallanTrip(
+        endTripDialog.challanNumber,
+        endTripDialog.endTime
+      );
+
+      showAlert(
+        "Trip end time saved successfully",
+        "success"
+      );
+
+      setEndTripDialog({
+        open: false,
+        challanNumber: "",
+        endTime: "",
+      });
+
+      await reloadOperationalHistory();
+      await onSaved?.();
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        getBackendMessage(
+          error,
+          "Failed to save trip end time"
+        ),
+        "error"
+      );
+    } finally {
+      setChallanActionSaving(false);
+    }
+  }
+
+  function openActivityHelpers(activity) {
+    if (
+      !activity ||
+      activity.source !== SOURCE.CHALLAN
+    ) {
+      return;
+    }
+
+    const count =
+      activity.raw?.helperLoaderCount ??
+      activity.helperCount ??
+      "";
+
+    setHelperDialog({
+      open: true,
+      challanNumber:
+        activity.challanNumber || "",
+      helperLoaderCount:
+        count === null ||
+          count === undefined ||
+          Number(count) <= 0
+          ? ""
+          : String(count),
+    });
+  }
+
+  async function submitActivityHelpers() {
+    if (!helperDialog.challanNumber) {
+      showAlert(
+        "Challan number is required",
+        "error"
+      );
+      return;
+    }
+
+    try {
+      setChallanActionSaving(true);
+
+      await updateDispatchChallanHelpers(
+        helperDialog.challanNumber,
+        helperDialog.helperLoaderCount
+      );
+
+      showAlert(
+        String(
+          helperDialog.helperLoaderCount || ""
+        ).trim()
+          ? "Helpers / loaders updated successfully"
+          : "Helpers / loaders cleared successfully",
+        "success"
+      );
+
+      setHelperDialog({
+        open: false,
+        challanNumber: "",
+        helperLoaderCount: "",
+      });
+
+      await reloadOperationalHistory();
+      await onSaved?.();
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        getBackendMessage(
+          error,
+          "Failed to update helpers / loaders"
+        ),
+        "error"
+      );
+    } finally {
+      setChallanActionSaving(false);
+    }
+  }
+
   return (
     <div
       style={overlay}
@@ -1502,8 +1759,79 @@ function LogisticsShiftModal({
                               : "Details"}
                           </button>
 
-                          {activity.source !==
-                            SOURCE.MANUAL && (
+                          {activity.source ===
+                            SOURCE.CHALLAN && (
+                              <>
+                                <button
+                                  type="button"
+                                  style={previewBtn}
+                                  disabled={
+                                    downloadingKey ===
+                                    `PREVIEW:${activity.key}`
+                                  }
+                                  onClick={() =>
+                                    previewActivityChallan(
+                                      activity
+                                    )
+                                  }
+                                >
+                                  {downloadingKey ===
+                                    `PREVIEW:${activity.key}`
+                                    ? "Opening…"
+                                    : "Preview"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={pdfBtn}
+                                  disabled={
+                                    downloadingKey ===
+                                    activity.key
+                                  }
+                                  onClick={() =>
+                                    downloadActivityChallan(
+                                      activity
+                                    )
+                                  }
+                                >
+                                  {downloadingKey ===
+                                    activity.key
+                                    ? "PDF…"
+                                    : "Download"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={endTimeActionBtn}
+                                  onClick={() =>
+                                    openActivityEndTrip(
+                                      activity
+                                    )
+                                  }
+                                >
+                                  {activity.endAt
+                                    ? "Edit End"
+                                    : "Enter End"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={helperActionBtn}
+                                  onClick={() =>
+                                    openActivityHelpers(
+                                      activity
+                                    )
+                                  }
+                                >
+                                  {activity.helperCount > 0
+                                    ? "Edit Helpers"
+                                    : "Enter Helpers"}
+                                </button>
+                              </>
+                            )}
+
+                          {activity.source ===
+                            SOURCE.LEGACY_TRIP && (
                               <button
                                 type="button"
                                 style={pdfBtn}
@@ -1520,7 +1848,7 @@ function LogisticsShiftModal({
                                 {downloadingKey ===
                                   activity.key
                                   ? "PDF…"
-                                  : "PDF"}
+                                  : "Download"}
                               </button>
                             )}
                         </div>
@@ -1861,6 +2189,205 @@ function LogisticsShiftModal({
             </Field>
           </div>
         </section>
+
+
+        {pdfPreview.open && (
+          <div
+            style={actionOverlay}
+            onClick={closePdfPreview}
+          >
+            <div
+              style={pdfPreviewModal}
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div style={actionModalHeader}>
+                <div>
+                  <div style={actionModalTitle}>
+                    Challan PDF Preview
+                  </div>
+                  <div style={actionModalSub}>
+                    {pdfPreview.challanNumber}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={actionModalClose}
+                  onClick={closePdfPreview}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <iframe
+                title="Dispatch Challan PDF Preview"
+                src={pdfPreview.url}
+                style={pdfFrame}
+              />
+            </div>
+          </div>
+        )}
+
+        {endTripDialog.open && (
+          <div
+            style={actionOverlay}
+            onClick={() =>
+              setEndTripDialog({
+                open: false,
+                challanNumber: "",
+                endTime: "",
+              })
+            }
+          >
+            <div
+              style={actionFormModal}
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div style={actionModalHeader}>
+                <div>
+                  <div style={actionModalTitle}>
+                    Trip End Time
+                  </div>
+                  <div style={actionModalSub}>
+                    {endTripDialog.challanNumber}
+                  </div>
+                </div>
+              </div>
+
+              <label style={actionField}>
+                End Date / Time
+                <input
+                  type="datetime-local"
+                  value={endTripDialog.endTime}
+                  onChange={(event) =>
+                    setEndTripDialog(
+                      (previous) => ({
+                        ...previous,
+                        endTime:
+                          event.target.value,
+                      })
+                    )
+                  }
+                  style={actionInput}
+                />
+              </label>
+
+              <div style={actionModalFooter}>
+                <button
+                  type="button"
+                  style={actionCancelBtn}
+                  onClick={() =>
+                    setEndTripDialog({
+                      open: false,
+                      challanNumber: "",
+                      endTime: "",
+                    })
+                  }
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  style={actionSaveBtn}
+                  disabled={challanActionSaving}
+                  onClick={submitActivityEndTrip}
+                >
+                  {challanActionSaving
+                    ? "Saving..."
+                    : "Save End Time"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {helperDialog.open && (
+          <div
+            style={actionOverlay}
+            onClick={() =>
+              setHelperDialog({
+                open: false,
+                challanNumber: "",
+                helperLoaderCount: "",
+              })
+            }
+          >
+            <div
+              style={actionFormModal}
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div style={actionModalHeader}>
+                <div>
+                  <div style={actionModalTitle}>
+                    Helpers / Loaders
+                  </div>
+                  <div style={actionModalSub}>
+                    {helperDialog.challanNumber}
+                  </div>
+                </div>
+              </div>
+
+              <label style={actionField}>
+                Number of Helpers / Loaders
+                <input
+                  type="number"
+                  min="0"
+                  max="999"
+                  step="1"
+                  value={
+                    helperDialog.helperLoaderCount
+                  }
+                  onChange={(event) =>
+                    setHelperDialog(
+                      (previous) => ({
+                        ...previous,
+                        helperLoaderCount:
+                          event.target.value,
+                      })
+                    )
+                  }
+                  placeholder="Leave blank / 0 to clear"
+                  style={actionInput}
+                />
+              </label>
+
+              <div style={actionModalHint}>
+                Leave blank or enter 0 to clear helpers / loaders for this challan.
+              </div>
+
+              <div style={actionModalFooter}>
+                <button
+                  type="button"
+                  style={actionCancelBtn}
+                  onClick={() =>
+                    setHelperDialog({
+                      open: false,
+                      challanNumber: "",
+                      helperLoaderCount: "",
+                    })
+                  }
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  style={helperSaveBtn}
+                  disabled={challanActionSaving}
+                  onClick={submitActivityHelpers}
+                >
+                  {challanActionSaving
+                    ? "Saving..."
+                    : "Save Helpers"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={footer}>
           <button
@@ -2334,10 +2861,10 @@ const historyTable = {
 };
 
 const historyHead = {
-  minWidth: 1040,
+  minWidth: 1260,
   display: "grid",
   gridTemplateColumns:
-    "1.55fr .95fr 1.25fr 1fr .7fr .85fr .9fr",
+    "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
   padding: 13,
   background: "#111827",
   color: "#94a3b8",
@@ -2346,10 +2873,10 @@ const historyHead = {
 };
 
 const historyRow = {
-  minWidth: 1040,
+  minWidth: 1260,
   display: "grid",
   gridTemplateColumns:
-    "1.55fr .95fr 1.25fr 1fr .7fr .85fr .9fr",
+    "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
   padding: 13,
   color: "#fff",
   borderTop:
@@ -2491,6 +3018,49 @@ const pdfBtn = {
   background:
     "rgba(251,191,36,.10)",
   color: "#facc15",
+  fontSize: 10,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+
+const previewBtn = {
+  height: 29,
+  padding: "0 9px",
+  borderRadius: 9,
+  border:
+    "1px solid rgba(34,211,238,.20)",
+  background:
+    "rgba(34,211,238,.09)",
+  color: "#67e8f9",
+  fontSize: 10,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const endTimeActionBtn = {
+  height: 29,
+  padding: "0 9px",
+  borderRadius: 9,
+  border:
+    "1px solid rgba(239,68,68,.22)",
+  background:
+    "rgba(239,68,68,.10)",
+  color: "#fca5a5",
+  fontSize: 10,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const helperActionBtn = {
+  height: 29,
+  padding: "0 9px",
+  borderRadius: 9,
+  border:
+    "1px solid rgba(167,139,250,.22)",
+  background:
+    "rgba(139,92,246,.10)",
+  color: "#c4b5fd",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -2711,6 +3281,143 @@ const saveBtn = {
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   fontWeight: 800,
+};
+
+
+const actionOverlay = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 11000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+  background: "rgba(2,6,23,.78)",
+  backdropFilter: "blur(10px)",
+};
+
+const pdfPreviewModal = {
+  width: "min(1100px,96vw)",
+  height: "min(820px,90vh)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  borderRadius: 22,
+  background: "#020617",
+  border: "1px solid rgba(255,255,255,.10)",
+  boxShadow: "0 30px 90px rgba(0,0,0,.55)",
+};
+
+const actionFormModal = {
+  width: "min(440px,94vw)",
+  padding: 20,
+  borderRadius: 20,
+  background:
+    "linear-gradient(180deg,#0f172a,#111827)",
+  border: "1px solid rgba(255,255,255,.10)",
+  boxShadow: "0 30px 80px rgba(0,0,0,.48)",
+};
+
+const actionModalHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "16px 18px",
+  borderBottom: "1px solid rgba(255,255,255,.07)",
+};
+
+const actionModalTitle = {
+  color: "#fff",
+  fontSize: 17,
+  fontWeight: 900,
+};
+
+const actionModalSub = {
+  marginTop: 4,
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 750,
+  fontFamily: "monospace",
+};
+
+const actionModalClose = {
+  width: 32,
+  height: 32,
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(255,255,255,.04)",
+  color: "#fff",
+  cursor: "pointer",
+};
+
+const pdfFrame = {
+  flex: 1,
+  width: "100%",
+  border: "none",
+  background: "#fff",
+};
+
+const actionField = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  marginTop: 16,
+  color: "#cbd5e1",
+  fontSize: 12,
+  fontWeight: 850,
+};
+
+const actionInput = {
+  height: 44,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,.10)",
+  background: "rgba(255,255,255,.04)",
+  color: "#fff",
+  padding: "0 12px",
+  outline: "none",
+  colorScheme: "dark",
+};
+
+const actionModalHint = {
+  marginTop: 8,
+  color: "#64748b",
+  fontSize: 10,
+  lineHeight: 1.45,
+};
+
+const actionModalFooter = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 9,
+  marginTop: 18,
+};
+
+const actionCancelBtn = {
+  height: 38,
+  padding: "0 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,.08)",
+  background: "rgba(255,255,255,.04)",
+  color: "#cbd5e1",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const actionSaveBtn = {
+  height: 38,
+  padding: "0 15px",
+  borderRadius: 10,
+  border: "none",
+  background: "linear-gradient(135deg,#dc2626,#ef4444)",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const helperSaveBtn = {
+  ...actionSaveBtn,
+  background: "linear-gradient(135deg,#7c3aed,#8b5cf6)",
 };
 
 export default LogisticsShiftModal;
