@@ -1,46 +1,71 @@
 package com.alsorg.packing.controller.dto.scan;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
+/**
+ * Request used by scanner bulk dispatch.
+ *
+ * Driver and vehicle are optional.
+ * helperLoaderCount is optional and must reach DispatchChallanService/PDF.
+ * dispatchTime is the current field; tripStart remains for backward
+ * compatibility.
+ */
 public class BulkScanRequest {
 
-    private List<String> scanTexts;
-    
-    private java.util.UUID driverId;
+	private List<String> scanTexts;
+	private UUID driverId;
+	private UUID vehicleId;
+	private Integer helperLoaderCount;
+	private LocalDateTime dispatchTime;
+	private LocalDateTime tripStart;
 
-    private java.util.UUID vehicleId;
+	public List<String> getScanTexts() {
+		return scanTexts;
+	}
 
-    private java.time.LocalDateTime tripStart;
+	public void setScanTexts(List<String> scanTexts) {
+		this.scanTexts = scanTexts;
+	}
 
-    public List<String> getScanTexts() {
-        return scanTexts;
-    }
-
-    public void setScanTexts(List<String> scanTexts) {
-        this.scanTexts = scanTexts;
-    }
-
-	public java.util.UUID getDriverId() {
+	public UUID getDriverId() {
 		return driverId;
 	}
 
-	public void setDriverId(java.util.UUID driverId) {
+	public void setDriverId(UUID driverId) {
 		this.driverId = driverId;
 	}
 
-	public java.util.UUID getVehicleId() {
+	public UUID getVehicleId() {
 		return vehicleId;
 	}
 
-	public void setVehicleId(java.util.UUID vehicleId) {
+	public void setVehicleId(UUID vehicleId) {
 		this.vehicleId = vehicleId;
 	}
 
-	public java.time.LocalDateTime getTripStart() {
+	public Integer getHelperLoaderCount() {
+		return helperLoaderCount;
+	}
+
+	public void setHelperLoaderCount(Integer helperLoaderCount) {
+		this.helperLoaderCount = helperLoaderCount;
+	}
+
+	public LocalDateTime getDispatchTime() {
+		return dispatchTime;
+	}
+
+	public void setDispatchTime(LocalDateTime dispatchTime) {
+		this.dispatchTime = dispatchTime;
+	}
+
+	public LocalDateTime getTripStart() {
 		return tripStart;
 	}
 
-	public void setTripStart(java.time.LocalDateTime tripStart) {
+	public void setTripStart(LocalDateTime tripStart) {
 		this.tripStart = tripStart;
 	}
 }

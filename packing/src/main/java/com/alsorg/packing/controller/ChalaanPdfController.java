@@ -63,10 +63,10 @@ public class ChalaanPdfController {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 request.itemIds(),
                                 request.driverId(),
@@ -93,10 +93,10 @@ public class ChalaanPdfController {
                  * Keep the same permission rule as final challan creation.
                  */
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
 
                 DispatchTripPdfResult result = dispatchChallanService.previewDispatchChallan(
                                 request.itemIds(),
@@ -123,10 +123,10 @@ public class ChalaanPdfController {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
 
                 DispatchTripPdfResult result = customChallanService.generateAndSave(
                                 request,
@@ -146,10 +146,10 @@ public class ChalaanPdfController {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
 
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 List.of(zohoItemId),
@@ -173,10 +173,10 @@ public class ChalaanPdfController {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
 
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
                                 ids,
@@ -375,15 +375,61 @@ public class ChalaanPdfController {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
                 if (!canUseDispatchChallan(user)) {
-    return ResponseEntity
-            .status(403)
-            .build();
-}
+                        return ResponseEntity
+                                        .status(403)
+                                        .build();
+                }
 
                 return ResponseEntity.ok(
                                 customChallanService.listForUser(
                                                 user.getUsername(),
                                                 currentUserService.isAdmin(user)));
+        }
+
+        /*
+         * ============================================================
+         * ADMIN CUSTOM-CHALLAN EDIT
+         * ============================================================
+         */
+
+        @GetMapping(value = "/custom/{challanNumber:.+}", produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<CustomChallanRequest> getCustomChallanForAdminEdit(
+                        @PathVariable String challanNumber,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.isAdmin(user)) {
+                        return ResponseEntity.status(403).build();
+                }
+
+                return ResponseEntity.ok(
+                                customChallanService.getForAdminEdit(
+                                                challanNumber));
+        }
+
+        @Transactional
+        @PutMapping(value = "/custom/{challanNumber:.+}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_PDF_VALUE)
+        public ResponseEntity<byte[]> updateCustomChallanAsAdmin(
+                        @PathVariable String challanNumber,
+                        @RequestBody CustomChallanRequest request,
+                        @RequestParam(defaultValue = "true") boolean preview,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.isAdmin(user)) {
+                        return ResponseEntity.status(403).build();
+                }
+
+                DispatchTripPdfResult result = customChallanService.updateAsAdmin(
+                                challanNumber,
+                                request,
+                                user.getUsername());
+
+                return buildPdfResponse(
+                                result,
+                                preview);
         }
 
         @GetMapping(value = "/custom/{challanNumber:.+}/download", produces = MediaType.APPLICATION_PDF_VALUE)

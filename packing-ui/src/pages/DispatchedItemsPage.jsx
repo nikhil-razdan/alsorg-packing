@@ -41,6 +41,8 @@ import {
 	createDispatchChallan,
 	createCustomChallan,
 	fetchCustomChallans,
+	fetchCustomChallanDetails,
+	updateCustomChallan,
 	downloadCustomChallan,
 } from "../dashboard/api/logisticsApi";
 import { useAuth } from "../auth/AuthContext";
@@ -911,7 +913,7 @@ const dispatchPageSizeNativeSelectSx = {
 
 const customChallanRowSx = {
 	display: "grid",
-	gridTemplateColumns: "220px 180px minmax(260px,1fr) 110px 110px",
+	gridTemplateColumns: "220px 180px minmax(280px,1fr) 110px 250px",
 	alignItems: "center",
 	gap: 1.5,
 	p: 1.4,
@@ -923,6 +925,353 @@ const customChallanRowSx = {
 		background: "rgba(255,255,255,.055)",
 		borderColor: "rgba(139,92,246,.26)",
 	},
+};
+
+const customChallanModalShellSx = {
+	...enhancedModalSx,
+	width: "min(1120px, 96vw)",
+	height: "min(92vh, 920px)",
+	maxHeight: "92vh",
+	display: "flex",
+	flexDirection: "column",
+	borderRadius: "24px",
+	background: `
+		radial-gradient(circle at 8% 0%, rgba(139,92,246,.24), transparent 30%),
+		radial-gradient(circle at 92% 8%, rgba(59,130,246,.16), transparent 30%),
+		linear-gradient(180deg,#09111f,#0f172a)
+	`,
+	border: "1px solid rgba(167,139,250,.20)",
+	boxShadow: "0 42px 120px rgba(0,0,0,.72)",
+};
+
+const customChallanHeroHeaderSx = {
+	px: 3,
+	py: 2.5,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 2,
+	flexShrink: 0,
+	background: "linear-gradient(135deg,rgba(139,92,246,.16),rgba(59,130,246,.05))",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
+};
+
+const customChallanModalBodySx = {
+	flex: 1,
+	minHeight: 0,
+	overflowY: "auto",
+	p: 3,
+	...premiumScrollbarSx("#a78bfa"),
+};
+
+const customFormSectionSx = {
+	p: 2.2,
+	mb: 2,
+	borderRadius: "18px",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.075)",
+	boxShadow: "0 14px 34px rgba(2,6,23,.20)",
+};
+
+const customFormSectionTitleSx = {
+	color: "#fff",
+	fontWeight: 950,
+	fontSize: 14,
+	letterSpacing: ".01em",
+};
+
+const customFormSectionSubSx = {
+	mt: 0.35,
+	mb: 2,
+	color: "rgba(255,255,255,.48)",
+	fontWeight: 650,
+	fontSize: 11,
+};
+
+const customChallanItemCardSx = {
+	p: 2,
+	borderRadius: "17px",
+	background: "linear-gradient(135deg,rgba(139,92,246,.08),rgba(255,255,255,.025))",
+	border: "1px solid rgba(139,92,246,.16)",
+	boxShadow: "0 12px 28px rgba(2,6,23,.18)",
+};
+
+const customItemNumberChipSx = {
+	height: 24,
+	borderRadius: 999,
+	color: "#ddd6fe",
+	background: "rgba(139,92,246,.14)",
+	border: "1px solid rgba(139,92,246,.26)",
+	fontWeight: 900,
+	fontSize: 10,
+};
+
+const customChallanStickyFooterSx = {
+	...modalFooterSx,
+	flexShrink: 0,
+	alignItems: "center",
+	background: "rgba(8,15,29,.94)",
+	backdropFilter: "blur(18px)",
+	borderTop: "1px solid rgba(167,139,250,.13)",
+};
+
+const customChallanEditButtonSx = {
+	height: 36,
+	px: 1.8,
+	minWidth: 116,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontSize: 11,
+	fontWeight: 900,
+	color: "#fde68a",
+	background: "linear-gradient(135deg,rgba(245,158,11,.18),rgba(217,119,6,.10))",
+	border: "1px solid rgba(245,158,11,.30)",
+
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#d97706,#f59e0b)",
+		boxShadow: "0 10px 24px rgba(245,158,11,.22)",
+	},
+};
+
+
+/* =========================================================
+ * ADMIN-ONLY CUSTOM CHALLAN INTELLIGENCE / REPORTING
+ * ========================================================= */
+const customAdminCommandCenterSx = {
+	mb: 1.4,
+	p: 1.4,
+	borderRadius: "18px",
+	background:
+		"radial-gradient(circle at top left, rgba(139,92,246,.18), transparent 36%), linear-gradient(135deg,rgba(15,23,42,.92),rgba(30,41,59,.72))",
+	border: "1px solid rgba(167,139,250,.22)",
+	boxShadow: "0 16px 36px rgba(2,6,23,.28)",
+};
+
+const customAdminCommandTopSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.2,
+	flexWrap: "wrap",
+};
+
+const customAdminCommandTitleSx = {
+	color: "#fff",
+	fontSize: 13,
+	fontWeight: 950,
+	letterSpacing: ".02em",
+};
+
+const customAdminCommandSubSx = {
+	mt: 0.25,
+	color: "rgba(255,255,255,.50)",
+	fontSize: 10.5,
+	fontWeight: 700,
+};
+
+const customAdminActionButtonSx = (accent = "#8b5cf6", active = false) => ({
+	height: 36,
+	px: 1.55,
+	borderRadius: "12px",
+	textTransform: "none",
+	fontSize: 11,
+	fontWeight: 950,
+	color: "#fff",
+	background: active
+		? `linear-gradient(135deg,${accent},rgba(79,70,229,.92))`
+		: `linear-gradient(180deg,${accent}22,rgba(255,255,255,.035))`,
+	border: `1px solid ${accent}${active ? "66" : "3d"}`,
+	boxShadow: active ? `0 10px 22px ${accent}28` : "none",
+
+	"&:hover": {
+		transform: "translateY(-1px)",
+		background: active
+			? `linear-gradient(135deg,${accent},rgba(67,56,202,.96))`
+			: `linear-gradient(180deg,${accent}33,rgba(255,255,255,.055))`,
+	},
+
+	"&.Mui-disabled": {
+		opacity: 0.45,
+		color: "rgba(255,255,255,.55)",
+	},
+});
+
+const customAdminFilterGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "minmax(260px,1.45fr) repeat(3,minmax(150px,.65fr))",
+	},
+	gap: 1,
+	mt: 1.3,
+};
+
+const customAdminFilterFieldSx = {
+	"& .MuiOutlinedInput-root": {
+		minHeight: 42,
+		borderRadius: "12px",
+		color: "#fff",
+		background: "rgba(255,255,255,.035)",
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.08)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(167,139,250,.36)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#a78bfa",
+			boxShadow: "0 0 0 3px rgba(167,139,250,.10)",
+		},
+	},
+
+	"& .MuiInputLabel-root": {
+		color: "#94a3b8",
+		fontSize: 11.5,
+		fontWeight: 800,
+	},
+
+	"& input, & .MuiSelect-select": {
+		color: "#fff",
+		fontSize: 11.5,
+		fontWeight: 800,
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
+
+	"& input::-webkit-calendar-picker-indicator": {
+		filter: "invert(1)",
+		opacity: 0.8,
+	},
+};
+
+const customAdminKpiGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+	gap: 1,
+	mt: 1.25,
+};
+
+const customAdminKpiCardSx = (accent = "#8b5cf6") => ({
+	p: 1.3,
+	borderRadius: "15px",
+	background:
+		`radial-gradient(circle at top right,${accent}26,transparent 46%),rgba(255,255,255,.03)`,
+	border: `1px solid ${accent}33`,
+	minWidth: 0,
+});
+
+const customAdminKpiLabelSx = {
+	color: "rgba(255,255,255,.49)",
+	fontSize: 9.5,
+	fontWeight: 950,
+	letterSpacing: ".08em",
+	textTransform: "uppercase",
+};
+
+const customAdminKpiValueSx = {
+	mt: 0.45,
+	color: "#fff",
+	fontSize: 23,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const customAdminKpiMetaSx = {
+	mt: 0.55,
+	color: "rgba(255,255,255,.45)",
+	fontSize: 9.5,
+	fontWeight: 700,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const customAdminInsightPanelSx = {
+	mt: 1.25,
+	p: 1.4,
+	borderRadius: "17px",
+	background: "rgba(2,6,23,.34)",
+	border: "1px solid rgba(167,139,250,.16)",
+};
+
+const customAdminInsightGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2,minmax(0,1fr))",
+		xl: "repeat(3,minmax(0,1fr))",
+	},
+	gap: 1.2,
+};
+
+const customAdminInsightCardSx = {
+	p: 1.3,
+	borderRadius: "14px",
+	background: "rgba(255,255,255,.025)",
+	border: "1px solid rgba(255,255,255,.065)",
+	minWidth: 0,
+};
+
+const customAdminInsightTitleSx = {
+	color: "#ddd6fe",
+	fontSize: 10.5,
+	fontWeight: 950,
+	letterSpacing: ".06em",
+	textTransform: "uppercase",
+	mb: 1,
+};
+
+const customAdminBarTrackSx = {
+	height: 7,
+	borderRadius: 999,
+	background: "rgba(255,255,255,.055)",
+	overflow: "hidden",
+};
+
+const customAdminBarFillSx = (percent, accent = "#8b5cf6") => ({
+	height: "100%",
+	width: `${Math.max(0, Math.min(100, Number(percent) || 0))}%`,
+	borderRadius: 999,
+	background: `linear-gradient(90deg,${accent},#c4b5fd)`,
+});
+
+const customAdminActivityListSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.85,
+	maxHeight: 330,
+	overflowY: "auto",
+	pr: 0.6,
+	...premiumScrollbarSx("#a78bfa"),
+};
+
+const customAdminActivityRowSx = {
+	display: "grid",
+	gridTemplateColumns: "42px minmax(0,1fr) auto",
+	alignItems: "center",
+	gap: 1.1,
+	p: 1.05,
+	borderRadius: "13px",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.065)",
+};
+
+const customAdminActivityIconSx = {
+	width: 38,
+	height: 38,
+	borderRadius: "12px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	fontSize: 18,
+	background: "rgba(139,92,246,.14)",
+	border: "1px solid rgba(167,139,250,.22)",
 };
 
 const historyCardSx = {
@@ -4595,6 +4944,23 @@ export default function DispatchedItemsPage() {
 
 	const [customChallanOpen, setCustomChallanOpen] = useState(false);
 	const [customChallanLoading, setCustomChallanLoading] = useState(false);
+	const [customChallanMode, setCustomChallanMode] = useState("CREATE");
+	const [customChallanEditingNumber, setCustomChallanEditingNumber] = useState("");
+	const [customChallanDetailLoading, setCustomChallanDetailLoading] = useState(false);
+
+	const [customChallanSearch, setCustomChallanSearch] = useState("");
+	const [customChallanTypeFilter, setCustomChallanTypeFilter] = useState("ALL");
+	const [customChallanCreatorFilter, setCustomChallanCreatorFilter] = useState("ALL");
+	const [customChallanPeriodFilter, setCustomChallanPeriodFilter] = useState("ALL");
+	const [customChallanDateFrom, setCustomChallanDateFrom] = useState("");
+	const [customChallanDateTo, setCustomChallanDateTo] = useState("");
+	const [customChallanAnalyticsOpen, setCustomChallanAnalyticsOpen] = useState(false);
+	const [customChallanActivityOpen, setCustomChallanActivityOpen] = useState(false);
+	const [customChallanReportLoading, setCustomChallanReportLoading] = useState(false);
+
+	const isEditingCustomChallan =
+		customChallanMode === "EDIT" &&
+		Boolean(customChallanEditingNumber);
 
 	const [customChallanForm, setCustomChallanForm] = useState({
 		challanType: "CUSTOMER_CARE",
@@ -12866,6 +13232,33 @@ export default function DispatchedItemsPage() {
 			}
 		};
 
+	const toCustomChallanDateTimeInput = (
+		value
+	) => {
+		const raw =
+			String(
+				value || ""
+			).trim();
+
+		if (!raw) {
+			return "";
+		}
+
+		const match =
+			raw.match(
+				/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+			);
+
+		if (!match) {
+			return "";
+		}
+
+		return (
+			`${match[1]}-${match[2]}-${match[3]}` +
+			`T${match[4]}:${match[5]}`
+		);
+	};
+
 	const resetCustomChallanForm = () => {
 		setCustomChallanForm({
 			challanType: "CUSTOMER_CARE",
@@ -12885,8 +13278,188 @@ export default function DispatchedItemsPage() {
 	};
 
 	const openCustomChallanModal = () => {
+		setCustomChallanMode("CREATE");
+		setCustomChallanEditingNumber("");
 		resetCustomChallanForm();
 		setCustomChallanOpen(true);
+	};
+
+	const closeCustomChallanModal = () => {
+		if (
+			customChallanLoading ||
+			customChallanDetailLoading
+		) {
+			return;
+		}
+
+		setCustomChallanOpen(false);
+		setCustomChallanMode("CREATE");
+		setCustomChallanEditingNumber("");
+		resetCustomChallanForm();
+	};
+
+	const openEditCustomChallanModal = async (
+		challan
+	) => {
+		if (!isAdmin) {
+			alert("Only Admin can edit custom challans");
+			return;
+		}
+
+		const challanNumber =
+			String(
+				challan?.challanNumber || ""
+			).trim();
+
+		if (!challanNumber) {
+			alert("Custom challan number missing");
+			return;
+		}
+
+		try {
+			setCustomChallanDetailLoading(true);
+
+			const detail =
+				await fetchCustomChallanDetails(
+					challanNumber
+				);
+
+			setCustomChallanMode("EDIT");
+			setCustomChallanEditingNumber(
+				challanNumber
+			);
+
+			setCustomChallanForm({
+				challanType:
+					String(
+						detail?.challanType ||
+						"OTHER"
+					)
+						.trim()
+						.toUpperCase(),
+
+				fromLocation:
+					String(
+						detail?.fromLocation || ""
+					),
+
+				toLocation:
+					String(
+						detail?.toLocation || ""
+					),
+
+				pdNo:
+					String(
+						detail?.pdNo || ""
+					),
+
+				driverName:
+					String(
+						detail?.driverName || ""
+					),
+
+				vehicleNumber:
+					String(
+						detail?.vehicleNumber || ""
+					),
+
+				handedOverTo:
+					String(
+						detail?.handedOverTo || ""
+					),
+
+				clientName:
+					String(
+						detail?.clientName || ""
+					),
+
+				clientAddress:
+					String(
+						detail?.clientAddress || ""
+					),
+
+				purpose:
+					String(
+						detail?.purpose || ""
+					),
+
+				movementMode:
+					String(
+						detail?.movementMode ||
+						"DIRECT_DISPATCH"
+					),
+
+				dispatchTime:
+					toCustomChallanDateTimeInput(
+						detail?.dispatchTime
+					),
+
+				items:
+					Array.isArray(
+						detail?.items
+					) &&
+						detail.items.length > 0
+						? detail.items.map(
+							(item) => ({
+								description:
+									String(
+										item?.description ||
+										""
+									),
+
+								drawingNo:
+									String(
+										item?.drawingNo ||
+										""
+									),
+
+								quantity:
+									String(
+										item?.quantity ?? 1
+									),
+
+								uom:
+									String(
+										item?.uom ||
+										"PIECES"
+									)
+										.trim()
+										.toUpperCase(),
+
+								returnable:
+									Boolean(
+										item?.returnable
+									),
+
+								remarks:
+									String(
+										item?.remarks ||
+										""
+									),
+							}))
+						: [
+							createEmptyCustomChallanLine(),
+						],
+			});
+
+			/* Avoid stacking the edit modal over the history modal. */
+			setChallanHistoryOpen(false);
+			setCustomChallanOpen(true);
+
+		} catch (error) {
+			console.error(
+				"Custom challan load failed",
+				error
+			);
+
+			alert(
+				error?.message ||
+				"Failed to load custom challan"
+			);
+
+		} finally {
+			setCustomChallanDetailLoading(false);
+		}
 	};
 
 	const updateCustomChallanField = (key, value) => {
@@ -12936,8 +13509,16 @@ export default function DispatchedItemsPage() {
 	};
 
 	const submitCustomChallan = async () => {
+		const editingCustomChallan =
+			customChallanMode === "EDIT" &&
+			Boolean(customChallanEditingNumber);
 
-		if (!isDispatch) {
+		if (editingCustomChallan) {
+			if (!isAdmin) {
+				alert("Only Admin can edit a custom challan");
+				return;
+			}
+		} else if (!isDispatch) {
 			alert("Only dispatch user can create custom challan");
 			return;
 		}
@@ -12970,7 +13551,16 @@ export default function DispatchedItemsPage() {
 		const handedOverTo =
 			String(customChallanForm.handedOverTo || "").trim();
 
-		if (isSiteReturnChallanType(challanType) && !handedOverTo) {
+		const movementMode =
+			String(
+				customChallanForm.movementMode ||
+				"DIRECT_DISPATCH"
+			).trim() || "DIRECT_DISPATCH";
+
+		if (
+			isSiteReturnChallanType(challanType) &&
+			!handedOverTo
+		) {
 			alert("Handed Over To is required for Site Return challan");
 			return;
 		}
@@ -12985,6 +13575,11 @@ export default function DispatchedItemsPage() {
 			return;
 		}
 
+		const allowedUomValues =
+			CUSTOM_CHALLAN_UOM_OPTIONS.map(
+				(option) => option.value
+			);
+
 		const cleanedItems =
 			(customChallanForm.items || [])
 				.map((item) => {
@@ -12996,21 +13591,28 @@ export default function DispatchedItemsPage() {
 							.trim()
 							.toUpperCase();
 
-					const allowedUomValues =
-						CUSTOM_CHALLAN_UOM_OPTIONS.map((option) => option.value);
-
 					return {
-						description: String(item.description || "").trim(),
-						drawingNo: String(item.drawingNo || "").trim(),
+						description:
+							String(item.description || "").trim(),
+
+						drawingNo:
+							String(item.drawingNo || "").trim(),
+
 						quantity:
 							Number.isFinite(quantity) && quantity > 0
 								? quantity
 								: 1,
-						uom: allowedUomValues.includes(uom)
-							? uom
-							: "PIECES",
-						returnable: Boolean(item.returnable),
-						remarks: String(item.remarks || "").trim(),
+
+						uom:
+							allowedUomValues.includes(uom)
+								? uom
+								: "PIECES",
+
+						returnable:
+							Boolean(item.returnable),
+
+						remarks:
+							String(item.remarks || "").trim(),
 					};
 				})
 				.filter((item) => item.description);
@@ -13020,40 +13622,44 @@ export default function DispatchedItemsPage() {
 			return;
 		}
 
+		const payload = {
+			...customChallanForm,
+			challanType,
+			fromLocation,
+			toLocation,
+			pdNo: String(customChallanForm.pdNo || "").trim(),
+			driverName,
+			vehicleNumber,
+			handedOverTo: isSiteReturnChallanType(challanType)
+				? handedOverTo
+				: "",
+			clientName: String(customChallanForm.clientName || "").trim(),
+			clientAddress: String(customChallanForm.clientAddress || "").trim(),
+			purpose: String(customChallanForm.purpose || "").trim(),
+			movementMode,
+			dispatchTime: selectedDispatchTime,
+			items: cleanedItems,
+		};
+
 		try {
 			setCustomChallanLoading(true);
 
-			const result = await createCustomChallan({
-				...customChallanForm,
+			const result =
+				editingCustomChallan
+					? await updateCustomChallan(
+						customChallanEditingNumber,
+						payload
+					)
+					: await createCustomChallan(
+						payload
+					);
 
-				challanType,
+			const blob = result?.blob;
 
-				fromLocation,
-				toLocation,
-
-				pdNo: String(customChallanForm.pdNo || "").trim(),
-				driverName,
-				vehicleNumber,
-
-				handedOverTo: isSiteReturnChallanType(challanType)
-					? handedOverTo
-					: "",
-
-				clientName: String(customChallanForm.clientName || "").trim(),
-				clientAddress: String(customChallanForm.clientAddress || "").trim(),
-				purpose: String(customChallanForm.purpose || "").trim(),
-
-				movementMode: "DIRECT_DISPATCH",
-
-				dispatchTime: selectedDispatchTime,
-
-				items: cleanedItems,
-			});
-
-			const blob = result.blob;
-
-			if (!blob) {
-				throw new Error("No custom challan PDF generated");
+			if (!blob || blob.size === 0) {
+				throw new Error(
+					"No custom challan PDF generated"
+				);
 			}
 
 			const url =
@@ -13061,17 +13667,26 @@ export default function DispatchedItemsPage() {
 
 			showChalaanPreview(
 				url,
-				result.challanNo || "CUSTOM_CHALLAN"
+				result.challanNo ||
+				customChallanEditingNumber ||
+				"CUSTOM_CHALLAN"
 			);
 
 			setCustomChallanOpen(false);
+			setCustomChallanMode("CREATE");
+			setCustomChallanEditingNumber("");
 			resetCustomChallanForm();
 
 			await loadCustomChallans();
 
 		} catch (err) {
 			console.error(err);
-			alert(err.message || "Custom challan generation failed");
+			alert(
+				err.message ||
+				(editingCustomChallan
+					? "Custom challan update failed"
+					: "Custom challan generation failed")
+			);
 		} finally {
 			setCustomChallanLoading(false);
 		}
@@ -13642,23 +14257,931 @@ export default function DispatchedItemsPage() {
 		setChalaanPreview(null);
 	};
 
+	const parseCustomChallanDateTime = (value) => {
+		if (!value) {
+			return null;
+		}
+
+		const parsed =
+			parseDispatchDateTime(value);
+
+		return parsed &&
+			!Number.isNaN(parsed.getTime())
+			? parsed
+			: null;
+	};
+
+	const getCustomChallanDateKey = (value) => {
+		const date =
+			value instanceof Date
+				? value
+				: parseCustomChallanDateTime(value);
+
+		if (!date) {
+			return "";
+		}
+
+		const pad = (number) =>
+			String(number).padStart(2, "0");
+
+		return `${date.getFullYear()}-${pad(
+			date.getMonth() + 1
+		)}-${pad(date.getDate())}`;
+	};
+
+	const customChallanCreatorOptions = useMemo(() => {
+		return Array.from(
+			new Set(
+				(customChallans || [])
+					.map((challan) =>
+						String(challan?.generatedBy || "").trim()
+					)
+					.filter(Boolean)
+			)
+		).sort((a, b) =>
+			a.localeCompare(b, undefined, {
+				sensitivity: "base",
+			})
+		);
+	}, [customChallans]);
+
+	const customChallanFilteredRows = useMemo(() => {
+		const searchText =
+			normalizeSmartSearch(customChallanSearch);
+
+		const typeFilter =
+			String(customChallanTypeFilter || "ALL")
+				.trim()
+				.toUpperCase();
+
+		const creatorFilter =
+			String(customChallanCreatorFilter || "ALL").trim();
+
+		const periodFilter =
+			String(customChallanPeriodFilter || "ALL")
+				.trim()
+				.toUpperCase();
+
+		const now = new Date();
+		const todayStart = new Date(
+			now.getFullYear(),
+			now.getMonth(),
+			now.getDate()
+		);
+
+		const sevenDayStart = new Date(todayStart);
+		sevenDayStart.setDate(sevenDayStart.getDate() - 6);
+
+		const thirtyDayStart = new Date(todayStart);
+		thirtyDayStart.setDate(thirtyDayStart.getDate() - 29);
+
+		const monthStart = new Date(
+			now.getFullYear(),
+			now.getMonth(),
+			1
+		);
+
+		const nextDayStart = new Date(todayStart);
+		nextDayStart.setDate(nextDayStart.getDate() + 1);
+
+		return (customChallans || [])
+			.filter((challan) => {
+				if (!isAdmin) {
+					return true;
+				}
+
+				if (searchText) {
+					const haystack = normalizeSmartSearch(
+						[
+							challan?.challanNumber,
+							challan?.challanType,
+							challan?.challanTypeLabel,
+							getCustomChallanTypeLabel(challan?.challanType),
+							challan?.fromLocation,
+							challan?.toLocation,
+							challan?.pdNo,
+							challan?.clientName,
+							challan?.purpose,
+							challan?.driverName,
+							challan?.vehicleNumber,
+							challan?.handedOverTo,
+							challan?.generatedBy,
+						].join(" "),
+					);
+
+					if (!haystack.includes(searchText)) {
+						return false;
+					}
+				}
+
+				if (
+					typeFilter !== "ALL" &&
+					String(challan?.challanType || "")
+						.trim()
+						.toUpperCase() !== typeFilter
+				) {
+					return false;
+				}
+
+				if (
+					creatorFilter !== "ALL" &&
+					String(challan?.generatedBy || "").trim() !== creatorFilter
+				) {
+					return false;
+				}
+
+				if (periodFilter === "ALL") {
+					return true;
+				}
+
+				const generatedAt =
+					parseCustomChallanDateTime(challan?.generatedAt);
+
+				if (!generatedAt) {
+					return false;
+				}
+
+				if (periodFilter === "TODAY") {
+					return generatedAt >= todayStart && generatedAt < nextDayStart;
+				}
+
+				if (periodFilter === "LAST_7_DAYS") {
+					return generatedAt >= sevenDayStart;
+				}
+
+				if (periodFilter === "LAST_30_DAYS") {
+					return generatedAt >= thirtyDayStart;
+				}
+
+				if (periodFilter === "THIS_MONTH") {
+					return generatedAt >= monthStart;
+				}
+
+				if (periodFilter === "CUSTOM") {
+					const dateKey = getCustomChallanDateKey(generatedAt);
+
+					if (customChallanDateFrom && dateKey < customChallanDateFrom) {
+						return false;
+					}
+
+					if (customChallanDateTo && dateKey > customChallanDateTo) {
+						return false;
+					}
+
+					return true;
+				}
+
+				return true;
+			})
+			.sort((a, b) => {
+				const aDate =
+					parseCustomChallanDateTime(a?.generatedAt)?.getTime() || 0;
+				const bDate =
+					parseCustomChallanDateTime(b?.generatedAt)?.getTime() || 0;
+
+				return bDate - aDate;
+			});
+	}, [
+		customChallans,
+		isAdmin,
+		customChallanSearch,
+		customChallanTypeFilter,
+		customChallanCreatorFilter,
+		customChallanPeriodFilter,
+		customChallanDateFrom,
+		customChallanDateTo,
+	]);
+
+	const customChallanAdminStats = useMemo(() => {
+		const sourceRows =
+			Array.isArray(customChallanFilteredRows)
+				? customChallanFilteredRows
+				: [];
+
+		const now = new Date();
+		const todayKey = getCustomChallanDateKey(now);
+		const monthKey = `${now.getFullYear()}-${String(
+			now.getMonth() + 1
+		).padStart(2, "0")}`;
+
+		let totalItems = 0;
+		let todayCount = 0;
+		let monthCount = 0;
+		let logisticsCompleteCount = 0;
+
+		const creators = new Set();
+		const clients = new Set();
+		const typeMap = new Map();
+		const creatorMap = new Map();
+		const routeMap = new Map();
+
+		sourceRows.forEach((challan) => {
+			const itemCount =
+				Number(challan?.totalItems || 0);
+
+			totalItems += Number.isFinite(itemCount)
+				? itemCount
+				: 0;
+
+			const dateKey =
+				getCustomChallanDateKey(challan?.generatedAt);
+
+			if (dateKey === todayKey) {
+				todayCount += 1;
+			}
+
+			if (dateKey.startsWith(monthKey)) {
+				monthCount += 1;
+			}
+
+			const creator =
+				String(challan?.generatedBy || "Unassigned").trim() || "Unassigned";
+			const client =
+				String(challan?.clientName || "").trim();
+
+			creators.add(creator);
+			if (client) {
+				clients.add(client);
+			}
+
+			if (
+				String(challan?.driverName || "").trim() &&
+				String(challan?.vehicleNumber || "").trim()
+			) {
+				logisticsCompleteCount += 1;
+			}
+
+			const typeKey =
+				String(challan?.challanType || "OTHER")
+					.trim()
+					.toUpperCase() || "OTHER";
+
+			const typeEntry = typeMap.get(typeKey) || {
+				type: typeKey,
+				label:
+					challan?.challanTypeLabel ||
+					getCustomChallanTypeLabel(typeKey),
+				challans: 0,
+				items: 0,
+			};
+
+			typeEntry.challans += 1;
+			typeEntry.items += Number.isFinite(itemCount)
+				? itemCount
+				: 0;
+			typeMap.set(typeKey, typeEntry);
+
+			const creatorEntry = creatorMap.get(creator) || {
+				name: creator,
+				challans: 0,
+				items: 0,
+				lastAt: "",
+			};
+
+			creatorEntry.challans += 1;
+			creatorEntry.items += Number.isFinite(itemCount)
+				? itemCount
+				: 0;
+
+			const creatorLastTime =
+				parseCustomChallanDateTime(creatorEntry.lastAt)?.getTime() || 0;
+			const currentTime =
+				parseCustomChallanDateTime(challan?.generatedAt)?.getTime() || 0;
+
+			if (currentTime >= creatorLastTime) {
+				creatorEntry.lastAt = challan?.generatedAt || "";
+			}
+
+			creatorMap.set(creator, creatorEntry);
+
+			const routeLabel = `${String(
+				challan?.fromLocation || "—"
+			).trim() || "—"} → ${String(
+				challan?.toLocation || "—"
+			).trim() || "—"}`;
+
+			const routeEntry = routeMap.get(routeLabel) || {
+				route: routeLabel,
+				challans: 0,
+				items: 0,
+				lastAt: "",
+			};
+
+			routeEntry.challans += 1;
+			routeEntry.items += Number.isFinite(itemCount)
+				? itemCount
+				: 0;
+
+			const routeLastTime =
+				parseCustomChallanDateTime(routeEntry.lastAt)?.getTime() || 0;
+
+			if (currentTime >= routeLastTime) {
+				routeEntry.lastAt = challan?.generatedAt || "";
+			}
+
+			routeMap.set(routeLabel, routeEntry);
+		});
+
+		const typeBreakdown = Array.from(typeMap.values()).sort(
+			(a, b) => b.challans - a.challans || b.items - a.items
+		);
+
+		const creatorBreakdown = Array.from(creatorMap.values()).sort(
+			(a, b) => b.challans - a.challans || b.items - a.items
+		);
+
+		const routeBreakdown = Array.from(routeMap.values()).sort(
+			(a, b) => b.challans - a.challans || b.items - a.items
+		);
+
+		const dailyTrend = Array.from({ length: 7 }, (_, index) => {
+			const date = new Date(
+				now.getFullYear(),
+				now.getMonth(),
+				now.getDate()
+			);
+
+			date.setDate(date.getDate() - (6 - index));
+
+			const key = getCustomChallanDateKey(date);
+			const rowsForDay = sourceRows.filter(
+				(challan) =>
+					getCustomChallanDateKey(challan?.generatedAt) === key
+			);
+
+			return {
+				key,
+				label: date.toLocaleDateString("en-IN", {
+					day: "2-digit",
+					month: "short",
+				}),
+				challans: rowsForDay.length,
+				items: rowsForDay.reduce(
+					(sum, challan) => sum + Number(challan?.totalItems || 0),
+					0
+				),
+			};
+		});
+
+		const logisticsCompleteness = sourceRows.length
+			? Math.round((logisticsCompleteCount / sourceRows.length) * 100)
+			: 0;
+
+		return {
+			totalChallans: sourceRows.length,
+			totalItems,
+			todayCount,
+			monthCount,
+			uniqueCreators: creators.size,
+			uniqueClients: clients.size,
+			logisticsCompleteCount,
+			logisticsCompleteness,
+			averageItems: sourceRows.length
+				? totalItems / sourceRows.length
+				: 0,
+			typeBreakdown,
+			creatorBreakdown,
+			routeBreakdown,
+			dailyTrend,
+			activity: sourceRows.slice(0, 15),
+			topType: typeBreakdown[0] || null,
+			topCreator: creatorBreakdown[0] || null,
+			topRoute: routeBreakdown[0] || null,
+		};
+	}, [customChallanFilteredRows]);
+
+	const customChallanFilterLabel = useMemo(() => {
+		const parts = [];
+
+		if (customChallanTypeFilter !== "ALL") {
+			parts.push(
+				getCustomChallanTypeLabel(customChallanTypeFilter)
+			);
+		}
+
+		if (customChallanCreatorFilter !== "ALL") {
+			parts.push(`By ${customChallanCreatorFilter}`);
+		}
+
+		const periodLabels = {
+			TODAY: "Today",
+			LAST_7_DAYS: "Last 7 Days",
+			LAST_30_DAYS: "Last 30 Days",
+			THIS_MONTH: "This Month",
+			CUSTOM: customChallanDateFrom || customChallanDateTo
+				? `${customChallanDateFrom || "Start"} → ${customChallanDateTo || "Today"}`
+				: "Custom Date Range",
+		};
+
+		if (customChallanPeriodFilter !== "ALL") {
+			parts.push(
+				periodLabels[customChallanPeriodFilter] || customChallanPeriodFilter
+			);
+		}
+
+		if (customChallanSearch.trim()) {
+			parts.push(`Search: ${customChallanSearch.trim()}`);
+		}
+
+		return parts.length
+			? parts.join(" • ")
+			: "All custom challans";
+	}, [
+		customChallanTypeFilter,
+		customChallanCreatorFilter,
+		customChallanPeriodFilter,
+		customChallanDateFrom,
+		customChallanDateTo,
+		customChallanSearch,
+	]);
+
+	const clearCustomChallanAdminFilters = () => {
+		setCustomChallanSearch("");
+		setCustomChallanTypeFilter("ALL");
+		setCustomChallanCreatorFilter("ALL");
+		setCustomChallanPeriodFilter("ALL");
+		setCustomChallanDateFrom("");
+		setCustomChallanDateTo("");
+		setCustomChallanPageNo(1);
+	};
+
+	const fetchCustomChallanReportDetails = async (sourceRows) => {
+		const detailMap = new Map();
+		let nextIndex = 0;
+		const concurrency = Math.min(4, sourceRows.length);
+
+		const worker = async () => {
+			while (nextIndex < sourceRows.length) {
+				const currentIndex = nextIndex;
+				nextIndex += 1;
+
+				const challan = sourceRows[currentIndex];
+				const challanNumber = String(
+					challan?.challanNumber || ""
+				).trim();
+
+				if (!challanNumber) {
+					continue;
+				}
+
+				try {
+					const detail =
+						await fetchCustomChallanDetails(challanNumber);
+
+					detailMap.set(challanNumber, detail || null);
+				} catch (error) {
+					console.warn(
+						`Unable to load item details for ${challanNumber}:`,
+						error
+					);
+
+					detailMap.set(challanNumber, null);
+				}
+			}
+		};
+
+		if (concurrency > 0) {
+			await Promise.all(
+				Array.from({ length: concurrency }, () => worker())
+			);
+		}
+
+		return detailMap;
+	};
+
+	const exportCustomChallanAdminReport = async () => {
+		if (!isAdmin) {
+			alert("Only Admin can export Custom Challan analytics");
+			return;
+		}
+
+		const sourceRows =
+			Array.isArray(customChallanFilteredRows)
+				? customChallanFilteredRows
+				: [];
+
+		if (sourceRows.length === 0) {
+			alert("No custom challans match the current report filters");
+			return;
+		}
+
+		try {
+			setCustomChallanReportLoading(true);
+
+			const [excelJsModule, detailMap] = await Promise.all([
+				import("exceljs"),
+				fetchCustomChallanReportDetails(sourceRows),
+			]);
+
+			const ExcelJS = excelJsModule.default ?? excelJsModule;
+			const workbook = new ExcelJS.Workbook();
+
+			workbook.creator = "ALSORG PackFlow";
+			workbook.company = "ALSORG";
+			workbook.title = "Custom Challan Management Report";
+			workbook.subject = "Admin analytics, custom challan register and activity report";
+			workbook.category = "Custom Challan Reporting";
+			workbook.created = new Date();
+			workbook.modified = new Date();
+
+			const styleHeaderRow = (row, accent = "FF7C3AED") => {
+				row.height = 26;
+				row.eachCell({ includeEmpty: true }, (cell) => {
+					cell.font = {
+						name: "Calibri",
+						size: 10,
+						bold: true,
+						color: { argb: "FFFFFFFF" },
+					};
+					cell.fill = {
+						type: "pattern",
+						pattern: "solid",
+						fgColor: { argb: accent },
+					};
+					cell.alignment = {
+						horizontal: "center",
+						vertical: "middle",
+						wrapText: true,
+					};
+					cell.border = {
+						top: { style: "thin", color: { argb: "FFD8B4FE" } },
+						left: { style: "thin", color: { argb: "FFD8B4FE" } },
+						bottom: { style: "thin", color: { argb: "FFD8B4FE" } },
+						right: { style: "thin", color: { argb: "FFD8B4FE" } },
+					};
+				});
+			};
+
+			const styleDataRow = (row, index) => {
+				row.height = 25;
+				row.eachCell({ includeEmpty: true }, (cell) => {
+					cell.font = {
+						name: "Calibri",
+						size: 10,
+						color: { argb: "FF1E293B" },
+					};
+					cell.fill = {
+						type: "pattern",
+						pattern: "solid",
+						fgColor: {
+							argb: index % 2 ? "FFF8FAFC" : "FFFFFFFF",
+						},
+					};
+					cell.alignment = {
+						vertical: "middle",
+						wrapText: true,
+					};
+					cell.border = {
+						top: { style: "thin", color: { argb: "FFE2E8F0" } },
+						left: { style: "thin", color: { argb: "FFE2E8F0" } },
+						bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+						right: { style: "thin", color: { argb: "FFE2E8F0" } },
+					};
+				});
+			};
+
+			const setReportTitle = (worksheet, title, subtitle, lastColumn) => {
+				worksheet.mergeCells(`A1:${lastColumn}1`);
+				worksheet.mergeCells(`A2:${lastColumn}2`);
+
+				const titleCell = worksheet.getCell("A1");
+				titleCell.value = title;
+				titleCell.font = {
+					name: "Calibri",
+					size: 18,
+					bold: true,
+					color: { argb: "FFFFFFFF" },
+				};
+				titleCell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: { argb: "FF0F172A" },
+				};
+				titleCell.alignment = { vertical: "middle" };
+				worksheet.getRow(1).height = 32;
+
+				const subtitleCell = worksheet.getCell("A2");
+				subtitleCell.value = subtitle;
+				subtitleCell.font = {
+					name: "Calibri",
+					size: 10,
+					italic: true,
+					color: { argb: "FF475569" },
+				};
+				subtitleCell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: { argb: "FFF8FAFC" },
+				};
+				worksheet.getRow(2).height = 23;
+			};
+
+			const summary = workbook.addWorksheet("Executive Summary", {
+				views: [{ showGridLines: false }],
+			});
+
+			setReportTitle(
+				summary,
+				"ALSORG CUSTOM CHALLAN — EXECUTIVE SUMMARY",
+				`Filters: ${customChallanFilterLabel} | Generated: ${new Date().toLocaleString("en-IN")}`,
+				"H"
+			);
+
+			[18, 18, 18, 18, 18, 18, 18, 18].forEach((width, index) => {
+				summary.getColumn(index + 1).width = width;
+			});
+
+			const summaryMetrics = [
+				["Total Challans", customChallanAdminStats.totalChallans],
+				["Total Items", customChallanAdminStats.totalItems],
+				["Created Today", customChallanAdminStats.todayCount],
+				["This Month", customChallanAdminStats.monthCount],
+				["Unique Creators", customChallanAdminStats.uniqueCreators],
+				["Unique Clients", customChallanAdminStats.uniqueClients],
+				["Avg Items / Challan", Number(customChallanAdminStats.averageItems.toFixed(2))],
+				["Driver+Vehicle Complete %", customChallanAdminStats.logisticsCompleteness],
+			];
+
+			const metricHeader = summary.getRow(4);
+			metricHeader.values = summaryMetrics.map(([label]) => label);
+			styleHeaderRow(metricHeader, "FF7C3AED");
+
+			const metricValues = summary.getRow(5);
+			metricValues.values = summaryMetrics.map(([, value]) => value);
+			metricValues.height = 30;
+			metricValues.eachCell((cell) => {
+				cell.font = {
+					name: "Calibri",
+					size: 14,
+					bold: true,
+					color: { argb: "FF312E81" },
+				};
+				cell.alignment = { horizontal: "center", vertical: "middle" };
+				cell.fill = {
+					type: "pattern",
+					pattern: "solid",
+					fgColor: { argb: "FFF5F3FF" },
+				};
+			});
+
+			summary.getCell("A7").value = "Challan Type Analysis";
+			summary.getCell("A7").font = { bold: true, size: 12, color: { argb: "FF5B21B6" } };
+			const typeHeader = summary.getRow(8);
+			typeHeader.values = ["Type", "Challans", "Items", "Share %"];
+			styleHeaderRow(typeHeader, "FF8B5CF6");
+
+			customChallanAdminStats.typeBreakdown.forEach((entry, index) => {
+				const row = summary.addRow([
+					entry.label,
+					entry.challans,
+					entry.items,
+					customChallanAdminStats.totalChallans
+						? entry.challans / customChallanAdminStats.totalChallans
+						: 0,
+				]);
+				styleDataRow(row, index);
+				row.getCell(4).numFmt = "0.0%";
+			});
+
+			const register = workbook.addWorksheet("Challan Register", {
+				views: [{ state: "frozen", ySplit: 4, showGridLines: false }],
+			});
+
+			const registerColumns = [
+				["Challan No.", 24],
+				["Date / Time", 20],
+				["Type", 27],
+				["From", 22],
+				["To / Site", 24],
+				["PD No.", 18],
+				["Client", 28],
+				["Purpose", 34],
+				["Driver", 22],
+				["Vehicle", 18],
+				["Handed Over To", 22],
+				["Generated By", 22],
+				["Items", 10],
+			];
+
+			setReportTitle(
+				register,
+				"ALSORG CUSTOM CHALLAN REGISTER",
+				`Scope: ${customChallanFilterLabel}`,
+				"M"
+			);
+
+			registerColumns.forEach(([, width], index) => {
+				register.getColumn(index + 1).width = width;
+			});
+
+			const registerHeader = register.getRow(4);
+			registerHeader.values = registerColumns.map(([label]) => label);
+			styleHeaderRow(registerHeader, "FF7C3AED");
+
+			sourceRows.forEach((challan, index) => {
+				const row = register.addRow([
+					challan?.challanNumber || "",
+					formatLocalDateTimeDisplay(challan?.generatedAt),
+					challan?.challanTypeLabel || getCustomChallanTypeLabel(challan?.challanType),
+					challan?.fromLocation || "",
+					challan?.toLocation || "",
+					challan?.pdNo || "",
+					challan?.clientName || "",
+					challan?.purpose || "",
+					challan?.driverName || "",
+					challan?.vehicleNumber || "",
+					challan?.handedOverTo || "",
+					challan?.generatedBy || "",
+					Number(challan?.totalItems || 0),
+				]);
+				styleDataRow(row, index);
+			});
+
+			register.autoFilter = {
+				from: { row: 4, column: 1 },
+				to: { row: Math.max(4, register.rowCount), column: registerColumns.length },
+			};
+
+			const itemSheet = workbook.addWorksheet("Item Details", {
+				views: [{ state: "frozen", ySplit: 4, showGridLines: false }],
+			});
+
+			const itemColumns = [
+				["Challan No.", 24],
+				["Date / Time", 20],
+				["Type", 26],
+				["PD No.", 18],
+				["Client", 26],
+				["Description", 42],
+				["Line PD / Reference", 22],
+				["Quantity", 12],
+				["UOM", 12],
+				["Returnable", 13],
+				["Remarks", 34],
+			];
+
+			setReportTitle(
+				itemSheet,
+				"ALSORG CUSTOM CHALLAN — ITEM DETAILS",
+				"Line-level data loaded from each Admin-accessible custom challan record",
+				"K"
+			);
+
+			itemColumns.forEach(([, width], index) => {
+				itemSheet.getColumn(index + 1).width = width;
+			});
+
+			const itemHeader = itemSheet.getRow(4);
+			itemHeader.values = itemColumns.map(([label]) => label);
+			styleHeaderRow(itemHeader, "FF6D28D9");
+
+			let itemRowIndex = 0;
+			sourceRows.forEach((challan) => {
+				const detail = detailMap.get(challan?.challanNumber);
+				const items = Array.isArray(detail?.items) ? detail.items : [];
+
+				items.forEach((item) => {
+					const row = itemSheet.addRow([
+						challan?.challanNumber || "",
+						formatLocalDateTimeDisplay(challan?.generatedAt),
+						challan?.challanTypeLabel || getCustomChallanTypeLabel(challan?.challanType),
+						challan?.pdNo || "",
+						challan?.clientName || "",
+						item?.description || "",
+						item?.drawingNo || "",
+						Number(item?.quantity || 0),
+						item?.uom || "",
+						item?.returnable ? "Yes" : "No",
+						item?.remarks || "",
+					]);
+
+					styleDataRow(row, itemRowIndex);
+					itemRowIndex += 1;
+				});
+			});
+
+			itemSheet.autoFilter = {
+				from: { row: 4, column: 1 },
+				to: { row: Math.max(4, itemSheet.rowCount), column: itemColumns.length },
+			};
+
+			const activitySheet = workbook.addWorksheet("User Activity", {
+				views: [{ state: "frozen", ySplit: 4, showGridLines: false }],
+			});
+
+			setReportTitle(
+				activitySheet,
+				"ALSORG CUSTOM CHALLAN — CREATION ACTIVITY",
+				"Generation activity derived from generatedBy and generatedAt fields",
+				"D"
+			);
+
+			[30, 16, 16, 22].forEach((width, index) => {
+				activitySheet.getColumn(index + 1).width = width;
+			});
+
+			const activityHeader = activitySheet.getRow(4);
+			activityHeader.values = ["Generated By", "Challans", "Items", "Last Activity"];
+			styleHeaderRow(activityHeader, "FF2563EB");
+
+			customChallanAdminStats.creatorBreakdown.forEach((entry, index) => {
+				const row = activitySheet.addRow([
+					entry.name,
+					entry.challans,
+					entry.items,
+					formatLocalDateTimeDisplay(entry.lastAt),
+				]);
+				styleDataRow(row, index);
+			});
+
+			const routeSheet = workbook.addWorksheet("Route Analysis", {
+				views: [{ state: "frozen", ySplit: 4, showGridLines: false }],
+			});
+
+			setReportTitle(
+				routeSheet,
+				"ALSORG CUSTOM CHALLAN — ROUTE ANALYSIS",
+				"From-to movement frequency and material-line volume",
+				"D"
+			);
+
+			[48, 16, 16, 22].forEach((width, index) => {
+				routeSheet.getColumn(index + 1).width = width;
+			});
+
+			const routeHeader = routeSheet.getRow(4);
+			routeHeader.values = ["Movement Route", "Challans", "Items", "Last Activity"];
+			styleHeaderRow(routeHeader, "FF059669");
+
+			customChallanAdminStats.routeBreakdown.forEach((entry, index) => {
+				const row = routeSheet.addRow([
+					entry.route,
+					entry.challans,
+					entry.items,
+					formatLocalDateTimeDisplay(entry.lastAt),
+				]);
+				styleDataRow(row, index);
+			});
+
+			[summary, register, itemSheet, activitySheet, routeSheet].forEach((sheet) => {
+				sheet.pageSetup = {
+					paperSize: 9,
+					orientation: "landscape",
+					fitToPage: true,
+					fitToWidth: 1,
+					fitToHeight: 0,
+					margins: {
+						left: 0.25,
+						right: 0.25,
+						top: 0.5,
+						bottom: 0.5,
+						header: 0.2,
+						footer: 0.2,
+					},
+				};
+
+				sheet.headerFooter.oddFooter =
+					"&LALSORG PackFlow&CPage &P of &N&RCustom Challan Report";
+			});
+
+			const buffer = await workbook.xlsx.writeBuffer();
+			const blob = new Blob([buffer], {
+				type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			});
+
+			const dateStamp = getCustomChallanDateKey(new Date()).replaceAll("-", "");
+
+			downloadDispatchBlob({
+				blob,
+				fileName: `ALSORG_Custom_Challan_Admin_Report_${dateStamp}.xlsx`,
+			});
+		} catch (error) {
+			console.error("Custom challan admin report failed:", error);
+			alert(error?.message || "Custom challan report export failed");
+		} finally {
+			setCustomChallanReportLoading(false);
+		}
+	};
+
 	const customChallanTotalPages = useMemo(() => {
 		return Math.max(
 			1,
-			Math.ceil(customChallans.length / customChallanPageSize)
+			Math.ceil(
+				customChallanFilteredRows.length / customChallanPageSize
+			)
 		);
-	}, [customChallans.length, customChallanPageSize]);
+	}, [customChallanFilteredRows.length, customChallanPageSize]);
 
 	const paginatedCustomChallans = useMemo(() => {
 		const start =
 			(customChallanPageNo - 1) * customChallanPageSize;
 
-		return customChallans.slice(
+		return customChallanFilteredRows.slice(
 			start,
 			start + customChallanPageSize
 		);
 	}, [
-		customChallans,
+		customChallanFilteredRows,
 		customChallanPageNo,
 		customChallanPageSize,
 	]);
@@ -15123,6 +16646,344 @@ export default function DispatchedItemsPage() {
 
 								{!customChallansLoading && customChallans.length > 0 && (
 									<>
+										{isAdmin && (
+											<Box sx={customAdminCommandCenterSx}>
+												<Box sx={customAdminCommandTopSx}>
+													<Box>
+														<Box sx={customAdminCommandTitleSx}>
+															🧠 Admin Custom Challan Intelligence
+														</Box>
+														<Box sx={customAdminCommandSubSx}>
+															Operational reporting, generation activity, data quality and full Excel reporting
+														</Box>
+													</Box>
+
+													<Box
+														sx={{
+															display: "flex",
+															alignItems: "center",
+															gap: 0.8,
+															flexWrap: "wrap",
+														}}
+													>
+														<Button
+															onClick={() =>
+																setCustomChallanAnalyticsOpen((value) => !value)
+															}
+															sx={customAdminActionButtonSx(
+																"#8b5cf6",
+																customChallanAnalyticsOpen
+															)}
+														>
+															📊 Analytics
+														</Button>
+
+														<Button
+															onClick={() =>
+																setCustomChallanActivityOpen((value) => !value)
+															}
+															sx={customAdminActionButtonSx(
+																"#2563eb",
+																customChallanActivityOpen
+															)}
+														>
+															🕘 Activity
+														</Button>
+
+														<Button
+															disabled={customChallanReportLoading}
+															onClick={exportCustomChallanAdminReport}
+															sx={customAdminActionButtonSx("#059669")}
+														>
+															{customChallanReportLoading
+																? "Preparing Report…"
+																: "📥 Full Excel Report"}
+														</Button>
+
+														<Button
+															onClick={clearCustomChallanAdminFilters}
+															sx={customAdminActionButtonSx("#64748b")}
+														>
+															↺ Reset
+														</Button>
+													</Box>
+												</Box>
+
+												<Box sx={customAdminFilterGridSx}>
+													<TextField
+														size="small"
+														label="Search Custom Challans"
+														placeholder="Challan no, PD, client, route, driver, creator…"
+														value={customChallanSearch}
+														onChange={(event) => {
+															setCustomChallanSearch(event.target.value);
+															setCustomChallanPageNo(1);
+														}}
+														InputProps={{
+															startAdornment: (
+																<SearchIcon
+																	sx={{
+																		color: "#8b5cf6",
+																		mr: 1,
+																	}}
+																/>
+															),
+														}}
+														sx={customAdminFilterFieldSx}
+													/>
+
+													<TextField
+														select
+														size="small"
+														label="Challan Type"
+														value={customChallanTypeFilter}
+														onChange={(event) => {
+															setCustomChallanTypeFilter(event.target.value);
+															setCustomChallanPageNo(1);
+														}}
+														SelectProps={{ MenuProps: modalSelectMenuProps }}
+														sx={customAdminFilterFieldSx}
+													>
+														<MenuItem value="ALL">All Types</MenuItem>
+														{CUSTOM_CHALLAN_TYPE_OPTIONS.map((option) => (
+															<MenuItem key={option.value} value={option.value}>
+																{option.label}
+															</MenuItem>
+														))}
+													</TextField>
+
+													<TextField
+														select
+														size="small"
+														label="Generated By"
+														value={customChallanCreatorFilter}
+														onChange={(event) => {
+															setCustomChallanCreatorFilter(event.target.value);
+															setCustomChallanPageNo(1);
+														}}
+														SelectProps={{ MenuProps: modalSelectMenuProps }}
+														sx={customAdminFilterFieldSx}
+													>
+														<MenuItem value="ALL">All Users</MenuItem>
+														{customChallanCreatorOptions.map((creator) => (
+															<MenuItem key={creator} value={creator}>
+																{creator}
+															</MenuItem>
+														))}
+													</TextField>
+
+													<TextField
+														select
+														size="small"
+														label="Activity Period"
+														value={customChallanPeriodFilter}
+														onChange={(event) => {
+															setCustomChallanPeriodFilter(event.target.value);
+															setCustomChallanPageNo(1);
+														}}
+														SelectProps={{ MenuProps: modalSelectMenuProps }}
+														sx={customAdminFilterFieldSx}
+													>
+														<MenuItem value="ALL">All Time</MenuItem>
+														<MenuItem value="TODAY">Today</MenuItem>
+														<MenuItem value="LAST_7_DAYS">Last 7 Days</MenuItem>
+														<MenuItem value="LAST_30_DAYS">Last 30 Days</MenuItem>
+														<MenuItem value="THIS_MONTH">This Month</MenuItem>
+														<MenuItem value="CUSTOM">Custom Range</MenuItem>
+													</TextField>
+												</Box>
+
+												{customChallanPeriodFilter === "CUSTOM" && (
+													<Box
+														sx={{
+															display: "grid",
+															gridTemplateColumns: {
+																xs: "1fr",
+																md: "repeat(2,minmax(180px,260px))",
+															},
+															gap: 1,
+															mt: 1,
+														}}
+													>
+														<TextField
+															type="date"
+															size="small"
+															label="From Date"
+															InputLabelProps={{ shrink: true }}
+															value={customChallanDateFrom}
+															onChange={(event) => {
+																setCustomChallanDateFrom(event.target.value);
+																setCustomChallanPageNo(1);
+															}}
+															sx={customAdminFilterFieldSx}
+														/>
+														<TextField
+															type="date"
+															size="small"
+															label="To Date"
+															InputLabelProps={{ shrink: true }}
+															value={customChallanDateTo}
+															onChange={(event) => {
+																setCustomChallanDateTo(event.target.value);
+																setCustomChallanPageNo(1);
+															}}
+															sx={customAdminFilterFieldSx}
+														/>
+													</Box>
+												)}
+
+												<Box sx={customAdminKpiGridSx}>
+													<Box sx={customAdminKpiCardSx("#8b5cf6")}>
+														<Box sx={customAdminKpiLabelSx}>Challans in Scope</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.totalChallans}</Box>
+														<Box sx={customAdminKpiMetaSx}>{customChallanFilterLabel}</Box>
+													</Box>
+													<Box sx={customAdminKpiCardSx("#06b6d4")}>
+														<Box sx={customAdminKpiLabelSx}>Material Lines / Items</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.totalItems}</Box>
+														<Box sx={customAdminKpiMetaSx}>Avg {customChallanAdminStats.averageItems.toFixed(1)} per challan</Box>
+													</Box>
+													<Box sx={customAdminKpiCardSx("#10b981")}>
+														<Box sx={customAdminKpiLabelSx}>Created Today</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.todayCount}</Box>
+														<Box sx={customAdminKpiMetaSx}>Current local business day</Box>
+													</Box>
+													<Box sx={customAdminKpiCardSx("#f59e0b")}>
+														<Box sx={customAdminKpiLabelSx}>This Month</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.monthCount}</Box>
+														<Box sx={customAdminKpiMetaSx}>{customChallanAdminStats.uniqueClients} unique client(s)</Box>
+													</Box>
+													<Box sx={customAdminKpiCardSx("#3b82f6")}>
+														<Box sx={customAdminKpiLabelSx}>Active Creators</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.uniqueCreators}</Box>
+														<Box sx={customAdminKpiMetaSx}>Top: {customChallanAdminStats.topCreator?.name || "—"}</Box>
+													</Box>
+													<Box sx={customAdminKpiCardSx("#22c55e")}>
+														<Box sx={customAdminKpiLabelSx}>Logistics Data Complete</Box>
+														<Box sx={customAdminKpiValueSx}>{customChallanAdminStats.logisticsCompleteness}%</Box>
+														<Box sx={customAdminKpiMetaSx}>Driver + vehicle captured together</Box>
+													</Box>
+												</Box>
+
+												<Collapse in={customChallanAnalyticsOpen} timeout="auto" unmountOnExit>
+													<Box sx={customAdminInsightPanelSx}>
+														<Box sx={customAdminCommandTitleSx}>Detailed Analytics</Box>
+														<Box sx={customAdminCommandSubSx}>Type mix, creator performance, routes and recent 7-day movement volume</Box>
+														<Box sx={{ ...customAdminInsightGridSx, mt: 1.2 }}>
+															<Box sx={customAdminInsightCardSx}>
+																<Box sx={customAdminInsightTitleSx}>Challan Type Mix</Box>
+																{customChallanAdminStats.typeBreakdown.length === 0 ? (
+																	<Box sx={customAdminCommandSubSx}>No type data in current scope.</Box>
+																) : (
+																	customChallanAdminStats.typeBreakdown.slice(0, 6).map((entry) => {
+																		const percent = customChallanAdminStats.totalChallans
+																			? (entry.challans / customChallanAdminStats.totalChallans) * 100
+																			: 0;
+																		return (
+																			<Box key={entry.type} sx={{ mb: 1 }}>
+																				<Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.45 }}>
+																					<Box sx={{ color: "#e2e8f0", fontSize: 10.5, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.label}</Box>
+																					<Box sx={{ color: "#c4b5fd", fontSize: 10.5, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans} • {percent.toFixed(0)}%</Box>
+																				</Box>
+																				<Box sx={customAdminBarTrackSx}><Box sx={customAdminBarFillSx(percent, "#8b5cf6")} /></Box>
+																			</Box>
+																		);
+																	})
+																)}
+															</Box>
+
+															<Box sx={customAdminInsightCardSx}>
+																<Box sx={customAdminInsightTitleSx}>Top Creators</Box>
+																{customChallanAdminStats.creatorBreakdown.slice(0, 6).map((entry, index) => (
+																	<Box key={entry.name} sx={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr) auto", alignItems: "center", gap: 0.8, py: 0.65, borderBottom: index < Math.min(5, customChallanAdminStats.creatorBreakdown.length - 1) ? "1px solid rgba(255,255,255,.05)" : "none" }}>
+																		<Box sx={{ color: "#a78bfa", fontWeight: 950, fontSize: 10.5 }}>#{index + 1}</Box>
+																		<Box sx={{ minWidth: 0 }}>
+																			<Box sx={{ color: "#fff", fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.name}</Box>
+																			<Box sx={{ color: "rgba(255,255,255,.42)", fontSize: 9.5, fontWeight: 700 }}>{entry.items} item(s)</Box>
+																		</Box>
+																		<Chip size="small" label={`${entry.challans} challan${entry.challans === 1 ? "" : "s"}`} sx={{ height: 22, color: "#bfdbfe", fontSize: 9.5, fontWeight: 900, background: "rgba(59,130,246,.10)", border: "1px solid rgba(96,165,250,.18)" }} />
+																	</Box>
+																))}
+															</Box>
+
+															<Box sx={customAdminInsightCardSx}>
+																<Box sx={customAdminInsightTitleSx}>Top Routes</Box>
+																{customChallanAdminStats.routeBreakdown.slice(0, 6).map((entry, index) => (
+																	<Box key={entry.route} sx={{ py: 0.7, borderBottom: index < Math.min(5, customChallanAdminStats.routeBreakdown.length - 1) ? "1px solid rgba(255,255,255,.05)" : "none" }}>
+																		<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+																			<Box sx={{ color: "#fff", fontSize: 10.2, fontWeight: 850, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={entry.route}>{entry.route}</Box>
+																			<Box sx={{ color: "#6ee7b7", fontSize: 10, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans}</Box>
+																		</Box>
+																		<Box sx={{ mt: 0.25, color: "rgba(255,255,255,.40)", fontSize: 9.3, fontWeight: 700 }}>{entry.items} item(s) • Last {formatLocalDateTimeDisplay(entry.lastAt)}</Box>
+																	</Box>
+																))}
+															</Box>
+
+															<Box sx={{ ...customAdminInsightCardSx, gridColumn: { xs: "auto", xl: "1 / -1" } }}>
+																<Box sx={customAdminInsightTitleSx}>7-Day Creation Trend</Box>
+																<Box sx={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(56px,1fr))", gap: 0.8, overflowX: "auto", pb: 0.4 }}>
+																	{customChallanAdminStats.dailyTrend.map((day) => {
+																		const maxDaily = Math.max(1, ...customChallanAdminStats.dailyTrend.map((item) => item.challans));
+																		const height = Math.max(10, (day.challans / maxDaily) * 72);
+																		return (
+																			<Box key={day.key} sx={{ minWidth: 56, textAlign: "center" }}>
+																				<Box sx={{ height: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+																					<Box sx={{ width: 24, height, minHeight: 10, borderRadius: "7px 7px 3px 3px", background: "linear-gradient(180deg,#a78bfa,#6d28d9)", boxShadow: "0 8px 20px rgba(139,92,246,.18)" }} />
+																				</Box>
+																				<Box sx={{ mt: 0.45, color: "#fff", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
+																				<Box sx={{ color: "rgba(255,255,255,.42)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
+																			</Box>
+																		);
+																	})}
+																</Box>
+															</Box>
+														</Box>
+													</Box>
+												</Collapse>
+
+												<Collapse in={customChallanActivityOpen} timeout="auto" unmountOnExit>
+													<Box sx={customAdminInsightPanelSx}>
+														<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1.2 }}>
+															<Box>
+																<Box sx={customAdminCommandTitleSx}>Recent Generation Activity</Box>
+																<Box sx={customAdminCommandSubSx}>Creation activity comes from generatedBy / generatedAt. Historical edit events need a backend audit log and are not invented here.</Box>
+															</Box>
+															<Chip size="small" label={`${customChallanAdminStats.activity.length} recent`} sx={customChallanCountChipSx} />
+														</Box>
+														<Box sx={customAdminActivityListSx}>
+															{customChallanAdminStats.activity.length === 0 ? (
+																<Box sx={modalEmptyStateSx}>No activity matches the current filters.</Box>
+															) : (
+																customChallanAdminStats.activity.map((challan) => (
+																	<Box key={`activity-${challan.challanNumber}`} sx={customAdminActivityRowSx}>
+																		<Box sx={customAdminActivityIconSx}>🧾</Box>
+																		<Box sx={{ minWidth: 0 }}>
+																			<Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap" }}>
+																				<Box sx={{ color: "#fff", fontFamily: "monospace", fontSize: 11.5, fontWeight: 950 }}>{challan.challanNumber}</Box>
+																				<Chip size="small" label={challan.challanTypeLabel || getCustomChallanTypeLabel(challan.challanType)} sx={{ height: 20, color: "#ddd6fe", fontSize: 8.8, fontWeight: 900, background: "rgba(139,92,246,.11)", border: "1px solid rgba(167,139,250,.18)" }} />
+																			</Box>
+																			<Box sx={{ mt: 0.3, color: "rgba(255,255,255,.54)", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+																				{challan.generatedBy || "Unknown user"} • {challan.fromLocation || "—"} → {challan.toLocation || "—"} • {challan.totalItems || 0} item(s)
+																			</Box>
+																		</Box>
+																		<Box sx={{ color: "#94a3b8", fontSize: 9.7, fontWeight: 800, whiteSpace: "nowrap" }}>
+																			{formatLocalDateTimeDisplay(challan.generatedAt)}
+																		</Box>
+																	</Box>
+																))
+															)}
+														</Box>
+													</Box>
+												</Collapse>
+											</Box>
+										)}
+
+										{isAdmin && customChallanFilteredRows.length === 0 && (
+											<Box sx={{ ...modalEmptyStateSx, mb: 1.2 }}>
+												No custom challans match the current Admin filters.
+											</Box>
+										)}
+
 										<Box sx={customChallanPagerWrapSx}>
 											<Box
 												sx={{
@@ -15140,7 +17001,7 @@ export default function DispatchedItemsPage() {
 												pageNo={customChallanPageNo}
 												totalPages={customChallanTotalPages}
 												pageSize={customChallanPageSize}
-												totalRows={customChallans.length}
+												totalRows={customChallanFilteredRows.length}
 												label="challans"
 												pageSizeOptions={[5, 8, 12, 20]}
 												onPageChange={setCustomChallanPageNo}
@@ -15225,6 +17086,9 @@ export default function DispatchedItemsPage() {
 															{challan.clientName || "No client"} •{" "}
 															Driver: {challan.driverName || "—"} • Vehicle:{" "}
 															{challan.vehicleNumber || "—"}
+															{isAdmin && (
+																<> • By: {challan.generatedBy || "—"}</>
+															)}
 															{isSiteReturnChallanType(challan.challanType) && (
 																<>
 																	{" "}• Handed Over To: {challan.handedOverTo || "—"}
@@ -15244,35 +17108,57 @@ export default function DispatchedItemsPage() {
 														{Number(challan.totalItems || 0) === 1 ? "" : "s"}
 													</Box>
 
-													<Button
-														size="small"
-														onClick={async () => {
-															try {
-																const result =
-																	await downloadCustomChallan(
-																		challan.challanNumber
-																	);
-
-																const url =
-																	URL.createObjectURL(result.blob);
-
-																showChalaanPreview(
-																	url,
-																	result.challanNo || challan.challanNumber
-																);
-															} catch (err) {
-																console.error(err);
-																alert(err.message || "Download failed");
-															}
-														}}
+													<Box
 														sx={{
-															...modalSecondaryButtonSx,
-															height: 34,
-															color: "#fff",
+															display: "flex",
+															alignItems: "center",
+															justifyContent: "flex-end",
+															gap: 1,
 														}}
 													>
-														View PDF
-													</Button>
+														<Button
+															size="small"
+															onClick={async () => {
+																try {
+																	const result =
+																		await downloadCustomChallan(
+																			challan.challanNumber
+																		);
+
+																	const url =
+																		URL.createObjectURL(result.blob);
+
+																	showChalaanPreview(
+																		url,
+																		result.challanNo || challan.challanNumber
+																	);
+																} catch (err) {
+																	console.error(err);
+																	alert(err.message || "Download failed");
+																}
+															}}
+															sx={{
+																...modalSecondaryButtonSx,
+																height: 34,
+																color: "#fff",
+															}}
+														>
+															View PDF
+														</Button>
+
+														{isAdmin && (
+															<Button
+																size="small"
+																disabled={customChallanDetailLoading}
+																onClick={() =>
+																	openEditCustomChallanModal(challan)
+																}
+																sx={customChallanEditButtonSx}
+															>
+																Edit Details
+															</Button>
+														)}
+													</Box>
 												</Box>
 											))}
 										</Box>
@@ -16537,67 +18423,134 @@ export default function DispatchedItemsPage() {
 				{customChallanOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 5700 }}
-						onClick={() => {
-							if (!customChallanLoading) {
-								setCustomChallanOpen(false);
-							}
-						}}
+						onClick={closeCustomChallanModal}
 					>
 						<Box
-							sx={{
-								...enhancedModalSx,
-								width: 860,
-								maxHeight: "90vh",
-							}}
+							sx={customChallanModalShellSx}
 							onClick={(e) => e.stopPropagation()}
 						>
-							<Box sx={modalHeaderSx}>
-								<Box sx={modalTitleWrapSx}>
-									<Box sx={modalIconBubble("#8b5cf6")}>
+							<Box sx={customChallanHeroHeaderSx}>
+								<Box
+									sx={{
+										display: "flex",
+										alignItems: "center",
+										gap: 1.7,
+										minWidth: 0,
+									}}
+								>
+									<Box
+										sx={{
+											...modalIconBubble("#8b5cf6"),
+											width: 50,
+											height: 50,
+											borderRadius: "15px",
+											fontSize: 25,
+										}}
+									>
 										🧾
 									</Box>
 
-									<Box>
-										<Box sx={modalTitleSx}>
-											Custom Challan
+									<Box sx={{ minWidth: 0 }}>
+										<Box
+											sx={{
+												display: "flex",
+												alignItems: "center",
+												gap: 1,
+												flexWrap: "wrap",
+											}}
+										>
+											<Box sx={modalTitleSx}>
+												{isEditingCustomChallan
+													? "Edit Custom Challan"
+													: "Create Custom Challan"}
+											</Box>
+
+											<Chip
+												size="small"
+												label={
+													isEditingCustomChallan
+														? "ADMIN EDIT MODE"
+														: "NEW MOVEMENT"
+												}
+												sx={{
+													height: 23,
+													color: isEditingCustomChallan
+														? "#fde68a"
+														: "#c4b5fd",
+													background: isEditingCustomChallan
+														? "rgba(245,158,11,.13)"
+														: "rgba(139,92,246,.14)",
+													border: isEditingCustomChallan
+														? "1px solid rgba(245,158,11,.25)"
+														: "1px solid rgba(139,92,246,.25)",
+													fontWeight: 900,
+													fontSize: 9,
+												}}
+											/>
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Customer Care / Site Requirement / Job Work / Site Return / Other Movement
+											{isEditingCustomChallan
+												? "Correct movement, party, transport and item details. Saved changes immediately become the source for the regenerated PDF."
+												: "Create a controlled external movement document for Customer Care, Site Requirement, Job Work or Site Return."}
 										</Box>
+
+										{isEditingCustomChallan && (
+											<Box
+												sx={{
+													mt: 0.8,
+													color: "#c4b5fd",
+													fontFamily: "monospace",
+													fontWeight: 900,
+													fontSize: 11,
+												}}
+											>
+												{customChallanEditingNumber}
+											</Box>
+										)}
 									</Box>
 								</Box>
 
 								<IconButton
 									sx={modalCloseButtonSx}
-									disabled={customChallanLoading}
-									onClick={() => setCustomChallanOpen(false)}
+									disabled={
+										customChallanLoading ||
+										customChallanDetailLoading
+									}
+									onClick={closeCustomChallanModal}
 								>
 									×
 								</IconButton>
 							</Box>
 
-							<Box sx={modalContentSx}>
-								<Box sx={{ ...modalScrollBodySx, maxHeight: "64vh" }}>
+							<Box sx={customChallanModalBodySx}>
+								<Box sx={customFormSectionSx}>
+									<Box sx={customFormSectionTitleSx}>
+										01 · Movement & Timing
+									</Box>
+									<Box sx={customFormSectionSubSx}>
+										Define the challan category, movement path and exact business date/time.
+									</Box>
+
 									<Box
 										sx={{
 											display: "grid",
-											gridTemplateColumns: "1fr 1fr",
+											gridTemplateColumns: {
+												xs: "1fr",
+												md: "1fr 1fr",
+											},
 											gap: 2,
-											mb: 2,
 										}}
 									>
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Challan Type
 											</Box>
-
 											<Box
 												component="select"
 												value={customChallanForm.challanType}
 												onChange={(e) => {
 													const nextType = e.target.value;
-
 													setCustomChallanForm((prev) => ({
 														...prev,
 														challanType: nextType,
@@ -16609,10 +18562,7 @@ export default function DispatchedItemsPage() {
 												sx={dispatchTripNativeSelectSx}
 											>
 												{CUSTOM_CHALLAN_TYPE_OPTIONS.map((option) => (
-													<option
-														key={option.value}
-														value={option.value}
-													>
+													<option key={option.value} value={option.value}>
 														{option.label}
 													</option>
 												))}
@@ -16621,15 +18571,18 @@ export default function DispatchedItemsPage() {
 
 										<TextField
 											label="Movement Mode"
-											value="Direct Dispatch"
-											disabled
+											placeholder="DIRECT_DISPATCH"
+											value={customChallanForm.movementMode}
+											onChange={(e) =>
+												updateCustomChallanField("movementMode", e.target.value)
+											}
 											sx={formFieldSx}
 										/>
+
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Challan Date & Time
 											</Box>
-
 											<TextField
 												fullWidth
 												type="datetime-local"
@@ -16640,6 +18593,7 @@ export default function DispatchedItemsPage() {
 												sx={dateTimeFieldSx}
 											/>
 										</Box>
+
 										<TextField
 											label="From Location"
 											placeholder="Dispatch / Customer Care / Store"
@@ -16659,7 +18613,27 @@ export default function DispatchedItemsPage() {
 											}
 											sx={formFieldSx}
 										/>
+									</Box>
+								</Box>
 
+								<Box sx={customFormSectionSx}>
+									<Box sx={customFormSectionTitleSx}>
+										02 · Party & Logistics
+									</Box>
+									<Box sx={customFormSectionSubSx}>
+										Project reference, client information and optional transport / handover details.
+									</Box>
+
+									<Box
+										sx={{
+											display: "grid",
+											gridTemplateColumns: {
+												xs: "1fr",
+												md: "1fr 1fr",
+											},
+											gap: 2,
+										}}
+									>
 										<TextField
 											label="PD No."
 											value={customChallanForm.pdNo}
@@ -16669,225 +18643,129 @@ export default function DispatchedItemsPage() {
 											sx={formFieldSx}
 										/>
 
+										<TextField
+											label="Client Name"
+											value={customChallanForm.clientName}
+											onChange={(e) =>
+												updateCustomChallanField("clientName", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="Client Address"
+											multiline
+											minRows={2}
+											value={customChallanForm.clientAddress}
+											onChange={(e) =>
+												updateCustomChallanField("clientAddress", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
+										<TextField
+											label="Purpose / Requirement"
+											multiline
+											minRows={2}
+											placeholder="Customer care replacement, site hardware requirement, job work, etc."
+											value={customChallanForm.purpose}
+											onChange={(e) =>
+												updateCustomChallanField("purpose", e.target.value)
+											}
+											sx={formFieldSx}
+										/>
+
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Driver Name
-
-												<Box
-													component="span"
-													sx={{
-														ml: 0.7,
-														color: "#64748b",
-														fontSize: 11,
-														fontWeight: 750,
-													}}
-												>
+												<Box component="span" sx={{ ml: 0.7, color: "#64748b", fontSize: 11, fontWeight: 750 }}>
 													(Optional)
 												</Box>
 											</Box>
-
 											<Box
 												component="select"
-												value={
-													customChallanForm.driverName ||
-													""
-												}
+												value={customChallanForm.driverName || ""}
 												onChange={(event) => {
-													const selectedValue =
-														String(
-															event.target.value || ""
-														);
-
-													if (
-														selectedValue ===
-														CREATE_NEW_DRIVER_OPTION
-													) {
-														openCreateDriverModal(
-															MASTER_CREATE_TARGET
-																.CUSTOM_CHALLAN
-														);
-
+													const selectedValue = String(event.target.value || "");
+													if (selectedValue === CREATE_NEW_DRIVER_OPTION) {
+														openCreateDriverModal(MASTER_CREATE_TARGET.CUSTOM_CHALLAN);
 														return;
 													}
-
-													/*
-													 * Custom challan stores driverName,
-													 * not the Driver UUID.
-													 */
-													updateCustomChallanField(
-														"driverName",
-														selectedValue
-													);
+													updateCustomChallanField("driverName", selectedValue);
 												}}
 												sx={dispatchTripNativeSelectSx}
 											>
-												<option value="">
-													No Driver / Leave Blank
-												</option>
-
-												<option
-													value={CREATE_NEW_DRIVER_OPTION}
-												>
-													＋ Create New Driver
-												</option>
-
-												{logisticsDrivers.map(
-													(driver) => {
-														const driverId =
-															String(
-																driver?.id || ""
-															).trim();
-
-														const driverName =
-															String(
-																driver?.name || ""
-															).trim();
-
-														if (!driverName) {
-															return null;
-														}
-
-														return (
-															<option
-																key={
-																	driverId ||
-																	driverName
-																}
-																value={driverName}
-															>
-																{driverName}
-															</option>
-														);
-													}
-												)}
-											</Box>
-
-											<Box
-												sx={{
-													mt: 0.7,
-													color: "rgba(255,255,255,.42)",
-													fontSize: 11,
-													fontWeight: 650,
-												}}
-											>
-												Optional for custom movements.
+												<option value="">No Driver / Leave Blank</option>
+												<option value={CREATE_NEW_DRIVER_OPTION}>＋ Create New Driver</option>
+												{customChallanForm.driverName &&
+													!logisticsDrivers.some(
+														(driver) =>
+															String(driver?.name || "").trim() ===
+															String(customChallanForm.driverName || "").trim()
+													) && (
+														<option value={customChallanForm.driverName}>
+															{customChallanForm.driverName} (Current)
+														</option>
+													)}
+												{logisticsDrivers.map((driver) => {
+													const driverId = String(driver?.id || "").trim();
+													const driverName = String(driver?.name || "").trim();
+													if (!driverName) return null;
+													return (
+														<option key={driverId || driverName} value={driverName}>
+															{driverName}
+														</option>
+													);
+												})}
 											</Box>
 										</Box>
 
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Vehicle Number
-
-												<Box
-													component="span"
-													sx={{
-														ml: 0.7,
-														color: "#64748b",
-														fontSize: 11,
-														fontWeight: 750,
-													}}
-												>
+												<Box component="span" sx={{ ml: 0.7, color: "#64748b", fontSize: 11, fontWeight: 750 }}>
 													(Optional)
 												</Box>
 											</Box>
-
 											<Box
 												component="select"
-												value={
-													customChallanForm.vehicleNumber ||
-													""
-												}
+												value={customChallanForm.vehicleNumber || ""}
 												onChange={(event) => {
-													const selectedValue =
-														String(
-															event.target.value || ""
-														);
-
-													if (
-														selectedValue ===
-														CREATE_NEW_VEHICLE_OPTION
-													) {
-														openCreateVehicleModal(
-															MASTER_CREATE_TARGET
-																.CUSTOM_CHALLAN
-														);
-
+													const selectedValue = String(event.target.value || "");
+													if (selectedValue === CREATE_NEW_VEHICLE_OPTION) {
+														openCreateVehicleModal(MASTER_CREATE_TARGET.CUSTOM_CHALLAN);
 														return;
 													}
-
-													/*
-													 * Custom challan stores vehicleNumber,
-													 * not the Vehicle UUID.
-													 */
-													updateCustomChallanField(
-														"vehicleNumber",
-														selectedValue
-													);
+													updateCustomChallanField("vehicleNumber", selectedValue);
 												}}
 												sx={dispatchTripNativeSelectSx}
 											>
-												<option value="">
-													No Vehicle / Leave Blank
-												</option>
-
-												<option
-													value={CREATE_NEW_VEHICLE_OPTION}
-												>
-													＋ Create New Vehicle
-												</option>
-
-												{logisticsVehicles.map(
-													(vehicle) => {
-														const vehicleId =
-															String(
-																vehicle?.id || ""
-															).trim();
-
-														const vehicleNumber =
-															String(
-																vehicle?.vehicleNumber ||
-																""
-															).trim();
-
-														const vehicleName =
-															String(
-																vehicle?.vehicleName ||
-																""
-															).trim();
-
-														if (!vehicleNumber) {
-															return null;
-														}
-
-														return (
-															<option
-																key={
-																	vehicleId ||
-																	vehicleNumber
-																}
-																value={vehicleNumber}
-															>
-																{vehicleNumber}
-																{vehicleName
-																	? ` - ${vehicleName}`
-																	: ""}
-															</option>
-														);
-													}
-												)}
-											</Box>
-
-											<Box
-												sx={{
-													mt: 0.7,
-													color: "rgba(255,255,255,.42)",
-													fontSize: 11,
-													fontWeight: 650,
-												}}
-											>
-												Optional for custom movements.
+												<option value="">No Vehicle / Leave Blank</option>
+												<option value={CREATE_NEW_VEHICLE_OPTION}>＋ Create New Vehicle</option>
+												{customChallanForm.vehicleNumber &&
+													!logisticsVehicles.some(
+														(vehicle) =>
+															String(vehicle?.vehicleNumber || "").trim() ===
+															String(customChallanForm.vehicleNumber || "").trim()
+													) && (
+														<option value={customChallanForm.vehicleNumber}>
+															{customChallanForm.vehicleNumber} (Current)
+														</option>
+													)}
+												{logisticsVehicles.map((vehicle) => {
+													const vehicleId = String(vehicle?.id || "").trim();
+													const vehicleNumber = String(vehicle?.vehicleNumber || "").trim();
+													const vehicleName = String(vehicle?.vehicleName || "").trim();
+													if (!vehicleNumber) return null;
+													return (
+														<option key={vehicleId || vehicleNumber} value={vehicleNumber}>
+															{vehicleNumber}{vehicleName ? ` - ${vehicleName}` : ""}
+														</option>
+													);
+												})}
 											</Box>
 										</Box>
+
 										{isSiteReturnChallanType(customChallanForm.challanType) && (
 											<TextField
 												label="Handed Over To"
@@ -16900,266 +18778,221 @@ export default function DispatchedItemsPage() {
 												sx={formFieldSx}
 											/>
 										)}
-										<TextField
-											label="Client Name"
-											value={customChallanForm.clientName}
-											onChange={(e) =>
-												updateCustomChallanField("clientName", e.target.value)
-											}
-											sx={formFieldSx}
-										/>
-
-										<TextField
-											label="Client Address"
-											value={customChallanForm.clientAddress}
-											onChange={(e) =>
-												updateCustomChallanField("clientAddress", e.target.value)
-											}
-											sx={formFieldSx}
-										/>
 									</Box>
+								</Box>
 
-									<TextField
-										fullWidth
-										multiline
-										minRows={2}
-										label="Purpose / Requirement"
-										placeholder="Example: Customer care replacement, assembly hardware required at site, missing hinge/screw/accessory, etc."
-										value={customChallanForm.purpose}
-										onChange={(e) =>
-											updateCustomChallanField("purpose", e.target.value)
-										}
-										sx={{
-											...formFieldSx,
-											mb: 2,
-										}}
-									/>
-
+								<Box sx={customFormSectionSx}>
 									<Box
 										sx={{
 											display: "flex",
 											alignItems: "center",
 											justifyContent: "space-between",
-											mb: 1.5,
+											gap: 2,
+											mb: 2,
 										}}
 									>
-										<Box
-											sx={{
-												color: "#fff",
-												fontWeight: 900,
-												fontSize: 15,
-											}}
-										>
-											Challan Items
+										<Box>
+											<Box sx={customFormSectionTitleSx}>
+												03 · Challan Items
+											</Box>
+											<Box sx={{ ...customFormSectionSubSx, mb: 0 }}>
+												Add, remove or correct every material / requirement line.
+											</Box>
 										</Box>
 
 										<Button
 											onClick={addCustomChallanItem}
 											sx={{
-												...modalSecondaryButtonSx,
-												color: "#fff",
+												...premiumButton,
+												minWidth: 120,
+												background: "linear-gradient(135deg,#6d28d9,#8b5cf6)",
 											}}
 										>
 											+ Add Item
 										</Button>
 									</Box>
 
-									{customChallanForm.items.map((item, index) => (
-										<Box
-											key={index}
-											sx={{
-												p: 1.6,
-												mb: 1.4,
-												borderRadius: "14px",
-												background: "rgba(255,255,255,.035)",
-												border: "1px solid rgba(255,255,255,.07)",
-											}}
-										>
-											<Box
-												sx={{
-													display: "flex",
-													justifyContent: "space-between",
-													alignItems: "center",
-													mb: 1.2,
-												}}
-											>
+									<Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+										{customChallanForm.items.map((item, index) => (
+											<Box key={`custom-item-${index}`} sx={customChallanItemCardSx}>
 												<Box
 													sx={{
-														color: "#93c5fd",
-														fontWeight: 900,
-														fontSize: 13,
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "space-between",
+														mb: 1.6,
 													}}
 												>
-													Item #{index + 1}
+													<Chip
+														size="small"
+														label={`ITEM ${String(index + 1).padStart(2, "0")}`}
+														sx={customItemNumberChipSx}
+													/>
+
+													{customChallanForm.items.length > 1 && (
+														<Button
+															onClick={() => removeCustomChallanItem(index)}
+															sx={{
+																minWidth: 0,
+																px: 1.3,
+																textTransform: "none",
+																fontWeight: 850,
+																fontSize: 11,
+																color: "#fca5a5",
+																background: "rgba(239,68,68,.08)",
+																border: "1px solid rgba(239,68,68,.16)",
+															}}
+														>
+															Remove
+														</Button>
+													)}
 												</Box>
 
-												<Button
-													size="small"
-													onClick={() => removeCustomChallanItem(index)}
+												<Box
 													sx={{
-														minWidth: 76,
-														height: 30,
-														borderRadius: "8px",
-														textTransform: "none",
-														fontWeight: 800,
-														color: "#fca5a5",
-														background: "rgba(239,68,68,.10)",
-														border: "1px solid rgba(239,68,68,.18)",
+														display: "grid",
+														gridTemplateColumns: {
+															xs: "1fr",
+															md: "minmax(260px,2fr) minmax(160px,1fr) 100px 120px 170px",
+														},
+														gap: 1.4,
+														mb: 1.4,
 													}}
 												>
-													Remove
-												</Button>
-											</Box>
+													<TextField
+														label="Description"
+														value={item.description}
+														onChange={(e) =>
+															updateCustomChallanItem(index, "description", e.target.value)
+														}
+														sx={formFieldSx}
+													/>
 
-											<Box
-												sx={{
-													display: "grid",
-													gridTemplateColumns: "2fr 1fr 90px 120px 170px",
-													gap: 1.4,
-													mb: 1.4,
-												}}
-											>
-												<TextField
-													label="Description"
-													value={item.description}
-													onChange={(e) =>
-														updateCustomChallanItem(
-															index,
-															"description",
-															e.target.value
-														)
-													}
-													sx={formFieldSx}
-												/>
+													<TextField
+														label="Line PD No. / Reference"
+														value={item.drawingNo}
+														onChange={(e) =>
+															updateCustomChallanItem(index, "drawingNo", e.target.value)
+														}
+														sx={formFieldSx}
+													/>
 
-												<TextField
-													label="Dwg No."
-													value={item.drawingNo}
-													onChange={(e) =>
-														updateCustomChallanItem(
-															index,
-															"drawingNo",
-															e.target.value
-														)
-													}
-													sx={formFieldSx}
-												/>
+													<TextField
+														label="Qty"
+														type="number"
+														inputProps={{ min: 0.0001, step: "any" }}
+														value={item.quantity}
+														onChange={(e) =>
+															updateCustomChallanItem(index, "quantity", e.target.value)
+														}
+														sx={formFieldSx}
+													/>
 
-												<TextField
-													label="Qty"
-													type="number"
-													value={item.quantity}
-													onChange={(e) =>
-														updateCustomChallanItem(
-															index,
-															"quantity",
-															e.target.value
-														)
-													}
-													sx={formFieldSx}
-												/>
-
-												<Box>
-													<Box sx={dispatchTripFieldLabelSx}>
-														UOM
+													<Box>
+														<Box sx={dispatchTripFieldLabelSx}>UOM</Box>
+														<Box
+															component="select"
+															value={item.uom || "PIECES"}
+															onChange={(e) =>
+																updateCustomChallanItem(index, "uom", e.target.value)
+															}
+															sx={{ ...dispatchTripNativeSelectSx, height: 56 }}
+														>
+															{CUSTOM_CHALLAN_UOM_OPTIONS.map((option) => (
+																<option key={option.value} value={option.value}>
+																	{option.label}
+																</option>
+															))}
+														</Box>
 													</Box>
 
-													<Box
-														component="select"
-														value={item.uom || "PIECES"}
-														onChange={(e) =>
-															updateCustomChallanItem(
-																index,
-																"uom",
-																e.target.value
-															)
-														}
-														sx={{
-															...dispatchTripNativeSelectSx,
-															height: 56,
-														}}
-													>
-														{CUSTOM_CHALLAN_UOM_OPTIONS.map((option) => (
-															<option
-																key={option.value}
-																value={option.value}
-															>
-																{option.label}
-															</option>
-														))}
+													<Box>
+														<Box sx={dispatchTripFieldLabelSx}>Nature</Box>
+														<Box
+															component="select"
+															value={item.returnable ? "RETURNABLE" : "NON_RETURNABLE"}
+															onChange={(e) =>
+																updateCustomChallanItem(
+																	index,
+																	"returnable",
+																	e.target.value === "RETURNABLE"
+																)
+															}
+															sx={{ ...dispatchTripNativeSelectSx, height: 56 }}
+														>
+															<option value="NON_RETURNABLE">Non Returnable</option>
+															<option value="RETURNABLE">Returnable</option>
+														</Box>
 													</Box>
 												</Box>
 
-												<Box>
-													<Box sx={dispatchTripFieldLabelSx}>
-														Nature
-													</Box>
-
-													<Box
-														component="select"
-														value={item.returnable ? "RETURNABLE" : "NON_RETURNABLE"}
-														onChange={(e) =>
-															updateCustomChallanItem(
-																index,
-																"returnable",
-																e.target.value === "RETURNABLE"
-															)
-														}
-														sx={{
-															...dispatchTripNativeSelectSx,
-															height: 56,
-														}}
-													>
-														<option value="NON_RETURNABLE">
-															Non Returnable
-														</option>
-
-														<option value="RETURNABLE">
-															Returnable
-														</option>
-													</Box>
-												</Box>
+												<TextField
+													fullWidth
+													label="Remarks"
+													value={item.remarks}
+													onChange={(e) =>
+														updateCustomChallanItem(index, "remarks", e.target.value)
+													}
+													sx={formFieldSx}
+												/>
 											</Box>
-
-											<TextField
-												fullWidth
-												label="Remarks"
-												value={item.remarks}
-												onChange={(e) =>
-													updateCustomChallanItem(
-														index,
-														"remarks",
-														e.target.value
-													)
-												}
-												sx={formFieldSx}
-											/>
-										</Box>
-									))}
+										))}
+									</Box>
 								</Box>
 							</Box>
 
-							<Box sx={modalFooterSx}>
+							<Box sx={customChallanStickyFooterSx}>
+								<Box sx={{ flex: 1, minWidth: 0 }}>
+									<Box sx={{ color: "#fff", fontSize: 12, fontWeight: 900 }}>
+										{customChallanForm.items.length} Item
+										{customChallanForm.items.length === 1 ? "" : "s"}
+									</Box>
+									<Box
+										sx={{
+											mt: 0.25,
+											color: "rgba(255,255,255,.43)",
+											fontSize: 10.5,
+											fontWeight: 650,
+										}}
+									>
+										{isEditingCustomChallan
+											? "Saving updates the existing record and all future PDF previews/downloads."
+											: "Review the movement details before generating the challan."}
+									</Box>
+								</Box>
+
 								<Button
-									disabled={customChallanLoading}
-									onClick={() => setCustomChallanOpen(false)}
+									disabled={
+										customChallanLoading ||
+										customChallanDetailLoading
+									}
+									onClick={closeCustomChallanModal}
 									sx={modalSecondaryButtonSx}
 								>
 									Cancel
 								</Button>
 
 								<Button
-									disabled={customChallanLoading}
+									disabled={
+										customChallanLoading ||
+										customChallanDetailLoading
+									}
 									onClick={submitCustomChallan}
 									sx={{
 										...premiumButton,
-										background:
-											"linear-gradient(135deg,#7c3aed,#8b5cf6)",
+										minWidth: 210,
+										background: isEditingCustomChallan
+											? "linear-gradient(135deg,#d97706,#f59e0b)"
+											: "linear-gradient(135deg,#6d28d9,#8b5cf6)",
 									}}
 								>
 									{customChallanLoading
-										? "Generating..."
-										: "Generate Custom Challan"}
+										? isEditingCustomChallan
+											? "Saving Changes..."
+											: "Generating..."
+										: isEditingCustomChallan
+											? "Save Changes & Refresh PDF"
+											: "Generate Custom Challan"}
 								</Button>
 							</Box>
 						</Box>
@@ -21416,6 +23249,19 @@ export default function DispatchedItemsPage() {
 													</Box>
 
 													<Box sx={challanHistoryActionsSx}>
+														{isAdmin && (
+															<Button
+																size="small"
+																disabled={customChallanDetailLoading}
+																onClick={() =>
+																	openEditCustomChallanModal(challan)
+																}
+																sx={customChallanEditButtonSx}
+															>
+																Edit Details
+															</Button>
+														)}
+
 														<Button
 															size="small"
 															onClick={async () => {

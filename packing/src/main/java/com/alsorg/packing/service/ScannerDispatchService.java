@@ -109,6 +109,9 @@ public class ScannerDispatchService {
         return dto;
     }
 
+    /**
+     * Backward-compatible overload used by older callers.
+     */
     @Transactional
     public DispatchTripPdfResult dispatchSingleByScan(
             String rawScanText,
@@ -116,7 +119,34 @@ public class ScannerDispatchService {
             Set<String> allowedPlants,
             UUID driverId,
             UUID vehicleId,
-            LocalDateTime tripStart) {
+            LocalDateTime dispatchTime) {
+
+        return dispatchSingleByScan(
+                rawScanText,
+                username,
+                allowedPlants,
+                driverId,
+                vehicleId,
+                dispatchTime,
+                null);
+    }
+
+    /**
+     * Scanner single-item dispatch.
+     *
+     * helperLoaderCount is deliberately forwarded to DispatchChallanService so
+     * the value is persisted on DispatchedItem and printed in the PDF.
+     */
+    @Transactional
+    public DispatchTripPdfResult dispatchSingleByScan(
+            String rawScanText,
+            String username,
+            Set<String> allowedPlants,
+            UUID driverId,
+            UUID vehicleId,
+            LocalDateTime dispatchTime,
+            Integer helperLoaderCount) {
+
         ResolvedScan resolved = resolve(rawScanText);
 
         assertScanPlantAccess(
@@ -127,11 +157,15 @@ public class ScannerDispatchService {
                 List.of(resolved.dispatchedItem.getZohoItemId()),
                 driverId,
                 vehicleId,
-                tripStart,
+                dispatchTime,
+                helperLoaderCount,
                 username,
                 allowedPlants);
     }
 
+    /**
+     * Backward-compatible overload used by older callers.
+     */
     @Transactional
     public DispatchTripPdfResult dispatchBulkByScans(
             List<String> rawScanTexts,
@@ -139,9 +173,36 @@ public class ScannerDispatchService {
             Set<String> allowedPlants,
             UUID driverId,
             UUID vehicleId,
-            LocalDateTime tripStart) {
+            LocalDateTime dispatchTime) {
+
+        return dispatchBulkByScans(
+                rawScanTexts,
+                username,
+                allowedPlants,
+                driverId,
+                vehicleId,
+                dispatchTime,
+                null);
+    }
+
+    /**
+     * Scanner bulk dispatch.
+     *
+     * QR and manually-entered SN=<stickerNumber> values are resolved through the
+     * exact same validation path. Driver/vehicle/helper-loader fields are optional.
+     */
+    @Transactional
+    public DispatchTripPdfResult dispatchBulkByScans(
+            List<String> rawScanTexts,
+            String username,
+            Set<String> allowedPlants,
+            UUID driverId,
+            UUID vehicleId,
+            LocalDateTime dispatchTime,
+            Integer helperLoaderCount) {
+
         if (rawScanTexts == null || rawScanTexts.isEmpty()) {
-            throw new RuntimeException("No QR scans provided");
+            throw new RuntimeException("No QR / sticker scans provided");
         }
 
         Map<String, ResolvedScan> unique = new LinkedHashMap<>();
@@ -161,9 +222,7 @@ public class ScannerDispatchService {
                                 + resolved.dispatchedItem.getName());
             }
 
-            unique.put(
-                    id,
-                    resolved);
+            unique.put(id, resolved);
         }
 
         List<String> itemIds = unique.values()
@@ -175,7 +234,8 @@ public class ScannerDispatchService {
                 itemIds,
                 driverId,
                 vehicleId,
-                tripStart,
+                dispatchTime,
+                helperLoaderCount,
                 username,
                 allowedPlants);
     }

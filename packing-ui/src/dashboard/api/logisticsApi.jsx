@@ -822,6 +822,105 @@ export async function fetchCustomChallans() {
   );
 }
 
+export async function fetchCustomChallanDetails(
+  challanNumber
+) {
+  const cleanNumber =
+    String(
+      challanNumber || ""
+    ).trim();
+
+  if (!cleanNumber) {
+    throw new Error(
+      "Custom challan number missing"
+    );
+  }
+
+  return requestJson(
+    `/api/chalaan/custom/${encodeURIComponent(
+      cleanNumber
+    )}`,
+    {
+      method: "GET",
+      errorMessage:
+        "Failed to load custom challan details",
+    }
+  );
+}
+
+export async function updateCustomChallan(
+  challanNumber,
+  payload
+) {
+  const cleanNumber =
+    String(
+      challanNumber || ""
+    ).trim();
+
+  if (!cleanNumber) {
+    throw new Error(
+      "Custom challan number missing"
+    );
+  }
+
+  const finalDispatchTime =
+    normalizeLocalDateTime(
+      payload?.dispatchTime
+    );
+
+  if (!finalDispatchTime) {
+    throw new Error(
+      "Custom challan date and time is required"
+    );
+  }
+
+  const driverName =
+    String(
+      payload?.driverName || ""
+    ).trim() || null;
+
+  const vehicleNumber =
+    String(
+      payload?.vehicleNumber || ""
+    ).trim() || null;
+
+  const res = await requestBlob(
+    `/api/chalaan/custom/${encodeURIComponent(
+      cleanNumber
+    )}?preview=true`,
+    {
+      method: "PUT",
+      body: {
+        ...payload,
+        driverName,
+        vehicleNumber,
+        dispatchTime:
+          finalDispatchTime,
+      },
+      errorMessage:
+        "Custom challan update failed",
+    }
+  );
+
+  const blob =
+    await res.blob();
+
+  return {
+    blob,
+    challanNo:
+      getHeaderValue(
+        res,
+        "X-Challan-No",
+        cleanNumber
+      ),
+    filename:
+      getPdfFilename(
+        res,
+        `${cleanNumber}.pdf`
+      ),
+  };
+}
+
 export async function downloadCustomChallan(
   challanNumber
 ) {

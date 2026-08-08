@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 @Service
 @Transactional
 public class CustomChallanService {
@@ -26,6 +29,9 @@ public class CustomChallanService {
 
     private final CustomChallanRepository repository;
     private final ChalaanPdfService pdfService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public CustomChallanService(
             CustomChallanRepository repository,
@@ -52,32 +58,128 @@ public class CustomChallanService {
         CustomChallan challan = new CustomChallan();
 
         challan.setChallanNumber(challanNo);
-        challan.setChallanType(clean(request.challanType()));
-        challan.setFromLocation(clean(request.fromLocation()));
-        challan.setToLocation(clean(request.toLocation()));
-        challan.setPdNo(clean(request.pdNo()));
+        challan.setGeneratedBy(actor);
+        challan.setGeneratedAt(generatedAt);
+
+        applyHeaderFields(
+                challan,
+                request);
+
+        addSubmittedItems(
+                challan,
+                request.items());
+
+        repository.save(challan);
+
+        return buildPdfResult(challan);
+    }
+
+    /*
+     * ============================================================
+     * ADMIN CUSTOM-CHALLAN EDIT
+     * ============================================================
+     */
+
+    @Transactional(readOnly = true)
+    public CustomChallanRequest getForAdminEdit(
+            String challanNumber) {
+
+        return toRequest(
+                findRequired(challanNumber));
+    }
+
+    /**
+     * Updates an existing custom challan without changing its challan number or
+     * original generatedBy value. The PDF is not stored separately; every later
+     * preview/download is rebuilt from the corrected database values.
+     */
+    public DispatchTripPdfResult updateAsAdmin(
+            String challanNumber,
+            CustomChallanRequest request,
+            String adminUsername) {
+
+        validateRequest(request);
+
+        CustomChallan challan = findRequired(
+                challanNumber);
+
+        applyHeaderFields(
+                challan,
+                request);
+
+        if (request.dispatchTime() != null) {
+            challan.setGeneratedAt(
+                    request.dispatchTime());
+        }
+
+        /*
+         * Keep challanNumber and generatedBy immutable.
+         *
+         * We explicitly remove old child rows through EntityManager before adding
+         * the submitted lines. That makes item deletion/editing work even when the
+         * entity mapping does not use orphanRemoval=true.
+         */
+        replaceSubmittedItems(
+                challan,
+                request.items());
+
+        repository.save(challan);
+        entityManager.flush();
+
+        return buildPdfResult(challan);
+    }
+
+    private void applyHeaderFields(
+            CustomChallan challan,
+            CustomChallanRequest request) {
+
+        challan.setChallanType(
+                clean(request.challanType()));
+
+        challan.setFromLocation(
+                clean(request.fromLocation()));
+
+        challan.setToLocation(
+                clean(request.toLocation()));
+
+        challan.setPdNo(
+                clean(request.pdNo()));
+
         challan.setDriverName(
-                cleanNullable(
-                        request.driverName()));
+                cleanNullable(request.driverName()));
 
         challan.setVehicleNumber(
-                cleanNullable(
-                        request.vehicleNumber()));
+                cleanNullable(request.vehicleNumber()));
 
         challan.setHandedOverTo(
-                cleanNullable(
-                        request.handedOverTo()));
-        challan.setClientName(clean(request.clientName()));
-        challan.setClientAddress(clean(request.clientAddress()));
-        challan.setPurpose(clean(request.purpose()));
+                isType(request.challanType(), "SITE_RETURN")
+                        ? cleanNullable(request.handedOverTo())
+                        : null);
+
+        challan.setClientName(
+                clean(request.clientName()));
+
+        challan.setClientAddress(
+                clean(request.clientAddress()));
+
+        challan.setPurpose(
+                clean(request.purpose()));
+
         challan.setMovementMode(
                 isBlank(request.movementMode())
                         ? "DIRECT_DISPATCH"
                         : clean(request.movementMode()));
-        challan.setGeneratedBy(actor);
-        challan.setGeneratedAt(generatedAt);
+    }
 
-        for (CustomChallanItemRequest itemRequest : request.items()) {
+    private void addSubmittedItems(
+            CustomChallan challan,
+            List<CustomChallanItemRequest> itemRequests) {
+
+        if (itemRequests == null) {
+            return;
+        }
+
+        for (CustomChallanItemRequest itemRequest : itemRequests) {
             if (itemRequest == null || isBlank(itemRequest.description())) {
                 continue;
             }
@@ -93,27 +195,92 @@ public class CustomChallanService {
                             ? 1D
                             : itemRequest.quantity());
 
-            item.setUom(normalizeUom(itemRequest.uom()));
+            item.setUom(
+                    normalizeUom(itemRequest.uom()));
 
-            item.setReturnable(Boolean.TRUE.equals(itemRequest.returnable()));
-            item.setRemarks(clean(itemRequest.remarks()));
+            item.setReturnable(
+                    Boolean.TRUE.equals(itemRequest.returnable()));
+
+            item.setRemarks(
+                    clean(itemRequest.remarks()));
 
             challan.getItems().add(item);
         }
+    }
 
-        repository.save(challan);
+    private void replaceSubmittedItems(
+            CustomChallan challan,
+            List<CustomChallanItemRequest> itemRequests) {
+
+        List<CustomChallanItem> existingItems = challan.getItems() == null
+                ? List.of()
+                : new ArrayList<>(challan.getItems());
+
+        if (challan.getItems() != null) {
+            challan.getItems().clear();
+        }
+
+        for (CustomChallanItem existingItem : existingItems) {
+            if (existingItem == null) {
+                continue;
+            }
+
+            CustomChallanItem managedItem = entityManager.contains(existingItem)
+                    ? existingItem
+                    : entityManager.merge(existingItem);
+
+            entityManager.remove(managedItem);
+        }
+
+        entityManager.flush();
+
+        addSubmittedItems(
+                challan,
+                itemRequests);
+
+        /*
+         * The parent already exists and is managed during an Admin update.
+         * Persist the newly-created child rows explicitly so this works whether the
+         * entity relationship is configured with PERSIST, MERGE or ALL cascade.
+         */
+        for (CustomChallanItem submittedItem : challan.getItems()) {
+            if (submittedItem != null && !entityManager.contains(submittedItem)) {
+                entityManager.persist(submittedItem);
+            }
+        }
+    }
+
+    private DispatchTripPdfResult buildPdfResult(
+            CustomChallan challan) {
 
         CustomChallanRequest pdfRequest = toRequest(challan);
 
         byte[] pdf = pdfService.generateCustomChalaan(
                 pdfRequest,
-                challanNo,
-                actor);
+                challan.getChallanNumber(),
+                challan.getGeneratedBy());
 
         return new DispatchTripPdfResult(
                 null,
-                challanNo,
+                challan.getChallanNumber(),
                 pdf);
+    }
+
+    private CustomChallan findRequired(
+            String challanNumber) {
+
+        String cleanNumber = cleanNullable(
+                challanNumber);
+
+        if (cleanNumber == null) {
+            throw new RuntimeException(
+                    "Custom challan number is required");
+        }
+
+        return repository
+                .findById(cleanNumber)
+                .orElseThrow(() -> new RuntimeException(
+                        "Custom challan not found: " + cleanNumber));
     }
 
     @Transactional(readOnly = true)
@@ -128,22 +295,8 @@ public class CustomChallanService {
     @Transactional(readOnly = true)
     public DispatchTripPdfResult download(
             String challanNumber) {
-        CustomChallan challan = repository
-                .findById(challanNumber)
-                .orElseThrow(() -> new RuntimeException(
-                        "Custom challan not found: " + challanNumber));
-
-        CustomChallanRequest request = toRequest(challan);
-
-        byte[] pdf = pdfService.generateCustomChalaan(
-                request,
-                challan.getChallanNumber(),
-                challan.getGeneratedBy());
-
-        return new DispatchTripPdfResult(
-                null,
-                challan.getChallanNumber(),
-                pdf);
+        return buildPdfResult(
+                findRequired(challanNumber));
     }
 
     private CustomChallanRequest toRequest(
@@ -337,17 +490,7 @@ public class CustomChallanService {
             }
         }
 
-        CustomChallanRequest request = toRequest(challan);
-
-        byte[] pdf = pdfService.generateCustomChalaan(
-                request,
-                challan.getChallanNumber(),
-                challan.getGeneratedBy());
-
-        return new DispatchTripPdfResult(
-                null,
-                challan.getChallanNumber(),
-                pdf);
+        return buildPdfResult(challan);
     }
 
     private String cleanNullable(
