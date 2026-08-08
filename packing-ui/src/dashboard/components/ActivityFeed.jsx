@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 const IST_OFFSET_MINUTES = 330;
 const DEFAULT_PAGE_SIZE = 5;
@@ -449,6 +450,13 @@ function ActivityDetailModal({
 }) {
   if (!log) return null;
 
+  const portalTarget =
+    typeof document !== "undefined"
+      ? document.body
+      : null;
+
+  if (!portalTarget) return null;
+
   const meta = activityMeta(
     log.action,
     log.role
@@ -461,23 +469,37 @@ function ActivityDetailModal({
   const traceSearch =
     getTraceSearchValue(log);
 
-  return (
+  /*
+   * IMPORTANT:
+   * Render the inspector into document.body instead of inside the
+   * dashboard activity card. The dashboard surface uses blur/overflow
+   * effects which can create a containing/clipping context for fixed
+   * descendants in Chromium. Portalling the modal keeps it centered to
+   * the real viewport and prevents the misalignment shown previously.
+   */
+  return createPortal(
     <div
       style={detailOverlay}
+      role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose?.();
         }
       }}
     >
-      <div style={detailModal}>
+      <div
+        style={detailModal}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${log._actionLabel || "Activity"} details`}
+      >
         <div style={detailModalHeader}>
           <div style={detailIdentity}>
             <div style={detailIcon(meta)}>
               {meta.icon}
             </div>
 
-            <div style={{ minWidth: 0 }}>
+            <div style={detailHeaderCopy}>
               <div style={detailEyebrow}>
                 {meta.label.toUpperCase()} ACTIVITY
               </div>
@@ -496,6 +518,7 @@ function ActivityDetailModal({
             type="button"
             onClick={onClose}
             style={detailCloseButton}
+            aria-label="Close activity details"
           >
             ×
           </button>
@@ -503,34 +526,50 @@ function ActivityDetailModal({
 
         <div style={detailSummaryGrid}>
           <div style={summaryTile}>
-            <span>Performed By</span>
-            <strong>{log._performedBy}</strong>
+            <span style={summaryTileLabel}>Performed By</span>
+            <strong style={summaryTileValue}>{log._performedBy}</strong>
           </div>
 
           <div style={summaryTile}>
-            <span>Role</span>
-            <strong>{log._role}</strong>
+            <span style={summaryTileLabel}>Role</span>
+            <strong style={summaryTileValue}>{log._role}</strong>
           </div>
 
           <div style={summaryTile}>
-            <span>Status Flow</span>
-            <strong>
+            <span style={summaryTileLabel}>Status Flow</span>
+            <strong style={summaryTileValue}>
               {statusLabel(log._fromStatus) || "—"} →{" "}
               {statusLabel(log._toStatus) || "—"}
             </strong>
           </div>
 
           <div style={summaryTile}>
-            <span>Activity Time</span>
-            <strong>{formatDate(log._activityTime)}</strong>
+            <span style={summaryTileLabel}>Activity Time</span>
+            <strong style={summaryTileValue}>
+              {formatDate(log._activityTime)}
+            </strong>
           </div>
         </div>
 
-        <div style={detailSectionTitle}>
-          Complete Event Payload
+        <div style={detailPayloadHeader}>
+          <div>
+            <div style={detailSectionTitle}>
+              Complete Event Payload
+            </div>
+            <div style={detailSectionSubtitle}>
+              Every field returned by the activity API for this exact event.
+            </div>
+          </div>
+
+          <div style={detailFieldCount}>
+            {fields.length} fields
+          </div>
         </div>
 
-        <div style={detailFields}>
+        <div
+          style={detailFields}
+          className="packflow-activity-scroll"
+        >
           {fields.map(([key, value]) => (
             <div key={key} style={detailField}>
               <div style={detailFieldLabel}>
@@ -548,19 +587,21 @@ function ActivityDetailModal({
 
         <div style={detailFooter}>
           <div style={detailHint}>
-            Every field returned by the activity API is shown above.
+            Click “Inspect linked record” to trace the related item, packet, sticker or challan.
           </div>
 
           {traceSearch && onInspectRecord && (
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                onClose?.();
+
                 onInspectRecord({
                   search: traceSearch,
                   title: `Trace: ${log._itemName}`,
                   type: "all",
-                })
-              }
+                });
+              }}
               style={inspectButton(meta.accent)}
             >
               Inspect linked record →
@@ -568,7 +609,8 @@ function ActivityDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    portalTarget
   );
 }
 
@@ -1843,47 +1885,63 @@ const emptyText = {
 const detailOverlay = {
   position: "fixed",
   inset: 0,
-  zIndex: 20000,
+  zIndex: 2147483000,
   padding: 18,
-  display: "grid",
-  placeItems: "center",
+  boxSizing: "border-box",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
   background:
-    "rgba(2,6,23,.82)",
-  backdropFilter: "blur(14px)",
+    "radial-gradient(circle at 18% 12%,rgba(59,130,246,.16),transparent 30%),radial-gradient(circle at 82% 88%,rgba(34,197,94,.08),transparent 28%),rgba(2,6,23,.88)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
 };
 
 const detailModal = {
-  width: "min(940px,100%)",
-  maxHeight:
-    "min(860px,calc(100vh - 36px))",
+  width: "min(1040px,calc(100vw - 36px))",
+  height: "min(820px,calc(100vh - 36px))",
+  maxWidth: "1040px",
+  maxHeight: "calc(100vh - 36px)",
+  minHeight: 560,
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
   borderRadius: 24,
   background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,#0f172a,#08101d)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 32%),linear-gradient(180deg,#0f172a,#08101d)",
   border:
-    "1px solid rgba(96,165,250,.16)",
+    "1px solid rgba(96,165,250,.18)",
   boxShadow:
-    "0 40px 110px rgba(0,0,0,.65)",
+    "0 44px 120px rgba(0,0,0,.72)",
+  color: "#fff",
 };
 
 const detailModalHeader = {
   flexShrink: 0,
-  padding: "18px 20px",
+  minHeight: 78,
+  padding: "16px 20px",
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 14,
+  alignItems: "center",
+  gap: 16,
+  background:
+    "linear-gradient(135deg,rgba(59,130,246,.08),rgba(255,255,255,.015))",
   borderBottom:
     "1px solid rgba(148,163,184,.08)",
 };
 
 const detailIdentity = {
   minWidth: 0,
+  flex: 1,
   display: "flex",
   alignItems: "center",
   gap: 12,
+};
+
+const detailHeaderCopy = {
+  minWidth: 0,
+  flex: 1,
 };
 
 const detailIcon = (meta) => ({
@@ -1939,26 +1997,52 @@ const detailSummaryGrid = {
   flexShrink: 0,
   display: "grid",
   gridTemplateColumns:
-    "repeat(4,minmax(0,1fr))",
-  gap: 8,
-  padding: "12px 20px",
+    "repeat(auto-fit,minmax(185px,1fr))",
+  gap: 9,
+  padding: "14px 20px 12px",
 };
 
 const summaryTile = {
   minWidth: 0,
-  padding: 11,
+  minHeight: 64,
+  padding: "11px 12px",
   borderRadius: 13,
   background:
-    "rgba(255,255,255,.035)",
+    "linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.025))",
   border:
-    "1px solid rgba(148,163,184,.065)",
+    "1px solid rgba(148,163,184,.075)",
   display: "flex",
   flexDirection: "column",
+  justifyContent: "center",
   gap: 5,
 };
 
+const summaryTileLabel = {
+  color: "#7f8ea3",
+  fontSize: 8.5,
+  fontWeight: 950,
+  letterSpacing: ".055em",
+  textTransform: "uppercase",
+};
+
+const summaryTileValue = {
+  color: "#f8fafc",
+  fontSize: 11.5,
+  fontWeight: 900,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
+};
+
+const detailPayloadHeader = {
+  flexShrink: 0,
+  padding: "6px 20px 10px",
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
 const detailSectionTitle = {
-  padding: "4px 20px 8px",
   color: "#94a3b8",
   fontSize: 8.5,
   fontWeight: 950,
@@ -1966,54 +2050,88 @@ const detailSectionTitle = {
   textTransform: "uppercase",
 };
 
+const detailSectionSubtitle = {
+  marginTop: 3,
+  color: "#64748b",
+  fontSize: 9,
+  fontWeight: 700,
+};
+
+const detailFieldCount = {
+  flexShrink: 0,
+  minHeight: 24,
+  padding: "0 8px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  color: "#bfdbfe",
+  background: "rgba(59,130,246,.08)",
+  border: "1px solid rgba(96,165,250,.14)",
+  fontSize: 8,
+  fontWeight: 900,
+};
+
 const detailFields = {
+  flex: 1,
   minHeight: 0,
   overflowY: "auto",
+  overflowX: "hidden",
+  alignContent: "start",
   display: "grid",
   gridTemplateColumns:
-    "repeat(2,minmax(0,1fr))",
-  gap: 8,
-  padding: "0 20px 16px",
+    "repeat(auto-fit,minmax(280px,1fr))",
+  gap: 9,
+  padding: "0 20px 18px",
   scrollbarWidth: "thin",
   scrollbarColor:
     "#3b82f6 rgba(15,23,42,.72)",
+  scrollbarGutter: "stable",
 };
 
 const detailField = {
   minWidth: 0,
-  padding: 11,
+  minHeight: 58,
+  padding: "10px 11px",
   borderRadius: 12,
   background:
-    "rgba(2,6,23,.34)",
+    "linear-gradient(180deg,rgba(2,6,23,.40),rgba(2,6,23,.30))",
   border:
-    "1px solid rgba(148,163,184,.055)",
+    "1px solid rgba(148,163,184,.06)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-start",
 };
 
 const detailFieldLabel = {
-  color: "#64748b",
+  color: "#718096",
   fontSize: 8,
   fontWeight: 950,
   textTransform: "uppercase",
-  letterSpacing: ".05em",
+  letterSpacing: ".055em",
+  lineHeight: 1.2,
 };
 
 const detailFieldValue = {
-  marginTop: 5,
-  color: "#e2e8f0",
-  fontSize: 10.5,
-  fontWeight: 750,
+  marginTop: 6,
+  color: "#f1f5f9",
+  fontSize: 11,
+  fontWeight: 800,
   whiteSpace: "pre-wrap",
   overflowWrap: "anywhere",
-  lineHeight: 1.5,
+  wordBreak: "break-word",
+  lineHeight: 1.45,
 };
 
 const detailFooter = {
   flexShrink: 0,
-  padding: "12px 20px",
+  minHeight: 58,
+  padding: "10px 20px",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
+  flexWrap: "wrap",
+  background: "rgba(2,6,23,.24)",
   borderTop:
     "1px solid rgba(148,163,184,.08)",
 };
