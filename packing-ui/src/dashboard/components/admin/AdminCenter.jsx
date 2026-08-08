@@ -189,6 +189,65 @@ const formatDateTime = (value) => {
     });
 };
 
+
+const getCreatedBy = (row) =>
+    row?.createdBy ||
+    row?.generatedBy ||
+    row?.raisedBy ||
+    row?.addedBy ||
+    "-";
+
+const getPackedBy = (row) =>
+    row?.packedBy ||
+    row?.stickerGeneratedBy ||
+    row?.generatedBy ||
+    "-";
+
+const getDispatchedBy = (row) =>
+    row?.dispatchedBy ||
+    row?.dispatchBy ||
+    row?.tripStartedBy ||
+    "-";
+
+const getCreatedAt = (row) =>
+    row?.createdAt ||
+    row?.generatedAt ||
+    row?.addedAt ||
+    null;
+
+const getPackedAt = (row) =>
+    row?.packedAt ||
+    row?.stickerGeneratedAt ||
+    row?.packingDate ||
+    null;
+
+const getDispatchedAt = (row) =>
+    row?.dispatchedAt ||
+    row?.tripStartedAt ||
+    row?.dispatchDate ||
+    null;
+
+const hasPackedLifecycle = (row) =>
+    Boolean(
+        row?.packedBy ||
+        row?.packedAt ||
+        row?.stickerNumber ||
+        String(row?.status || "")
+            .toUpperCase()
+            .includes("PACK")
+    );
+
+const hasDispatchedLifecycle = (row) =>
+    Boolean(
+        row?.dispatchedBy ||
+        row?.dispatchedAt ||
+        row?.challanNumber ||
+        row?.chalaanNumber ||
+        String(row?.status || "")
+            .toUpperCase()
+            .includes("DISPATCH")
+    );
+
 const parseJsonObject = (value) => {
     if (!value) return {};
 
@@ -244,10 +303,7 @@ function ResultPagination({
     onPageChange,
     disabled,
 }) {
-    if (
-        !page ||
-        Number(page.totalPages || 0) <= 1
-    ) {
+    if (!page) {
         return null;
     }
 
@@ -255,54 +311,174 @@ function ResultPagination({
         Number(page.number || 0);
 
     const totalPages =
-        Number(page.totalPages || 0);
+        Math.max(
+            1,
+            Number(page.totalPages || 0)
+        );
+
+    const totalElements =
+        Number(page.totalElements || 0);
+
+    const pageSize =
+        Math.max(
+            1,
+            Number(page.size || 20)
+        );
+
+    const startRecord =
+        totalElements === 0
+            ? 0
+            : currentPage * pageSize + 1;
+
+    const endRecord =
+        Math.min(
+            (currentPage + 1) * pageSize,
+            totalElements
+        );
+
+    const pageWindow = [];
+
+    const firstVisible =
+        Math.max(
+            0,
+            Math.min(
+                currentPage - 2,
+                totalPages - 5
+            )
+        );
+
+    const lastVisible =
+        Math.min(
+            totalPages - 1,
+            firstVisible + 4
+        );
+
+    for (
+        let index = firstVisible;
+        index <= lastVisible;
+        index += 1
+    ) {
+        pageWindow.push(index);
+    }
 
     return (
-        <div style={paginationRow}>
-            <button
-                type="button"
-                disabled={
-                    disabled ||
-                    currentPage <= 0
-                }
-                onClick={() =>
-                    onPageChange(
-                        currentPage - 1
-                    )
-                }
-                style={paginationButton(
-                    disabled ||
-                    currentPage <= 0
-                )}
-            >
-                ← Previous
-            </button>
-
-            <div style={paginationText}>
-                Page {currentPage + 1} of{" "}
-                {totalPages}
+        <div style={paginationShell}>
+            <div style={paginationRecordMeta}>
+                {totalElements > 0
+                    ? `Showing ${startRecord}–${endRecord} of ${totalElements}`
+                    : "No records"}
             </div>
 
-            <button
-                type="button"
-                disabled={
-                    disabled ||
-                    currentPage >=
-                    totalPages - 1
-                }
-                onClick={() =>
-                    onPageChange(
-                        currentPage + 1
-                    )
-                }
-                style={paginationButton(
-                    disabled ||
-                    currentPage >=
-                    totalPages - 1
-                )}
-            >
-                Next →
-            </button>
+            <div style={paginationRow}>
+                <button
+                    type="button"
+                    disabled={
+                        disabled ||
+                        currentPage <= 0
+                    }
+                    onClick={() =>
+                        onPageChange(0)
+                    }
+                    style={paginationIconButton(
+                        disabled ||
+                        currentPage <= 0
+                    )}
+                    title="First page"
+                >
+                    «
+                </button>
+
+                <button
+                    type="button"
+                    disabled={
+                        disabled ||
+                        currentPage <= 0
+                    }
+                    onClick={() =>
+                        onPageChange(
+                            currentPage - 1
+                        )
+                    }
+                    style={paginationButton(
+                        disabled ||
+                        currentPage <= 0
+                    )}
+                >
+                    ← Previous
+                </button>
+
+                <div style={paginationNumberRow}>
+                    {pageWindow.map(
+                        (pageNumber) => (
+                            <button
+                                type="button"
+                                key={pageNumber}
+                                disabled={disabled}
+                                onClick={() =>
+                                    onPageChange(
+                                        pageNumber
+                                    )
+                                }
+                                style={paginationNumberButton(
+                                    pageNumber ===
+                                    currentPage,
+                                    disabled
+                                )}
+                            >
+                                {pageNumber + 1}
+                            </button>
+                        )
+                    )}
+                </div>
+
+                <div style={paginationText}>
+                    Page {currentPage + 1} of{" "}
+                    {totalPages}
+                </div>
+
+                <button
+                    type="button"
+                    disabled={
+                        disabled ||
+                        currentPage >=
+                        totalPages - 1
+                    }
+                    onClick={() =>
+                        onPageChange(
+                            currentPage + 1
+                        )
+                    }
+                    style={paginationButton(
+                        disabled ||
+                        currentPage >=
+                        totalPages - 1
+                    )}
+                >
+                    Next →
+                </button>
+
+                <button
+                    type="button"
+                    disabled={
+                        disabled ||
+                        currentPage >=
+                        totalPages - 1
+                    }
+                    onClick={() =>
+                        onPageChange(
+                            totalPages - 1
+                        )
+                    }
+                    style={paginationIconButton(
+                        disabled ||
+                        currentPage >=
+                        totalPages - 1
+                    )}
+                    title="Last page"
+                >
+                    »
+                </button>
+            </div>
         </div>
     );
 }
@@ -361,6 +537,24 @@ function SearchResultCard({
         target.itemDescription ||
         "";
 
+    const createdBy =
+        getCreatedBy(target);
+
+    const packedBy =
+        getPackedBy(target);
+
+    const dispatchedBy =
+        getDispatchedBy(target);
+
+    const createdAt =
+        getCreatedAt(target);
+
+    const packedAt =
+        getPackedAt(target);
+
+    const dispatchedAt =
+        getDispatchedAt(target);
+
     return (
         <button
             type="button"
@@ -373,16 +567,22 @@ function SearchResultCard({
         >
             <div style={searchResultTop}>
                 <div style={resultIdentity}>
-                    <div
-                        style={resultTypeBadge(
-                            isMaster
-                                ? "#a78bfa"
-                                : "#38bdf8"
-                        )}
-                    >
-                        {isMaster
-                            ? "Master Item"
-                            : "Packet Item"}
+                    <div style={resultBadgeRow}>
+                        <div
+                            style={resultTypeBadge(
+                                isMaster
+                                    ? "#a78bfa"
+                                    : "#38bdf8"
+                            )}
+                        >
+                            {isMaster
+                                ? "Master Item"
+                                : "Packet Item"}
+                        </div>
+
+                        <div style={resultStatusBadge}>
+                            {target.status || "UNKNOWN"}
+                        </div>
                     </div>
 
                     <div style={resultTitle}>
@@ -443,13 +643,6 @@ function SearchResultCard({
                     </strong>
                 </div>
 
-                <div>
-                    <span>Status</span>
-                    <strong>
-                        {target.status || "-"}
-                    </strong>
-                </div>
-
                 {!isMaster && (
                     <>
                         <div>
@@ -465,14 +658,154 @@ function SearchResultCard({
                                 {target.stickerNumber || "-"}
                             </strong>
                         </div>
+
+                        <div>
+                            <span>Challan</span>
+                            <strong>
+                                {target.challanNumber ||
+                                    target.chalaanNumber ||
+                                    "-"}
+                            </strong>
+                        </div>
                     </>
                 )}
             </div>
 
-            <div style={resultId}>
-                ID: {target.id}
+            <div style={resultLifecycleGrid}>
+                <div style={lifecycleMetaCard}>
+                    <span>Created By</span>
+                    <strong>
+                        {createdBy}
+                    </strong>
+                    <small>
+                        {formatDateTime(
+                            createdAt
+                        )}
+                    </small>
+                </div>
+
+                {!isMaster &&
+                    hasPackedLifecycle(target) && (
+                        <div style={lifecycleMetaCard}>
+                            <span>Packed By</span>
+                            <strong>
+                                {packedBy}
+                            </strong>
+                            <small>
+                                {formatDateTime(
+                                    packedAt
+                                )}
+                            </small>
+                        </div>
+                    )}
+
+                {!isMaster &&
+                    hasDispatchedLifecycle(target) && (
+                        <div style={lifecycleMetaCard}>
+                            <span>Dispatched By</span>
+                            <strong>
+                                {dispatchedBy}
+                            </strong>
+                            <small>
+                                {formatDateTime(
+                                    dispatchedAt
+                                )}
+                            </small>
+                        </div>
+                    )}
+            </div>
+
+            <div style={resultFooterRow}>
+                <div style={resultId}>
+                    ID: {target.id}
+                </div>
+
+                <div style={resultOpenHint}>
+                    Open complete details →
+                </div>
             </div>
         </button>
+    );
+}
+
+
+function LifecycleMetaPanel({
+    row,
+}) {
+    if (!row) return null;
+
+    const createdAt =
+        getCreatedAt(row);
+
+    const packedAt =
+        getPackedAt(row);
+
+    const dispatchedAt =
+        getDispatchedAt(row);
+
+    return (
+        <div>
+            <div style={sectionHeading}>
+                Lifecycle & Responsibility
+            </div>
+
+            <div style={lifecyclePanelGrid}>
+                <div style={lifecyclePanelCard}>
+                    <span>Created By</span>
+                    <strong>
+                        {getCreatedBy(row)}
+                    </strong>
+                    <small>
+                        {formatDateTime(
+                            createdAt
+                        )}
+                    </small>
+                </div>
+
+                {hasPackedLifecycle(row) && (
+                    <div style={lifecyclePanelCard}>
+                        <span>Packed By</span>
+                        <strong>
+                            {getPackedBy(row)}
+                        </strong>
+                        <small>
+                            {formatDateTime(
+                                packedAt
+                            )}
+                        </small>
+                    </div>
+                )}
+
+                {hasDispatchedLifecycle(row) && (
+                    <div style={lifecyclePanelCard}>
+                        <span>Dispatched By</span>
+                        <strong>
+                            {getDispatchedBy(row)}
+                        </strong>
+                        <small>
+                            {formatDateTime(
+                                dispatchedAt
+                            )}
+                        </small>
+                    </div>
+                )}
+
+                <div style={lifecyclePanelCard}>
+                    <span>Last Updated</span>
+                    <strong>
+                        {row.updatedBy ||
+                            row.modifiedBy ||
+                            "-"}
+                    </strong>
+                    <small>
+                        {formatDateTime(
+                            row.updatedAt ||
+                            row.modifiedAt
+                        )}
+                    </small>
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -529,7 +862,8 @@ function DeletionHistory({
             {!loading &&
                 !error &&
                 page.content.length > 0 && (
-                    <div style={historyList}>
+                    <div style={historyList}
+                        className="admin-center-scroll">
                         {page.content.map(
                             (row) => {
                                 const affectedRows =
@@ -977,7 +1311,8 @@ function AdminPacketRollbackPanel({
 
                 {!searching &&
                     page.content.length > 0 && (
-                        <div style={searchResults}>
+                        <div style={searchResults}
+                            className="admin-center-scroll">
                             {page.content.map(
                                 (target) => (
                                     <SearchResultCard
@@ -1105,7 +1440,8 @@ function AdminPacketRollbackPanel({
                 )}
 
                 {preview && (
-                    <div style={previewContent}>
+                    <div style={previewContent}
+                        className="admin-center-scroll">
                         <div style={previewHeader}>
                             <div>
                                 <div
@@ -1232,6 +1568,10 @@ function AdminPacketRollbackPanel({
                                 </strong>
                             </div>
                         </div>
+
+                        <LifecycleMetaPanel
+                            row={preview}
+                        />
 
                         {preview.warning && (
                             <div style={impactWarning}>
@@ -1392,7 +1732,8 @@ function AdminRollbackHistory({
             {!loading &&
                 !error &&
                 page.content.length > 0 && (
-                    <div style={historyList}>
+                    <div style={historyList}
+                        className="admin-center-scroll">
                         {page.content.map(
                             (row) => (
                                 <div
@@ -2071,21 +2412,21 @@ function AdminCenter({
             setConfirmation("");
 
             await notifyAdminDataChanged({
-                    action:
-                        deletingMaster
-                            ? "MASTER_ITEM_DELETION"
-                            : "PERMANENT_DELETION",
+                action:
+                    deletingMaster
+                        ? "MASTER_ITEM_DELETION"
+                        : "PERMANENT_DELETION",
 
-                    targetType:
-                        deletingMaster
-                            ? "MASTER_ITEM"
-                            : "PACKET_ITEM",
+                targetType:
+                    deletingMaster
+                        ? "MASTER_ITEM"
+                        : "PACKET_ITEM",
 
-                    targetId:
-                        selectedTargetId,
+                targetId:
+                    selectedTargetId,
 
-                    ...result,
-                });
+                ...result,
+            });
         } catch (error) {
             console.error(error);
 
@@ -2119,6 +2460,25 @@ function AdminCenter({
                 }
             }}
         >
+            <style>{`
+                .admin-center-scroll::-webkit-scrollbar {
+                    width: 10px;
+                    height: 10px;
+                }
+                .admin-center-scroll::-webkit-scrollbar-track {
+                    background: rgba(15,23,42,.88);
+                    border-radius: 999px;
+                }
+                .admin-center-scroll::-webkit-scrollbar-thumb {
+                    background: linear-gradient(180deg,#2563eb,#60a5fa);
+                    border-radius: 999px;
+                    border: 2px solid rgba(15,23,42,.95);
+                }
+                .admin-center-scroll::-webkit-scrollbar-thumb:hover {
+                    background: linear-gradient(180deg,#3b82f6,#93c5fd);
+                }
+            `}</style>
+
             <div style={modal}>
                 <div style={modalHeader}>
                     <div style={headerIdentity}>
@@ -2210,7 +2570,7 @@ function AdminCenter({
                     </button>
                 </div>
 
-                <div style={modalBody}>
+                <div style={modalBody} className="admin-center-scroll">
                     {workspaceTab ===
                         "deletionHistory" && (
                             <DeletionHistory
@@ -2515,7 +2875,8 @@ function AdminCenter({
                                     )}
 
                                     {preview && (
-                                        <div style={previewContent}>
+                                        <div style={previewContent}
+                                            className="admin-center-scroll">
                                             <div
                                                 style={
                                                     previewHeader
@@ -2641,6 +3002,10 @@ function AdminCenter({
                                                     </strong>
                                                 </div>
                                             </div>
+
+                                            <LifecycleMetaPanel
+                                                row={preview}
+                                            />
 
                                             {preview.warning && (
                                                 <div
@@ -2968,6 +3333,9 @@ const modalBody = {
     minHeight: 0,
     padding: 22,
     overflowY: "auto",
+    overflowX: "hidden",
+    scrollbarWidth: "thin",
+    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
 };
 
 const deleteLayout = {
@@ -3106,11 +3474,13 @@ const searchSummary = {
 const searchResults = {
     display: "flex",
     flexDirection: "column",
-    gap: 9,
-
-    maxHeight: 485,
+    gap: 10,
+    maxHeight: 500,
     overflowY: "auto",
-    paddingRight: 3,
+    overflowX: "hidden",
+    paddingRight: 6,
+    scrollbarWidth: "thin",
+    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
 };
 
 const searchResultCard = (
@@ -3290,6 +3660,12 @@ const previewContent = {
     display: "flex",
     flexDirection: "column",
     gap: 17,
+    maxHeight: "100%",
+    overflowY: "auto",
+    overflowX: "hidden",
+    paddingRight: 5,
+    scrollbarWidth: "thin",
+    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
 };
 
 const previewHeader = {
@@ -3843,6 +4219,12 @@ const historyList = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
+    maxHeight: "58vh",
+    overflowY: "auto",
+    overflowX: "hidden",
+    paddingRight: 6,
+    scrollbarWidth: "thin",
+    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
 };
 
 const historyCard = {
@@ -3899,5 +4281,138 @@ const historyTargetId = {
     fontSize: 9.5,
     wordBreak: "break-all",
 };
+
+
+const resultBadgeRow = {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    flexWrap: "wrap",
+};
+
+const resultStatusBadge = {
+    minHeight: 22,
+    padding: "0 8px",
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    color: "#cbd5e1",
+    background: "rgba(148,163,184,.07)",
+    border: "1px solid rgba(148,163,184,.11)",
+    fontSize: 9,
+    fontWeight: 900,
+};
+
+const resultLifecycleGrid = {
+    marginTop: 12,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+    gap: 8,
+};
+
+const lifecycleMetaCard = {
+    minWidth: 0,
+    padding: 10,
+    borderRadius: 13,
+    background: "rgba(2,6,23,.28)",
+    border: "1px solid rgba(148,163,184,.06)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    textAlign: "left",
+};
+
+const resultFooterRow = {
+    marginTop: 10,
+    paddingTop: 9,
+    borderTop: "1px solid rgba(148,163,184,.055)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+};
+
+const resultOpenHint = {
+    color: "#60a5fa",
+    fontSize: 9.5,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+};
+
+const lifecyclePanelGrid = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+    gap: 8,
+};
+
+const lifecyclePanelCard = {
+    minWidth: 0,
+    padding: 11,
+    borderRadius: 13,
+    background: "rgba(59,130,246,.055)",
+    border: "1px solid rgba(96,165,250,.11)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+};
+
+const paginationShell = {
+    marginTop: 13,
+    padding: 10,
+    borderRadius: 14,
+    background: "rgba(2,6,23,.26)",
+    border: "1px solid rgba(148,163,184,.06)",
+};
+
+const paginationRecordMeta = {
+    marginBottom: 8,
+    color: "#64748b",
+    fontSize: 9.5,
+    fontWeight: 800,
+};
+
+const paginationNumberRow = {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+};
+
+const paginationNumberButton = (
+    active,
+    disabled
+) => ({
+    minWidth: 31,
+    height: 31,
+    padding: "0 8px",
+    borderRadius: 9,
+    border: active
+        ? "1px solid rgba(96,165,250,.34)"
+        : "1px solid rgba(148,163,184,.07)",
+    background: active
+        ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+        : "rgba(255,255,255,.035)",
+    color: active ? "#fff" : "#cbd5e1",
+    opacity: disabled ? 0.45 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    fontSize: 9.5,
+    fontWeight: 900,
+});
+
+const paginationIconButton = (
+    disabled
+) => ({
+    width: 31,
+    height: 31,
+    borderRadius: 9,
+    border: "1px solid rgba(96,165,250,.10)",
+    background: "rgba(59,130,246,.05)",
+    color: "#93c5fd",
+    opacity: disabled ? 0.35 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    fontSize: 13,
+    fontWeight: 950,
+});
 
 export default AdminCenter;

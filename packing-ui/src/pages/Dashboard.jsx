@@ -8,6 +8,7 @@ import {
   fetchDashboardStats,
   fetchDashboardActivity,
   fetchDailyThroughputUsers,
+  fetchDashboardTrace,
 } from "../dashboard/api/dashboardApi";
 
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
@@ -190,10 +191,16 @@ function InventoryStatCard({
               : "Live inventory metric")}
         </div>
 
-        <div style={inventoryLiveDotWrap}>
-          <span style={inventoryLiveDot(accent)} />
-          LIVE
-        </div>
+        {clickable ? (
+          <div style={inventoryAnalyzePill(accent, active)}>
+            {active ? "OPEN" : "ANALYZE ↗"}
+          </div>
+        ) : (
+          <div style={inventoryLiveDotWrap}>
+            <span style={inventoryLiveDot(accent)} />
+            LIVE
+          </div>
+        )}
       </div>
     </button>
   );
@@ -360,6 +367,8 @@ function DetailStatCard({
   rows = [],
   totalLabel,
   totalValue,
+  onInspect,
+  inspectLabel = "Inspect exact records",
 }) {
   return (
     <div style={detailCard(accent)}>
@@ -369,24 +378,54 @@ function DetailStatCard({
           {subtitle && <div style={detailSubtitle}>{subtitle}</div>}
         </div>
 
-        {totalLabel && (
-          <div style={detailTotalBox}>
-            <span>{totalLabel}</span>
-            <strong>{totalValue}</strong>
-          </div>
-        )}
+        <div style={detailHeaderActions}>
+          {onInspect && (
+            <button
+              type="button"
+              onClick={onInspect}
+              style={detailInspectButton(accent)}
+            >
+              {inspectLabel} ↗
+            </button>
+          )}
+
+          {totalLabel && (
+            <div style={detailTotalBox}>
+              <span>{totalLabel}</span>
+              <strong>{totalValue}</strong>
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={detailGrid}>
-        {rows.map((row) => (
-          <div key={row.label} style={detailItem}>
-            <div style={detailItemLabel}>{row.label}</div>
-            <div style={detailItemValue}>{row.value}</div>
-            {row.subtle && (
-              <div style={detailItemSubtle}>{row.subtle}</div>
-            )}
-          </div>
-        ))}
+        {rows.map((row) => {
+          const clickable = Boolean(row.onClick);
+
+          return (
+            <button
+              type="button"
+              key={row.label}
+              onClick={row.onClick}
+              disabled={!clickable}
+              style={detailItemButton(
+                accent,
+                clickable
+              )}
+            >
+              <div style={detailItemLabel}>{row.label}</div>
+              <div style={detailItemValue}>{row.value}</div>
+              {row.subtle && (
+                <div style={detailItemSubtle}>{row.subtle}</div>
+              )}
+              {clickable && (
+                <div style={detailItemOpenHint}>
+                  Pinpoint records →
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -734,7 +773,7 @@ function requestDashboardActivityFast() {
   }
 
   dashboardActivityInFlight =
-    fetchDashboardActivity(12)
+    fetchDashboardActivity(100)
       .finally(() => {
         dashboardActivityInFlight =
           null;
@@ -828,6 +867,1233 @@ function ThroughputUserModal({
   );
 }
 
+
+const DASHBOARD_DRILLDOWN_BATCH_SIZE = 500;
+const DASHBOARD_DRILLDOWN_MAX_ROWS = 10000;
+const DASHBOARD_DRILLDOWN_PAGE_SIZES = [10, 20, 50];
+
+const dashboardPad = (value) =>
+  String(value).padStart(2, "0");
+
+const dashboardToDateTime = (
+  date,
+  time,
+  endOfDay = false
+) => {
+  if (!date) return undefined;
+
+  const finalTime =
+    time ||
+    (endOfDay
+      ? "23:59:59"
+      : "00:00:00");
+
+  return `${date}T${finalTime.length === 5
+      ? `${finalTime}:00`
+      : finalTime
+    }`;
+};
+
+const dashboardFormatDateTime = (value) => {
+  if (!value) return "—";
+
+  try {
+    const raw = String(value)
+      .trim()
+      .replace(" ", "T");
+
+    let date;
+
+    const localMatch = raw.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+    );
+
+    if (
+      localMatch &&
+      !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)
+    ) {
+      date = new Date(
+        Number(localMatch[1]),
+        Number(localMatch[2]) - 1,
+        Number(localMatch[3]),
+        Number(localMatch[4]),
+        Number(localMatch[5]),
+        Number(localMatch[6] || 0)
+      );
+    } else {
+      date = new Date(raw);
+    }
+
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+
+    return date.toLocaleString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }
+    );
+  } catch {
+    return String(value);
+  }
+};
+
+const dashboardSafeText = (
+  value,
+  fallback = "—"
+) => {
+  const text =
+    String(value ?? "")
+      .trim();
+
+  return text || fallback;
+};
+
+const dashboardTraceActionDate = (row) =>
+  row?.dispatchedAt ||
+  row?.generatedAt ||
+  row?.packedAt ||
+  row?.tripStartedAt ||
+  row?.createdAt ||
+  row?.updatedAt ||
+  null;
+
+const dashboardTraceCreatedBy = (row) =>
+  row?.createdBy ||
+  row?.raisedBy ||
+  row?.generatedBy ||
+  "—";
+
+const dashboardTracePackedBy = (row) =>
+  row?.packedBy ||
+  row?.stickerGeneratedBy ||
+  row?.generatedBy ||
+  "—";
+
+const dashboardTraceDispatchedBy = (row) =>
+  row?.dispatchedBy ||
+  row?.dispatchBy ||
+  row?.tripStartedBy ||
+  "—";
+
+const dashboardFieldLabel = (value) =>
+  String(value || "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) =>
+      char.toUpperCase()
+    );
+
+const dashboardFieldValue = (value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "—";
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
+};
+
+function DashboardRecordDetailModal({
+  row,
+  title,
+  onClose,
+}) {
+  if (!row) return null;
+
+  const fields =
+    Object.entries(row)
+      .sort(([a], [b]) =>
+        a.localeCompare(b)
+      );
+
+  return (
+    <div
+      style={dashboardRecordOverlay}
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose?.();
+        }
+      }}
+    >
+      <div style={dashboardRecordModal}>
+        <div style={dashboardRecordHeader}>
+          <div>
+            <div style={dashboardRecordEyebrow}>
+              PINPOINT RECORD INSPECTOR
+            </div>
+
+            <div style={dashboardRecordTitle}>
+              {dashboardSafeText(
+                row.itemName ||
+                row.masterItemName ||
+                row.packetNumber ||
+                row.challanNumber ||
+                row.stickerNumber,
+                title ||
+                "Selected Record"
+              )}
+            </div>
+
+            <div style={dashboardRecordSub}>
+              {dashboardSafeText(
+                row.sourceType
+              )}{" "}
+              •{" "}
+              {dashboardSafeText(
+                row.status ||
+                row.movementType
+              )}{" "}
+              •{" "}
+              {dashboardFormatDateTime(
+                dashboardTraceActionDate(
+                  row
+                )
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={dashboardRecordClose}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={dashboardRecordActorGrid}>
+          <div style={dashboardRecordActor}>
+            <span>Created By</span>
+            <strong>
+              {dashboardSafeText(
+                dashboardTraceCreatedBy(
+                  row
+                )
+              )}
+            </strong>
+          </div>
+
+          <div style={dashboardRecordActor}>
+            <span>Packed By</span>
+            <strong>
+              {dashboardSafeText(
+                dashboardTracePackedBy(
+                  row
+                )
+              )}
+            </strong>
+          </div>
+
+          <div style={dashboardRecordActor}>
+            <span>Dispatched By</span>
+            <strong>
+              {dashboardSafeText(
+                dashboardTraceDispatchedBy(
+                  row
+                )
+              )}
+            </strong>
+          </div>
+
+          <div style={dashboardRecordActor}>
+            <span>Action Date / Time</span>
+            <strong>
+              {dashboardFormatDateTime(
+                dashboardTraceActionDate(
+                  row
+                )
+              )}
+            </strong>
+          </div>
+        </div>
+
+        <div
+          style={dashboardRecordFields}
+          className="dashboard-drill-scroll"
+        >
+          {fields.map(
+            ([key, value]) => (
+              <div
+                key={key}
+                style={dashboardRecordField}
+              >
+                <div
+                  style={
+                    dashboardRecordFieldLabel
+                  }
+                >
+                  {dashboardFieldLabel(
+                    key
+                  )}
+                </div>
+
+                <div
+                  style={
+                    dashboardRecordFieldValue
+                  }
+                >
+                  {dashboardFieldValue(
+                    value
+                  )}
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatDrilldownModal({
+  open,
+  config,
+  onClose,
+}) {
+  const [rows, setRows] =
+    useState([]);
+  const [loading, setLoading] =
+    useState(false);
+  const [error, setError] =
+    useState("");
+  const [search, setSearch] =
+    useState("");
+  const [fromDate, setFromDate] =
+    useState("");
+  const [toDate, setToDate] =
+    useState("");
+  const [fromTime, setFromTime] =
+    useState("");
+  const [toTime, setToTime] =
+    useState("");
+  const [page, setPage] =
+    useState(0);
+  const [pageSize, setPageSize] =
+    useState(20);
+  const [selectedRow, setSelectedRow] =
+    useState(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setSearch(
+      String(
+        config?.search || ""
+      )
+    );
+    setFromDate("");
+    setToDate("");
+    setFromTime("");
+    setToTime("");
+    setPage(0);
+    setSelectedRow(null);
+  }, [
+    open,
+    config?.key,
+    config?.search,
+  ]);
+
+  const loadRows = useCallback(
+    async (overrides = {}) => {
+      if (!open) return;
+
+      const effectiveSearch =
+        Object.prototype.hasOwnProperty.call(
+          overrides,
+          "search"
+        )
+          ? overrides.search
+          : search;
+
+      const effectiveFromDate =
+        Object.prototype.hasOwnProperty.call(
+          overrides,
+          "fromDate"
+        )
+          ? overrides.fromDate
+          : fromDate;
+
+      const effectiveFromTime =
+        Object.prototype.hasOwnProperty.call(
+          overrides,
+          "fromTime"
+        )
+          ? overrides.fromTime
+          : fromTime;
+
+      const effectiveToDate =
+        Object.prototype.hasOwnProperty.call(
+          overrides,
+          "toDate"
+        )
+          ? overrides.toDate
+          : toDate;
+
+      const effectiveToTime =
+        Object.prototype.hasOwnProperty.call(
+          overrides,
+          "toTime"
+        )
+          ? overrides.toTime
+          : toTime;
+
+      try {
+        setLoading(true);
+        setError("");
+
+        const sourceRows = [];
+        const pageSignatures =
+          new Set();
+
+        for (
+          let offset = 0;
+          offset < DASHBOARD_DRILLDOWN_MAX_ROWS;
+          offset += DASHBOARD_DRILLDOWN_BATCH_SIZE
+        ) {
+          const data =
+            await fetchDashboardTrace({
+              type:
+                config?.type ||
+                "all",
+              from:
+                dashboardToDateTime(
+                  effectiveFromDate,
+                  effectiveFromTime,
+                  false
+                ),
+              to:
+                dashboardToDateTime(
+                  effectiveToDate,
+                  effectiveToTime,
+                  true
+                ),
+              search:
+                String(
+                  effectiveSearch ||
+                  ""
+                ).trim(),
+              limit:
+                DASHBOARD_DRILLDOWN_BATCH_SIZE,
+              offset,
+            });
+
+          const batch =
+            Array.isArray(data)
+              ? data
+              : Array.isArray(
+                data?.content
+              )
+                ? data.content
+                : [];
+
+          if (batch.length === 0) {
+            break;
+          }
+
+          const signature =
+            batch
+              .slice(0, 12)
+              .map(
+                (row) =>
+                  row?.packetItemId ||
+                  row?.masterItemId ||
+                  row?.challanNumber ||
+                  row?.stickerNumber ||
+                  row?.id ||
+                  ""
+              )
+              .join("|");
+
+          if (
+            signature &&
+            pageSignatures.has(
+              signature
+            )
+          ) {
+            console.warn(
+              "Dashboard trace endpoint repeated a page; stopping drill-down pagination."
+            );
+            break;
+          }
+
+          if (signature) {
+            pageSignatures.add(
+              signature
+            );
+          }
+
+          sourceRows.push(...batch);
+
+          if (
+            batch.length <
+            DASHBOARD_DRILLDOWN_BATCH_SIZE
+          ) {
+            break;
+          }
+        }
+
+        const statuses =
+          Array.isArray(
+            config?.statuses
+          )
+            ? config.statuses.map(
+              (value) =>
+                String(
+                  value || ""
+                )
+                  .trim()
+                  .toUpperCase()
+            )
+            : [];
+
+        const filtered =
+          statuses.length === 0
+            ? sourceRows
+            : sourceRows.filter(
+              (row) =>
+                statuses.includes(
+                  String(
+                    row?.status ||
+                    row?.movementType ||
+                    ""
+                  )
+                    .trim()
+                    .toUpperCase()
+                )
+            );
+
+        setRows(filtered);
+        setPage(0);
+      } catch (loadError) {
+        console.error(
+          loadError
+        );
+
+        setRows([]);
+        setPage(0);
+        setError(
+          loadError?.message ||
+          "Unable to load exact records for this metric."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      open,
+      config?.type,
+      config?.statuses,
+      fromDate,
+      fromTime,
+      toDate,
+      toTime,
+      search,
+    ]
+  );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    loadRows({
+      search:
+        String(
+          config?.search ||
+          ""
+        ),
+      fromDate: "",
+      fromTime: "",
+      toDate: "",
+      toTime: "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    open,
+    config?.key,
+  ]);
+
+  if (!open) return null;
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        rows.length /
+        pageSize
+      )
+    );
+
+  const safePage =
+    Math.min(
+      page,
+      totalPages - 1
+    );
+
+  const pageRows =
+    rows.slice(
+      safePage * pageSize,
+      safePage * pageSize +
+      pageSize
+    );
+
+  const accent =
+    config?.accent ||
+    "#60a5fa";
+
+  return (
+    <div
+      style={dashboardDrillOverlay}
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose?.();
+        }
+      }}
+    >
+      <style>{`
+        .dashboard-drill-scroll::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+        .dashboard-drill-scroll::-webkit-scrollbar-track {
+          background: rgba(15,23,42,.92);
+          border-radius: 999px;
+        }
+        .dashboard-drill-scroll::-webkit-scrollbar-thumb {
+          background: linear-gradient(90deg,#2563eb,#60a5fa);
+          border-radius: 999px;
+          border: 2px solid rgba(15,23,42,.95);
+        }
+        .dashboard-drill-scroll::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(90deg,#3b82f6,#93c5fd);
+        }
+      `}</style>
+
+      <div style={dashboardDrillModal}>
+        <div
+          style={
+            dashboardDrillHeader(
+              accent
+            )
+          }
+        >
+          <div>
+            <div style={dashboardDrillEyebrow}>
+              EXACT RECORD ANALYSIS
+            </div>
+
+            <div style={dashboardDrillTitle}>
+              {config?.title ||
+                "Metric Details"}
+            </div>
+
+            <div style={dashboardDrillSubtitle}>
+              {config?.subtitle ||
+                "Pinpoint the exact records contributing to this dashboard metric."}
+            </div>
+          </div>
+
+          <div style={dashboardDrillHeaderRight}>
+            <div
+              style={
+                dashboardDrillCount(
+                  accent
+                )
+              }
+            >
+              {rows.length} records
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              style={dashboardRecordClose}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div style={dashboardDrillFilters}>
+          <label style={dashboardDrillField}>
+            <span>Search</span>
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key ===
+                  "Enter"
+                ) {
+                  loadRows();
+                }
+              }}
+              placeholder={
+                config?.searchPlaceholder ||
+                "Item, packet, PD, sticker, challan, client, user..."
+              }
+              style={dashboardDrillInput}
+            />
+          </label>
+
+          <label style={dashboardDrillField}>
+            <span>From Date</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(event) =>
+                setFromDate(
+                  event.target.value
+                )
+              }
+              style={dashboardDrillInput}
+            />
+          </label>
+
+          <label style={dashboardDrillField}>
+            <span>From Time</span>
+            <input
+              type="time"
+              value={fromTime}
+              onChange={(event) =>
+                setFromTime(
+                  event.target.value
+                )
+              }
+              style={dashboardDrillInput}
+            />
+          </label>
+
+          <label style={dashboardDrillField}>
+            <span>To Date</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(event) =>
+                setToDate(
+                  event.target.value
+                )
+              }
+              style={dashboardDrillInput}
+            />
+          </label>
+
+          <label style={dashboardDrillField}>
+            <span>To Time</span>
+            <input
+              type="time"
+              value={toTime}
+              onChange={(event) =>
+                setToTime(
+                  event.target.value
+                )
+              }
+              style={dashboardDrillInput}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={loadRows}
+            disabled={loading}
+            style={
+              dashboardDrillApply(
+                accent
+              )
+            }
+          >
+            {loading
+              ? "Loading..."
+              : "Apply"}
+          </button>
+        </div>
+
+        {error && (
+          <div style={dashboardDrillError}>
+            {error}
+          </div>
+        )}
+
+        <div
+          style={dashboardDrillTableWrap}
+          className="dashboard-drill-scroll"
+        >
+          <table style={dashboardDrillTable}>
+            <thead>
+              <tr>
+                <th style={dashboardDrillTh}>
+                  Flow
+                </th>
+                <th style={dashboardDrillTh}>
+                  Item / Packet
+                </th>
+                <th style={dashboardDrillTh}>
+                  Client
+                </th>
+                <th style={dashboardDrillTh}>
+                  PD / DWG
+                </th>
+                <th style={dashboardDrillTh}>
+                  Sticker
+                </th>
+                <th style={dashboardDrillTh}>
+                  Challan
+                </th>
+                <th style={dashboardDrillTh}>
+                  Status
+                </th>
+                <th style={dashboardDrillTh}>
+                  Actors
+                </th>
+                <th style={dashboardDrillTh}>
+                  Date / Time
+                </th>
+                <th style={dashboardDrillTh}>
+                  Location / Vehicle
+                </th>
+                <th style={dashboardDrillTh}>
+                  Exception
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && (
+                <tr>
+                  <td
+                    colSpan={11}
+                    style={
+                      dashboardDrillEmpty
+                    }
+                  >
+                    Loading exact records...
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                pageRows.length ===
+                0 && (
+                  <tr>
+                    <td
+                      colSpan={11}
+                      style={
+                        dashboardDrillEmpty
+                      }
+                    >
+                      No exact records matched the current metric filters.
+                    </td>
+                  </tr>
+                )}
+
+              {!loading &&
+                pageRows.map(
+                  (row, index) => (
+                    <tr
+                      key={
+                        row.packetItemId ||
+                        row.masterItemId ||
+                        row.challanNumber ||
+                        row.stickerNumber ||
+                        row.id ||
+                        index
+                      }
+                      onClick={() =>
+                        setSelectedRow(
+                          row
+                        )
+                      }
+                      style={
+                        dashboardDrillRow
+                      }
+                    >
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.sourceType
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTdStrong
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.itemName ||
+                          row.masterItemName
+                        )}
+                        <div
+                          style={
+                            dashboardDrillSub
+                          }
+                        >
+                          Packet:{" "}
+                          {dashboardSafeText(
+                            row.packetNumber
+                          )}
+                        </div>
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.clientName
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        PD{" "}
+                        {dashboardSafeText(
+                          row.pdNo
+                        )}
+                        <div
+                          style={
+                            dashboardDrillSub
+                          }
+                        >
+                          DWG{" "}
+                          {dashboardSafeText(
+                            row.drawingNo
+                          )}
+                        </div>
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.stickerNumber
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.challanNumber ||
+                          row.chalaanNumber
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.status ||
+                          row.movementType
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        <div>
+                          C:{" "}
+                          {dashboardSafeText(
+                            dashboardTraceCreatedBy(
+                              row
+                            )
+                          )}
+                        </div>
+
+                        {(
+                          row.packedBy ||
+                          row.packedAt ||
+                          row.stickerNumber
+                        ) && (
+                            <div
+                              style={
+                                dashboardDrillSub
+                              }
+                            >
+                              P:{" "}
+                              {dashboardSafeText(
+                                dashboardTracePackedBy(
+                                  row
+                                )
+                              )}
+                            </div>
+                          )}
+
+                        {(
+                          row.dispatchedBy ||
+                          row.dispatchedAt ||
+                          row.challanNumber
+                        ) && (
+                            <div
+                              style={
+                                dashboardDrillSub
+                              }
+                            >
+                              D:{" "}
+                              {dashboardSafeText(
+                                dashboardTraceDispatchedBy(
+                                  row
+                                )
+                              )}
+                            </div>
+                          )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardFormatDateTime(
+                          dashboardTraceActionDate(
+                            row
+                          )
+                        )}
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {dashboardSafeText(
+                          row.currentLocationCode ||
+                          row.warehouseCode ||
+                          row.plantCode
+                        )}
+                        <div
+                          style={
+                            dashboardDrillSub
+                          }
+                        >
+                          {dashboardSafeText(
+                            row.vehicleNumber
+                          )}
+                        </div>
+                      </td>
+
+                      <td
+                        style={
+                          dashboardDrillTd
+                        }
+                      >
+                        {row.exceptionReason ? (
+                          <span
+                            style={
+                              dashboardException
+                            }
+                          >
+                            {row.exceptionReason}
+                          </span>
+                        ) : (
+                          <span
+                            style={
+                              dashboardClear
+                            }
+                          >
+                            Clear
+                          </span>
+                        )}
+                        <div
+                          style={
+                            dashboardOpenHint
+                          }
+                        >
+                          Open ↗
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={dashboardDrillPager}>
+          <div style={dashboardDrillPagerMeta}>
+            {rows.length > 0
+              ? `Showing ${safePage *
+              pageSize +
+              1
+              }–${Math.min(
+                (safePage + 1) *
+                pageSize,
+                rows.length
+              )} of ${rows.length}`
+              : "No rows"}
+          </div>
+
+          <div style={dashboardDrillPagerControls}>
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(
+                  Number(
+                    event.target.value
+                  ) || 20
+                );
+                setPage(0);
+              }}
+              style={dashboardDrillPageSize}
+            >
+              {DASHBOARD_DRILLDOWN_PAGE_SIZES.map(
+                (value) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {value} / page
+                  </option>
+                )
+              )}
+            </select>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPage(0)
+              }
+              disabled={
+                safePage === 0
+              }
+              style={dashboardDrillPageButton(
+                safePage === 0
+              )}
+            >
+              «
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPage(
+                  (current) =>
+                    Math.max(
+                      0,
+                      current - 1
+                    )
+                )
+              }
+              disabled={
+                safePage === 0
+              }
+              style={dashboardDrillPageButton(
+                safePage === 0
+              )}
+            >
+              ‹
+            </button>
+
+            <div
+              style={
+                dashboardDrillPageIndicator
+              }
+            >
+              {safePage + 1} /{" "}
+              {totalPages}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPage(
+                  (current) =>
+                    Math.min(
+                      totalPages - 1,
+                      current + 1
+                    )
+                )
+              }
+              disabled={
+                safePage >=
+                totalPages - 1
+              }
+              style={dashboardDrillPageButton(
+                safePage >=
+                totalPages - 1
+              )}
+            >
+              ›
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPage(
+                  totalPages - 1
+                )
+              }
+              disabled={
+                safePage >=
+                totalPages - 1
+              }
+              style={dashboardDrillPageButton(
+                safePage >=
+                totalPages - 1
+              )}
+            >
+              »
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <DashboardRecordDetailModal
+        row={selectedRow}
+        title={config?.title}
+        onClose={() =>
+          setSelectedRow(null)
+        }
+      />
+    </div>
+  );
+}
+
 function DashboardPage() {
   const [stats, setStats] =
     useState(() => {
@@ -876,6 +2142,18 @@ function DashboardPage() {
     useState("summary");
 
   const [activeStatCard, setActiveStatCard] = useState(null);
+
+  const [statDrilldown, setStatDrilldown] =
+    useState({
+      open: false,
+      key: "",
+      title: "",
+      subtitle: "",
+      type: "all",
+      statuses: [],
+      search: "",
+      accent: "#60a5fa",
+    });
 
   const [throughputModal, setThroughputModal] = useState({
     open: false,
@@ -1300,6 +2578,44 @@ function DashboardPage() {
     );
   };
 
+  const openStatDrilldown = (config = {}) => {
+    setStatDrilldown({
+      open: true,
+      key:
+        config.key ||
+        `${config.type || "all"}-${config.title || "metric"}-${Date.now()}`,
+      title:
+        config.title ||
+        "Metric Details",
+      subtitle:
+        config.subtitle ||
+        "Pinpoint the exact records contributing to this metric.",
+      type:
+        config.type ||
+        "all",
+      statuses:
+        Array.isArray(config.statuses)
+          ? config.statuses
+          : [],
+      search:
+        config.search ||
+        "",
+      accent:
+        config.accent ||
+        "#60a5fa",
+      searchPlaceholder:
+        config.searchPlaceholder ||
+        "Item, packet, PD, sticker, challan, client, user...",
+    });
+  };
+
+  const closeStatDrilldown = () => {
+    setStatDrilldown((current) => ({
+      ...current,
+      open: false,
+    }));
+  };
+
   const openThroughputUserModal = async (type) => {
     if (!isAdmin) return;
 
@@ -1419,6 +2735,15 @@ function DashboardPage() {
       trend: `${Number(stats.stickerReprints || 0)} reprints`,
       progress: packetCompletionRate,
       progressLabel: "Packet items stickered",
+      active: statDrilldown.open && statDrilldown.key === "stickers",
+      onClick: () =>
+        openStatDrilldown({
+          key: "stickers",
+          title: "Sticker Generation Records",
+          subtitle: "Exact packet items and sticker records contributing to the sticker metric.",
+          type: "generated",
+          accent: "#f472b6",
+        }),
     },
 
     {
@@ -1431,6 +2756,15 @@ function DashboardPage() {
       trend: percentLabel(packetCompletionRate),
       progress: packetCompletionRate,
       progressLabel: "Packing completion",
+      active: statDrilldown.open && statDrilldown.key === "packed",
+      onClick: () =>
+        openStatDrilldown({
+          key: "packed",
+          title: "Packed Item Records",
+          subtitle: "Exact packed packet items with packing users, timestamps and sticker references.",
+          type: "packed",
+          accent: "#34d399",
+        }),
     },
 
     {
@@ -1449,6 +2783,15 @@ function DashboardPage() {
             Number(stats.packetItems || 0)
           ) * 100,
       progressLabel: "Pending share",
+      active: statDrilldown.open && statDrilldown.key === "pending",
+      onClick: () =>
+        openStatDrilldown({
+          key: "pending",
+          title: "Pending Item Records",
+          subtitle: "Exact packet items still awaiting packing / sticker completion.",
+          type: "pending",
+          accent: "#f59e0b",
+        }),
     },
 
     {
@@ -1473,6 +2816,16 @@ function DashboardPage() {
       trend: `${Number(stats.queuedItems || 0)} queued`,
       progress: readyToDispatchShare,
       progressLabel: "Share of live inventory",
+      active: statDrilldown.open && statDrilldown.key === "readyToDispatch",
+      onClick: () =>
+        openStatDrilldown({
+          key: "readyToDispatch",
+          title: "Ready to Dispatch Queue",
+          subtitle: "Exact items currently waiting for dispatch action.",
+          type: "all",
+          statuses: ["READY_TO_DISPATCH"],
+          accent: "#ef4444",
+        }),
     },
 
     {
@@ -1485,6 +2838,15 @@ function DashboardPage() {
       trend: `${currentInventoryExceptions} issues`,
       progress: inventoryAccuracy,
       progressLabel: "Data health",
+      active: statDrilldown.open && statDrilldown.key === "accuracy",
+      onClick: () =>
+        openStatDrilldown({
+          key: "accuracy",
+          title: "Inventory Accuracy Exceptions",
+          subtitle: "Exact linked records reducing the inventory accuracy score.",
+          type: "errored",
+          accent: "#22c55e",
+        }),
     },
 
     {
@@ -1535,6 +2897,15 @@ function DashboardPage() {
       trend: "live",
       progress: operationalEfficiency,
       progressLabel: "Dispatch conversion",
+      active: statDrilldown.open && statDrilldown.key === "efficiency",
+      onClick: () =>
+        openStatDrilldown({
+          key: "efficiency",
+          title: "Dispatch Conversion Records",
+          subtitle: "Exact dispatched records behind the operational efficiency metric.",
+          type: "dispatched",
+          accent: "#14b8a6",
+        }),
     },
   ].filter(Boolean);
 
@@ -1625,9 +2996,27 @@ function DashboardPage() {
                           </div>
                         </div>
 
-                        <div style={detailTotalBox}>
-                          <span>Total Today</span>
-                          <strong>{dailyThroughput}</strong>
+                        <div style={detailHeaderActions}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openStatDrilldown({
+                                key: "dailyThroughput",
+                                title: "Today’s Throughput Records",
+                                subtitle: "Exact packing and dispatch activity behind today’s throughput.",
+                                type: "all",
+                                accent: "#06b6d4",
+                              })
+                            }
+                            style={detailInspectButton("#06b6d4")}
+                          >
+                            Inspect exact records ↗
+                          </button>
+
+                          <div style={detailTotalBox}>
+                            <span>Total Today</span>
+                            <strong>{dailyThroughput}</strong>
+                          </div>
                         </div>
                       </div>
 
@@ -1692,6 +3081,15 @@ function DashboardPage() {
                       subtitle="Live stock position by operational status"
                       totalLabel="Inventory Total"
                       totalValue={finalInventoryTotal}
+                      onInspect={() =>
+                        openStatDrilldown({
+                          key: "inventoryItems",
+                          title: "Inventory Item Records",
+                          subtitle: "Exact live inventory rows across warehouse, ready-to-dispatch and ready stock.",
+                          type: "all",
+                          accent: "#60a5fa",
+                        })
+                      }
                       rows={[
                         {
                           label: "Warehouse Items",
@@ -1719,6 +3117,15 @@ function DashboardPage() {
                       subtitle="Actual operational packet-level inventory structure"
                       totalLabel="Packet Items"
                       totalValue={Number(stats.packetItems || 0)}
+                      onInspect={() =>
+                        openStatDrilldown({
+                          key: "packetItems",
+                          title: "Packet Item Records",
+                          subtitle: "Exact packet-level rows with sticker, client, PD, location and lifecycle actor details.",
+                          type: "all",
+                          accent: "#38bdf8",
+                        })
+                      }
                       rows={[
                         {
                           label: "Total Packets",
@@ -1761,6 +3168,15 @@ function DashboardPage() {
                       subtitle="Normal dispatch challans generated from dispatched_items"
                       totalLabel="Total Challans"
                       totalValue={Number(stats.normalDispatchChallans || 0)}
+                      onInspect={() =>
+                        openStatDrilldown({
+                          key: "challans",
+                          title: "Dispatch Challan Records",
+                          subtitle: "Exact challaned records including driver, vehicle, trip status and dispatch users.",
+                          type: "challaned",
+                          accent: "#8b5cf6",
+                        })
+                      }
                       rows={[
                         {
                           label: "Normal Dispatch Challans",
@@ -1803,6 +3219,15 @@ function DashboardPage() {
                       subtitle="Manual customer care / site / hardware movement challans"
                       totalLabel="Custom Challans"
                       totalValue={Number(stats.customChallans || 0)}
+                      onInspect={() =>
+                        openStatDrilldown({
+                          key: "customChallans",
+                          title: "Custom Challan Records",
+                          subtitle: "Exact manual movement challan records and related user/date information.",
+                          type: "custom",
+                          accent: "#ec4899",
+                        })
+                      }
                       rows={[
                         {
                           label: "Total Custom Challans",
@@ -1830,6 +3255,15 @@ function DashboardPage() {
                       subtitle="Data quality checks from master, packet, dispatch and sticker tables"
                       totalLabel="Total Exceptions"
                       totalValue={Number(stats.exceptionsCount || 0)}
+                      onInspect={() =>
+                        openStatDrilldown({
+                          key: "exceptions",
+                          title: "Data Exception Records",
+                          subtitle: "Pinpoint exact packet, sticker, dispatch and master-link exceptions requiring correction.",
+                          type: "errored",
+                          accent: "#f97316",
+                        })
+                      }
                       rows={[
                         {
                           label: "Master Items Without Packets",
@@ -2145,6 +3579,9 @@ function DashboardPage() {
                       <div style={activityFeedShell}>
                         <ActivityFeed
                           logs={activityLogs}
+                          onInspectRecord={
+                            openStatDrilldown
+                          }
                         />
                       </div>
                     </div>
@@ -2461,6 +3898,13 @@ function DashboardPage() {
         error={throughputModal.error}
         onClose={closeThroughputUserModal}
       />
+
+      <StatDrilldownModal
+        open={statDrilldown.open}
+        config={statDrilldown}
+        onClose={closeStatDrilldown}
+      />
+
       <MasterItemsModal
         key={masterItemsRefreshKey}
         open={masterItemsModalOpen}
@@ -3017,6 +4461,22 @@ const inventoryTrendLabel = {
   whiteSpace: "nowrap",
 };
 
+const inventoryAnalyzePill = (accent, active) => ({
+  minHeight: 22,
+  padding: "0 7px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  color: active ? "#fff" : accent,
+  background: active
+    ? `${accent}28`
+    : `${accent}10`,
+  border: `1px solid ${accent}2E`,
+  fontSize: 7.4,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+});
+
 const inventoryLiveDotWrap = {
   flexShrink: 0,
   display: "inline-flex",
@@ -3301,6 +4761,54 @@ const detailItem = {
   background: "rgba(255,255,255,.04)",
 
   border: "1px solid rgba(255,255,255,.06)",
+};
+
+const detailHeaderActions = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const detailInspectButton = (accent) => ({
+  height: 38,
+  padding: "0 14px",
+  borderRadius: 12,
+  border: `1px solid ${accent}42`,
+  background: `${accent}16`,
+  color: "#fff",
+  fontFamily: "inherit",
+  fontSize: 10.5,
+  fontWeight: 950,
+  cursor: "pointer",
+});
+
+const detailItemButton = (
+  accent,
+  clickable
+) => ({
+  padding: 16,
+  borderRadius: 18,
+  background:
+    "rgba(255,255,255,.04)",
+  border: clickable
+    ? `1px solid ${accent}36`
+    : "1px solid rgba(255,255,255,.06)",
+  color: "#fff",
+  textAlign: "left",
+  fontFamily: "inherit",
+  cursor: clickable
+    ? "pointer"
+    : "default",
+  opacity: 1,
+});
+
+const detailItemOpenHint = {
+  marginTop: 9,
+  color: "#93c5fd",
+  fontSize: 10,
+  fontWeight: 900,
 };
 
 const throughputClickCard = (accent, enabled) => ({
@@ -4156,6 +5664,428 @@ const activityFeedShell = {
     "rgba(2,6,23,.20)",
   border:
     "1px solid rgba(148,163,184,.055)",
+};
+
+
+const dashboardDrillOverlay = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 15000,
+  padding: 18,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(2,6,23,.84)",
+  backdropFilter: "blur(14px)",
+};
+
+const dashboardDrillModal = {
+  width: "min(1480px,100%)",
+  height: "min(900px,calc(100vh - 36px))",
+  minHeight: 620,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  borderRadius: 28,
+  background:
+    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,#0f172a,#07101d)",
+  border: "1px solid rgba(96,165,250,.18)",
+  boxShadow: "0 42px 120px rgba(0,0,0,.70)",
+  color: "#fff",
+};
+
+const dashboardDrillHeader = (accent) => ({
+  flexShrink: 0,
+  minHeight: 82,
+  padding: "18px 20px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  background: `linear-gradient(135deg,${accent}10,rgba(255,255,255,.02))`,
+  borderBottom: "1px solid rgba(148,163,184,.08)",
+});
+
+const dashboardDrillEyebrow = {
+  color: "#93c5fd",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".11em",
+};
+
+const dashboardDrillTitle = {
+  marginTop: 4,
+  color: "#fff",
+  fontSize: 22,
+  fontWeight: 950,
+  letterSpacing: "-.02em",
+};
+
+const dashboardDrillSubtitle = {
+  marginTop: 5,
+  maxWidth: 860,
+  color: "#94a3b8",
+  fontSize: 11.5,
+  fontWeight: 700,
+  lineHeight: 1.5,
+};
+
+const dashboardDrillHeaderRight = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const dashboardDrillCount = (accent) => ({
+  minHeight: 32,
+  padding: "0 11px",
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: 999,
+  color: "#fff",
+  background: `${accent}16`,
+  border: `1px solid ${accent}35`,
+  fontSize: 10,
+  fontWeight: 950,
+});
+
+const dashboardDrillFilters = {
+  flexShrink: 0,
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(260px,1.6fr) repeat(4,minmax(125px,.7fr)) auto",
+  gap: 8,
+  alignItems: "end",
+  padding: 12,
+  margin: 12,
+  borderRadius: 16,
+  background: "rgba(255,255,255,.025)",
+  border: "1px solid rgba(148,163,184,.065)",
+};
+
+const dashboardDrillField = {
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+  color: "#64748b",
+  fontSize: 8.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".05em",
+};
+
+const dashboardDrillInput = {
+  width: "100%",
+  minWidth: 0,
+  height: 38,
+  padding: "0 10px",
+  boxSizing: "border-box",
+  borderRadius: 11,
+  border: "1px solid rgba(148,163,184,.09)",
+  outline: "none",
+  background: "#0f172a",
+  color: "#e2e8f0",
+  colorScheme: "dark",
+  fontFamily: "inherit",
+  fontSize: 10,
+  fontWeight: 800,
+};
+
+const dashboardDrillApply = (accent) => ({
+  height: 38,
+  padding: "0 16px",
+  borderRadius: 11,
+  border: `1px solid ${accent}42`,
+  background: `linear-gradient(135deg,${accent},#2563eb)`,
+  color: "#fff",
+  fontFamily: "inherit",
+  fontSize: 10,
+  fontWeight: 950,
+  cursor: "pointer",
+});
+
+const dashboardDrillError = {
+  flexShrink: 0,
+  margin: "0 12px 10px",
+  padding: 10,
+  borderRadius: 12,
+  color: "#fecaca",
+  background: "rgba(239,68,68,.08)",
+  border: "1px solid rgba(239,68,68,.18)",
+  fontSize: 10,
+  fontWeight: 800,
+};
+
+const dashboardDrillTableWrap = {
+  flex: 1,
+  minHeight: 0,
+  margin: "0 12px",
+  overflow: "auto",
+  borderRadius: 16,
+  border: "1px solid rgba(148,163,184,.07)",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 rgba(15,23,42,.9)",
+};
+
+const dashboardDrillTable = {
+  width: "100%",
+  minWidth: 1580,
+  borderCollapse: "collapse",
+  fontSize: 10.5,
+};
+
+const dashboardDrillTh = {
+  position: "sticky",
+  top: 0,
+  zIndex: 3,
+  padding: "11px 10px",
+  textAlign: "left",
+  background: "#0b1220",
+  color: "#94a3b8",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".06em",
+  textTransform: "uppercase",
+  borderBottom: "1px solid rgba(148,163,184,.09)",
+};
+
+const dashboardDrillTd = {
+  padding: "11px 10px",
+  verticalAlign: "top",
+  color: "#cbd5e1",
+  borderBottom: "1px solid rgba(148,163,184,.045)",
+};
+
+const dashboardDrillTdStrong = {
+  ...dashboardDrillTd,
+  color: "#fff",
+  fontWeight: 850,
+};
+
+const dashboardDrillSub = {
+  marginTop: 4,
+  color: "#64748b",
+  fontSize: 9,
+  fontWeight: 700,
+};
+
+const dashboardDrillRow = {
+  cursor: "pointer",
+};
+
+const dashboardException = {
+  color: "#fdba74",
+  fontWeight: 850,
+};
+
+const dashboardClear = {
+  color: "#4ade80",
+  fontWeight: 900,
+};
+
+const dashboardOpenHint = {
+  marginTop: 5,
+  color: "#60a5fa",
+  fontSize: 8.5,
+  fontWeight: 900,
+};
+
+const dashboardDrillEmpty = {
+  padding: 30,
+  textAlign: "center",
+  color: "#94a3b8",
+  fontWeight: 800,
+};
+
+const dashboardDrillPager = {
+  flexShrink: 0,
+  minHeight: 54,
+  padding: "10px 14px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  borderTop: "1px solid rgba(148,163,184,.07)",
+};
+
+const dashboardDrillPagerMeta = {
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 800,
+};
+
+const dashboardDrillPagerControls = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+};
+
+const dashboardDrillPageSize = {
+  height: 32,
+  padding: "0 8px",
+  borderRadius: 10,
+  border: "1px solid rgba(96,165,250,.14)",
+  background: "#0f172a",
+  color: "#bfdbfe",
+  colorScheme: "dark",
+  fontFamily: "inherit",
+  fontSize: 9,
+  fontWeight: 850,
+  outline: "none",
+};
+
+const dashboardDrillPageButton = (disabled) => ({
+  minWidth: 34,
+  height: 32,
+  padding: "0 8px",
+  borderRadius: 10,
+  border: "1px solid rgba(96,165,250,.14)",
+  background: "rgba(59,130,246,.06)",
+  color: "#bfdbfe",
+  opacity: disabled ? 0.35 : 1,
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontFamily: "inherit",
+  fontWeight: 950,
+});
+
+const dashboardDrillPageIndicator = {
+  minWidth: 64,
+  height: 32,
+  borderRadius: 10,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(148,163,184,.04)",
+  border: "1px solid rgba(148,163,184,.07)",
+  color: "#e2e8f0",
+  fontSize: 9.5,
+  fontWeight: 900,
+};
+
+const dashboardRecordOverlay = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 17000,
+  padding: 18,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(2,6,23,.88)",
+  backdropFilter: "blur(14px)",
+};
+
+const dashboardRecordModal = {
+  width: "min(1080px,100%)",
+  maxHeight: "min(880px,calc(100vh - 36px))",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  borderRadius: 26,
+  background:
+    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,#0f172a,#08101d)",
+  border: "1px solid rgba(96,165,250,.18)",
+  boxShadow: "0 40px 110px rgba(0,0,0,.70)",
+  color: "#fff",
+};
+
+const dashboardRecordHeader = {
+  flexShrink: 0,
+  padding: "18px 20px",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  borderBottom: "1px solid rgba(148,163,184,.08)",
+};
+
+const dashboardRecordEyebrow = {
+  color: "#93c5fd",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".09em",
+};
+
+const dashboardRecordTitle = {
+  marginTop: 4,
+  color: "#fff",
+  fontSize: 21,
+  fontWeight: 950,
+};
+
+const dashboardRecordSub = {
+  marginTop: 4,
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const dashboardRecordClose = {
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  borderRadius: 10,
+  border: "1px solid rgba(148,163,184,.10)",
+  background: "rgba(255,255,255,.04)",
+  color: "#fff",
+  fontSize: 20,
+  cursor: "pointer",
+};
+
+const dashboardRecordActorGrid = {
+  flexShrink: 0,
+  display: "grid",
+  gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+  gap: 8,
+  padding: "12px 20px",
+};
+
+const dashboardRecordActor = {
+  minWidth: 0,
+  padding: 11,
+  borderRadius: 13,
+  background: "rgba(255,255,255,.035)",
+  border: "1px solid rgba(148,163,184,.065)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+  color: "#64748b",
+  fontSize: 9,
+  fontWeight: 850,
+};
+
+const dashboardRecordFields = {
+  minHeight: 0,
+  overflowY: "auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+  gap: 8,
+  padding: "0 20px 20px",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 rgba(15,23,42,.72)",
+};
+
+const dashboardRecordField = {
+  minWidth: 0,
+  padding: 11,
+  borderRadius: 12,
+  background: "rgba(2,6,23,.34)",
+  border: "1px solid rgba(148,163,184,.055)",
+};
+
+const dashboardRecordFieldLabel = {
+  color: "#64748b",
+  fontSize: 8,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".05em",
+};
+
+const dashboardRecordFieldValue = {
+  marginTop: 5,
+  color: "#e2e8f0",
+  fontSize: 10.5,
+  fontWeight: 750,
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  lineHeight: 1.5,
 };
 
 export default DashboardPage;
