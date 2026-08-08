@@ -29,6 +29,7 @@ import {
 } from "expo-camera";
 
 import {
+  buildStickerScanText,
   dispatchSingleScan,
   moveItemToFg,
   resolveScan,
@@ -214,6 +215,17 @@ export default function ScanDispatchScreen({
   const isDispatch =
     hasRole("DISPATCH");
 
+  const normalizedRole =
+    normalizeStatus(role) ||
+    (
+      Array.isArray(roles)
+        ? roles
+          .map(normalizeStatus)
+          .find(Boolean)
+        : ""
+    ) ||
+    (isDispatch ? "DISPATCH" : "");
+
   const [permission, requestPermission] =
     useCameraPermissions();
 
@@ -222,6 +234,16 @@ export default function ScanDispatchScreen({
 
   const [scanText, setScanText] =
     useState("");
+
+  const [
+    manualStickerNumber,
+    setManualStickerNumber,
+  ] = useState("");
+
+  const [
+    resolveSource,
+    setResolveSource,
+  ] = useState("");
 
   const [resolved, setResolved] =
     useState(null);
@@ -454,57 +476,182 @@ export default function ScanDispatchScreen({
       }
 
       setScannerActive(false);
-      setScanText(raw);
 
-      await resolveQr(raw);
+      await resolveItem(
+        raw,
+        {
+          source: "QR",
+        }
+      );
     };
 
-  const resolveQr =
+  const submitManualSticker =
+    async () => {
+      let stickerScanText;
+
+      try {
+        stickerScanText =
+          buildStickerScanText(
+            manualStickerNumber
+          );
+      } catch (e) {
+        showNotice(
+          "warning",
+          "Sticker Number required",
+          e?.message ||
+          "Enter Sticker Number."
+        );
+
+        return;
+      }
+
+      const success =
+        await resolveItem(
+          stickerScanText,
+          {
+            source:
+              "STICKER",
+          }
+        );
+
+      if (success) {
+        /*
+         * Keep the visible sticker number in the field.
+         * This is useful if the user needs to visually
+         * verify what was entered.
+         */
+      }
+    };
+
+  const resolveItem =
     async (
       raw,
       options = {}
     ) => {
       const silent =
-        Boolean(options.silent);
+        Boolean(
+          options.silent
+        );
+
+      const source =
+        options.source ===
+          "STICKER"
+          ? "STICKER"
+          : "QR";
+
+      const cleanValue =
+        String(
+          raw || ""
+        ).trim();
+
+      if (!cleanValue) {
+        showNotice(
+          "warning",
+          "Item reference required",
+          "Scan the QR or enter the Sticker Number."
+        );
+
+        return false;
+      }
 
       try {
         setLoading(true);
 
         const data =
-          await resolveScan(raw);
+          await resolveScan(
+            cleanValue
+          );
+
+        const foundItem =
+          getResolvedItem(
+            data
+          );
 
         setResolved(data);
 
-        const foundItem =
-          getResolvedItem(data);
+        /*
+         * Keep the canonical scanner value.
+         *
+         * QR:
+         * ALSORG|TYPE=...|PI=...|SN=...
+         *
+         * Manual:
+         * SN=123456
+         */
+        setScanText(
+          cleanValue
+        );
+
+        setResolveSource(
+          source
+        );
 
         const zoneOptions =
-          getFgOptions(foundItem);
+          getFgOptions(
+            foundItem
+          );
 
-        if (zoneOptions.length === 1) {
-          update("fgZoneCode", zoneOptions[0]);
+        if (
+          zoneOptions.length === 1
+        ) {
+          update(
+            "fgZoneCode",
+            zoneOptions[0]
+          );
+        } else {
+          update(
+            "fgZoneCode",
+            ""
+          );
         }
+
+        /*
+         * Pause scanner once an item has been successfully found.
+         */
+        setScannerActive(
+          false
+        );
 
         if (!silent) {
           showNotice(
             "success",
-            "QR resolved",
-            "Item details loaded successfully."
+            source === "STICKER"
+              ? "Sticker found"
+              : "QR resolved",
+            source === "STICKER"
+              ? "Item loaded successfully from Sticker Number."
+              : "Item details loaded successfully."
           );
         }
+
+        return true;
       } catch (e) {
         setResolved(null);
+        setScanText("");
+        setResolveSource("");
 
         showNotice(
           "error",
-          "Scan failed",
+          source === "STICKER"
+            ? "Sticker not found"
+            : "Scan failed",
           getBackendMessage(
             e,
-            "Unable to resolve QR"
+            source === "STICKER"
+              ? "Unable to find item using this Sticker Number."
+              : "Unable to resolve QR."
           )
         );
 
-        setScannerActive(true);
+        if (
+          source === "QR"
+        ) {
+          setScannerActive(
+            true
+          );
+        }
+
+        return false;
       } finally {
         setLoading(false);
       }
@@ -513,6 +660,8 @@ export default function ScanDispatchScreen({
   const resetScan = () => {
     setScannerActive(true);
     setScanText("");
+    setManualStickerNumber("");
+    setResolveSource("");
     setResolved(null);
     setNotice(null);
 
@@ -559,10 +708,13 @@ export default function ScanDispatchScreen({
       );
 
       if (scanText) {
-        await resolveQr(
+        await resolveItem(
           scanText,
           {
             silent: true,
+            source:
+              resolveSource ||
+              "QR",
           }
         );
       }
@@ -598,8 +750,8 @@ export default function ScanDispatchScreen({
     if (!scanText) {
       showNotice(
         "warning",
-        "QR missing",
-        "Please scan QR first."
+        "Item missing",
+        "Scan a QR or enter the Sticker Number first."
       );
       return;
     }
@@ -777,6 +929,96 @@ export default function ScanDispatchScreen({
         readiness={readiness}
       />
 
+      <View style={styles.manualStickerCard}>
+        <View style={styles.manualStickerTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.manualStickerKicker}>
+              QR NOT READABLE?
+            </Text>
+
+            <Text style={styles.manualStickerTitle}>
+              Enter Sticker Number
+            </Text>
+
+            <Text style={styles.manualStickerSub}>
+              Type the printed Sticker Number and the same dispatch validation will be used.
+            </Text>
+          </View>
+
+          <View style={styles.manualBadge}>
+            <Text style={styles.manualBadgeText}>
+              FALLBACK
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.manualStickerRow}>
+          <TextInput
+            value={manualStickerNumber}
+            onChangeText={
+              setManualStickerNumber
+            }
+            placeholder="Example: 000123"
+            placeholderTextColor="#64748b"
+            style={styles.manualStickerInput}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={
+              !loading &&
+              !dispatching
+            }
+            returnKeyType="search"
+            onSubmitEditing={
+              submitManualSticker
+            }
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.manualStickerBtn,
+              (
+                !manualStickerNumber.trim() ||
+                loading
+              )
+                ? styles.manualStickerBtnDisabled
+                : null,
+            ]}
+            onPress={
+              submitManualSticker
+            }
+            disabled={
+              !manualStickerNumber.trim() ||
+              loading
+            }
+          >
+            {loading ? (
+              <ActivityIndicator
+                color="#fff"
+                size="small"
+              />
+            ) : (
+              <Text style={styles.manualStickerBtnText}>
+                Find Item
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.manualStickerHint}>
+          Sticker Number is checked against the latest active sticker before dispatch.
+        </Text>
+      </View>
+
+      <View style={styles.orDivider}>
+        <View style={styles.orLine} />
+
+        <Text style={styles.orText}>
+          OR SCAN QR
+        </Text>
+
+        <View style={styles.orLine} />
+      </View>
+
       <View style={styles.cameraWrap}>
         {scannerActive ? (
           <CameraView
@@ -863,6 +1105,32 @@ export default function ScanDispatchScreen({
                     item?.codeSku
                   )}
                 </Text>
+              </View>
+
+              <View style={styles.sourceRow}>
+                <View
+                  style={[
+                    styles.sourceBadge,
+                    resolveSource === "STICKER"
+                      ? styles.sourceBadgeManual
+                      : styles.sourceBadgeQr,
+                  ]}
+                >
+                  <Text style={styles.sourceBadgeText}>
+                    {resolveSource === "STICKER"
+                      ? "STICKER ENTRY"
+                      : "QR SCAN"}
+                  </Text>
+                </View>
+
+                {item?.stickerNumber ? (
+                  <Text
+                    style={styles.sourceSticker}
+                    numberOfLines={1}
+                  >
+                    Sticker: {item.stickerNumber}
+                  </Text>
+                ) : null}
               </View>
 
               <View
@@ -1811,5 +2079,172 @@ const styles = {
   primaryText: {
     color: "#fff",
     fontWeight: "900",
+  },
+
+  manualStickerCard: {
+    backgroundColor:
+      "rgba(15,23,42,.96)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor:
+      "rgba(59,130,246,.25)",
+    padding: 15,
+    marginBottom: 12,
+  },
+
+  manualStickerTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 13,
+  },
+
+  manualStickerKicker: {
+    color: "#60a5fa",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+
+  manualStickerTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  manualStickerSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+
+  manualBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor:
+      "rgba(168,85,247,.12)",
+    borderWidth: 1,
+    borderColor:
+      "rgba(168,85,247,.28)",
+    marginLeft: 10,
+  },
+
+  manualBadgeText: {
+    color: "#c4b5fd",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  manualStickerRow: {
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  manualStickerInput: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,.10)",
+    backgroundColor:
+      "rgba(255,255,255,.05)",
+    color: "#fff",
+    paddingHorizontal: 13,
+    fontWeight: "900",
+  },
+
+  manualStickerBtn: {
+    minWidth: 96,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  manualStickerBtnDisabled: {
+    opacity: 0.45,
+  },
+
+  manualStickerBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  manualStickerHint: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 15,
+    marginTop: 8,
+  },
+
+  orDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor:
+      "rgba(255,255,255,.08)",
+  },
+
+  orText: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  sourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 7,
+  },
+
+  sourceBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  sourceBadgeQr: {
+    backgroundColor:
+      "rgba(59,130,246,.10)",
+    borderColor:
+      "rgba(59,130,246,.25)",
+  },
+
+  sourceBadgeManual: {
+    backgroundColor:
+      "rgba(168,85,247,.10)",
+    borderColor:
+      "rgba(168,85,247,.28)",
+  },
+
+  sourceBadgeText: {
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  sourceSticker: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "800",
+    flexShrink: 1,
   },
 };

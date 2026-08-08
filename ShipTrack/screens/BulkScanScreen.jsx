@@ -26,6 +26,7 @@ import {
 } from "expo-camera";
 
 import {
+  buildStickerScanText,
   dispatchBulkScans,
   moveItemToFg,
   resolveScan,
@@ -298,6 +299,8 @@ function getSearchBlob(row) {
     item.clientName,
     item.description,
     item.remarks,
+    item.stickerNumber,
+    row.sourceType,
     item.plantCode,
     item.currentLocationCode,
     item.location,
@@ -313,11 +316,24 @@ export default function BulkScanScreen({
 }) {
 
   const {
+    role,
+    roles = [],
     hasRole,
   } = useAuth();
 
   const isDispatch =
     hasRole("DISPATCH");
+
+  const normalizedRole =
+    normalizeStatus(role) ||
+    (
+      Array.isArray(roles)
+        ? roles
+          .map(normalizeStatus)
+          .find(Boolean)
+        : ""
+    ) ||
+    (isDispatch ? "DISPATCH" : "");
 
   const [permission, requestPermission] =
     useCameraPermissions();
@@ -339,6 +355,11 @@ export default function BulkScanScreen({
 
   const [rows, setRows] =
     useState([]);
+
+  const [
+    manualStickerNumber,
+    setManualStickerNumber,
+  ] = useState("");
 
   const [drivers, setDrivers] =
     useState([]);
@@ -713,104 +734,211 @@ export default function BulkScanScreen({
     setLocationFilter("ALL");
   };
 
-  const addScan = async (raw) => {
-    const cleanScan =
-      String(raw || "").trim();
+  const addScan =
+    async (
+      raw,
+      options = {}
+    ) => {
+      const source =
+        options.source ===
+          "STICKER"
+          ? "STICKER"
+          : "QR";
 
-    if (!cleanScan) {
-      setScannerActive(true);
-      return;
-    }
+      const cleanScan =
+        String(
+          raw || ""
+        ).trim();
 
-    const duplicate =
-      rows.some(
-        (r) => r.scanText === cleanScan
-      );
+      if (!cleanScan) {
+        setScannerActive(true);
+        return false;
+      }
 
-    if (duplicate) {
-      showNotice(
-        "warning",
-        "Duplicate QR",
-        "This QR is already added in the bulk cart."
-      );
-
-      setScannerActive(true);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const data =
-        await resolveScan(cleanScan);
-
-      const item =
-        getResolvedItem(data);
-
-      const zohoItemId =
-        getZohoItemId(item);
-
-      const duplicateItem =
+      const duplicate =
         rows.some(
           (r) =>
-            getZohoItemId(r.item) ===
-            zohoItemId
+            String(
+              r.scanText || ""
+            ).trim() ===
+            cleanScan
         );
 
-      if (duplicateItem) {
+      if (duplicate) {
         showNotice(
           "warning",
-          "Duplicate item",
-          "This item is already added in the bulk cart."
+          "Already added",
+          source === "STICKER"
+            ? "This Sticker Number is already in the bulk cart."
+            : "This QR is already in the bulk cart."
         );
 
         setScannerActive(true);
-        return;
+        return false;
       }
 
-      setRows((prev) => [
-        ...prev,
-        {
-          scanText: cleanScan,
-          item,
-          fgZoneCode: "",
-          manualFgZone: false,
-        },
-      ]);
+      try {
+        setLoading(true);
 
-      showNotice(
-        "success",
-        "Item added",
-        `${clean(
-          getItemName(item)
-        )} added to bulk cart.`
-      );
-    } catch (e) {
-      showNotice(
-        "error",
-        "Scan failed",
-        getBackendMessage(
-          e,
-          "Unable to resolve QR"
-        )
-      );
-    } finally {
-      setLoading(false);
-      setScannerActive(true);
-    }
-  };
+        const data =
+          await resolveScan(
+            cleanScan
+          );
+
+        const item =
+          getResolvedItem(
+            data
+          );
+
+        const zohoItemId =
+          getZohoItemId(
+            item
+          );
+
+        if (!zohoItemId) {
+          throw new Error(
+            "Resolved item does not contain a valid item ID."
+          );
+        }
+
+        /*
+         * More important than comparing QR strings:
+         * prevent the SAME ITEM being added using QR
+         * and then again using Sticker Number.
+         */
+        const duplicateItem =
+          rows.some(
+            (r) =>
+              String(
+                getZohoItemId(
+                  r.item
+                )
+              ) ===
+              String(
+                zohoItemId
+              )
+          );
+
+        if (duplicateItem) {
+          showNotice(
+            "warning",
+            "Item already added",
+            "This item is already present in the bulk cart."
+          );
+
+          setScannerActive(true);
+          return false;
+        }
+
+        setRows(
+          (prev) => [
+            ...prev,
+            {
+              scanText:
+                cleanScan,
+
+              sourceType:
+                source,
+
+              item,
+
+              fgZoneCode:
+                "",
+
+              manualFgZone:
+                false,
+            },
+          ]
+        );
+
+        showNotice(
+          "success",
+          source === "STICKER"
+            ? "Sticker item added"
+            : "QR item added",
+          `${clean(
+            getItemName(item)
+          )} added to bulk cart.`
+        );
+
+        return true;
+      } catch (e) {
+        showNotice(
+          "error",
+          source === "STICKER"
+            ? "Sticker not found"
+            : "Scan failed",
+          getBackendMessage(
+            e,
+            source === "STICKER"
+              ? "Unable to find item using this Sticker Number."
+              : "Unable to resolve QR."
+          )
+        );
+
+        return false;
+      } finally {
+        setLoading(false);
+        setScannerActive(true);
+      }
+    };
 
   const handleBarcodeScanned =
     async ({
       data,
     }) => {
-      if (!scannerActive || loading) {
+      if (
+        !scannerActive ||
+        loading
+      ) {
         return;
       }
 
       setScannerActive(false);
 
-      await addScan(data);
+      await addScan(
+        data,
+        {
+          source:
+            "QR",
+        }
+      );
+    };
+
+  const addManualSticker =
+    async () => {
+      let stickerScanText;
+
+      try {
+        stickerScanText =
+          buildStickerScanText(
+            manualStickerNumber
+          );
+      } catch (e) {
+        showNotice(
+          "warning",
+          "Sticker Number required",
+          e?.message ||
+          "Enter Sticker Number."
+        );
+
+        return;
+      }
+
+      const added =
+        await addScan(
+          stickerScanText,
+          {
+            source:
+              "STICKER",
+          }
+        );
+
+      if (added) {
+        setManualStickerNumber(
+          ""
+        );
+      }
     };
 
   const removeRow = (index) => {
@@ -839,7 +967,9 @@ export default function BulkScanScreen({
           style: "destructive",
           onPress: () => {
             setRows([]);
+            setManualStickerNumber("");
             setBulkFgZoneCode("");
+            setScannerActive(true);
             clearFilters();
             showNotice(
               "success",
@@ -1214,26 +1344,17 @@ export default function BulkScanScreen({
       return;
     }
 
-    if (!form.driverId) {
-      showNotice(
-        "warning",
-        "Driver required",
-        "Please select driver."
-      );
-      return;
-    }
-
-    if (!form.vehicleId) {
-      showNotice(
-        "warning",
-        "Vehicle required",
-        "Please select vehicle."
-      );
-      return;
-    }
+    /*
+     * Driver and vehicle are OPTIONAL.
+     *
+     * Blank values are normalized to null by dispatchApi.
+     * Do not block dispatch when either is empty.
+     */
 
     const selectedDispatchTime =
-      toBackendDateTime(form.tripStart);
+      toBackendDateTime(
+        form.tripStart
+      );
 
     if (!selectedDispatchTime) {
       showNotice(
@@ -1249,13 +1370,21 @@ export default function BulkScanScreen({
 
       const result =
         await dispatchBulkScans({
-          scanTexts: rows.map(
-            (row) => row.scanText
-          ),
+          scanTexts:
+            rows.map(
+              (row) =>
+                row.scanText
+            ),
 
+          /*
+           * Optional.
+           */
           driverId:
             form.driverId || null,
 
+          /*
+           * Optional.
+           */
           vehicleId:
             form.vehicleId || null,
 
@@ -1281,21 +1410,37 @@ export default function BulkScanScreen({
           {
             text: "View Challans",
             onPress: () =>
-              navigation.navigate("Trips"),
+              navigation.navigate(
+                "Trips"
+              ),
           },
           {
             text: "New Bulk Scan",
             onPress: () => {
               setRows([]);
+              setManualStickerNumber("");
               setBulkFgZoneCode("");
+              setScannerActive(true);
               clearFilters();
 
-              setForm((prev) => ({
-                ...prev,
-                helperLoaderCount: "",
-                remarks: "",
-                tripStart: getNowDateTimeLocal(),
-              }));
+              setForm(
+                (prev) => ({
+                  ...prev,
+
+                  /*
+                   * Keep driver/vehicle selection if desired.
+                   * Reset only dispatch-specific entry data.
+                   */
+                  helperLoaderCount:
+                    "",
+
+                  remarks:
+                    "",
+
+                  tripStart:
+                    getNowDateTimeLocal(),
+                })
+              );
 
               setNotice(null);
             },
@@ -1324,7 +1469,7 @@ export default function BulkScanScreen({
         </Text>
 
         <Text style={styles.permissionText}>
-          Bulk QR Dispatch is allowed only for DISPATCH users.
+          Bulk QR / Sticker Dispatch is allowed only for DISPATCH users.
         </Text>
 
         <Text style={styles.permissionText}>
@@ -1353,29 +1498,6 @@ export default function BulkScanScreen({
     );
   }
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.permissionTitle}>
-          Camera Permission Required
-        </Text>
-
-        <Text style={styles.permissionText}>
-          ShipTrack needs camera access to scan dispatch QR codes.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.primaryFullBtn}
-          onPress={requestPermission}
-        >
-          <Text style={styles.primaryText}>
-            Allow Camera
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <ScrollView
       style={styles.page}
@@ -1384,11 +1506,11 @@ export default function BulkScanScreen({
       }}
     >
       <Text style={styles.title}>
-        Bulk QR Dispatch
+        Bulk Dispatch
       </Text>
 
       <Text style={styles.sub}>
-        Scan multiple items, move FG-required items, then create one bulk dispatch challan.
+        Scan QR codes or enter Sticker Numbers, move FG-required items, then create one bulk dispatch challan.
       </Text>
 
       <StatusNotice
@@ -1405,34 +1527,155 @@ export default function BulkScanScreen({
         vehicles={vehicles.length}
       />
 
-      <View style={styles.cameraWrap}>
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr"],
-          }}
-          onBarcodeScanned={
-            scannerActive
-              ? handleBarcodeScanned
-              : undefined
-          }
-        />
+      <View style={styles.manualStickerCard}>
+        <View style={styles.manualStickerTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.manualStickerKicker}>
+              MANUAL ITEM ENTRY
+            </Text>
 
-        <View style={styles.scanFrame} />
+            <Text style={styles.manualStickerTitle}>
+              Add by Sticker Number
+            </Text>
+
+            <Text style={styles.manualStickerSub}>
+              Use this when the printed QR is damaged, blurred or cannot be scanned.
+            </Text>
+          </View>
+
+          <View style={styles.manualBadge}>
+            <Text style={styles.manualBadgeText}>
+              + CART
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.manualStickerRow}>
+          <TextInput
+            value={manualStickerNumber}
+            onChangeText={
+              setManualStickerNumber
+            }
+            placeholder="Enter Sticker Number"
+            placeholderTextColor="#64748b"
+            style={styles.manualStickerInput}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={
+              !loading &&
+              !dispatching
+            }
+            returnKeyType="done"
+            onSubmitEditing={
+              addManualSticker
+            }
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.manualStickerBtn,
+              (
+                !manualStickerNumber.trim() ||
+                loading
+              )
+                ? styles.manualStickerBtnDisabled
+                : null,
+            ]}
+            disabled={
+              !manualStickerNumber.trim() ||
+              loading
+            }
+            onPress={
+              addManualSticker
+            }
+          >
+            <Text style={styles.manualStickerBtnText}>
+              Add Item
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.manualStickerHint}>
+          QR-scanned and manually entered items can be mixed in the same challan.
+        </Text>
+      </View>
+
+      <View style={styles.orDivider}>
+        <View style={styles.orLine} />
+
+        <Text style={styles.orText}>
+          OR KEEP SCANNING
+        </Text>
+
+        <View style={styles.orLine} />
+      </View>
+
+      <View style={styles.cameraWrap}>
+        {permission.granted ? (
+          <>
+            <CameraView
+              style={styles.camera}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={
+                scannerActive
+                  ? handleBarcodeScanned
+                  : undefined
+              }
+            />
+
+            <View style={styles.scanFrame} />
+          </>
+        ) : (
+          <View style={styles.cameraUnavailable}>
+            <Text style={styles.cameraUnavailableIcon}>
+              📷
+            </Text>
+
+            <Text style={styles.cameraUnavailableTitle}>
+              Camera access unavailable
+            </Text>
+
+            <Text style={styles.cameraUnavailableText}>
+              You can still add and dispatch items using the Sticker Number above.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.cameraPermissionBtn}
+              onPress={requestPermission}
+            >
+              <Text style={styles.cameraPermissionText}>
+                Allow Camera
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={styles.scanActions}>
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() =>
-            setScannerActive(true)
-          }
-        >
-          <Text style={styles.secondaryText}>
-            Keep Scanning
-          </Text>
-        </TouchableOpacity>
+        {permission.granted ? (
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() =>
+              setScannerActive(true)
+            }
+          >
+            <Text style={styles.secondaryText}>
+              Keep Scanning
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={requestPermission}
+          >
+            <Text style={styles.secondaryText}>
+              Enable Camera
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {rows.length > 0 ? (
           <TouchableOpacity
@@ -2211,6 +2454,31 @@ function BulkItemCard({
           <Text style={styles.itemSub}>
             SKU: {clean(item.sku)}
           </Text>
+
+          <View style={styles.sourceRow}>
+            <View
+              style={[
+                styles.sourceBadge,
+                row.sourceType ===
+                  "STICKER"
+                  ? styles.sourceBadgeManual
+                  : styles.sourceBadgeQr,
+              ]}
+            >
+              <Text style={styles.sourceBadgeText}>
+                {row.sourceType ===
+                  "STICKER"
+                  ? "STICKER"
+                  : "QR"}
+              </Text>
+            </View>
+
+            {item?.stickerNumber ? (
+              <Text style={styles.sourceSticker}>
+                {item.stickerNumber}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         <View
@@ -2553,6 +2821,124 @@ const styles = {
     marginTop: 2,
   },
 
+  manualStickerCard: {
+    backgroundColor: "rgba(15,23,42,.96)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.25)",
+    padding: 15,
+    marginBottom: 12,
+  },
+
+  manualStickerTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 13,
+  },
+
+  manualStickerKicker: {
+    color: "#60a5fa",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+
+  manualStickerTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  manualStickerSub: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+
+  manualBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(168,85,247,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,.28)",
+    marginLeft: 10,
+  },
+
+  manualBadgeText: {
+    color: "#c4b5fd",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  manualStickerRow: {
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  manualStickerInput: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.10)",
+    backgroundColor: "rgba(255,255,255,.05)",
+    color: "#fff",
+    paddingHorizontal: 13,
+    fontWeight: "900",
+  },
+
+  manualStickerBtn: {
+    minWidth: 96,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  manualStickerBtnDisabled: {
+    opacity: 0.45,
+  },
+
+  manualStickerBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  manualStickerHint: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 15,
+    marginTop: 8,
+  },
+
+  orDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,.08)",
+  },
+
+  orText: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
   cameraWrap: {
     height: 290,
     borderRadius: 22,
@@ -2576,6 +2962,50 @@ const styles = {
     borderRadius: 18,
     borderWidth: 2,
     borderColor: "rgba(96,165,250,.95)",
+  },
+
+  cameraUnavailable: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 22,
+  },
+
+  cameraUnavailableIcon: {
+    fontSize: 30,
+    marginBottom: 8,
+  },
+
+  cameraUnavailableTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  cameraUnavailableText: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 17,
+    marginTop: 5,
+    marginBottom: 12,
+  },
+
+  cameraPermissionBtn: {
+    paddingHorizontal: 16,
+    minHeight: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(59,130,246,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  cameraPermissionText: {
+    color: "#93c5fd",
+    fontWeight: "900",
   },
 
   scanActions: {
@@ -3062,6 +3492,44 @@ const styles = {
     fontWeight: "700",
     marginTop: 5,
     fontSize: 12,
+  },
+
+  sourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 7,
+  },
+
+  sourceBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  sourceBadgeQr: {
+    backgroundColor: "rgba(59,130,246,.10)",
+    borderColor: "rgba(59,130,246,.25)",
+  },
+
+  sourceBadgeManual: {
+    backgroundColor: "rgba(168,85,247,.10)",
+    borderColor: "rgba(168,85,247,.28)",
+  },
+
+  sourceBadgeText: {
+    color: "#cbd5e1",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  sourceSticker: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "800",
+    flexShrink: 1,
   },
 
   statusBadge: {

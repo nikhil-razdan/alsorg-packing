@@ -119,6 +119,19 @@ function formatDateTime(value) {
   }
 }
 
+function isTripEnded(
+  challan
+) {
+  return (
+    Boolean(
+      challan?.tripEndedAt
+    ) ||
+    normalizeStatus(
+      challan?.tripStatus
+    ) === "ENDED"
+  );
+}
+
 function isToday(value) {
   if (!value) {
     return false;
@@ -410,43 +423,41 @@ export default function AdminDashboardScreen({
       const runningTrips =
         challans.filter(
           (challan) =>
-            !challan.tripEndedAt ||
-            normalizeStatus(challan.tripStatus) === "RUNNING"
+            !isTripEnded(challan)
         ).length;
 
       const endedTrips =
         challans.filter(
-          (challan) =>
-            challan.tripEndedAt ||
-            normalizeStatus(challan.tripStatus) === "ENDED"
+          isTripEnded
         ).length;
 
-      const todayChallans =
+      const todayChallanRows =
         challans.filter((challan) =>
           isToday(
             challan.dispatchedAt ||
             challan.tripStartedAt
           )
+        );
+
+      const todayChallans =
+        todayChallanRows.length;
+
+      const todayEndedTrips =
+        todayChallanRows.filter(
+          isTripEnded
         ).length;
 
       const todayItems =
-        challans
-          .filter((challan) =>
-            isToday(
-              challan.dispatchedAt ||
-              challan.tripStartedAt
-            )
-          )
-          .reduce(
-            (sum, challan) =>
-              sum +
-              Number(
-                challan.totalItems ||
-                challan.items?.length ||
-                0
-              ),
-            0
-          );
+        todayChallanRows.reduce(
+          (sum, challan) =>
+            sum +
+            Number(
+              challan.totalItems ||
+              challan.items?.length ||
+              0
+            ),
+          0
+        );
 
       return {
         totalItems,
@@ -460,6 +471,7 @@ export default function AdminDashboardScreen({
         runningTrips,
         endedTrips,
         todayChallans,
+        todayEndedTrips,
         todayItems,
         drivers: drivers.length,
         vehicles: vehicles.length,
@@ -499,16 +511,23 @@ export default function AdminDashboardScreen({
       return challans
         .filter(
           (challan) =>
-            !challan.tripEndedAt ||
-            normalizeStatus(challan.tripStatus) === "RUNNING"
+            !isTripEnded(challan)
         )
         .slice(0, 3);
     }, [challans]);
 
+  /*
+   * The percentage is displayed inside Today's Dispatch,
+   * therefore it must represent TODAY'S trip closure rate,
+   * not the all-time closure rate.
+   */
   const completionPercent =
-    stats.totalChallans > 0
+    stats.todayChallans > 0
       ? Math.round(
-        (stats.endedTrips / stats.totalChallans) * 100
+        (
+          stats.todayEndedTrips /
+          stats.todayChallans
+        ) * 100
       )
       : 0;
 
@@ -879,8 +898,7 @@ function RecentChallan({
   onPress,
 }) {
   const ended =
-    Boolean(challan.tripEndedAt) ||
-    normalizeStatus(challan.tripStatus) === "ENDED";
+    isTripEnded(challan);
 
   return (
     <TouchableOpacity
