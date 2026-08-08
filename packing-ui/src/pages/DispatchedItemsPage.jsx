@@ -204,6 +204,38 @@ const tableActionButton = {
 	whiteSpace: "nowrap",
 };
 
+/*
+ * Normal dispatch challan preview action shown directly on each
+ * dispatch-table row once that item belongs to a generated challan.
+ * The existing shared PDF preview modal already includes Download PDF,
+ * so this adds row-level access without changing the working challan flow.
+ */
+const rowChallanPdfButtonSx = {
+	...tableActionButton,
+	minWidth: 128,
+	color: "#dbeafe",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.20),rgba(59,130,246,.10))",
+	border:
+		"1px solid rgba(96,165,250,.28)",
+	boxShadow:
+		"0 8px 20px rgba(37,99,235,.16)",
+
+	"& .MuiButton-startIcon": {
+		marginRight: "6px",
+	},
+
+	"&:hover": {
+		color: "#fff",
+		background:
+			"linear-gradient(135deg,#2563eb,#3b82f6)",
+		borderColor:
+			"rgba(147,197,253,.42)",
+		boxShadow:
+			"0 10px 24px rgba(37,99,235,.30)",
+	},
+};
+
 const simpleCellText = {
 	color: "#ffffff",
 	fontWeight: 800,
@@ -3419,6 +3451,315 @@ const historyActionBtnsSx = {
 	flexWrap: "wrap",
 };
 
+
+/* =========================================================
+ * NORMAL DISPATCH CHALLAN — DEEP VIEW / ANALYTICS
+ *
+ * Additive only. Custom Challan UI/logic remains untouched.
+ * ========================================================= */
+const normalChallanAnalyticsPanelSx = {
+	mb: 1.5,
+	p: 1.35,
+	borderRadius: "18px",
+	background:
+		"radial-gradient(circle at top left,rgba(37,99,235,.16),transparent 36%),linear-gradient(135deg,rgba(15,23,42,.90),rgba(30,41,59,.58))",
+	border: "1px solid rgba(96,165,250,.20)",
+	boxShadow: "0 14px 32px rgba(2,6,23,.22)",
+};
+
+const normalChallanAnalyticsTitleSx = {
+	color: "#dbeafe",
+	fontSize: 11,
+	fontWeight: 950,
+	letterSpacing: ".11em",
+	textTransform: "uppercase",
+	mb: 1,
+};
+
+const normalChallanAnalyticsGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit,minmax(125px,1fr))",
+	gap: 0.9,
+};
+
+const normalChallanMetricCardSx = (accent = "#60a5fa") => ({
+	p: 1.15,
+	borderRadius: "14px",
+	background: `radial-gradient(circle at top right,${accent}20,transparent 50%),rgba(255,255,255,.025)`,
+	border: `1px solid ${accent}2e`,
+	minWidth: 0,
+});
+
+const normalChallanMetricLabelSx = {
+	color: "rgba(255,255,255,.48)",
+	fontSize: 8.8,
+	fontWeight: 950,
+	letterSpacing: ".07em",
+	textTransform: "uppercase",
+};
+
+const normalChallanMetricValueSx = {
+	mt: 0.45,
+	color: "#fff",
+	fontSize: 21,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const normalChallanMetricMetaSx = {
+	mt: 0.45,
+	color: "rgba(255,255,255,.42)",
+	fontSize: 8.8,
+	fontWeight: 700,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const normalChallanViewModalSx = {
+	...enhancedModalSx,
+	width: "min(1460px,97vw)",
+	height: "min(92vh,920px)",
+	maxHeight: "92vh",
+	display: "flex",
+	flexDirection: "column",
+	borderRadius: "24px",
+	background:
+		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.22),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.12),transparent 28%),linear-gradient(180deg,#07101f,#0f172a)",
+	border: "1px solid rgba(96,165,250,.20)",
+	boxShadow: "0 44px 130px rgba(0,0,0,.74)",
+};
+
+const normalChallanViewBodySx = {
+	flex: 1,
+	minHeight: 0,
+	p: 2,
+	display: "flex",
+	flexDirection: "column",
+	gap: 1.4,
+	overflow: "hidden",
+};
+
+const normalChallanSummaryGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "repeat(2,minmax(0,1fr))",
+		md: "repeat(4,minmax(0,1fr))",
+		xl: "repeat(8,minmax(0,1fr))",
+	},
+	gap: 0.9,
+};
+
+const normalChallanInfoCardSx = {
+	p: 1.15,
+	borderRadius: "14px",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.07)",
+	minWidth: 0,
+};
+
+const normalChallanInfoLabelSx = {
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 950,
+	textTransform: "uppercase",
+	letterSpacing: ".08em",
+};
+
+const normalChallanInfoValueSx = {
+	mt: 0.45,
+	color: "#fff",
+	fontSize: 11.5,
+	fontWeight: 900,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const normalChallanInspectorGridSx = {
+	flex: 1,
+	minHeight: 0,
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "minmax(0,1fr)",
+		lg: "minmax(620px,1.42fr) minmax(360px,.78fr)",
+	},
+	gap: 1.4,
+	overflow: {
+		xs: "auto",
+		lg: "hidden",
+	},
+	...premiumScrollbarSx("#60a5fa"),
+};
+
+const normalChallanItemsPanelSx = {
+	minWidth: 0,
+	minHeight: 0,
+	display: "flex",
+	flexDirection: "column",
+	borderRadius: "18px",
+	background: "rgba(2,6,23,.34)",
+	border: "1px solid rgba(96,165,250,.14)",
+	overflow: "hidden",
+};
+
+const normalChallanItemsToolbarSx = {
+	p: 1.2,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	flexWrap: "wrap",
+	background: "rgba(255,255,255,.025)",
+	borderBottom: "1px solid rgba(255,255,255,.06)",
+};
+
+const normalChallanItemListSx = {
+	flex: 1,
+	minHeight: 0,
+	overflowY: "auto",
+	overflowX: "hidden",
+	p: 1,
+	...premiumScrollbarSx("#60a5fa"),
+};
+
+const normalChallanItemRowSx = (selected = false) => ({
+	display: "grid",
+	gridTemplateColumns: "44px minmax(180px,1.4fr) minmax(110px,.75fr) minmax(110px,.75fr) minmax(105px,.65fr) auto",
+	alignItems: "center",
+	gap: 1,
+	p: 1,
+	mb: 0.75,
+	borderRadius: "13px",
+	cursor: "pointer",
+	background: selected
+		? "linear-gradient(135deg,rgba(37,99,235,.18),rgba(59,130,246,.07))"
+		: "rgba(255,255,255,.025)",
+	border: selected
+		? "1px solid rgba(96,165,250,.34)"
+		: "1px solid rgba(255,255,255,.06)",
+	transition: "all .16s ease",
+	"&:hover": {
+		background: selected
+			? "linear-gradient(135deg,rgba(37,99,235,.24),rgba(59,130,246,.10))"
+			: "rgba(255,255,255,.05)",
+		borderColor: "rgba(96,165,250,.24)",
+	},
+});
+
+const normalChallanItemIndexSx = {
+	width: 34,
+	height: 34,
+	borderRadius: "11px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	color: "#bfdbfe",
+	fontSize: 10,
+	fontWeight: 950,
+	background: "rgba(37,99,235,.12)",
+	border: "1px solid rgba(96,165,250,.18)",
+};
+
+const normalChallanItemPrimarySx = {
+	color: "#fff",
+	fontSize: 11.5,
+	fontWeight: 900,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const normalChallanItemSecondarySx = {
+	mt: 0.28,
+	color: "rgba(255,255,255,.46)",
+	fontSize: 9.5,
+	fontWeight: 700,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const normalChallanDetailPanelSx = {
+	minWidth: 0,
+	minHeight: 0,
+	display: "flex",
+	flexDirection: "column",
+	borderRadius: "18px",
+	background:
+		"radial-gradient(circle at top right,rgba(16,185,129,.10),transparent 36%),rgba(2,6,23,.36)",
+	border: "1px solid rgba(16,185,129,.15)",
+	overflow: "hidden",
+};
+
+const normalChallanDetailScrollSx = {
+	flex: 1,
+	minHeight: 0,
+	overflowY: "auto",
+	p: 1.4,
+	...premiumScrollbarSx("#10b981"),
+};
+
+const normalChallanDetailSectionSx = {
+	p: 1.25,
+	mb: 1,
+	borderRadius: "14px",
+	background: "rgba(255,255,255,.026)",
+	border: "1px solid rgba(255,255,255,.06)",
+};
+
+const normalChallanDetailSectionTitleSx = {
+	mb: 0.9,
+	color: "#6ee7b7",
+	fontSize: 9.5,
+	fontWeight: 950,
+	letterSpacing: ".10em",
+	textTransform: "uppercase",
+};
+
+const normalChallanDetailFieldGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+	gap: 0.9,
+};
+
+const normalChallanDetailFieldSx = {
+	minWidth: 0,
+};
+
+const normalChallanDetailFieldLabelSx = {
+	color: "#64748b",
+	fontSize: 8.4,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".06em",
+};
+
+const normalChallanDetailFieldValueSx = {
+	mt: 0.3,
+	color: "#e2e8f0",
+	fontSize: 10.5,
+	fontWeight: 800,
+	wordBreak: "break-word",
+};
+
+const normalChallanViewButtonSx = {
+	height: 36,
+	px: 1.6,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontSize: 10.5,
+	fontWeight: 950,
+	color: "#bfdbfe",
+	background: "linear-gradient(135deg,rgba(37,99,235,.18),rgba(59,130,246,.08))",
+	border: "1px solid rgba(96,165,250,.26)",
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+		boxShadow: "0 10px 22px rgba(37,99,235,.22)",
+	},
+};
+
 const normalizeSmartSearch = (value) => {
 	return String(value || "")
 		.toLowerCase()
@@ -4858,6 +5199,27 @@ const DISPATCH_BACKEND_BATCH_SIZE = 200;
  * This is significantly faster than 43 sequential requests,
  * while remaining safe for a Render instance and database pool.
  */
+
+function formatTripDurationMinutes(value) {
+	const minutes = Number(value);
+
+	if (!Number.isFinite(minutes) || minutes < 0) {
+		return "—";
+	}
+
+	const total = Math.round(minutes);
+	const days = Math.floor(total / 1440);
+	const hours = Math.floor((total % 1440) / 60);
+	const mins = total % 60;
+
+	const parts = [];
+	if (days > 0) parts.push(`${days}d`);
+	if (hours > 0) parts.push(`${hours}h`);
+	parts.push(`${mins}m`);
+
+	return parts.join(" ");
+}
+
 const DISPATCH_FETCH_CONCURRENCY = 4;
 
 const DISPATCH_BACKEND_MAX_PAGES = 5000;
@@ -4973,6 +5335,15 @@ export default function DispatchedItemsPage() {
 	const [challanHistoryLoading, setChallanHistoryLoading] = useState(false);
 	const [challanHistoryRows, setChallanHistoryRows] = useState([]);
 	const [challanHistorySearch, setChallanHistorySearch] = useState("");
+
+	/* Normal Dispatch Challan deep inspector — custom challans are untouched. */
+	const [normalChallanViewOpen, setNormalChallanViewOpen] = useState(false);
+	const [normalChallanViewLoading, setNormalChallanViewLoading] = useState(false);
+	const [normalChallanView, setNormalChallanView] = useState(null);
+	const [normalChallanItemSearch, setNormalChallanItemSearch] = useState("");
+	const [normalChallanItemPageNo, setNormalChallanItemPageNo] = useState(1);
+	const [normalChallanItemPageSize, setNormalChallanItemPageSize] = useState(10);
+	const [normalChallanSelectedItemId, setNormalChallanSelectedItemId] = useState("");
 
 	const [challanHistoryPageNo, setChallanHistoryPageNo] = useState(1);
 	const [challanHistoryPageSize, setChallanHistoryPageSize] = useState(6);
@@ -11723,6 +12094,17 @@ export default function DispatchedItemsPage() {
 			renderCell: (params) => {
 				const row = params.row;
 
+				/*
+				 * A normal dispatch challan is created only after dispatch, so rows
+				 * that do not yet have a challan number keep their existing actions
+				 * unchanged. Rows with a challan receive one direct PDF-preview action.
+				 */
+				const rowChallanNumber =
+					String(
+						getDispatchChallanNo(row) ||
+						""
+					).trim();
+
 				const rowAction = getDispatchRowAction(row);
 
 				const showMoveToFg =
@@ -11744,6 +12126,28 @@ export default function DispatchedItemsPage() {
 
 				return (
 					<Box sx={actionContainer}>
+						{rowChallanNumber && (
+							<Tooltip
+								title={`Preview Challan PDF - ${rowChallanNumber}`}
+								arrow
+							>
+								<Button
+									size="small"
+									startIcon={
+										<DescriptionOutlinedIcon fontSize="small" />
+									}
+									onClick={() =>
+										previewExistingChallanPdf(
+											rowChallanNumber
+										)
+									}
+									sx={rowChallanPdfButtonSx}
+								>
+									View Challan PDF
+								</Button>
+							</Tooltip>
+						)}
+
 						{showMoveToFg && (
 							<Button
 								size="small"
@@ -14205,6 +14609,90 @@ export default function DispatchedItemsPage() {
 		}
 	};
 
+
+	const closeNormalChallanView = () => {
+		setNormalChallanViewOpen(false);
+		setNormalChallanViewLoading(false);
+		setNormalChallanView(null);
+		setNormalChallanItemSearch("");
+		setNormalChallanItemPageNo(1);
+		setNormalChallanSelectedItemId("");
+	};
+
+	const openNormalChallanView = (challan) => {
+		if (!challan) {
+			alert("Challan details unavailable");
+			return;
+		}
+
+		/*
+		 * Master-item history cards intentionally contain only the rows belonging
+		 * to that master grouping. For the inspector, always prefer the original
+		 * complete challan returned by /api/dispatched/challans so "View Details"
+		 * shows every row on the challan, not only the current master-item subset.
+		 */
+		const challanNumber = getChallanNumber(challan);
+		const completeChallan =
+			(challanHistoryRows || []).find(
+				(row) => getChallanNumber(row) === challanNumber
+			) || challan;
+
+		const items = Array.isArray(completeChallan.items)
+			? completeChallan.items
+			: [];
+
+		setNormalChallanView(completeChallan);
+		setNormalChallanItemSearch("");
+		setNormalChallanItemPageNo(1);
+		setNormalChallanSelectedItemId(
+			String(items?.[0]?.zohoItemId || "")
+		);
+		setNormalChallanViewOpen(true);
+	};
+
+	const openNormalChallanViewByNumber = async (challanNumber) => {
+		const cleanNumber = String(challanNumber || "").trim();
+
+		if (!cleanNumber) {
+			alert("Challan number missing");
+			return;
+		}
+
+		try {
+			setNormalChallanViewLoading(true);
+
+			let sourceRows = Array.isArray(challanHistoryRows)
+				? challanHistoryRows
+				: [];
+
+			let challan = sourceRows.find(
+				(row) => getChallanNumber(row) === cleanNumber
+			);
+
+			if (!challan) {
+				sourceRows = await fetchChallanHistoryRows();
+				setChallanHistoryRows(sourceRows);
+
+				challan = sourceRows.find(
+					(row) => getChallanNumber(row) === cleanNumber
+				);
+			}
+
+			if (!challan) {
+				throw new Error(
+					`Challan ${cleanNumber} was not found in dispatch history`
+				);
+			}
+
+			openNormalChallanView(challan);
+		} catch (err) {
+			console.error(err);
+			alert(err?.message || "Unable to load challan details");
+		} finally {
+			setNormalChallanViewLoading(false);
+		}
+	};
+
 	const getMasterHistoryKey = (item) => {
 		return [
 			item?.clientName || "",
@@ -14250,11 +14738,18 @@ export default function DispatchedItemsPage() {
 				if (!group.challans.has(challanNumber)) {
 					group.challans.set(challanNumber, {
 						challanNumber,
+						driverId: challan.driverId || null,
 						driverName: challan.driverName || "—",
+						vehicleId: challan.vehicleId || null,
 						vehicleNumber: challan.vehicleNumber || "—",
+						helperLoaderCount: challan.helperLoaderCount ?? null,
 						dispatchedAt: challan.dispatchedAt,
 						dispatchedBy: challan.dispatchedBy || "—",
+						tripStartedAt: challan.tripStartedAt || null,
+						tripEndedAt: challan.tripEndedAt || null,
+						tripDurationMinutes: challan.tripDurationMinutes ?? null,
 						tripStatus: challan.tripStatus || "—",
+						totalItems: Number(challan.totalItems || 0),
 						items: [],
 					});
 				}
@@ -14299,7 +14794,24 @@ export default function DispatchedItemsPage() {
 							group.pdNo,
 							group.drawingNo,
 							group.challans
-								.map((c) => c.challanNumber)
+								.flatMap((c) => [
+									c.challanNumber,
+									c.driverName,
+									c.vehicleNumber,
+									c.dispatchedBy,
+									c.tripStatus,
+									...(c.items || []).flatMap((item) => [
+										item.zohoItemId,
+										item.name,
+										item.sku,
+										item.pdNo,
+										item.drawingNo,
+										item.description,
+										item.remarks,
+										item.plantCode,
+										item.currentLocationCode,
+									]),
+								])
 								.join(" "),
 						].join(" ")
 					);
@@ -14313,6 +14825,237 @@ export default function DispatchedItemsPage() {
 				);
 			});
 	}, [challanHistoryRows, challanHistorySearch]);
+
+
+	const normalChallanAnalytics = useMemo(() => {
+		const source = Array.isArray(challanHistoryRows)
+			? challanHistoryRows
+			: [];
+
+		const allItems = source.flatMap((challan) =>
+			Array.isArray(challan?.items) ? challan.items : []
+		);
+
+		const now = new Date();
+		const todayKey = `${now.getFullYear()}-${String(
+			now.getMonth() + 1
+		).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+		const todayChallans = source.filter((challan) => {
+			const date = parseDispatchDateTime(challan?.dispatchedAt);
+			if (!date) return false;
+			const key = `${date.getFullYear()}-${String(
+				date.getMonth() + 1
+			).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+			return key === todayKey;
+		}).length;
+
+		const running = source.filter(
+			(challan) =>
+				String(challan?.tripStatus || "")
+					.trim()
+					.toUpperCase() === "RUNNING"
+		).length;
+
+		const ended = source.filter(
+			(challan) =>
+				String(challan?.tripStatus || "")
+					.trim()
+					.toUpperCase() === "ENDED"
+		).length;
+
+		const uniqueClients = new Set(
+			allItems
+				.map((item) => String(item?.clientName || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+
+		const uniqueVehicles = new Set(
+			source
+				.map((challan) => String(challan?.vehicleNumber || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+
+		const helperTotal = source.reduce(
+			(sum, challan) => sum + Number(challan?.helperLoaderCount || 0),
+			0
+		);
+
+		return {
+			challans: source.length,
+			items: allItems.length,
+			today: todayChallans,
+			running,
+			ended,
+			averageItems:
+				source.length > 0
+					? (allItems.length / source.length).toFixed(1)
+					: "0.0",
+			uniqueClients,
+			uniqueVehicles,
+			helperTotal,
+		};
+	}, [challanHistoryRows]);
+
+	const normalChallanCurrentRowLookup = useMemo(() => {
+		const lookup = new Map();
+
+		(rows || []).forEach((row) => {
+			const id = String(row?.zohoItemId || "").trim();
+			if (id) {
+				lookup.set(id, row);
+			}
+		});
+
+		return lookup;
+	}, [rows]);
+
+	const normalChallanViewItems = useMemo(() => {
+		const items = Array.isArray(normalChallanView?.items)
+			? normalChallanView.items
+			: [];
+
+		return items.map((item) => {
+			const itemId = String(item?.zohoItemId || "").trim();
+			const sourceRow = itemId
+				? normalChallanCurrentRowLookup.get(itemId)
+				: null;
+
+			/*
+			 * Keep challan-response fields authoritative while enriching the row
+			 * with packet/sticker/packing/location fields already loaded by this page.
+			 */
+			return {
+				...(sourceRow || {}),
+				...item,
+				challanNumber:
+					getChallanNumber(normalChallanView) ||
+					getChallanNumber(sourceRow),
+			};
+		});
+	}, [
+		normalChallanView,
+		normalChallanCurrentRowLookup,
+	]);
+
+	const normalChallanFilteredItems = useMemo(() => {
+		const tokens = prepareDispatchSearchTokens(normalChallanItemSearch);
+
+		if (tokens.length === 0) {
+			return normalChallanViewItems;
+		}
+
+		return normalChallanViewItems.filter((item) => {
+			const joined = [
+				item.zohoItemId,
+				item.name,
+				item.itemName,
+				item.sku,
+				item.stickerNumber,
+				item.packetNo,
+				item.packetNumber,
+				item.pdNo,
+				item.drawingNo,
+				item.clientName,
+				item.clientAddress,
+				item.description,
+				item.remarks,
+				item.itemArea,
+				item.area,
+				item.plantCode,
+				item.currentLocationCode,
+				item.location,
+				item.fgAreaCode,
+				item.fgZoneCode,
+				item.warehouseCode,
+				item.status,
+				item.packedBy,
+				item.dispatchedBy,
+			].filter(Boolean).join(" ");
+
+			const normal = normalizeSmartSearch(joined);
+			const compact = normalizeCompactSearch(joined);
+
+			return tokens.every((token) =>
+				(token.normal && normal.includes(token.normal)) ||
+				(token.compact && compact.includes(token.compact))
+			);
+		});
+	}, [normalChallanViewItems, normalChallanItemSearch]);
+
+	const normalChallanItemTotalPages = useMemo(() => {
+		return Math.max(
+			1,
+			Math.ceil(
+				normalChallanFilteredItems.length / normalChallanItemPageSize
+			)
+		);
+	}, [normalChallanFilteredItems.length, normalChallanItemPageSize]);
+
+	const paginatedNormalChallanItems = useMemo(() => {
+		const start =
+			(normalChallanItemPageNo - 1) * normalChallanItemPageSize;
+
+		return normalChallanFilteredItems.slice(
+			start,
+			start + normalChallanItemPageSize
+		);
+	}, [
+		normalChallanFilteredItems,
+		normalChallanItemPageNo,
+		normalChallanItemPageSize,
+	]);
+
+	const selectedNormalChallanItem = useMemo(() => {
+		if (normalChallanViewItems.length === 0) {
+			return null;
+		}
+
+		const selected = normalChallanViewItems.find(
+			(item) =>
+				String(item?.zohoItemId || "") ===
+				String(normalChallanSelectedItemId || "")
+		);
+
+		return selected || normalChallanViewItems[0];
+	}, [normalChallanViewItems, normalChallanSelectedItemId]);
+
+	const normalChallanViewStats = useMemo(() => {
+		const items = normalChallanViewItems;
+		const uniqueClients = new Set(
+			items
+				.map((item) => String(item?.clientName || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+		const uniquePds = new Set(
+			items
+				.map((item) => String(item?.pdNo || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+		const uniqueDrawings = new Set(
+			items
+				.map((item) => String(item?.drawingNo || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+		const uniquePlants = new Set(
+			items
+				.map((item) => String(item?.plantCode || "").trim().toLowerCase())
+				.filter(Boolean)
+		).size;
+		const totalQuantity = items.reduce(
+			(sum, item) => sum + Number(item?.quantity || 0),
+			0
+		);
+
+		return {
+			items: items.length,
+			totalQuantity,
+			uniqueClients,
+			uniquePds,
+			uniqueDrawings,
+			uniquePlants,
+		};
+	}, [normalChallanViewItems]);
 
 	const customChallanHistoryRows = useMemo(() => {
 		const searchText =
@@ -23257,6 +24000,427 @@ export default function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+
+				{normalChallanViewOpen && normalChallanView && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 6100 }}
+						onClick={closeNormalChallanView}
+					>
+						<Box
+							sx={normalChallanViewModalSx}
+							onClick={(event) => event.stopPropagation()}
+						>
+							<Box
+								sx={{
+									...modalHeaderSx,
+									flexShrink: 0,
+									background:
+										"linear-gradient(135deg,rgba(37,99,235,.14),rgba(16,185,129,.05))",
+								}}
+							>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#10b981")}>🚚</Box>
+									<Box sx={{ minWidth: 0 }}>
+										<Box
+											sx={{
+												display: "flex",
+												alignItems: "center",
+												gap: 1,
+												flexWrap: "wrap",
+											}}
+										>
+											<Box sx={modalTitleSx}>
+												Dispatch Challan Inspector
+											</Box>
+											<Chip
+												size="small"
+												label={normalChallanView.tripStatus || "—"}
+												sx={tripStatusChipSx(normalChallanView.tripStatus)}
+											/>
+										</Box>
+										<Box sx={modalSubtitleSx}>
+											{getChallanNumber(normalChallanView)} • Exact challan, logistics, trip and item-row traceability
+										</Box>
+									</Box>
+								</Box>
+
+								<Box
+									sx={{
+										display: "flex",
+										alignItems: "center",
+										gap: 0.8,
+										flexWrap: "wrap",
+									}}
+								>
+									<Button
+										onClick={() =>
+											previewExistingChallanPdf(
+												getChallanNumber(normalChallanView)
+											)
+										}
+										sx={normalChallanViewButtonSx}
+									>
+										Preview PDF
+									</Button>
+									<Button
+										onClick={() =>
+											downloadExistingChallanPdf(
+												getChallanNumber(normalChallanView)
+											)
+										}
+										sx={modalSecondaryButtonSx}
+									>
+										Download PDF
+									</Button>
+									<IconButton
+										onClick={closeNormalChallanView}
+										sx={modalCloseButtonSx}
+									>
+										×
+									</IconButton>
+								</Box>
+							</Box>
+
+							<Box sx={normalChallanViewBodySx}>
+								<Box sx={normalChallanSummaryGridSx}>
+									<NormalChallanInfo
+										label="Items"
+										value={normalChallanViewStats.items}
+									/>
+									<NormalChallanInfo
+										label="Total Qty"
+										value={normalChallanViewStats.totalQuantity}
+									/>
+									<NormalChallanInfo
+										label="Clients"
+										value={normalChallanViewStats.uniqueClients}
+									/>
+									<NormalChallanInfo
+										label="PD Nos."
+										value={normalChallanViewStats.uniquePds}
+									/>
+									<NormalChallanInfo
+										label="Drawings"
+										value={normalChallanViewStats.uniqueDrawings}
+									/>
+									<NormalChallanInfo
+										label="Plants"
+										value={normalChallanViewStats.uniquePlants}
+									/>
+									<NormalChallanInfo
+										label="Helpers / Loaders"
+										value={normalChallanView.helperLoaderCount ?? "—"}
+									/>
+									<NormalChallanInfo
+										label="Trip Duration"
+										value={formatTripDurationMinutes(
+											normalChallanView.tripDurationMinutes
+										)}
+									/>
+								</Box>
+
+								<Box
+									sx={{
+										display: "grid",
+										gridTemplateColumns: {
+											xs: "1fr",
+											md: "repeat(2,minmax(0,1fr))",
+											xl: "repeat(4,minmax(0,1fr))",
+										},
+										gap: 0.9,
+									}}
+								>
+									<NormalChallanInfo
+										label="Driver"
+										value={normalChallanView.driverName || "—"}
+									/>
+									<NormalChallanInfo
+										label="Vehicle"
+										value={normalChallanView.vehicleNumber || "—"}
+									/>
+									<NormalChallanInfo
+										label="Dispatched By"
+										value={normalChallanView.dispatchedBy || "—"}
+									/>
+									<NormalChallanInfo
+										label="Dispatched At"
+										value={formatLocalDateTimeDisplay(
+											normalChallanView.dispatchedAt
+										)}
+									/>
+									<NormalChallanInfo
+										label="Trip Started"
+										value={formatLocalDateTimeDisplay(
+											normalChallanView.tripStartedAt
+										)}
+									/>
+									<NormalChallanInfo
+										label="Trip Ended"
+										value={formatLocalDateTimeDisplay(
+											normalChallanView.tripEndedAt
+										)}
+									/>
+									<NormalChallanInfo
+										label="Challan No."
+										value={getChallanNumber(normalChallanView) || "—"}
+									/>
+									<NormalChallanInfo
+										label="Trip Status"
+										value={normalChallanView.tripStatus || "—"}
+									/>
+								</Box>
+
+								<Box sx={normalChallanInspectorGridSx}>
+									<Box sx={normalChallanItemsPanelSx}>
+										<Box sx={normalChallanItemsToolbarSx}>
+											<Box>
+												<Box
+													sx={{
+														color: "#fff",
+														fontSize: 12.5,
+														fontWeight: 950,
+													}}
+												>
+													Challan Item Rows
+												</Box>
+												<Box
+													sx={{
+														mt: 0.25,
+														color: "#64748b",
+														fontSize: 9.5,
+														fontWeight: 750,
+													}}
+												>
+													Search exact item, SKU, sticker, packet, PD, drawing, client, plant or location
+												</Box>
+											</Box>
+
+											<TextField
+												size="small"
+												placeholder="Search item rows…"
+												value={normalChallanItemSearch}
+												onChange={(event) => {
+													setNormalChallanItemSearch(event.target.value);
+													setNormalChallanItemPageNo(1);
+												}}
+												InputProps={{
+													startAdornment: (
+														<SearchIcon
+															sx={{ color: "#60a5fa", mr: 0.8 }}
+														/>
+													),
+												}}
+												sx={{
+													...customChallanSearchFieldSx,
+													width: "min(360px,100%)",
+												}}
+											/>
+										</Box>
+
+										<Box sx={normalChallanItemListSx}>
+											{paginatedNormalChallanItems.length === 0 && (
+												<Box sx={modalEmptyStateSx}>
+													No challan item rows match this search.
+												</Box>
+											)}
+
+											{paginatedNormalChallanItems.map((item, index) => {
+												const itemId = String(item?.zohoItemId || "");
+												const selected =
+													itemId === String(normalChallanSelectedItemId || "") ||
+													(!normalChallanSelectedItemId && index === 0);
+
+												return (
+													<Box
+														key={itemId || `${item?.sku || "item"}-${index}`}
+														sx={normalChallanItemRowSx(selected)}
+														onClick={() => setNormalChallanSelectedItemId(itemId)}
+													>
+														<Box sx={normalChallanItemIndexSx}>
+															{(normalChallanItemPageNo - 1) * normalChallanItemPageSize + index + 1}
+														</Box>
+
+														<Box sx={{ minWidth: 0 }}>
+															<Box sx={normalChallanItemPrimarySx}>
+																{item?.name || item?.itemName || "Unnamed Item"}
+															</Box>
+															<Box sx={normalChallanItemSecondarySx}>
+																SKU: {item?.sku || "—"} • Sticker: {item?.stickerNumber || "—"}
+															</Box>
+														</Box>
+
+														<Box sx={{ minWidth: 0 }}>
+															<Box sx={normalChallanItemPrimarySx}>{item?.pdNo || "—"}</Box>
+															<Box sx={normalChallanItemSecondarySx}>PD No.</Box>
+														</Box>
+
+														<Box sx={{ minWidth: 0 }}>
+															<Box sx={normalChallanItemPrimarySx}>{item?.drawingNo || "—"}</Box>
+															<Box sx={normalChallanItemSecondarySx}>Drawing</Box>
+														</Box>
+
+														<Box sx={{ minWidth: 0 }}>
+															<Box sx={normalChallanItemPrimarySx}>{item?.plantCode || "—"}</Box>
+															<Box sx={normalChallanItemSecondarySx}>{item?.status || "—"}</Box>
+														</Box>
+
+														<Button
+															size="small"
+															onClick={(event) => {
+																event.stopPropagation();
+																setNormalChallanSelectedItemId(itemId);
+															}}
+															sx={normalChallanViewButtonSx}
+														>
+															View Item
+														</Button>
+													</Box>
+												);
+											})}
+										</Box>
+
+										<Box
+											sx={{
+												p: 1,
+												borderTop: "1px solid rgba(255,255,255,.06)",
+												background: "rgba(255,255,255,.02)",
+											}}
+										>
+											<ChallanHistoryPager
+												pageNo={normalChallanItemPageNo}
+												totalPages={normalChallanItemTotalPages}
+												pageSize={normalChallanItemPageSize}
+												totalRows={normalChallanFilteredItems.length}
+												label="items"
+												pageSizeOptions={[5, 10, 20, 50]}
+												onPageChange={setNormalChallanItemPageNo}
+												onPageSizeChange={setNormalChallanItemPageSize}
+											/>
+										</Box>
+									</Box>
+
+									<Box sx={normalChallanDetailPanelSx}>
+										<Box
+											sx={{
+												p: 1.3,
+												borderBottom: "1px solid rgba(255,255,255,.06)",
+												background: "rgba(16,185,129,.045)",
+											}}
+										>
+											<Box sx={{ color: "#fff", fontSize: 12.5, fontWeight: 950 }}>
+												Selected Item / Row
+											</Box>
+											<Box sx={{ mt: 0.25, color: "#64748b", fontSize: 9.5, fontWeight: 750 }}>
+												Pinpoint record-level information available in the current dispatch register
+											</Box>
+										</Box>
+
+										<Box sx={normalChallanDetailScrollSx}>
+											{!selectedNormalChallanItem ? (
+												<Box sx={modalEmptyStateSx}>Select an item row to inspect it.</Box>
+											) : (
+												<>
+													<Box sx={normalChallanDetailSectionSx}>
+														<Box sx={normalChallanDetailSectionTitleSx}>Identity</Box>
+														<Box sx={normalChallanDetailFieldGridSx}>
+															<NormalChallanDetailField label="Item" value={selectedNormalChallanItem.name || selectedNormalChallanItem.itemName} />
+															<NormalChallanDetailField label="Zoho Item ID" value={selectedNormalChallanItem.zohoItemId} />
+															<NormalChallanDetailField label="SKU / Code" value={selectedNormalChallanItem.sku} />
+															<NormalChallanDetailField label="Sticker No." value={selectedNormalChallanItem.stickerNumber} />
+															<NormalChallanDetailField label="Packet No." value={selectedNormalChallanItem.packetNo || selectedNormalChallanItem.packetNumber} />
+															<NormalChallanDetailField label="Item Area" value={selectedNormalChallanItem.itemArea || selectedNormalChallanItem.area} />
+															<NormalChallanDetailField label="PD No." value={selectedNormalChallanItem.pdNo} />
+															<NormalChallanDetailField label="Drawing No." value={selectedNormalChallanItem.drawingNo} />
+														</Box>
+													</Box>
+
+													<Box sx={normalChallanDetailSectionSx}>
+														<Box sx={normalChallanDetailSectionTitleSx}>Client & Material</Box>
+														<Box sx={normalChallanDetailFieldGridSx}>
+															<NormalChallanDetailField label="Client" value={selectedNormalChallanItem.clientName} />
+															<NormalChallanDetailField label="Quantity" value={selectedNormalChallanItem.quantity} />
+															<NormalChallanDetailField label="Description" value={selectedNormalChallanItem.description} full />
+															<NormalChallanDetailField label="Address" value={selectedNormalChallanItem.clientAddress} full />
+															<NormalChallanDetailField label="Remarks" value={selectedNormalChallanItem.remarks} full />
+														</Box>
+													</Box>
+
+													<Box sx={normalChallanDetailSectionSx}>
+														<Box sx={normalChallanDetailSectionTitleSx}>Location & Status</Box>
+														<Box sx={normalChallanDetailFieldGridSx}>
+															<NormalChallanDetailField label="Plant" value={selectedNormalChallanItem.plantCode} />
+															<NormalChallanDetailField label="Status" value={selectedNormalChallanItem.status} />
+															<NormalChallanDetailField label="Current Location" value={selectedNormalChallanItem.currentLocationCode || selectedNormalChallanItem.location} />
+															<NormalChallanDetailField label="FG Area / Zone" value={selectedNormalChallanItem.fgAreaCode || selectedNormalChallanItem.fgZoneCode} />
+															<NormalChallanDetailField label="Warehouse" value={selectedNormalChallanItem.warehouseCode} />
+															<NormalChallanDetailField label="Challan" value={getChallanNumber(normalChallanView)} />
+														</Box>
+													</Box>
+
+													<Box sx={normalChallanDetailSectionSx}>
+														<Box sx={normalChallanDetailSectionTitleSx}>Responsibility & Time</Box>
+														<Box sx={normalChallanDetailFieldGridSx}>
+															<NormalChallanDetailField label="Packed By" value={selectedNormalChallanItem.packedBy || selectedNormalChallanItem.generatedBy} />
+															<NormalChallanDetailField label="Packed At" value={formatLocalDateTimeDisplay(selectedNormalChallanItem.packedAt || selectedNormalChallanItem.packingDate || selectedNormalChallanItem.createdAt)} />
+															<NormalChallanDetailField label="Dispatched By" value={selectedNormalChallanItem.dispatchedBy || normalChallanView.dispatchedBy} />
+															<NormalChallanDetailField label="Dispatched At" value={formatLocalDateTimeDisplay(selectedNormalChallanItem.dispatchedAt || normalChallanView.dispatchedAt)} />
+															<NormalChallanDetailField label="Created By" value={selectedNormalChallanItem.createdBy} />
+															<NormalChallanDetailField label="Created At" value={formatLocalDateTimeDisplay(selectedNormalChallanItem.createdAt)} />
+														</Box>
+													</Box>
+												</>
+											)}
+										</Box>
+									</Box>
+								</Box>
+							</Box>
+
+							<Box
+								sx={{
+									...modalFooterSx,
+									flexShrink: 0,
+									alignItems: "center",
+									background: "rgba(8,15,29,.96)",
+								}}
+							>
+								<Box
+									sx={{
+										mr: "auto",
+										color: "#64748b",
+										fontSize: 10,
+										fontWeight: 800,
+									}}
+								>
+									Showing {normalChallanFilteredItems.length} of {normalChallanViewItems.length} item rows
+								</Box>
+								<Button
+									onClick={() =>
+										previewExistingChallanPdf(
+											getChallanNumber(normalChallanView)
+										)
+									}
+									sx={normalChallanViewButtonSx}
+								>
+									Preview Challan PDF
+								</Button>
+								<Button
+									onClick={() =>
+										downloadExistingChallanPdf(
+											getChallanNumber(normalChallanView)
+										)
+									}
+									sx={modalSecondaryButtonSx}
+								>
+									Download PDF
+								</Button>
+								<Button onClick={closeNormalChallanView} sx={modalSecondaryButtonSx}>
+									Close
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+
 				{challanHistoryOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 5900 }}
@@ -23364,6 +24528,64 @@ export default function DispatchedItemsPage() {
 										accent="#f59e0b"
 									/>
 								</Box>
+
+								<Box sx={normalChallanAnalyticsPanelSx}>
+									<Box sx={normalChallanAnalyticsTitleSx}>
+										Normal Dispatch Intelligence
+									</Box>
+
+									<Box sx={normalChallanAnalyticsGridSx}>
+										<NormalChallanMetric
+											label="Challans"
+											value={normalChallanAnalytics.challans}
+											meta="Normal dispatch documents"
+											accent="#60a5fa"
+										/>
+										<NormalChallanMetric
+											label="Items"
+											value={normalChallanAnalytics.items}
+											meta="Rows across challans"
+											accent="#22c55e"
+										/>
+										<NormalChallanMetric
+											label="Today"
+											value={normalChallanAnalytics.today}
+											meta="Generated today"
+											accent="#38bdf8"
+										/>
+										<NormalChallanMetric
+											label="Running Trips"
+											value={normalChallanAnalytics.running}
+											meta="Trip not ended"
+											accent="#f59e0b"
+										/>
+										<NormalChallanMetric
+											label="Ended Trips"
+											value={normalChallanAnalytics.ended}
+											meta="Trip closure recorded"
+											accent="#10b981"
+										/>
+										<NormalChallanMetric
+											label="Avg Items"
+											value={normalChallanAnalytics.averageItems}
+											meta="Per challan"
+											accent="#818cf8"
+										/>
+										<NormalChallanMetric
+											label="Clients"
+											value={normalChallanAnalytics.uniqueClients}
+											meta="Unique client names"
+											accent="#a78bfa"
+										/>
+										<NormalChallanMetric
+											label="Vehicles"
+											value={normalChallanAnalytics.uniqueVehicles}
+											meta={`${normalChallanAnalytics.helperTotal} helper/loaders logged`}
+											accent="#f97316"
+										/>
+									</Box>
+								</Box>
+
 								{loading && (
 									<Box
 										sx={{
@@ -23467,6 +24689,10 @@ export default function DispatchedItemsPage() {
 																<Box sx={challanHistoryMetaSx}>
 																	By: {challan.dispatchedBy} • Driver: {challan.driverName} • Vehicle: {challan.vehicleNumber}
 																</Box>
+
+																<Box sx={challanHistoryMetaSx}>
+																	Helpers / Loaders: {challan.helperLoaderCount ?? "—"} • Trip: {formatTripDurationMinutes(challan.tripDurationMinutes)}
+																</Box>
 															</Box>
 
 															<Box sx={challanHistoryActionsSx}>
@@ -23500,6 +24726,14 @@ export default function DispatchedItemsPage() {
 																	sx={modalSecondaryButtonSx}
 																>
 																	Download
+																</Button>
+
+																<Button
+																	size="small"
+																	onClick={() => openNormalChallanView(challan)}
+																	sx={normalChallanViewButtonSx}
+																>
+																	View Details
 																</Button>
 															</Box>
 														</Box>
@@ -23938,17 +25172,44 @@ export default function DispatchedItemsPage() {
 												/>
 
 												{doc.challanNumber && (
-													<Button
-														size="small"
-														onClick={() =>
-															previewNormalChallanByNumber(
-																doc.challanNumber
-															)
-														}
-														sx={modalSecondaryButtonSx}
-													>
-														Preview
-													</Button>
+													<Box sx={historyActionBtnsSx}>
+														<Button
+															size="small"
+															onClick={() =>
+																previewNormalChallanByNumber(
+																	doc.challanNumber
+																)
+															}
+															sx={modalSecondaryButtonSx}
+														>
+															Preview
+														</Button>
+
+														<Button
+															size="small"
+															onClick={() =>
+																downloadNormalChallanByNumber(
+																	doc.challanNumber
+																)
+															}
+															sx={modalSecondaryButtonSx}
+														>
+															Download
+														</Button>
+
+														<Button
+															size="small"
+															disabled={normalChallanViewLoading}
+															onClick={() =>
+																openNormalChallanViewByNumber(
+																	doc.challanNumber
+																)
+															}
+															sx={normalChallanViewButtonSx}
+														>
+															Details
+														</Button>
+													</Box>
 												)}
 											</Box>
 										))}
@@ -23979,6 +25240,56 @@ export default function DispatchedItemsPage() {
 				</Suspense>
 			</div>
 		</div>
+	);
+}
+
+
+function NormalChallanMetric({
+	label,
+	value,
+	meta,
+	accent,
+}) {
+	return (
+		<Box sx={normalChallanMetricCardSx(accent)}>
+			<Box sx={normalChallanMetricLabelSx}>{label}</Box>
+			<Box sx={normalChallanMetricValueSx}>{value ?? "—"}</Box>
+			<Box sx={normalChallanMetricMetaSx}>{meta || "—"}</Box>
+		</Box>
+	);
+}
+
+function NormalChallanInfo({ label, value }) {
+	return (
+		<Box sx={normalChallanInfoCardSx}>
+			<Box sx={normalChallanInfoLabelSx}>{label}</Box>
+			<Box sx={normalChallanInfoValueSx}>{value ?? "—"}</Box>
+		</Box>
+	);
+}
+
+function NormalChallanDetailField({
+	label,
+	value,
+	full = false,
+}) {
+	const cleanValue =
+		value === null ||
+			value === undefined ||
+			String(value).trim() === ""
+			? "—"
+			: String(value);
+
+	return (
+		<Box
+			sx={{
+				...normalChallanDetailFieldSx,
+				gridColumn: full ? "1 / -1" : "auto",
+			}}
+		>
+			<Box sx={normalChallanDetailFieldLabelSx}>{label}</Box>
+			<Box sx={normalChallanDetailFieldValueSx}>{cleanValue}</Box>
+		</Box>
 	);
 }
 
