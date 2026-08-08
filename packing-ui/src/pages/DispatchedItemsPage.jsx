@@ -800,6 +800,139 @@ const customChallanBodySx = {
 	p: 1.4,
 };
 
+/*
+ * Shared Custom Challan smart-search panel.
+ *
+ * This lives inside the Custom Challan section (not inside the Admin-only
+ * analytics area) so Dispatch users can search their own custom challans
+ * and Admin can search the complete custom-challan register.
+ */
+const customChallanSearchPanelSx = {
+	mb: 1.35,
+	p: 1.35,
+	borderRadius: "18px",
+	background:
+		"radial-gradient(circle at 0% 0%,rgba(139,92,246,.16),transparent 34%),linear-gradient(135deg,rgba(15,23,42,.90),rgba(30,41,59,.58))",
+	border: "1px solid rgba(167,139,250,.20)",
+	boxShadow: "0 14px 32px rgba(2,6,23,.24)",
+};
+
+const customChallanSearchTopSx = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.2,
+	flexWrap: "wrap",
+	mb: 1,
+};
+
+const customChallanSearchTitleWrapSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	minWidth: 0,
+};
+
+const customChallanSearchIconSx = {
+	width: 38,
+	height: 38,
+	borderRadius: "13px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	flexShrink: 0,
+	color: "#ddd6fe",
+	background:
+		"linear-gradient(135deg,rgba(124,58,237,.26),rgba(139,92,246,.10))",
+	border: "1px solid rgba(167,139,250,.24)",
+	boxShadow: "0 10px 22px rgba(109,40,217,.16)",
+};
+
+const customChallanSearchTitleSx = {
+	color: "#fff",
+	fontSize: 12.5,
+	fontWeight: 950,
+	letterSpacing: ".01em",
+};
+
+const customChallanSearchSubSx = {
+	mt: 0.25,
+	color: "rgba(255,255,255,.48)",
+	fontSize: 9.8,
+	fontWeight: 700,
+	lineHeight: 1.35,
+};
+
+const customChallanSearchFieldSx = {
+	"& .MuiOutlinedInput-root": {
+		minHeight: 46,
+		borderRadius: "14px",
+		color: "#fff",
+		background:
+			"linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.03))",
+
+		"& fieldset": {
+			borderColor: "rgba(167,139,250,.20)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(167,139,250,.46)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#a78bfa",
+			boxShadow: "0 0 0 3px rgba(167,139,250,.11)",
+		},
+	},
+
+	"& input": {
+		color: "#fff",
+		fontSize: 12,
+		fontWeight: 800,
+	},
+
+	"& input::placeholder": {
+		color: "rgba(226,232,240,.43)",
+		opacity: 1,
+	},
+};
+
+const customChallanSearchMetaRowSx = {
+	mt: 1,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	flexWrap: "wrap",
+};
+
+const customChallanSearchCoverageSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.65,
+	flexWrap: "wrap",
+};
+
+const customChallanSearchHintChipSx = {
+	height: 22,
+	borderRadius: 999,
+	color: "#cbd5e1",
+	fontSize: 9,
+	fontWeight: 850,
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.07)",
+};
+
+const customChallanSearchResultChipSx = {
+	height: 24,
+	borderRadius: 999,
+	color: "#ddd6fe",
+	fontSize: 9.5,
+	fontWeight: 950,
+	background: "rgba(139,92,246,.12)",
+	border: "1px solid rgba(167,139,250,.22)",
+};
+
 
 const premiumScrollbarSx = (accent = "#60a5fa") => ({
 	scrollbarWidth: "thin",
@@ -1101,7 +1234,7 @@ const customAdminFilterGridSx = {
 	display: "grid",
 	gridTemplateColumns: {
 		xs: "1fr",
-		md: "minmax(260px,1.45fr) repeat(3,minmax(150px,.65fr))",
+		md: "repeat(3,minmax(170px,1fr))",
 	},
 	gap: 1,
 	mt: 1.3,
@@ -5115,6 +5248,16 @@ export default function DispatchedItemsPage() {
 	const deferredSearch =
 		useDeferredValue(
 			search
+		);
+
+	/*
+	 * Keep the Custom Challan search responsive even when Admin has a large
+	 * historical register. The typed value updates immediately while the
+	 * result calculation can be deferred by React.
+	 */
+	const deferredCustomChallanSearch =
+		useDeferredValue(
+			customChallanSearch
 		);
 
 	const preparedSearchTokens =
@@ -14306,8 +14449,33 @@ export default function DispatchedItemsPage() {
 	}, [customChallans]);
 
 	const customChallanFilteredRows = useMemo(() => {
-		const searchText =
-			normalizeSmartSearch(customChallanSearch);
+		/*
+		 * Universal Custom Challan search.
+		 *
+		 * Search is intentionally shared by Dispatch and Admin. Admin-only
+		 * analytics filters (type / creator / period) are applied afterwards.
+		 *
+		 * Multiple words use AND matching. Punctuation-insensitive compact
+		 * matching also allows values such as:
+		 *   CC-CH-20260808-AB12CD
+		 *   ccch20260808ab12cd
+		 * to find the same challan.
+		 */
+		const searchTokens =
+			tokenizeSmartSearch(
+				deferredCustomChallanSearch
+			)
+				.map((token) => ({
+					normal:
+						normalizeSmartSearch(token),
+					compact:
+						normalizeCompactSearch(token),
+				}))
+				.filter(
+					(token) =>
+						token.normal ||
+						token.compact
+				);
 
 		const typeFilter =
 			String(customChallanTypeFilter || "ALL")
@@ -14346,32 +14514,121 @@ export default function DispatchedItemsPage() {
 
 		return (customChallans || [])
 			.filter((challan) => {
-				if (!isAdmin) {
-					return true;
-				}
+				/*
+				 * Search every meaningful summary field that can exist today,
+				 * plus safe aliases used by current/legacy responses.
+				 *
+				 * The array/item fallbacks also make this automatically search
+				 * item descriptions if a future/list API returns embedded lines.
+				 */
+				if (searchTokens.length > 0) {
+					const itemSearchValues =
+						Array.isArray(challan?.items)
+							? challan.items.flatMap((item) => [
+								item?.description,
+								item?.drawingNo,
+								item?.pdNo,
+								item?.remarks,
+								item?.uom,
+								item?.quantity,
+							])
+							: [];
 
-				if (searchText) {
-					const haystack = normalizeSmartSearch(
-						[
-							challan?.challanNumber,
-							challan?.challanType,
-							challan?.challanTypeLabel,
-							getCustomChallanTypeLabel(challan?.challanType),
-							challan?.fromLocation,
-							challan?.toLocation,
-							challan?.pdNo,
-							challan?.clientName,
-							challan?.purpose,
-							challan?.driverName,
-							challan?.vehicleNumber,
-							challan?.handedOverTo,
-							challan?.generatedBy,
-						].join(" "),
-					);
+					const searchValues = [
+						challan?.challanNumber,
+						challan?.chalaanNumber,
+						challan?.challanNo,
+						challan?.challanType,
+						challan?.challanTypeLabel,
+						getCustomChallanTypeLabel(challan?.challanType),
 
-					if (!haystack.includes(searchText)) {
+						challan?.pdNo,
+						challan?.pdNumber,
+						challan?.drawingNo,
+
+						challan?.clientName,
+						challan?.client,
+						challan?.clientAddress,
+						challan?.address,
+						challan?.siteAddress,
+
+						challan?.site,
+						challan?.siteName,
+						challan?.area,
+						challan?.areaName,
+						challan?.location,
+
+						challan?.fromLocation,
+						challan?.toLocation,
+						challan?.sourceLocation,
+						challan?.destinationLocation,
+
+						challan?.purpose,
+						challan?.remarks,
+						challan?.movementMode,
+
+						challan?.driverName,
+						challan?.vehicleNumber,
+						challan?.vehicleNo,
+						challan?.handedOverTo,
+
+						challan?.generatedBy,
+						challan?.createdBy,
+						challan?.generatedAt,
+						challan?.createdAt,
+
+						challan?.totalItems,
+						...itemSearchValues,
+					];
+
+					const joinedText =
+						searchValues
+							.filter(
+								(value) =>
+									value !== null &&
+									value !== undefined &&
+									String(value).trim() !== ""
+							)
+							.join(" ");
+
+					const normalHaystack =
+						normalizeSmartSearch(
+							joinedText
+						);
+
+					const compactHaystack =
+						normalizeCompactSearch(
+							joinedText
+						);
+
+					const matchesSearch =
+						searchTokens.every(
+							(token) =>
+								(
+									token.normal &&
+									normalHaystack.includes(
+										token.normal
+									)
+								) ||
+								(
+									token.compact &&
+									compactHaystack.includes(
+										token.compact
+									)
+								)
+						);
+
+					if (!matchesSearch) {
 						return false;
 					}
+				}
+
+				/*
+				 * Dispatch users stop here: the search panel works for the records
+				 * returned to them, without exposing Admin reporting filters.
+				 */
+				if (!isAdmin) {
+					return true;
 				}
 
 				if (
@@ -14444,13 +14701,14 @@ export default function DispatchedItemsPage() {
 	}, [
 		customChallans,
 		isAdmin,
-		customChallanSearch,
+		deferredCustomChallanSearch,
 		customChallanTypeFilter,
 		customChallanCreatorFilter,
 		customChallanPeriodFilter,
 		customChallanDateFrom,
 		customChallanDateTo,
 	]);
+
 
 	const customChallanAdminStats = useMemo(() => {
 		const sourceRows =
@@ -16646,6 +16904,108 @@ export default function DispatchedItemsPage() {
 
 								{!customChallansLoading && customChallans.length > 0 && (
 									<>
+										<Box sx={customChallanSearchPanelSx}>
+											<Box sx={customChallanSearchTopSx}>
+												<Box sx={customChallanSearchTitleWrapSx}>
+													<Box sx={customChallanSearchIconSx}>
+														<SearchIcon sx={{ fontSize: 20 }} />
+													</Box>
+
+													<Box sx={{ minWidth: 0 }}>
+														<Box sx={customChallanSearchTitleSx}>
+															Smart Custom Challan Search
+														</Box>
+
+														<Box sx={customChallanSearchSubSx}>
+															Search challan number, client, site / area, PD, route, driver, vehicle, purpose, type, creator and other saved challan details.
+														</Box>
+													</Box>
+												</Box>
+
+												<Chip
+													size="small"
+													label={`${customChallanFilteredRows.length} / ${customChallans.length} matching`}
+													sx={customChallanSearchResultChipSx}
+												/>
+											</Box>
+
+											<TextField
+												fullWidth
+												size="small"
+												value={customChallanSearch}
+												onChange={(event) => {
+													setCustomChallanSearch(event.target.value);
+													setCustomChallanPageNo(1);
+												}}
+												placeholder="Search: client, challan no., site, area, PD, from/to location, driver, vehicle, purpose, type, user…"
+												InputProps={{
+													startAdornment: (
+														<SearchIcon
+															sx={{
+																color: "#a78bfa",
+																mr: 1,
+															}}
+														/>
+													),
+													endAdornment: customChallanSearch ? (
+														<Button
+															onClick={() => {
+																setCustomChallanSearch("");
+																setCustomChallanPageNo(1);
+															}}
+															sx={{
+																minWidth: 0,
+																px: 1.15,
+																height: 28,
+																borderRadius: "9px",
+																textTransform: "none",
+																color: "#e9d5ff",
+																fontSize: 10,
+																fontWeight: 900,
+																background: "rgba(139,92,246,.11)",
+																border: "1px solid rgba(167,139,250,.18)",
+															}}
+														>
+															Clear
+														</Button>
+													) : null,
+												}}
+												sx={customChallanSearchFieldSx}
+											/>
+
+											<Box sx={customChallanSearchMetaRowSx}>
+												<Box sx={customChallanSearchCoverageSx}>
+													{[
+														"Challan No.",
+														"Client",
+														"Site / Area",
+														"PD",
+														"Route",
+														"Driver / Vehicle",
+														"Purpose",
+													].map((label) => (
+														<Chip
+															key={label}
+															size="small"
+															label={label}
+															sx={customChallanSearchHintChipSx}
+														/>
+													))}
+												</Box>
+
+												<Box
+													sx={{
+														color: "rgba(255,255,255,.43)",
+														fontSize: 9.5,
+														fontWeight: 750,
+														whiteSpace: "nowrap",
+													}}
+												>
+													Tip: multiple words narrow results automatically
+												</Box>
+											</Box>
+										</Box>
+
 										{isAdmin && (
 											<Box sx={customAdminCommandCenterSx}>
 												<Box sx={customAdminCommandTopSx}>
@@ -16710,28 +17070,6 @@ export default function DispatchedItemsPage() {
 												</Box>
 
 												<Box sx={customAdminFilterGridSx}>
-													<TextField
-														size="small"
-														label="Search Custom Challans"
-														placeholder="Challan no, PD, client, route, driver, creator…"
-														value={customChallanSearch}
-														onChange={(event) => {
-															setCustomChallanSearch(event.target.value);
-															setCustomChallanPageNo(1);
-														}}
-														InputProps={{
-															startAdornment: (
-																<SearchIcon
-																	sx={{
-																		color: "#8b5cf6",
-																		mr: 1,
-																	}}
-																/>
-															),
-														}}
-														sx={customAdminFilterFieldSx}
-													/>
-
 													<TextField
 														select
 														size="small"
@@ -16978,9 +17316,13 @@ export default function DispatchedItemsPage() {
 											</Box>
 										)}
 
-										{isAdmin && customChallanFilteredRows.length === 0 && (
+										{customChallanFilteredRows.length === 0 && (
 											<Box sx={{ ...modalEmptyStateSx, mb: 1.2 }}>
-												No custom challans match the current Admin filters.
+												{customChallanSearch.trim()
+													? `No custom challan found for "${customChallanSearch.trim()}". Try client name, challan no., site / area, PD, location, driver or vehicle.`
+													: isAdmin
+														? "No custom challans match the current Admin reporting filters."
+														: "No custom challans match the current search."}
 											</Box>
 										)}
 
