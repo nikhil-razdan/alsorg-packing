@@ -34,6 +34,9 @@ const emptyLocation = {
     contactPhone: "", active: true,
 };
 
+const upperCode = (value) =>
+    clean(value).toUpperCase();
+
 const metadataEnum = (payload, name, fallback) => {
     const raw = payload?.enums?.[name] ?? payload?.data?.enums?.[name] ?? payload?.[name];
     return Array.isArray(raw) && raw.length ? raw : fallback;
@@ -143,9 +146,132 @@ function MasterPage({ type }) {
         return "";
     };
     const body = () => {
-        if (type === "materials") return { ...form, materialCode: normalize(form.materialCode), category: normalize(form.category), uom: normalize(form.uom), minimumStock: Number(form.minimumStock || 0), reorderLevel: Number(form.reorderLevel || 0), rowVersion: dialog?.row?.rowVersion ?? null };
-        if (type === "projects") return { ...form, projectCode: normalize(form.projectCode), drawingNo: normalize(form.drawingNo), plantCode: normalize(form.plantCode), requiredDate: clean(form.requiredDate) || null, rowVersion: dialog?.row?.rowVersion ?? null };
-        return { ...form, locationCode: normalize(form.locationCode), plantCode: normalize(form.plantCode), locationType: normalize(form.locationType), ownershipType: normalize(form.ownershipType), rowVersion: dialog?.row?.rowVersion ?? null };
+        if (type === "materials") {
+            return {
+                ...form,
+
+                // Business identifier: preserve -, ., / etc.
+                materialCode: upperCode(
+                    form.materialCode
+                ),
+
+                materialName:
+                    clean(form.materialName),
+
+                // Category is an enum-like value.
+                category:
+                    normalize(form.category),
+
+                specification:
+                    clean(form.specification) || null,
+
+                // UOM is a business code, not an enum.
+                // Preserve values such as SQ.FT, SQ-M, KG/M2, etc.
+                uom:
+                    upperCode(form.uom),
+
+                preferredSupplier:
+                    clean(form.preferredSupplier) || null,
+
+                minimumStock:
+                    Number(form.minimumStock || 0),
+
+                reorderLevel:
+                    Number(form.reorderLevel || 0),
+
+                active:
+                    form.active === true,
+
+                rowVersion:
+                    dialog?.row?.rowVersion ?? null,
+            };
+        }
+
+        if (type === "projects") {
+            return {
+                ...form,
+
+                // Preserve project/PD punctuation.
+                projectCode:
+                    upperCode(form.projectCode),
+
+                projectName:
+                    clean(form.projectName),
+
+                clientName:
+                    clean(form.clientName),
+
+                // Preserve WR-359.06 etc.
+                drawingNo:
+                    upperCode(form.drawingNo),
+
+                drawingRevision:
+                    upperCode(form.drawingRevision) || "0",
+
+                productName:
+                    clean(form.productName),
+
+                // CRITICAL FIX:
+                // AL-P1 must remain AL-P1.
+                plantCode:
+                    upperCode(form.plantCode),
+
+                requiredDate:
+                    clean(form.requiredDate) || null,
+
+                remarks:
+                    clean(form.remarks) || null,
+
+                active:
+                    form.active === true,
+
+                rowVersion:
+                    dialog?.row?.rowVersion ?? null,
+            };
+        }
+
+        return {
+            ...form,
+
+            // Preserve codes such as QC-AL-P1.
+            locationCode:
+                upperCode(form.locationCode),
+
+            locationName:
+                clean(form.locationName),
+
+            // CRITICAL FIX:
+            // AL-P1 must remain AL-P1.
+            plantCode:
+                upperCode(form.plantCode),
+
+            // These ARE enum values.
+            locationType:
+                normalize(form.locationType),
+
+            ownershipType:
+                normalize(
+                    form.ownershipType || "INTERNAL"
+                ),
+
+            supportsStock:
+                form.supportsStock === true,
+
+            address:
+                clean(form.address) || null,
+
+            contactPerson:
+                clean(form.contactPerson) || null,
+
+            contactPhone:
+                clean(form.contactPhone) || null,
+
+            active:
+                form.active === true,
+
+            rowVersion:
+                dialog?.row?.rowVersion ?? null,
+        };
     };
     const save = async () => {
         const message = validate(); if (message) { setError(message); return; }
