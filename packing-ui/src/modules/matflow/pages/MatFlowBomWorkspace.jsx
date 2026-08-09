@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Box,
     Button,
     Card,
@@ -61,6 +62,39 @@ const REQUISITION_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_R
 
 const projectOf = (bom) => bom?.projectDrawing || bom?.project || bom?.projectContext || {};
 const linesOf = (bom) => [bom?.lines, bom?.bomLines, bom?.items].find(Array.isArray) || [];
+
+/*
+ * Business identifiers such as plant codes must preserve punctuation.
+ * Example: AL-P1 must never become AL_P1.
+ *
+ * normalize() remains correct for enum/status values such as:
+ * QC, PROCESSING, PRODUCTION, EXTERNAL_PROCESSOR, SUBMITTED, etc.
+ */
+const upperCode = (value) => clean(value).toUpperCase();
+
+const sameCode = (left, right) =>
+    upperCode(left) === upperCode(right);
+
+const routeLocationMatchesStep = (location, stepType) => {
+    if (!location || location.active === false) return false;
+
+    const locationType = normalize(location.locationType);
+    const requestedStep = normalize(stepType);
+
+    if (requestedStep === "QC") {
+        return locationType === "QC";
+    }
+
+    if (requestedStep === "PROCESSING") {
+        return ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(locationType);
+    }
+
+    if (requestedStep === "PRODUCTION") {
+        return locationType === "PRODUCTION";
+    }
+
+    return false;
+};
 
 const workflowFor = (bom) => {
     const status = normalize(bom?.status);
@@ -208,6 +242,7 @@ export function MatFlowBomDetailPage() {
     const [routes, setRoutes] = useState([]);
     const [materials, setMaterials] = useState([]);
     const [locations, setLocations] = useState([]);
+    const [locationLoadError, setLocationLoadError] = useState("");
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
@@ -240,26 +275,197 @@ export function MatFlowBomDetailPage() {
     const canRequisition = hasRole(REQUISITION_ROLES) && status === "APPROVED" && bom?.effective === true;
     const workflow = workflowFor(bom);
 
-    useEffect(() => {
-        if (!canEdit) return;
-        let active = true;
-        (async () => {
-            try {
-                const [m, l] = await Promise.all([matflowApi.listMaterials({ active: true }), matflowApi.listLocations({ active: true })]);
-                if (active) {
-                    setMaterials(extractMatFlowPage(m?.data).rows.filter((x) => x.active !== false));
-                    setLocations(extractMatFlowPage(l?.data).rows.filter((x) => x.active !== false));
+    const projectPlantCode = upperCode(
+        project?.plantCode || project?.owningPlantCode
+    );
+
+    const routeLocationOptions = useMemo(() => {
+        return locations.filter((location) => {
+            if (!routeLocationMatchesStep(location, routeForm.stepType)) {
+                return false;
+            }
+
+            /*
+             * Keep QC and final Production inside the BOM/project plant.
+             * Processing may be an internal or external processor and can
+             * therefore be in another accessible plant/location.
+             */
+            const stepType = normalize(routeForm.stepType);
+
+            if (
+                projectPlantCode &&
+                ["QC", "PRODUCTION"].includes(stepType) &&
+                !sameCode(location.plantCode, projectPlantCode)
+            ) {
+                return false;
+            }
+
+            return true;
+        });
+    }, [locations, routeForm.stepType, projectPlantCode]);
+
+    const routeIssues = useMemo(() => {
+        const issues = [];
+
+        lines.forEach((line) => {
+            const lineRoutes = routes
+                .filter((item) => String(item.bomLineId) === String(line.id))
+                .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
+
+            const lineLabel =
+                line.materialCodeSnapshot ||
+                line.materialCode ||
+                line.materialNameSnapshot ||
+                line.materialName ||
+                `Line ${line.lineNo ?? "-"}`;
+
+            if (lineRoutes.length === 0) {
+                issues.push(`${lineLabel}: route is missing.`);
+                return;
+            }
+
+            const first = lineRoutes[0];
+            const last = lineRoutes[lineRoutes.length - 1];
+
+            if (normalize(first.stepType) !== "QC") {
+                issues.push(`${lineLabel}: first route step must be QC.`);
+            }
+
+            if (normalize(last.stepType) !== "PRODUCTION") {
+                issues.push(`${lineLabel}: final route step must be Production.`);
+            }
+
+            const qcCount = lineRoutes.filter(
+                (step) => normalize(step.stepType) === "QC"
+            ).length;
+
+            const productionCount = lineRoutes.filter(
+                (step) => normalize(step.stepType) === "PRODUCTION"
+            ).length;
+
+            if (qcCount !== 1) {
+                issues.push(`${lineLabel}: route must contain exactly one QC step.`);
+            }
+
+            if (productionCount !== 1) {
+                issues.push(`${lineLabel}: route must contain exactly one Production step.`);
+            }
+
+            lineRoutes.forEach((step, index) => {
+                if (!step?.locationId) {
+                    issues.push(`${lineLabel}: route step ${index + 1} has no location.`);
                 }
-            } catch { /* detail can still be read */ }
+
+                if (
+                    index > 0 &&
+                    index < lineRoutes.length - 1 &&
+                    normalize(step.stepType) !== "PROCESSING"
+                ) {
+                    issues.push(
+                        `${lineLabel}: only Processing steps are allowed between QC and Production.`
+                    );
+                }
+            });
+        });
+
+        return Array.from(new Set(issues));
+    }, [lines, routes]);
+
+    const validRouteLineCount = useMemo(() => {
+        return lines.filter((line) => {
+            const lineRoutes = routes
+                .filter((item) => String(item.bomLineId) === String(line.id))
+                .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
+
+            if (lineRoutes.length < 2) return false;
+            if (normalize(lineRoutes[0]?.stepType) !== "QC") return false;
+            if (normalize(lineRoutes[lineRoutes.length - 1]?.stepType) !== "PRODUCTION") return false;
+
+            const middle = lineRoutes.slice(1, -1);
+            return middle.every((step) => normalize(step.stepType) === "PROCESSING");
+        }).length;
+    }, [lines, routes]);
+
+    useEffect(() => {
+        if (!canEdit) {
+            setMaterials([]);
+            setLocations([]);
+            setLocationLoadError("");
+            return;
+        }
+
+        let active = true;
+
+        (async () => {
+            setLocationLoadError("");
+
+            const [materialResult, locationResult] = await Promise.allSettled([
+                matflowApi.listMaterials({ active: true }),
+                matflowApi.listLocations({ active: true }),
+            ]);
+
+            if (!active) return;
+
+            if (materialResult.status === "fulfilled") {
+                setMaterials(
+                    extractMatFlowPage(materialResult.value?.data).rows
+                        .filter((item) => item.active !== false)
+                );
+            } else {
+                setMaterials([]);
+                setError(
+                    readMatFlowError(
+                        materialResult.reason,
+                        "Unable to load active MatFlow materials."
+                    )
+                );
+            }
+
+            if (locationResult.status === "fulfilled") {
+                setLocations(
+                    extractMatFlowPage(locationResult.value?.data).rows
+                        .filter((item) => item.active !== false)
+                );
+            } else {
+                setLocations([]);
+                setLocationLoadError(
+                    readMatFlowError(
+                        locationResult.reason,
+                        "Unable to load active MatFlow route locations."
+                    )
+                );
+            }
         })();
-        return () => { active = false; };
+
+        return () => {
+            active = false;
+        };
     }, [canEdit]);
 
     const executeAction = async () => {
         if (!action || !bom?.id || bom.rowVersion == null) return;
+
         const cleaned = clean(remarks);
-        if (action === "PRODUCTION_RETURN" && !cleaned) { setError("Return remarks are required."); return; }
-        setWorking(true); setError("");
+
+        if (action === "PRODUCTION_RETURN" && !cleaned) {
+            setError("Return remarks are required.");
+            return;
+        }
+
+        if (action === "SUBMIT" && routeIssues.length > 0) {
+            setAction(null);
+            setRemarks("");
+            setError(
+                `BOM cannot be submitted yet. ${routeIssues.slice(0, 4).join(" ")}${routeIssues.length > 4
+                    ? ` +${routeIssues.length - 4} more route issue(s).`
+                    : ""
+                }`
+            );
+            return;
+        }
+
+        setWorking(true);
+        setError("");
         const body = { rowVersion: bom.rowVersion, remarks: cleaned || null };
         try {
             let response;
@@ -299,18 +505,106 @@ export function MatFlowBomDetailPage() {
     };
 
     const openRoute = (line, step = null) => {
-        const lineRoutes = routes.filter((item) => String(item.bomLineId) === String(line.id))
+        const lineRoutes = routes
+            .filter((item) => String(item.bomLineId) === String(line.id))
             .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
+
+        if (step) {
+            setRouteDialog({ line, step, lineRoutes });
+            setRouteForm({
+                sequenceNo: String(step.sequenceNo ?? 1),
+                stepType: normalize(step.stepType) || "QC",
+                locationId: step.locationId || "",
+                processCode: step.processCode || "",
+                expectedYieldPercent: String(step.expectedYieldPercent ?? 100),
+                remarks: step.remarks || "",
+            });
+            setError("");
+            return;
+        }
+
+        const hasProduction = lineRoutes.some(
+            (item) => normalize(item.stepType) === "PRODUCTION"
+        );
+
+        if (hasProduction) {
+            setError(
+                "This material route already ends at Production. Edit/delete the final Production step first if you need to insert another Processing step."
+            );
+            return;
+        }
+
         const nextType = lineRoutes.length === 0 ? "QC" : "PRODUCTION";
-        setRouteDialog({ line, step, lineRoutes });
-        setRouteForm(step ? {
-            sequenceNo: String(step.sequenceNo ?? 1), stepType: step.stepType || "QC", locationId: step.locationId || "",
-            processCode: step.processCode || "", expectedYieldPercent: String(step.expectedYieldPercent ?? 100), remarks: step.remarks || "",
-        } : { sequenceNo: String(lineRoutes.length + 1), stepType: nextType, locationId: "", processCode: "", expectedYieldPercent: "100", remarks: "" });
+
+        setRouteDialog({ line, step: null, lineRoutes });
+        setRouteForm({
+            sequenceNo: String(lineRoutes.length + 1),
+            stepType: nextType,
+            locationId: "",
+            processCode: "",
+            expectedYieldPercent: "100",
+            remarks: "",
+        });
+        setError("");
     };
 
+    useEffect(() => {
+        if (!routeDialog) return;
+
+        const selectedStillValid = routeLocationOptions.some(
+            (location) => String(location.id) === String(routeForm.locationId)
+        );
+
+        if (routeForm.locationId && !selectedStillValid) {
+            setRouteForm((current) => ({
+                ...current,
+                locationId: "",
+            }));
+            return;
+        }
+
+        if (!routeForm.locationId && routeLocationOptions.length === 1) {
+            setRouteForm((current) => ({
+                ...current,
+                locationId: routeLocationOptions[0].id,
+            }));
+        }
+    }, [
+        routeDialog,
+        routeForm.stepType,
+        routeForm.locationId,
+        routeLocationOptions,
+    ]);
+
     const saveRoute = async () => {
-        if (!routeDialog?.line?.id || !routeForm.locationId) { setError("Route location is required."); return; }
+        if (!routeDialog?.line?.id) {
+            setError("BOM material line is required.");
+            return;
+        }
+
+        if (!routeForm.locationId) {
+            setError(
+                routeLocationOptions.length === 0
+                    ? `No compatible ${readable(routeForm.stepType)} location is configured${["QC", "PRODUCTION"].includes(normalize(routeForm.stepType)) && projectPlantCode
+                        ? ` for plant ${projectPlantCode}`
+                        : ""
+                    }. Create/activate the location in MatFlow Location Master first.`
+                    : "Route location is required."
+            );
+            return;
+        }
+
+        const selectedRouteLocation = routeLocationOptions.find(
+            (location) => String(location.id) === String(routeForm.locationId)
+        );
+
+        if (!selectedRouteLocation) {
+            setError(
+                "The selected route location is no longer compatible with this route step. Refresh and select a valid location."
+            );
+            return;
+        }
+
         const sequenceNo = Number(routeForm.sequenceNo);
         const existing = (routeDialog.lineRoutes || []).filter((item) => item.id !== routeDialog?.step?.id);
         if (sequenceNo === 1 && routeForm.stepType !== "QC") { setError("The first route step must be QC."); return; }
@@ -343,6 +637,11 @@ export function MatFlowBomDetailPage() {
         <Box sx={pageSx}>
             <PageHero badge="OPERATIONAL BOM" title={bom?.bomNumber || "BOM"} subtitle={`${project.projectCode || "-"} · ${project.drawingNo || "-"} · Revision ${bom?.revisionNo ?? "-"}`} actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/matflow/boms")} sx={secondaryBtnSx}>Back</Button></>} />
             <ErrorBox>{error}</ErrorBox>
+            {locationLoadError && (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                    {locationLoadError} Route locations cannot be selected until the Location Master request succeeds.
+                </Alert>
+            )}
             {bom && <>
                 <Card sx={panelSx}>
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}>
@@ -389,8 +688,25 @@ export function MatFlowBomDetailPage() {
                 </Card>
 
                 <Card sx={panelSx}>
-                    <Typography sx={sectionTitleSx}>Approved Material Route</Typography>
-                    <Typography sx={sectionSubSx}>Every material route is mandatory: QC first → optional Processing step(s) → Production last.</Typography>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                        <Box>
+                            <Typography sx={sectionTitleSx}>Approved Material Route</Typography>
+                            <Typography sx={sectionSubSx}>
+                                Every material route is mandatory: QC first → optional Processing step(s) → Production last.
+                            </Typography>
+                        </Box>
+                        <Chip
+                            size="small"
+                            label={`${validRouteLineCount}/${lines.length} material route(s) complete`}
+                            color={lines.length > 0 && validRouteLineCount === lines.length ? "success" : "warning"}
+                        />
+                    </Box>
+                    {routeIssues.length > 0 && (
+                        <Alert severity="warning" sx={{ mt: 1.25, borderRadius: 2 }}>
+                            {routeIssues.slice(0, 3).join(" ")}
+                            {routeIssues.length > 3 ? ` +${routeIssues.length - 3} more route issue(s).` : ""}
+                        </Alert>
+                    )}
                     <Box sx={{ ...tableShellSx, mt: 1.5 }}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "90px 80px 140px 180px 130px 110px 160px" }}>
                             {["BOM Line", "Sequence", "Step", "Location", "Process", "Yield %", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
@@ -427,8 +743,73 @@ export function MatFlowBomDetailPage() {
                 <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Route Step" : "Add Route Step"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
                     <TextField type="number" label="Sequence *" value={routeForm.sequenceNo} onChange={(e) => setRouteForm((c) => ({ ...c, sequenceNo: e.target.value }))} sx={fieldSx} />
-                    <TextField select label="Step Type *" value={routeForm.stepType} onChange={(e) => setRouteForm((c) => ({ ...c, stepType: e.target.value }))} sx={fieldSx}>{(Number(routeForm.sequenceNo) === 1 ? ["QC"] : ["PROCESSING", "PRODUCTION"]).map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField>
-                    <TextField select label="Location *" value={routeForm.locationId} onChange={(e) => setRouteForm((c) => ({ ...c, locationId: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }}>{locations.filter((location) => routeForm.stepType === "PROCESSING" ? ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(normalize(location.locationType)) : normalize(location.locationType) === routeForm.stepType).map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {location.plantCode}</MenuItem>)}</TextField>
+                    <TextField
+                        select
+                        label="Step Type *"
+                        value={routeForm.stepType}
+                        onChange={(e) => {
+                            const nextStepType = e.target.value;
+                            setRouteForm((current) => ({
+                                ...current,
+                                stepType: nextStepType,
+                                locationId: "",
+                                processCode:
+                                    nextStepType === "PROCESSING"
+                                        ? current.processCode
+                                        : "",
+                            }));
+                        }}
+                        sx={fieldSx}
+                    >
+                        {(Number(routeForm.sequenceNo) === 1
+                            ? ["QC"]
+                            : ["PROCESSING", "PRODUCTION"]
+                        ).map((value) => (
+                            <MenuItem key={value} value={value}>
+                                {readable(value)}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="Location *"
+                        value={routeForm.locationId}
+                        onChange={(e) =>
+                            setRouteForm((current) => ({
+                                ...current,
+                                locationId: e.target.value,
+                            }))
+                        }
+                        helperText={
+                            locationLoadError
+                                ? "Location Master could not be loaded."
+                                : routeLocationOptions.length === 0
+                                    ? `No active ${readable(routeForm.stepType)} location configured${["QC", "PRODUCTION"].includes(normalize(routeForm.stepType)) && projectPlantCode
+                                        ? ` for ${projectPlantCode}`
+                                        : ""
+                                    }.`
+                                    : `${routeLocationOptions.length} compatible location(s) available.`
+                        }
+                        sx={{ ...fieldSx, gridColumn: "1 / -1" }}
+                    >
+                        {routeLocationOptions.length === 0 ? (
+                            <MenuItem value="" disabled>
+                                {locationLoadError
+                                    ? "Unable to load locations"
+                                    : `No compatible ${readable(routeForm.stepType)} location configured`}
+                            </MenuItem>
+                        ) : (
+                            routeLocationOptions.map((location) => (
+                                <MenuItem key={location.id} value={location.id}>
+                                    {location.locationCode} · {location.locationName} · {location.plantCode}
+                                    {normalize(location.locationType) === "EXTERNAL_PROCESSOR"
+                                        ? " · External Processor"
+                                        : ""}
+                                </MenuItem>
+                            ))
+                        )}
+                    </TextField>
                     {routeForm.stepType === "PROCESSING" && <TextField label="Process Code *" value={routeForm.processCode} onChange={(e) => setRouteForm((c) => ({ ...c, processCode: e.target.value }))} sx={fieldSx} />}
                     <TextField type="number" label="Expected Yield %" value={routeForm.expectedYieldPercent} onChange={(e) => setRouteForm((c) => ({ ...c, expectedYieldPercent: e.target.value }))} sx={fieldSx} />
                     <TextField multiline minRows={2} label="Remarks" value={routeForm.remarks} onChange={(e) => setRouteForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
@@ -438,3 +819,4 @@ export function MatFlowBomDetailPage() {
         </Box>
     );
 }
+
