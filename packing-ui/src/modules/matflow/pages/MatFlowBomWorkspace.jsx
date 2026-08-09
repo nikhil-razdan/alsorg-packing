@@ -286,15 +286,14 @@ export function MatFlowBomDetailPage() {
             }
 
             /*
-             * Keep QC and final Production inside the BOM/project plant.
-             * Processing may be an internal or external processor and can
-             * therefore be in another accessible plant/location.
+             * Every approved route destination belongs to the BOM/project
+             * operational plant. An EXTERNAL_PROCESSOR may be physically
+             * external, but its MatFlow location record must still be tagged
+             * with the BOM's operational plant so downstream authorization
+             * remains deterministic.
              */
-            const stepType = normalize(routeForm.stepType);
-
             if (
                 projectPlantCode &&
-                ["QC", "PRODUCTION"].includes(stepType) &&
                 !sameCode(location.plantCode, projectPlantCode)
             ) {
                 return false;
@@ -303,6 +302,39 @@ export function MatFlowBomDetailPage() {
             return true;
         });
     }, [locations, routeForm.stepType, projectPlantCode]);
+
+    const resolveRouteLocation = useCallback(
+        (step) => {
+            if (!step) return null;
+
+            const masterLocation = locations.find(
+                (location) => String(location.id) === String(step.locationId)
+            );
+
+            if (masterLocation) return masterLocation;
+
+            if (
+                step.locationId ||
+                step.locationCode ||
+                step.locationName ||
+                step.locationType ||
+                step.plantCode
+            ) {
+                return {
+                    id: step.locationId || null,
+                    locationCode: step.locationCode || null,
+                    locationName: step.locationName || null,
+                    plantCode: step.plantCode || null,
+                    locationType: step.locationType || null,
+                    ownershipType: step.ownershipType || null,
+                    active: true,
+                };
+            }
+
+            return null;
+        },
+        [locations]
+    );
 
     const routeIssues = useMemo(() => {
         const issues = [];
@@ -327,49 +359,66 @@ export function MatFlowBomDetailPage() {
             const first = lineRoutes[0];
             const last = lineRoutes[lineRoutes.length - 1];
 
-            if (normalize(first.stepType) !== "QC") {
-                issues.push(`${lineLabel}: first route step must be QC.`);
-            }
+            if (normalize(first.stepType) !== "QC") issues.push(`${lineLabel}: first route step must be QC.`);
+            if (normalize(last.stepType) !== "PRODUCTION") issues.push(`${lineLabel}: final route step must be Production.`);
 
-            if (normalize(last.stepType) !== "PRODUCTION") {
-                issues.push(`${lineLabel}: final route step must be Production.`);
-            }
+            const qcCount = lineRoutes.filter((step) => normalize(step.stepType) === "QC").length;
+            const productionCount = lineRoutes.filter((step) => normalize(step.stepType) === "PRODUCTION").length;
 
-            const qcCount = lineRoutes.filter(
-                (step) => normalize(step.stepType) === "QC"
-            ).length;
-
-            const productionCount = lineRoutes.filter(
-                (step) => normalize(step.stepType) === "PRODUCTION"
-            ).length;
-
-            if (qcCount !== 1) {
-                issues.push(`${lineLabel}: route must contain exactly one QC step.`);
-            }
-
-            if (productionCount !== 1) {
-                issues.push(`${lineLabel}: route must contain exactly one Production step.`);
-            }
+            if (qcCount !== 1) issues.push(`${lineLabel}: route must contain exactly one QC step.`);
+            if (productionCount !== 1) issues.push(`${lineLabel}: route must contain exactly one Production step.`);
 
             lineRoutes.forEach((step, index) => {
+                const sequence = Number(step?.sequenceNo || index + 1);
+                const stepType = normalize(step?.stepType);
+                const location = resolveRouteLocation(step);
+                const locationType = normalize(location?.locationType);
+                const locationLabel =
+                    location?.locationCode ||
+                    location?.locationName ||
+                    (step?.locationId ? `location ${step.locationId}` : "location");
+
                 if (!step?.locationId) {
-                    issues.push(`${lineLabel}: route step ${index + 1} has no location.`);
+                    issues.push(`${lineLabel}: route step ${sequence} (${stepType || "UNKNOWN"}) has no saved location.`);
+                    return;
                 }
 
-                if (
-                    index > 0 &&
-                    index < lineRoutes.length - 1 &&
-                    normalize(step.stepType) !== "PROCESSING"
-                ) {
-                    issues.push(
-                        `${lineLabel}: only Processing steps are allowed between QC and Production.`
-                    );
+                if (!location) {
+                    issues.push(`${lineLabel}: route step ${sequence} references a Location Master record that cannot be resolved.`);
+                    return;
+                }
+
+                if (!locationType) {
+                    issues.push(`${lineLabel}: ${locationLabel} has no Location Type. Edit the Location Master record.`);
+                    return;
+                }
+
+                if (stepType === "QC" && locationType !== "QC") {
+                    issues.push(`${lineLabel}: QC step uses ${locationLabel}, but that location is ${readable(locationType)}, not QC.`);
+                }
+
+                if (stepType === "PROCESSING" && !["PROCESSING", "EXTERNAL_PROCESSOR"].includes(locationType)) {
+                    issues.push(`${lineLabel}: Processing step uses ${locationLabel}, but that location is ${readable(locationType)}.`);
+                }
+
+                if (stepType === "PRODUCTION" && locationType !== "PRODUCTION") {
+                    issues.push(`${lineLabel}: Production step uses ${locationLabel}, but that location is ${readable(locationType)}, not Production.`);
+                }
+
+                if (projectPlantCode && !sameCode(location.plantCode, projectPlantCode)) {
+                    issues.push(`${lineLabel}: ${locationLabel} belongs to ${location.plantCode || "no plant"}, but this BOM belongs to ${projectPlantCode}.`);
+                }
+
+                if (location.active === false) issues.push(`${lineLabel}: ${locationLabel} is inactive.`);
+
+                if (index > 0 && index < lineRoutes.length - 1 && stepType !== "PROCESSING") {
+                    issues.push(`${lineLabel}: only Processing steps are allowed between QC and Production.`);
                 }
             });
         });
 
         return Array.from(new Set(issues));
-    }, [lines, routes]);
+    }, [lines, routes, projectPlantCode, resolveRouteLocation]);
 
     const validRouteLineCount = useMemo(() => {
         return lines.filter((line) => {
@@ -381,10 +430,26 @@ export function MatFlowBomDetailPage() {
             if (normalize(lineRoutes[0]?.stepType) !== "QC") return false;
             if (normalize(lineRoutes[lineRoutes.length - 1]?.stepType) !== "PRODUCTION") return false;
 
-            const middle = lineRoutes.slice(1, -1);
-            return middle.every((step) => normalize(step.stepType) === "PROCESSING");
+            const qcCount = lineRoutes.filter((step) => normalize(step?.stepType) === "QC").length;
+            const productionCount = lineRoutes.filter((step) => normalize(step?.stepType) === "PRODUCTION").length;
+            if (qcCount !== 1 || productionCount !== 1) return false;
+
+            return lineRoutes.every((step, index) => {
+                const stepType = normalize(step?.stepType);
+                const location = resolveRouteLocation(step);
+                const locationType = normalize(location?.locationType);
+
+                if (!step?.locationId || !location || !locationType) return false;
+                if (location.active === false) return false;
+                if (projectPlantCode && !sameCode(location.plantCode, projectPlantCode)) return false;
+                if (stepType === "QC" && locationType !== "QC") return false;
+                if (stepType === "PROCESSING" && !["PROCESSING", "EXTERNAL_PROCESSOR"].includes(locationType)) return false;
+                if (stepType === "PRODUCTION" && locationType !== "PRODUCTION") return false;
+                if (index > 0 && index < lineRoutes.length - 1 && stepType !== "PROCESSING") return false;
+                return true;
+            });
         }).length;
-    }, [lines, routes]);
+    }, [lines, routes, projectPlantCode, resolveRouteLocation]);
 
     useEffect(() => {
         if (!canEdit) {
@@ -713,9 +778,41 @@ export function MatFlowBomDetailPage() {
                         </Box>
                         {routes.length === 0 ? <EmptyState>No explicit route configured. Add route steps from the material line actions.</EmptyState> : routes.map((step) => {
                             const line = lines.find((item) => String(item.id) === String(step.bomLineId));
+                            const resolvedLocation = resolveRouteLocation(step);
+                            const resolvedLocationType = normalize(resolvedLocation?.locationType);
+                            const expectedType = normalize(step.stepType);
+                            const locationTypeValid =
+                                expectedType === "QC"
+                                    ? resolvedLocationType === "QC"
+                                    : expectedType === "PROCESSING"
+                                        ? ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(resolvedLocationType)
+                                        : expectedType === "PRODUCTION"
+                                            ? resolvedLocationType === "PRODUCTION"
+                                            : false;
+                            const plantValid = !projectPlantCode || sameCode(resolvedLocation?.plantCode, projectPlantCode);
+                            const routeLocationValid = Boolean(step.locationId) && Boolean(resolvedLocation) && Boolean(resolvedLocationType) && locationTypeValid && plantValid && resolvedLocation?.active !== false;
+
                             return <Box key={step.id} sx={{ ...tableRowSx, gridTemplateColumns: "90px 80px 140px 180px 130px 110px 160px" }}>
-                                <Box sx={tableCellSx}>{step.bomLineNo ?? line?.lineNo ?? "-"}</Box><Box sx={tableCellSx}>{step.sequenceNo}</Box><Box sx={tableCellSx}>{step.stepType}</Box><Box sx={tableCellSx}>{step.locationCode || step.locationName || "-"}</Box><Box sx={tableCellSx}>{step.processCode || "-"}</Box><Box sx={tableCellSx}>{step.expectedYieldPercent ?? 100}</Box>
-                                <Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>{canEdit && line ? <><Button onClick={() => openRoute(line, step)} sx={secondaryBtnSx}>Edit</Button><Button onClick={() => deleteRoute(line, step)} sx={secondaryBtnSx}>Delete</Button></> : "-"}</Box>
+                                <Box sx={tableCellSx}>{step.bomLineNo ?? line?.lineNo ?? "-"}</Box>
+                                <Box sx={tableCellSx}>{step.sequenceNo}</Box>
+                                <Box sx={tableCellSx}>{step.stepType}</Box>
+                                <Box sx={tableCellSx}>
+                                    <Typography sx={routeLocationValid ? mainTextSx : { ...mainTextSx, color: "error.main" }}>
+                                        {resolvedLocation?.locationCode || resolvedLocation?.locationName || "INVALID / MISSING"}
+                                    </Typography>
+                                    <Typography sx={subTextSx}>
+                                        {resolvedLocationType ? readable(resolvedLocationType) : "No location type"}
+                                        {resolvedLocation?.plantCode ? ` · ${resolvedLocation.plantCode}` : ""}
+                                    </Typography>
+                                </Box>
+                                <Box sx={tableCellSx}>{step.processCode || "-"}</Box>
+                                <Box sx={tableCellSx}>{step.expectedYieldPercent ?? 100}</Box>
+                                <Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>
+                                    {canEdit && line ? <>
+                                        <Button onClick={() => openRoute(line, step)} sx={secondaryBtnSx}>Edit</Button>
+                                        <Button onClick={() => deleteRoute(line, step)} sx={secondaryBtnSx}>Delete</Button>
+                                    </> : "-"}
+                                </Box>
                             </Box>;
                         })}
                     </Box>
@@ -819,4 +916,3 @@ export function MatFlowBomDetailPage() {
         </Box>
     );
 }
-
