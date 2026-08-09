@@ -1,13 +1,15 @@
 package com.alsorg.packing.controller.matflow;
 
+import com.alsorg.packing.controller.dto.matflow.MatFlowIntegrityDtos.IntegrityReport;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.AuditLogRow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.DashboardResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.PageResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.ProjectTrackingResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.ShortageAgeingRow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.StockLedgerRow;
+import com.alsorg.packing.controller.dto.matflow.MatFlowTrackerDtos.TrackerResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
-import com.alsorg.packing.service.matflow.MatFlowReportingService;
+import com.alsorg.packing.service.matflow.MatFlowInsightService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,60 +23,52 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Consolidated read-model controller for dashboard/reporting, tracker and
+ * integrity diagnostics.
+ */
 @RestController
-@RequestMapping("/api/matflow/reports")
+@RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
-public class MatFlowReportingController {
+public class MatFlowInsightController {
 
-    private final MatFlowReportingService service;
+    private final MatFlowInsightService service;
 
-    public MatFlowReportingController(
-            MatFlowReportingService service) {
+    public MatFlowInsightController(MatFlowInsightService service) {
         this.service = service;
     }
 
-    @GetMapping("/dashboard")
+    /* -------------------- Reports -------------------- */
+
+    @GetMapping("/reports/dashboard")
     public DashboardResponse dashboard(
             @RequestParam(required = false) String plantCode) {
-        return service.dashboard(
-                plantCode);
+        return service.dashboard(plantCode);
     }
 
-    @GetMapping("/projects/{projectDrawingId}")
+    @GetMapping("/reports/projects/{projectDrawingId}")
     public ProjectTrackingResponse projectTracking(
             @PathVariable UUID projectDrawingId) {
-        return service.projectTracking(
-                projectDrawingId);
+        return service.projectTracking(projectDrawingId);
     }
 
-    @GetMapping("/shortages")
+    @GetMapping("/reports/shortages")
     public List<ShortageAgeingRow> shortages(
             @RequestParam(required = false) String plantCode,
-
             @RequestParam(required = false) Integer minimumAgeDays) {
-        return service.shortageAgeing(
-                plantCode,
-                minimumAgeDays);
+        return service.shortageAgeing(plantCode, minimumAgeDays);
     }
 
-    @GetMapping("/stock-ledger")
+    @GetMapping("/reports/stock-ledger")
     public PageResponse<StockLedgerRow> stockLedger(
             @RequestParam(required = false) String plantCode,
-
             @RequestParam(required = false) UUID materialId,
-
             @RequestParam(required = false) UUID locationId,
-
             @RequestParam(required = false) MovementType movementType,
-
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-
             @RequestParam(required = false) String search,
-
             @RequestParam(defaultValue = "0") int page,
-
             @RequestParam(defaultValue = "25") int size) {
         return service.stockLedger(
                 plantCode,
@@ -88,24 +82,16 @@ public class MatFlowReportingController {
                 size);
     }
 
-    @GetMapping("/audit")
+    @GetMapping("/reports/audit")
     public PageResponse<AuditLogRow> audit(
             @RequestParam(required = false) String plantCode,
-
             @RequestParam(required = false) String entityType,
-
             @RequestParam(required = false) UUID entityId,
-
             @RequestParam(required = false) String action,
-
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-
             @RequestParam(required = false) String search,
-
             @RequestParam(defaultValue = "0") int page,
-
             @RequestParam(defaultValue = "25") int size) {
         return service.auditLogs(
                 plantCode,
@@ -117,5 +103,23 @@ public class MatFlowReportingController {
                 search,
                 page,
                 size);
+    }
+
+    /* -------------------- Smart tracker -------------------- */
+
+    @GetMapping("/tracker")
+    public TrackerResponse tracker(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) String stage) {
+        return service.tracker(search, plantCode, stage);
+    }
+
+    /* -------------------- Integrity -------------------- */
+
+    @GetMapping("/admin/integrity")
+    public IntegrityReport integrity(
+            @RequestParam(required = false) String plantCode) {
+        return service.inspectIntegrity(plantCode);
     }
 }

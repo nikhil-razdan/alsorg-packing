@@ -85,15 +85,7 @@ public class MatFlowAccessService {
                                 "MATFLOW_ENGINEERING");
         }
 
-        public void requireApproval() {
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_DIRECTOR");
-        }
+        
 
         public void requirePlantAccess(
                         String plantCode) {
@@ -294,7 +286,8 @@ public class MatFlowAccessService {
                                 "ADMIN",
                                 "MATFLOW_MANAGER",
                                 "MATFLOW_STORE",
-                                "MATFLOW_PURCHASE");
+                                "MATFLOW_PURCHASE",
+                                "MATFLOW_DIRECTOR");
         }
 
         public void requireTransferDispatch(
@@ -556,4 +549,15 @@ public class MatFlowAccessService {
                                 "MATFLOW_MANAGER",
                                 "MATFLOW_DIRECTOR");
         }
+
+        public void requirePurchaseOrderApproval() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_DIRECTOR");
+        }
+
 }
