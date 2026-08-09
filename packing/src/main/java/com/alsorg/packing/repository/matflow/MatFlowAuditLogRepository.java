@@ -1,40 +1,25 @@
 package com.alsorg.packing.repository.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowAuditLog;
-import java.time.LocalDateTime;
-import java.util.Set;
-import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
-public interface MatFlowAuditLogRepository extends JpaRepository<MatFlowAuditLog, UUID> {
-    @Query("""
-            select audit
-            from MatFlowAuditLog audit
-            where (audit.plantCode is null or upper(audit.plantCode) in :plantCodes)
-              and (:entityType = '' or upper(audit.entityType) = :entityType)
-              and (:entityId is null or audit.entityId = :entityId)
-              and (:action = '' or upper(audit.action) = :action)
-              and (:fromDate is null or audit.actionAt >= :fromDate)
-              and (:toDate is null or audit.actionAt <= :toDate)
-              and (
-                    :searchPattern = ''
-                    or lower(coalesce(audit.actor, '')) like :searchPattern
-                    or lower(coalesce(audit.projectCode, '')) like :searchPattern
-                    or lower(coalesce(audit.drawingNo, '')) like :searchPattern
-                    or lower(coalesce(audit.detailsJson, '')) like :searchPattern
-              )
-            """)
-    Page<MatFlowAuditLog> search(
-            @Param("plantCodes") Set<String> plantCodes,
-            @Param("entityType") String entityType,
-            @Param("entityId") UUID entityId,
-            @Param("action") String action,
-            @Param("fromDate") LocalDateTime fromDate,
-            @Param("toDate") LocalDateTime toDate,
-            @Param("searchPattern") String searchPattern,
-            Pageable pageable);
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
+/**
+ * Audit repository.
+ *
+ * Filtering is intentionally implemented with JPA Specifications inside
+ * MatFlowInsightService instead of one large nullable-parameter JPQL query.
+ * PostgreSQL can fail to infer the type of nullable LocalDateTime parameters
+ * used in predicates such as ":fromDate is null", producing:
+ * "could not determine data type of parameter".
+ *
+ * Specifications add only the predicates that are actually required, so no
+ * untyped nullable SQL bind is emitted.
+ */
+public interface MatFlowAuditLogRepository
+        extends JpaRepository<MatFlowAuditLog, UUID>,
+        JpaSpecificationExecutor<MatFlowAuditLog> {
 }

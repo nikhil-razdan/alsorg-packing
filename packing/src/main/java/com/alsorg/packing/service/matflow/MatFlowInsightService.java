@@ -29,6 +29,8 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -243,8 +245,7 @@ public class MatFlowInsightService {
                     .findAllByOrderByUpdatedAtDesc()
                     .stream()
                     .filter(requisition -> plants.contains(
-                            normalizePlant(
-                                    requisition.destinationLocation.plantCode)))
+                            requisitionPlant(requisition)))
                     .toList();
 
             List<MatFlowTransferOrder> transfers = transferRepository
@@ -481,9 +482,9 @@ public class MatFlowInsightService {
                                 requisition.requisitionNumber,
                                 requisition.status,
 
-                                requisition.destinationLocation.locationCode,
+                                requisitionDestinationCode(requisition),
 
-                                requisition.destinationLocation.plantCode,
+                                requisitionPlant(requisition),
 
                                 lines.size(),
                                 shortageLines,
@@ -554,8 +555,7 @@ public class MatFlowInsightService {
                                     RequisitionStatus.PRODUCTION_COMPLETED))
                     .stream()
                     .filter(line -> plants.contains(
-                            normalizePlant(
-                                    line.requisition.destinationLocation.plantCode)))
+                            requisitionPlant(line == null ? null : line.requisition)))
                     .map(line -> {
                         LocalDateTime startedAt = line.requisition.plannedAt != null
                                 ? line.requisition.plannedAt
@@ -589,9 +589,9 @@ public class MatFlowInsightService {
                                 line.reservedQty,
                                 line.shortageQty,
 
-                                line.requisition.destinationLocation.locationCode,
+                                requisitionDestinationCode(line.requisition),
 
-                                line.requisition.destinationLocation.plantCode,
+                                requisitionPlant(line.requisition),
 
                                 line.requisition.status,
                                 startedAt,
@@ -630,14 +630,15 @@ public class MatFlowInsightService {
                             Sort.Direction.DESC,
                             "actionAt"));
 
-            Page<MatFlowStockLedger> result = ledgerRepository.search(
-                    plants,
-                    materialId,
-                    locationId,
-                    movementType,
-                    fromDate,
-                    toDate,
-                    likePattern(search),
+            Page<MatFlowStockLedger> result = ledgerRepository.findAll(
+                    stockLedgerSpecification(
+                            plants,
+                            materialId,
+                            locationId,
+                            movementType,
+                            fromDate,
+                            toDate,
+                            search),
                     pageable);
 
             return new PageResponse<>(
@@ -674,14 +675,15 @@ public class MatFlowInsightService {
                             Sort.Direction.DESC,
                             "actionAt"));
 
-            Page<MatFlowAuditLog> result = auditRepository.search(
-                    plants,
-                    upperFilter(entityType),
-                    entityId,
-                    upperFilter(action),
-                    fromDate,
-                    toDate,
-                    likePattern(search),
+            Page<MatFlowAuditLog> result = auditRepository.findAll(
+                    auditSpecification(
+                            plants,
+                            entityType,
+                            entityId,
+                            action,
+                            fromDate,
+                            toDate,
+                            search),
                     pageable);
 
             List<AuditLogRow> rows = result.getContent()
@@ -705,6 +707,169 @@ public class MatFlowInsightService {
                     result.getSize(),
                     result.getTotalElements(),
                     result.getTotalPages());
+        }
+
+        private Specification<MatFlowStockLedger> stockLedgerSpecification(
+                Set<String> plants,
+                UUID materialId,
+                UUID locationId,
+                MovementType movementType,
+                LocalDateTime fromDate,
+                LocalDateTime toDate,
+                String search) {
+
+            return (root, query, cb) -> {
+                List<Predicate> predicates = new ArrayList<>();
+
+                predicates.add(
+                        cb.upper(
+                                root.get("location")
+                                        .<String>get("plantCode"))
+                                .in(plants));
+
+                if (materialId != null) {
+                    predicates.add(
+                            cb.equal(
+                                    root.get("material").get("id"),
+                                    materialId));
+                }
+
+                if (locationId != null) {
+                    predicates.add(
+                            cb.equal(
+                                    root.get("location").get("id"),
+                                    locationId));
+                }
+
+                if (movementType != null) {
+                    predicates.add(
+                            cb.equal(
+                                    root.get("movementType"),
+                                    movementType));
+                }
+
+                if (fromDate != null) {
+                    predicates.add(
+                            cb.greaterThanOrEqualTo(
+                                    root.<LocalDateTime>get("actionAt"),
+                                    fromDate));
+                }
+
+                if (toDate != null) {
+                    predicates.add(
+                            cb.lessThanOrEqualTo(
+                                    root.<LocalDateTime>get("actionAt"),
+                                    toDate));
+                }
+
+                String term = clean(search);
+                if (term != null) {
+                    String like = "%" + term.toLowerCase(Locale.ROOT) + "%";
+                    predicates.add(
+                            cb.or(
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("referenceNumber"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("projectCode"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("drawingNo"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("batchNo"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("actor"), "")), like)));
+                }
+
+                return cb.and(predicates.toArray(Predicate[]::new));
+            };
+        }
+
+        private Specification<MatFlowAuditLog> auditSpecification(
+                Set<String> plants,
+                String entityType,
+                UUID entityId,
+                String action,
+                LocalDateTime fromDate,
+                LocalDateTime toDate,
+                String search) {
+
+            return (root, query, cb) -> {
+                List<Predicate> predicates = new ArrayList<>();
+
+                predicates.add(
+                        cb.or(
+                                cb.isNull(root.get("plantCode")),
+                                cb.upper(root.<String>get("plantCode")).in(plants)));
+
+                String entityFilter = clean(entityType);
+                if (entityFilter != null) {
+                    predicates.add(
+                            cb.equal(
+                                    cb.upper(root.<String>get("entityType")),
+                                    entityFilter.toUpperCase(Locale.ROOT)));
+                }
+
+                if (entityId != null) {
+                    predicates.add(
+                            cb.equal(
+                                    root.get("entityId"),
+                                    entityId));
+                }
+
+                String actionFilter = clean(action);
+                if (actionFilter != null) {
+                    predicates.add(
+                            cb.equal(
+                                    cb.upper(root.<String>get("action")),
+                                    actionFilter.toUpperCase(Locale.ROOT)));
+                }
+
+                if (fromDate != null) {
+                    predicates.add(
+                            cb.greaterThanOrEqualTo(
+                                    root.<LocalDateTime>get("actionAt"),
+                                    fromDate));
+                }
+
+                if (toDate != null) {
+                    predicates.add(
+                            cb.lessThanOrEqualTo(
+                                    root.<LocalDateTime>get("actionAt"),
+                                    toDate));
+                }
+
+                String term = clean(search);
+                if (term != null) {
+                    String like = "%" + term.toLowerCase(Locale.ROOT) + "%";
+                    predicates.add(
+                            cb.or(
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("actor"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("projectCode"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("drawingNo"), "")), like),
+                                    cb.like(cb.lower(cb.coalesce(root.<String>get("detailsJson"), "")), like)));
+                }
+
+                return cb.and(predicates.toArray(Predicate[]::new));
+            };
+        }
+
+        private String requisitionPlant(
+                MatFlowMaterialRequisition requisition) {
+            if (requisition == null) {
+                return "";
+            }
+
+            if (requisition.destinationLocation != null &&
+                    clean(requisition.destinationLocation.plantCode) != null) {
+                return normalizePlant(requisition.destinationLocation.plantCode);
+            }
+
+            if (requisition.projectDrawing != null) {
+                return normalizePlant(requisition.projectDrawing.getPlantCode());
+            }
+
+            return "";
+        }
+
+        private String requisitionDestinationCode(
+                MatFlowMaterialRequisition requisition) {
+            return requisition != null && requisition.destinationLocation != null
+                    ? requisition.destinationLocation.locationCode
+                    : null;
         }
 
         private PlantDashboardRow buildPlantDashboard(
@@ -734,7 +899,7 @@ public class MatFlowInsightService {
 
             long openRequisitions = requisitions.stream()
                     .filter(requisition -> plantEquals(
-                            requisition.destinationLocation.plantCode,
+                            requisitionPlant(requisition),
                             plant) &&
                             requisition.status != RequisitionStatus.CANCELLED &&
                             requisition.status != RequisitionStatus.COMPLETED &&
@@ -743,7 +908,7 @@ public class MatFlowInsightService {
 
             long shortageRequisitions = requisitions.stream()
                     .filter(requisition -> plantEquals(
-                            requisition.destinationLocation.plantCode,
+                            requisitionPlant(requisition),
                             plant) &&
                             requisition.status == RequisitionStatus.SHORTAGE_PENDING)
                     .count();
@@ -1737,8 +1902,7 @@ public class MatFlowInsightService {
             List<MatFlowRequisitionLine> requisitionLines = requisitionLineRepository.findAll()
                     .stream()
                     .filter(line -> plants.contains(
-                            normalizePlant(
-                                    line.requisition.destinationLocation.plantCode)))
+                            requisitionPlant(line == null ? null : line.requisition)))
                     .toList();
 
             checkedRecords += requisitionLines.size();
@@ -1917,6 +2081,25 @@ public class MatFlowInsightService {
             }
         }
 
+        private String requisitionPlant(
+                MatFlowMaterialRequisition requisition) {
+            if (requisition == null) {
+                return "";
+            }
+
+            if (requisition.destinationLocation != null &&
+                    requisition.destinationLocation.plantCode != null &&
+                    !requisition.destinationLocation.plantCode.isBlank()) {
+                return normalizePlant(requisition.destinationLocation.plantCode);
+            }
+
+            if (requisition.projectDrawing != null) {
+                return normalizePlant(requisition.projectDrawing.getPlantCode());
+            }
+
+            return "";
+        }
+
         private void inspectRequisitionLine(
                 MatFlowRequisitionLine line,
                 List<IntegrityViolation> violations) {
@@ -1936,6 +2119,18 @@ public class MatFlowInsightService {
                     " / line " +
                     line.lineNo;
 
+            if (line.requisition.destinationLocation == null) {
+                add(
+                        violations,
+                        IntegritySeverity.CRITICAL,
+                        "REQUISITION_DESTINATION_MISSING",
+                        "REQUISITION",
+                        line.requisition.getId(),
+                        line.requisition.requisitionNumber,
+                        requisitionPlant(line.requisition),
+                        "Requisition has no destination location. Repair legacy data before further execution.");
+            }
+
             if (isNegative(requested) ||
                     isNegative(reserved) ||
                     isNegative(shortage) ||
@@ -1949,7 +2144,7 @@ public class MatFlowInsightService {
                         "REQUISITION_LINE",
                         line.getId(),
                         reference,
-                        line.requisition.destinationLocation.plantCode,
+                        requisitionPlant(line.requisition),
                         "Requisition quantities cannot be negative.");
             }
 
@@ -1962,7 +2157,7 @@ public class MatFlowInsightService {
                         "REQUISITION_LINE",
                         line.getId(),
                         reference,
-                        line.requisition.destinationLocation.plantCode,
+                        requisitionPlant(line.requisition),
                         "Consumed plus returned quantity exceeds issued quantity.");
             }
 
@@ -1974,7 +2169,7 @@ public class MatFlowInsightService {
                         "REQUISITION_LINE",
                         line.getId(),
                         reference,
-                        line.requisition.destinationLocation.plantCode,
+                        requisitionPlant(line.requisition),
                         "Shortage quantity exceeds requested quantity.");
             }
 
@@ -1986,7 +2181,7 @@ public class MatFlowInsightService {
                         "REQUISITION_LINE",
                         line.getId(),
                         reference,
-                        line.requisition.destinationLocation.plantCode,
+                        requisitionPlant(line.requisition),
                         "Issued quantity exceeds requested quantity.");
             }
         }

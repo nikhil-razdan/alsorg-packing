@@ -103,14 +103,9 @@ public class MatFlowAccessService {
                                         "Plant code is missing from the requested MatFlow record");
                 }
 
-                User user = currentUser();
+                Set<String> permittedPlants = allowedPlants();
 
-                if (!currentUserService.canAccessPlant(
-                                user,
-                                normalizedPlant)) {
-
-                        Set<String> permittedPlants = allowedPlants();
-
+                if (!permittedPlants.contains(normalizedPlant)) {
                         throw new AccessDeniedException(
                                         "No access to plant: " + normalizedPlant +
                                                         ". Assigned MatFlow plants: " +
@@ -119,26 +114,73 @@ public class MatFlowAccessService {
                 }
         }
 
+        /**
+         * MatFlow-only plant resolution.
+         *
+         * IMPORTANT:
+         * This intentionally does NOT change CurrentUserService or User's
+         * shared effective-plant behavior, because those classes are also used
+         * by PackFlow/BOMFlow.
+         *
+         * For MatFlow we merge both:
+         * 1. modern user_plant_access values (User.plantCodes)
+         * 2. legacy users.plant_code (User.plantCode)
+         *
+         * This makes incremental user-data migration safe without broadening
+         * permissions in other modules.
+         */
         public Set<String> allowedPlants() {
 
-                Set<String> plants = currentUserService.allowedPlants(
-                                currentUser());
+                User user = currentUser();
 
-                if (plants == null ||
-                                plants.isEmpty()) {
+                /*
+                 * Preserve the existing shared ADMIN behavior exactly:
+                 * ADMIN receives PlantLocationService.getAllPlantCodes()
+                 * through CurrentUserService.
+                 */
+                if (isAdmin(user)) {
+                        return normalizePlants(
+                                        currentUserService.allowedPlants(user));
+                }
 
+                java.util.LinkedHashSet<String> plants = new java.util.LinkedHashSet<>();
+
+                if (user.getPlantCodes() != null) {
+                        plants.addAll(
+                                        normalizePlants(
+                                                        user.getPlantCodes()));
+                }
+
+                String legacyPlant = normalize(
+                                user.getPlantCode());
+
+                if (!legacyPlant.isBlank()) {
+                        plants.add(legacyPlant);
+                }
+
+                if (plants.isEmpty()) {
+                        throw new AccessDeniedException(
+                                        "No MatFlow plant access assigned");
+                }
+
+                return java.util.Collections.unmodifiableSet(
+                                plants);
+        }
+
+        private Set<String> normalizePlants(
+                        Set<String> source) {
+
+                if (source == null ||
+                                source.isEmpty()) {
                         return Set.of();
                 }
 
-                return plants.stream()
+                return source.stream()
                                 .filter(
                                                 java.util.Objects::nonNull)
-                                .map(String::trim)
+                                .map(this::normalize)
                                 .filter(
                                                 value -> !value.isBlank())
-                                .map(
-                                                value -> value.toUpperCase(
-                                                                Locale.ROOT))
                                 .collect(
                                                 java.util.stream.Collectors.toCollection(
                                                                 java.util.LinkedHashSet::new));
@@ -159,9 +201,11 @@ public class MatFlowAccessService {
                         return false;
                 }
 
-                return currentUserService.canAccessPlant(
-                                currentUser(),
-                                normalizedPlant);
+                try {
+                        return allowedPlants().contains(normalizedPlant);
+                } catch (AccessDeniedException exception) {
+                        return false;
+                }
         }
 
         private void requireRole(
