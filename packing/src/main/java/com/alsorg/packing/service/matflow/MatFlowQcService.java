@@ -583,6 +583,7 @@ public class MatFlowQcService {
 
                         MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
 
+                        reservation.sourceLocation = inspection.location;
                         reservation.reservedQty = accepted;
 
                         reservation.status = accepted.compareTo(

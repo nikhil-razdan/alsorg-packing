@@ -7,7 +7,7 @@ import {
 	MatFlowThemeProvider,
 	canAccessMatFlowScreen,
 	defaultMatFlowPathForRole,
-	getMatFlowRole,
+	getMatFlowRoles,
 } from "./matflowUi";
 
 import {
@@ -54,7 +54,7 @@ import {
 
 function Guard({ screen, children }) {
 	const location = useLocation();
-	const { user, role, modules, isLoggedIn, authLoading } = useAuth();
+	const { user, role, roles, modules, isLoggedIn, authLoading } = useAuth();
 
 	if (authLoading) return null;
 	if (!isLoggedIn) {
@@ -71,18 +71,28 @@ function Guard({ screen, children }) {
 		return <Navigate to="/modules" replace />;
 	}
 
-	const cleanRole = getMatFlowRole(role || user?.role);
-	if (!canAccessMatFlowScreen(screen, cleanRole)) {
-		return <Navigate to={defaultMatFlowPathForRole(cleanRole)} replace />;
+	const effectiveRoles = getMatFlowRoles([
+		...(Array.isArray(roles) ? roles : []),
+		...(Array.isArray(user?.roles) ? user.roles : []),
+		role,
+		user?.role,
+	]);
+	if (!canAccessMatFlowScreen(screen, effectiveRoles)) {
+		return <Navigate to={defaultMatFlowPathForRole(effectiveRoles)} replace />;
 	}
 
 	return children;
 }
 
 function HomeRedirect() {
-	const { role, user, authLoading } = useAuth();
+	const { role, roles, user, authLoading } = useAuth();
 	if (authLoading) return null;
-	return <Navigate to={defaultMatFlowPathForRole(role || user?.role)} replace />;
+	return <Navigate to={defaultMatFlowPathForRole([
+		...(Array.isArray(roles) ? roles : []),
+		...(Array.isArray(user?.roles) ? user.roles : []),
+		role,
+		user?.role,
+	])} replace />;
 }
 
 const guarded = (screen, element) => <Guard screen={screen}>{element}</Guard>;

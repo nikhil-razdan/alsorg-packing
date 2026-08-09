@@ -296,6 +296,9 @@ public class MatFlowProcurementService {
                 String actor = accessService.actor();
 
                 order.status = PurchaseOrderStatus.PLACED;
+                order.approvedBy = actor;
+                order.approvedAt = LocalDateTime.now();
+                order.approvalRemarks = request == null ? null : clean(request.remarks());
 
                 if (request != null &&
                                 clean(request.remarks()) != null) {
@@ -830,6 +833,9 @@ public class MatFlowProcurementService {
                                 order.deliveryLocation.locationCode,
                                 order.deliveryLocation.plantCode,
                                 order.status,
+                                order.approvedBy,
+                                order.approvedAt,
+                                order.approvalRemarks,
                                 order.remarks,
                                 order.getRowVersion(),
                                 lines);

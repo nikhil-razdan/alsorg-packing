@@ -23,8 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Purchase + receipt controller.
  *
- * Purchase creates a DRAFT PO.  Manager/Director/Admin approves it through
- * /approve.  The old Purchase-user /place action is intentionally removed.
+ * Purchase creates a DRAFT PO. Manager/Director/Admin approves it through
+ * /approve. The old Purchase-user /place action is intentionally removed.
  */
 @RestController
 @RequestMapping("/api/matflow")

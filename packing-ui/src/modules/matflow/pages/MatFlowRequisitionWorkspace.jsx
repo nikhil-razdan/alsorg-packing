@@ -55,8 +55,8 @@ const PAGE_SIZE = 25;
 
 export function MatFlowRequisitionListPage() {
     const navigate = useNavigate();
-    const { role, selectedPlantParam } = useMatFlow();
-    const canCreate = CREATE_ROLES.includes(role);
+    const { hasRole, selectedPlantParam } = useMatFlow();
+    const canCreate = hasRole(CREATE_ROLES);
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -135,9 +135,9 @@ export function MatFlowRequisitionCreatePage() {
         let active = true;
         (async () => {
             try {
-                const [b, l] = await Promise.all([matflowApi.listBoms({ status: "APPROVED", latestOnly: true }), matflowApi.listLocations({ active: true })]);
+                const [b, l] = await Promise.all([matflowApi.listBoms({ status: "APPROVED", latestOnly: false }), matflowApi.listLocations({ active: true })]);
                 if (!active) return;
-                setBoms(extractMatFlowPage(b?.data).rows.filter((bom) => normalize(bom.status) === "APPROVED" && bom.effective === true && bom.latestRevision === true));
+                setBoms(extractMatFlowPage(b?.data).rows.filter((bom) => normalize(bom.status) === "APPROVED" && bom.effective === true));
                 setLocations(extractMatFlowPage(l?.data).rows.filter((location) => location.active !== false && normalize(location.locationType) === "PRODUCTION"));
             } catch (requestError) { if (active) setError(readMatFlowError(requestError, "Unable to load approved BOMs and Production locations.")); }
             finally { if (active) setLoading(false); }
@@ -215,7 +215,7 @@ export function MatFlowRequisitionCreatePage() {
 export function MatFlowRequisitionDetailPage() {
     const { requisitionId } = useParams();
     const navigate = useNavigate();
-    const { role } = useMatFlow();
+    const { hasRole } = useMatFlow();
     const [requisition, setRequisition] = useState(null);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
@@ -242,10 +242,13 @@ export function MatFlowRequisitionDetailPage() {
         returned: sum.returned + Number(line.returnedQty || 0),
     }), { requested: 0, reserved: 0, shortage: 0, issued: 0, consumed: 0, returned: 0 }), [lines]);
     const status = normalize(requisition?.status);
-    const productionRole = CREATE_ROLES.includes(role);
+    const productionRole = hasRole(CREATE_ROLES);
     const canSubmit = productionRole && status === "DRAFT" && lines.length > 0 && requisition?.rowVersion != null;
     const canStart = productionRole && status === "ISSUED_TO_PRODUCTION" && requisition?.rowVersion != null;
     const canComplete = productionRole && status === "PRODUCTION_STARTED" && requisition?.rowVersion != null;
+    const isPartialAvailability = totals.shortage > 0 && (totals.reserved > 0 || totals.issued > 0);
+    const partialDecision = normalize(requisition?.partialAvailabilityDecision || "UNDECIDED");
+    const canDecidePartial = productionRole && isPartialAvailability && requisition?.rowVersion != null && !["CANCELLED", "PRODUCTION_STARTED", "PRODUCTION_COMPLETED"].includes(status);
 
     const execute = async () => {
         if (!action || !requisition?.id || requisition.rowVersion == null) return;
@@ -255,6 +258,8 @@ export function MatFlowRequisitionDetailPage() {
             if (action === "SUBMIT") await matflowApi.submitRequisition(requisition.id, body);
             if (action === "START") await matflowApi.startProduction(requisition.id, body);
             if (action === "COMPLETE") await matflowApi.completeProduction(requisition.id, body);
+            if (action === "PARTIAL_ISSUE") await matflowApi.decidePartialAvailability(requisition.id, { ...body, decision: "ISSUE_AVAILABLE_NOW" });
+            if (action === "PARTIAL_HOLD") await matflowApi.decidePartialAvailability(requisition.id, { ...body, decision: "HOLD_UNTIL_SHORTAGE_COMPLETE" });
             setAction(null); setRemarks(""); await load();
         } catch (requestError) { setError(readMatFlowError(requestError, "Unable to complete Production action.")); }
         finally { setWorking(false); }
@@ -266,10 +271,10 @@ export function MatFlowRequisitionDetailPage() {
         <ErrorBox>{error}</ErrorBox>
         {requisition && <>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Status" value={<MatFlowStatusChip status={requisition.status} />} /><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /><SummaryCard label="Consumed" value={formatQty(totals.consumed)} /></Box>
-            <Card sx={panelSx}><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 1 }}><Detail label="Project" value={requisition.projectCode} /><Detail label="Drawing" value={requisition.drawingNo} /><Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} /><Detail label="Destination" value={requisition.destinationLocationName || requisition.destinationLocationCode} /><Detail label="Plant" value={requisition.destinationPlantCode} /><Detail label="Requested By" value={requisition.requestedBy} /><Detail label="Requested At" value={formatDate(requisition.requestedAt)} /><Detail label="Submitted At" value={formatDate(requisition.submittedAt)} /><Detail label="Remarks" value={requisition.remarks} /></Box>
-                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1.5 }}>{canSubmit && <Button startIcon={<SendOutlinedIcon />} onClick={() => setAction("SUBMIT")} sx={primaryBtnSx}>Submit to Store</Button>}{canStart && <Button startIcon={<PlayArrowOutlinedIcon />} onClick={() => setAction("START")} sx={primaryBtnSx}>Start Production</Button>}{canComplete && <Button startIcon={<TaskAltOutlinedIcon />} onClick={() => setAction("COMPLETE")} sx={primaryBtnSx}>Complete Finished Product</Button>}</Box></Card>
+            <Card sx={panelSx}><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 1 }}><Detail label="Project" value={requisition.projectCode} /><Detail label="Drawing" value={requisition.drawingNo} /><Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} /><Detail label="Destination" value={requisition.destinationLocationName || requisition.destinationLocationCode} /><Detail label="Plant" value={requisition.destinationPlantCode} /><Detail label="Partial Availability" value={<MatFlowStatusChip status={requisition.partialAvailabilityDecision || "UNDECIDED"} />} /><Detail label="Decision By" value={requisition.partialDecisionBy || "-"} /><Detail label="Requested By" value={requisition.requestedBy} /><Detail label="Requested At" value={formatDate(requisition.requestedAt)} /><Detail label="Submitted At" value={formatDate(requisition.submittedAt)} /><Detail label="Remarks" value={requisition.remarks} /></Box>
+                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1.5, flexWrap: "wrap" }}>{canSubmit && <Button startIcon={<SendOutlinedIcon />} onClick={() => setAction("SUBMIT")} sx={primaryBtnSx}>Submit to Store</Button>}{canDecidePartial && <Button onClick={() => setAction("PARTIAL_ISSUE")} sx={partialDecision === "ISSUE_AVAILABLE_NOW" ? primaryBtnSx : secondaryBtnSx}>Issue Available Now</Button>}{canDecidePartial && <Button onClick={() => setAction("PARTIAL_HOLD")} sx={partialDecision === "HOLD_UNTIL_SHORTAGE_COMPLETE" ? primaryBtnSx : secondaryBtnSx}>Hold Until Shortage Complete</Button>}{canStart && <Button startIcon={<PlayArrowOutlinedIcon />} onClick={() => setAction("START")} sx={primaryBtnSx}>Start Production</Button>}{canComplete && <Button startIcon={<TaskAltOutlinedIcon />} onClick={() => setAction("COMPLETE")} sx={primaryBtnSx}>Complete Finished Product</Button>}</Box></Card>
             <Card sx={panelSx}><Typography sx={{ fontWeight: 950, mb: 1 }}>Material Lines</Typography><Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "70px 190px 100px 100px 100px 100px 100px 100px 160px" }}>{["Line", "Material", "Requested", "Reserved", "Shortage", "Issued", "Consumed", "Returned", "Status"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{lines.map((line) => <Box key={line.id} sx={{ ...tableRowSx, gridTemplateColumns: "70px 190px 100px 100px 100px 100px 100px 100px 160px" }}><Box sx={tableCellSx}>{line.lineNo}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{line.materialCode}</Typography><Typography sx={subTextSx}>{line.materialName}</Typography></Box><Box sx={tableCellSx}>{formatQty(line.requestedQty)}</Box><Box sx={tableCellSx}>{formatQty(line.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(line.shortageQty)}</Box><Box sx={tableCellSx}>{formatQty(line.issuedQty)}</Box><Box sx={tableCellSx}>{formatQty(line.consumedQty)}</Box><Box sx={tableCellSx}>{formatQty(line.returnedQty)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={line.status || requisition.status} /></Box></Box>)}</Box></Card>
         </>}
-        <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit Requisition to Store" : action === "START" ? "Start Production" : "Complete Finished Product"}</DialogTitle><DialogContent sx={dialogContentSx}><TextField fullWidth multiline minRows={3} label="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} /></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setAction(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={execute} disabled={working} sx={primaryBtnSx}>{working ? "Working..." : "Confirm"}</Button></DialogActions></Dialog>
+        <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit Requisition to Store" : action === "START" ? "Start Production" : action === "COMPLETE" ? "Complete Finished Product" : action === "PARTIAL_ISSUE" ? "Issue Available Quantity Now" : "Hold Available Quantity"}</DialogTitle><DialogContent sx={dialogContentSx}><TextField fullWidth multiline minRows={3} label="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} /></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setAction(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={execute} disabled={working} sx={primaryBtnSx}>{working ? "Working..." : "Confirm"}</Button></DialogActions></Dialog>
     </Box>;
 }

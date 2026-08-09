@@ -71,8 +71,8 @@ async function discoverPurchaseIndents() {
 }
 
 export function MatFlowPurchasePage() {
-    const { role } = useMatFlow();
-    const canPurchase = PURCHASE_ROLES.includes(role);
+    const { hasRole } = useMatFlow();
+    const canPurchase = hasRole(PURCHASE_ROLES);
     const [orders, setOrders] = useState([]);
     const [vendors, setVendors] = useState([]);
     const [indents, setIndents] = useState([]);
@@ -142,8 +142,8 @@ export function MatFlowPurchasePage() {
 }
 
 export function MatFlowPoApprovalPage() {
-    const { role } = useMatFlow();
-    const canApprove = APPROVAL_ROLES.includes(role);
+    const { hasRole } = useMatFlow();
+    const canApprove = hasRole(APPROVAL_ROLES);
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState("");
@@ -155,8 +155,8 @@ export function MatFlowPoApprovalPage() {
 }
 
 export function MatFlowReceivingPage() {
-    const { role } = useMatFlow();
-    const canReceive = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE].includes(role);
+    const { hasRole } = useMatFlow();
+    const canReceive = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
     const [orders, setOrders] = useState([]);
     const [receipts, setReceipts] = useState([]);
     const [loading, setLoading] = useState(true);

@@ -14,6 +14,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomUpdateRequest;
 
 import com.alsorg.packing.domain.matflow.*;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.repository.matflow.*;
 
@@ -269,6 +270,8 @@ public class MatFlowBomService {
                                                 "Inactive project drawing cannot be used");
                         }
 
+                        requireApprovedProduct(project);
+
                         String actor = accessService.actor();
 
                         UUID revisionGroupId = UUID.randomUUID();
@@ -347,6 +350,7 @@ public class MatFlowBomService {
                                                         "Inactive project drawing cannot be used");
                                 }
 
+                                requireApprovedProduct(project);
                                 bom.setProjectDrawing(project);
                         }
 
@@ -645,6 +649,8 @@ public class MatFlowBomService {
                         assertActionVersion(
                                         request,
                                         bom);
+
+                        requireApprovedProduct(bom.getProjectDrawing());
 
                         List<MatFlowBomLine> lines = lineRepository
                                         .findByBom_IdOrderByLineNoAsc(
@@ -965,6 +971,8 @@ public class MatFlowBomService {
                         assertActionVersion(
                                         request,
                                         source);
+
+                        requireApprovedProduct(source.getProjectDrawing());
 
                         MatFlowBom latest = bomRepository
                                         .findFirstByRevisionGroupIdOrderByRevisionNoDesc(
@@ -1420,6 +1428,18 @@ public class MatFlowBomService {
                                         line.getRowVersion());
                 }
 
+                private void requireApprovedProduct(
+                                MatFlowProjectDrawing project) {
+                        if (project == null) {
+                                throw conflict("BOM project/product context is missing");
+                        }
+
+                        if (project.getProductApprovalStatus() != ProjectProductApprovalStatus.APPROVED) {
+                                throw conflict(
+                                                "Director approval is required for this product/drawing before Engineering can create or submit a BOM");
+                        }
+                }
+
                 private String normalizeMaterialCategory(
                                 String value) {
 
@@ -1782,38 +1802,74 @@ public class MatFlowBomService {
 
                 private void validateRoute(
                                 List<MatFlowBomRouteStep> steps) {
-                        if (steps.isEmpty()) {
-                                return;
+                        if (steps == null || steps.isEmpty()) {
+                                throw badRequest(
+                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production");
                         }
 
+                        int qcCount = 0;
                         int productionCount = 0;
+                        boolean productionSeen = false;
 
                         for (int index = 0; index < steps.size(); index++) {
-
                                 MatFlowBomRouteStep step = steps.get(index);
 
-                                accessService.requirePlantAccess(
-                                                step.location.plantCode);
+                                if (step == null || step.location == null || step.stepType == null) {
+                                        throw badRequest("BOM route contains an incomplete step");
+                                }
+
+                                accessService.requirePlantAccess(step.location.plantCode);
 
                                 if (!step.location.active) {
                                         throw badRequest(
-                                                        "Inactive location exists in BOM route: " +
-                                                                        step.location.locationCode);
+                                                        "Inactive location exists in BOM route: "
+                                                                        + step.location.locationCode);
+                                }
+
+                                validateLocationType(step.stepType, step.location);
+
+                                if (index == 0 && step.stepType != RouteStepType.QC) {
+                                        throw badRequest(
+                                                        "The first material route step must be QC");
+                                }
+
+                                if (step.stepType == RouteStepType.QC) {
+                                        qcCount++;
+                                        if (index != 0) {
+                                                throw badRequest(
+                                                                "QC must be the first and only QC route step");
+                                        }
+                                }
+
+                                if (productionSeen) {
+                                        throw badRequest(
+                                                        "No route step is allowed after Production");
                                 }
 
                                 if (step.stepType == RouteStepType.PRODUCTION) {
                                         productionCount++;
+                                        productionSeen = true;
 
                                         if (index != steps.size() - 1) {
                                                 throw badRequest(
                                                                 "Production must be the final route step");
                                         }
                                 }
+
+                                if (step.stepType == RouteStepType.PROCESSING && index == 0) {
+                                        throw badRequest(
+                                                        "Processing cannot occur before QC");
+                                }
+                        }
+
+                        if (qcCount != 1) {
+                                throw badRequest(
+                                                "A material route must contain exactly one QC step as the first step");
                         }
 
                         if (productionCount != 1) {
                                 throw badRequest(
-                                                "A configured route must contain exactly one final production step");
+                                                "A material route must contain exactly one Production step as the final step");
                         }
                 }
 

@@ -5,6 +5,7 @@ import static com.alsorg.packing.controller.matflow.MatFlowApiContract.API_VERSI
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectProductApprovalRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowMetadataDtos.MetadataResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationRequest;
@@ -25,6 +26,8 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MaterialReturnStat
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.OwnershipType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProcessingJobStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PartialAvailabilityDecision;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionType;
@@ -40,6 +43,7 @@ import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
 import com.alsorg.packing.domain.matflow.MatFlowVendor;
 
+import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowLocationRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
@@ -55,6 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,9 +102,16 @@ public class MatFlowMasterDataService {
             MatFlowStockBalanceRepository balanceRepository,
             MatFlowStockLedgerRepository ledgerRepository,
             MatFlowVendorRepository vendorRepository,
-            MatFlowAccessService accessService) {
+            MatFlowBomRepository bomRepository,
+            MatFlowAccessService accessService,
+            MatFlowAuditService auditService) {
         this.accessService = accessService;
-        this.master = new MasterModule(materialRepository, projectRepository, accessService);
+        this.master = new MasterModule(
+                materialRepository,
+                projectRepository,
+                bomRepository,
+                accessService,
+                auditService);
         this.inventory = new InventoryModule(
                 locationRepository, materialRepository, balanceRepository, ledgerRepository, accessService);
         this.vendors = new VendorModule(vendorRepository, accessService);
@@ -133,6 +145,20 @@ public class MatFlowMasterDataService {
     @Transactional
     public ProjectDrawingResponse updateProject(UUID id, ProjectDrawingRequest request) {
         return master.updateProject(id, request);
+    }
+
+    @Transactional
+    public ProjectDrawingResponse approveProjectProduct(
+            UUID id,
+            ProjectProductApprovalRequest request) {
+        return master.approveProjectProduct(id, request);
+    }
+
+    @Transactional
+    public ProjectDrawingResponse returnProjectProduct(
+            UUID id,
+            ProjectProductApprovalRequest request) {
+        return master.returnProjectProduct(id, request);
     }
 
     @Transactional(readOnly = true)
@@ -224,6 +250,8 @@ public class MatFlowMasterDataService {
         enums.put("materialReturnStatus", names(MaterialReturnStatus.class));
         enums.put("materialReturnReason", names(MaterialReturnReason.class));
         enums.put("movementType", names(MovementType.class));
+        enums.put("projectProductApprovalStatus", names(ProjectProductApprovalStatus.class));
+        enums.put("partialAvailabilityDecision", names(PartialAvailabilityDecision.class));
 
         return new MetadataResponse(
                 API_VERSION,
@@ -251,17 +279,21 @@ public class MatFlowMasterDataService {
 
         private final MatFlowMaterialRepository materialRepository;
         private final MatFlowProjectDrawingRepository projectRepository;
+        private final MatFlowBomRepository bomRepository;
         private final MatFlowAccessService accessService;
+        private final MatFlowAuditService auditService;
 
         MasterModule(
                 MatFlowMaterialRepository materialRepository,
                 MatFlowProjectDrawingRepository projectRepository,
-                MatFlowAccessService accessService) {
+                MatFlowBomRepository bomRepository,
+                MatFlowAccessService accessService,
+                MatFlowAuditService auditService) {
             this.materialRepository = materialRepository;
-
             this.projectRepository = projectRepository;
-
+            this.bomRepository = bomRepository;
             this.accessService = accessService;
+            this.auditService = auditService;
         }
 
         @Transactional(readOnly = true)
@@ -450,11 +482,26 @@ public class MatFlowMasterDataService {
                     request,
                     plantCode);
 
+            resetProductApproval(project);
+
             project.setCreatedBy(actor);
             project.setUpdatedBy(actor);
 
-            return toProjectResponse(
-                    projectRepository.save(project));
+            project = projectRepository.save(project);
+
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    project.getId(),
+                    "PRODUCT_SUBMITTED_FOR_DIRECTOR_APPROVAL",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    project.getDrawingNo(),
+                    auditService.details(
+                            "projectName", project.getProjectName(),
+                            "productName", project.getProductName(),
+                            "drawingRevision", project.getDrawingRevision()));
+
+            return toProjectResponse(project);
         }
 
         @Transactional
@@ -497,16 +544,140 @@ public class MatFlowMasterDataService {
                         "Project drawing revision already exists");
             }
 
+            boolean criticalChange = hasApprovalCriticalChange(
+                    project,
+                    request,
+                    plantCode);
+
+            if (criticalChange &&
+                    bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
+                throw conflict(
+                        "An approved/effective BOM already exists for this product/drawing. "
+                                + "Create a new Product/Drawing revision instead of changing approval-critical fields.");
+            }
+
             applyProject(
                     project,
                     request,
                     plantCode);
 
-            project.setUpdatedBy(
-                    accessService.actor());
+            if (criticalChange ||
+                    project.getProductApprovalStatus() == ProjectProductApprovalStatus.RETURNED) {
+                resetProductApproval(project);
+            }
 
-            return toProjectResponse(
-                    projectRepository.save(project));
+            String actor = accessService.actor();
+            project.setUpdatedBy(actor);
+            project = projectRepository.save(project);
+
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    project.getId(),
+                    "PROJECT_PRODUCT_UPDATED",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    project.getDrawingNo(),
+                    auditService.details(
+                            "productName", project.getProductName(),
+                            "approvalReset", criticalChange,
+                            "approvalStatus", project.getProductApprovalStatus()));
+
+            return toProjectResponse(project);
+        }
+
+        @Transactional
+        public ProjectDrawingResponse approveProjectProduct(
+                UUID id,
+                ProjectProductApprovalRequest request) {
+            accessService.requireProjectProductApproval();
+
+            MatFlowProjectDrawing project = requireProject(id);
+
+            assertVersion(
+                    request == null ? null : request.rowVersion(),
+                    project.getRowVersion(),
+                    "Project product");
+
+            if (!project.isActive()) {
+                throw conflict("Inactive product/drawing cannot be approved");
+            }
+
+            if (project.getProductApprovalStatus() == ProjectProductApprovalStatus.APPROVED) {
+                return toProjectResponse(project);
+            }
+
+            String actor = accessService.actor();
+            project.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
+            project.setProductApprovedBy(actor);
+            project.setProductApprovedAt(LocalDateTime.now());
+            project.setProductReturnedBy(null);
+            project.setProductReturnedAt(null);
+            project.setProductApprovalRemarks(
+                    request == null ? null : clean(request.remarks()));
+            project.setUpdatedBy(actor);
+
+            project = projectRepository.save(project);
+
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    project.getId(),
+                    "PRODUCT_APPROVED_BY_DIRECTOR",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    project.getDrawingNo(),
+                    auditService.details(
+                            "productName", project.getProductName(),
+                            "approvalRemarks", project.getProductApprovalRemarks()));
+
+            return toProjectResponse(project);
+        }
+
+        @Transactional
+        public ProjectDrawingResponse returnProjectProduct(
+                UUID id,
+                ProjectProductApprovalRequest request) {
+            accessService.requireProjectProductApproval();
+
+            MatFlowProjectDrawing project = requireProject(id);
+
+            assertVersion(
+                    request == null ? null : request.rowVersion(),
+                    project.getRowVersion(),
+                    "Project product");
+
+            String remarks = clean(request == null ? null : request.remarks());
+            if (remarks == null) {
+                throw badRequest("Return remarks are required");
+            }
+
+            if (bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
+                throw conflict(
+                        "This product/drawing already has an effective approved BOM. Create a new Product/Drawing revision instead of returning the approved live product.");
+            }
+
+            String actor = accessService.actor();
+            project.setProductApprovalStatus(ProjectProductApprovalStatus.RETURNED);
+            project.setProductApprovedBy(null);
+            project.setProductApprovedAt(null);
+            project.setProductReturnedBy(actor);
+            project.setProductReturnedAt(LocalDateTime.now());
+            project.setProductApprovalRemarks(remarks);
+            project.setUpdatedBy(actor);
+
+            project = projectRepository.save(project);
+
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    project.getId(),
+                    "PRODUCT_RETURNED_BY_DIRECTOR",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    project.getDrawingNo(),
+                    auditService.details(
+                            "productName", project.getProductName(),
+                            "returnRemarks", remarks));
+
+            return toProjectResponse(project);
         }
 
         @Transactional(readOnly = true)
@@ -546,6 +717,12 @@ public class MatFlowMasterDataService {
                     project.getRequiredDate(),
                     project.getRemarks(),
                     project.isActive(),
+                    project.getProductApprovalStatus(),
+                    project.getProductApprovedBy(),
+                    project.getProductApprovedAt(),
+                    project.getProductReturnedBy(),
+                    project.getProductReturnedAt(),
+                    project.getProductApprovalRemarks(),
                     project.getRowVersion(),
                     project.getCreatedBy(),
                     project.getCreatedAt(),
@@ -627,6 +804,31 @@ public class MatFlowMasterDataService {
             }
         }
 
+        private boolean hasApprovalCriticalChange(
+                MatFlowProjectDrawing project,
+                ProjectDrawingRequest request,
+                String plantCode) {
+            return !Objects.equals(upper(project.getProjectCode()), upper(request.projectCode()))
+                    || !Objects.equals(clean(project.getProjectName()), clean(request.projectName()))
+                    || !Objects.equals(clean(project.getClientName()), clean(request.clientName()))
+                    || !Objects.equals(upper(project.getDrawingNo()), upper(request.drawingNo()))
+                    || !Objects.equals(normalizedRevision(project.getDrawingRevision()),
+                            normalizedRevision(request.drawingRevision()))
+                    || !Objects.equals(clean(project.getProductName()), clean(request.productName()))
+                    || !Objects.equals(upper(project.getPlantCode()), upper(plantCode));
+        }
+
+        private void resetProductApproval(
+                MatFlowProjectDrawing project) {
+            project.setProductApprovalStatus(
+                    ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL);
+            project.setProductApprovedBy(null);
+            project.setProductApprovedAt(null);
+            project.setProductReturnedBy(null);
+            project.setProductReturnedAt(null);
+            project.setProductApprovalRemarks(null);
+        }
+
         private void validateMaterialRequest(
                 MaterialRequest request) {
             if (request == null) {
@@ -665,6 +867,10 @@ public class MatFlowMasterDataService {
             required(
                     request.projectName(),
                     "Project name");
+
+            required(
+                    request.clientName(),
+                    "Client name");
 
             required(
                     request.drawingNo(),
@@ -752,11 +958,17 @@ public class MatFlowMasterDataService {
                                     .toUpperCase();
         }
 
+        private String clean(String value) {
+            if (value == null) {
+                return null;
+            }
+            String result = value.trim();
+            return result.isBlank() ? null : result;
+        }
+
         private String upper(String value) {
-            return value == null
-                    ? null
-                    : value.trim()
-                            .toUpperCase();
+            String result = clean(value);
+            return result == null ? null : result.toUpperCase(Locale.ROOT);
         }
 
         private String normalizeSearch(

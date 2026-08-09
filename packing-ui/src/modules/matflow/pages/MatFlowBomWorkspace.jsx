@@ -74,8 +74,8 @@ const workflowFor = (bom) => {
 
 export function MatFlowBomListPage({ submittedOnly = false }) {
     const navigate = useNavigate();
-    const { role } = useMatFlow();
-    const canCreate = EDIT_ROLES.includes(role);
+    const { hasRole } = useMatFlow();
+    const canCreate = hasRole(EDIT_ROLES);
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -88,7 +88,7 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
             const response = await matflowApi.listBoms({
                 search: clean(search) || undefined,
                 status: submittedOnly ? "SUBMITTED" : status || undefined,
-                latestOnly: status === "SUPERSEDED" ? false : true,
+                latestOnly: undefined,
             });
             setRows(extractMatFlowPage(response?.data).rows);
         } catch (requestError) {
@@ -158,7 +158,8 @@ export function MatFlowBomCreatePage() {
         (async () => {
             try {
                 const response = await matflowApi.listProjects({ active: true });
-                if (active) setProjects(extractMatFlowPage(response?.data).rows.filter((row) => row.active !== false));
+                if (active) setProjects(extractMatFlowPage(response?.data).rows.filter((row) =>
+                    row.active !== false && normalize(row.productApprovalStatus) === "APPROVED"));
             } catch (requestError) {
                 if (active) setError(readMatFlowError(requestError, "Unable to load project drawings."));
             } finally { if (active) setLoading(false); }
@@ -202,7 +203,7 @@ export function MatFlowBomCreatePage() {
 export function MatFlowBomDetailPage() {
     const { bomId } = useParams();
     const navigate = useNavigate();
-    const { role } = useMatFlow();
+    const { hasRole } = useMatFlow();
     const [bom, setBom] = useState(null);
     const [routes, setRoutes] = useState([]);
     const [materials, setMaterials] = useState([]);
@@ -215,7 +216,7 @@ export function MatFlowBomDetailPage() {
     const [lineDialog, setLineDialog] = useState(null);
     const [lineForm, setLineForm] = useState({ materialId: "", requiredQty: "", wastagePercent: "0", remarks: "" });
     const [routeDialog, setRouteDialog] = useState(null);
-    const [routeForm, setRouteForm] = useState({ sequenceNo: "1", stepType: "PROCESSING", locationId: "", processCode: "", expectedYieldPercent: "100", remarks: "" });
+    const [routeForm, setRouteForm] = useState({ sequenceNo: "1", stepType: "QC", locationId: "", processCode: "", expectedYieldPercent: "100", remarks: "" });
 
     const load = useCallback(async () => {
         if (!bomId) return;
@@ -233,10 +234,10 @@ export function MatFlowBomDetailPage() {
     const lines = useMemo(() => linesOf(bom), [bom]);
     const project = useMemo(() => projectOf(bom), [bom]);
     const status = normalize(bom?.status);
-    const canEdit = EDIT_ROLES.includes(role) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
-    const canReview = REVIEW_ROLES.includes(role) && status === "SUBMITTED" && bom?.rowVersion != null;
-    const canRevision = EDIT_ROLES.includes(role) && status === "APPROVED" && bom?.effective === true && bom?.latestRevision === true;
-    const canRequisition = REQUISITION_ROLES.includes(role) && status === "APPROVED" && bom?.effective === true && bom?.latestRevision === true;
+    const canEdit = hasRole(EDIT_ROLES) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
+    const canReview = hasRole(REVIEW_ROLES) && status === "SUBMITTED" && bom?.rowVersion != null;
+    const canRevision = hasRole(EDIT_ROLES) && status === "APPROVED" && bom?.effective === true && bom?.latestRevision === true;
+    const canRequisition = hasRole(REQUISITION_ROLES) && status === "APPROVED" && bom?.effective === true;
     const workflow = workflowFor(bom);
 
     useEffect(() => {
@@ -298,15 +299,24 @@ export function MatFlowBomDetailPage() {
     };
 
     const openRoute = (line, step = null) => {
-        setRouteDialog({ line, step });
+        const lineRoutes = routes.filter((item) => String(item.bomLineId) === String(line.id))
+            .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
+        const nextType = lineRoutes.length === 0 ? "QC" : "PRODUCTION";
+        setRouteDialog({ line, step, lineRoutes });
         setRouteForm(step ? {
-            sequenceNo: String(step.sequenceNo ?? 1), stepType: step.stepType || "PROCESSING", locationId: step.locationId || "",
+            sequenceNo: String(step.sequenceNo ?? 1), stepType: step.stepType || "QC", locationId: step.locationId || "",
             processCode: step.processCode || "", expectedYieldPercent: String(step.expectedYieldPercent ?? 100), remarks: step.remarks || "",
-        } : { sequenceNo: String((routes.filter((item) => String(item.bomLineId) === String(line.id)).length + 1)), stepType: "PROCESSING", locationId: "", processCode: "", expectedYieldPercent: "100", remarks: "" });
+        } : { sequenceNo: String(lineRoutes.length + 1), stepType: nextType, locationId: "", processCode: "", expectedYieldPercent: "100", remarks: "" });
     };
 
     const saveRoute = async () => {
         if (!routeDialog?.line?.id || !routeForm.locationId) { setError("Route location is required."); return; }
+        const sequenceNo = Number(routeForm.sequenceNo);
+        const existing = (routeDialog.lineRoutes || []).filter((item) => item.id !== routeDialog?.step?.id);
+        if (sequenceNo === 1 && routeForm.stepType !== "QC") { setError("The first route step must be QC."); return; }
+        if (sequenceNo > 1 && routeForm.stepType === "QC") { setError("QC can only be the first route step."); return; }
+        if (routeForm.stepType === "PRODUCTION" && existing.some((item) => Number(item.sequenceNo) > sequenceNo)) { setError("Production must be the final route step."); return; }
+        if (routeForm.stepType === "PROCESSING" && !clean(routeForm.processCode)) { setError("Process code is required for a Processing step."); return; }
         const body = {
             sequenceNo: Number(routeForm.sequenceNo), stepType: routeForm.stepType, locationId: routeForm.locationId,
             processCode: routeForm.stepType === "PROCESSING" ? clean(routeForm.processCode) : null,
@@ -380,7 +390,7 @@ export function MatFlowBomDetailPage() {
 
                 <Card sx={panelSx}>
                     <Typography sx={sectionTitleSx}>Approved Material Route</Typography>
-                    <Typography sx={sectionSubSx}>Configured route must end in one Production step when a route is used.</Typography>
+                    <Typography sx={sectionSubSx}>Every material route is mandatory: QC first → optional Processing step(s) → Production last.</Typography>
                     <Box sx={{ ...tableShellSx, mt: 1.5 }}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "90px 80px 140px 180px 130px 110px 160px" }}>
                             {["BOM Line", "Sequence", "Step", "Location", "Process", "Yield %", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
@@ -417,7 +427,7 @@ export function MatFlowBomDetailPage() {
                 <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Route Step" : "Add Route Step"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
                     <TextField type="number" label="Sequence *" value={routeForm.sequenceNo} onChange={(e) => setRouteForm((c) => ({ ...c, sequenceNo: e.target.value }))} sx={fieldSx} />
-                    <TextField select label="Step Type *" value={routeForm.stepType} onChange={(e) => setRouteForm((c) => ({ ...c, stepType: e.target.value }))} sx={fieldSx}>{["PROCESSING", "QC", "PRODUCTION"].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField>
+                    <TextField select label="Step Type *" value={routeForm.stepType} onChange={(e) => setRouteForm((c) => ({ ...c, stepType: e.target.value }))} sx={fieldSx}>{(Number(routeForm.sequenceNo) === 1 ? ["QC"] : ["PROCESSING", "PRODUCTION"]).map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField>
                     <TextField select label="Location *" value={routeForm.locationId} onChange={(e) => setRouteForm((c) => ({ ...c, locationId: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }}>{locations.filter((location) => routeForm.stepType === "PROCESSING" ? ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(normalize(location.locationType)) : normalize(location.locationType) === routeForm.stepType).map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {location.plantCode}</MenuItem>)}</TextField>
                     {routeForm.stepType === "PROCESSING" && <TextField label="Process Code *" value={routeForm.processCode} onChange={(e) => setRouteForm((c) => ({ ...c, processCode: e.target.value }))} sx={fieldSx} />}
                     <TextField type="number" label="Expected Yield %" value={routeForm.expectedYieldPercent} onChange={(e) => setRouteForm((c) => ({ ...c, expectedYieldPercent: e.target.value }))} sx={fieldSx} />

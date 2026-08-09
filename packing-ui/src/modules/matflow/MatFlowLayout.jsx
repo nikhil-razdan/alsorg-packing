@@ -17,7 +17,6 @@ import {
 import { useAuth } from "../../auth/AuthContext";
 import {
     canAccessMatFlowScreen,
-    getMatFlowRole,
     matFlowRoleLabel,
     useMatFlow,
 } from "./matflowUi";
@@ -90,17 +89,16 @@ const HEADER = [
 ];
 
 export default function MatFlowLayout() {
-    const { user, role, logout } = useAuth();
-    const { availablePlants, selectedPlantCode, setSelectedPlantCode } = useMatFlow();
+    const { user, logout } = useAuth();
+    const { availablePlants, selectedPlantCode, setSelectedPlantCode, roles, role } = useMatFlow();
     const { isDark, toggleMode } = useMatFlowTheme();
     const navigate = useNavigate();
     const location = useLocation();
     const [collapsed, setCollapsed] = useState(false);
-    const cleanRole = getMatFlowRole(role || user?.role);
 
     const items = useMemo(
-        () => NAV.filter((item) => canAccessMatFlowScreen(item.screen, cleanRole)),
-        [cleanRole]
+        () => NAV.filter((item) => canAccessMatFlowScreen(item.screen, roles)),
+        [roles]
     );
 
     const header = useMemo(
@@ -171,7 +169,7 @@ export default function MatFlowLayout() {
 
                 <Box sx={identitySx}>
                     <Typography sx={{ color: "var(--mf-text)", fontWeight: 850 }}>{user?.username || user?.name || "User"}</Typography>
-                    <Typography sx={mutedSx}>{matFlowRoleLabel(cleanRole)}</Typography>
+                    <Typography sx={mutedSx}>{matFlowRoleLabel(role)}</Typography>
                 </Box>
 
                 <Box component="main" sx={contentSx}><Outlet /></Box>

@@ -637,7 +637,7 @@ public class MatFlowInsightService {
                     movementType,
                     fromDate,
                     toDate,
-                    clean(search),
+                    likePattern(search),
                     pageable);
 
             return new PageResponse<>(
@@ -676,12 +676,12 @@ public class MatFlowInsightService {
 
             Page<MatFlowAuditLog> result = auditRepository.search(
                     plants,
-                    clean(entityType),
+                    upperFilter(entityType),
                     entityId,
-                    clean(action),
+                    upperFilter(action),
                     fromDate,
                     toDate,
-                    clean(search),
+                    likePattern(search),
                     pageable);
 
             List<AuditLogRow> rows = result.getContent()
@@ -956,6 +956,18 @@ public class MatFlowInsightService {
             }
 
             return Math.min(size, 200);
+        }
+
+        private String likePattern(String value) {
+            String cleaned = clean(value);
+            return cleaned == null
+                    ? ""
+                    : "%" + cleaned.toLowerCase(Locale.ROOT) + "%";
+        }
+
+        private String upperFilter(String value) {
+            String cleaned = clean(value);
+            return cleaned == null ? "" : cleaned.toUpperCase(Locale.ROOT);
         }
 
         private String clean(String value) {

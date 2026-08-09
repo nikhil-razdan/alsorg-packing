@@ -2,6 +2,7 @@ package com.alsorg.packing.controller.matflow;
 
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.RequisitionCancelRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.ReservationReleaseRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.PartialAvailabilityDecisionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
@@ -82,6 +83,14 @@ public class MatFlowRequisitionController {
             @PathVariable UUID id,
             @Valid @RequestBody RequisitionCancelRequest request) {
         return service.cancelRequisition(id, request);
+    }
+
+    @PostMapping("/requisitions/{id}/partial-availability-decision")
+    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_PRODUCTION')")
+    public RequisitionResponse decidePartialAvailability(
+            @PathVariable UUID id,
+            @Valid @RequestBody PartialAvailabilityDecisionRequest request) {
+        return service.decidePartialAvailability(id, request);
     }
 
     /* -------------------- Store desk -------------------- */

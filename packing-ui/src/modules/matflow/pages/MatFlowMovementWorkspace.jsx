@@ -52,14 +52,14 @@ import {
 
 const TRANSFER_STATUSES = ["ALL", "PLANNED", "READY", "PARTIALLY_DISPATCHED", "IN_TRANSIT", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"];
 
-const canRoleActAtLocationType = (role, locationType) => {
-    if ([MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER].includes(role)) return true;
+const canRoleActAtLocationType = (hasRole, locationType) => {
+    if (hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER)) return true;
     switch (normalize(locationType)) {
-        case "STORE": return role === MATFLOW_ROLES.STORE;
-        case "PRODUCTION": return role === MATFLOW_ROLES.PRODUCTION;
-        case "QC": return role === MATFLOW_ROLES.QC;
+        case "STORE": return hasRole(MATFLOW_ROLES.STORE);
+        case "PRODUCTION": return hasRole(MATFLOW_ROLES.PRODUCTION);
+        case "QC": return hasRole(MATFLOW_ROLES.QC);
         case "PROCESSING":
-        case "EXTERNAL_PROCESSOR": return role === MATFLOW_ROLES.PROCESSING;
+        case "EXTERNAL_PROCESSOR": return hasRole(MATFLOW_ROLES.PROCESSING);
         default: return false;
     }
 };
@@ -108,7 +108,7 @@ export function MatFlowTransfersPage() {
 export function MatFlowTransferDetailPage() {
     const { transferId } = useParams();
     const navigate = useNavigate();
-    const { role } = useMatFlow();
+    const { hasRole } = useMatFlow();
     const [transfer, setTransfer] = useState(null);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
@@ -130,8 +130,8 @@ export function MatFlowTransferDetailPage() {
     const received = numeric(transfer?.receivedQty);
     const pendingDispatch = Math.max(0, planned - dispatched);
     const pendingReceipt = Math.max(0, dispatched - received);
-    const dispatchable = canRoleActAtLocationType(role, transfer?.fromLocationType) && ["READY", "PARTIALLY_DISPATCHED", "PARTIALLY_RECEIVED"].includes(status) && pendingDispatch > 0;
-    const receivable = canRoleActAtLocationType(role, transfer?.toLocationType) && ["PARTIALLY_DISPATCHED", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) && pendingReceipt > 0;
+    const dispatchable = canRoleActAtLocationType(hasRole, transfer?.fromLocationType) && ["READY", "PARTIALLY_DISPATCHED", "PARTIALLY_RECEIVED"].includes(status) && pendingDispatch > 0;
+    const receivable = canRoleActAtLocationType(hasRole, transfer?.toLocationType) && ["PARTIALLY_DISPATCHED", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) && pendingReceipt > 0;
 
     const openAction = (next) => {
         setAction(next); setForm({ quantity: String(next === "DISPATCH" ? pendingDispatch : pendingReceipt), batchNo: "", remarks: "" }); setError("");
@@ -162,8 +162,8 @@ export function MatFlowTransferDetailPage() {
 }
 
 export function MatFlowReturnsPage() {
-    const { role } = useMatFlow();
-    const canCreateReturn = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION].includes(role);
+    const { hasRole } = useMatFlow();
+    const canCreateReturn = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION);
     const [rows, setRows] = useState([]);
     const [requisitions, setRequisitions] = useState([]);
     const [locations, setLocations] = useState([]);
@@ -220,7 +220,7 @@ export function MatFlowReturnsPage() {
     return <Box sx={pageSx}>
         <PageHero badge="MATERIAL RETURN CONTROL" title="Material Returns" subtitle="Return unused issued material from Production through controlled stock movement." actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>{canCreateReturn && <Button startIcon={<AddIcon />} onClick={() => setDialog(true)} sx={primaryBtnSx}>Create Return</Button>}</>} />
         <ErrorBox>{error}</ErrorBox>
-        <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 170px 180px 150px 160px 140px" }}>{["Return", "Requisition", "Route", "Reason", "Status", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{rows.length === 0 ? <EmptyState /> : rows.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 170px 180px 150px 160px 140px" }}><Box sx={tableCellSx}>{row.returnNumber}</Box><Box sx={tableCellSx}>{row.requisitionNumber}</Box><Box sx={tableCellSx}>{row.fromLocationCode} → {row.toLocationCode}</Box><Box sx={tableCellSx}>{readable(row.reason)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>{normalize(row.status) === "DRAFT" && canRoleActAtLocationType(role, locations.find((l) => String(l.id) === String(row.fromLocationId))?.locationType) && <Button disabled={working} onClick={() => act(row, "dispatch")} sx={primaryBtnSx}>Dispatch</Button>}{["IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(normalize(row.status)) && canRoleActAtLocationType(role, locations.find((l) => String(l.id) === String(row.toLocationId))?.locationType) && <Button disabled={working} onClick={() => act(row, "receive")} sx={primaryBtnSx}>Receive</Button>}</Box></Box>)}</Box>}</Card>
+        <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 170px 180px 150px 160px 140px" }}>{["Return", "Requisition", "Route", "Reason", "Status", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{rows.length === 0 ? <EmptyState /> : rows.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 170px 180px 150px 160px 140px" }}><Box sx={tableCellSx}>{row.returnNumber}</Box><Box sx={tableCellSx}>{row.requisitionNumber}</Box><Box sx={tableCellSx}>{row.fromLocationCode} → {row.toLocationCode}</Box><Box sx={tableCellSx}>{readable(row.reason)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>{normalize(row.status) === "DRAFT" && canRoleActAtLocationType(hasRole, locations.find((l) => String(l.id) === String(row.fromLocationId))?.locationType) && <Button disabled={working} onClick={() => act(row, "dispatch")} sx={primaryBtnSx}>Dispatch</Button>}{["IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(normalize(row.status)) && canRoleActAtLocationType(hasRole, locations.find((l) => String(l.id) === String(row.toLocationId))?.locationType) && <Button disabled={working} onClick={() => act(row, "receive")} sx={primaryBtnSx}>Receive</Button>}</Box></Box>)}</Box>}</Card>
         <Dialog open={dialog} onClose={() => !working && setDialog(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>Create Material Return</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}><TextField select label="Requisition *" value={form.requisitionId} onChange={(e) => { const nextId = e.target.value; const req = requisitions.find((item) => String(item.id) === String(nextId)); setForm((c) => ({ ...c, requisitionId: nextId, fromLocationId: req?.destinationLocationId || "", toLocationId: "", lines: {} })); }} sx={fieldSx}>{requisitions.map((r) => <MenuItem key={r.id} value={r.id}>{r.requisitionNumber} · {r.projectCode}</MenuItem>)}</TextField><TextField select label="Reason *" value={form.reason} onChange={(e) => setForm((c) => ({ ...c, reason: e.target.value }))} sx={fieldSx}>{returnReasons.map((v) => <MenuItem key={v} value={v}>{readable(v)}</MenuItem>)}</TextField><TextField select label="From Production Location *" value={form.fromLocationId} disabled sx={fieldSx}>{locations.filter((l) => String(l.id) === String(form.fromLocationId)).map((l) => <MenuItem key={l.id} value={l.id}>{l.locationCode} · {l.plantCode}</MenuItem>)}</TextField><TextField select label="Return To Location *" value={form.toLocationId} onChange={(e) => setForm((c) => ({ ...c, toLocationId: e.target.value }))} sx={fieldSx}>{locations.filter((l) => l.supportsStock !== false && normalize(l.locationType) !== "PRODUCTION" && String(l.id) !== String(form.fromLocationId)).map((l) => <MenuItem key={l.id} value={l.id}>{l.locationCode} · {l.plantCode} · {readable(l.locationType)}</MenuItem>)}</TextField><TextField label="Remarks" value={form.remarks} onChange={(e) => setForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} /></Box><Box sx={{ mt: 1.5 }}>{returnableLines.map((line) => { const max = Math.max(0, numeric(line.issuedQty) - numeric(line.consumedQty) - numeric(line.returnedQty)); return <Box key={line.id} sx={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 1, alignItems: "center", mb: 1 }}><Box><Typography sx={mainTextSx}>{line.materialCode} · {line.materialName}</Typography><Typography sx={subTextSx}>Returnable {formatQty(max)} {line.uom || ""}</Typography></Box><TextField type="number" label="Return Qty" value={form.lines[String(line.id)] ?? ""} onChange={(e) => setForm((c) => ({ ...c, lines: { ...c.lines, [String(line.id)]: e.target.value } }))} sx={fieldSx} /></Box>; })}</Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(false)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={createReturn} disabled={working} sx={primaryBtnSx}>Create Return</Button></DialogActions></Dialog>
     </Box>;
 }

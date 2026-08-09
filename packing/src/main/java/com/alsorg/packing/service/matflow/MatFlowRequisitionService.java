@@ -2,8 +2,10 @@ package com.alsorg.packing.service.matflow;
 
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.RequisitionCancelRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.ReservationReleaseRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.PartialAvailabilityDecisionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProcessingJobStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PartialAvailabilityDecision;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatus;
 import com.alsorg.packing.domain.matflow.MatFlowProcessingJob;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
@@ -355,12 +357,14 @@ public class MatFlowRequisitionService {
         }
 
         if (bom.getStatus() != MatFlowBomStatus.APPROVED ||
-                !bom.isEffective() ||
-                !bom.isLatestRevision()) {
+                !bom.isEffective()) {
 
             throw conflict(
-                    "Only the latest effective approved BOM can be requisitioned");
+                    "Only an effective approved BOM can be requisitioned");
         }
+
+        // Protect requisition execution from legacy/invalid approved routes.
+        routingService.validateBomForSubmission(bom);
 
         MatFlowLocation destination = requireLocation(
                 request.destinationLocationId());
@@ -407,6 +411,7 @@ public class MatFlowRequisitionService {
         requisition.destinationLocation = destination;
 
         requisition.status = RequisitionStatus.DRAFT;
+        requisition.partialAvailabilityDecision = PartialAvailabilityDecision.UNDECIDED;
 
         requisition.requestedBy = actor;
 
@@ -669,6 +674,7 @@ public class MatFlowRequisitionService {
             MatFlowReservation reservation,
             List<MatFlowBomRouteStep> route,
             BigDecimal quantity,
+            boolean deferInitialTransfer,
             String actor) {
 
         if (reservation.sourceLocation == null) {
@@ -734,7 +740,7 @@ public class MatFlowRequisitionService {
                     next);
 
             transfer.status = predecessorId == null
-                    ? TransferStatus.READY
+                    ? (deferInitialTransfer ? TransferStatus.PLANNED : TransferStatus.READY)
                     : TransferStatus.PLANNED;
 
             transfer.remarks = "Automatically planned from material requisition";
@@ -1630,6 +1636,10 @@ public class MatFlowRequisitionService {
                         .getPlantCode(),
 
                 requisition.status,
+                requisition.partialAvailabilityDecision,
+                requisition.partialDecisionBy,
+                requisition.partialDecisionAt,
+                requisition.partialDecisionRemarks,
 
                 requisition.requestedBy,
                 requisition.requestedAt,
@@ -1690,6 +1700,25 @@ public class MatFlowRequisitionService {
                 finalTransfer.status == TransferStatus.RECEIVED;
     }
 
+    private boolean isPartialIssueAllowed(
+            MatFlowMaterialRequisition requisition) {
+        if (requisition == null) {
+            return false;
+        }
+
+        List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                .findByRequisition_IdOrderByLineNoAsc(requisition.getId());
+
+        boolean hasShortage = lines.stream()
+                .anyMatch(line -> zero(line.shortageQty).compareTo(BigDecimal.ZERO) > 0);
+
+        if (!hasShortage) {
+            return true;
+        }
+
+        return requisition.partialAvailabilityDecision == PartialAvailabilityDecision.ISSUE_AVAILABLE_NOW;
+    }
+
     private ReservationResponse toReservationResponse(
             MatFlowReservation reservation) {
 
@@ -1724,6 +1753,9 @@ public class MatFlowRequisitionService {
 
         boolean issueReady = isReservationIssueReady(
                 reservation) &&
+                isPartialIssueAllowed(
+                        reservation.requisitionLine.requisition)
+                &&
                 remainingIssueQty.compareTo(
                         BigDecimal.ZERO) > 0
                 &&
@@ -2164,6 +2196,16 @@ public class MatFlowRequisitionService {
                     ? List.of()
                     : lineReview.allocations();
 
+            BigDecimal plannedAllocationTotal = allocations.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(StoreSourceAllocationRequest::reserveQty)
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::zero)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            boolean deferInitialTransfer = plannedAllocationTotal.compareTo(BigDecimal.ZERO) > 0
+                    && plannedAllocationTotal.compareTo(requestedQty) < 0;
+
             Set<UUID> usedSourceIds = new LinkedHashSet<>();
 
             BigDecimal totalReserved = BigDecimal.ZERO.setScale(
@@ -2318,6 +2360,7 @@ public class MatFlowRequisitionService {
                         reservation,
                         route,
                         reserveQty,
+                        deferInitialTransfer,
                         actor);
 
                 totalReserved = nextReserved;
@@ -3063,6 +3106,76 @@ public class MatFlowRequisitionService {
     }
 
     @Transactional
+    public RequisitionResponse decidePartialAvailability(
+            UUID requisitionId,
+            PartialAvailabilityDecisionRequest request) {
+        accessService.requireProductionRequest();
+
+        if (request == null || request.decision() == null ||
+                request.decision() == PartialAvailabilityDecision.UNDECIDED) {
+            throw badRequest(
+                    "Production must choose ISSUE_AVAILABLE_NOW or HOLD_UNTIL_SHORTAGE_COMPLETE");
+        }
+
+        MatFlowMaterialRequisition requisition = requisitionRepository
+                .lockById(requisitionId)
+                .orElseThrow(() -> notFound("Requisition not found"));
+
+        accessService.requirePlantAccess(requisition.destinationLocation.getPlantCode());
+        assertVersion(request.rowVersion(), requisition.getRowVersion(), "Requisition");
+
+        if (requisition.status == RequisitionStatus.CANCELLED ||
+                requisition.status == RequisitionStatus.PRODUCTION_STARTED ||
+                requisition.status == RequisitionStatus.PRODUCTION_COMPLETED) {
+            throw conflict("Partial-availability decision cannot be changed in status: " + requisition.status);
+        }
+
+        List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                .findByRequisition_IdOrderByLineNoAsc(requisitionId);
+
+        boolean hasShortage = lines.stream()
+                .anyMatch(line -> zero(line.shortageQty).compareTo(BigDecimal.ZERO) > 0);
+        boolean hasAvailableQuantity = lines.stream()
+                .anyMatch(line -> zero(line.reservedQty).add(zero(line.issuedQty))
+                        .compareTo(BigDecimal.ZERO) > 0);
+
+        if (!hasShortage || !hasAvailableQuantity) {
+            throw conflict(
+                    "Production partial-availability decision is only required when some quantity is available and some quantity is short");
+        }
+
+        String actor = accessService.actor();
+        requisition.partialAvailabilityDecision = request.decision();
+        requisition.partialDecisionBy = actor;
+        requisition.partialDecisionAt = LocalDateTime.now();
+        requisition.partialDecisionRemarks = clean(request.remarks());
+        requisition.setUpdatedBy(actor);
+        requisitionRepository.save(requisition);
+
+        if (request.decision() == PartialAvailabilityDecision.ISSUE_AVAILABLE_NOW) {
+            activateDeferredQcTransfers(requisition.getId(), actor);
+        }
+
+        auditService.record(
+                "REQUISITION",
+                requisition.getId(),
+                "PARTIAL_AVAILABILITY_DECIDED",
+                requisition.destinationLocation.getPlantCode(),
+                requisition.projectDrawing.getProjectCode(),
+                requisition.projectDrawing.getDrawingNo(),
+                auditService.details(
+                        "requisitionNumber", requisition.requisitionNumber,
+                        "decision", requisition.partialAvailabilityDecision,
+                        "remarks", requisition.partialDecisionRemarks));
+
+        refreshState(requisition.getId(), actor);
+
+        return toRequisitionResponse(
+                requisitionRepository.findDetailById(requisition.getId())
+                        .orElseThrow(() -> notFound("Requisition not found after decision")));
+    }
+
+    @Transactional
     public ReservationResponse releaseReservation(
             UUID reservationId,
             ReservationReleaseRequest request) {
@@ -3124,6 +3237,22 @@ public class MatFlowRequisitionService {
         return response;
     }
 
+    private void activateDeferredQcTransfers(
+            UUID requisitionId,
+            String actor) {
+        transferRepository
+                .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(requisitionId)
+                .stream()
+                .filter(transfer -> transfer.predecessorTransferId == null)
+                .filter(transfer -> transfer.status == TransferStatus.PLANNED)
+                .filter(transfer -> transfer.purpose == TransferPurpose.QC_TRANSFER)
+                .forEach(transfer -> {
+                    transfer.status = TransferStatus.READY;
+                    transfer.setUpdatedBy(actor);
+                    transferRepository.save(transfer);
+                });
+    }
+
     /**
      * Authoritative requisition state refresh used by Store, transfer, QC
      * and Production execution. It intentionally stops using legacy
@@ -3175,6 +3304,10 @@ public class MatFlowRequisitionService {
                 .filter(reservation -> reservation.status != ReservationStatus.CANCELLED &&
                         reservation.status != ReservationStatus.RELEASED)
                 .toList();
+
+        if (!anyShortage) {
+            activateDeferredQcTransfers(requisitionId, clean(actor) == null ? accessService.actor() : actor);
+        }
 
         boolean allIssueReady = !reservations.isEmpty() &&
                 reservations.stream().allMatch(reservation -> reservation.status == ReservationStatus.ISSUED ||
@@ -3337,6 +3470,8 @@ public class MatFlowRequisitionService {
                         "Material has not completed its approved route to the Production issue location");
             }
 
+            assertPartialAvailabilityAllowsIssue(requisition);
+
             BigDecimal remaining = zero(
                     reservation.reservedQty)
                     .subtract(
@@ -3493,6 +3628,35 @@ public class MatFlowRequisitionService {
             return planningService
                     .getPlanningSnapshot(
                             requisition.getId());
+        }
+
+        private void assertPartialAvailabilityAllowsIssue(
+                MatFlowMaterialRequisition requisition) {
+            List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                    .findByRequisition_IdOrderByLineNoAsc(requisition.getId());
+
+            boolean hasShortage = lines.stream()
+                    .anyMatch(line -> zero(line.shortageQty).compareTo(BigDecimal.ZERO) > 0);
+
+            if (!hasShortage) {
+                return;
+            }
+
+            PartialAvailabilityDecision decision = requisition.partialAvailabilityDecision == null
+                    ? PartialAvailabilityDecision.UNDECIDED
+                    : requisition.partialAvailabilityDecision;
+
+            if (decision == PartialAvailabilityDecision.ISSUE_AVAILABLE_NOW) {
+                return;
+            }
+
+            if (decision == PartialAvailabilityDecision.HOLD_UNTIL_SHORTAGE_COMPLETE) {
+                throw conflict(
+                        "Production has chosen to hold available material until the shortage is completed");
+            }
+
+            throw conflict(
+                    "Production must decide whether to issue available material now or hold it until the shortage is completed");
         }
 
         public boolean isIssueReady(

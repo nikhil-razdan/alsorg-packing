@@ -47,9 +47,9 @@ import {
 } from "../matflowUi";
 
 export function MatFlowQcPage() {
-    const { role } = useMatFlow();
-    const canQcWrite = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.QC].includes(role);
-    const canVendorReturn = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE].includes(role);
+    const { hasRole } = useMatFlow();
+    const canQcWrite = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.QC);
+    const canVendorReturn = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
     const [rows, setRows] = useState([]);
     const [locations, setLocations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -156,8 +156,8 @@ export function MatFlowProcessingPage() {
 }
 
 export function MatFlowProductionExecutionPage() {
-    const { role } = useMatFlow();
-    const canConsume = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION].includes(role);
+    const { hasRole } = useMatFlow();
+    const canConsume = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION);
     const [consumptions, setConsumptions] = useState([]);
     const [requisitions, setRequisitions] = useState([]);
     const [loading, setLoading] = useState(true);

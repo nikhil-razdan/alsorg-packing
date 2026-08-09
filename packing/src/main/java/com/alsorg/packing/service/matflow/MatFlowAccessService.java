@@ -85,8 +85,6 @@ public class MatFlowAccessService {
                                 "MATFLOW_ENGINEERING");
         }
 
-        
-
         public void requirePlantAccess(
                         String plantCode) {
 
@@ -111,9 +109,13 @@ public class MatFlowAccessService {
                                 user,
                                 normalizedPlant)) {
 
+                        Set<String> permittedPlants = allowedPlants();
+
                         throw new AccessDeniedException(
-                                        "No access to plant: " +
-                                                        normalizedPlant);
+                                        "No access to plant: " + normalizedPlant +
+                                                        ". Assigned MatFlow plants: " +
+                                                        (permittedPlants.isEmpty() ? "NONE"
+                                                                        : String.join(", ", permittedPlants)));
                 }
         }
 
@@ -165,13 +167,8 @@ public class MatFlowAccessService {
         private void requireRole(
                         User user,
                         String... roles) {
-                String currentRole = normalize(user.getRole());
-
-                for (String role : roles) {
-                        if (currentRole.equals(
-                                        normalize(role))) {
-                                return;
-                        }
+                if (currentUserService.hasAnyRole(user, roles)) {
+                        return;
                 }
 
                 throw new AccessDeniedException(
@@ -179,16 +176,17 @@ public class MatFlowAccessService {
         }
 
         private boolean isAdmin(User user) {
-                return "ADMIN".equals(
-                                normalize(user.getRole()));
+                return currentUserService.hasRole(user, "ADMIN");
         }
 
         private boolean roleStartsWith(
                         User user,
                         String prefix) {
-                return normalize(user.getRole())
-                                .startsWith(
-                                                normalize(prefix));
+                String cleanPrefix = normalize(prefix);
+                return user != null && user.getEffectiveRoles() != null &&
+                                user.getEffectiveRoles().stream()
+                                                .map(this::normalize)
+                                                .anyMatch(role -> role.startsWith(cleanPrefix));
         }
 
         private String normalize(
@@ -204,6 +202,16 @@ public class MatFlowAccessService {
                                 .replaceFirst(
                                                 "^ROLE_",
                                                 "");
+        }
+
+        public void requireProjectProductApproval() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_DIRECTOR");
         }
 
         public void requireProductionBomReview() {
@@ -425,18 +433,7 @@ public class MatFlowAccessService {
         private boolean isAnyRole(
                         User user,
                         String... roles) {
-                String userRole = normalize(user == null
-                                ? null
-                                : user.getRole());
-
-                for (String role : roles) {
-                        if (userRole.equals(
-                                        normalize(role))) {
-                                return true;
-                        }
-                }
-
-                return false;
+                return currentUserService.hasAnyRole(user, roles);
         }
 
         public void requireVendorWrite() {

@@ -3,6 +3,7 @@ package com.alsorg.packing.controller.matflow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectProductApprovalRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowMetadataDtos.MetadataResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationRequest;
@@ -85,6 +86,20 @@ public class MatFlowMasterDataController {
             @PathVariable UUID id,
             @Valid @RequestBody ProjectDrawingRequest request) {
         return service.updateProject(id, request);
+    }
+
+    @PostMapping("/projects/{id}/approve-product")
+    public ProjectDrawingResponse approveProjectProduct(
+            @PathVariable UUID id,
+            @Valid @RequestBody ProjectProductApprovalRequest request) {
+        return service.approveProjectProduct(id, request);
+    }
+
+    @PostMapping("/projects/{id}/return-product")
+    public ProjectDrawingResponse returnProjectProduct(
+            @PathVariable UUID id,
+            @Valid @RequestBody ProjectProductApprovalRequest request) {
+        return service.returnProjectProduct(id, request);
     }
 
     /* -------------------- Locations -------------------- */
