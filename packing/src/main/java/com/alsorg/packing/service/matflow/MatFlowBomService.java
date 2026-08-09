@@ -1859,7 +1859,8 @@ public class MatFlowBomService {
 
                         if (steps == null || steps.isEmpty()) {
                                 throw badRequest(
-                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production. " +
+                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production. "
+                                                                +
                                                                 "Missing route for material " + materialLabel);
                         }
 
@@ -1874,10 +1875,30 @@ public class MatFlowBomService {
 
                                 if (step == null || step.location == null || step.stepType == null) {
                                         throw badRequest(
-                                                        "BOM route contains an incomplete step for material " + materialLabel);
+                                                        "BOM route contains an incomplete step for material "
+                                                                        + materialLabel);
                                 }
 
-                                MatFlowLocation location = step.location;
+                                /*
+                                 * The association on MatFlowBomRouteStep may be a Hibernate
+                                 * lazy proxy. Resolve the authoritative Location entity by ID
+                                 * before validating its operational attributes.
+                                 */
+                                UUID routeLocationId = step.location.getId();
+
+                                if (routeLocationId == null) {
+                                        throw badRequest(
+                                                        "BOM route contains a location without an ID for material "
+                                                                        + materialLabel);
+                                }
+
+                                MatFlowLocation location = locationRepository
+                                                .findById(routeLocationId)
+                                                .orElseThrow(() -> conflict(
+                                                                "Route location " + routeLocationId +
+                                                                                " no longer exists for material "
+                                                                                + materialLabel));
+
                                 String locationLabel = safeLabel(
                                                 location.getLocationCode(),
                                                 location.getId());
@@ -1894,12 +1915,13 @@ public class MatFlowBomService {
                                         throw conflict(
                                                         "Route location " + locationLabel +
                                                                         " belongs to plant " + routePlantCode +
-                                                                        " but BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                                        " but BOM "
+                                                                        + safeLabel(bom.getBomNumber(), bom.getId()) +
                                                                         " belongs to plant " + bomPlantCode +
                                                                         ". Use a route location from the BOM plant.");
                                 }
 
-                                if (!location.active) {
+                                if (!location.isActive()) {
                                         throw badRequest(
                                                         "Inactive location exists in BOM route: " +
                                                                         locationLabel);
@@ -1911,20 +1933,23 @@ public class MatFlowBomService {
 
                                 if (index == 0 && step.stepType != RouteStepType.QC) {
                                         throw badRequest(
-                                                        "The first material route step must be QC for material " + materialLabel);
+                                                        "The first material route step must be QC for material "
+                                                                        + materialLabel);
                                 }
 
                                 if (step.stepType == RouteStepType.QC) {
                                         qcCount++;
                                         if (index != 0) {
                                                 throw badRequest(
-                                                                "QC must be the first and only QC route step for material " + materialLabel);
+                                                                "QC must be the first and only QC route step for material "
+                                                                                + materialLabel);
                                         }
                                 }
 
                                 if (productionSeen) {
                                         throw badRequest(
-                                                        "No route step is allowed after Production for material " + materialLabel);
+                                                        "No route step is allowed after Production for material "
+                                                                        + materialLabel);
                                 }
 
                                 if (step.stepType == RouteStepType.PRODUCTION) {
@@ -1933,47 +1958,90 @@ public class MatFlowBomService {
 
                                         if (index != steps.size() - 1) {
                                                 throw badRequest(
-                                                                "Production must be the final route step for material " + materialLabel);
+                                                                "Production must be the final route step for material "
+                                                                                + materialLabel);
                                         }
                                 }
 
                                 if (step.stepType == RouteStepType.PROCESSING && index == 0) {
                                         throw badRequest(
-                                                        "Processing cannot occur before QC for material " + materialLabel);
+                                                        "Processing cannot occur before QC for material "
+                                                                        + materialLabel);
                                 }
                         }
 
                         if (qcCount != 1) {
                                 throw badRequest(
-                                                "A material route must contain exactly one QC step as the first step for material " + materialLabel);
+                                                "A material route must contain exactly one QC step as the first step for material "
+                                                                + materialLabel);
                         }
 
                         if (productionCount != 1) {
                                 throw badRequest(
-                                                "A material route must contain exactly one Production step as the final step for material " + materialLabel);
+                                                "A material route must contain exactly one Production step as the final step for material "
+                                                                + materialLabel);
                         }
                 }
 
                 private void validateLocationType(
                                 RouteStepType stepType,
                                 MatFlowLocation location) {
-                        if (stepType == RouteStepType.PROCESSING &&
-                                        location.locationType != LocationType.PROCESSING &&
-                                        location.locationType != LocationType.EXTERNAL_PROCESSOR) {
+
+                        if (stepType == null) {
                                 throw badRequest(
-                                                "Processing step requires an internal or external processing location");
+                                                "Route step type is required");
+                        }
+
+                        if (location == null) {
+                                throw badRequest(
+                                                "Route location is required");
+                        }
+
+                        /*
+                         * IMPORTANT:
+                         * Always use the entity accessor here.
+                         *
+                         * Route-step locations are commonly Hibernate lazy proxies when
+                         * a BOM is reloaded for submission. Reading a public backing field
+                         * directly (location.locationType) bypasses proxy initialization
+                         * and can therefore appear null/stale even though the persisted
+                         * mf_locations.location_type is QC/PRODUCTION.
+                         *
+                         * getLocationType() goes through Hibernate's proxy interceptor and
+                         * returns the authoritative persisted enum value.
+                         */
+                        LocationType actualType = location.getLocationType();
+
+                        String locationLabel = safeLabel(
+                                        location.getLocationCode(),
+                                        location.getId());
+
+                        if (actualType == null) {
+                                throw badRequest(
+                                                "Route location " + locationLabel +
+                                                                " has no Location Type. Correct the MatFlow Location Master record.");
+                        }
+
+                        if (stepType == RouteStepType.PROCESSING &&
+                                        actualType != LocationType.PROCESSING &&
+                                        actualType != LocationType.EXTERNAL_PROCESSOR) {
+                                throw badRequest(
+                                                "Processing step requires PROCESSING or EXTERNAL_PROCESSOR location, but "
+                                                                + locationLabel + " is " + actualType);
                         }
 
                         if (stepType == RouteStepType.QC &&
-                                        location.locationType != LocationType.QC) {
+                                        actualType != LocationType.QC) {
                                 throw badRequest(
-                                                "QC step requires a QC location");
+                                                "QC step requires a QC location, but "
+                                                                + locationLabel + " is " + actualType);
                         }
 
                         if (stepType == RouteStepType.PRODUCTION &&
-                                        location.locationType != LocationType.PRODUCTION) {
+                                        actualType != LocationType.PRODUCTION) {
                                 throw badRequest(
-                                                "Production step requires a production location");
+                                                "Production step requires a PRODUCTION location, but "
+                                                                + locationLabel + " is " + actualType);
                         }
                 }
 
@@ -2119,12 +2187,13 @@ public class MatFlowBomService {
                                 throw conflict(
                                                 "Route location " + locationLabel +
                                                                 " belongs to plant " + locationPlantCode +
-                                                                " but BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                                " but BOM " + safeLabel(bom.getBomNumber(), bom.getId())
+                                                                +
                                                                 " belongs to plant " + bomPlantCode +
                                                                 ". Select a route location from the BOM plant.");
                         }
 
-                        if (!location.active) {
+                        if (!location.isActive()) {
                                 throw badRequest(
                                                 "Inactive location cannot be used in a route: " + locationLabel);
                         }
@@ -2194,11 +2263,11 @@ public class MatFlowBomService {
                                         step.sequenceNo,
                                         step.stepType,
                                         location.getId(),
-                                        location.locationCode,
-                                        location.locationName,
-                                        location.plantCode,
-                                        location.locationType,
-                                        location.ownershipType,
+                                        location.getLocationCode(),
+                                        location.getLocationName(),
+                                        location.getPlantCode(),
+                                        location.getLocationType(),
+                                        location.getOwnershipType(),
                                         step.processCode,
                                         step.expectedYieldPercent,
                                         step.remarks,
