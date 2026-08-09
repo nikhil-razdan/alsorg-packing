@@ -2,8 +2,14 @@ import API from "../../../services/api";
 
 const BASE = "/matflow";
 
-const cleanParams = (params = {}) => {
-	return Object.fromEntries(
+/*
+ * Removes undefined, null and blank-string query parameters.
+ * This keeps requests clean and avoids sending values such as:
+ *
+ * ?status=&plantCode=&search=
+ */
+const cleanParams = (params = {}) =>
+	Object.fromEntries(
 		Object.entries(params).filter(
 			([, value]) =>
 				value !== undefined &&
@@ -11,175 +17,242 @@ const cleanParams = (params = {}) => {
 				value !== ""
 		)
 	);
-};
 
-const localListResponse = (rows = []) => {
-	return Promise.resolve({
-		data: rows,
-	});
+/*
+ * Validates path IDs before the request is made.
+ *
+ * This prevents accidental requests such as:
+ *
+ * /boms/undefined
+ * /requisitions/null
+ */
+const requiredId = (
+	value,
+	label = "ID"
+) => {
+	const id =
+		String(
+			value ?? ""
+		).trim();
+
+	if (!id) {
+		throw new Error(
+			`${label} is required.`
+		);
+	}
+
+	return encodeURIComponent(
+		id
+	);
 };
 
 /*
- * Backend release detail shape:
- *
- * {
- *     release: { ...release header },
- *     lines: [ ...material lines ]
- * }
- *
- * Existing frontend pages expect:
- *
- * {
- *     ...release header,
- *     lines: [...]
- * }
+ * =========================================================
+ * COMMON RESPONSE HELPERS
+ * =========================================================
  */
-const normalizeReleaseDetail = (
-	response
-) => {
-	const payload = response?.data;
 
+/*
+ * Supports:
+ *
+ * 1. Plain arrays:
+ *    [...]
+ *
+ * 2. Spring Page:
+ *    {
+ *      content: [],
+ *      number: 0,
+ *      size: 20,
+ *      totalElements: 100,
+ *      totalPages: 5
+ *    }
+ *
+ * 3. Generic rows:
+ *    {
+ *      rows: []
+ *    }
+ *
+ * 4. Generic data wrapper:
+ *    {
+ *      data: []
+ *    }
+ */
+export const extractMatFlowPage = (
+	data
+) => {
 	if (
-		payload?.release &&
-		typeof payload.release === "object"
+		Array.isArray(
+			data
+		)
 	) {
 		return {
-			...response,
-			data: {
-				...payload.release,
-				lines: Array.isArray(
-					payload.lines
+			rows: data,
+
+			page: 0,
+
+			size:
+				data.length,
+
+			totalElements:
+				data.length,
+
+			totalPages:
+				data.length
+					? 1
+					: 0,
+		};
+	}
+
+	const rows =
+		Array.isArray(
+			data?.content
+		)
+			? data.content
+			: Array.isArray(
+				data?.rows
+			)
+				? data.rows
+				: Array.isArray(
+					data?.data
 				)
-					? payload.lines
-					: [],
-			},
-		};
-	}
-
-	return response;
-};
-
-const normalizeReleaseList = (
-	response
-) => {
-	const payload = response?.data;
-
-	if (!Array.isArray(payload)) {
-		return {
-			...response,
-			data: [],
-		};
-	}
+					? data.data
+					: [];
 
 	return {
-		...response,
-		data: payload.map((entry) => {
-			if (
-				entry?.release &&
-				typeof entry.release === "object"
-			) {
-				return {
-					...entry.release,
-					lines: Array.isArray(
-						entry.lines
-					)
-						? entry.lines
-						: [],
-				};
-			}
+		rows,
 
-			return entry;
-		}),
+		page:
+			Number(
+				data?.number ??
+				data?.page ??
+				0
+			),
+
+		size:
+			Number(
+				data?.size ??
+				rows.length
+			),
+
+		totalElements:
+			Number(
+				data?.totalElements ??
+				rows.length
+			),
+
+		totalPages:
+			Number(
+				data?.totalPages ??
+				(
+					rows.length
+						? 1
+						: 0
+				)
+			),
 	};
 };
 
+/*
+ * Reads both the new MatFlowApiError contract and
+ * normal Spring / Axios error payloads.
+ */
+export const readMatFlowError = (
+	error,
+	fallback =
+		"The MatFlow request failed."
+) => {
+	const data =
+		error?.response?.data;
+
+	if (
+		typeof data ===
+		"string"
+	) {
+		return data;
+	}
+
+	const validationErrors =
+		data?.validationErrors &&
+			typeof data.validationErrors ===
+			"object"
+			? Object.entries(
+				data.validationErrors
+			).map(
+				(
+					[
+						field,
+						message,
+					]
+				) =>
+					`${field}: ${message}`
+			)
+			: [];
+
+	const message =
+		data?.message ||
+		data?.detail ||
+		data?.error ||
+		error?.message ||
+		fallback;
+
+	return validationErrors.length
+		? [
+			message,
+			...validationErrors,
+		].join(
+			" | "
+		)
+		: message;
+};
+
+/*
+ * =========================================================
+ * MATFLOW API
+ * =========================================================
+ *
+ * This client is aligned with the refactored backend:
+ *
+ * - MatFlowMasterDataController
+ * - MatFlowBomController
+ * - MatFlowRequisitionController
+ * - MatFlowProcurementController
+ * - MatFlowQcController
+ * - MatFlowMovementController
+ * - MatFlowProductionController
+ * - MatFlowInsightController
+ *
+ * Old release/HOD/plan/direct-issue endpoints are
+ * intentionally not present.
+ */
 export const matflowApi = {
 
+	/*
+	 * =====================================================
+	 * MASTER DATA
+	 * =====================================================
+	 */
 
-	/* =====================================================
- * MATFLOW PROFESSIONAL TRACKER
- * ===================================================== */
+	/*
+	 * MATERIALS
+	 */
 
-	getTracker(params = {}) {
-		return API.get(
-			`${BASE}/tracker`,
-			{
-				params:
-					cleanParams(params),
-			}
-		);
-	},
-
-	/* =====================================================
- * MATERIAL MASTER
- * Backend: MatFlowMasterController
- * ===================================================== */
-
-	listMaterials(params = {}) {
+	listMaterials(
+		params = {}
+	) {
 		return API.get(
 			`${BASE}/materials`,
 			{
-				params: cleanParams(params),
+				params:
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	async getMaterial(materialId) {
-		if (!materialId) {
-			throw new Error(
-				"Material ID is required."
-			);
-		}
-
-		/*
-		 * The current backend has no:
-		 * GET /materials/{id}
-		 *
-		 * Therefore obtain the master list and locate
-		 * the requested record locally.
-		 */
-		const response =
-			await API.get(
-				`${BASE}/materials`
-			);
-
-		const rows =
-			Array.isArray(response.data)
-				? response.data
-				: [];
-
-		const material =
-			rows.find(
-				(row) =>
-					String(row.id) ===
-					String(materialId)
-			);
-
-		if (!material) {
-			const error =
-				new Error(
-					"Material not found."
-				);
-
-			error.response = {
-				status: 404,
-				data: {
-					message:
-						"Material not found.",
-				},
-			};
-
-			throw error;
-		}
-
-		return {
-			...response,
-			data: material,
-		};
-	},
-
-
-	createMaterial(body) {
+	createMaterial(
+		body
+	) {
 		return API.post(
 			`${BASE}/materials`,
 			body
@@ -187,83 +260,40 @@ export const matflowApi = {
 	},
 
 	updateMaterial(
-		materialId,
+		id,
 		body
 	) {
 		return API.put(
-			`${BASE}/materials/${materialId}`,
+			`${BASE}/materials/${requiredId(
+				id,
+				"Material ID"
+			)}`,
 			body
 		);
 	},
 
-	/* =====================================================
-	 * PROJECT / DRAWING MASTER
-	 * Exact backend endpoint: /projects
-	 * ===================================================== */
 
-	listProjects(params = {}) {
+	/*
+	 * PROJECTS / DRAWINGS / PRODUCTS
+	 */
+
+	listProjects(
+		params = {}
+	) {
 		return API.get(
 			`${BASE}/projects`,
 			{
-				params: cleanParams(params),
+				params:
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	async getProject(projectId) {
-		if (!projectId) {
-			throw new Error(
-				"Project ID is required."
-			);
-		}
-
-		/*
-		 * The current backend has no:
-		 * GET /projects/{id}
-		 *
-		 * Use the list endpoint and locate the project.
-		 */
-		const response =
-			await API.get(
-				`${BASE}/projects`
-			);
-
-		const rows =
-			Array.isArray(response.data)
-				? response.data
-				: [];
-
-		const project =
-			rows.find(
-				(row) =>
-					String(row.id) ===
-					String(projectId)
-			);
-
-		if (!project) {
-			const error =
-				new Error(
-					"Project drawing not found."
-				);
-
-			error.response = {
-				status: 404,
-				data: {
-					message:
-						"Project drawing not found.",
-				},
-			};
-
-			throw error;
-		}
-
-		return {
-			...response,
-			data: project,
-		};
-	},
-
-	createProject(body) {
+	createProject(
+		body
+	) {
 		return API.post(
 			`${BASE}/projects`,
 			body
@@ -271,194 +301,40 @@ export const matflowApi = {
 	},
 
 	updateProject(
-		projectId,
+		id,
 		body
 	) {
 		return API.put(
-			`${BASE}/projects/${projectId}`,
+			`${BASE}/projects/${requiredId(
+				id,
+				"Project drawing ID"
+			)}`,
 			body
 		);
 	},
 
-	/* =====================================================
-	 * MATFLOW OPERATIONAL BOM
-	 * ===================================================== */
 
-	listBoms(params = {}) {
-		return API.get(
-			`${BASE}/boms`,
-			{
-				params: cleanParams(params),
-			}
-		);
-	},
+	/*
+	 * LOCATIONS
+	 */
 
-	getBom(bomId) {
-		return API.get(
-			`${BASE}/boms/${bomId}`
-		);
-	},
-
-	createBom(body) {
-		return API.post(
-			`${BASE}/boms`,
-			body
-		);
-	},
-
-	updateBom(
-		bomId,
-		body
+	listLocations(
+		params = {}
 	) {
-		return API.put(
-			`${BASE}/boms/${bomId}`,
-			body
-		);
-	},
-
-	addBomLine(
-		bomId,
-		body
-	) {
-		return API.post(
-			`${BASE}/boms/${bomId}/lines`,
-			body
-		);
-	},
-
-	updateBomLine(
-		bomId,
-		lineId,
-		body
-	) {
-		return API.put(
-			`${BASE}/boms/${bomId}/lines/${lineId}`,
-			body
-		);
-	},
-
-	deleteBomLine(
-		bomId,
-		lineId,
-		rowVersion
-	) {
-		return API.delete(
-			`${BASE}/boms/${bomId}/lines/${lineId}`,
-			{
-				params: {
-					rowVersion,
-				},
-			}
-		);
-	},
-
-	submitBom: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/submit`,
-			body
-		),
-
-	returnBom: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/return`,
-			body
-		),
-
-	approveBom: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/approve`,
-			body
-		),
-
-	createBomRevision: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/revisions`,
-			body
-		),
-
-	productionApproveBom: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/production-approve`,
-			body
-		),
-
-
-	productionReturnBom: (
-		id,
-		body
-	) =>
-		API.post(
-			`${BASE}/boms/${encodeURIComponent(
-				String(id).trim()
-			)}/production-return`,
-			body
-		),
-
-	issueStoreReservation(
-		reservationId,
-		body
-	) {
-		const id =
-			String(
-				reservationId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Reservation ID is required."
-				)
-			);
-		}
-
-		return API.post(
-			`${BASE}/store/reservations/${encodeURIComponent(
-				id
-			)}/issue`,
-			body
-		);
-	},
-
-	/* =====================================================
-	 * INVENTORY
-	 * Exact backend: MatFlowInventoryController
-	 * ===================================================== */
-
-	listLocations(params = {}) {
 		return API.get(
 			`${BASE}/locations`,
 			{
-				params: cleanParams(params),
+				params:
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	createLocation(body) {
+	createLocation(
+		body
+	) {
 		return API.post(
 			`${BASE}/locations`,
 			body
@@ -466,185 +342,410 @@ export const matflowApi = {
 	},
 
 	updateLocation(
-		locationId,
+		id,
 		body
 	) {
 		return API.put(
-			`${BASE}/locations/${locationId}`,
+			`${BASE}/locations/${requiredId(
+				id,
+				"Location ID"
+			)}`,
 			body
 		);
 	},
 
-	listStock(params = {}) {
+
+	/*
+	 * STOCK
+	 */
+
+	listStock(
+		params = {}
+	) {
 		return API.get(
 			`${BASE}/stock`,
 			{
-				params: cleanParams(params),
+				params:
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	adjustStock(body) {
+	adjustStock(
+		body
+	) {
 		return API.post(
 			`${BASE}/stock/adjustments`,
 			body
 		);
 	},
 
-	/* =====================================================
-	 * CONTROL ACTIONS
-	 * Exact backend: MatFlowControlController
-	 * ===================================================== */
 
-	releaseReservation(
-		reservationId,
+	/*
+	 * VENDORS
+	 */
+
+	listVendors(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/vendors`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+	createVendor(
 		body
 	) {
-		const id =
-			String(
-				reservationId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Reservation ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/reservations/${encodeURIComponent(
-				id
-			)}/release`,
+			`${BASE}/vendors`,
 			body
 		);
 	},
-	/* =====================================================
-	 * MATFLOW RELEASES
-	 * ===================================================== */
 
-	async getRelease(releaseId) {
-		const response = await API.get(
-			`${BASE}/releases/${releaseId}`
-		);
-
-		return normalizeReleaseDetail(
-			response
-		);
-	},
-
-	async getReleaseBySourceRevision(
-		revisionId
+	updateVendor(
+		id,
+		body
 	) {
-		const response = await API.get(
-			`${BASE}/releases/by-source-revision/${revisionId}`
-		);
-
-		return normalizeReleaseDetail(
-			response
-		);
-	},
-
-	async listReleases(params = {}) {
-		const sourceBomId =
-			params.sourceBomId;
-
-		/*
-		 * Current backend does not have a global release-list
-		 * endpoint. Its GET /releases endpoint requires
-		 * sourceBomId.
-		 *
-		 * Returning an empty local list prevents unnecessary
-		 * 400 errors until a source BOM is supplied.
-		 */
-		if (!sourceBomId) {
-			return localListResponse([]);
-		}
-
-		const response = await API.get(
-			`${BASE}/releases`,
-			{
-				params: {
-					sourceBomId,
-				},
-			}
-		);
-
-		return normalizeReleaseList(
-			response
+		return API.put(
+			`${BASE}/vendors/${requiredId(
+				id,
+				"Vendor ID"
+			)}`,
+			body
 		);
 	},
 
-	getReleaseAudit(releaseId) {
+
+	/*
+	 * MATFLOW ENUM / METADATA
+	 */
+
+	metadata() {
 		return API.get(
-			`${BASE}/releases/${releaseId}/audit`
+			`${BASE}/meta`
 		);
 	},
 
-	/* =====================================================
-	 * PRODUCTION REQUISITIONS AND STORE PLANNING
-	 *
-	 * Exact backend:
-	 * MatFlowPlanningController
-	 * MatFlowControlController
-	 * ===================================================== */
 
-	listRequisitions(params = {}) {
+	/*
+	 * =====================================================
+	 * OPERATIONAL BOM + ROUTING
+	 * =====================================================
+	 */
+
+	listBoms(
+		params = {}
+	) {
 		return API.get(
-			`${BASE}/requisitions`,
+			`${BASE}/boms`,
 			{
 				params:
-					cleanParams(params),
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	getRequisition(requisitionId) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
+	getBom(
+		id
+	) {
 		return API.get(
-			`${BASE}/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
 			)}`
 		);
 	},
 
-	getRequisitionPlanning(
-		requisitionId
+	createBom(
+		body
 	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
+		return API.post(
+			`${BASE}/boms`,
+			body
+		);
+	},
 
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
+	updateBom(
+		id,
+		body
+	) {
+		return API.put(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}`,
+			body
+		);
+	},
 
+	addBomLine(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines`,
+			body
+		);
+	},
+
+	updateBomLine(
+		id,
+		lineId,
+		body
+	) {
+		return API.put(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines/${requiredId(
+				lineId,
+				"BOM line ID"
+			)}`,
+			body
+		);
+	},
+
+	deleteBomLine(
+		id,
+		lineId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines/${requiredId(
+				lineId,
+				"BOM line ID"
+			)}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+
+	/*
+	 * ENGINEERING
+	 *
+	 * Direct workflow:
+	 *
+	 * DRAFT / RETURNED
+	 *      ↓
+	 * SUBMITTED
+	 *      ↓
+	 * PRODUCTION
+	 */
+
+	submitBom(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/submit`,
+			body
+		);
+	},
+
+
+	/*
+	 * PRODUCTION BOM REVIEW
+	 *
+	 * HOD approval has intentionally been removed.
+	 */
+
+	productionApproveBom(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/production-approve`,
+			body
+		);
+	},
+
+	productionReturnBom(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/production-return`,
+			body
+		);
+	},
+
+
+	/*
+	 * BOM REVISION
+	 */
+
+	createBomRevision(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/revisions`,
+			body
+		);
+	},
+
+
+	/*
+	 * BOM MATERIAL ROUTING
+	 */
+
+	listBomRoutes(
+		id
+	) {
 		return API.get(
-			`${BASE}/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/routes`
+		);
+	},
+
+	addBomRouteStep(
+		id,
+		lineId,
+		body
+	) {
+		return API.post(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines/${requiredId(
+				lineId,
+				"BOM line ID"
+			)}/route-steps`,
+			body
+		);
+	},
+
+	updateBomRouteStep(
+		id,
+		lineId,
+		stepId,
+		body
+	) {
+		return API.put(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines/${requiredId(
+				lineId,
+				"BOM line ID"
+			)}/route-steps/${requiredId(
+				stepId,
+				"Route step ID"
+			)}`,
+			body
+		);
+	},
+
+	deleteBomRouteStep(
+		id,
+		lineId,
+		stepId,
+		rowVersion
+	) {
+		return API.delete(
+			`${BASE}/boms/${requiredId(
+				id,
+				"BOM ID"
+			)}/lines/${requiredId(
+				lineId,
+				"BOM line ID"
+			)}/route-steps/${requiredId(
+				stepId,
+				"Route step ID"
+			)}`,
+			{
+				params: {
+					rowVersion,
+				},
+			}
+		);
+	},
+
+
+	/*
+	 * =====================================================
+	 * PRODUCTION REQUISITION + STORE
+	 * =====================================================
+	 */
+
+	/*
+	 * REQUISITIONS
+	 */
+
+	listRequisitions() {
+		return API.get(
+			`${BASE}/requisitions`
+		);
+	},
+
+	getRequisition(
+		id
+	) {
+		return API.get(
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
+			)}`
+		);
+	},
+
+	/*
+	 * Combined requisition planning snapshot:
+	 *
+	 * reservations
+	 * shortages
+	 * transfers
+	 * indents
+	 * downstream planning
+	 */
+	getRequisitionPlanning(
+		id
+	) {
+		return API.get(
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}/planning`
 		);
 	},
 
-	createRequisition(body) {
+	createRequisition(
+		body
+	) {
 		return API.post(
 			`${BASE}/requisitions`,
 			body
@@ -652,694 +753,626 @@ export const matflowApi = {
 	},
 
 	submitRequisition(
-		requisitionId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}/submit`,
 			body
 		);
 	},
 
-	planRequisition(
-		requisitionId,
-		body
-	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
-		return API.post(
-			`${BASE}/requisitions/${encodeURIComponent(
-				id
-			)}/plan`,
-			body
-		);
-	},
-
 	cancelRequisition(
-		requisitionId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}/cancel`,
 			body
 		);
 	},
 
-	/* =====================================================
- * STORE REQUISITION REVIEW
- * ===================================================== */
 
-	listStoreQueue(params = {}) {
+	/*
+	 * STORE REVIEW QUEUE
+	 */
+
+	listStoreQueue(
+		params = {}
+	) {
 		return API.get(
 			`${BASE}/store/requisitions`,
 			{
 				params:
-					cleanParams(params),
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	getStoreReview(requisitionId) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
+	getStoreReview(
+		id
+	) {
 		return API.get(
-			`${BASE}/store/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/store/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}`
 		);
 	},
 
 	getStoreAvailability(
-		requisitionId
+		id
 	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
 		return API.get(
-			`${BASE}/store/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/store/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}/availability`
 		);
 	},
 
 	submitStoreReview(
-		requisitionId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				requisitionId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Requisition ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/store/requisitions/${encodeURIComponent(
-				id
+			`${BASE}/store/requisitions/${requiredId(
+				id,
+				"Requisition ID"
 			)}/review`,
 			body
 		);
 	},
 
-	/* =====================================================
-	 * MATERIAL INDENTS
-	 * ===================================================== */
 
-	createIndent(body) {
-		return API.post(
-			`${BASE}/indents`,
-			body
-		);
-	},
-
-	getIndent(indentId) {
-		return API.get(
-			`${BASE}/indents/${indentId}`
-		);
-	},
-
-	listIndentsByRequisition(
-		requisitionId
-	) {
-		return API.get(
-			`${BASE}/indents/by-requisition/${requisitionId}`
-		);
-	},
-
-	listIndents(params = {}) {
-		if (!params.requisitionId) {
-			return localListResponse([]);
-		}
-
-		return API.get(
-			`${BASE}/indents/by-requisition/${params.requisitionId}`
-		);
-	},
-
-	saveIndentLine(
-		indentId,
+	/*
+	 * STORE ISSUE
+	 *
+	 * This is the single authoritative reservation issue
+	 * endpoint after backend refactoring.
+	 */
+	issueStoreReservation(
+		id,
 		body
 	) {
 		return API.post(
-			`${BASE}/indents/${indentId}/lines`,
+			`${BASE}/store/reservations/${requiredId(
+				id,
+				"Reservation ID"
+			)}/issue`,
 			body
 		);
 	},
 
-	removeIndentLine(
-		indentId,
-		lineId,
-		rowVersion
+
+	/*
+	 * RELEASE RESERVED QUANTITY
+	 */
+
+	releaseReservation(
+		id,
+		body
 	) {
-		return API.delete(
-			`${BASE}/indents/${indentId}/lines/${lineId}`,
-			{
-				params: {
-					rowVersion,
-				},
-			}
+		return API.post(
+			`${BASE}/reservations/${requiredId(
+				id,
+				"Reservation ID"
+			)}/release`,
+			body
 		);
 	},
+
+
+	/*
+	 * SHORTAGE INDENT → PURCHASE
+	 */
 
 	submitIndent(
-		indentId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				indentId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Indent ID is required."
-				)
-			);
-		}
-
 		return API.patch(
-			`${BASE}/indents/${encodeURIComponent(
-				id
+			`${BASE}/indents/${requiredId(
+				id,
+				"Indent ID"
 			)}/submit-to-purchase`,
 			body
 		);
 	},
 
-	cancelIndent(
-		indentId,
+
+	/*
+	 * =====================================================
+	 * PROCUREMENT
+	 * =====================================================
+	 */
+
+	/*
+	 * PURCHASE ORDERS
+	 */
+
+	listPurchaseOrders() {
+		return API.get(
+			`${BASE}/purchase-orders`
+		);
+	},
+
+	createPurchaseOrder(
 		body
 	) {
-		return API.patch(
-			`${BASE}/indents/${indentId}/cancel`,
+		return API.post(
+			`${BASE}/purchase-orders`,
 			body
 		);
 	},
 
-	/* =====================================================
-	 * PURCHASE QUEUE
-	 * ===================================================== */
+	/*
+	 * Higher-authority approval.
+	 *
+	 * Current backend moves the approved PO from
+	 * DRAFT → PLACED and records approval in audit.
+	 */
+	approvePurchaseOrder(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/purchase-orders/${requiredId(
+				id,
+				"Purchase order ID"
+			)}/approve`,
+			body
+		);
+	},
 
-	listPurchaseQueue(params = {}) {
+
+	/*
+	 * GOODS RECEIPT / GRN
+	 */
+
+	listGoodsReceipts() {
 		return API.get(
-			`${BASE}/purchase/indents/pending`,
+			`${BASE}/grns`
+		);
+	},
+
+	createGoodsReceipt(
+		body
+	) {
+		return API.post(
+			`${BASE}/grns`,
+			body
+		);
+	},
+
+
+	/*
+	 * =====================================================
+	 * QUALITY CONTROL
+	 * =====================================================
+	 */
+
+	listQcInspections(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/qc`,
 			{
 				params:
-					cleanParams(params),
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	/* =====================================================
-	 * VENDOR QUOTATIONS
-	 * ===================================================== */
-
-	createVendorQuote(body) {
-		return API.post(
-			`${BASE}/purchase/quotes`,
-			body
-		);
-	},
-
-	getVendorQuote(quoteId) {
-		return API.get(
-			`${BASE}/purchase/quotes/${quoteId}`
-		);
-	},
-
-	saveVendorQuoteLine(
-		quoteId,
+	decideQc(
+		id,
 		body
 	) {
 		return API.post(
-			`${BASE}/purchase/quotes/${quoteId}/lines`,
+			`${BASE}/qc/${requiredId(
+				id,
+				"QC inspection ID"
+			)}/decision`,
 			body
 		);
 	},
 
-	submitVendorQuote(
-		quoteId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/purchase/quotes/${quoteId}/submit`,
-			body
-		);
-	},
-
-	cancelVendorQuote(
-		quoteId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/purchase/quotes/${quoteId}/cancel`,
-			body
-		);
-	},
-
-	getQuoteComparison(indentId) {
-		return API.get(
-			`${BASE}/purchase/indents/${indentId}/quote-comparison`
-		);
-	},
-
-	/* =====================================================
-	 * PURCHASE ORDERS
-	 * ===================================================== */
-
-	createPurchaseOrder(body) {
-		return API.post(
-			`${BASE}/purchase/orders`,
-			body
-		);
-	},
-
-	getPurchaseOrder(
-		purchaseOrderId
-	) {
-		return API.get(
-			`${BASE}/purchase/orders/${purchaseOrderId}`
-		);
-	},
-
-	listPurchaseOrdersByIndent(
-		indentId
-	) {
-		return API.get(
-			`${BASE}/purchase/orders/by-indent/${indentId}`
-		);
-	},
-
-	listPurchaseOrders(params = {}) {
-		if (!params.indentId) {
-			return localListResponse([]);
-		}
-
-		return API.get(
-			`${BASE}/purchase/orders/by-indent/${params.indentId}`
-		);
-	},
-
-	savePurchaseOrderLine(
-		purchaseOrderId,
+	returnQcToVendor(
+		id,
 		body
 	) {
 		return API.post(
-			`${BASE}/purchase/orders/${purchaseOrderId}/lines`,
+			`${BASE}/qc/${requiredId(
+				id,
+				"QC inspection ID"
+			)}/return-to-vendor`,
 			body
 		);
 	},
 
-	removePurchaseOrderLine(
-		purchaseOrderId,
-		lineId,
-		rowVersion
-	) {
-		return API.delete(
-			`${BASE}/purchase/orders/${purchaseOrderId}/lines/${lineId}`,
-			{
-				params: {
-					rowVersion,
-				},
-			}
+
+	/*
+	 * QC DISPOSITION
+	 *
+	 * Used when a rejected transferred material needs a
+	 * controlled disposition decision.
+	 */
+
+	listQcDispositions() {
+		return API.get(
+			`${BASE}/qc-dispositions`
 		);
 	},
 
-	submitPurchaseOrder(
-		purchaseOrderId,
+	decideQcDisposition(
+		inspectionId,
 		body
 	) {
-		return API.patch(
-			`${BASE}/purchase/orders/${purchaseOrderId}/submit-for-approval`,
+		return API.post(
+			`${BASE}/qc-dispositions/${requiredId(
+				inspectionId,
+				"QC inspection ID"
+			)}`,
 			body
 		);
 	},
 
-	approvePurchaseOrder(
-		purchaseOrderId,
-		body
+
+	/*
+	 * =====================================================
+	 * MOVEMENT — TRANSFERS + RETURNS
+	 * =====================================================
+	 */
+
+	/*
+	 * TRANSFERS
+	 */
+
+	listTransfers(
+		params = {}
 	) {
-		return API.patch(
-			`${BASE}/purchase/orders/${purchaseOrderId}/approve`,
-			body
-		);
-	},
-
-	returnPurchaseOrder(
-		purchaseOrderId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/purchase/orders/${purchaseOrderId}/return`,
-			body
-		);
-	},
-
-	cancelPurchaseOrder(
-		purchaseOrderId,
-		body
-	) {
-		return API.patch(
-			`${BASE}/purchase/orders/${purchaseOrderId}/cancel`,
-			body
-		);
-	},
-
-	/* =====================================================
- * TRANSFER EXECUTION
- *
- * Exact backend:
- * MatFlowTransferController
- * ===================================================== */
-
-	listTransfers(params = {}) {
 		return API.get(
 			`${BASE}/transfers`,
 			{
 				params:
-					cleanParams(params),
+					cleanParams(
+						params
+					),
 			}
 		);
 	},
 
-	getTransfer(transferId) {
-		const id =
-			String(
-				transferId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Transfer ID is required."
-				)
-			);
-		}
-
+	getTransfer(
+		id
+	) {
 		return API.get(
-			`${BASE}/transfers/${encodeURIComponent(
-				id
+			`${BASE}/transfers/${requiredId(
+				id,
+				"Transfer ID"
 			)}`
 		);
 	},
 
 	dispatchTransfer(
-		transferId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				transferId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Transfer ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/transfers/${encodeURIComponent(
-				id
+			`${BASE}/transfers/${requiredId(
+				id,
+				"Transfer ID"
 			)}/dispatch`,
 			body
 		);
 	},
 
 	receiveTransfer(
-		transferId,
+		id,
 		body
 	) {
-		const id =
-			String(
-				transferId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Transfer ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/transfers/${encodeURIComponent(
-				id
+			`${BASE}/transfers/${requiredId(
+				id,
+				"Transfer ID"
 			)}/receive`,
 			body
 		);
 	},
 
-	issueDirectReservation(
-		reservationId,
+
+	/*
+	 * MATERIAL RETURNS
+	 */
+
+	listMaterialReturns() {
+		return API.get(
+			`${BASE}/material-returns`
+		);
+	},
+
+	createMaterialReturn(
 		body
 	) {
-		const id =
-			String(
-				reservationId ?? ""
-			).trim();
-
-		if (!id) {
-			return Promise.reject(
-				new Error(
-					"Reservation ID is required."
-				)
-			);
-		}
-
 		return API.post(
-			`${BASE}/reservations/${encodeURIComponent(
-				id
-			)}/issue-direct`,
+			`${BASE}/material-returns`,
 			body
 		);
 	},
-};
 
-export const readMatFlowError = (
-	error,
-	fallback = "The MatFlow request failed."
-) => {
-	const data =
-		error?.response?.data;
-
-	if (typeof data === "string") {
-		return data;
-	}
-
-	const validationErrors =
-		data?.validationErrors &&
-			typeof data.validationErrors === "object"
-			? Object.entries(
-				data.validationErrors
-			).map(
-				([field, message]) =>
-					`${field}: ${message}`
-			)
-			: [];
-
-	const mainMessage =
-		data?.message ||
-		data?.detail ||
-		data?.error ||
-		error?.message ||
-		fallback;
-
-	return validationErrors.length > 0
-		? [
-			mainMessage,
-			...validationErrors,
-		].join(" | ")
-		: mainMessage;
-};
-
-export const extractMatFlowPage = (
-	responseData
-) => {
-	if (Array.isArray(responseData)) {
-		return {
-			rows: responseData,
-			page: 0,
-			size: responseData.length,
-			totalElements:
-				responseData.length,
-			totalPages:
-				responseData.length > 0
-					? 1
-					: 0,
-		};
-	}
-
-	if (
-		Array.isArray(
-			responseData?.content
-		)
+	dispatchMaterialReturn(
+		id,
+		body
 	) {
-		return {
-			rows:
-				responseData.content,
+		return API.post(
+			`${BASE}/material-returns/${requiredId(
+				id,
+				"Material return ID"
+			)}/dispatch`,
+			body
+		);
+	},
 
-			page:
-				responseData.number ??
-				responseData.page ??
-				0,
-
-			size:
-				responseData.size ??
-				responseData.content
-					.length,
-
-			totalElements:
-				responseData.totalElements ??
-				responseData.content
-					.length,
-
-			totalPages:
-				responseData.totalPages ??
-				1,
-		};
-	}
-
-	if (
-		Array.isArray(
-			responseData?.data
-		)
+	receiveMaterialReturn(
+		id,
+		body
 	) {
-		return {
-			rows:
-				responseData.data,
+		return API.post(
+			`${BASE}/material-returns/${requiredId(
+				id,
+				"Material return ID"
+			)}/receive`,
+			body
+		);
+	},
 
-			page:
-				responseData.page ?? 0,
 
-			size:
-				responseData.size ??
-				responseData.data
-					.length,
+	/*
+	 * =====================================================
+	 * PROCESSING + PRODUCTION
+	 * =====================================================
+	 */
 
-			totalElements:
-				responseData.totalElements ??
-				responseData.data
-					.length,
+	/*
+	 * PROCESSING JOBS
+	 */
 
-			totalPages:
-				responseData.totalPages ??
-				1,
-		};
-	}
+	listProcessingJobs() {
+		return API.get(
+			`${BASE}/processing-jobs`
+		);
+	},
 
-	if (
-		Array.isArray(
-			responseData?.rows
-		)
+	createProcessingJob(
+		body
 	) {
-		return {
-			rows:
-				responseData.rows,
+		return API.post(
+			`${BASE}/processing-jobs`,
+			body
+		);
+	},
 
-			page:
-				responseData.page ??
-				responseData.number ??
-				0,
+	startProcessingJob(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/processing-jobs/${requiredId(
+				id,
+				"Processing job ID"
+			)}/start`,
+			body
+		);
+	},
 
-			size:
-				responseData.size ??
-				responseData.rows.length,
+	completeProcessingJob(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/processing-jobs/${requiredId(
+				id,
+				"Processing job ID"
+			)}/complete`,
+			body
+		);
+	},
 
-			totalElements:
-				responseData.totalElements ??
-				responseData.rows.length,
 
-			totalPages:
-				responseData.totalPages ??
-				(
-					responseData.rows.length >
-						0
-						? 1
-						: 0
-				),
-		};
-	}
+	/*
+	 * PRODUCTION EXECUTION
+	 */
 
-	return {
-		rows: [],
-		page: 0,
-		size: 0,
-		totalElements: 0,
-		totalPages: 0,
-	};
+	startProduction(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
+			)}/production/start`,
+			body
+		);
+	},
+
+	completeProduction(
+		id,
+		body
+	) {
+		return API.post(
+			`${BASE}/requisitions/${requiredId(
+				id,
+				"Requisition ID"
+			)}/production/complete`,
+			body
+		);
+	},
+
+
+	/*
+	 * PRODUCTION CONSUMPTION
+	 */
+
+	listConsumptions() {
+		return API.get(
+			`${BASE}/production-consumptions`
+		);
+	},
+
+	createConsumption(
+		body
+	) {
+		return API.post(
+			`${BASE}/production-consumptions`,
+			body
+		);
+	},
+
+
+	/*
+	 * =====================================================
+	 * REPORTING + TRACKER + INTEGRITY
+	 * =====================================================
+	 */
+
+	/*
+	 * DASHBOARD REPORT
+	 */
+
+	dashboardReport(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/reports/dashboard`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+
+	/*
+	 * PROJECT / DRAWING REPORT
+	 */
+
+	projectReport(
+		projectDrawingId
+	) {
+		return API.get(
+			`${BASE}/reports/projects/${requiredId(
+				projectDrawingId,
+				"Project drawing ID"
+			)}`
+		);
+	},
+
+
+	/*
+	 * SHORTAGES
+	 */
+
+	shortageReport(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/reports/shortages`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+
+	/*
+	 * STOCK LEDGER
+	 */
+
+	stockLedger(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/reports/stock-ledger`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+
+	/*
+	 * AUDIT
+	 */
+
+	auditLogs(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/reports/audit`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+
+	/*
+	 * PROFESSIONAL MATFLOW CONTROL TOWER
+	 */
+
+	getTracker(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/tracker`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
+
+
+	/*
+	 * ADMIN INTEGRITY CHECK
+	 */
+
+	integrity(
+		params = {}
+	) {
+		return API.get(
+			`${BASE}/admin/integrity`,
+			{
+				params:
+					cleanParams(
+						params
+					),
+			}
+		);
+	},
 };
-
 
 export default matflowApi;
