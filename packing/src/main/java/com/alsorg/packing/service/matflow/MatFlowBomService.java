@@ -1227,8 +1227,12 @@ public class MatFlowBomService {
                                                 "BOM project drawing is missing");
                         }
 
+                        String projectPlantCode = requirePlantCode(
+                                        bom.getProjectDrawing().getPlantCode(),
+                                        "BOM " + safeLabel(bom.getBomNumber(), bom.getId()) + " project/drawing");
+
                         accessService.requirePlantAccess(
-                                        bom.getProjectDrawing().getPlantCode());
+                                        projectPlantCode);
 
                         return bom;
                 }
@@ -1245,10 +1249,40 @@ public class MatFlowBomService {
                                         .orElseThrow(() -> notFound(
                                                         "Project drawing not found"));
 
+                        String projectPlantCode = requirePlantCode(
+                                        project.getPlantCode(),
+                                        "Project/drawing " + safeLabel(project.getProjectCode(), project.getId()));
+
                         accessService.requirePlantAccess(
-                                        project.getPlantCode());
+                                        projectPlantCode);
 
                         return project;
+                }
+
+                private String requirePlantCode(
+                                String value,
+                                String context) {
+                        String normalized = clean(value);
+
+                        if (normalized == null) {
+                                throw conflict(
+                                                context +
+                                                                " has no plant code. Correct the MatFlow Project/Location master record before continuing.");
+                        }
+
+                        return normalized.toUpperCase(Locale.ROOT);
+                }
+
+                private String safeLabel(
+                                String value,
+                                UUID id) {
+                        String cleaned = clean(value);
+
+                        if (cleaned != null) {
+                                return cleaned;
+                        }
+
+                        return id == null ? "UNKNOWN" : id.toString();
                 }
 
                 private int nextLineNo(UUID bomId) {
@@ -1617,7 +1651,8 @@ public class MatFlowBomService {
                                                 "Route sequence already exists for this BOM line");
                         }
 
-                        MatFlowLocation location = requireLocation(
+                        MatFlowLocation location = requireLocationForBom(
+                                        bom,
                                         request.locationId());
 
                         validateLocationType(
@@ -1678,7 +1713,8 @@ public class MatFlowBomService {
                                                 "Route sequence already exists for this BOM line");
                         }
 
-                        MatFlowLocation location = requireLocation(
+                        MatFlowLocation location = requireLocationForBom(
+                                        bom,
                                         request.locationId());
 
                         validateLocationType(
@@ -1733,6 +1769,14 @@ public class MatFlowBomService {
                 @Transactional(readOnly = true)
                 public void validateBomForSubmission(
                                 MatFlowBom bom) {
+                        if (bom == null || bom.getId() == null) {
+                                throw badRequest(
+                                                "Persisted BOM is required for route validation");
+                        }
+
+                        String bomPlantCode = requireBomPlantCode(bom);
+                        accessService.requirePlantAccess(bomPlantCode);
+
                         List<MatFlowBomLine> lines = lineRepository
                                         .findByBom_IdOrderByLineNoAsc(
                                                         bom.getId());
@@ -1742,7 +1786,10 @@ public class MatFlowBomService {
                                                 .findByBomLine_IdOrderBySequenceNoAsc(
                                                                 line.getId());
 
-                                validateRoute(steps);
+                                validateRoute(
+                                                bom,
+                                                line,
+                                                steps);
                         }
                 }
 
@@ -1801,11 +1848,22 @@ public class MatFlowBomService {
                 }
 
                 private void validateRoute(
+                                MatFlowBom bom,
+                                MatFlowBomLine line,
                                 List<MatFlowBomRouteStep> steps) {
+                        String materialLabel = line == null
+                                        ? "UNKNOWN MATERIAL"
+                                        : safeLabel(
+                                                        line.getMaterialCodeSnapshot(),
+                                                        line.getId());
+
                         if (steps == null || steps.isEmpty()) {
                                 throw badRequest(
-                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production");
+                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production. " +
+                                                                "Missing route for material " + materialLabel);
                         }
+
+                        String bomPlantCode = requireBomPlantCode(bom);
 
                         int qcCount = 0;
                         int productionCount = 0;
@@ -1815,35 +1873,58 @@ public class MatFlowBomService {
                                 MatFlowBomRouteStep step = steps.get(index);
 
                                 if (step == null || step.location == null || step.stepType == null) {
-                                        throw badRequest("BOM route contains an incomplete step");
-                                }
-
-                                accessService.requirePlantAccess(step.location.plantCode);
-
-                                if (!step.location.active) {
                                         throw badRequest(
-                                                        "Inactive location exists in BOM route: "
-                                                                        + step.location.locationCode);
+                                                        "BOM route contains an incomplete step for material " + materialLabel);
                                 }
 
-                                validateLocationType(step.stepType, step.location);
+                                MatFlowLocation location = step.location;
+                                String locationLabel = safeLabel(
+                                                location.getLocationCode(),
+                                                location.getId());
+
+                                String routePlantCode = requirePlantCode(
+                                                location.getPlantCode(),
+                                                "Route location " + locationLabel +
+                                                                " used by material " + materialLabel);
+
+                                accessService.requirePlantAccess(
+                                                routePlantCode);
+
+                                if (!bomPlantCode.equals(routePlantCode)) {
+                                        throw conflict(
+                                                        "Route location " + locationLabel +
+                                                                        " belongs to plant " + routePlantCode +
+                                                                        " but BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                                        " belongs to plant " + bomPlantCode +
+                                                                        ". Use a route location from the BOM plant.");
+                                }
+
+                                if (!location.active) {
+                                        throw badRequest(
+                                                        "Inactive location exists in BOM route: " +
+                                                                        locationLabel);
+                                }
+
+                                validateLocationType(
+                                                step.stepType,
+                                                location);
 
                                 if (index == 0 && step.stepType != RouteStepType.QC) {
                                         throw badRequest(
-                                                        "The first material route step must be QC");
+                                                        "The first material route step must be QC for material " + materialLabel);
                                 }
 
                                 if (step.stepType == RouteStepType.QC) {
                                         qcCount++;
                                         if (index != 0) {
                                                 throw badRequest(
-                                                                "QC must be the first and only QC route step");
+                                                                "QC must be the first and only QC route step for material " + materialLabel);
                                         }
                                 }
 
                                 if (productionSeen) {
                                         throw badRequest(
-                                                        "No route step is allowed after Production");
+                                                        "No route step is allowed after Production for material " + materialLabel);
                                 }
 
                                 if (step.stepType == RouteStepType.PRODUCTION) {
@@ -1852,24 +1933,24 @@ public class MatFlowBomService {
 
                                         if (index != steps.size() - 1) {
                                                 throw badRequest(
-                                                                "Production must be the final route step");
+                                                                "Production must be the final route step for material " + materialLabel);
                                         }
                                 }
 
                                 if (step.stepType == RouteStepType.PROCESSING && index == 0) {
                                         throw badRequest(
-                                                        "Processing cannot occur before QC");
+                                                        "Processing cannot occur before QC for material " + materialLabel);
                                 }
                         }
 
                         if (qcCount != 1) {
                                 throw badRequest(
-                                                "A material route must contain exactly one QC step as the first step");
+                                                "A material route must contain exactly one QC step as the first step for material " + materialLabel);
                         }
 
                         if (productionCount != 1) {
                                 throw badRequest(
-                                                "A material route must contain exactly one Production step as the final step");
+                                                "A material route must contain exactly one Production step as the final step for material " + materialLabel);
                         }
                 }
 
@@ -1971,9 +2052,10 @@ public class MatFlowBomService {
                                         .orElseThrow(() -> notFound(
                                                         "BOM not found"));
 
+                        String bomPlantCode = requireBomPlantCode(bom);
+
                         accessService.requirePlantAccess(
-                                        bom.getProjectDrawing()
-                                                        .getPlantCode());
+                                        bomPlantCode);
 
                         return bom;
                 }
@@ -2007,22 +2089,95 @@ public class MatFlowBomService {
                                                         "BOM line not found"));
                 }
 
-                private MatFlowLocation requireLocation(
+                private MatFlowLocation requireLocationForBom(
+                                MatFlowBom bom,
                                 UUID id) {
+                        if (id == null) {
+                                throw badRequest(
+                                                "Route location ID is required");
+                        }
+
                         MatFlowLocation location = locationRepository
                                         .findById(id)
                                         .orElseThrow(() -> notFound(
                                                         "Location not found"));
 
+                        String locationLabel = safeLabel(
+                                        location.getLocationCode(),
+                                        location.getId());
+
+                        String locationPlantCode = requirePlantCode(
+                                        location.getPlantCode(),
+                                        "Route location " + locationLabel);
+
+                        String bomPlantCode = requireBomPlantCode(bom);
+
                         accessService.requirePlantAccess(
-                                        location.plantCode);
+                                        locationPlantCode);
+
+                        if (!bomPlantCode.equals(locationPlantCode)) {
+                                throw conflict(
+                                                "Route location " + locationLabel +
+                                                                " belongs to plant " + locationPlantCode +
+                                                                " but BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                                " belongs to plant " + bomPlantCode +
+                                                                ". Select a route location from the BOM plant.");
+                        }
 
                         if (!location.active) {
                                 throw badRequest(
-                                                "Inactive location cannot be used in a route");
+                                                "Inactive location cannot be used in a route: " + locationLabel);
                         }
 
                         return location;
+                }
+
+                private String requireBomPlantCode(
+                                MatFlowBom bom) {
+                        if (bom == null) {
+                                throw conflict(
+                                                "BOM context is missing while validating its route");
+                        }
+
+                        if (bom.getProjectDrawing() == null) {
+                                throw conflict(
+                                                "BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                                " has no Project/Drawing master");
+                        }
+
+                        return requirePlantCode(
+                                        bom.getProjectDrawing().getPlantCode(),
+                                        "BOM " + safeLabel(bom.getBomNumber(), bom.getId()) +
+                                                        " Project/Drawing " +
+                                                        safeLabel(
+                                                                        bom.getProjectDrawing().getProjectCode(),
+                                                                        bom.getProjectDrawing().getId()));
+                }
+
+                private String requirePlantCode(
+                                String value,
+                                String context) {
+                        String normalized = clean(value);
+
+                        if (normalized == null) {
+                                throw conflict(
+                                                context +
+                                                                " has no plant code. Correct the MatFlow master-data record before continuing.");
+                        }
+
+                        return normalized.toUpperCase(Locale.ROOT);
+                }
+
+                private String safeLabel(
+                                String value,
+                                UUID id) {
+                        String cleaned = clean(value);
+
+                        if (cleaned != null) {
+                                return cleaned;
+                        }
+
+                        return id == null ? "UNKNOWN" : id.toString();
                 }
 
                 private RouteStepResponse toResponse(
