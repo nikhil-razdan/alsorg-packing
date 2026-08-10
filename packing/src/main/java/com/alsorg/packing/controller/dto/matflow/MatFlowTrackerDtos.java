@@ -123,6 +123,7 @@ public final class MatFlowTrackerDtos {
                         String bomMaterialCode,
                         String currentMaterialCode,
                         String materialName,
+                        String materialCategory,
                         String uom,
                         BigDecimal requestedQty,
                         BigDecimal reservedQty,

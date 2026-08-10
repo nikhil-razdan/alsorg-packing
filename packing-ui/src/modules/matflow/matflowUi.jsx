@@ -265,7 +265,7 @@ const MATFLOW_SCREEN_ROLES = Object.freeze({
   boms: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
   "bom-create": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
   "bom-edit": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
-  "bom-review": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION],
+  "bom-review": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
   production: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE],
   "production-execution": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION],
   store: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE],
@@ -715,14 +715,25 @@ export const dialogContentSx = { pt: "18px !important", background: "var(--mf-pa
 export const dialogActionsSx = { p: "14px 24px 20px", borderTop: "1px solid var(--mf-border)", background: "var(--mf-panel-solid)" };
 
 export const MATFLOW_MATERIAL_CATEGORIES = Object.freeze([
-  ["METAL", "Metal", "#60a5fa"], ["WOOD", "Wood", "#8b5cf6"], ["HARDWARE", "Hardware", "#f59e0b"],
-  ["STONE", "Stone", "#14b8a6"], ["GLASS", "Glass / Mirror", "#38bdf8"], ["UPHOLSTERY", "Upholstery", "#ec4899"],
-  ["PAINT", "Paint / Polish", "#f472b6"], ["LAMINATE", "Laminate", "#a78bfa"], ["VENEER", "Veneer", "#c084fc"],
-  ["ADHESIVE", "Adhesive", "#fb923c"], ["ELECTRICAL", "Electrical", "#facc15"], ["PACKAGING", "Packaging", "#22c55e"],
-  ["CONSUMABLE", "Consumable", "#2dd4bf"], ["MISCELLANEOUS", "Miscellaneous", "#94a3b8"],
+  ["RAW_MATERIAL", "Raw Material", "#64748b"],
+  ["METAL", "Metal", "#60a5fa"],
+  ["WOOD", "Wood", "#8b5cf6"],
+  ["VENEER", "Veneer", "#c084fc"],
+  ["STONE_TILE", "Stone / Tile", "#14b8a6"],
+  ["HARDWARE", "Hardware", "#f59e0b"],
+  ["UPHOLSTERY", "Upholstery", "#ec4899"],
+  ["FABRIC_LEATHER", "Fabric / Leather", "#f472b6"],
+  ["FOAM", "Foam", "#fb7185"],
+  ["GLASS_MIRROR", "Glass / Mirror", "#38bdf8"],
+  ["LAMINATE", "Laminate", "#a78bfa"],
+  ["PAINT_POLISH", "Paint / Polish", "#f472b6"],
+  ["ADHESIVE_CHEMICAL", "Adhesive / Chemical", "#fb923c"],
+  ["ELECTRICAL", "Electrical", "#facc15"],
+  ["PACKAGING", "Packaging", "#22c55e"],
+  ["OTHER", "Other", "#94a3b8"],
 ].map(([value, label, color], order) => ({ value, label, color, order })));
 const categoryMap = new Map(MATFLOW_MATERIAL_CATEGORIES.map((item) => [item.value, item]));
-export const normalizeMatFlowCategory = (value) => normalize(value) || "MISCELLANEOUS";
+export const normalizeMatFlowCategory = (value) => normalize(value) || "OTHER";
 export const getMatFlowCategoryMeta = (value) => {
   const key = normalizeMatFlowCategory(value);
   return categoryMap.get(key) || { value: key, label: readable(key), color: "#94a3b8", order: 999 };

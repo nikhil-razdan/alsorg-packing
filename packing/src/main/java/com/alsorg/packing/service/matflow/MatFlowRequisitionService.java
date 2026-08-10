@@ -678,6 +678,19 @@ public class MatFlowRequisitionService {
          * =====================================================
          */
 
+        /**
+         * Store planning creates only the first physical QC hand-off.
+         *
+         * Processing is no longer a mandatory pre-baked route. The BOM still
+         * defines the approved QC location, optional permitted Processing
+         * location(s) and final Production destination, but the QC actor chooses
+         * the actual post-QC path after inspecting the physical lot.
+         *
+         * Compatibility note: if a future Store review intentionally allocates
+         * already-QC-cleared stock whose source itself is the approved QC
+         * location, the remaining configured route is retained. Normal Store
+         * stock always stops at QC and waits for the explicit QC routing gate.
+         */
         private void createTransferChain(
                         MatFlowMaterialRequisition requisition,
                         MatFlowReservation reservation,
@@ -686,121 +699,145 @@ public class MatFlowRequisitionService {
                         boolean deferInitialTransfer,
                         String actor) {
 
-                if (reservation.sourceLocation == null) {
-                        throw conflict(
-                                        "Reservation source location is missing");
+                if (reservation == null || reservation.sourceLocation == null) {
+                        throw conflict("Reservation source location is missing");
                 }
 
-                List<MatFlowLocation> destinations = new ArrayList<>();
+                if (requisition == null || requisition.destinationLocation == null) {
+                        throw conflict("Requisition Production destination is missing");
+                }
 
-                if (route.isEmpty()) {
-                        destinations.add(
-                                        requisition.destinationLocation);
-                } else {
-                        for (MatFlowBomRouteStep step : route) {
-                                destinations.add(
-                                                step.location);
+                MatFlowLocation source = reservation.sourceLocation;
+                List<MatFlowBomRouteStep> approvedRoute = route == null ? List.of() : route;
+
+                if (approvedRoute.isEmpty()) {
+                        createPlannedTransfer(
+                                        requisition,
+                                        reservation,
+                                        source,
+                                        requisition.destinationLocation,
+                                        null,
+                                        null,
+                                        LINE_NUMBER_INCREMENT,
+                                        quantity,
+                                        deferInitialTransfer,
+                                        "Automatically planned from material requisition",
+                                        actor);
+                        return;
+                }
+
+                MatFlowBomRouteStep qcStep = approvedRoute.get(0);
+                if (qcStep == null || qcStep.stepType != RouteStepType.QC || qcStep.location == null) {
+                        throw conflict("Approved BOM route must start at a valid QC location");
+                }
+
+                /*
+                 * Normal Store stock: create Store -> QC only. No Processing or
+                 * Production successor exists until QC records its routing choice.
+                 */
+                if (source.getLocationType() != LocationType.QC) {
+                        if (!source.getId().equals(qcStep.location.getId())) {
+                                createPlannedTransfer(
+                                                requisition,
+                                                reservation,
+                                                source,
+                                                qcStep.location,
+                                                qcStep.getId(),
+                                                null,
+                                                LINE_NUMBER_INCREMENT,
+                                                quantity,
+                                                deferInitialTransfer,
+                                                "Reserved Store material awaiting QC inspection and routing decision",
+                                                actor);
                         }
+                        return;
                 }
 
-                MatFlowLocation current = reservation.sourceLocation;
-
+                /*
+                 * Compatibility path for already QC-cleared reusable stock.
+                 * It has no new inspection row to own a routing decision, so retain
+                 * the approved remainder rather than stranding usable inventory.
+                 */
+                MatFlowLocation current = source;
                 UUID predecessorId = null;
-
                 int sequence = LINE_NUMBER_INCREMENT;
+                boolean first = true;
 
-                for (int index = 0; index < destinations.size(); index++) {
-                        MatFlowLocation next = destinations.get(
-                                        index);
-
-                        if (next == null) {
-                                throw conflict(
-                                                "BOM route contains a missing destination");
-                        }
-
-                        if (current.getId()
-                                        .equals(
-                                                        next.getId())) {
-
-                                current = next;
-
+                for (int index = 1; index < approvedRoute.size(); index++) {
+                        MatFlowBomRouteStep step = approvedRoute.get(index);
+                        if (step == null || step.location == null)
+                                continue;
+                        if (current.getId().equals(step.location.getId())) {
+                                current = step.location;
                                 continue;
                         }
 
-                        MatFlowTransferOrder transfer = new MatFlowTransferOrder();
-
-                        transfer.transferNumber = generateNumber(
-                                        "MFT");
-
-                        transfer.requisition = requisition;
-
-                        transfer.reservation = reservation;
-
-                        transfer.fromLocation = current;
-
-                        transfer.toLocation = next;
-
-                        transfer.routeSequenceNo = sequence;
-
-                        transfer.predecessorTransferId = predecessorId;
-
-                        transfer.purpose = determinePurpose(
+                        MatFlowTransferOrder created = createPlannedTransfer(
+                                        requisition,
+                                        reservation,
                                         current,
-                                        next);
-
-                        transfer.status = predecessorId == null
-                                        ? (deferInitialTransfer ? TransferStatus.PLANNED : TransferStatus.READY)
-                                        : TransferStatus.PLANNED;
-
-                        transfer.remarks = "Automatically planned from material requisition";
-
-                        transfer.setCreatedBy(
+                                        step.location,
+                                        step.getId(),
+                                        predecessorId,
+                                        sequence,
+                                        quantity,
+                                        first && deferInitialTransfer,
+                                        "Route for previously QC-cleared inventory",
                                         actor);
-
-                        transfer.setUpdatedBy(
-                                        actor);
-
-                        transfer = transferRepository.save(
-                                        transfer);
-
-                        MatFlowTransferLine transferLine = new MatFlowTransferLine();
-
-                        transferLine.transferOrder = transfer;
-
-                        transferLine.material = reservation.material;
-
-                        transferLine.routeStepId = route.isEmpty()
-                                        ? null
-                                        : route.get(
-                                                        index)
-                                                        .getId();
-
-                        transferLine.plannedQty = quantity.setScale(
-                                        3,
-                                        RoundingMode.HALF_UP);
-
-                        transferLine.dispatchedQty = BigDecimal.ZERO;
-
-                        transferLine.receivedQty = BigDecimal.ZERO;
-
-                        transferLine.uom = reservation.material
-                                        .getUom();
-
-                        transferLine.setCreatedBy(
-                                        actor);
-
-                        transferLine.setUpdatedBy(
-                                        actor);
-
-                        transferLineRepository.save(
-                                        transferLine);
-
-                        predecessorId = transfer.getId();
-
-                        current = next;
-
+                        predecessorId = created.getId();
+                        current = step.location;
                         sequence += LINE_NUMBER_INCREMENT;
+                        first = false;
                 }
+        }
+
+        private MatFlowTransferOrder createPlannedTransfer(
+                        MatFlowMaterialRequisition requisition,
+                        MatFlowReservation reservation,
+                        MatFlowLocation from,
+                        MatFlowLocation to,
+                        UUID routeStepId,
+                        UUID predecessorId,
+                        int sequence,
+                        BigDecimal quantity,
+                        boolean defer,
+                        String remarks,
+                        String actor) {
+
+                if (from == null || to == null) {
+                        throw conflict("Transfer source and destination are required");
+                }
+
+                MatFlowTransferOrder transfer = new MatFlowTransferOrder();
+                transfer.transferNumber = generateNumber("MFT");
+                transfer.requisition = requisition;
+                transfer.reservation = reservation;
+                transfer.fromLocation = from;
+                transfer.toLocation = to;
+                transfer.routeSequenceNo = sequence;
+                transfer.predecessorTransferId = predecessorId;
+                transfer.purpose = determinePurpose(from, to);
+                transfer.status = predecessorId == null && !defer
+                                ? TransferStatus.READY
+                                : TransferStatus.PLANNED;
+                transfer.remarks = remarks;
+                transfer.setCreatedBy(actor);
+                transfer.setUpdatedBy(actor);
+                transfer = transferRepository.save(transfer);
+
+                MatFlowTransferLine transferLine = new MatFlowTransferLine();
+                transferLine.transferOrder = transfer;
+                transferLine.material = reservation.material;
+                transferLine.routeStepId = routeStepId;
+                transferLine.plannedQty = quantity.setScale(3, RoundingMode.HALF_UP);
+                transferLine.dispatchedQty = BigDecimal.ZERO;
+                transferLine.receivedQty = BigDecimal.ZERO;
+                transferLine.uom = reservation.material.getUom();
+                transferLine.setCreatedBy(actor);
+                transferLine.setUpdatedBy(actor);
+                transferLineRepository.save(transferLine);
+
+                return transfer;
         }
 
         private TransferPurpose determinePurpose(
@@ -834,6 +871,17 @@ public class MatFlowRequisitionService {
 
                 if (toType == LocationType.QC) {
                         return TransferPurpose.QC_TRANSFER;
+                }
+
+                if (fromType == LocationType.QC &&
+                                (toType == LocationType.PROCESSING ||
+                                                toType == LocationType.EXTERNAL_PROCESSOR)) {
+                        return TransferPurpose.QC_TO_PROCESSING;
+                }
+
+                if (fromType == LocationType.QC &&
+                                toType == LocationType.PRODUCTION) {
+                        return TransferPurpose.QC_TO_PRODUCTION;
                 }
 
                 boolean fromProcessing = fromType == LocationType.PROCESSING ||
@@ -903,25 +951,19 @@ public class MatFlowRequisitionService {
                                                                         this::toStoreApprovedRouteStepResponse)
                                                         .toList();
 
-                                        MatFlowBomRouteStep firstProcessingStep = route.stream()
-                                                        .filter(
-                                                                        step -> step != null &&
-                                                                                        step.location != null &&
-                                                                                        step.stepType == RouteStepType.PROCESSING)
-                                                        .findFirst()
-                                                        .orElse(null);
-
-                                        boolean processingRequired = firstProcessingStep != null;
-
-                                        UUID firstProcessingLocationId = firstProcessingStep == null
-                                                        ? null
-                                                        : firstProcessingStep.location
-                                                                        .getId();
-
-                                        String firstProcessingLocationCode = firstProcessingStep == null
-                                                        ? null
-                                                        : firstProcessingStep.location
-                                                                        .getLocationCode();
+                                        /*
+                                         * Processing steps on the BOM are approved OPTIONS only.
+                                         * Store is not allowed to decide or force Processing. The QC
+                                         * actor chooses Direct-to-Production vs one approved Processing
+                                         * Unit after the material lot is physically received and inspected.
+                                         *
+                                         * Legacy response fields remain for wire compatibility, but are
+                                         * deliberately reported as not-required / null. The complete
+                                         * approvedRouteSteps list still exposes the governed options.
+                                         */
+                                        boolean processingRequired = false;
+                                        UUID firstProcessingLocationId = null;
+                                        String firstProcessingLocationCode = null;
 
                                         MatFlowLocation firstDestination = route.isEmpty()
                                                         ? requisition.destinationLocation
@@ -1147,78 +1189,29 @@ public class MatFlowRequisitionService {
                         MatFlowMaterial material) {
 
                 if (lineReview == null) {
-                        throw badRequest(
-                                        "Store review line is required");
+                        throw badRequest("Store review line is required");
                 }
-
-                List<MatFlowBomRouteStep> processingSteps = approvedRoute == null
-                                ? List.of()
-                                : approvedRoute.stream()
-                                                .filter(
-                                                                step -> step != null &&
-                                                                                step.location != null &&
-                                                                                step.stepType == RouteStepType.PROCESSING)
-                                                .toList();
-
-                boolean approvedProcessingRequired = !processingSteps.isEmpty();
-
-                Boolean submittedProcessingRequired = lineReview.processingRequired();
-
-                UUID submittedProcessingLocationId = lineReview.processingLocationId();
 
                 String materialLabel = material == null
                                 ? "selected material"
-                                : safeLabel(
-                                                material.getMaterialCode(),
-                                                material.getId());
+                                : safeLabel(material.getMaterialCode(), material.getId());
 
                 /*
-                 * Older clients may omit the confirmation flag.
-                 * When supplied, it must agree with the approved BOM.
+                 * vNext routing authority:
+                 * Store may reserve stock and initiate the mandatory Store -> QC
+                 * hand-off, but Store must never choose Processing. Processing is a
+                 * post-inspection decision owned by the QC actor.
+                 *
+                 * We keep the two legacy request fields only to remain compatible
+                 * with older clients. Any client that still attempts to select a
+                 * Processing path at Store is rejected explicitly rather than
+                 * silently changing the physical route.
                  */
-                if (submittedProcessingRequired != null &&
-                                submittedProcessingRequired != approvedProcessingRequired) {
-
+                if (Boolean.TRUE.equals(lineReview.processingRequired()) ||
+                                lineReview.processingLocationId() != null) {
                         throw badRequest(
-                                        "Processing selection does not match the approved BOM route for material " +
-                                                        materialLabel);
-                }
-
-                /*
-                 * No processing location may be submitted when the
-                 * approved BOM route does not require processing.
-                 */
-                if (!approvedProcessingRequired) {
-
-                        if (submittedProcessingLocationId != null) {
-                                throw badRequest(
-                                                "A processing location was submitted for material " +
-                                                                materialLabel +
-                                                                ", but its approved BOM route is direct to Production");
-                        }
-
-                        return;
-                }
-
-                /*
-                 * The submitted processing location, when provided,
-                 * must be one of the approved processing steps.
-                 */
-                if (submittedProcessingLocationId != null) {
-
-                        boolean approvedLocation = processingSteps.stream()
-                                        .anyMatch(
-                                                        step -> step.location
-                                                                        .getId()
-                                                                        .equals(
-                                                                                        submittedProcessingLocationId));
-
-                        if (!approvedLocation) {
-                                throw badRequest(
-                                                "Selected processing location is not part of the approved BOM route for material "
-                                                                +
-                                                                materialLabel);
-                        }
+                                        "Store cannot select Processing for material " + materialLabel +
+                                                        ". Processing is decided by QC after inspection.");
                 }
         }
 
@@ -3429,11 +3422,25 @@ public class MatFlowRequisitionService {
         private void activateDeferredInitialTransfers(
                         UUID requisitionId,
                         String actor) {
+                /*
+                 * A HOLD_UNTIL_SHORTAGE_COMPLETE decision may defer either:
+                 * 1. a first Store/QC transfer with no predecessor, or
+                 * 2. the post-QC route created after the incoming Store->QC transfer
+                 * has already been RECEIVED.
+                 *
+                 * Therefore a deferred transfer is activatable when it is PLANNED and
+                 * either has no predecessor OR its predecessor is already RECEIVED.
+                 * This does not prematurely release Processing->Production because that
+                 * predecessor remains unreceived until Processing actually completes.
+                 */
                 transferRepository
                                 .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(requisitionId)
                                 .stream()
-                                .filter(transfer -> transfer.predecessorTransferId == null)
                                 .filter(transfer -> transfer.status == TransferStatus.PLANNED)
+                                .filter(transfer -> transfer.predecessorTransferId == null ||
+                                                transferRepository.findById(transfer.predecessorTransferId)
+                                                                .map(predecessor -> predecessor.status == TransferStatus.RECEIVED)
+                                                                .orElse(false))
                                 .forEach(transfer -> {
                                         transfer.status = TransferStatus.READY;
                                         transfer.setUpdatedBy(actor);

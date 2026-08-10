@@ -268,6 +268,17 @@ public class MatFlowAccessService {
                                 "MATFLOW_PRODUCTION");
         }
 
+        /** Final BOM approval after Production has approved the submitted revision. */
+        public void requireDirectorBomReview() {
+                User user = currentUser();
+
+                requireRole(
+                                user,
+                                "ADMIN",
+                                "MATFLOW_MANAGER",
+                                "MATFLOW_DIRECTOR");
+        }
+
         public void requireLocationWrite() {
                 User user = currentUser();
 

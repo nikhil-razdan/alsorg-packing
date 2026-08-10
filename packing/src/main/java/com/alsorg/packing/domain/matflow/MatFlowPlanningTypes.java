@@ -77,7 +77,8 @@ public final class MatFlowPlanningTypes {
 
     public enum TransferPurpose {
         STORE_TO_PROCESSING, PROCESSING_TO_PROCESSING, PROCESSING_TO_PRODUCTION,
-        STORE_TO_PRODUCTION, INTER_PLANT, QC_TRANSFER, QC_TO_REWORK,
+        STORE_TO_PRODUCTION, QC_TO_PROCESSING, QC_TO_PRODUCTION,
+        INTER_PLANT, QC_TRANSFER, QC_TO_REWORK,
         RETURN_TO_SOURCE, PRODUCTION_RETURN
     }
 
@@ -91,6 +92,16 @@ public final class MatFlowPlanningTypes {
 
     public enum QcInspectionStatus {
         PENDING, COMPLETED, CANCELLED
+    }
+
+    /**
+     * The quality decision and the physical next-hop decision are deliberately
+     * separate. Accepted material stays under QC custody until this decision is
+     * recorded by the QC actor.
+     */
+    public enum QcRoutingDecision {
+        DIRECT_TO_PRODUCTION,
+        SEND_TO_PROCESSING
     }
 
     public enum QcSourceType {

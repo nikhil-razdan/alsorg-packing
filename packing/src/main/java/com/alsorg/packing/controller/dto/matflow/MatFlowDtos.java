@@ -89,12 +89,15 @@ public final class MatFlowDtos {
                         Integer revisionNo, MatFlowBomStatus status, boolean latestRevision, boolean effective,
                         UUID projectDrawingId, String projectCode, String projectName, String drawingNo,
                         String drawingRevision, String productName, String clientName, String plantCode,
-                        int lineCount, Long rowVersion, String updatedBy, LocalDateTime updatedAt) {
+                        int lineCount,
+                        String productionReviewedBy, LocalDateTime productionReviewedAt, String productionReviewRemarks,
+                        Long rowVersion, String updatedBy, LocalDateTime updatedAt) {
         }
 
         public record BomDetailResponse(UUID id, String bomNumber, UUID revisionGroupId,
                         Integer revisionNo, MatFlowBomStatus status, boolean latestRevision, boolean effective,
                         ProjectDrawingResponse project, String remarks, String submittedBy, LocalDateTime submittedAt,
+                        String productionReviewedBy, LocalDateTime productionReviewedAt, String productionReviewRemarks,
                         String approvedBy, LocalDateTime approvedAt, String returnedBy, LocalDateTime returnedAt,
                         String returnRemarks, Long rowVersion, String createdBy, LocalDateTime createdAt,
                         String updatedBy, LocalDateTime updatedAt, List<BomLineResponse> lines,

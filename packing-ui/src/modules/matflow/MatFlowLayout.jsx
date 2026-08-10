@@ -48,11 +48,11 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
     ["Control Tower", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
-    ["Projects", "/matflow/projects", "projects", <FolderOutlinedIcon />],
+    ["Project Portfolio", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
     ["Operational BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
-    ["Production BOM Review", "/matflow/bom-approvals", "bom-review", <ApprovalOutlinedIcon />],
+    ["BOM Review & Approval", "/matflow/bom-approvals", "bom-review", <ApprovalOutlinedIcon />],
     ["Production Requisitions", "/matflow/production", "production", <EngineeringOutlinedIcon />],
     ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Store", "/matflow/store", "store", <StorefrontOutlinedIcon />],
@@ -69,7 +69,7 @@ const NAV = [
 
 const HEADER = [
     ["/matflow/production-execution", "Production Execution", "Production start, material consumption and finished-product completion"],
-    ["/matflow/bom-approvals", "Production BOM Review", "Approve or return Engineering-submitted BOM revisions"],
+    ["/matflow/bom-approvals", "BOM Review & Approval", "Production technical review followed by Director final approval"],
     ["/matflow/boms", "Operational BOMs", "Engineering material structure and approved route control"],
     ["/matflow/store", "Store Material Control", "Availability, reservation, shortage, indent and issue"],
     ["/matflow/production", "Production Material Control", "Requisitions, issue readiness and finished-product lifecycle"],
@@ -77,13 +77,13 @@ const HEADER = [
     ["/matflow/purchase", "Purchase", "Purchase orders and vendors"],
     ["/matflow/approvals", "PO Approvals", "Independent Manager/Director commercial approval"],
     ["/matflow/receiving", "GRN & Receiving", "Receive approved purchase orders into QC-blocked stock"],
-    ["/matflow/qc", "Quality Control", "Inspect received and transferred material"],
+    ["/matflow/qc", "Quality Control", "Inspect material and decide Direct-to-Production vs optional Processing routing"],
     ["/matflow/processing", "Material Processing", "Processing inputs, outputs, yield and wastage"],
     ["/matflow/returns", "Material Returns", "Controlled return movements"],
     ["/matflow/tracker", "MatFlow Control Tower", "Server-computed project and material workflow status"],
     ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
     ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
-    ["/matflow/projects", "Projects & Drawings", "Client project and product/drawing master"],
+    ["/matflow/projects", "Project Portfolio", "Client Project → Product/Item → BOM → Material execution hierarchy"],
     ["/matflow/materials", "Material Master", "Standardized operational material records"],
     ["/matflow/locations", "Locations", "Store, Production, Processing and QC destinations"],
 ];

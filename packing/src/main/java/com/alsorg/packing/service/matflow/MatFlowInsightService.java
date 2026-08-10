@@ -1204,6 +1204,8 @@ public class MatFlowInsightService {
                                 java.util.Map.entry("PRODUCT_APPROVAL", 1440L),
                                 java.util.Map.entry("BOM_ENGINEERING", 1440L),
                                 java.util.Map.entry("BOM_PRODUCTION_REVIEW", 480L),
+                                java.util.Map.entry("BOM_DIRECTOR_APPROVAL", 480L),
+                                java.util.Map.entry("QC_ROUTE", 240L),
                                 java.util.Map.entry("DEMAND", 240L),
                                 java.util.Map.entry("STORE", 480L),
                                 java.util.Map.entry("PURCHASE", 2880L),
@@ -1343,9 +1345,18 @@ public class MatFlowInsightService {
                         int readyTransferCount = (int) transfers.stream()
                                         .filter(transfer -> "READY".equals(enumName(transfer.status))).count();
 
-                        String currentStage = resolveCurrentStage(
-                                        requisition.status, requestedQty, reservedQty, shortageQty, issuedQty,
-                                        consumedQty, openTransferCount);
+                        String currentStage;
+                        if (hasPendingQc(context)) {
+                                currentStage = "QC_PENDING";
+                        } else if (hasPendingQcRouting(context)) {
+                                currentStage = "QC_ROUTING_PENDING";
+                        } else if (hasActiveProcessing(context)) {
+                                currentStage = "PROCESSING";
+                        } else {
+                                currentStage = resolveCurrentStage(
+                                                requisition.status, requestedQty, reservedQty, shortageQty, issuedQty,
+                                                consumedQty, openTransferCount);
+                        }
                         String responsibleDesk = resolveResponsibleDesk(currentStage);
                         int progressPercent = resolveProgressPercent(currentStage);
 
@@ -1502,13 +1513,21 @@ public class MatFlowInsightService {
                                         bom == null ? null : bom.getBomNumber(), true,
                                         "Engineering prepares material lines and approved route definition.");
 
-                        addStage(stages, "BOM_PRODUCTION_REVIEW", "Production BOM Review", "PRODUCTION", production,
+                        addStage(stages, "BOM_PRODUCTION_REVIEW", "Production BOM Technical Review", "PRODUCTION", production,
                                         bom == null ? null : bom.getSubmittedAt(),
+                                        bom == null ? null : bom.getProductionReviewedAt(),
+                                        bom == null ? null : bom.getProductionReviewedBy(),
+                                        "BOM", bom == null ? null : bom.getId(),
+                                        bom == null ? null : bom.getBomNumber(), true,
+                                        "Production performs the technical BOM review. This approval is intermediate and does not make the BOM effective.");
+
+                        addStage(stages, "BOM_DIRECTOR_APPROVAL", "Director Final BOM Approval", "DIRECTOR", production,
+                                        bom == null ? null : bom.getProductionReviewedAt(),
                                         bom == null ? null : bom.getApprovedAt(),
                                         bom == null ? null : bom.getApprovedBy(),
                                         "BOM", bom == null ? null : bom.getId(),
-                                        bom == null ? null : bom.getBomNumber(), true,
-                                        "Production directly approves or returns the operational BOM.");
+                                        bom == null ? null : bom.getBomNumber(), bom != null && bom.getSubmittedAt() != null,
+                                        "Director final approval makes the Production-reviewed BOM effective for material requisitions.");
 
                         addStage(stages, "DEMAND", "Production Material Demand", "PRODUCTION", production,
                                         r.requestedAt != null ? r.requestedAt : r.getCreatedAt(), r.submittedAt,
@@ -1687,12 +1706,33 @@ public class MatFlowInsightService {
 
                         for (MatFlowQcInspection qc : c.inspections()) {
                                 boolean done = "COMPLETED".equals(enumName(qc.status));
-                                operations.add(stageRecord("QC", "QC " + safeText(qc.inspectionNumber), "QC",
+                                operations.add(stageRecord("QC", "QC Quality " + safeText(qc.inspectionNumber), "QC",
                                                 qc.location,
                                                 qc.getCreatedAt(), qc.inspectedAt, done ? "DONE" : "CURRENT",
                                                 target("QC"), qc.inspectedBy,
                                                 "QC_INSPECTION", qc.getId(), qc.inspectionNumber,
-                                                "Quality gate: accepted material is released to the next approved route leg."));
+                                                "Quality inspection only: accepted vs rejected quantity."));
+
+                                boolean routingApplicable = done && safe(qc.acceptedQty).compareTo(BigDecimal.ZERO) > 0
+                                                && qc.routingReservationId != null;
+                                if (routingApplicable) {
+                                        operations.add(stageRecord(
+                                                        "QC_ROUTE",
+                                                        "QC Routing " + safeText(qc.inspectionNumber),
+                                                        "QC",
+                                                        qc.location,
+                                                        qc.inspectedAt,
+                                                        qc.routingDecidedAt,
+                                                        qc.routingDecidedAt == null ? "CURRENT" : "DONE",
+                                                        target("QC_ROUTE"),
+                                                        qc.routingDecidedBy,
+                                                        "QC_INSPECTION",
+                                                        qc.getId(),
+                                                        qc.inspectionNumber,
+                                                        qc.routingDecidedAt == null
+                                                                        ? "Accepted material is held at QC awaiting Direct-to-Production vs Processing decision."
+                                                                        : "QC route: " + enumName(qc.routingDecision)));
+                                }
                         }
 
                         for (MatFlowProcessingJob job : c.jobs()) {
@@ -1768,6 +1808,7 @@ public class MatFlowInsightService {
                                                         material == null ? null : material.getMaterialCode(),
                                                         material == null ? null : material.getMaterialCode(),
                                                         material == null ? null : material.getMaterialName(),
+                                                        material == null ? null : material.getCategory(),
                                                         material == null ? null : material.getUom(),
                                                         scale(line.requestedQty), scale(line.reservedQty),
                                                         scale(line.shortageQty), scale(line.issuedQty),
@@ -1806,6 +1847,7 @@ public class MatFlowInsightService {
                                                         material == null ? null : material.getMaterialCode(),
                                                         material == null ? null : material.getMaterialCode(),
                                                         material == null ? null : material.getMaterialName(),
+                                                        material == null ? null : material.getCategory(),
                                                         material == null ? null : material.getUom(),
                                                         scale(line.requestedQty), scale(line.reservedQty),
                                                         scale(line.shortageQty), scale(line.issuedQty),
@@ -1944,6 +1986,7 @@ public class MatFlowInsightService {
                                         line.material == null ? null : line.material.getMaterialCode(),
                                         currentMaterial == null ? null : currentMaterial.getMaterialCode(),
                                         currentMaterial == null ? null : currentMaterial.getMaterialName(),
+                                        currentMaterial == null ? null : currentMaterial.getCategory(),
                                         currentMaterial == null ? null : currentMaterial.getUom(),
                                         scale(line.requestedQty), scale(line.reservedQty), scale(line.shortageQty),
                                         scale(line.issuedQty),
@@ -1963,7 +2006,9 @@ public class MatFlowInsightService {
                 private TrackerCycleSummary buildCycle(TrackingContext c, List<TrackerStageTiming> stages,
                                 TrackerRowResponse summary) {
                         LocalDateTime projectStart = c.requisition().projectDrawing == null ? null
-                                        : c.requisition().projectDrawing.getCreatedAt();
+                                        : c.requisition().projectDrawing.getProject() != null
+                                                        ? c.requisition().projectDrawing.getProject().getCreatedAt()
+                                                        : c.requisition().projectDrawing.getCreatedAt();
                         LocalDateTime requisitionStart = c.requisition().requestedAt != null
                                         ? c.requisition().requestedAt
                                         : c.requisition().getCreatedAt();
@@ -2076,6 +2121,31 @@ public class MatFlowInsightService {
                         if (open == null)
                                 return Position.of("PRODUCTION", c.requisition().destinationLocation);
                         return Position.of(departmentForLocation(open.toLocation), open.toLocation);
+                }
+
+                private Position qcPosition(TrackingContext context) {
+                        MatFlowQcInspection inspection = context.inspections().stream()
+                                        .filter(item -> item != null && item.location != null)
+                                        .filter(item -> "PENDING".equals(enumName(item.status)) ||
+                                                        ("COMPLETED".equals(enumName(item.status)) &&
+                                                                        item.routingReservationId != null &&
+                                                                        item.routingDecision == null))
+                                        .min(Comparator.comparing(MatFlowQcInspection::getCreatedAt,
+                                                        Comparator.nullsLast(Comparator.naturalOrder())))
+                                        .orElse(null);
+                        return inspection == null ? Position.of("QUALITY CONTROL", null)
+                                        : Position.of("QUALITY CONTROL", inspection.location);
+                }
+
+                private Position processingPosition(TrackingContext context) {
+                        MatFlowProcessingJob job = context.jobs().stream()
+                                        .filter(item -> item != null &&
+                                                        !Set.of("COMPLETED", "CANCELLED").contains(enumName(item.status)))
+                                        .min(Comparator.comparing(MatFlowProcessingJob::getCreatedAt,
+                                                        Comparator.nullsLast(Comparator.naturalOrder())))
+                                        .orElse(null);
+                        return job == null ? Position.of("PROCESSING", null)
+                                        : Position.of("PROCESSING", job.location);
                 }
 
                 private LocalDateTime resolveStageStart(TrackingContext c, String currentStage, Position current) {
@@ -2291,6 +2361,27 @@ public class MatFlowInsightService {
                                         scale(totalReserved), scale(totalShortage));
                 }
 
+                private boolean hasPendingQc(TrackingContext context) {
+                        return context != null && context.inspections().stream()
+                                        .anyMatch(inspection -> inspection != null &&
+                                                        "PENDING".equals(enumName(inspection.status)));
+                }
+
+                private boolean hasPendingQcRouting(TrackingContext context) {
+                        return context != null && context.inspections().stream()
+                                        .anyMatch(inspection -> inspection != null &&
+                                                        "COMPLETED".equals(enumName(inspection.status)) &&
+                                                        safe(inspection.acceptedQty).compareTo(BigDecimal.ZERO) > 0 &&
+                                                        inspection.routingReservationId != null &&
+                                                        inspection.routingDecision == null);
+                }
+
+                private boolean hasActiveProcessing(TrackingContext context) {
+                        return context != null && context.jobs().stream()
+                                        .anyMatch(job -> job != null &&
+                                                        !Set.of("COMPLETED", "CANCELLED").contains(enumName(job.status)));
+                }
+
                 private String resolveCurrentStage(RequisitionStatus status, BigDecimal requestedQty,
                                 BigDecimal reservedQty,
                                 BigDecimal shortageQty, BigDecimal issuedQty, BigDecimal consumedQty,
@@ -2328,6 +2419,8 @@ public class MatFlowInsightService {
                                         "PRODUCTION";
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
+                                case "QC_PENDING", "QC_ROUTING_PENDING" -> "QUALITY CONTROL";
+                                case "PROCESSING" -> "PROCESSING";
                                 case "TRANSFER_IN_PROGRESS" -> "ROUTE / TRANSFER";
                                 case "CANCELLED" -> "CLOSED";
                                 default -> "MATFLOW CONTROL";
@@ -2340,6 +2433,9 @@ public class MatFlowInsightService {
                                 case "AWAITING_STORE_PLANNING" -> 30;
                                 case "SHORTAGE_PENDING" -> 48;
                                 case "MATERIAL_RESERVED" -> 58;
+                                case "QC_PENDING" -> 64;
+                                case "QC_ROUTING_PENDING" -> 68;
+                                case "PROCESSING" -> 74;
                                 case "TRANSFER_IN_PROGRESS" -> 72;
                                 case "READY_TO_ISSUE" -> 82;
                                 case "PRODUCTION_ISSUE" -> 88;
@@ -2356,6 +2452,9 @@ public class MatFlowInsightService {
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
                                         target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
+                                case "QC_PENDING" -> target("QC");
+                                case "QC_ROUTING_PENDING" -> target("QC_ROUTE");
+                                case "PROCESSING" -> target("PROCESSING");
                                 case "TRANSFER_IN_PROGRESS" -> target("ROUTE");
                                 case "PRODUCTION_ISSUE" -> target("PRODUCTION_ISSUE");
                                 case "PRODUCTION_IN_PROGRESS" -> target("PRODUCTION");
@@ -2391,7 +2490,7 @@ public class MatFlowInsightService {
                                 case "DRAFT" -> "DEMAND";
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
-                                case "TRANSFER_IN_PROGRESS", "READY_TO_ISSUE" -> "ROUTE";
+                                case "QC_PENDING", "QC_ROUTING_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS", "READY_TO_ISSUE" -> "ROUTE";
                                 case "PRODUCTION_ISSUE" -> "PRODUCTION_ISSUE";
                                 case "PRODUCTION_IN_PROGRESS" -> "PRODUCTION";
                                 case "PRODUCTION_COMPLETED" -> "COMPLETE";

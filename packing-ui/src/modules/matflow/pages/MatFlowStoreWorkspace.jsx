@@ -341,8 +341,9 @@ export function MatFlowStoreDetailPage() {
                     requisitionLineId: line.id,
                     rowVersion: line.rowVersion,
                     allocations: selected.map((item) => ({ sourceLocationId: item.locationId, reserveQty: item.qty })),
-                    processingRequired: entry?.processingRequired === true,
-                    processingLocationId: entry?.processingRequired === true ? entry?.firstProcessingLocationId ?? null : null,
+                    // Store does not choose Processing. QC owns the post-inspection route decision.
+                    processingRequired: false,
+                    processingLocationId: null,
                     createIndentForShortage: reserved + 0.0005 < requested,
                     remarks: null,
                 };
@@ -416,7 +417,7 @@ export function MatFlowStoreDetailPage() {
                 rowVersion: dispatchTarget.rowVersion,
                 quantity,
                 batchNo: clean(dispatchForm.batchNo) || null,
-                remarks: clean(dispatchForm.remarks) || "Reserved Store material dispatched into approved MatFlow route.",
+                remarks: clean(dispatchForm.remarks) || "Reserved Store material dispatched to the controlled QC gate.",
             });
             setDispatchTarget(null);
             setDispatchForm({ quantity: "", batchNo: "", remarks: "" });
@@ -460,7 +461,7 @@ export function MatFlowStoreDetailPage() {
                     const entry = availabilityByLine.get(String(line.id));
                     const options = Array.isArray(entry?.stockOptions) ? entry.stockOptions : [];
                     return <Card key={line.id} sx={{ ...panelSx, mt: 1.25 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}><Box><Typography sx={mainTextSx}>{line.materialCode} · {line.materialName}</Typography><Typography sx={subTextSx}>Requested {formatQty(line.requestedQty)} {line.uom || ""} · Approved route: {entry?.approvedRoute || entry?.firstDestinationLocationCode || requisition.destinationLocationCode}</Typography></Box><MatFlowStatusChip status={entry?.processingRequired ? "PROCESSING_REQUIRED" : "READY"} /></Box>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}><Box><Typography sx={mainTextSx}>{line.materialCode} · {line.materialName}</Typography><Typography sx={subTextSx}>Requested {formatQty(line.requestedQty)} {line.uom || ""} · First controlled destination: {entry?.firstDestinationLocationCode || "QC"}. QC decides whether Processing is required after inspection.</Typography></Box><MatFlowStatusChip status="QC_FIRST" /></Box>
                         <Box sx={{ ...tableShellSx, mt: 1 }}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 120px 100px 100px 100px 140px" }}>{["Source", "Plant", "On Hand", "Reserved", "Available", "Reserve Now"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{options.length === 0 ? <EmptyState>No free stock source was returned; full quantity will become shortage.</EmptyState> : options.map((option) => <Box key={option.locationId} sx={{ ...tableRowSx, gridTemplateColumns: "160px 120px 100px 100px 100px 140px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{option.locationCode}</Typography><Typography sx={subTextSx}>{option.locationName}</Typography></Box><Box sx={tableCellSx}>{option.plantCode}</Box><Box sx={tableCellSx}>{formatQty(option.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(option.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(option.availableQty)}</Box><Box sx={tableCellSx}><TextField type="number" size="small" value={allocations[String(line.id)]?.[String(option.locationId)] ?? ""} onChange={(e) => setAllocations((current) => ({ ...current, [String(line.id)]: { ...(current[String(line.id)] || {}), [String(option.locationId)]: e.target.value } }))} sx={fieldSx} /></Box></Box>)}</Box>
                     </Card>;
                 })}
@@ -468,17 +469,17 @@ export function MatFlowStoreDetailPage() {
                 <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1.5 }}><Button startIcon={<Inventory2OutlinedIcon />} onClick={confirmReview} disabled={working} sx={primaryBtnSx}>{working ? "Reserving..." : "Confirm Review & Reserve"}</Button></Box>
             </Card>}
 
-            {totals.shortage > 0 && totals.reserved > 0 && <Card sx={panelSx}><Typography sx={mainTextSx}>Production partial-availability decision</Typography><Typography sx={subTextSx}>{normalize(requisition.partialAvailabilityDecision) === "ISSUE_AVAILABLE_NOW" ? "Production has authorized available quantity to continue through QC/Processing and be issued when route-complete." : normalize(requisition.partialAvailabilityDecision) === "HOLD_UNTIL_SHORTAGE_COMPLETE" ? "Production has instructed Store to hold the available quantity until shortage procurement is completed." : "Production decision is pending. Store can reserve and procure shortage, but final issue is blocked until Production decides."}</Typography></Card>}
+            {totals.shortage > 0 && totals.reserved > 0 && <Card sx={panelSx}><Typography sx={mainTextSx}>Production partial-availability decision</Typography><Typography sx={subTextSx}>{normalize(requisition.partialAvailabilityDecision) === "ISSUE_AVAILABLE_NOW" ? "Production has authorized available quantity to continue to QC now. QC will decide Direct-to-Production or optional Processing after inspection." : normalize(requisition.partialAvailabilityDecision) === "HOLD_UNTIL_SHORTAGE_COMPLETE" ? "Production has instructed Store to hold the available quantity until shortage procurement is completed." : "Production decision is pending. Store can reserve and procure shortage, but final issue is blocked until Production decides."}</Typography></Card>}
             <Card sx={panelSx}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap", mb: 1 }}>
                     <Box>
                         <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Reservations & Route Control</Typography>
-                        <Typography sx={subTextSx}>Store owns the first physical hand-off. Dispatch READY Store stock into the approved QC/Processing route; final Store Issue appears only after the route reaches Production staging.</Typography>
+                        <Typography sx={subTextSx}>Store owns reservation and the first physical hand-off only. Dispatch READY Store stock to QC. After inspection, QC owns the Direct-to-Production vs optional Processing decision; Store issues only when the accepted route reaches Production staging.</Typography>
                     </Box>
                     <Button onClick={() => navigate("/matflow/transfers")} sx={secondaryBtnSx}>Open Transfer Desk</Button>
                 </Box>
                 <Box sx={tableShellSx}>
-                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 135px 105px minmax(280px,1fr) 155px 175px" }}>{["Material", "Source", "Reserved", "Approved Route", "Next Owner", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 135px 105px minmax(280px,1fr) 155px 175px" }}>{["Material", "Source", "Reserved", "Live Route / Custody", "Next Owner", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
                     {reservations.length === 0 ? <EmptyState>No reservations created yet.</EmptyState> : reservations.map((reservation) => {
                         const route = routeForReservation(reservation);
                         const currentTransfer = currentTransferForReservation(reservation);

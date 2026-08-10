@@ -57,7 +57,8 @@ import {
 
 const BOM_STATUSES = ["", "DRAFT", "SUBMITTED", "APPROVED", "RETURNED", "SUPERSEDED"];
 const EDIT_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING];
-const REVIEW_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION];
+const PRODUCTION_REVIEW_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION];
+const DIRECTOR_REVIEW_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR];
 const REQUISITION_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION];
 
 const projectOf = (bom) => bom?.projectDrawing || bom?.project || bom?.projectContext || {};
@@ -96,12 +97,22 @@ const routeLocationMatchesStep = (location, stepType) => {
     return false;
 };
 
+const hasHistoryAction = (bom, action) =>
+    (Array.isArray(bom?.history) ? bom.history : []).some(
+        (entry) => normalize(entry?.action) === normalize(action)
+    );
+
+const productionApproved = (bom) =>
+    Boolean(bom?.productionReviewedAt || bom?.productionReviewedBy) ||
+    hasHistoryAction(bom, "PRODUCTION_APPROVED");
+
 const workflowFor = (bom) => {
     const status = normalize(bom?.status);
-    if (status === "DRAFT") return ["Engineering", "Add material lines/routes and submit directly to Production"];
-    if (status === "RETURNED") return ["Engineering", "Correct the returned BOM and resubmit to Production"];
-    if (status === "SUBMITTED") return ["Production", "Approve or return the submitted BOM"];
-    if (status === "APPROVED") return ["Production / Store", bom?.effective ? "Raise material requisition against this effective BOM" : "Resolve effective revision"];
+    if (status === "DRAFT") return ["Engineering", "Complete material lines and approved QC / optional Processing / Production route options, then submit"];
+    if (status === "RETURNED") return ["Engineering", "Correct the returned BOM and resubmit for Production + Director approval"];
+    if (status === "SUBMITTED" && !productionApproved(bom)) return ["Production", "Review and approve or return the Engineering-submitted BOM"];
+    if (status === "SUBMITTED" && productionApproved(bom)) return ["Director", "Production approved. Director final approval or return is required"];
+    if (status === "APPROVED") return ["Production / Store", bom?.effective ? "Final approval complete — requisition can be raised against this effective BOM" : "Resolve effective revision"];
     if (status === "SUPERSEDED") return ["Engineering", "Use the current approved revision"];
     return ["MatFlow", "Review BOM status"];
 };
@@ -135,11 +146,11 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge={submittedOnly ? "PRODUCTION BOM REVIEW" : "OPERATIONAL BOM CONTROL"}
-                title={submittedOnly ? "Submitted BOM Review" : "Operational BOMs"}
+                badge={submittedOnly ? "BOM REVIEW & APPROVAL" : "OPERATIONAL BOM CONTROL"}
+                title={submittedOnly ? "Submitted BOM Review & Approval" : "Operational BOMs"}
                 subtitle={submittedOnly
-                    ? "Production reviews Engineering-submitted BOMs directly before the revision becomes effective for material requisitions."
-                    : "Engineering authors project-specific BOMs and routes; Production directly approves the submitted revision."}
+                    ? "Production performs the technical review first; Director gives final approval before the BOM becomes effective for material requisitions."
+                    : "Engineering authors product-specific BOMs. Production technical approval and Director final approval are both required."}
                 actions={!submittedOnly && canCreate ? <Button startIcon={<AddIcon />} onClick={() => navigate("/matflow/boms/new")} sx={primaryBtnSx}>Create BOM</Button> : null}
             />
             <Card sx={panelSx}>
@@ -270,7 +281,9 @@ export function MatFlowBomDetailPage() {
     const project = useMemo(() => projectOf(bom), [bom]);
     const status = normalize(bom?.status);
     const canEdit = hasRole(EDIT_ROLES) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
-    const canReview = hasRole(REVIEW_ROLES) && status === "SUBMITTED" && bom?.rowVersion != null;
+    const productionReviewComplete = productionApproved(bom);
+    const canProductionReview = hasRole(PRODUCTION_REVIEW_ROLES) && status === "SUBMITTED" && !productionReviewComplete && bom?.rowVersion != null;
+    const canDirectorReview = hasRole(DIRECTOR_REVIEW_ROLES) && status === "SUBMITTED" && productionReviewComplete && bom?.rowVersion != null;
     const canRevision = hasRole(EDIT_ROLES) && status === "APPROVED" && bom?.effective === true && bom?.latestRevision === true;
     const canRequisition = hasRole(REQUISITION_ROLES) && status === "APPROVED" && bom?.effective === true;
     const workflow = workflowFor(bom);
@@ -512,7 +525,7 @@ export function MatFlowBomDetailPage() {
 
         const cleaned = clean(remarks);
 
-        if (action === "PRODUCTION_RETURN" && !cleaned) {
+        if (["PRODUCTION_RETURN", "DIRECTOR_RETURN"].includes(action) && !cleaned) {
             setError("Return remarks are required.");
             return;
         }
@@ -537,6 +550,8 @@ export function MatFlowBomDetailPage() {
             if (action === "SUBMIT") response = await matflowApi.submitBom(bom.id, body);
             if (action === "PRODUCTION_APPROVE") response = await matflowApi.productionApproveBom(bom.id, body);
             if (action === "PRODUCTION_RETURN") response = await matflowApi.productionReturnBom(bom.id, body);
+            if (action === "DIRECTOR_APPROVE") response = await matflowApi.directorApproveBom(bom.id, body);
+            if (action === "DIRECTOR_RETURN") response = await matflowApi.directorReturnBom(bom.id, body);
             if (action === "REVISION") response = await matflowApi.createBomRevision(bom.id, body);
             setAction(null); setRemarks("");
             if (action === "REVISION" && response?.data?.id) navigate(`/matflow/boms/${response.data.id}`, { replace: true });
@@ -717,9 +732,11 @@ export function MatFlowBomDetailPage() {
                         <Detail label="Responsible Department" value={workflow[0]} /><Detail label="Next Action" value={workflow[1]} />
                     </Box>
                     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end", mt: 1.5 }}>
-                        {canEdit && lines.length > 0 && <Button startIcon={<SendOutlinedIcon />} onClick={() => setAction("SUBMIT")} sx={primaryBtnSx}>Submit to Production</Button>}
-                        {canReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("PRODUCTION_APPROVE")} sx={primaryBtnSx}>Production Approve</Button>}
-                        {canReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("PRODUCTION_RETURN")} sx={secondaryBtnSx}>Return to Engineering</Button>}
+                        {canEdit && lines.length > 0 && <Button startIcon={<SendOutlinedIcon />} onClick={() => setAction("SUBMIT")} sx={primaryBtnSx}>Submit for Approval</Button>}
+                        {canProductionReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("PRODUCTION_APPROVE")} sx={primaryBtnSx}>Production Approve</Button>}
+                        {canProductionReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("PRODUCTION_RETURN")} sx={secondaryBtnSx}>Production Return</Button>}
+                        {canDirectorReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("DIRECTOR_APPROVE")} sx={primaryBtnSx}>Director Final Approve</Button>}
+                        {canDirectorReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("DIRECTOR_RETURN")} sx={secondaryBtnSx}>Director Return</Button>}
                         {canRevision && <Button onClick={() => setAction("REVISION")} sx={secondaryBtnSx}>Create Revision</Button>}
                         {canRequisition && <Button onClick={() => navigate(`/matflow/requisitions/new?bomId=${bom.id}`)} sx={primaryBtnSx}>Raise Requisition</Button>}
                     </Box>
@@ -757,7 +774,7 @@ export function MatFlowBomDetailPage() {
                         <Box>
                             <Typography sx={sectionTitleSx}>Approved Material Route</Typography>
                             <Typography sx={sectionSubSx}>
-                                Every material route is mandatory: QC first → optional Processing step(s) → Production last.
+                                Every material requires QC and a Production destination. Processing rows are approved candidate Processing Units; QC decides per inspected lot whether to bypass Processing or send the material to one approved unit.
                             </Typography>
                         </Box>
                         <Chip
@@ -820,8 +837,8 @@ export function MatFlowBomDetailPage() {
             </>}
 
             <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit BOM to Production" : action === "PRODUCTION_APPROVE" ? "Approve BOM" : action === "PRODUCTION_RETURN" ? "Return BOM" : "Create BOM Revision"}</DialogTitle>
-                <DialogContent sx={dialogContentSx}><TextField fullWidth multiline minRows={3} label={action === "PRODUCTION_RETURN" ? "Return Remarks *" : "Remarks"} value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} /></DialogContent>
+                <DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit BOM for Production Review" : action === "PRODUCTION_APPROVE" ? "Production Technical Approval" : action === "PRODUCTION_RETURN" ? "Production Return" : action === "DIRECTOR_APPROVE" ? "Director Final Approval" : action === "DIRECTOR_RETURN" ? "Director Return" : "Create BOM Revision"}</DialogTitle>
+                <DialogContent sx={dialogContentSx}><TextField fullWidth multiline minRows={3} label={["PRODUCTION_RETURN", "DIRECTOR_RETURN"].includes(action) ? "Return Remarks *" : "Remarks"} value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} /></DialogContent>
                 <DialogActions sx={dialogActionsSx}><Button onClick={() => setAction(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={executeAction} disabled={working} sx={primaryBtnSx}>{working ? "Working..." : "Confirm"}</Button></DialogActions>
             </Dialog>
 

@@ -35,11 +35,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * BOM aggregate service: Engineering BOM authoring, approved material routes,
- * revision control and direct Production review/approval.
+ * revision control and sequential Production + Director review/approval.
  *
  * The former HOD intermediate service step is intentionally removed from the
- * public service contract: SUBMITTED -> APPROVED/RETURNED is now a Production
- * decision, matching the agreed MatFlow workflow.
+ * public service contract: SUBMITTED -> Production approval -> Director final
+ * approval/return is the active
+ * workflow. No HOD intermediate approval exists.
  */
 @Service
 public class MatFlowBomService {
@@ -117,6 +118,16 @@ public class MatFlowBomService {
         @Transactional
         public BomDetailResponse approveByProduction(UUID id, BomActionRequest request) {
                 return bom.productionApprove(id, request);
+        }
+
+        @Transactional
+        public BomDetailResponse approveByDirector(UUID id, BomActionRequest request) {
+                return bom.directorApprove(id, request);
+        }
+
+        @Transactional
+        public BomDetailResponse returnByDirector(UUID id, BomActionRequest request) {
+                return bom.directorReturn(id, request);
         }
 
         @Transactional
@@ -733,133 +744,207 @@ public class MatFlowBomService {
 
                         accessService.requireProductionBomReview();
 
-                        MatFlowBom bom = requireBom(
-                                        id);
+                        MatFlowBom bom = requireBom(id);
 
                         if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
-
                                 throw conflict(
-                                                "Only a submitted BOM can be approved by Production");
+                                                "Only an Engineering-submitted BOM can be reviewed by Production");
                         }
 
-                        assertActionVersion(
-                                        request,
-                                        bom);
+                        if (bom.getProductionReviewedAt() != null ||
+                                        clean(bom.getProductionReviewedBy()) != null) {
+                                throw conflict(
+                                                "Production has already approved this BOM. It is now awaiting Director approval.");
+                        }
+
+                        assertActionVersion(request, bom);
 
                         String actor = accessService.actor();
-
                         String reviewRemarks = request == null
                                         ? null
-                                        : clean(
-                                                        request.remarks());
+                                        : clean(request.remarks());
 
                         /*
-                         * Final Production approval is the point where the previous
-                         * effective revision may safely be superseded.
+                         * Production approval is intentionally INTERMEDIATE.
+                         * The BOM remains SUBMITTED and non-effective until Director
+                         * performs the final approval. This prevents Store/Production
+                         * requisitions from using a BOM that has only one of the two
+                         * required approvals.
                          */
+                        bom.setProductionReviewedBy(actor);
+                        bom.setProductionReviewedAt(LocalDateTime.now());
+                        bom.setProductionReviewRemarks(reviewRemarks);
+                        bom.setApprovedBy(null);
+                        bom.setApprovedAt(null);
+                        bom.setEffective(false);
+                        bom.setUpdatedBy(actor);
+
+                        MatFlowBom reviewedBom = bomRepository.saveAndFlush(bom);
+
+                        saveHistory(
+                                        reviewedBom,
+                                        MatFlowApprovalAction.PRODUCTION_APPROVED,
+                                        MatFlowBomStatus.SUBMITTED,
+                                        MatFlowBomStatus.SUBMITTED,
+                                        reviewRemarks,
+                                        actor);
+
+                        saveAudit(
+                                        reviewedBom,
+                                        "BOM_PRODUCTION_REVIEW_APPROVED",
+                                        auditDetails(
+                                                        "revisionNo", reviewedBom.getRevisionNo(),
+                                                        "productionReviewedBy", actor,
+                                                        "nextApproval", "DIRECTOR",
+                                                        "effective", false),
+                                        actor);
+
+                        return toDetail(reviewedBom);
+                }
+
+                @Transactional
+                public BomDetailResponse directorApprove(
+                                UUID id,
+                                BomActionRequest request) {
+
+                        accessService.requireDirectorBomReview();
+
+                        MatFlowBom bom = requireBom(id);
+
+                        if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
+                                throw conflict(
+                                                "Only a submitted BOM can receive final Director approval");
+                        }
+
+                        if (bom.getProductionReviewedAt() == null ||
+                                        clean(bom.getProductionReviewedBy()) == null) {
+                                throw conflict(
+                                                "Production approval is required before Director can approve this BOM");
+                        }
+
+                        assertActionVersion(request, bom);
+
+                        String actor = accessService.actor();
+                        String remarks = request == null ? null : clean(request.remarks());
+
+                        /* Final approval: supersede the old effective revision here only. */
                         bomRepository
                                         .findFirstByRevisionGroupIdAndEffectiveTrue(
                                                         bom.getRevisionGroupId())
-                                        .filter(previous -> !previous.getId()
-                                                        .equals(
-                                                                        bom.getId()))
+                                        .filter(previous -> !previous.getId().equals(bom.getId()))
                                         .ifPresent(previous -> {
-
                                                 MatFlowBomStatus previousStatus = previous.getStatus();
-
-                                                previous.setEffective(
-                                                                false);
-
-                                                previous.setStatus(
-                                                                MatFlowBomStatus.SUPERSEDED);
-
-                                                previous.setLatestRevision(
-                                                                false);
-
-                                                previous.setUpdatedBy(
-                                                                actor);
-
-                                                MatFlowBom supersededBom = bomRepository.save(
-                                                                previous);
+                                                previous.setEffective(false);
+                                                previous.setStatus(MatFlowBomStatus.SUPERSEDED);
+                                                previous.setLatestRevision(false);
+                                                previous.setUpdatedBy(actor);
+                                                MatFlowBom superseded = bomRepository.save(previous);
 
                                                 saveHistory(
-                                                                supersededBom,
+                                                                superseded,
                                                                 MatFlowApprovalAction.SUPERSEDED,
                                                                 previousStatus,
                                                                 MatFlowBomStatus.SUPERSEDED,
-                                                                "Superseded by revision " +
-                                                                                bom.getRevisionNo(),
+                                                                "Superseded by Director-approved revision "
+                                                                                + bom.getRevisionNo(),
                                                                 actor);
 
                                                 saveAudit(
-                                                                supersededBom,
+                                                                superseded,
                                                                 "BOM_SUPERSEDED",
                                                                 auditDetails(
-                                                                                "supersededByBomId",
-                                                                                bom.getId(),
-
+                                                                                "supersededByBomId", bom.getId(),
                                                                                 "supersededByRevisionNo",
                                                                                 bom.getRevisionNo()),
                                                                 actor);
                                         });
 
-                        bom.setStatus(
-                                        MatFlowBomStatus.APPROVED);
+                        bom.setStatus(MatFlowBomStatus.APPROVED);
+                        bom.setEffective(true);
+                        bom.setLatestRevision(true);
+                        bom.setApprovedBy(actor);
+                        bom.setApprovedAt(LocalDateTime.now());
+                        bom.setReturnedBy(null);
+                        bom.setReturnedAt(null);
+                        bom.setReturnRemarks(null);
+                        bom.setUpdatedBy(actor);
 
-                        bom.setEffective(
-                                        true);
-
-                        bom.setLatestRevision(
-                                        true);
-
-                        bom.setProductionReviewedBy(
-                                        actor);
-
-                        bom.setProductionReviewedAt(
-                                        LocalDateTime.now());
-
-                        bom.setProductionReviewRemarks(
-                                        reviewRemarks);
-
-                        /*
-                         * These are the final approval fields.
-                         */
-                        bom.setApprovedBy(
-                                        actor);
-
-                        bom.setApprovedAt(
-                                        LocalDateTime.now());
-
-                        bom.setUpdatedBy(
-                                        actor);
-
-                        MatFlowBom approvedBom = bomRepository.saveAndFlush(
-                                        bom);
+                        MatFlowBom approvedBom = bomRepository.saveAndFlush(bom);
 
                         saveHistory(
                                         approvedBom,
-                                        MatFlowApprovalAction.PRODUCTION_APPROVED,
+                                        MatFlowApprovalAction.DIRECTOR_APPROVED,
                                         MatFlowBomStatus.SUBMITTED,
                                         MatFlowBomStatus.APPROVED,
-                                        reviewRemarks,
+                                        remarks,
                                         actor);
 
                         saveAudit(
                                         approvedBom,
-                                        "BOM_PRODUCTION_APPROVED",
+                                        "BOM_DIRECTOR_APPROVED",
                                         auditDetails(
-                                                        "revisionNo",
-                                                        approvedBom.getRevisionNo(),
-
-                                                        "effective",
-                                                        true,
-
-                                                        "productionReviewedBy",
-                                                        actor),
+                                                        "revisionNo", approvedBom.getRevisionNo(),
+                                                        "productionReviewedBy", approvedBom.getProductionReviewedBy(),
+                                                        "directorApprovedBy", actor,
+                                                        "effective", true),
                                         actor);
 
-                        return toDetail(
-                                        approvedBom);
+                        return toDetail(approvedBom);
+                }
+
+                @Transactional
+                public BomDetailResponse directorReturn(
+                                UUID id,
+                                BomActionRequest request) {
+
+                        accessService.requireDirectorBomReview();
+
+                        MatFlowBom bom = requireBom(id);
+                        if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
+                                throw conflict("Only a submitted BOM can be returned by Director");
+                        }
+                        if (bom.getProductionReviewedAt() == null ||
+                                        clean(bom.getProductionReviewedBy()) == null) {
+                                throw conflict("Production approval is required before Director review");
+                        }
+
+                        assertActionVersion(request, bom);
+                        String remarks = request == null ? null : clean(request.remarks());
+                        if (remarks == null) {
+                                throw badRequest("Director return remarks are required");
+                        }
+
+                        String actor = accessService.actor();
+                        bom.setStatus(MatFlowBomStatus.RETURNED);
+                        bom.setEffective(false);
+                        bom.setReturnedBy(actor);
+                        bom.setReturnedAt(LocalDateTime.now());
+                        bom.setReturnRemarks(remarks);
+                        bom.setApprovedBy(null);
+                        bom.setApprovedAt(null);
+                        bom.setUpdatedBy(actor);
+
+                        MatFlowBom returnedBom = bomRepository.saveAndFlush(bom);
+
+                        saveHistory(
+                                        returnedBom,
+                                        MatFlowApprovalAction.DIRECTOR_RETURNED,
+                                        MatFlowBomStatus.SUBMITTED,
+                                        MatFlowBomStatus.RETURNED,
+                                        remarks,
+                                        actor);
+
+                        saveAudit(
+                                        returnedBom,
+                                        "BOM_RETURNED_BY_DIRECTOR",
+                                        auditDetails(
+                                                        "revisionNo", returnedBom.getRevisionNo(),
+                                                        "productionReviewedBy", returnedBom.getProductionReviewedBy(),
+                                                        "returnedBy", actor,
+                                                        "remarks", remarks),
+                                        actor);
+
+                        return toDetail(returnedBom);
                 }
 
                 @Transactional
@@ -876,6 +961,12 @@ public class MatFlowBomService {
 
                                 throw conflict(
                                                 "Only a submitted BOM can be returned by Production");
+                        }
+
+                        if (bom.getProductionReviewedAt() != null ||
+                                        clean(bom.getProductionReviewedBy()) != null) {
+                                throw conflict(
+                                                "Production has already approved this BOM. Director must make the next approval/return decision.");
                         }
 
                         assertActionVersion(
@@ -1383,6 +1474,9 @@ public class MatFlowBomService {
                                         project.getClientName(),
                                         project.getPlantCode(),
                                         lineCount,
+                                        bom.getProductionReviewedBy(),
+                                        bom.getProductionReviewedAt(),
+                                        bom.getProductionReviewRemarks(),
                                         bom.getRowVersion(),
                                         bom.getUpdatedBy(),
                                         bom.getUpdatedAt());
@@ -1424,6 +1518,9 @@ public class MatFlowBomService {
                                         bom.getRemarks(),
                                         bom.getSubmittedBy(),
                                         bom.getSubmittedAt(),
+                                        bom.getProductionReviewedBy(),
+                                        bom.getProductionReviewedAt(),
+                                        bom.getProductionReviewRemarks(),
                                         bom.getApprovedBy(),
                                         bom.getApprovedAt(),
                                         bom.getReturnedBy(),

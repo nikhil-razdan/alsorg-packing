@@ -6,14 +6,13 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.QcDecisi
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.QcInspectionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorReturnRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorReturnResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowQcRoutingDtos.QcRoutingRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowQcRoutingDtos.QcRoutingResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus;
 import com.alsorg.packing.service.matflow.MatFlowQcService;
-
 import jakarta.validation.Valid;
-
 import java.util.List;
 import java.util.UUID;
-
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,8 +23,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Consolidated QC controller for inspections, vendor rejection returns and
- * internal rejected-material dispositions.
+ * Quality gate and explicit post-QC routing authority.
+ *
+ * Accepted material does not automatically enter Processing or Production.
+ * The QC actor first records quality, then records the physical next-hop
+ * choice.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -49,6 +51,23 @@ public class MatFlowQcController {
             @PathVariable UUID id,
             @Valid @RequestBody QcDecisionRequest request) {
         return service.decide(id, request);
+    }
+
+    @GetMapping("/qc-routing")
+    public List<QcRoutingResponse> routingQueue() {
+        return service.listRouting();
+    }
+
+    @GetMapping("/qc/{id}/routing")
+    public QcRoutingResponse routing(@PathVariable UUID id) {
+        return service.routing(id);
+    }
+
+    @PostMapping("/qc/{id}/route")
+    public QcRoutingResponse route(
+            @PathVariable UUID id,
+            @Valid @RequestBody QcRoutingRequest request) {
+        return service.route(id, request);
     }
 
     @PostMapping("/qc/{id}/return-to-vendor")

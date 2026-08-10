@@ -10,30 +10,17 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RouteStepRe
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RouteStepResponse;
 import com.alsorg.packing.domain.matflow.MatFlowBomStatus;
 import com.alsorg.packing.service.matflow.MatFlowBomService;
-
 import jakarta.validation.Valid;
-
 import java.util.List;
 import java.util.UUID;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
- * Engineering BOM + approved routing controller.
- *
- * The HOD approval endpoints are intentionally removed. The workflow is:
- * Engineering submit -> Production approve/return -> Approved.
+ * Product-specific Operational BOM controller.
+ * Workflow: Engineering submit -> Production approve/return -> Director final
+ * approve/return. Final Director approval alone makes the revision effective.
  */
 @RestController
 @RequestMapping("/api/matflow/boms")
@@ -65,16 +52,12 @@ public class MatFlowBomController {
     }
 
     @PutMapping("/{id}")
-    public BomDetailResponse update(
-            @PathVariable UUID id,
-            @Valid @RequestBody BomUpdateRequest request) {
+    public BomDetailResponse update(@PathVariable UUID id, @Valid @RequestBody BomUpdateRequest request) {
         return service.update(id, request);
     }
 
     @PostMapping("/{id}/lines")
-    public BomDetailResponse addLine(
-            @PathVariable UUID id,
-            @Valid @RequestBody BomLineRequest request) {
+    public BomDetailResponse addLine(@PathVariable UUID id, @Valid @RequestBody BomLineRequest request) {
         return service.addLine(id, request);
     }
 
@@ -95,9 +78,7 @@ public class MatFlowBomController {
     }
 
     @PostMapping("/{id}/submit")
-    public BomDetailResponse submit(
-            @PathVariable UUID id,
-            @Valid @RequestBody BomActionRequest request) {
+    public BomDetailResponse submit(@PathVariable UUID id, @Valid @RequestBody BomActionRequest request) {
         return service.submit(id, request);
     }
 
@@ -115,14 +96,26 @@ public class MatFlowBomController {
         return service.returnByProduction(id, request);
     }
 
+    @PostMapping("/{id}/director-approve")
+    public BomDetailResponse directorApprove(
+            @PathVariable UUID id,
+            @Valid @RequestBody BomActionRequest request) {
+        return service.approveByDirector(id, request);
+    }
+
+    @PostMapping("/{id}/director-return")
+    public BomDetailResponse directorReturn(
+            @PathVariable UUID id,
+            @Valid @RequestBody BomActionRequest request) {
+        return service.returnByDirector(id, request);
+    }
+
     @PostMapping("/{id}/revisions")
     public BomDetailResponse createRevision(
             @PathVariable UUID id,
             @Valid @RequestBody BomActionRequest request) {
         return service.createRevision(id, request);
     }
-
-    /* -------------------- Approved BOM route -------------------- */
 
     @GetMapping("/{id}/routes")
     public List<RouteStepResponse> routes(@PathVariable UUID id) {

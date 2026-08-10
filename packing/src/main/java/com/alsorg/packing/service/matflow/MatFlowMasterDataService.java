@@ -32,12 +32,14 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatu
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcRoutingDecision;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcSourceType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferPurpose;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferStatus;
+import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
@@ -47,6 +49,7 @@ import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowLocationRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockBalanceRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockLedgerRepository;
 import com.alsorg.packing.repository.matflow.MatFlowVendorRepository;
@@ -98,6 +101,7 @@ public class MatFlowMasterDataService {
         public MatFlowMasterDataService(
                         MatFlowMaterialRepository materialRepository,
                         MatFlowProjectDrawingRepository projectRepository,
+                        MatFlowProjectRepository projectHeaderRepository,
                         MatFlowLocationRepository locationRepository,
                         MatFlowStockBalanceRepository balanceRepository,
                         MatFlowStockLedgerRepository ledgerRepository,
@@ -109,6 +113,7 @@ public class MatFlowMasterDataService {
                 this.master = new MasterModule(
                                 materialRepository,
                                 projectRepository,
+                                projectHeaderRepository,
                                 bomRepository,
                                 accessService,
                                 auditService);
@@ -244,6 +249,7 @@ public class MatFlowMasterDataService {
                 enums.put("transferStatus", names(TransferStatus.class));
                 enums.put("transferPurpose", names(TransferPurpose.class));
                 enums.put("qcInspectionStatus", names(QcInspectionStatus.class));
+                enums.put("qcRoutingDecision", names(QcRoutingDecision.class));
                 enums.put("qcSourceType", names(QcSourceType.class));
                 enums.put("qcDispositionType", names(QcDispositionType.class));
                 enums.put("qcDispositionStatus", names(QcDispositionStatus.class));
@@ -280,6 +286,7 @@ public class MatFlowMasterDataService {
 
                 private final MatFlowMaterialRepository materialRepository;
                 private final MatFlowProjectDrawingRepository projectRepository;
+                private final MatFlowProjectRepository projectHeaderRepository;
                 private final MatFlowBomRepository bomRepository;
                 private final MatFlowAccessService accessService;
                 private final MatFlowAuditService auditService;
@@ -287,11 +294,13 @@ public class MatFlowMasterDataService {
                 MasterModule(
                                 MatFlowMaterialRepository materialRepository,
                                 MatFlowProjectDrawingRepository projectRepository,
+                                MatFlowProjectRepository projectHeaderRepository,
                                 MatFlowBomRepository bomRepository,
                                 MatFlowAccessService accessService,
                                 MatFlowAuditService auditService) {
                         this.materialRepository = materialRepository;
                         this.projectRepository = projectRepository;
+                        this.projectHeaderRepository = projectHeaderRepository;
                         this.bomRepository = bomRepository;
                         this.accessService = accessService;
                         this.auditService = auditService;
@@ -483,6 +492,39 @@ public class MatFlowMasterDataService {
                                         request,
                                         plantCode);
 
+                        /*
+                         * Compatibility endpoint: /projects historically created a flat
+                         * Project+Product row. After the Project aggregate migration it
+                         * still works, but always attaches the new Product to a real parent
+                         * Project header so project_id can remain NOT NULL.
+                         */
+                        MatFlowProject parent = projectHeaderRepository
+                                        .findByPlantCodeIgnoreCaseAndProjectCodeIgnoreCase(
+                                                        plantCode,
+                                                        projectCode)
+                                        .orElseGet(() -> {
+                                                MatFlowProject created = new MatFlowProject();
+                                                created.setProjectCode(projectCode);
+                                                created.setProjectName(request.projectName());
+                                                created.setClientName(request.clientName());
+                                                created.setPlantCode(plantCode);
+                                                created.setRequiredDate(request.requiredDate());
+                                                created.setPriority("NORMAL");
+                                                created.setActive(request.active() == null || request.active());
+                                                created.setCreatedBy(actor);
+                                                created.setUpdatedBy(actor);
+                                                return projectHeaderRepository.save(created);
+                                        });
+
+                        if (!Objects.equals(clean(parent.getProjectName()), clean(request.projectName()))
+                                        || !Objects.equals(clean(parent.getClientName()),
+                                                        clean(request.clientName()))) {
+                                throw conflict(
+                                                "Project header already exists with different Project/Client data. "
+                                                                + "Use Project Portfolio to add the product under the existing Project.");
+                        }
+
+                        project.setProject(parent);
                         resetProductApproval(project);
 
                         project.setCreatedBy(actor);
@@ -530,6 +572,23 @@ public class MatFlowMasterDataService {
 
                         String projectCode = upper(request.projectCode());
 
+                        /*
+                         * After the vNext hierarchy migration, Project header ownership
+                         * belongs to mf_projects. The legacy flat endpoint may edit the
+                         * Product/Drawing child, but it must never fork Project/Client/Plant
+                         * snapshots away from its parent. Header edits go through the
+                         * Project Portfolio API.
+                         */
+                        MatFlowProject parent = project.getProject();
+                        if (parent != null && (!Objects.equals(upper(parent.getProjectCode()), projectCode) ||
+                                        !Objects.equals(upper(parent.getPlantCode()), plantCode) ||
+                                        !Objects.equals(clean(parent.getProjectName()), clean(request.projectName())) ||
+                                        !Objects.equals(clean(parent.getClientName()), clean(request.clientName())))) {
+                                throw conflict(
+                                                "Project/Client/Plant header fields are owned by the parent Project. " +
+                                                                "Use Project Portfolio to edit the Project header; use this Product endpoint only for Product/Drawing fields.");
+                        }
+
                         String drawingNo = upper(request.drawingNo());
 
                         String drawingRevision = normalizedRevision(
@@ -561,6 +620,10 @@ public class MatFlowMasterDataService {
                                         project,
                                         request,
                                         plantCode);
+
+                        if (parent != null) {
+                                project.setProject(parent);
+                        }
 
                         if (criticalChange ||
                                         project.getProductApprovalStatus() == ProjectProductApprovalStatus.RETURNED) {
