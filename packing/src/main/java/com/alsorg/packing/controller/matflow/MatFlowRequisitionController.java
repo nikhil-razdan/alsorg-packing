@@ -94,7 +94,6 @@ public class MatFlowRequisitionController {
      * deferred until the shortage reaches zero.
      */
     @PostMapping("/requisitions/{id}/partial-availability-decision")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_PRODUCTION')")
     public RequisitionResponse decidePartialAvailability(
             @PathVariable UUID id,
             @Valid @RequestBody PartialAvailabilityDecisionRequest request) {
@@ -104,26 +103,22 @@ public class MatFlowRequisitionController {
     /* -------------------- Store desk -------------------- */
 
     @GetMapping("/store/requisitions")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public List<RequisitionResponse> storeQueue(
             @RequestParam(required = false) String plantCode) {
         return service.listStoreQueue(plantCode);
     }
 
     @GetMapping("/store/requisitions/{id}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public PlanningResponse storeDetail(@PathVariable UUID id) {
         return service.getPlanningSnapshot(id);
     }
 
     @GetMapping("/store/requisitions/{id}/availability")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public List<StoreLineAvailabilityResponse> availability(@PathVariable UUID id) {
         return service.getStoreAvailability(id);
     }
 
     @PostMapping("/store/requisitions/{id}/review")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public PlanningResponse review(
             @PathVariable UUID id,
             @Valid @RequestBody StoreReviewRequest request) {
@@ -131,7 +126,6 @@ public class MatFlowRequisitionController {
     }
 
     @PostMapping("/store/reservations/{reservationId}/issue")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public PlanningResponse issueReservation(
             @PathVariable UUID reservationId,
             @Valid @RequestBody StoreIssueRequest request) {
@@ -141,7 +135,6 @@ public class MatFlowRequisitionController {
     /* -------------------- Reservation control -------------------- */
 
     @PostMapping("/reservations/{id}/release")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     public ReservationResponse releaseReservation(
             @PathVariable UUID id,
             @Valid @RequestBody ReservationReleaseRequest request) {
@@ -151,7 +144,6 @@ public class MatFlowRequisitionController {
     /* -------------------- Shortage indent -------------------- */
 
     @PatchMapping("/indents/{id}/submit-to-purchase")
-    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_STORE')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void submitIndentToPurchase(
             @PathVariable UUID id,

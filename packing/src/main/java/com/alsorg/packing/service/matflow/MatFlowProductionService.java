@@ -93,7 +93,8 @@ public class MatFlowProductionService {
                                 stockRepository,
                                 ledgerRepository,
                                 accessService,
-                                auditService);
+                                auditService,
+                                requisitionService);
         }
 
         @Transactional(readOnly = true)
@@ -462,66 +463,31 @@ public class MatFlowProductionService {
                         }
 
                         /*
-                         * Processing is route-sequential, not a free-standing operation.
-                         * Every earlier PROCESSING step for this reservation/BOM line must
-                         * already be completed before a later one can be created. If the
-                         * current step is at a different location, the physical inbound
-                         * transfer to that processing location must also be RECEIVED.
+                         * vNext processing semantics:
+                         * PROCESSING steps in the approved BOM are permitted QC routing
+                         * options, not a mandatory sequence. The QC actor selects at most
+                         * one Processing Unit for the inspected lot. Therefore job creation
+                         * must validate the exact transfer created by the QC routing gate,
+                         * not demand completion of lower-sequence processing options.
                          */
-                        List<MatFlowBomRouteStep> approvedRoute = routeRepository
-                                        .findByBomLine_IdOrderBySequenceNoAsc(routeStep.bomLine.getId());
-
-                        List<MatFlowBomRouteStep> earlierProcessingSteps = approvedRoute.stream()
-                                        .filter(step -> step != null &&
-                                                        step.stepType == RouteStepType.PROCESSING &&
-                                                        step.sequenceNo < routeStep.sequenceNo)
-                                        .toList();
-
-                        for (MatFlowBomRouteStep earlierStep : earlierProcessingSteps) {
-                                MatFlowProcessingJob earlierJob = jobRepository
-                                                .findByReservation_IdAndRouteStep_Id(
-                                                                reservation.getId(),
-                                                                earlierStep.getId())
-                                                .orElseThrow(() -> conflict(
-                                                                "Earlier approved processing step "
-                                                                                + earlierStep.sequenceNo +
-                                                                                " must be completed first"));
-
-                                if (earlierJob.status != ProcessingJobStatus.COMPLETED) {
-                                        throw conflict(
-                                                        "Earlier approved processing step " + earlierStep.sequenceNo +
-                                                                        " is not completed yet");
-                                }
-                        }
-
-                        MatFlowBomRouteStep previousRouteStep = approvedRoute.stream()
-                                        .filter(step -> step != null && step.sequenceNo < routeStep.sequenceNo)
-                                        .max(java.util.Comparator.comparingInt(step -> step.sequenceNo))
-                                        .orElse(null);
-
-                        boolean sameLocationAsCompletedPreviousProcessing = previousRouteStep != null &&
-                                        previousRouteStep.stepType == RouteStepType.PROCESSING &&
-                                        previousRouteStep.location != null &&
-                                        previousRouteStep.location.getId().equals(routeStep.location.getId()) &&
-                                        jobRepository
-                                                        .findByReservation_IdAndRouteStep_Id(
-                                                                        reservation.getId(),
-                                                                        previousRouteStep.getId())
-                                                        .map(job -> job.status == ProcessingJobStatus.COMPLETED)
-                                                        .orElse(false);
-
-                        boolean inboundTransferReceived = transferRepository
+                        boolean inboundSelectedProcessingTransferReceived = transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAsc(reservation.getId())
                                         .stream()
-                                        .anyMatch(transfer -> transfer != null &&
-                                                        transfer.toLocation != null &&
-                                                        transfer.toLocation.getId().equals(routeStep.location.getId())
-                                                        &&
-                                                        transfer.status == TransferStatus.RECEIVED);
+                                        .filter(transfer -> transfer != null
+                                                        && transfer.toLocation != null
+                                                        && routeStep.location != null
+                                                        && transfer.toLocation.getId()
+                                                                        .equals(routeStep.location.getId())
+                                                        && transfer.status == TransferStatus.RECEIVED)
+                                        .anyMatch(transfer -> transferLineRepository
+                                                        .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
+                                                                        transfer.getId())
+                                                        .map(line -> routeStep.getId().equals(line.routeStepId))
+                                                        .orElse(false));
 
-                        if (!sameLocationAsCompletedPreviousProcessing && !inboundTransferReceived) {
+                        if (!inboundSelectedProcessingTransferReceived) {
                                 throw conflict(
-                                                "Material has not yet been received at the selected approved processing location");
+                                                "QC has not routed and fully received this reservation at the selected Processing Unit");
                         }
 
                         MatFlowMaterial outputMaterial = request.outputMaterialId() == null
@@ -579,8 +545,26 @@ public class MatFlowProductionService {
                         job.setCreatedBy(actor);
                         job.setUpdatedBy(actor);
 
-                        return toResponse(
-                                        jobRepository.save(job));
+                        job = jobRepository.save(job);
+
+                        auditService.record(
+                                        "PROCESSING_JOB",
+                                        job.getId(),
+                                        "PROCESSING_JOB_CREATED",
+                                        job.location.getPlantCode(),
+                                        job.requisition.projectDrawing == null ? null
+                                                        : job.requisition.projectDrawing.getProjectCode(),
+                                        job.requisition.projectDrawing == null ? null
+                                                        : job.requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "jobNumber", job.jobNumber,
+                                                        "reservationId", reservation.getId(),
+                                                        "routeStepId", routeStep.getId(),
+                                                        "processCode", routeStep.processCode,
+                                                        "plannedInputQty", plannedQty));
+
+                        requisitionService.refreshState(job.requisition.getId(), actor);
+                        return toResponse(job);
                 }
 
                 @Transactional
@@ -690,6 +674,22 @@ public class MatFlowProductionService {
                                         job,
                                         request.batchNo(),
                                         actor);
+
+                        auditService.record(
+                                        "PROCESSING_JOB",
+                                        job.getId(),
+                                        "PROCESSING_STARTED",
+                                        job.location.getPlantCode(),
+                                        job.requisition.projectDrawing == null ? null
+                                                        : job.requisition.projectDrawing.getProjectCode(),
+                                        job.requisition.projectDrawing == null ? null
+                                                        : job.requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "jobNumber", job.jobNumber,
+                                                        "actualInputQty", inputQty,
+                                                        "batchNo", clean(request.batchNo())));
+
+                        requisitionService.refreshState(job.requisition.getId(), actor);
 
                         return toResponse(job);
                 }
@@ -849,6 +849,8 @@ public class MatFlowProductionService {
                                                         job.outputQty,
                                                         "wastageQty",
                                                         job.wastageQty));
+
+                        requisitionService.refreshState(job.requisition.getId(), actor);
 
                         return toResponse(job);
                 }
@@ -1205,6 +1207,7 @@ public class MatFlowProductionService {
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowAccessService accessService;
                 private final MatFlowAuditService auditService;
+                private final MatFlowRequisitionService requisitionService;
 
                 ConsumptionModule(
                                 MatFlowProductionConsumptionRepository consumptionRepository,
@@ -1215,7 +1218,8 @@ public class MatFlowProductionService {
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowAccessService accessService,
-                                MatFlowAuditService auditService) {
+                                MatFlowAuditService auditService,
+                                MatFlowRequisitionService requisitionService) {
                         this.consumptionRepository = consumptionRepository;
 
                         this.consumptionLineRepository = consumptionLineRepository;
@@ -1232,6 +1236,7 @@ public class MatFlowProductionService {
 
                         this.accessService = accessService;
                         this.auditService = auditService;
+                        this.requisitionService = requisitionService;
                 }
 
                 @Transactional(readOnly = true)
@@ -1521,6 +1526,10 @@ public class MatFlowProductionService {
                                                         "consumptionNumber", consumption.consumptionNumber,
                                                         "requisitionNumber", requisition.requisitionNumber,
                                                         "lineCount", request.lines().size()));
+
+                        requisitionService.refreshState(
+                                        requisition.getId(),
+                                        actor);
 
                         return toResponse(consumption);
                 }

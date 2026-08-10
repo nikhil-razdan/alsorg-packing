@@ -11,6 +11,7 @@ import com.alsorg.packing.domain.matflow.MatFlowProcessingJob;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
 import com.alsorg.packing.repository.matflow.MatFlowProcessingJobRepository;
 import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderRepository;
+import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderLineRepository;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.IndentLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.IndentResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
@@ -41,6 +42,7 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionLineStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferPurpose;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferStatus;
@@ -130,6 +132,8 @@ public class MatFlowRequisitionService {
 
         private final MatFlowTransferOrderRepository transferRepository;
         private final MatFlowTransferLineRepository transferLineRepository;
+        private final MatFlowProcessingJobRepository processingRepository;
+        private final MatFlowPurchaseOrderLineRepository purchaseOrderLineRepository;
 
         private final MatFlowAccessService accessService;
         private final MatFlowBomService routingService;
@@ -156,6 +160,7 @@ public class MatFlowRequisitionService {
                         MatFlowTransferLineRepository transferLineRepository,
                         MatFlowProcessingJobRepository processingRepository,
                         MatFlowPurchaseOrderRepository purchaseOrderRepository,
+                        MatFlowPurchaseOrderLineRepository purchaseOrderLineRepository,
                         MatFlowAccessService accessService,
                         MatFlowBomService routingService,
                         MatFlowAuditService auditService,
@@ -179,6 +184,8 @@ public class MatFlowRequisitionService {
 
                 this.transferRepository = transferRepository;
                 this.transferLineRepository = transferLineRepository;
+                this.processingRepository = processingRepository;
+                this.purchaseOrderLineRepository = purchaseOrderLineRepository;
 
                 this.accessService = accessService;
                 this.routingService = routingService;
@@ -1653,6 +1660,7 @@ public class MatFlowRequisitionService {
                                                         zero(
                                                                         line.returnedQty),
 
+                                                        line.status,
                                                         line.remarks,
                                                         line.getRowVersion());
                                 })
@@ -3462,11 +3470,9 @@ public class MatFlowRequisitionService {
                 requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
                                 requisition);
 
-                if (requisition.status == RequisitionStatus.CANCELLED ||
+                boolean headerStateFrozen = requisition.status == RequisitionStatus.CANCELLED ||
                                 requisition.status == RequisitionStatus.PRODUCTION_STARTED ||
-                                requisition.status == RequisitionStatus.PRODUCTION_COMPLETED) {
-                        return;
-                }
+                                requisition.status == RequisitionStatus.PRODUCTION_COMPLETED;
 
                 List<MatFlowRequisitionLine> lines = requisitionLineRepository
                                 .findByRequisition_IdOrderByLineNoAsc(requisitionId);
@@ -3502,6 +3508,17 @@ public class MatFlowRequisitionService {
                                 .filter(reservation -> reservation.status != ReservationStatus.CANCELLED &&
                                                 reservation.status != ReservationStatus.RELEASED)
                                 .toList();
+
+                refreshMaterialLineStatuses(
+                                requisition,
+                                lines,
+                                reservations,
+                                clean(actor) == null ? accessService.actor() : actor);
+
+                /* Production/Completed headers are explicit lifecycle states. */
+                if (headerStateFrozen) {
+                        return;
+                }
 
                 if (!anyShortage) {
                         activateDeferredInitialTransfers(
@@ -3550,6 +3567,195 @@ public class MatFlowRequisitionService {
                         requisition.setUpdatedBy(clean(actor) == null ? accessService.actor() : actor);
                         requisitionRepository.save(requisition);
                 }
+        }
+
+        /**
+         * Keeps the material-level workflow state synchronized with the physical
+         * and commercial execution records. RequisitionLine.status is the primary
+         * per-material state used by the tracker; it must not remain permanently
+         * PENDING_STORE_REVIEW while the header progresses.
+         */
+        private void refreshMaterialLineStatuses(
+                        MatFlowMaterialRequisition requisition,
+                        List<MatFlowRequisitionLine> lines,
+                        List<MatFlowReservation> reservations,
+                        String actor) {
+
+                Map<UUID, List<MatFlowReservation>> reservationsByLine = reservations == null
+                                ? Map.of()
+                                : reservations.stream()
+                                                .filter(r -> r != null && r.requisitionLine != null
+                                                                && r.requisitionLine.getId() != null)
+                                                .collect(java.util.stream.Collectors.groupingBy(
+                                                                r -> r.requisitionLine.getId(),
+                                                                LinkedHashMap::new,
+                                                                java.util.stream.Collectors.toList()));
+
+                List<MatFlowIndent> requisitionIndents = indentRepository
+                                .findByRequisition_Id(requisition.getId());
+
+                for (MatFlowRequisitionLine line : lines) {
+                        if (line == null || line.getId() == null) {
+                                continue;
+                        }
+
+                        RequisitionLineStatus next = deriveMaterialLineStatus(
+                                        requisition,
+                                        line,
+                                        reservationsByLine.getOrDefault(line.getId(), List.of()),
+                                        requisitionIndents);
+
+                        if (line.status != next) {
+                                line.status = next;
+                                line.setUpdatedBy(actor);
+                                requisitionLineRepository.save(line);
+                        }
+                }
+        }
+
+        private RequisitionLineStatus deriveMaterialLineStatus(
+                        MatFlowMaterialRequisition requisition,
+                        MatFlowRequisitionLine line,
+                        List<MatFlowReservation> reservations,
+                        List<MatFlowIndent> requisitionIndents) {
+
+                if (requisition.status == RequisitionStatus.CANCELLED) {
+                        return RequisitionLineStatus.CANCELLED;
+                }
+
+                BigDecimal requested = zero(line.requestedQty);
+                BigDecimal issued = zero(line.issuedQty);
+                BigDecimal consumed = zero(line.consumedQty);
+                BigDecimal returned = zero(line.returnedQty);
+                BigDecimal accounted = consumed.add(returned);
+                BigDecimal shortage = zero(line.shortageQty);
+                BigDecimal reserved = zero(line.reservedQty);
+
+                if (issued.compareTo(requested) >= 0 && issued.compareTo(BigDecimal.ZERO) > 0
+                                && accounted.compareTo(issued) >= 0) {
+                        if (returned.compareTo(BigDecimal.ZERO) > 0 && consumed.compareTo(BigDecimal.ZERO) == 0) {
+                                return RequisitionLineStatus.RETURNED;
+                        }
+                        return RequisitionLineStatus.CONSUMED;
+                }
+
+                if (consumed.compareTo(BigDecimal.ZERO) > 0 || returned.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.PARTIALLY_CONSUMED;
+                }
+
+                if (issued.compareTo(requested) >= 0 && requested.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.ISSUED_TO_PRODUCTION;
+                }
+
+                if (issued.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.PARTIALLY_ISSUED;
+                }
+
+                boolean processingInProgress = reservations.stream()
+                                .flatMap(r -> processingRepository.findByReservation_Id(r.getId()).stream())
+                                .anyMatch(job -> job.status == ProcessingJobStatus.IN_PROGRESS);
+                if (processingInProgress) {
+                        return RequisitionLineStatus.IN_PROCESSING;
+                }
+
+                boolean processingSelectedOrWaiting = reservations.stream().anyMatch(reservation -> {
+                        boolean pendingJob = processingRepository.findByReservation_Id(reservation.getId()).stream()
+                                        .anyMatch(job -> job.status == ProcessingJobStatus.PENDING);
+                        if (pendingJob) {
+                                return true;
+                        }
+                        return transferRepository.findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                        reservation.getId()).stream()
+                                        .anyMatch(transfer -> transfer != null
+                                                        && transfer.toLocation != null
+                                                        && (transfer.toLocation
+                                                                        .getLocationType() == LocationType.PROCESSING
+                                                                        || transfer.toLocation
+                                                                                        .getLocationType() == LocationType.EXTERNAL_PROCESSOR)
+                                                        && transfer.status != TransferStatus.CANCELLED
+                                                        && transfer.status != TransferStatus.RECEIVED);
+                });
+                if (processingSelectedOrWaiting) {
+                        return RequisitionLineStatus.PROCESSING_REQUIRED;
+                }
+
+                boolean allIssueReady = !reservations.isEmpty() && reservations.stream()
+                                .filter(r -> r.status != ReservationStatus.CANCELLED
+                                                && r.status != ReservationStatus.RELEASED)
+                                .allMatch(r -> r.status == ReservationStatus.ISSUED
+                                                || isReservationIssueReady(r, requisition.destinationLocation));
+                if (shortage.compareTo(BigDecimal.ZERO) <= 0 && allIssueReady) {
+                        return RequisitionLineStatus.READY_TO_ISSUE;
+                }
+
+                boolean qcCustody = reservations.stream().anyMatch(reservation -> {
+                        if (reservation.sourceLocation == null
+                                        || reservation.sourceLocation.getLocationType() != LocationType.QC
+                                        || reservation.status == ReservationStatus.CANCELLED
+                                        || reservation.status == ReservationStatus.RELEASED) {
+                                return false;
+                        }
+                        List<MatFlowTransferOrder> routeTransfers = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
+                        return routeTransfers.stream().noneMatch(transfer -> transfer != null
+                                        && transfer.status != TransferStatus.CANCELLED
+                                        && transfer.fromLocation != null
+                                        && transfer.fromLocation.getId().equals(reservation.sourceLocation.getId()));
+                });
+
+                boolean receivedAtQc = reservations.stream().anyMatch(reservation -> transferRepository
+                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId()).stream()
+                                .anyMatch(transfer -> transfer != null
+                                                && transfer.toLocation != null
+                                                && transfer.toLocation.getLocationType() == LocationType.QC
+                                                && transfer.status == TransferStatus.RECEIVED));
+
+                boolean purchasedPhysicalReceiptAwaitingQc = requisitionIndents.stream()
+                                .flatMap(indent -> indentLineRepository
+                                                .findByIndent_IdOrderByCreatedAtAsc(indent.getId()).stream())
+                                .filter(indentLine -> indentLine.requisitionLine != null
+                                                && line.getId().equals(indentLine.requisitionLine.getId()))
+                                .flatMap(indentLine -> purchaseOrderLineRepository
+                                                .findByIndentLine_Id(indentLine.getId()).stream())
+                                .anyMatch(poLine -> zero(poLine.receivedQty).compareTo(BigDecimal.ZERO) > 0
+                                                && poLine.indentLine != null
+                                                && zero(poLine.indentLine.receivedQty)
+                                                                .compareTo(zero(poLine.receivedQty)) < 0);
+
+                if (qcCustody || receivedAtQc || purchasedPhysicalReceiptAwaitingQc) {
+                        return RequisitionLineStatus.QC_PENDING;
+                }
+
+                List<MatFlowIndentLine> indentLines = requisitionIndents.stream()
+                                .flatMap(indent -> indentLineRepository
+                                                .findByIndent_IdOrderByCreatedAtAsc(indent.getId()).stream())
+                                .filter(indentLine -> indentLine.requisitionLine != null
+                                                && line.getId().equals(indentLine.requisitionLine.getId()))
+                                .toList();
+
+                boolean ordered = indentLines.stream()
+                                .anyMatch(indentLine -> zero(indentLine.orderedQty).compareTo(BigDecimal.ZERO) > 0);
+                if (shortage.compareTo(BigDecimal.ZERO) > 0 && ordered) {
+                        return RequisitionLineStatus.ORDERED;
+                }
+
+                if (shortage.compareTo(BigDecimal.ZERO) > 0 && !indentLines.isEmpty()) {
+                        return RequisitionLineStatus.INDENT_CREATED;
+                }
+
+                if (shortage.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.SHORTAGE_IDENTIFIED;
+                }
+
+                if (reserved.compareTo(requested) >= 0 && requested.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.RESERVED;
+                }
+
+                if (reserved.compareTo(BigDecimal.ZERO) > 0) {
+                        return RequisitionLineStatus.PARTIALLY_RESERVED;
+                }
+
+                return RequisitionLineStatus.PENDING_STORE_REVIEW;
         }
 
         private boolean isStoreQueueStatus(RequisitionStatus status) {

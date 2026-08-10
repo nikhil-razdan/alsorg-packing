@@ -325,7 +325,7 @@ export function MatFlowRequisitionListPage() {
             <PageHero
                 badge="PRODUCTION MATERIAL CONTROL"
                 title="Production Requisitions"
-                subtitle="Raise and track material demand against Production-approved, effective MatFlow BOM revisions."
+                subtitle="Raise and track material demand against the latest effective BOM revision after Production technical approval and Director final approval."
                 actions={
                     <>
                         <Button
@@ -1923,10 +1923,24 @@ export function MatFlowRequisitionDetailPage() {
         requisition?.rowVersion !=
         null;
 
+    const fullyAccountedForCompletion =
+        lines.length > 0 &&
+        lines.every((line) => {
+            const requested = Number(line?.requestedQty || 0);
+            const issued = Number(line?.issuedQty || 0);
+            const accounted =
+                Number(line?.consumedQty || 0) +
+                Number(line?.returnedQty || 0);
+
+            return issued + 0.0005 >= requested &&
+                accounted + 0.0005 >= issued;
+        });
+
     const canComplete =
         productionRole &&
         status ===
         "PRODUCTION_STARTED" &&
+        fullyAccountedForCompletion &&
         requisition?.rowVersion !=
         null;
 
@@ -2415,6 +2429,25 @@ export function MatFlowRequisitionDetailPage() {
                             )}
                         </Box>
                     </Card>
+
+                    {productionRole &&
+                        status === "PRODUCTION_STARTED" &&
+                        !fullyAccountedForCompletion && (
+                            <Card
+                                sx={{
+                                    ...panelSx,
+                                    border: "1px solid var(--mf-warning-border)",
+                                    background: "var(--mf-warning-soft)",
+                                }}
+                            >
+                                <Typography sx={{ ...mainTextSx, color: "var(--mf-warning-text)" }}>
+                                    Finished-product completion is waiting for material accounting
+                                </Typography>
+                                <Typography sx={subTextSx}>
+                                    Every requested quantity must first be issued to Production, and every issued quantity must then be consumed or returned. The Complete Finished Product action will unlock automatically when all material lines satisfy that control.
+                                </Typography>
+                            </Card>
+                        )}
 
                     <Card
                         sx={

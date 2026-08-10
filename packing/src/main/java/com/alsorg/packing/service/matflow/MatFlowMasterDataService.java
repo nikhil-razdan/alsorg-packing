@@ -35,6 +35,7 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcRoutingDecision;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcSourceType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionLineStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ReservationStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferPurpose;
@@ -242,6 +243,7 @@ public class MatFlowMasterDataService {
                                 namesExcluding(
                                                 RequisitionStatus.class,
                                                 Set.of("SUBMITTED", "PLANNED", "ISSUED", "COMPLETED")));
+                enums.put("requisitionLineStatus", names(RequisitionLineStatus.class));
                 enums.put("reservationStatus", names(ReservationStatus.class));
                 enums.put("indentStatus", names(IndentStatus.class));
                 enums.put("purchaseOrderStatus", names(PurchaseOrderStatus.class));

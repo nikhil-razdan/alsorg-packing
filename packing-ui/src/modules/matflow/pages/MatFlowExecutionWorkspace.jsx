@@ -17,13 +17,14 @@ import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionMan
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate } from "react-router-dom";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
-import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
     PageHero,
+    SummaryCard,
     clean,
     dialogActionsSx,
     dialogContentSx,
@@ -338,12 +339,46 @@ export function MatFlowQcPage() {
 }
 
 async function discoverProcessingCandidates(existingJobs = []) {
-    const requisitionResponse = await matflowApi.listRequisitions();
-    const requisitions = Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : [];
-    const snapshots = await Promise.all(requisitions.map(async (requisition) => {
-        try { return (await matflowApi.getRequisitionPlanning(requisition.id))?.data; }
-        catch { return null; }
-    }));
+    /*
+     * Processing candidates must come from the QC routing decision, not from
+     * the mere presence/order of PROCESSING rows in the BOM. Those rows are
+     * approved options. A reservation belongs on this desk only when QC chose
+     * SEND_TO_PROCESSING for the exact route step and the transfer has arrived.
+     */
+    const [requisitionResponse, routingResponse] = await Promise.all([
+        matflowApi.listRequisitions(),
+        matflowApi.listQcRouting(),
+    ]);
+
+    const requisitions = Array.isArray(requisitionResponse?.data)
+        ? requisitionResponse.data
+        : [];
+    const routingRows = Array.isArray(routingResponse?.data)
+        ? routingResponse.data
+        : [];
+
+    const selectedRouteByReservation = new Map(
+        routingRows
+            .filter((routing) =>
+                routing?.routingComplete === true &&
+                normalize(routing?.routingDecision) === "SEND_TO_PROCESSING" &&
+                routing?.reservationId &&
+                routing?.selectedProcessingRouteStepId
+            )
+            .map((routing) => [String(routing.reservationId), routing])
+    );
+
+    if (selectedRouteByReservation.size === 0) return [];
+
+    const snapshots = await Promise.all(
+        requisitions.map(async (requisition) => {
+            try {
+                return (await matflowApi.getRequisitionPlanning(requisition.id))?.data;
+            } catch {
+                return null;
+            }
+        })
+    );
 
     const routeCache = new Map();
     const candidates = [];
@@ -358,7 +393,7 @@ async function discoverProcessingCandidates(existingJobs = []) {
                 const routeResponse = await matflowApi.listBomRoutes(requisition.bomId);
                 routeCache.set(
                     String(requisition.bomId),
-                    Array.isArray(routeResponse?.data) ? routeResponse.data : []
+                    extractMatFlowPage(routeResponse?.data).rows
                 );
             } catch {
                 routeCache.set(String(requisition.bomId), []);
@@ -371,63 +406,49 @@ async function discoverProcessingCandidates(existingJobs = []) {
         for (const reservation of (snapshot.reservations || [])) {
             if (normalize(reservation.status) !== "ACTIVE") continue;
 
+            const routing = selectedRouteByReservation.get(String(reservation.id));
+            if (!routing) continue;
+
+            const selectedStep = routes.find(
+                (step) =>
+                    String(step.id) === String(routing.selectedProcessingRouteStepId) &&
+                    normalize(step.stepType) === "PROCESSING"
+            );
+
+            if (!selectedStep) continue;
+
             const line = (requisition.lines || []).find(
                 (item) => String(item.id) === String(reservation.requisitionLineId)
             );
-            if (!line?.bomLineId) continue;
 
-            const lineRoute = routes
-                .filter((step) => String(step.bomLineId) === String(line.bomLineId))
-                .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
+            if (!line?.bomLineId ||
+                String(selectedStep.bomLineId) !== String(line.bomLineId)) {
+                continue;
+            }
 
-            const processingSteps = lineRoute.filter(
-                (step) => normalize(step.stepType) === "PROCESSING"
+            const occupied = jobs.some((job) =>
+                String(job.reservationId) === String(reservation.id) &&
+                String(job.routeStepId) === String(selectedStep.id) &&
+                normalize(job.status) !== "CANCELLED"
             );
 
-            for (const step of processingSteps) {
-                const occupied = jobs.some((job) =>
-                    String(job.reservationId) === String(reservation.id) &&
-                    String(job.routeStepId) === String(step.id) &&
-                    normalize(job.status) !== "CANCELLED"
-                );
-                if (occupied) continue;
+            if (occupied) continue;
 
-                const earlierProcessingSteps = processingSteps.filter(
-                    (candidateStep) => Number(candidateStep.sequenceNo || 0) < Number(step.sequenceNo || 0)
-                );
+            const inboundComplete = transfers.some((transfer) =>
+                String(transfer.reservationId) === String(reservation.id) &&
+                String(transfer.toLocationId) === String(selectedStep.locationId) &&
+                normalize(transfer.status) === "RECEIVED"
+            );
 
-                const earlierProcessingComplete = earlierProcessingSteps.every((earlierStep) =>
-                    jobs.some((job) =>
-                        String(job.reservationId) === String(reservation.id) &&
-                        String(job.routeStepId) === String(earlierStep.id) &&
-                        normalize(job.status) === "COMPLETED"
-                    )
-                );
+            if (!inboundComplete) continue;
 
-                if (!earlierProcessingComplete) continue;
-
-                const stepIndex = lineRoute.findIndex((candidateStep) => String(candidateStep.id) === String(step.id));
-                const previousRouteStep = stepIndex > 0 ? lineRoute[stepIndex - 1] : null;
-
-                const sameLocationPreviousProcessingComplete =
-                    normalize(previousRouteStep?.stepType) === "PROCESSING" &&
-                    String(previousRouteStep?.locationId || "") === String(step.locationId || "") &&
-                    jobs.some((job) =>
-                        String(job.reservationId) === String(reservation.id) &&
-                        String(job.routeStepId) === String(previousRouteStep?.id) &&
-                        normalize(job.status) === "COMPLETED"
-                    );
-
-                const inboundComplete = transfers.some((transfer) =>
-                    String(transfer.reservationId) === String(reservation.id) &&
-                    String(transfer.toLocationId) === String(step.locationId) &&
-                    normalize(transfer.status) === "RECEIVED"
-                );
-
-                if (inboundComplete || sameLocationPreviousProcessingComplete) {
-                    candidates.push({ reservation, step, requisition, line });
-                }
-            }
+            candidates.push({
+                reservation,
+                step: selectedStep,
+                requisition,
+                line,
+                routing,
+            });
         }
     }
 
@@ -471,20 +492,645 @@ export function MatFlowProcessingPage() {
 }
 
 export function MatFlowProductionExecutionPage() {
+    const navigate = useNavigate();
     const { hasRole } = useMatFlow();
-    const canConsume = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION);
+    const canExecute = hasRole(
+        MATFLOW_ROLES.ADMIN,
+        MATFLOW_ROLES.MANAGER,
+        MATFLOW_ROLES.PRODUCTION
+    );
+
     const [consumptions, setConsumptions] = useState([]);
     const [requisitions, setRequisitions] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [working, setWorking] = useState(false);
+    const [workingId, setWorkingId] = useState("");
     const [error, setError] = useState("");
-    const [dialog, setDialog] = useState(false);
-    const [form, setForm] = useState({ requisitionId: "", remarks: "", quantities: {}, batches: {} });
-    const load = useCallback(async () => { setLoading(true); setError(""); try { const [c, r] = await Promise.all([matflowApi.listConsumptions(), matflowApi.listRequisitions()]); setConsumptions(Array.isArray(c?.data) ? c.data : []); setRequisitions((Array.isArray(r?.data) ? r.data : []).filter(row => normalize(row.status) === "PRODUCTION_STARTED")); } catch (e) { setError(readMatFlowError(e, "Unable to load Production consumption.")); } finally { setLoading(false); } }, []);
-    useEffect(() => { load(); }, [load]);
-    const req = requisitions.find(r => String(r.id) === String(form.requisitionId));
-    const lines = (req?.lines || []).map(line => ({ ...line, outstanding: Math.max(0, numeric(line.issuedQty) - numeric(line.consumedQty) - numeric(line.returnedQty)) })).filter(line => line.outstanding > 0);
-    useEffect(() => { if (!req) return; const q = {}, b = {}; lines.forEach(line => { q[String(line.id)] = String(line.outstanding); b[String(line.id)] = ""; }); setForm(c => ({ ...c, quantities: q, batches: b })); }, [form.requisitionId]); // eslint-disable-line react-hooks/exhaustive-deps
-    const consume = async () => { const requestLines = lines.map(line => ({ requisitionLineId: line.id, quantity: Number(form.quantities[String(line.id)] || 0), batchNo: clean(form.batches[String(line.id)]) || null, remarks: null })).filter(line => Number.isFinite(line.quantity) && line.quantity > 0); if (!req?.id || !requestLines.length) { setError("Select a started requisition and enter at least one consumption quantity."); return; } setWorking(true); setError(""); try { await matflowApi.createConsumption({ requisitionId: req.id, productionLocationId: req.destinationLocationId, remarks: clean(form.remarks) || null, lines: requestLines }); setDialog(false); await load(); } catch (e) { setError(readMatFlowError(e, "Unable to record Production consumption.")); } finally { setWorking(false); } };
-    return <Box sx={pageSx}><PageHero badge="PRODUCTION EXECUTION" title="Material Consumption" subtitle="Record actual consumption only after the requisition has explicitly entered Production Started." actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>{canConsume && <Button startIcon={<AddIcon />} onClick={() => setDialog(true)} sx={primaryBtnSx}>Record Consumption</Button>}</>} /><ErrorBox>{error}</ErrorBox><Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 160px 160px 100px" }}>{["Consumption", "Requisition", "Location", "Consumed By", "Lines"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{consumptions.length === 0 ? <EmptyState /> : consumptions.map(row => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 160px 160px 100px" }}><Box sx={tableCellSx}>{row.consumptionNumber}</Box><Box sx={tableCellSx}>{row.requisitionNumber}</Box><Box sx={tableCellSx}>{row.productionLocationCode}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.consumedBy}</Typography><Typography sx={subTextSx}>{formatDate(row.consumedAt)}</Typography></Box><Box sx={tableCellSx}>{row.lines?.length || 0}</Box></Box>)}</Box>}</Card><Dialog open={dialog} onClose={() => !working && setDialog(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>Record Production Consumption</DialogTitle><DialogContent sx={dialogContentSx}><TextField select fullWidth label="Started Requisition *" value={form.requisitionId} onChange={e => setForm(c => ({ ...c, requisitionId: e.target.value, quantities: {}, batches: {} }))} sx={fieldSx}>{requisitions.map(r => <MenuItem key={r.id} value={r.id}>{r.requisitionNumber} · {r.projectCode} · {r.destinationLocationCode}</MenuItem>)}</TextField><Box sx={{ mt: 1.5 }}>{lines.map(line => <Box key={line.id} sx={{ display: "grid", gridTemplateColumns: "1fr 160px 170px", gap: 1, alignItems: "center", mb: 1 }}><Box><Typography sx={mainTextSx}>{line.issuedMaterialCode || line.materialCode} · {line.issuedMaterialName || line.materialName}</Typography><Typography sx={subTextSx}>Outstanding issued {formatQty(line.outstanding)} {line.uom || ""}</Typography></Box><TextField type="number" label="Consume Qty" value={form.quantities[String(line.id)] ?? ""} onChange={e => setForm(c => ({ ...c, quantities: { ...c.quantities, [String(line.id)]: e.target.value } }))} sx={fieldSx} /><TextField label="Batch No." value={form.batches[String(line.id)] ?? ""} onChange={e => setForm(c => ({ ...c, batches: { ...c.batches, [String(line.id)]: e.target.value } }))} sx={fieldSx} /></Box>)}</Box><TextField fullWidth label="Remarks" value={form.remarks} onChange={e => setForm(c => ({ ...c, remarks: e.target.value }))} sx={fieldSx} /></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(false)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={consume} disabled={working} sx={primaryBtnSx}>Record Consumption</Button></DialogActions></Dialog></Box>;
+    const [dialog, setDialog] = useState(null);
+    const [form, setForm] = useState({
+        requisitionId: "",
+        remarks: "",
+        quantities: {},
+        batches: {},
+    });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+
+        try {
+            const [consumptionResponse, requisitionResponse] = await Promise.all([
+                matflowApi.listConsumptions(),
+                matflowApi.listRequisitions(),
+            ]);
+
+            setConsumptions(
+                Array.isArray(consumptionResponse?.data)
+                    ? consumptionResponse.data
+                    : []
+            );
+            setRequisitions(
+                Array.isArray(requisitionResponse?.data)
+                    ? requisitionResponse.data
+                    : []
+            );
+        } catch (requestError) {
+            setConsumptions([]);
+            setRequisitions([]);
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to load Production execution."
+                )
+            );
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const accounting = useCallback((requisition) => {
+        const lines = Array.isArray(requisition?.lines) ? requisition.lines : [];
+
+        return lines.reduce(
+            (result, line) => {
+                const requested = numeric(line?.requestedQty);
+                const issued = numeric(line?.issuedQty);
+                const consumed = numeric(line?.consumedQty);
+                const returned = numeric(line?.returnedQty);
+                const accounted = consumed + returned;
+
+                result.requested += requested;
+                result.issued += issued;
+                result.consumed += consumed;
+                result.returned += returned;
+                result.outstanding += Math.max(0, issued - accounted);
+                result.fullyIssued =
+                    result.fullyIssued && issued + 0.0005 >= requested;
+                result.fullyAccounted =
+                    result.fullyAccounted &&
+                    issued + 0.0005 >= requested &&
+                    accounted + 0.0005 >= issued;
+
+                return result;
+            },
+            {
+                requested: 0,
+                issued: 0,
+                consumed: 0,
+                returned: 0,
+                outstanding: 0,
+                fullyIssued: lines.length > 0,
+                fullyAccounted: lines.length > 0,
+            }
+        );
+    }, []);
+
+    const executionRows = useMemo(
+        () =>
+            requisitions.filter((row) =>
+                ["ISSUED_TO_PRODUCTION", "PRODUCTION_STARTED"].includes(
+                    normalize(row?.status)
+                )
+            ),
+        [requisitions]
+    );
+
+    const completedCount = useMemo(
+        () =>
+            requisitions.filter(
+                (row) => normalize(row?.status) === "PRODUCTION_COMPLETED"
+            ).length,
+        [requisitions]
+    );
+
+    const startedCount = executionRows.filter(
+        (row) => normalize(row?.status) === "PRODUCTION_STARTED"
+    ).length;
+    const awaitingStartCount = executionRows.filter(
+        (row) => normalize(row?.status) === "ISSUED_TO_PRODUCTION"
+    ).length;
+    const awaitingAccountingCount = executionRows.filter((row) => {
+        if (normalize(row?.status) !== "PRODUCTION_STARTED") return false;
+        return !accounting(row).fullyAccounted;
+    }).length;
+
+    const openConsumption = (requisition) => {
+        const lines = (Array.isArray(requisition?.lines) ? requisition.lines : [])
+            .map((line) => ({
+                ...line,
+                outstanding: Math.max(
+                    0,
+                    numeric(line?.issuedQty) -
+                    numeric(line?.consumedQty) -
+                    numeric(line?.returnedQty)
+                ),
+            }))
+            .filter((line) => line.outstanding > 0.0005);
+
+        const quantities = {};
+        const batches = {};
+        lines.forEach((line) => {
+            quantities[String(line.id)] = String(line.outstanding);
+            batches[String(line.id)] = "";
+        });
+
+        setForm({
+            requisitionId: requisition.id,
+            remarks: "",
+            quantities,
+            batches,
+        });
+        setDialog({ type: "CONSUME", requisition, lines });
+        setError("");
+    };
+
+    const start = async (requisition) => {
+        if (!requisition?.id || requisition?.rowVersion == null) return;
+        setWorkingId(String(requisition.id));
+        setError("");
+
+        try {
+            await matflowApi.startProduction(requisition.id, {
+                rowVersion: requisition.rowVersion,
+                remarks: "Production started from the MatFlow Production desk.",
+            });
+            await load();
+        } catch (requestError) {
+            setError(
+                readMatFlowError(requestError, "Unable to start Production.")
+            );
+        } finally {
+            setWorkingId("");
+        }
+    };
+
+    const complete = async (requisition) => {
+        if (!requisition?.id || requisition?.rowVersion == null) return;
+        const position = accounting(requisition);
+
+        if (!position.fullyAccounted) {
+            setError(
+                "Finished Product cannot be completed until every requested quantity is issued and every issued quantity is consumed or returned."
+            );
+            return;
+        }
+
+        setWorkingId(String(requisition.id));
+        setError("");
+
+        try {
+            await matflowApi.completeProduction(requisition.id, {
+                rowVersion: requisition.rowVersion,
+                remarks: "Finished Product completed from the MatFlow Production desk.",
+            });
+            await load();
+        } catch (requestError) {
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to complete the Finished Product."
+                )
+            );
+        } finally {
+            setWorkingId("");
+        }
+    };
+
+    const consume = async () => {
+        const requisition = dialog?.requisition;
+        const lines = Array.isArray(dialog?.lines) ? dialog.lines : [];
+        if (!requisition?.id) return;
+
+        const requestLines = lines
+            .map((line) => ({
+                requisitionLineId: line.id,
+                quantity: Number(form.quantities[String(line.id)] || 0),
+                batchNo: clean(form.batches[String(line.id)]) || null,
+                remarks: null,
+            }))
+            .filter(
+                (line) => Number.isFinite(line.quantity) && line.quantity > 0
+            );
+
+        if (!requestLines.length) {
+            setError("Enter at least one Production consumption quantity.");
+            return;
+        }
+
+        for (const requestLine of requestLines) {
+            const source = lines.find(
+                (line) => String(line.id) === String(requestLine.requisitionLineId)
+            );
+            if (
+                !source ||
+                requestLine.quantity > numeric(source.outstanding) + 0.0005
+            ) {
+                setError(
+                    `Consumption exceeds outstanding issued quantity for ${source?.issuedMaterialCode || source?.materialCode || "material"
+                    }.`
+                );
+                return;
+            }
+        }
+
+        setWorkingId(String(requisition.id));
+        setError("");
+
+        try {
+            await matflowApi.createConsumption({
+                requisitionId: requisition.id,
+                productionLocationId: requisition.destinationLocationId,
+                remarks: clean(form.remarks) || null,
+                lines: requestLines,
+            });
+            setDialog(null);
+            await load();
+        } catch (requestError) {
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to record Production consumption."
+                )
+            );
+        } finally {
+            setWorkingId("");
+        }
+    };
+
+    return (
+        <Box sx={pageSx}>
+            <PageHero
+                badge="PRODUCTION EXECUTION CONTROL"
+                title="Production & Finished Product"
+                subtitle="Start Production only after the complete requisition is issued. Record actual material consumption or returns, then complete the finished Product only after every issued quantity is fully accounted."
+                actions={
+                    <>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            onClick={load}
+                            sx={secondaryBtnSx}
+                        >
+                            Refresh
+                        </Button>
+                        <Button
+                            onClick={() => navigate("/matflow/returns")}
+                            sx={secondaryBtnSx}
+                        >
+                            Material Returns
+                        </Button>
+                    </>
+                }
+            />
+
+            <ErrorBox>{error}</ErrorBox>
+
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+                    gap: 1,
+                }}
+            >
+                <SummaryCard label="Awaiting Start" value={awaitingStartCount} colorful />
+                <SummaryCard label="In Production" value={startedCount} colorful />
+                <SummaryCard
+                    label="Awaiting Material Accounting"
+                    value={awaitingAccountingCount}
+                    colorful
+                />
+                <SummaryCard label="Products Completed" value={completedCount} colorful />
+            </Box>
+
+            <Card sx={panelSx}>
+                <Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>
+                    Production Execution Queue
+                </Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.25 }}>
+                    This queue is the Production-side hand-off after Store/QC/optional Processing. Material quantities remain traceable to the exact Project, Product/Drawing and requisition.
+                </Typography>
+
+                {loading ? (
+                    <LoadingBlock />
+                ) : (
+                    <Box sx={tableShellSx}>
+                        <Box
+                            sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns:
+                                    "170px 185px 155px minmax(235px,1fr) 165px minmax(250px,1fr)",
+                            }}
+                        >
+                            {[
+                                "Requisition",
+                                "Project / Drawing",
+                                "Status",
+                                "Material Accounting",
+                                "Next Control",
+                                "Action",
+                            ].map((heading) => (
+                                <Box key={heading} sx={tableCellSx}>
+                                    {heading}
+                                </Box>
+                            ))}
+                        </Box>
+
+                        {executionRows.length === 0 ? (
+                            <EmptyState>
+                                No requisition is currently awaiting Production start or Production completion.
+                            </EmptyState>
+                        ) : (
+                            executionRows.map((row) => {
+                                const position = accounting(row);
+                                const status = normalize(row.status);
+                                const busy = workingId === String(row.id);
+
+                                return (
+                                    <Box
+                                        key={row.id}
+                                        sx={{
+                                            ...tableRowSx,
+                                            gridTemplateColumns:
+                                                "170px 185px 155px minmax(235px,1fr) 165px minmax(250px,1fr)",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {row.requisitionNumber || "-"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                {row.bomNumber || "-"} · Rev {row.bomRevisionNo ?? "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {row.projectCode || "-"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                {row.drawingNo || "-"} · {row.destinationLocationCode || "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <MatFlowStatusChip status={row.status} />
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                Issued {formatQty(position.issued)} / Requested {formatQty(position.requested)}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                Consumed {formatQty(position.consumed)} · Returned {formatQty(position.returned)} · Unaccounted {formatQty(position.outstanding)}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {status === "ISSUED_TO_PRODUCTION"
+                                                    ? "START PRODUCTION"
+                                                    : position.fullyAccounted
+                                                        ? "COMPLETE PRODUCT"
+                                                        : "CONSUME / RETURN"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                {position.fullyAccounted
+                                                    ? "Material account closed"
+                                                    : `${formatQty(position.outstanding)} issued qty pending accounting`}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box
+                                            sx={{
+                                                ...tableCellSx,
+                                                display: "flex",
+                                                gap: 0.6,
+                                                flexWrap: "wrap",
+                                            }}
+                                        >
+                                            {canExecute && status === "ISSUED_TO_PRODUCTION" && (
+                                                <Button
+                                                    disabled={busy}
+                                                    onClick={() => start(row)}
+                                                    sx={primaryBtnSx}
+                                                >
+                                                    Start Production
+                                                </Button>
+                                            )}
+
+                                            {canExecute &&
+                                                status === "PRODUCTION_STARTED" &&
+                                                position.outstanding > 0.0005 && (
+                                                    <Button
+                                                        disabled={busy}
+                                                        onClick={() => openConsumption(row)}
+                                                        sx={primaryBtnSx}
+                                                    >
+                                                        Record Consumption
+                                                    </Button>
+                                                )}
+
+                                            {canExecute &&
+                                                status === "PRODUCTION_STARTED" &&
+                                                position.fullyAccounted && (
+                                                    <Button
+                                                        disabled={busy}
+                                                        onClick={() => complete(row)}
+                                                        sx={primaryBtnSx}
+                                                    >
+                                                        Complete Product
+                                                    </Button>
+                                                )}
+
+                                            {status === "PRODUCTION_STARTED" &&
+                                                position.outstanding > 0.0005 && (
+                                                    <Button
+                                                        disabled={busy}
+                                                        onClick={() => navigate("/matflow/returns")}
+                                                        sx={secondaryBtnSx}
+                                                    >
+                                                        Return Unused
+                                                    </Button>
+                                                )}
+
+                                            <Button
+                                                onClick={() =>
+                                                    navigate(`/matflow/requisitions/${row.id}`)
+                                                }
+                                                sx={secondaryBtnSx}
+                                            >
+                                                Requisition
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                );
+                            })
+                        )}
+                    </Box>
+                )}
+            </Card>
+
+            <Card sx={panelSx}>
+                <Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>
+                    Production Consumption Register
+                </Typography>
+                {loading ? (
+                    <LoadingBlock />
+                ) : (
+                    <Box sx={tableShellSx}>
+                        <Box
+                            sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns: "170px 180px 160px 160px 100px",
+                            }}
+                        >
+                            {[
+                                "Consumption",
+                                "Requisition",
+                                "Location",
+                                "Consumed By",
+                                "Lines",
+                            ].map((heading) => (
+                                <Box key={heading} sx={tableCellSx}>
+                                    {heading}
+                                </Box>
+                            ))}
+                        </Box>
+
+                        {consumptions.length === 0 ? (
+                            <EmptyState>No Production consumption has been recorded.</EmptyState>
+                        ) : (
+                            consumptions.map((row) => (
+                                <Box
+                                    key={row.id}
+                                    sx={{
+                                        ...tableRowSx,
+                                        gridTemplateColumns: "170px 180px 160px 160px 100px",
+                                    }}
+                                >
+                                    <Box sx={tableCellSx}>{row.consumptionNumber}</Box>
+                                    <Box sx={tableCellSx}>{row.requisitionNumber}</Box>
+                                    <Box sx={tableCellSx}>{row.productionLocationCode}</Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>
+                                            {row.consumedBy || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {formatDate(row.consumedAt)}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>{row.lines?.length || 0}</Box>
+                                </Box>
+                            ))
+                        )}
+                    </Box>
+                )}
+            </Card>
+
+            <Dialog
+                open={dialog?.type === "CONSUME"}
+                onClose={() => !workingId && setDialog(null)}
+                fullWidth
+                maxWidth="md"
+                PaperProps={{ sx: dialogPaperSx }}
+            >
+                <DialogTitle sx={dialogTitleSx}>
+                    Record Production Consumption
+                </DialogTitle>
+                <DialogContent sx={dialogContentSx}>
+                    <Typography sx={mainTextSx}>
+                        {dialog?.requisition?.requisitionNumber || "Requisition"} · {dialog?.requisition?.projectCode || "-"} · {dialog?.requisition?.drawingNo || "-"}
+                    </Typography>
+                    <Typography sx={{ ...subTextSx, mb: 1.5 }}>
+                        Enter only actual consumption. Unused issued quantity must be returned through the Material Return workflow before Finished Product completion.
+                    </Typography>
+
+                    {(dialog?.lines || []).map((line) => (
+                        <Box
+                            key={line.id}
+                            sx={{
+                                display: "grid",
+                                gridTemplateColumns: { xs: "1fr", md: "1fr 160px 170px" },
+                                gap: 1,
+                                alignItems: "center",
+                                mb: 1,
+                            }}
+                        >
+                            <Box>
+                                <Typography sx={mainTextSx}>
+                                    {line.issuedMaterialCode || line.materialCode} · {line.issuedMaterialName || line.materialName}
+                                </Typography>
+                                <Typography sx={subTextSx}>
+                                    Outstanding issued {formatQty(line.outstanding)} {line.uom || ""}
+                                </Typography>
+                            </Box>
+                            <TextField
+                                type="number"
+                                label="Consume Qty"
+                                value={form.quantities[String(line.id)] ?? ""}
+                                onChange={(event) =>
+                                    setForm((current) => ({
+                                        ...current,
+                                        quantities: {
+                                            ...current.quantities,
+                                            [String(line.id)]: event.target.value,
+                                        },
+                                    }))
+                                }
+                                sx={fieldSx}
+                            />
+                            <TextField
+                                label="Batch No."
+                                value={form.batches[String(line.id)] ?? ""}
+                                onChange={(event) =>
+                                    setForm((current) => ({
+                                        ...current,
+                                        batches: {
+                                            ...current.batches,
+                                            [String(line.id)]: event.target.value,
+                                        },
+                                    }))
+                                }
+                                sx={fieldSx}
+                            />
+                        </Box>
+                    ))}
+
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        label="Consumption Remarks"
+                        value={form.remarks}
+                        onChange={(event) =>
+                            setForm((current) => ({
+                                ...current,
+                                remarks: event.target.value,
+                            }))
+                        }
+                        sx={{ ...fieldSx, mt: 1 }}
+                    />
+                </DialogContent>
+                <DialogActions sx={dialogActionsSx}>
+                    <Button
+                        onClick={() => setDialog(null)}
+                        disabled={Boolean(workingId)}
+                        sx={secondaryBtnSx}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={consume}
+                        disabled={Boolean(workingId)}
+                        sx={primaryBtnSx}
+                    >
+                        Record Consumption
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
 }
+

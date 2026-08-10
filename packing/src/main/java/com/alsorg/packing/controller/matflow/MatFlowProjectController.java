@@ -13,13 +13,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** True Project -> Products aggregate API. */
 @RestController
-@RequestMapping("/api/matflow/project-portfolio")
+@RequestMapping("/api/matflow/projects")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowProjectController {
 
@@ -43,21 +44,21 @@ public class MatFlowProjectController {
     }
 
     @PostMapping
-    public ProjectPortfolioResponse create(@RequestBody ProjectRequest request) {
+    public ProjectPortfolioResponse create(@Valid @RequestBody ProjectRequest request) {
         return service.create(request);
     }
 
     @PutMapping("/{projectId}")
     public ProjectPortfolioResponse update(
             @PathVariable UUID projectId,
-            @RequestBody ProjectRequest request) {
+            @Valid @RequestBody ProjectRequest request) {
         return service.update(projectId, request);
     }
 
     @PostMapping("/{projectId}/products")
     public ProjectPortfolioResponse addProduct(
             @PathVariable UUID projectId,
-            @RequestBody ProductRequest request) {
+            @Valid @RequestBody ProductRequest request) {
         return service.addProduct(projectId, request);
     }
 
@@ -65,7 +66,7 @@ public class MatFlowProjectController {
     public ProjectPortfolioResponse updateProduct(
             @PathVariable UUID projectId,
             @PathVariable UUID productId,
-            @RequestBody ProductRequest request) {
+            @Valid @RequestBody ProductRequest request) {
         return service.updateProduct(projectId, productId, request);
     }
 
@@ -73,7 +74,7 @@ public class MatFlowProjectController {
     public ProjectPortfolioResponse approveProduct(
             @PathVariable UUID projectId,
             @PathVariable UUID productId,
-            @RequestBody ProductApprovalRequest request) {
+            @Valid @RequestBody ProductApprovalRequest request) {
         return service.approveProduct(projectId, productId, request);
     }
 
@@ -81,7 +82,7 @@ public class MatFlowProjectController {
     public ProjectPortfolioResponse returnProduct(
             @PathVariable UUID projectId,
             @PathVariable UUID productId,
-            @RequestBody ProductApprovalRequest request) {
+            @Valid @RequestBody ProductApprovalRequest request) {
         return service.returnProduct(projectId, productId, request);
     }
 }

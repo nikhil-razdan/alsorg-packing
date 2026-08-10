@@ -57,12 +57,22 @@ export const readMatFlowError = (
 		return data;
 	}
 
-	const validationErrors =
-		data?.validationErrors && typeof data.validationErrors === "object"
-			? Object.entries(data.validationErrors).map(
-				([field, message]) => `${field}: ${message}`
-			)
-			: [];
+	const validationPayload =
+		(data?.validationErrors && typeof data.validationErrors === "object"
+			? data.validationErrors
+			: null) ||
+		(data?.details?.validationErrors && typeof data.details.validationErrors === "object"
+			? data.details.validationErrors
+			: null) ||
+		(data?.details?.errors && typeof data.details.errors === "object"
+			? data.details.errors
+			: null);
+
+	const validationErrors = validationPayload
+		? Object.entries(validationPayload).map(
+			([field, message]) => `${field}: ${message}`
+		)
+		: [];
 
 	const message =
 		data?.message ||
@@ -95,71 +105,53 @@ export const matflowApi = {
 			body
 		),
 
-	// True Project -> Products aggregate (vNext primary project API)
-	listProjectPortfolio: (params = {}) =>
-		API.get(`${BASE}/project-portfolio`, {
-			params: cleanParams(params),
-		}),
-
-	getProjectPortfolio: (projectId) =>
-		API.get(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}`),
-
-	createProjectPortfolio: (body) =>
-		API.post(`${BASE}/project-portfolio`, body),
-
-	updateProjectPortfolio: (projectId, body) =>
-		API.put(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}`, body),
-
-	addProjectProduct: (projectId, body) =>
-		API.post(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products`, body),
-
-	updateProjectProduct: (projectId, productId, body) =>
-		API.put(
-			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,
-			body
-		),
-
-	approvePortfolioProduct: (projectId, productId, body) =>
-		API.post(
-			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/approve`,
-			body
-		),
-
-	returnPortfolioProduct: (projectId, productId, body) =>
-		API.post(
-			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/return`,
-			body
-		),
-
+	/*
+	 * Canonical v3 Project -> Products aggregate.
+	 *
+	 * Backend:
+	 *   /api/matflow/projects
+	 *   /api/matflow/projects/{projectId}/products/...
+	 *
+	 * This is the only Project API used by the frontend.
+	 */
 	listProjects: (params = {}) =>
 		API.get(`${BASE}/projects`, {
 			params: cleanParams(params),
 		}),
 
+	getProject: (projectId) =>
+		API.get(`${BASE}/projects/${requiredId(projectId, "Project ID")}`),
+
 	createProject: (body) =>
 		API.post(`${BASE}/projects`, body),
 
-	updateProject: (id, body) =>
+	updateProject: (projectId, body) =>
 		API.put(
-			`${BASE}/projects/${requiredId(id, "Project drawing ID")}`,
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}`,
 			body
 		),
 
-	approveProjectProduct: (id, body) =>
+	addProjectProduct: (projectId, body) =>
 		API.post(
-			`${BASE}/projects/${requiredId(
-				id,
-				"Project drawing ID"
-			)}/approve-product`,
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products`,
 			body
 		),
 
-	returnProjectProduct: (id, body) =>
+	updateProjectProduct: (projectId, productId, body) =>
+		API.put(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,
+			body
+		),
+
+	approveProjectProduct: (projectId, productId, body) =>
 		API.post(
-			`${BASE}/projects/${requiredId(
-				id,
-				"Project drawing ID"
-			)}/return-product`,
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/approve`,
+			body
+		),
+
+	returnProjectProduct: (projectId, productId, body) =>
+		API.post(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/return`,
 			body
 		),
 

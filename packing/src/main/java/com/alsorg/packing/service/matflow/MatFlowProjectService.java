@@ -14,6 +14,7 @@ import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
+import com.alsorg.packing.repository.matflow.MatFlowBomLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectProductRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
@@ -34,8 +35,10 @@ import org.springframework.web.server.ResponseStatusException;
  * First-class Project aggregate boundary.
  *
  * This service intentionally leaves existing material execution foreign keys
- * attached to MatFlowProjectDrawing (the Product/Item child). The parent Project
- * is a portfolio/ownership aggregate, while every BOM/requisition/stock movement
+ * attached to MatFlowProjectDrawing (the Product/Item child). The parent
+ * Project
+ * is a portfolio/ownership aggregate, while every BOM/requisition/stock
+ * movement
  * remains traceable to the exact product and drawing that consumed it.
  */
 @Service
@@ -44,6 +47,7 @@ public class MatFlowProjectService {
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectProductRepository productRepository;
     private final MatFlowBomRepository bomRepository;
+    private final MatFlowBomLineRepository bomLineRepository;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
     private final MatFlowRequisitionLineRepository requisitionLineRepository;
     private final MatFlowAccessService accessService;
@@ -53,6 +57,7 @@ public class MatFlowProjectService {
             MatFlowProjectRepository projectRepository,
             MatFlowProjectProductRepository productRepository,
             MatFlowBomRepository bomRepository,
+            MatFlowBomLineRepository bomLineRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
             MatFlowRequisitionLineRepository requisitionLineRepository,
             MatFlowAccessService accessService,
@@ -60,6 +65,7 @@ public class MatFlowProjectService {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
         this.bomRepository = bomRepository;
+        this.bomLineRepository = bomLineRepository;
         this.requisitionRepository = requisitionRepository;
         this.requisitionLineRepository = requisitionLineRepository;
         this.accessService = accessService;
@@ -72,7 +78,8 @@ public class MatFlowProjectService {
 
         String query = normalizeSearch(search);
         String requestedPlant = cleanUpper(plantCode);
-        if (requestedPlant != null) accessService.requirePlantAccess(requestedPlant);
+        if (requestedPlant != null)
+            accessService.requirePlantAccess(requestedPlant);
 
         return projectRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(project -> accessService.canAccessPlant(project.getPlantCode()))
@@ -82,9 +89,8 @@ public class MatFlowProjectService {
                         || contains(project.getProjectCode(), query)
                         || contains(project.getProjectName(), query)
                         || contains(project.getClientName(), query)
-                        || productsOf(project).stream().anyMatch(product ->
-                                contains(product.getProductName(), query)
-                                        || contains(product.getDrawingNo(), query)))
+                        || productsOf(project).stream().anyMatch(product -> contains(product.getProductName(), query)
+                                || contains(product.getDrawingNo(), query)))
                 .map(this::toPortfolio)
                 .toList();
     }
@@ -144,11 +150,13 @@ public class MatFlowProjectService {
 
         if (!products.isEmpty()
                 && (!same(project.getProjectCode(), nextCode) || !same(project.getPlantCode(), nextPlant))) {
-            throw conflict("Project code and plant cannot be changed after products have been created. Create a new Project instead.");
+            throw conflict(
+                    "Project code and plant cannot be changed after products have been created. Create a new Project instead.");
         }
 
         accessService.requirePlantAccess(nextPlant);
-        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndIdNot(nextPlant, nextCode, project.getId())) {
+        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndIdNot(nextPlant, nextCode,
+                project.getId())) {
             throw conflict("Project code already exists in plant " + nextPlant + ": " + nextCode);
         }
 
@@ -185,14 +193,14 @@ public class MatFlowProjectService {
         validateProductRequest(request, false);
 
         MatFlowProject project = requireProject(projectId);
-        if (!project.isActive()) throw conflict("Cannot add a product to an inactive Project");
+        if (!project.isActive())
+            throw conflict("Cannot add a product to an inactive Project");
 
         String drawingNo = requiredUpper(request.drawingNo(), "Drawing number");
         String drawingRevision = defaultRevision(request.drawingRevision());
 
-        boolean duplicate = productsOf(project).stream().anyMatch(product ->
-                same(product.getDrawingNo(), drawingNo)
-                        && same(product.getDrawingRevision(), drawingRevision));
+        boolean duplicate = productsOf(project).stream().anyMatch(product -> same(product.getDrawingNo(), drawingNo)
+                && same(product.getDrawingRevision(), drawingRevision));
         if (duplicate) {
             throw conflict("Drawing/revision already exists in this Project: " + drawingNo + " Rev " + drawingRevision);
         }
@@ -244,19 +252,20 @@ public class MatFlowProjectService {
                 || !same(product.getDrawingNo(), nextDrawing)
                 || !same(product.getDrawingRevision(), nextRevision);
 
-        boolean hasBom = bomRepository.findAll().stream().anyMatch(bom ->
-                bom.getProjectDrawing() != null
-                        && product.getId().equals(bom.getProjectDrawing().getId()));
+        boolean hasBom = bomRepository.findAll().stream().anyMatch(bom -> bom.getProjectDrawing() != null
+                && product.getId().equals(bom.getProjectDrawing().getId()));
 
         if (hasBom && identityChanged) {
-            throw conflict("Product identity/drawing cannot be changed after a BOM exists. Create a new Product/Drawing revision instead.");
+            throw conflict(
+                    "Product identity/drawing cannot be changed after a BOM exists. Create a new Product/Drawing revision instead.");
         }
 
         boolean duplicate = productsOf(project).stream()
                 .filter(other -> !other.getId().equals(product.getId()))
                 .anyMatch(other -> same(other.getDrawingNo(), nextDrawing)
                         && same(other.getDrawingRevision(), nextRevision));
-        if (duplicate) throw conflict("Drawing/revision already exists in this Project");
+        if (duplicate)
+            throw conflict("Drawing/revision already exists in this Project");
 
         applyProduct(product, request);
         product.setProject(project);
@@ -295,7 +304,8 @@ public class MatFlowProjectService {
         MatFlowProjectDrawing product = requireProduct(project, productId);
         assertVersion(request == null ? null : request.rowVersion(), product.getRowVersion(), "Project Product");
 
-        if (!product.isActive()) throw conflict("Inactive Product cannot be approved");
+        if (!product.isActive())
+            throw conflict("Inactive Product cannot be approved");
 
         String actor = accessService.actor();
         product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
@@ -327,7 +337,8 @@ public class MatFlowProjectService {
         assertVersion(request == null ? null : request.rowVersion(), product.getRowVersion(), "Project Product");
 
         String remarks = request == null ? null : clean(request.remarks());
-        if (remarks == null) throw badRequest("Director return remarks are required");
+        if (remarks == null)
+            throw badRequest("Director return remarks are required");
 
         String actor = accessService.actor();
         product.setProductApprovalStatus(ProjectProductApprovalStatus.RETURNED);
@@ -353,19 +364,25 @@ public class MatFlowProjectService {
 
     private ProjectPortfolioResponse toPortfolio(MatFlowProject project) {
         List<ProductPortfolioRow> products = productsOf(project).stream()
-                .sorted(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .sorted(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(this::toProductRow)
                 .toList();
 
-        int approved = (int) products.stream().filter(p -> p.approvalStatus() == ProjectProductApprovalStatus.APPROVED).count();
-        int completed = (int) products.stream().filter(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus())).count();
+        int approved = (int) products.stream().filter(p -> p.approvalStatus() == ProjectProductApprovalStatus.APPROVED)
+                .count();
+        int completed = (int) products.stream().filter(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus()))
+                .count();
         int shortage = (int) products.stream().filter(p -> p.shortageQty().compareTo(BigDecimal.ZERO) > 0).count();
 
-        BigDecimal requested = products.stream().map(ProductPortfolioRow::requestedQty).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal covered = products.stream().map(p -> p.reservedQty().max(p.issuedQty())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal requested = products.stream().map(ProductPortfolioRow::requestedQty).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+        BigDecimal covered = products.stream().map(p -> p.reservedQty().max(p.issuedQty())).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
         BigDecimal coverage = requested.compareTo(BigDecimal.ZERO) <= 0
                 ? BigDecimal.ZERO
-                : covered.multiply(BigDecimal.valueOf(100)).divide(requested, 1, RoundingMode.HALF_UP).min(BigDecimal.valueOf(100));
+                : covered.multiply(BigDecimal.valueOf(100)).divide(requested, 1, RoundingMode.HALF_UP)
+                        .min(BigDecimal.valueOf(100));
 
         String currentDepartment = aggregateDepartment(products);
         String health = deriveHealth(project, products, shortage, completed);
@@ -374,7 +391,8 @@ public class MatFlowProjectService {
                 project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(),
                 project.getPlantCode(), project.getRequiredDate(), project.getPriority(), project.getProjectManager(),
                 project.getRemarks(), project.isActive(), products.size(), approved, completed, shortage, coverage,
-                currentDepartment, health, project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
+                currentDepartment, health, project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(),
+                products);
     }
 
     private ProductPortfolioRow toProductRow(MatFlowProjectDrawing product) {
@@ -384,20 +402,29 @@ public class MatFlowProjectService {
                 .findFirst()
                 .orElse(null);
 
-        MatFlowMaterialRequisition latestReq = requisitionRepository
+        List<MatFlowMaterialRequisition> requisitions = requisitionRepository
                 .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
                 .stream()
-                .findFirst()
-                .orElse(null);
+                .filter(req -> req.status != RequisitionStatus.CANCELLED)
+                .toList();
 
+        MatFlowMaterialRequisition latestReq = requisitions.stream().findFirst().orElse(null);
+
+        /*
+         * Product portfolio quantities must represent the whole Product/Drawing,
+         * not only its newest requisition. A product may be requisitioned in
+         * multiple approved lots, so latest-only totals silently under-report
+         * material demand and consumption.
+         */
         BigDecimal requested = BigDecimal.ZERO;
         BigDecimal reserved = BigDecimal.ZERO;
         BigDecimal shortage = BigDecimal.ZERO;
         BigDecimal issued = BigDecimal.ZERO;
         BigDecimal consumed = BigDecimal.ZERO;
 
-        if (latestReq != null) {
-            for (MatFlowRequisitionLine line : requisitionLineRepository.findByRequisition_IdOrderByLineNoAsc(latestReq.getId())) {
+        for (MatFlowMaterialRequisition requisition : requisitions) {
+            for (MatFlowRequisitionLine line : requisitionLineRepository
+                    .findByRequisition_IdOrderByLineNoAsc(requisition.getId())) {
                 requested = requested.add(zero(line.requestedQty));
                 reserved = reserved.add(zero(line.reservedQty));
                 shortage = shortage.add(zero(line.shortageQty));
@@ -406,7 +433,10 @@ public class MatFlowProjectService {
             }
         }
 
-        String reqStatus = latestReq == null || latestReq.status == null ? null : latestReq.status.name();
+        boolean productCompleted = isProductManufacturingComplete(latestBom);
+        String reqStatus = productCompleted
+                ? RequisitionStatus.PRODUCTION_COMPLETED.name()
+                : latestReq == null || latestReq.status == null ? null : latestReq.status.name();
         return new ProductPortfolioRow(
                 product.getId(), product.getProductName(), product.getDrawingNo(), product.getDrawingRevision(),
                 product.getRequiredDate(), product.getProductApprovalStatus(), product.getProductApprovedBy(),
@@ -420,61 +450,146 @@ public class MatFlowProjectService {
                 latestReq == null ? null : latestReq.getId(),
                 latestReq == null ? null : latestReq.requisitionNumber,
                 reqStatus,
-                currentDepartment(latestReq),
+                currentDepartment(requisitions),
                 scale(requested), scale(reserved), scale(shortage), scale(issued), scale(consumed),
                 product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
     }
 
+    /**
+     * A Product is complete only when the current effective approved BOM is fully
+     * requisitioned and every non-cancelled requisition carrying that BOM has
+     * completed Production. This prevents one small/partial requisition from
+     * falsely completing the whole Product.
+     */
+    private boolean isProductManufacturingComplete(MatFlowBom operationalBom) {
+        if (operationalBom == null
+                || operationalBom.getStatus() != MatFlowBomStatus.APPROVED
+                || !operationalBom.isEffective()) {
+            return false;
+        }
+
+        List<com.alsorg.packing.domain.matflow.MatFlowBomLine> bomLines = bomLineRepository
+                .findByBom_IdOrderByLineNoAsc(operationalBom.getId());
+        if (bomLines.isEmpty())
+            return false;
+
+        java.util.LinkedHashSet<UUID> requisitionIds = new java.util.LinkedHashSet<>();
+
+        for (com.alsorg.packing.domain.matflow.MatFlowBomLine bomLine : bomLines) {
+            List<MatFlowRequisitionLine> requestedLines = requisitionLineRepository
+                    .findByBomLine_Id(bomLine.getId())
+                    .stream()
+                    .filter(line -> line.requisition != null
+                            && line.requisition.status != RequisitionStatus.CANCELLED)
+                    .toList();
+
+            BigDecimal totalRequested = requestedLines.stream()
+                    .map(line -> zero(line.requestedQty))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            if (totalRequested.compareTo(zero(bomLine.getNetRequiredQty())) < 0) {
+                return false;
+            }
+
+            requestedLines.stream()
+                    .map(line -> line.requisition.getId())
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(requisitionIds::add);
+        }
+
+        if (requisitionIds.isEmpty())
+            return false;
+
+        return requisitionIds.stream()
+                .map(requisitionRepository::findById)
+                .allMatch(optional -> optional.isPresent()
+                        && optional.get().status == RequisitionStatus.PRODUCTION_COMPLETED);
+    }
+
     private String aggregateDepartment(List<ProductPortfolioRow> products) {
-        if (products.isEmpty()) return "PROJECT SETUP";
-        if (products.stream().allMatch(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus()))) return "COMPLETED";
-        if (products.stream().anyMatch(p -> "PURCHASE".equals(p.currentDepartment()))) return "PURCHASE";
-        if (products.stream().anyMatch(p -> "QUALITY CONTROL".equals(p.currentDepartment()))) return "QUALITY CONTROL";
-        if (products.stream().anyMatch(p -> "PROCESSING".equals(p.currentDepartment()))) return "PROCESSING";
-        if (products.stream().anyMatch(p -> "PRODUCTION".equals(p.currentDepartment()))) return "PRODUCTION";
-        if (products.stream().anyMatch(p -> "STORE".equals(p.currentDepartment()))) return "STORE";
-        if (products.stream().anyMatch(p -> "BOM REVIEW".equals(p.currentDepartment()))) return "BOM REVIEW";
+        if (products.isEmpty())
+            return "PROJECT SETUP";
+        if (products.stream().allMatch(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus())))
+            return "COMPLETED";
+        if (products.stream().anyMatch(p -> "PURCHASE".equals(p.currentDepartment())))
+            return "PURCHASE";
+        if (products.stream().anyMatch(p -> "QUALITY CONTROL".equals(p.currentDepartment())))
+            return "QUALITY CONTROL";
+        if (products.stream().anyMatch(p -> "PROCESSING".equals(p.currentDepartment())))
+            return "PROCESSING";
+        if (products.stream().anyMatch(p -> "PRODUCTION".equals(p.currentDepartment())))
+            return "PRODUCTION";
+        if (products.stream().anyMatch(p -> "STORE".equals(p.currentDepartment())))
+            return "STORE";
+        if (products.stream().anyMatch(p -> "BOM REVIEW".equals(p.currentDepartment())))
+            return "BOM REVIEW";
         return "ENGINEERING";
     }
 
-    private String deriveHealth(MatFlowProject project, List<ProductPortfolioRow> products, int shortage, int completed) {
-        if (!project.isActive()) return "INACTIVE";
-        if (!products.isEmpty() && completed == products.size()) return "COMPLETED";
-        if (shortage > 0) return "SHORTAGE_RISK";
-        if (project.getRequiredDate() != null && project.getRequiredDate().isBefore(java.time.LocalDate.now())) return "OVERDUE";
-        if (products.stream().anyMatch(p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED)) return "APPROVAL_PENDING";
+    private String deriveHealth(MatFlowProject project, List<ProductPortfolioRow> products, int shortage,
+            int completed) {
+        if (!project.isActive())
+            return "INACTIVE";
+        if (!products.isEmpty() && completed == products.size())
+            return "COMPLETED";
+        if (shortage > 0)
+            return "SHORTAGE_RISK";
+        if (project.getRequiredDate() != null && project.getRequiredDate().isBefore(java.time.LocalDate.now()))
+            return "OVERDUE";
+        if (products.stream().anyMatch(p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED))
+            return "APPROVAL_PENDING";
         return "ON_TRACK";
     }
 
-    private String currentDepartment(MatFlowMaterialRequisition requisition) {
-        if (requisition == null) return "ENGINEERING / BOM";
-        RequisitionStatus status = requisition.status;
-        if (status == null) return "PRODUCTION";
-        return switch (status) {
-            case DRAFT -> "PRODUCTION";
-            case SUBMITTED_TO_STORE, STORE_REVIEW_IN_PROGRESS, PARTIALLY_RESERVED, READY_TO_ISSUE, PARTIALLY_ISSUED -> "STORE";
-            case SHORTAGE_PENDING -> "PURCHASE";
-            case ISSUED_TO_PRODUCTION, PRODUCTION_STARTED, PRODUCTION_COMPLETED -> "PRODUCTION";
-            default -> "MATFLOW";
-        };
+    private String currentDepartment(List<MatFlowMaterialRequisition> requisitions) {
+        if (requisitions == null || requisitions.isEmpty())
+            return "ENGINEERING / BOM";
+
+        /* Parallel shortage + available-stock execution is normal in MatFlow. */
+        boolean purchase = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.SHORTAGE_PENDING);
+        boolean production = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.ISSUED_TO_PRODUCTION
+                || req.status == RequisitionStatus.PRODUCTION_STARTED);
+        boolean store = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.SUBMITTED_TO_STORE
+                || req.status == RequisitionStatus.STORE_REVIEW_IN_PROGRESS
+                || req.status == RequisitionStatus.PARTIALLY_RESERVED
+                || req.status == RequisitionStatus.READY_TO_ISSUE
+                || req.status == RequisitionStatus.PARTIALLY_ISSUED);
+
+        if (purchase && (production || store))
+            return "MULTI-DEPARTMENT";
+        if (purchase)
+            return "PURCHASE";
+        if (production)
+            return "PRODUCTION";
+        if (store)
+            return "STORE";
+        if (requisitions.stream().allMatch(req -> req.status == RequisitionStatus.PRODUCTION_COMPLETED)) {
+            return "COMPLETED";
+        }
+        return "PRODUCTION";
     }
 
     private List<MatFlowProjectDrawing> productsOf(MatFlowProject project) {
         UUID id = project == null ? null : project.getId();
-        if (id == null) return List.of();
+        if (id == null)
+            return List.of();
         return productRepository.findByProject_IdOrderByCreatedAtAsc(id);
     }
 
     private MatFlowProject requireProject(UUID id) {
-        if (id == null) throw badRequest("Project ID is required");
-        MatFlowProject project = projectRepository.findById(id).orElseThrow(() -> notFound("MatFlow Project not found"));
+        if (id == null)
+            throw badRequest("Project ID is required");
+        MatFlowProject project = projectRepository.findById(id)
+                .orElseThrow(() -> notFound("MatFlow Project not found"));
         accessService.requirePlantAccess(project.getPlantCode());
         return project;
     }
 
     private MatFlowProjectDrawing requireProduct(MatFlowProject project, UUID productId) {
-        if (productId == null) throw badRequest("Product ID is required");
-        MatFlowProjectDrawing product = productRepository.findById(productId).orElseThrow(() -> notFound("Project Product not found"));
+        if (productId == null)
+            throw badRequest("Product ID is required");
+        MatFlowProjectDrawing product = productRepository.findById(productId)
+                .orElseThrow(() -> notFound("Project Product not found"));
         if (product.getProject() == null || !project.getId().equals(product.getProject().getId())) {
             throw conflict("Product does not belong to the selected Project");
         }
@@ -503,38 +618,93 @@ public class MatFlowProjectService {
     }
 
     private void validateProjectRequest(ProjectRequest request, boolean update) {
-        if (request == null) throw badRequest("Project request is required");
+        if (request == null)
+            throw badRequest("Project request is required");
         required(request.projectCode(), "Project code");
         required(request.projectName(), "Project name");
         required(request.clientName(), "Client name");
         required(request.plantCode(), "Plant");
-        if (update && request.rowVersion() == null) throw badRequest("Project rowVersion is required");
+        if (update && request.rowVersion() == null)
+            throw badRequest("Project rowVersion is required");
     }
 
     private void validateProductRequest(ProductRequest request, boolean update) {
-        if (request == null) throw badRequest("Product request is required");
+        if (request == null)
+            throw badRequest("Product request is required");
         required(request.productName(), "Product name");
         required(request.drawingNo(), "Drawing number");
-        if (update && request.rowVersion() == null) throw badRequest("Project Product rowVersion is required");
+        if (update && request.rowVersion() == null)
+            throw badRequest("Project Product rowVersion is required");
     }
 
     private void assertVersion(Long requested, Long current, String entity) {
-        if (requested == null) throw badRequest(entity + " rowVersion is required");
-        if (!requested.equals(current)) throw conflict(entity + " was modified by another user. Refresh and retry.");
+        if (requested == null)
+            throw badRequest(entity + " rowVersion is required");
+        if (!requested.equals(current))
+            throw conflict(entity + " was modified by another user. Refresh and retry.");
     }
 
-    private BigDecimal zero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
-    private BigDecimal scale(BigDecimal value) { return zero(value).setScale(3, RoundingMode.HALF_UP); }
-    private boolean same(String a, String b) { return cleanUpper(a) != null && cleanUpper(a).equals(cleanUpper(b)); }
-    private String defaultRevision(String value) { String v = cleanUpper(value); return v == null ? "0" : v; }
-    private String requiredUpper(String value, String field) { String v = cleanUpper(value); if (v == null) throw badRequest(field + " is required"); return v; }
-    private String required(String value, String field) { String v = clean(value); if (v == null) throw badRequest(field + " is required"); return v; }
-    private String cleanUpper(String value) { String v = clean(value); return v == null ? null : v.toUpperCase(Locale.ROOT); }
-    private String clean(String value) { if (value == null) return null; String v = value.trim(); return v.isBlank() ? null : v; }
-    private String normalizeSearch(String value) { String v = clean(value); return v == null ? "" : v.toLowerCase(Locale.ROOT); }
-    private boolean contains(String value, String query) { return value != null && value.toLowerCase(Locale.ROOT).contains(query); }
+    private BigDecimal zero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
 
-    private ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
-    private ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
-    private ResponseStatusException notFound(String message) { return new ResponseStatusException(HttpStatus.NOT_FOUND, message); }
+    private BigDecimal scale(BigDecimal value) {
+        return zero(value).setScale(3, RoundingMode.HALF_UP);
+    }
+
+    private boolean same(String a, String b) {
+        return cleanUpper(a) != null && cleanUpper(a).equals(cleanUpper(b));
+    }
+
+    private String defaultRevision(String value) {
+        String v = cleanUpper(value);
+        return v == null ? "0" : v;
+    }
+
+    private String requiredUpper(String value, String field) {
+        String v = cleanUpper(value);
+        if (v == null)
+            throw badRequest(field + " is required");
+        return v;
+    }
+
+    private String required(String value, String field) {
+        String v = clean(value);
+        if (v == null)
+            throw badRequest(field + " is required");
+        return v;
+    }
+
+    private String cleanUpper(String value) {
+        String v = clean(value);
+        return v == null ? null : v.toUpperCase(Locale.ROOT);
+    }
+
+    private String clean(String value) {
+        if (value == null)
+            return null;
+        String v = value.trim();
+        return v.isBlank() ? null : v;
+    }
+
+    private String normalizeSearch(String value) {
+        String v = clean(value);
+        return v == null ? "" : v.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean contains(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private ResponseStatusException conflict(String message) {
+        return new ResponseStatusException(HttpStatus.CONFLICT, message);
+    }
+
+    private ResponseStatusException notFound(String message) {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
+    }
 }

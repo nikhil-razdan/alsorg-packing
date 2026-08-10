@@ -2,9 +2,6 @@ package com.alsorg.packing.controller.matflow;
 
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectProductApprovalRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.ProjectDrawingResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowMetadataDtos.MetadataResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationResponse;
@@ -66,41 +63,13 @@ public class MatFlowMasterDataController {
         return service.updateMaterial(id, request);
     }
 
-    /* -------------------- Projects / drawings -------------------- */
+    /* -------------------- Projects -------------------- */
 
-    @GetMapping("/projects")
-    public List<ProjectDrawingResponse> projects(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean active) {
-        return service.listProjects(search, active);
-    }
-
-    @PostMapping("/projects")
-    public ProjectDrawingResponse createProject(
-            @Valid @RequestBody ProjectDrawingRequest request) {
-        return service.createProject(request);
-    }
-
-    @PutMapping("/projects/{id}")
-    public ProjectDrawingResponse updateProject(
-            @PathVariable UUID id,
-            @Valid @RequestBody ProjectDrawingRequest request) {
-        return service.updateProject(id, request);
-    }
-
-    @PostMapping("/projects/{id}/approve-product")
-    public ProjectDrawingResponse approveProjectProduct(
-            @PathVariable UUID id,
-            @Valid @RequestBody ProjectProductApprovalRequest request) {
-        return service.approveProjectProduct(id, request);
-    }
-
-    @PostMapping("/projects/{id}/return-product")
-    public ProjectDrawingResponse returnProjectProduct(
-            @PathVariable UUID id,
-            @Valid @RequestBody ProjectProductApprovalRequest request) {
-        return service.returnProjectProduct(id, request);
-    }
+    /**
+     * Project/Product writes were intentionally removed from this master-data
+     * controller. The canonical hierarchy is now owned only by
+     * MatFlowProjectController at /api/matflow/projects.
+     */
 
     /* -------------------- Locations -------------------- */
 

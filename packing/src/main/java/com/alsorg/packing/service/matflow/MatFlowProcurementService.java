@@ -70,6 +70,7 @@ public class MatFlowProcurementService {
         private final MatFlowStockLedgerRepository ledgerRepository;
         private final MatFlowAccessService accessService;
         private final MatFlowAuditService auditService;
+        private final MatFlowRequisitionService requisitionService;
 
         public MatFlowProcurementService(
                         MatFlowPurchaseOrderRepository purchaseOrderRepository,
@@ -84,7 +85,8 @@ public class MatFlowProcurementService {
                         MatFlowStockBalanceRepository stockRepository,
                         MatFlowStockLedgerRepository ledgerRepository,
                         MatFlowAccessService accessService,
-                        MatFlowAuditService auditService) {
+                        MatFlowAuditService auditService,
+                        MatFlowRequisitionService requisitionService) {
                 this.purchaseOrderRepository = purchaseOrderRepository;
 
                 this.purchaseOrderLineRepository = purchaseOrderLineRepository;
@@ -110,6 +112,7 @@ public class MatFlowProcurementService {
                 this.accessService = accessService;
 
                 this.auditService = auditService;
+                this.requisitionService = requisitionService;
         }
 
         @Transactional(readOnly = true)
@@ -250,6 +253,24 @@ public class MatFlowProcurementService {
                                         line);
                 }
 
+                auditService.record(
+                                "PURCHASE_ORDER",
+                                order.getId(),
+                                "PURCHASE_ORDER_CREATED",
+                                order.deliveryLocation == null ? null : order.deliveryLocation.getPlantCode(),
+                                order.indent == null || order.indent.projectDrawing == null
+                                                ? null
+                                                : order.indent.projectDrawing.getProjectCode(),
+                                order.indent == null || order.indent.projectDrawing == null
+                                                ? null
+                                                : order.indent.projectDrawing.getDrawingNo(),
+                                auditService.details(
+                                                "poNumber", order.poNumber,
+                                                "vendor", order.vendor == null ? null : order.vendor.vendorName,
+                                                "indentNumber", order.indent == null ? null : order.indent.indentNumber,
+                                                "lineCount", request.lines().size(),
+                                                "status", order.status));
+
                 return toPurchaseOrderResponse(order);
         }
 
@@ -331,6 +352,10 @@ public class MatFlowProcurementService {
                 refreshIndentOrderingStatus(
                                 order.indent,
                                 actor);
+
+                if (order.indent != null && order.indent.requisition != null) {
+                        requisitionService.refreshState(order.indent.requisition.getId(), actor);
+                }
 
                 auditService.record(
                                 "PURCHASE_ORDER",
@@ -566,6 +591,10 @@ public class MatFlowProcurementService {
                 refreshPurchaseOrderReceiptStatus(
                                 order,
                                 actor);
+
+                if (order.indent != null && order.indent.requisition != null) {
+                        requisitionService.refreshState(order.indent.requisition.getId(), actor);
+                }
 
                 auditService.record(
                                 "GOODS_RECEIPT",

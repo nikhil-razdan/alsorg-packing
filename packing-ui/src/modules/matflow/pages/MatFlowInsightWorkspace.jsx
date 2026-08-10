@@ -42,14 +42,15 @@ import {
 } from "../matflowUi";
 
 const STAGES = [
-    ["Project Portfolio", "Client Project → Product/Item ownership and Director product approval", "/matflow/projects"],
+    ["Project Portfolio", "Client Project → one or many Products/Items → Director product approval", "/matflow/projects"],
     ["Operational BOMs", "Engineering BOM → Production technical review → Director final approval", "/matflow/boms"],
-    ["Production Requisitions", "Material demand against approved BOM", "/matflow/production"],
-    ["Store", "Availability, reservation, shortage and issue", "/matflow/store"],
-    ["Transfers", "Approved material route movement", "/matflow/transfers"],
-    ["Purchase", "Shortage procurement and vendor control", "/matflow/purchase"],
-    ["QC", "Quality inspection + per-lot Direct/Processing route decision", "/matflow/qc"],
-    ["Processing", "Optional QC-selected material preprocessing jobs", "/matflow/processing"],
+    ["Production Requisitions", "Product/BOM material demand raised by Production", "/matflow/production"],
+    ["Store", "Inventory check → reservation → shortage identification → first QC hand-off", "/matflow/store"],
+    ["Purchase", "Shortage-only branch: Indent → PO → approval → GRN", "/matflow/purchase"],
+    ["QC", "Inspect each received lot and choose Direct to Production or one approved Processing Unit", "/matflow/qc"],
+    ["Processing", "Optional preprocessing only for lots explicitly routed by QC", "/matflow/processing"],
+    ["Production", "Explicit issue → Production start → consumption/returns → finished-product completion", "/matflow/production-execution"],
+    ["Ledger & Audit", "Immutable stock movements, custody, actor/time and workflow trace", "/matflow/ledger"],
 ];
 
 const TRACKER_FLOW = [
@@ -197,7 +198,7 @@ export function MatFlowDashboardPage() {
     const cards = [
         ["Active Projects", totals.activeProjects], ["Effective BOMs", totals.effectiveBoms], ["Open Requisitions", totals.openRequisitions], ["Shortage Requisitions", totals.shortageRequisitions], ["Ready Transfers", totals.readyOutboundTransfers], ["Pending QC", totals.pendingQcInspections], ["Processing Jobs", totals.activeProcessingJobs], ["Open Purchase Orders", totals.openPurchaseOrders]
     ];
-    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Engineering BOM → Production approval → requisition → Store → Purchase/QC → Processing → Production completion, with one stock ledger and audit trail." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
+    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Products → Engineering BOM → Production + Director approval → Production requisition → Store → Purchase shortage branch → QC → optional Processing → Production completion, with one stock ledger and audit trail." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
 }
 
 export function MatFlowTrackerPage() {
@@ -218,7 +219,7 @@ export function MatFlowTrackerPage() {
         setError("");
         try {
             const [projectsResponse, trackerResponse] = await Promise.all([
-                matflowApi.listProjectPortfolio({
+                matflowApi.listProjects({
                     search: clean(search) || undefined,
                     active: true,
                     plantCode: selectedPlantParam,
@@ -242,10 +243,39 @@ export function MatFlowTrackerPage() {
     useEffect(() => { load(); }, [load]);
 
     const trackerRows = Array.isArray(tracker?.rows) ? tracker.rows : [];
-    const trackerByProduct = useMemo(
-        () => new Map(trackerRows.map((row) => [String(row.projectDrawingId), row])),
-        [trackerRows]
-    );
+
+    const trackerRowsByProduct = useMemo(() => {
+        const grouped = new Map();
+
+        trackerRows.forEach((row) => {
+            if (!row?.projectDrawingId) return;
+            const key = String(row.projectDrawingId);
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(row);
+        });
+
+        grouped.forEach((rowsForProduct) => {
+            rowsForProduct.sort((left, right) => {
+                const leftTime = new Date(
+                    left?.updatedAt || left?.stageStartedAt || left?.requestedAt || 0
+                ).getTime();
+                const rightTime = new Date(
+                    right?.updatedAt || right?.stageStartedAt || right?.requestedAt || 0
+                ).getTime();
+                return rightTime - leftTime;
+            });
+        });
+
+        return grouped;
+    }, [trackerRows]);
+
+    const trackerByProduct = useMemo(() => {
+        const latest = new Map();
+        trackerRowsByProduct.forEach((rowsForProduct, key) => {
+            if (rowsForProduct.length) latest.set(key, rowsForProduct[0]);
+        });
+        return latest;
+    }, [trackerRowsByProduct]);
 
     const projects = useMemo(() => {
         if (!health) return portfolio;
@@ -279,21 +309,68 @@ export function MatFlowTrackerPage() {
     })), [trackerRows]);
 
     const loadMaterialDetail = useCallback(async (product) => {
-        const requisitionId = product?.latestRequisitionId;
-        if (!requisitionId) return;
-        const key = String(product.id);
+        const key = String(product?.id || "");
+        if (!key) return;
+
         setExpandedProducts((current) => ({ ...current, [key]: !current[key] }));
         if (materialDetails[key] || materialLoading[key]) return;
+
+        const productTrackerRows = trackerRowsByProduct.get(key) || [];
+        const requisitionIds = Array.from(new Set([
+            ...productTrackerRows.map((row) => row?.requisitionId).filter(Boolean),
+            product?.latestRequisitionId,
+        ].filter(Boolean).map(String)));
+
+        if (requisitionIds.length === 0) return;
+
         setMaterialLoading((current) => ({ ...current, [key]: true }));
+
         try {
-            const response = await matflowApi.getTrackerDetail(requisitionId);
-            setMaterialDetails((current) => ({ ...current, [key]: response?.data || null }));
+            const detailResults = await Promise.all(
+                requisitionIds.map(async (requisitionId) => {
+                    try {
+                        return (await matflowApi.getTrackerDetail(requisitionId))?.data || null;
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+
+            const details = detailResults.filter(Boolean);
+            const materials = details.flatMap((detail) => {
+                const requisitionNumber =
+                    detail?.summary?.requisitionNumber ||
+                    detail?.summary?.referenceNumber ||
+                    "-";
+
+                return (Array.isArray(detail?.materials) ? detail.materials : []).map(
+                    (material) => ({
+                        ...material,
+                        requisitionId: detail?.summary?.requisitionId || null,
+                        requisitionNumber,
+                    })
+                );
+            });
+
+            setMaterialDetails((current) => ({
+                ...current,
+                [key]: {
+                    details,
+                    materials,
+                    requisitionCount: details.length,
+                },
+            }));
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to load material-level tracker detail."));
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to load the Product's material-level tracker details."
+                )
+            );
         } finally {
             setMaterialLoading((current) => ({ ...current, [key]: false }));
         }
-    }, [materialDetails, materialLoading]);
+    }, [materialDetails, materialLoading, trackerRowsByProduct]);
 
     return <Box sx={pageSx}>
         <PageHero
@@ -375,10 +452,12 @@ export function MatFlowTrackerPage() {
 
                     <Box sx={{ p: 1.35, display: "grid", gap: 1 }}>
                         {productRows.length === 0 ? <EmptyState>No Products/Items have been added to this Project.</EmptyState> : productRows.map((product) => {
-                            const live = trackerByProduct.get(String(product.id));
                             const key = String(product.id);
+                            const productTrackerRows = trackerRowsByProduct.get(key) || [];
+                            const live = trackerByProduct.get(key);
                             const detail = materialDetails[key];
                             const materials = Array.isArray(detail?.materials) ? detail.materials : [];
+                            const requisitionCount = productTrackerRows.length || (product.latestRequisitionId ? 1 : 0);
                             const stageProgress = live ? Math.max(0, Math.min(100, Number(live.actualProgressPercent ?? live.progressPercent ?? 0))) : normalize(product.requisitionStatus) === "PRODUCTION_COMPLETED" ? 100 : 0;
                             const action = live ? trackerActionTarget(live) : null;
 
@@ -398,8 +477,8 @@ export function MatFlowTrackerPage() {
                                     </Box>
                                     <Box><Typography sx={subTextSx}>STATUS</Typography><MatFlowStatusChip status={live?.currentStage || live?.requisitionStatus || product.requisitionStatus || product.latestBomStatus || product.approvalStatus} /></Box>
                                     <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: { xs: "flex-start", xl: "flex-end" } }}>
-                                        {product.latestRequisitionId && <Button onClick={() => loadMaterialDetail(product)} sx={secondaryBtnSx}>{expandedProducts[key] ? "Hide Materials" : "Materials"}</Button>}
-                                        {product.latestRequisitionId && <Button onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)} sx={secondaryBtnSx}>Full Trace</Button>}
+                                        {requisitionCount > 0 && <Button onClick={() => loadMaterialDetail(product)} sx={secondaryBtnSx}>{expandedProducts[key] ? "Hide Materials" : `Materials (${requisitionCount} req.)`}</Button>}
+                                        {product.latestRequisitionId && <Button onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)} sx={secondaryBtnSx}>Latest Trace</Button>}
                                         {action && <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>Act</Button>}
                                     </Box>
                                 </Box>
@@ -420,14 +499,15 @@ export function MatFlowTrackerPage() {
                                 {expandedProducts[key] && <Box sx={{ borderTop: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
                                     {materialLoading[key] ? <LoadingBlock /> : !detail ? <Box sx={{ p: 1.2 }}><Typography sx={subTextSx}>Material trace could not be loaded.</Typography></Box> : <>
                                         <Box sx={{ px: 1.2, py: 1, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                                            <Box><Typography sx={{ fontSize: 14, fontWeight: 950 }}>Material Position Board</Typography><Typography sx={subTextSx}>Exact material custody and next destination for this Product requisition.</Typography></Box>
-                                            <Typography sx={subTextSx}>{materials.length} tracked material line(s)</Typography>
+                                            <Box><Typography sx={{ fontSize: 14, fontWeight: 950 }}>Material Position Board</Typography><Typography sx={subTextSx}>Exact material custody and next destination across every active/non-cancelled requisition currently returned for this Product.</Typography></Box>
+                                            <Typography sx={subTextSx}>{materials.length} tracked material position(s) · {detail?.requisitionCount || requisitionCount} requisition(s)</Typography>
                                         </Box>
                                         <Box sx={tableShellSx}>
-                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 90px 90px 90px 170px 160px 160px 150px" }}>
-                                                {["Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
+                                                {["Requisition", "Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                             </Box>
-                                            {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material) => <Box key={material.requisitionLineId || `${material.materialId}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 90px 90px 90px 170px 160px 160px 150px" }}>
+                                            {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material, materialIndex) => <Box key={`${material.requisitionId || "req"}:${material.requisitionLineId || material.materialId || materialIndex}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.requisitionNumber || "-"}</Typography></Box>
                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentMaterialCode || material.bomMaterialCode || "-"}</Typography><Typography sx={subTextSx}>{material.materialName || "-"}{material.materialCategory ? ` · ${readable(material.materialCategory)}` : ""} · {material.uom || ""}</Typography></Box>
                                                 <Box sx={tableCellSx}>{formatQty(material.requestedQty)}</Box>
                                                 <Box sx={tableCellSx}>{formatQty(material.reservedQty)}</Box>

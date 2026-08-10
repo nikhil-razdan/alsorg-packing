@@ -97,16 +97,22 @@ public final class MatFlowPlanningDtos {
          *             /plan.
          */
         @Deprecated
-        public record PlanningRequest(@NotNull(message = "Requisition row version is required.") Long rowVersion,
+        public record PlanningRequest(
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
                         List<UUID> preferredSourceLocationIds,
                         @Size(max = 2000, message = "Planning remarks cannot exceed 2000 characters.") String remarks) {
         }
 
+        /**
+         * Material-level execution contract. status is intentionally exposed because
+         * MatFlow is a material tracker, not only a requisition-header tracker.
+         */
         public record RequisitionLineResponse(UUID id, Integer lineNo, UUID bomLineId, UUID materialId,
                         String materialCode, String materialName, String materialCategory, UUID issuedMaterialId,
                         String issuedMaterialCode, String issuedMaterialName, String uom, BigDecimal bomRequiredQty,
                         BigDecimal requestedQty, BigDecimal reservedQty, BigDecimal shortageQty, BigDecimal issuedQty,
-                        BigDecimal consumedQty, BigDecimal returnedQty, String remarks, Long rowVersion) {
+                        BigDecimal consumedQty, BigDecimal returnedQty, RequisitionLineStatus status,
+                        String remarks, Long rowVersion) {
         }
 
         public record RequisitionResponse(
@@ -146,8 +152,7 @@ public final class MatFlowPlanningDtos {
                         UUID firstDestinationLocationId, String firstDestinationLocationCode, String demandPlantCode,
                         BigDecimal reservedQty, ReservationStatus status, Long rowVersion, BigDecimal issuedQty,
                         BigDecimal remainingIssueQty, boolean issueReady, UUID issueLocationId,
-                        String issueLocationCode,
-                        String responsibleDepartment, String nextAction) {
+                        String issueLocationCode, String responsibleDepartment, String nextAction) {
         }
 
         public record IndentLineResponse(UUID id, UUID requisitionLineId, UUID materialId, String materialCode,

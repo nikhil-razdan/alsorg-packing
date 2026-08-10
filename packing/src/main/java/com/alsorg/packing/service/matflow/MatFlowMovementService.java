@@ -688,11 +688,14 @@ public class MatFlowMovementService {
                                                         actor);
                                 }
 
-                                if (finalProductionDestination) {
-                                        requisitionService.refreshState(
-                                                        transferRequisition.getId(),
-                                                        actor);
-                                }
+                                /*
+                                 * Every completed hand-off can change the material-level
+                                 * state (QC pending, Processing required, Ready to issue),
+                                 * not only the final Production receipt.
+                                 */
+                                requisitionService.refreshState(
+                                                transferRequisition.getId(),
+                                                actor);
                         }
 
                         auditService.record(

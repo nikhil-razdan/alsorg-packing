@@ -47,7 +47,7 @@ public class MatFlowInsightController {
         return service.dashboard(plantCode);
     }
 
-    @GetMapping("/reports/projects/{projectDrawingId}")
+    @GetMapping({"/reports/products/{projectDrawingId}", "/reports/projects/{projectDrawingId}"})
     public ProjectTrackingResponse projectTracking(
             @PathVariable UUID projectDrawingId) {
         return service.projectTracking(projectDrawingId);

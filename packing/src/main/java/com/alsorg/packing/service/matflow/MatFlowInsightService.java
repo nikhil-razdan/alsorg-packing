@@ -52,6 +52,7 @@ public class MatFlowInsightService {
 
         public MatFlowInsightService(
                         MatFlowProjectDrawingRepository projectRepository,
+                        MatFlowProjectRepository projectHeaderRepository,
                         MatFlowBomRepository bomRepository,
                         MatFlowMaterialRequisitionRepository requisitionRepository,
                         MatFlowRequisitionLineRepository requisitionLineRepository,
@@ -71,6 +72,7 @@ public class MatFlowInsightService {
 
                 this.reporting = new ReportingModule(
                                 projectRepository,
+                                projectHeaderRepository,
                                 bomRepository,
                                 requisitionRepository,
                                 requisitionLineRepository,
@@ -171,6 +173,7 @@ public class MatFlowInsightService {
         private static final class ReportingModule {
 
                 private final MatFlowProjectDrawingRepository projectRepository;
+                private final MatFlowProjectRepository projectHeaderRepository;
                 private final MatFlowBomRepository bomRepository;
                 private final MatFlowMaterialRequisitionRepository requisitionRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
@@ -187,6 +190,7 @@ public class MatFlowInsightService {
 
                 ReportingModule(
                                 MatFlowProjectDrawingRepository projectRepository,
+                                MatFlowProjectRepository projectHeaderRepository,
                                 MatFlowBomRepository bomRepository,
                                 MatFlowMaterialRequisitionRepository requisitionRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
@@ -201,6 +205,7 @@ public class MatFlowInsightService {
                                 MatFlowAuditLogRepository auditRepository,
                                 MatFlowAccessService accessService) {
                         this.projectRepository = projectRepository;
+                        this.projectHeaderRepository = projectHeaderRepository;
 
                         this.bomRepository = bomRepository;
 
@@ -236,13 +241,12 @@ public class MatFlowInsightService {
 
                         Set<String> plants = resolvePlants(plantCode);
 
-                        List<MatFlowProjectDrawing> projects = projectRepository
-                                        .findAll()
+                        /* True Project count comes from mf_projects, not Product/Drawing children. */
+                        List<MatFlowProject> projects = projectHeaderRepository
+                                        .findAllByOrderByUpdatedAtDesc()
                                         .stream()
                                         .filter(project -> project.isActive() &&
-                                                        plants.contains(
-                                                                        normalizePlant(
-                                                                                        project.getPlantCode())))
+                                                        plants.contains(normalizePlant(project.getPlantCode())))
                                         .toList();
 
                         List<MatFlowBom> boms = bomRepository
@@ -904,7 +908,7 @@ public class MatFlowInsightService {
 
                 private PlantDashboardRow buildPlantDashboard(
                                 String plant,
-                                List<MatFlowProjectDrawing> projects,
+                                List<MatFlowProject> projects,
                                 List<MatFlowBom> boms,
                                 List<MatFlowMaterialRequisition> requisitions,
                                 List<MatFlowTransferOrder> transfers,
@@ -1513,7 +1517,8 @@ public class MatFlowInsightService {
                                         bom == null ? null : bom.getBomNumber(), true,
                                         "Engineering prepares material lines and approved route definition.");
 
-                        addStage(stages, "BOM_PRODUCTION_REVIEW", "Production BOM Technical Review", "PRODUCTION", production,
+                        addStage(stages, "BOM_PRODUCTION_REVIEW", "Production BOM Technical Review", "PRODUCTION",
+                                        production,
                                         bom == null ? null : bom.getSubmittedAt(),
                                         bom == null ? null : bom.getProductionReviewedAt(),
                                         bom == null ? null : bom.getProductionReviewedBy(),
@@ -1526,7 +1531,8 @@ public class MatFlowInsightService {
                                         bom == null ? null : bom.getApprovedAt(),
                                         bom == null ? null : bom.getApprovedBy(),
                                         "BOM", bom == null ? null : bom.getId(),
-                                        bom == null ? null : bom.getBomNumber(), bom != null && bom.getSubmittedAt() != null,
+                                        bom == null ? null : bom.getBomNumber(),
+                                        bom != null && bom.getSubmittedAt() != null,
                                         "Director final approval makes the Production-reviewed BOM effective for material requisitions.");
 
                         addStage(stages, "DEMAND", "Production Material Demand", "PRODUCTION", production,
@@ -2140,7 +2146,8 @@ public class MatFlowInsightService {
                 private Position processingPosition(TrackingContext context) {
                         MatFlowProcessingJob job = context.jobs().stream()
                                         .filter(item -> item != null &&
-                                                        !Set.of("COMPLETED", "CANCELLED").contains(enumName(item.status)))
+                                                        !Set.of("COMPLETED", "CANCELLED")
+                                                                        .contains(enumName(item.status)))
                                         .min(Comparator.comparing(MatFlowProcessingJob::getCreatedAt,
                                                         Comparator.nullsLast(Comparator.naturalOrder())))
                                         .orElse(null);
@@ -2379,7 +2386,8 @@ public class MatFlowInsightService {
                 private boolean hasActiveProcessing(TrackingContext context) {
                         return context != null && context.jobs().stream()
                                         .anyMatch(job -> job != null &&
-                                                        !Set.of("COMPLETED", "CANCELLED").contains(enumName(job.status)));
+                                                        !Set.of("COMPLETED", "CANCELLED")
+                                                                        .contains(enumName(job.status)));
                 }
 
                 private String resolveCurrentStage(RequisitionStatus status, BigDecimal requestedQty,
@@ -2490,7 +2498,9 @@ public class MatFlowInsightService {
                                 case "DRAFT" -> "DEMAND";
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
-                                case "QC_PENDING", "QC_ROUTING_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS", "READY_TO_ISSUE" -> "ROUTE";
+                                case "QC_PENDING", "QC_ROUTING_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
+                                                "READY_TO_ISSUE" ->
+                                        "ROUTE";
                                 case "PRODUCTION_ISSUE" -> "PRODUCTION_ISSUE";
                                 case "PRODUCTION_IN_PROGRESS" -> "PRODUCTION";
                                 case "PRODUCTION_COMPLETED" -> "COMPLETE";

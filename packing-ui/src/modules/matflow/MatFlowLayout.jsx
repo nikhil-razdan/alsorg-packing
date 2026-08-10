@@ -47,14 +47,13 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
-    ["Control Tower", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
-    ["Project Portfolio", "/matflow/projects", "projects", <FolderOutlinedIcon />],
+    ["Project Material Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
+    ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
     ["Operational BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
     ["BOM Review & Approval", "/matflow/bom-approvals", "bom-review", <ApprovalOutlinedIcon />],
     ["Production Requisitions", "/matflow/production", "production", <EngineeringOutlinedIcon />],
-    ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Store", "/matflow/store", "store", <StorefrontOutlinedIcon />],
     ["Transfers", "/matflow/transfers", "transfers", <SwapHorizOutlinedIcon />],
     ["Purchase", "/matflow/purchase", "purchase", <ShoppingCartOutlinedIcon />],
@@ -62,13 +61,14 @@ const NAV = [
     ["Receiving", "/matflow/receiving", "receiving", <LocalShippingOutlinedIcon />],
     ["Quality Control", "/matflow/qc", "qc", <FactCheckOutlinedIcon />],
     ["Processing", "/matflow/processing", "processing", <PrecisionManufacturingOutlinedIcon />],
+    ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
     ["Stock Ledger", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
     ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const HEADER = [
-    ["/matflow/production-execution", "Production Execution", "Production start, material consumption and finished-product completion"],
+    ["/matflow/production-execution", "Production Execution", "Production start → consumption/returns → finished-product completion"],
     ["/matflow/bom-approvals", "BOM Review & Approval", "Production technical review followed by Director final approval"],
     ["/matflow/boms", "Operational BOMs", "Engineering material structure and approved route control"],
     ["/matflow/store", "Store Material Control", "Availability, reservation, shortage, indent and issue"],
@@ -80,10 +80,10 @@ const HEADER = [
     ["/matflow/qc", "Quality Control", "Inspect material and decide Direct-to-Production vs optional Processing routing"],
     ["/matflow/processing", "Material Processing", "Processing inputs, outputs, yield and wastage"],
     ["/matflow/returns", "Material Returns", "Controlled return movements"],
-    ["/matflow/tracker", "MatFlow Control Tower", "Server-computed project and material workflow status"],
+    ["/matflow/tracker", "Project Material Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
     ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
     ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
-    ["/matflow/projects", "Project Portfolio", "Client Project → Product/Item → BOM → Material execution hierarchy"],
+    ["/matflow/projects", "Projects & Products", "Client Project → one or many Products/Items → BOM → material execution hierarchy"],
     ["/matflow/materials", "Material Master", "Standardized operational material records"],
     ["/matflow/locations", "Locations", "Store, Production, Processing and QC destinations"],
 ];
