@@ -1352,6 +1352,15 @@ public class MatFlowRequisitionService {
                                 .orElseThrow(() -> notFound(
                                                 "Material requisition not found"));
 
+                /*
+                 * MatFlow uses public JPA backing fields. If this entity is already
+                 * present in the persistence context as a Hibernate proxy, direct field
+                 * reads can bypass proxy getter interception and falsely look null.
+                 * Always unwrap the aggregate root before inspecting its associations.
+                 */
+                requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                requisition);
+
                 if (requisition.projectDrawing == null) {
                         throw conflict(
                                         "Material requisition has no project drawing");
@@ -1673,18 +1682,27 @@ public class MatFlowRequisitionService {
         }
 
         private boolean isReservationIssueReady(
-                        MatFlowReservation reservation) {
+                        MatFlowReservation reservation,
+                        MatFlowLocation destination) {
 
                 if (reservation == null ||
                                 reservation.getId() == null ||
-                                reservation.requisitionLine == null ||
-                                reservation.requisitionLine.requisition == null ||
-                                reservation.requisitionLine.requisition.destinationLocation == null) {
+                                destination == null ||
+                                destination.getId() == null) {
 
                         return false;
                 }
 
-                MatFlowLocation destination = reservation.requisitionLine.requisition.destinationLocation;
+                /*
+                 * Do not resolve the Production destination through
+                 * reservation.requisitionLine.requisition here. requisitionLine is LAZY
+                 * and MatFlow entities expose public backing fields; traversing through a
+                 * Hibernate proxy can therefore produce a false null even while the FK is
+                 * valid. The caller already owns the authoritative requisition root and
+                 * passes its Production destination explicitly.
+                 */
+                reservation = (MatFlowReservation) Hibernate.unproxy(
+                                reservation);
 
                 List<MatFlowTransferOrder> transfers = transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
@@ -1734,19 +1752,39 @@ public class MatFlowRequisitionService {
         private ReservationResponse toReservationResponse(
                         MatFlowReservation reservation) {
 
-                if (reservation == null ||
-                                reservation.requisitionLine == null ||
+                if (reservation == null) {
+                        throw conflict(
+                                        "Reservation record is incomplete");
+                }
+
+                reservation = (MatFlowReservation) Hibernate.unproxy(
+                                reservation);
+
+                if (reservation.requisitionLine == null ||
                                 reservation.material == null ||
                                 reservation.sourceLocation == null ||
-                                reservation.firstDestinationLocation == null ||
-                                reservation.requisitionLine.requisition == null ||
-                                reservation.requisitionLine.requisition.destinationLocation == null) {
+                                reservation.firstDestinationLocation == null) {
 
                         throw conflict(
                                         "Reservation record is incomplete");
                 }
 
-                MatFlowLocation issueLocation = reservation.requisitionLine.requisition.destinationLocation;
+                MatFlowRequisitionLine reservationLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                reservation.requisitionLine);
+
+                reservation.requisitionLine = reservationLine;
+
+                if (reservationLine.requisition == null ||
+                                reservationLine.requisition.getId() == null) {
+
+                        throw conflict(
+                                        "Reservation requisition link is missing");
+                }
+
+                MatFlowMaterialRequisition reservationRequisition = requireRequisition(
+                                reservationLine.requisition.getId());
+
+                MatFlowLocation issueLocation = reservationRequisition.destinationLocation;
 
                 BigDecimal reservedQty = zero(
                                 reservation.reservedQty);
@@ -1764,9 +1802,10 @@ public class MatFlowRequisitionService {
                                                 RoundingMode.HALF_UP);
 
                 boolean issueReady = isReservationIssueReady(
-                                reservation) &&
+                                reservation,
+                                issueLocation) &&
                                 isPartialIssueAllowed(
-                                                reservation.requisitionLine.requisition)
+                                                reservationRequisition)
                                 &&
                                 remainingIssueQty.compareTo(
                                                 BigDecimal.ZERO) > 0
@@ -3297,6 +3336,9 @@ public class MatFlowRequisitionService {
                                 .lockById(requisitionId)
                                 .orElseThrow(() -> notFound("Requisition not found"));
 
+                requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                requisition);
+
                 if (requisition.status == RequisitionStatus.CANCELLED ||
                                 requisition.status == RequisitionStatus.PRODUCTION_STARTED ||
                                 requisition.status == RequisitionStatus.PRODUCTION_COMPLETED) {
@@ -3344,11 +3386,20 @@ public class MatFlowRequisitionService {
                                         clean(actor) == null ? accessService.actor() : actor);
                 }
 
+                /*
+                 * 'requisition' is reassigned above after Hibernate.unproxy(...), so it is
+                 * not effectively final and cannot be captured by the stream lambda.
+                 * Capture only the destination in a final local variable.
+                 */
+                final MatFlowLocation productionDestination = requisition.destinationLocation;
+
                 boolean allIssueReady = !reservations.isEmpty() &&
                                 reservations.stream()
                                                 .allMatch(reservation -> reservation.status == ReservationStatus.ISSUED
                                                                 ||
-                                                                isReservationIssueReady(reservation));
+                                                                isReservationIssueReady(
+                                                                                reservation,
+                                                                                productionDestination));
 
                 RequisitionStatus nextStatus;
 
@@ -3465,6 +3516,14 @@ public class MatFlowRequisitionService {
                                         .orElseThrow(() -> notFound(
                                                         "Reservation not found"));
 
+                        /*
+                         * lockById can resolve to an already-managed Hibernate proxy. Unwrap
+                         * before reading public association fields; otherwise a valid
+                         * requisitionLine FK can appear null.
+                         */
+                        reservation = (MatFlowReservation) Hibernate.unproxy(
+                                        reservation);
+
                         if (reservation.requisitionLine == null ||
                                         reservation.material == null) {
 
@@ -3480,22 +3539,25 @@ public class MatFlowRequisitionService {
                                                         "Requisition line no longer exists"));
 
                         /*
-                         * RequisitionLine.requisition is LAZY. Because MatFlow entities use
-                         * public backing fields, reading line.requisition.destinationLocation
-                         * directly from a Hibernate proxy can incorrectly look null even when
-                         * mf_requisitions.destination_location_id is populated.
+                         * This is the critical Store-Issue fix. The locked line itself can be
+                         * a Hibernate proxy. Directly reading line.requisition from that proxy
+                         * bypasses Hibernate's getter interception and can falsely produce
+                         * "Reservation is not linked to a requisition" even though
+                         * mf_requisition_lines.requisition_id is populated.
                          *
-                         * Lock the authoritative requisition root and explicitly unproxy it
-                         * before reading workflow-critical fields. This is the same defensive
-                         * hydration pattern used by MatFlowMovementService for transfer
-                         * requisitions and also serializes the final Store issue against the
-                         * requisition state transition.
+                         * Unwrap the line first. Once the real line entity is available, its
+                         * requisition association contains the actual FK/proxy and getId() is
+                         * safe. Then lock + unwrap the authoritative requisition root.
                          */
+                        line = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                        line);
+
                         if (line.requisition == null ||
                                         line.requisition.getId() == null) {
 
                                 throw conflict(
-                                                "Reservation is not linked to a requisition");
+                                                "Reservation requisition link is missing for line: " +
+                                                                line.getId());
                         }
 
                         UUID requisitionId = line.requisition.getId();
