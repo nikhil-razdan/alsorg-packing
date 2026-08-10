@@ -4,6 +4,7 @@ import {
     Button,
     Card,
     Collapse,
+    IconButton,
     LinearProgress,
     MenuItem,
     TextField,
@@ -11,7 +12,6 @@ import {
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMatFlow } from "../matflowUi";
@@ -220,15 +220,23 @@ export function MatFlowTrackerPage() {
     const [materialLoading, setMaterialLoading] = useState({});
 
     const isProjectExpanded = useCallback(
-        (projectId) => expandedProjects[String(projectId)] !== false,
+        (projectId) => expandedProjects[String(projectId)] === true,
         [expandedProjects]
     );
 
-    const toggleProject = useCallback((projectId) => {
+    const expandProject = useCallback((projectId) => {
         const key = String(projectId);
         setExpandedProjects((current) => ({
             ...current,
-            [key]: current[key] === false,
+            [key]: true,
+        }));
+    }, []);
+
+    const collapseProject = useCallback((projectId) => {
+        const key = String(projectId);
+        setExpandedProjects((current) => ({
+            ...current,
+            [key]: false,
         }));
     }, []);
 
@@ -444,7 +452,37 @@ export function MatFlowTrackerPage() {
                 const projectExpanded = isProjectExpanded(project.id);
 
                 return <Card key={project.id} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                    <Box sx={{ px: 1.8, py: 1.55, background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-panel-solid) 58%,var(--mf-surface))", borderBottom: "1px solid var(--mf-border)" }}>
+                    <Box
+                        role={!projectExpanded ? "button" : undefined}
+                        tabIndex={!projectExpanded ? 0 : undefined}
+                        aria-expanded={projectExpanded}
+                        aria-controls={`matflow-project-${project.id}`}
+                        onClick={() => {
+                            if (!projectExpanded) expandProject(project.id);
+                        }}
+                        onKeyDown={(event) => {
+                            if (!projectExpanded && (event.key === "Enter" || event.key === " ")) {
+                                event.preventDefault();
+                                expandProject(project.id);
+                            }
+                        }}
+                        sx={{
+                            px: 1.8,
+                            py: 1.55,
+                            background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-panel-solid) 58%,var(--mf-surface))",
+                            borderBottom: projectExpanded ? "1px solid var(--mf-border)" : "none",
+                            cursor: projectExpanded ? "default" : "pointer",
+                            transition: "background .18s ease, box-shadow .18s ease",
+                            "&:hover": !projectExpanded ? {
+                                background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-surface) 58%,var(--mf-panel-solid))",
+                                boxShadow: "inset 0 0 0 1px var(--mf-border-strong)",
+                            } : undefined,
+                            "&:focus-visible": !projectExpanded ? {
+                                outline: "2px solid var(--mf-primary)",
+                                outlineOffset: "-2px",
+                            } : undefined,
+                        }}
+                    >
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.4fr) repeat(4,minmax(130px,.45fr))" }, gap: 1, alignItems: "center" }}>
                             <Box>
                                 <Typography sx={{ ...subTextSx, fontSize: 10, letterSpacing: .6 }}>CLIENT PROJECT</Typography>
@@ -456,19 +494,30 @@ export function MatFlowTrackerPage() {
                             <Box><Typography sx={subTextSx}>CURRENT DEPARTMENT</Typography><Typography sx={mainTextSx}>{project.currentDepartment || "-"}</Typography></Box>
                             <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: .7, flexWrap: "wrap" }}>
                                 <Box sx={healthSx(healthTone)}>{readable(project.health)}</Box>
-                                <Button
-                                    onClick={() => toggleProject(project.id)}
-                                    endIcon={projectExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                    aria-expanded={projectExpanded}
-                                    aria-controls={`matflow-project-${project.id}`}
-                                    sx={{
-                                        ...secondaryBtnSx,
-                                        minWidth: 126,
-                                        whiteSpace: "nowrap",
-                                    }}
-                                >
-                                    {projectExpanded ? "Collapse" : "Expand"}
-                                </Button>
+                                {projectExpanded && (
+                                    <IconButton
+                                        aria-label={`Collapse project ${project.projectCode || project.projectName || ""}`}
+                                        title="Collapse project"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            collapseProject(project.id);
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            width: 32,
+                                            height: 32,
+                                            border: "1px solid var(--mf-border-strong)",
+                                            borderRadius: 1.5,
+                                            color: "var(--mf-text)",
+                                            background: "var(--mf-panel-solid)",
+                                            "&:hover": {
+                                                background: "var(--mf-surface)",
+                                            },
+                                        }}
+                                    >
+                                        <ExpandLessIcon fontSize="small" />
+                                    </IconButton>
+                                )}
                             </Box>
                         </Box>
                         <Collapse in={projectExpanded} timeout="auto" unmountOnExit>
