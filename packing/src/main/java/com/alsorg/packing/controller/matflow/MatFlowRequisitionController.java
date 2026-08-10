@@ -85,6 +85,14 @@ public class MatFlowRequisitionController {
         return service.cancelRequisition(id, request);
     }
 
+    /**
+     * Production decision for a genuine partial-availability situation.
+     *
+     * ISSUE_AVAILABLE_NOW allows the already-reserved quantity to continue
+     * through its approved QC/Processing route while Purchase closes the
+     * shortage. HOLD_UNTIL_SHORTAGE_COMPLETE keeps the initial route transfer
+     * deferred until the shortage reaches zero.
+     */
     @PostMapping("/requisitions/{id}/partial-availability-decision")
     @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER','MATFLOW_PRODUCTION')")
     public RequisitionResponse decidePartialAvailability(

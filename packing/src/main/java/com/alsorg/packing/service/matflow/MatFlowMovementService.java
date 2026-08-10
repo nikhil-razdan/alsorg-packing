@@ -61,6 +61,7 @@ public class MatFlowMovementService {
                                 ledgerRepository,
                                 reservationRepository,
                                 requisitionLineRepository,
+                                requisitionRepository,
                                 accessService,
                                 qcRepository,
                                 auditService,
@@ -130,6 +131,7 @@ public class MatFlowMovementService {
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowReservationRepository reservationRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
+                private final MatFlowMaterialRequisitionRepository requisitionRepository;
                 private final MatFlowAccessService accessService;
                 private final MatFlowQcInspectionRepository qcRepository;
                 private final MatFlowAuditService auditService;
@@ -142,6 +144,7 @@ public class MatFlowMovementService {
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowReservationRepository reservationRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
+                                MatFlowMaterialRequisitionRepository requisitionRepository,
                                 MatFlowAccessService accessService,
                                 MatFlowQcInspectionRepository qcRepository,
                                 MatFlowAuditService auditService,
@@ -153,6 +156,7 @@ public class MatFlowMovementService {
                         this.ledgerRepository = ledgerRepository;
                         this.reservationRepository = reservationRepository;
                         this.requisitionLineRepository = requisitionLineRepository;
+                        this.requisitionRepository = requisitionRepository;
                         this.accessService = accessService;
                         this.qcRepository = qcRepository;
                         this.auditService = auditService;
@@ -217,6 +221,9 @@ public class MatFlowMovementService {
                                 TransferActionRequest request) {
 
                         MatFlowTransferOrder transfer = requireLockedTransfer(id);
+
+                        MatFlowMaterialRequisition transferRequisition = requireTransferRequisition(
+                                        transfer);
 
                         validateTransferLocations(
                                         transfer);
@@ -371,9 +378,9 @@ public class MatFlowMovementService {
                                         "TRANSFER_DISPATCHED",
                                         transfer.fromLocation
                                                         .getPlantCode(),
-                                        transfer.requisition.projectDrawing
+                                        transferRequisition.projectDrawing
                                                         .getProjectCode(),
-                                        transfer.requisition.projectDrawing
+                                        transferRequisition.projectDrawing
                                                         .getDrawingNo(),
                                         auditService.details(
                                                         "transferNumber",
@@ -406,6 +413,9 @@ public class MatFlowMovementService {
                                 TransferActionRequest request) {
 
                         MatFlowTransferOrder transfer = requireLockedTransfer(id);
+
+                        MatFlowMaterialRequisition transferRequisition = requireTransferRequisition(
+                                        transfer);
 
                         validateTransferLocations(
                                         transfer);
@@ -631,7 +641,7 @@ public class MatFlowMovementService {
 
                                 if (finalProductionDestination) {
                                         requisitionService.refreshState(
-                                                        transfer.requisition.getId(),
+                                                        transferRequisition.getId(),
                                                         actor);
                                 }
                         }
@@ -642,9 +652,9 @@ public class MatFlowMovementService {
                                         "TRANSFER_RECEIVED",
                                         transfer.toLocation
                                                         .getPlantCode(),
-                                        transfer.requisition.projectDrawing
+                                        transferRequisition.projectDrawing
                                                         .getProjectCode(),
-                                        transfer.requisition.projectDrawing
+                                        transferRequisition.projectDrawing
                                                         .getDrawingNo(),
                                         auditService.details(
                                                         "transferNumber",
@@ -690,15 +700,18 @@ public class MatFlowMovementService {
                                                         transferRepository.save(
                                                                         successor);
 
+                                                        MatFlowMaterialRequisition successorRequisition = requireTransferRequisition(
+                                                                        successor);
+
                                                         auditService.record(
                                                                         "TRANSFER",
                                                                         successor.getId(),
                                                                         "TRANSFER_READY",
                                                                         successor.fromLocation
                                                                                         .getPlantCode(),
-                                                                        successor.requisition.projectDrawing
+                                                                        successorRequisition.projectDrawing
                                                                                         .getProjectCode(),
-                                                                        successor.requisition.projectDrawing
+                                                                        successorRequisition.projectDrawing
                                                                                         .getDrawingNo(),
                                                                         auditService.details(
                                                                                         "transferNumber",
@@ -924,6 +937,59 @@ public class MatFlowMovementService {
                                         status == TransferStatus.PARTIALLY_RECEIVED;
                 }
 
+                /**
+                 * Re-hydrates the requisition aggregate through the authoritative
+                 * requisition repository before reading project/BOM fields.
+                 *
+                 * MatFlowTransferOrder.requisition is LAZY. Accessing public nested
+                 * backing fields directly from a Hibernate proxy can make
+                 * requisition.projectDrawing / requisition.bom appear null even when
+                 * the foreign keys are valid. findDetailById() is already the
+                 * established MatFlow requisition read contract and initializes the
+                 * required aggregate safely.
+                 */
+                private MatFlowMaterialRequisition requireTransferRequisition(
+                                MatFlowTransferOrder transfer) {
+
+                        if (transfer == null ||
+                                        transfer.requisition == null ||
+                                        transfer.requisition.getId() == null) {
+
+                                throw conflict(
+                                                "Transfer requisition is missing");
+                        }
+
+                        UUID requisitionId = transfer.requisition.getId();
+
+                        MatFlowMaterialRequisition requisition = requisitionRepository
+                                        .findDetailById(requisitionId)
+                                        .orElseThrow(() -> conflict(
+                                                        "Transfer requisition no longer exists: " + requisitionId));
+
+                        if (requisition.projectDrawing == null) {
+                                throw conflict(
+                                                "Transfer requisition has no Project/Drawing master: " +
+                                                                requisition.requisitionNumber);
+                        }
+
+                        if (requisition.bom == null) {
+                                throw conflict(
+                                                "Transfer requisition has no operational BOM: " +
+                                                                requisition.requisitionNumber);
+                        }
+
+                        if (requisition.destinationLocation == null) {
+                                throw conflict(
+                                                "Transfer requisition has no Production destination: " +
+                                                                requisition.requisitionNumber);
+                        }
+
+                        // Keep the transfer aggregate aligned with the hydrated instance.
+                        transfer.requisition = requisition;
+
+                        return requisition;
+                }
+
                 private MatFlowTransferOrder requireLockedTransfer(
                                 UUID id) {
 
@@ -1020,6 +1086,9 @@ public class MatFlowMovementService {
                                 String remarks,
                                 String actor) {
 
+                        MatFlowMaterialRequisition transferRequisition = requireTransferRequisition(
+                                        transfer);
+
                         MatFlowStockLedger ledger = new MatFlowStockLedger();
 
                         ledger.material = balance.material;
@@ -1058,10 +1127,10 @@ public class MatFlowMovementService {
 
                         ledger.referenceNumber = transfer.transferNumber;
 
-                        ledger.projectCode = transfer.requisition.projectDrawing
+                        ledger.projectCode = transferRequisition.projectDrawing
                                         .getProjectCode();
 
-                        ledger.drawingNo = transfer.requisition.projectDrawing
+                        ledger.drawingNo = transferRequisition.projectDrawing
                                         .getDrawingNo();
 
                         ledger.batchNo = clean(
@@ -1086,20 +1155,8 @@ public class MatFlowMovementService {
                                                 "Transfer order is required");
                         }
 
-                        if (transfer.requisition == null) {
-                                throw conflict(
-                                                "Transfer requisition is missing");
-                        }
-
-                        if (transfer.requisition.projectDrawing == null) {
-                                throw conflict(
-                                                "Transfer project drawing is missing");
-                        }
-
-                        if (transfer.requisition.bom == null) {
-                                throw conflict(
-                                                "Transfer operational BOM is missing");
-                        }
+                        MatFlowMaterialRequisition requisition = requireTransferRequisition(
+                                        transfer);
 
                         if (transfer.reservation == null) {
                                 throw conflict(
@@ -1120,8 +1177,6 @@ public class MatFlowMovementService {
                                 throw conflict(
                                                 "Transfer material is missing");
                         }
-
-                        MatFlowMaterialRequisition requisition = transfer.requisition;
 
                         MatFlowProjectDrawing project = requisition.projectDrawing;
 
@@ -1946,9 +2001,11 @@ public class MatFlowMovementService {
                         validateCreateRequest(request);
 
                         MatFlowMaterialRequisition requisition = requisitionRepository
-                                        .findById(request.requisitionId())
+                                        .findDetailById(request.requisitionId())
                                         .orElseThrow(() -> notFound(
                                                         "Requisition not found"));
+
+                        validateReturnRequisition(requisition);
 
                         MatFlowLocation fromLocation = requireLocation(
                                         request.fromLocationId());
@@ -2097,6 +2154,8 @@ public class MatFlowMovementService {
                                 UUID id,
                                 MaterialReturnActionRequest request) {
                         MatFlowMaterialReturn materialReturn = requireReturn(id);
+                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
+                                        materialReturn);
 
                         accessService.requireTransferDispatch(
                                         materialReturn.fromLocation);
@@ -2195,12 +2254,8 @@ public class MatFlowMovementService {
                                         materialReturn.getId(),
                                         "MATERIAL_RETURN_DISPATCHED",
                                         materialReturn.fromLocation.getPlantCode(),
-                                        materialReturn.requisition.projectDrawing == null
-                                                        ? null
-                                                        : materialReturn.requisition.projectDrawing.getProjectCode(),
-                                        materialReturn.requisition.projectDrawing == null
-                                                        ? null
-                                                        : materialReturn.requisition.projectDrawing.getDrawingNo(),
+                                        returnRequisition.projectDrawing.getProjectCode(),
+                                        returnRequisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
                                                         "returnNumber", materialReturn.returnNumber,
                                                         "status", materialReturn.status));
@@ -2213,6 +2268,8 @@ public class MatFlowMovementService {
                                 UUID id,
                                 MaterialReturnActionRequest request) {
                         MatFlowMaterialReturn materialReturn = requireReturn(id);
+                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
+                                        materialReturn);
 
                         accessService.requireTransferReceive(
                                         materialReturn.toLocation);
@@ -2360,12 +2417,8 @@ public class MatFlowMovementService {
                                         materialReturn.getId(),
                                         "MATERIAL_RETURN_RECEIVED",
                                         materialReturn.toLocation.getPlantCode(),
-                                        materialReturn.requisition.projectDrawing == null
-                                                        ? null
-                                                        : materialReturn.requisition.projectDrawing.getProjectCode(),
-                                        materialReturn.requisition.projectDrawing == null
-                                                        ? null
-                                                        : materialReturn.requisition.projectDrawing.getDrawingNo(),
+                                        returnRequisition.projectDrawing.getProjectCode(),
+                                        returnRequisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
                                                         "returnNumber", materialReturn.returnNumber,
                                                         "status", materialReturn.status));
@@ -2390,6 +2443,63 @@ public class MatFlowMovementService {
                         }
 
                         return materialReturn;
+                }
+
+                /**
+                 * Re-hydrates the Material Return requisition through the same aggregate
+                 * detail query used by the requisition workflow. This prevents public
+                 * backing-field reads on a Hibernate lazy requisition proxy from being
+                 * mistaken for missing Project/BOM/destination data.
+                 */
+                private MatFlowMaterialRequisition requireReturnRequisition(
+                                MatFlowMaterialReturn materialReturn) {
+
+                        if (materialReturn == null ||
+                                        materialReturn.requisition == null ||
+                                        materialReturn.requisition.getId() == null) {
+                                throw conflict(
+                                                "Material return requisition is missing");
+                        }
+
+                        UUID requisitionId = materialReturn.requisition.getId();
+
+                        MatFlowMaterialRequisition requisition = requisitionRepository
+                                        .findDetailById(requisitionId)
+                                        .orElseThrow(() -> conflict(
+                                                        "Material return requisition no longer exists: "
+                                                                        + requisitionId));
+
+                        validateReturnRequisition(requisition);
+
+                        materialReturn.requisition = requisition;
+                        return requisition;
+                }
+
+                private void validateReturnRequisition(
+                                MatFlowMaterialRequisition requisition) {
+
+                        if (requisition == null) {
+                                throw conflict(
+                                                "Material return requisition is missing");
+                        }
+
+                        if (requisition.projectDrawing == null) {
+                                throw conflict(
+                                                "Material return requisition has no Project/Drawing master: " +
+                                                                requisition.requisitionNumber);
+                        }
+
+                        if (requisition.bom == null) {
+                                throw conflict(
+                                                "Material return requisition has no operational BOM: " +
+                                                                requisition.requisitionNumber);
+                        }
+
+                        if (requisition.destinationLocation == null) {
+                                throw conflict(
+                                                "Material return requisition has no Production destination: " +
+                                                                requisition.requisitionNumber);
+                        }
                 }
 
                 private MatFlowLocation requireLocation(
@@ -2437,6 +2547,9 @@ public class MatFlowMovementService {
 
                 private MaterialReturnResponse toResponse(
                                 MatFlowMaterialReturn materialReturn) {
+                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
+                                        materialReturn);
+
                         List<MaterialReturnLineResponse> lines = returnLineRepository
                                         .findByMaterialReturn_IdOrderByCreatedAtAsc(
                                                         materialReturn.getId())
@@ -2461,8 +2574,8 @@ public class MatFlowMovementService {
                         return new MaterialReturnResponse(
                                         materialReturn.getId(),
                                         materialReturn.returnNumber,
-                                        materialReturn.requisition.getId(),
-                                        materialReturn.requisition.requisitionNumber,
+                                        returnRequisition.getId(),
+                                        returnRequisition.requisitionNumber,
 
                                         materialReturn.fromLocation.getId(),
                                         materialReturn.fromLocation.getLocationCode(),
@@ -2516,6 +2629,9 @@ public class MatFlowMovementService {
                                 MatFlowMaterialReturn materialReturn,
                                 MatFlowMaterialReturnLine line,
                                 String actor) {
+                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
+                                        materialReturn);
+
                         MatFlowStockLedger ledger = new MatFlowStockLedger();
 
                         ledger.material = balance.material;
@@ -2546,10 +2662,10 @@ public class MatFlowMovementService {
 
                         ledger.referenceNumber = materialReturn.returnNumber;
 
-                        ledger.projectCode = materialReturn.requisition.projectDrawing
+                        ledger.projectCode = returnRequisition.projectDrawing
                                         .getProjectCode();
 
-                        ledger.drawingNo = materialReturn.requisition.projectDrawing
+                        ledger.drawingNo = returnRequisition.projectDrawing
                                         .getDrawingNo();
 
                         ledger.batchNo = line.batchNo;
