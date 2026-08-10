@@ -15,6 +15,7 @@ import AddIcon from "@mui/icons-material/Add";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import { useNavigate } from "react-router-dom";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
@@ -47,6 +48,7 @@ import {
 } from "../matflowUi";
 
 export function MatFlowQcPage() {
+    const navigate = useNavigate();
     const { hasRole } = useMatFlow();
     const canQcWrite = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.QC);
     const canVendorReturn = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
@@ -69,11 +71,22 @@ export function MatFlowQcPage() {
     }, [status]);
     useEffect(() => { load(); }, [load]);
 
+    const counts = useMemo(() => ({
+        pending: rows.filter((row) => normalize(row.status) === "PENDING").length,
+        completed: rows.filter((row) => normalize(row.status) === "COMPLETED").length,
+        transferPending: rows.filter((row) => normalize(row.status) === "PENDING" && normalize(row.sourceType) === "TRANSFER_RECEIPT").length,
+        rejectedOpen: rows.filter((row) => normalize(row.status) === "COMPLETED" && numeric(row.rejectedQty) > 0).length,
+    }), [rows]);
+
     const openDecision = (row) => {
-        setDialog({ type: "DECISION", row }); setForm({ acceptedQty: String(row.inspectionQty ?? 0), rejectedQty: "0", remarks: "", dispositionType: "HOLD", quantity: "", targetLocationId: "" }); setError("");
+        setDialog({ type: "DECISION", row });
+        setForm({ acceptedQty: String(row.inspectionQty ?? 0), rejectedQty: "0", remarks: "", dispositionType: "HOLD", quantity: "", targetLocationId: "" });
+        setError("");
     };
     const openDisposition = (row) => {
-        setDialog({ type: "DISPOSITION", row }); setForm({ acceptedQty: "", rejectedQty: "", remarks: "", dispositionType: "HOLD", quantity: String(row.rejectedQty ?? 0), targetLocationId: "" }); setError("");
+        setDialog({ type: "DISPOSITION", row });
+        setForm({ acceptedQty: "", rejectedQty: "", remarks: "", dispositionType: "HOLD", quantity: String(row.rejectedQty ?? 0), targetLocationId: "" });
+        setError("");
     };
     const execute = async () => {
         const row = dialog?.row; if (!row) return;
@@ -99,12 +112,66 @@ export function MatFlowQcPage() {
         finally { setWorking(false); }
     };
 
+    const sourceTransferButton = (row, label = "Source Transfer") =>
+        normalize(row?.sourceType) === "TRANSFER_RECEIPT" && row?.sourceId
+            ? <Button onClick={() => navigate(`/matflow/transfers/${row.sourceId}`)} sx={secondaryBtnSx}>{label}</Button>
+            : null;
+
     return <Box sx={pageSx}>
-        <PageHero badge="QUALITY CONTROL" title="Material QC" subtitle="Inspect GRN and transfer receipts before accepted quantity can continue through MatFlow." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} />
+        <PageHero
+            badge="QUALITY CONTROL GATE"
+            title="Material QC"
+            subtitle="QC is the release gate between physical receipt and the downstream approved material route. Accepted transfer material unlocks the next route transfer; rejected material remains controlled for disposition."
+            actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button onClick={() => navigate("/matflow/transfers")} sx={secondaryBtnSx}>Transfer Desk</Button></>}
+        />
         <ErrorBox>{error}</ErrorBox>
-        <Card sx={panelSx}><TextField select label="QC Status" value={status} onChange={e => setStatus(e.target.value)} sx={{ ...fieldSx, minWidth: 220 }}><MenuItem value="">All</MenuItem><MenuItem value="PENDING">Pending</MenuItem><MenuItem value="COMPLETED">Completed</MenuItem></TextField></Card>
-        <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 140px 190px 150px 110px 100px 100px 150px 180px" }}>{["Inspection", "Source", "Material", "Location", "Qty", "Accepted", "Rejected", "Status", "Action"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{rows.length === 0 ? <EmptyState /> : rows.map(row => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 140px 190px 150px 110px 100px 100px 150px 180px" }}><Box sx={tableCellSx}>{row.inspectionNumber}</Box><Box sx={tableCellSx}>{readable(row.sourceType)}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode}</Typography><Typography sx={subTextSx}>{row.materialName}</Typography></Box><Box sx={tableCellSx}>{row.locationCode}</Box><Box sx={tableCellSx}>{formatQty(row.inspectionQty)}</Box><Box sx={tableCellSx}>{formatQty(row.acceptedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.rejectedQty)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap" }}>{canQcWrite && normalize(row.status) === "PENDING" && <Button onClick={() => openDecision(row)} sx={primaryBtnSx}>Decide</Button>}{canQcWrite && normalize(row.status) === "COMPLETED" && numeric(row.rejectedQty) > 0 && normalize(row.sourceType) === "TRANSFER_RECEIPT" && <Button onClick={() => openDisposition(row)} sx={secondaryBtnSx}>Disposition</Button>}{canVendorReturn && normalize(row.status) === "COMPLETED" && numeric(row.rejectedQty) > 0 && normalize(row.sourceType) === "GOODS_RECEIPT" && <Button onClick={() => { setDialog({ type: "VENDOR_RETURN", row }); setForm(f => ({ ...f, quantity: String(row.rejectedQty ?? 0), remarks: "" })); }} sx={secondaryBtnSx}>Vendor Return</Button>}</Box></Box>)}</Box>}</Card>
-        <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{dialog?.type === "DECISION" ? "QC Decision" : dialog?.type === "VENDOR_RETURN" ? "Return Rejected Material to Vendor" : "Rejected Material Disposition"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>{dialog?.type === "DECISION" ? <><TextField type="number" label="Accepted Qty" value={form.acceptedQty} onChange={e => setForm(c => ({ ...c, acceptedQty: e.target.value }))} sx={fieldSx} /><TextField type="number" label="Rejected Qty" value={form.rejectedQty} onChange={e => setForm(c => ({ ...c, rejectedQty: e.target.value }))} sx={fieldSx} /></> : dialog?.type === "DISPOSITION" ? <><TextField select label="Disposition" value={form.dispositionType} onChange={e => setForm(c => ({ ...c, dispositionType: e.target.value }))} sx={fieldSx}>{["HOLD", "REWORK", "RETURN_TO_SOURCE", "SCRAP"].map(v => <MenuItem key={v} value={v}>{readable(v)}</MenuItem>)}</TextField><TextField type="number" label="Quantity" value={form.quantity} onChange={e => setForm(c => ({ ...c, quantity: e.target.value }))} sx={fieldSx} />{form.dispositionType === "REWORK" && <TextField select label="Rework Processing Location" value={form.targetLocationId} onChange={e => setForm(c => ({ ...c, targetLocationId: e.target.value }))} sx={fieldSx}>{locations.filter(l => ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(normalize(l.locationType))).map(l => <MenuItem key={l.id} value={l.id}>{l.locationCode} · {l.plantCode} · {readable(l.locationType)}</MenuItem>)}</TextField>}</> : <TextField type="number" label="Return Qty" value={form.quantity} onChange={e => setForm(c => ({ ...c, quantity: e.target.value }))} sx={fieldSx} />}<TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={e => setForm(c => ({ ...c, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={execute} disabled={working} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
+            <Card sx={panelSx}><Typography sx={subTextSx}>PENDING QC</Typography><Typography sx={{ fontSize: 20, fontWeight: 950 }}>{counts.pending}</Typography></Card>
+            <Card sx={panelSx}><Typography sx={subTextSx}>TRANSFER RECEIPTS WAITING</Typography><Typography sx={{ fontSize: 20, fontWeight: 950 }}>{counts.transferPending}</Typography></Card>
+            <Card sx={panelSx}><Typography sx={subTextSx}>COMPLETED QC</Typography><Typography sx={{ fontSize: 20, fontWeight: 950 }}>{counts.completed}</Typography></Card>
+            <Card sx={panelSx}><Typography sx={subTextSx}>REJECTED / DISPOSITION</Typography><Typography sx={{ fontSize: 20, fontWeight: 950 }}>{counts.rejectedOpen}</Typography></Card>
+        </Box>
+        <Card sx={panelSx}>
+            <Box sx={{ display: "flex", gap: 1, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+                <TextField select label="QC Status" value={status} onChange={e => setStatus(e.target.value)} sx={{ ...fieldSx, minWidth: 220 }}><MenuItem value="">All</MenuItem><MenuItem value="PENDING">Pending</MenuItem><MenuItem value="COMPLETED">Completed</MenuItem></TextField>
+                <Typography sx={subTextSx}>Transfer-receipt QC must be completed before its PLANNED successor becomes READY.</Typography>
+            </Box>
+        </Card>
+        <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
+            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 145px 190px 150px 100px 100px 100px 140px minmax(220px,1fr)" }}>{["Inspection", "Source", "Material", "QC Location", "Qty", "Accepted", "Rejected", "Status", "Control / Next Step"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+            {rows.length === 0 ? <EmptyState /> : rows.map(row => {
+                const pending = normalize(row.status) === "PENDING";
+                const transferReceipt = normalize(row.sourceType) === "TRANSFER_RECEIPT";
+                const completedAccepted = normalize(row.status) === "COMPLETED" && numeric(row.acceptedQty) > 0;
+                return <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 145px 190px 150px 100px 100px 100px 140px minmax(220px,1fr)" }}>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.inspectionNumber}</Typography><Typography sx={subTextSx}>{row.inspectedBy ? `By ${row.inspectedBy}` : "Awaiting QC"}</Typography></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.sourceType)}</Typography>{transferReceipt && <Typography sx={subTextSx}>Route receipt</Typography>}</Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode}</Typography><Typography sx={subTextSx}>{row.materialName}</Typography></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode}</Typography><Typography sx={subTextSx}>QC custody</Typography></Box>
+                    <Box sx={tableCellSx}>{formatQty(row.inspectionQty)}</Box>
+                    <Box sx={tableCellSx}>{formatQty(row.acceptedQty)}</Box>
+                    <Box sx={tableCellSx}>{formatQty(row.rejectedQty)}</Box>
+                    <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
+                    <Box sx={{ ...tableCellSx, display: "flex", gap: .6, flexWrap: "wrap", alignItems: "center" }}>
+                        {canQcWrite && pending && <Button onClick={() => openDecision(row)} sx={primaryBtnSx}>Decide</Button>}
+                        {sourceTransferButton(row)}
+                        {canQcWrite && normalize(row.status) === "COMPLETED" && numeric(row.rejectedQty) > 0 && transferReceipt && <Button onClick={() => openDisposition(row)} sx={secondaryBtnSx}>Disposition</Button>}
+                        {canVendorReturn && normalize(row.status) === "COMPLETED" && numeric(row.rejectedQty) > 0 && normalize(row.sourceType) === "GOODS_RECEIPT" && <Button onClick={() => { setDialog({ type: "VENDOR_RETURN", row }); setForm(f => ({ ...f, quantity: String(row.rejectedQty ?? 0), remarks: "" })); }} sx={secondaryBtnSx}>Vendor Return</Button>}
+                        {completedAccepted && transferReceipt && <Typography sx={{ ...subTextSx, flexBasis: "100%" }}>QC released — downstream route is ready for its owning desk.</Typography>}
+                        {pending && transferReceipt && <Typography sx={{ ...subTextSx, flexBasis: "100%" }}>Decision releases accepted quantity into the next approved route leg.</Typography>}
+                    </Box>
+                </Box>;
+            })}
+        </Box>}</Card>
+        <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}>{dialog?.type === "DECISION" ? "QC Decision & Route Release" : dialog?.type === "VENDOR_RETURN" ? "Return Rejected Material to Vendor" : "Rejected Material Disposition"}</DialogTitle>
+            <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>
+                {dialog?.type === "DECISION" && normalize(dialog?.row?.sourceType) === "TRANSFER_RECEIPT" && <Typography sx={subTextSx}>Confirm only after the source transfer is fully received. Accepted quantity will release the QC block and make the downstream approved transfer READY.</Typography>}
+                {dialog?.type === "DECISION" ? <><TextField type="number" label="Accepted Qty" value={form.acceptedQty} onChange={e => setForm(c => ({ ...c, acceptedQty: e.target.value }))} sx={fieldSx} /><TextField type="number" label="Rejected Qty" value={form.rejectedQty} onChange={e => setForm(c => ({ ...c, rejectedQty: e.target.value }))} sx={fieldSx} /></> : dialog?.type === "DISPOSITION" ? <><TextField select label="Disposition" value={form.dispositionType} onChange={e => setForm(c => ({ ...c, dispositionType: e.target.value }))} sx={fieldSx}>{["HOLD", "REWORK", "RETURN_TO_SOURCE", "SCRAP"].map(v => <MenuItem key={v} value={v}>{readable(v)}</MenuItem>)}</TextField><TextField type="number" label="Quantity" value={form.quantity} onChange={e => setForm(c => ({ ...c, quantity: e.target.value }))} sx={fieldSx} />{form.dispositionType === "REWORK" && <TextField select label="Rework Processing Location" value={form.targetLocationId} onChange={e => setForm(c => ({ ...c, targetLocationId: e.target.value }))} sx={fieldSx}>{locations.filter(l => ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(normalize(l.locationType))).map(l => <MenuItem key={l.id} value={l.id}>{l.locationCode} · {l.plantCode} · {readable(l.locationType)}</MenuItem>)}</TextField>}</> : <TextField type="number" label="Return Qty" value={form.quantity} onChange={e => setForm(c => ({ ...c, quantity: e.target.value }))} sx={fieldSx} />}
+                <TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={e => setForm(c => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
+            </Box></DialogContent>
+            <DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={execute} disabled={working} sx={primaryBtnSx}>{working ? "Processing..." : "Confirm & Release Route"}</Button></DialogActions>
+        </Dialog>
     </Box>;
 }
 

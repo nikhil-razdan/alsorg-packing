@@ -42,6 +42,7 @@ import {
     pageSx,
     panelSx,
     primaryBtnSx,
+    readable,
     secondaryBtnSx,
     subTextSx,
     tableCellSx,
@@ -475,6 +476,9 @@ export function MatFlowStoreDetailPage() {
                         const nextOwner = reservation?.issueReady
                             ? "STORE · ISSUE"
                             : currentTransfer?.responsibleDepartment || reservation?.responsibleDepartment || "ROUTE";
+                        const nextAction = reservation?.issueReady
+                            ? "ISSUE_TO_PRODUCTION"
+                            : currentTransfer?.nextAction || reservation?.nextAction || "COMPLETE_ROUTE";
 
                         return <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 135px 105px minmax(280px,1fr) 155px 175px", alignItems: "center" }}>
                             <Box sx={tableCellSx}>
@@ -485,19 +489,19 @@ export function MatFlowStoreDetailPage() {
                             <Box sx={tableCellSx}>{formatQty(reservation.reservedQty)}</Box>
                             <Box sx={tableCellSx}>
                                 {route.length === 0 ? <Typography sx={subTextSx}>Route not generated.</Typography> : <Box sx={{ display: "flex", gap: .7, alignItems: "stretch", flexWrap: "wrap" }}>
-                                    <Box sx={{ px: 1, py: .65, border: "1px solid rgba(148,163,184,.22)", borderRadius: 1.5, minWidth: 88 }}>
+                                    <Box sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 88 }}>
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>SOURCE</Typography>
                                         <Typography sx={{ ...mainTextSx, fontSize: 12 }}>{reservation.sourceLocationCode || "STORE"}</Typography>
                                     </Box>
-                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid rgba(148,163,184,.22)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "rgba(14,165,233,.08)" : "transparent" }}>
+                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "var(--mf-primary-soft)" : "transparent" }}>
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>→ {transfer.toLocationCode || "NEXT"}</Typography>
                                         <Box sx={{ mt: .35 }}><MatFlowStatusChip status={transfer.status} /></Box>
                                     </Box>)}
                                 </Box>}
                             </Box>
                             <Box sx={tableCellSx}>
-                                <Typography sx={mainTextSx}>{nextOwner}</Typography>
-                                <Typography sx={subTextSx}>{reservation.nextAction || currentTransfer?.nextAction || (reservation.issueReady ? "ISSUE_TO_PRODUCTION" : "COMPLETE_ROUTE")}</Typography>
+                                <Typography sx={mainTextSx}>{readable(nextOwner)}</Typography>
+                                <Typography sx={subTextSx}>{readable(nextAction)}</Typography>
                             </Box>
                             <Box sx={tableCellSx}>
                                 {reservation.issueReady && remainingIssue > 0 ? <Button startIcon={<OutputOutlinedIcon />} disabled={workingId === String(reservation.id)} onClick={() => issue(reservation)} sx={primaryBtnSx}>Issue</Button>

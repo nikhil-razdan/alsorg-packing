@@ -120,7 +120,19 @@ export default function MatFlowLayout() {
                     {!collapsed && <Box><Typography sx={logoTitleSx}>MatFlow</Typography><Typography sx={mutedSx}>Material Operations</Typography></Box>}
                 </Box>
                 <Divider sx={{ borderColor: "var(--mf-border)" }} />
-                <Box component="nav" sx={{ py: 1, overflowY: "auto", flex: 1 }}>
+                <Box sx={sidebarIdentitySx(collapsed)}>
+                    <Box sx={avatarSx}>{String(user?.username || user?.name || "U").trim().charAt(0).toUpperCase() || "U"}</Box>
+                    {!collapsed && (
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography noWrap sx={{ color: "var(--mf-text)", fontWeight: 900, fontSize: 12.5 }}>
+                                {user?.username || user?.name || "User"}
+                            </Typography>
+                            <Typography noWrap sx={mutedSx}>{matFlowRoleLabel(role)}</Typography>
+                        </Box>
+                    )}
+                </Box>
+                <Divider sx={{ borderColor: "var(--mf-border)" }} />
+                <Box component="nav" sx={{ py: .9, overflowY: "auto", flex: 1 }}>
                     {items.map((item) => (
                         <Tooltip key={item.path} title={collapsed ? item.label : ""} placement="right">
                             <NavLink to={item.path} style={({ isActive }) => linkStyle(isActive, collapsed)}>
@@ -178,24 +190,104 @@ export default function MatFlowLayout() {
     );
 }
 
-const shellSx = { minHeight: "100vh", background: "var(--mf-page-bg)" };
+const shellSx = {
+    minHeight: "100vh",
+    background: "var(--mf-page-bg)",
+};
 const sidebarSx = (collapsed) => ({
-    position: "fixed", inset: "0 auto 0 0", width: collapsed ? 74 : 248, zIndex: 1200,
-    display: "flex", flexDirection: "column", background: "var(--mf-sidebar-bg)",
-    borderRight: "1px solid var(--mf-border)", transition: "width .2s ease",
+    position: "fixed",
+    inset: "0 auto 0 0",
+    width: collapsed ? 68 : 224,
+    zIndex: 1200,
+    display: "flex",
+    flexDirection: "column",
+    background: "var(--mf-sidebar-bg)",
+    borderRight: "1px solid var(--mf-border)",
+    boxShadow: "none",
+    transition: "width .2s ease",
 });
-const mainSx = (collapsed) => ({ ml: collapsed ? "74px" : "248px", minHeight: "100vh", transition: "margin-left .2s ease" });
-const logoSx = { minHeight: 72, p: 1.5, display: "flex", gap: 1.2, alignItems: "center" };
-const markSx = { width: 40, height: 40, borderRadius: 2.5, display: "grid", placeItems: "center", background: "linear-gradient(135deg,#0284c7,#38bdf8)", color: "#fff", fontWeight: 950 };
-const logoTitleSx = { color: "var(--mf-text)", fontWeight: 950, fontSize: 17 };
-const mutedSx = { color: "var(--mf-text-muted)", fontSize: 10.5, fontWeight: 700 };
-const headerSx = { minHeight: 72, px: { xs: 2, md: 2.5 }, py: 1.2, position: "sticky", top: 0, zIndex: 1100, display: "flex", justifyContent: "space-between", gap: 2, alignItems: "center", background: "var(--mf-header-bg)", borderBottom: "1px solid var(--mf-border)" };
+const mainSx = (collapsed) => ({
+    ml: collapsed ? "68px" : "224px",
+    minHeight: "100vh",
+    transition: "margin-left .2s ease",
+});
+const logoSx = {
+    minHeight: 66,
+    px: 1.45,
+    py: 1.15,
+    display: "flex",
+    gap: 1,
+    alignItems: "center",
+};
+const markSx = {
+    width: 36,
+    height: 36,
+    borderRadius: 2.2,
+    display: "grid",
+    placeItems: "center",
+    background: "var(--mf-primary)",
+    boxShadow: "0 7px 18px rgba(59,130,246,.16)",
+    color: "#fff",
+    fontWeight: 950,
+};
+const logoTitleSx = { color: "var(--mf-text)", fontWeight: 950, fontSize: 15.5, lineHeight: 1.1 };
+const mutedSx = { color: "var(--mf-text-muted)", fontSize: 9.5, fontWeight: 700 };
+const sidebarIdentitySx = (collapsed) => ({
+    px: collapsed ? .9 : 1.2,
+    py: 1.05,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: collapsed ? "center" : "flex-start",
+    gap: .9,
+});
+const avatarSx = {
+    width: 32,
+    height: 32,
+    flex: "0 0 auto",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    color: "var(--mf-primary-text)",
+    background: "var(--mf-primary-soft)",
+    border: "1px solid var(--mf-primary-border)",
+    fontSize: 11.5,
+    fontWeight: 950,
+};
+const headerSx = {
+    minHeight: 64,
+    px: { xs: 1.6, md: 2.2 },
+    py: .85,
+    position: "sticky",
+    top: 0,
+    zIndex: 1100,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 2,
+    alignItems: "center",
+    background: "var(--mf-header-bg)",
+    backdropFilter: "blur(14px)",
+    borderBottom: "1px solid var(--mf-border)",
+};
 const identitySx = { display: "none" };
-const contentSx = { p: { xs: 1.5, md: 2.25 }, maxWidth: 1700, mx: "auto" };
+const contentSx = {
+    p: { xs: 1.35, md: 2 },
+    maxWidth: 1640,
+    mx: "auto",
+};
 const linkStyle = (active, collapsed) => ({
-    display: "flex", alignItems: "center", gap: 12, margin: "4px 8px", padding: collapsed ? "10px 16px" : "10px 12px",
-    borderRadius: 10, textDecoration: "none", fontSize: 12, fontWeight: active ? 900 : 750,
-    color: active ? "#7dd3fc" : "var(--mf-text-secondary)",
-    background: active ? "rgba(14,165,233,.13)" : "transparent",
-    border: active ? "1px solid rgba(14,165,233,.22)" : "1px solid transparent",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 38,
+    margin: "3px 8px",
+    padding: collapsed ? "8px 13px" : "8px 10px",
+    borderRadius: 8,
+    textDecoration: "none",
+    fontSize: 11.2,
+    fontWeight: active ? 900 : 760,
+    color: active ? "var(--mf-primary-text)" : "var(--mf-text-secondary)",
+    background: active ? "var(--mf-primary-soft)" : "transparent",
+    border: active ? "1px solid var(--mf-primary-border)" : "1px solid transparent",
+    transition: "background .14s ease,color .14s ease,border-color .14s ease",
 });
+

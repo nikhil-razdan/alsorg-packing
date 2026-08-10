@@ -36,57 +36,138 @@ const readMode = () => {
 const variables = (mode) => {
   const dark = mode === "dark";
   return {
-    "--mf-page-bg": dark ? "#07111f" : "#f4f7fb",
-    "--mf-panel-bg": dark ? "rgba(15,23,42,.90)" : "rgba(255,255,255,.98)",
-    "--mf-panel-solid": dark ? "#0f172a" : "#fff",
-    "--mf-surface": dark ? "rgba(2,6,23,.36)" : "rgba(241,245,249,.94)",
-    "--mf-surface-strong": dark ? "rgba(2,6,23,.58)" : "rgba(226,232,240,.95)",
-    "--mf-field-bg": dark ? "rgba(255,255,255,.04)" : "#fff",
-    "--mf-hover": dark ? "rgba(14,165,233,.10)" : "rgba(37,99,235,.07)",
-    "--mf-text": dark ? "#f8fafc" : "#0f172a",
-    "--mf-text-secondary": dark ? "rgba(248,250,252,.70)" : "rgba(15,23,42,.72)",
-    "--mf-text-muted": dark ? "rgba(248,250,252,.48)" : "rgba(15,23,42,.50)",
-    "--mf-border": dark ? "rgba(255,255,255,.08)" : "rgba(15,23,42,.11)",
-    "--mf-border-strong": dark ? "rgba(255,255,255,.16)" : "rgba(15,23,42,.20)",
-    "--mf-shadow": dark ? "0 16px 36px rgba(2,6,23,.28)" : "0 14px 30px rgba(15,23,42,.08)",
+    // Base shell
+    "--mf-page-bg": dark ? "#07111f" : "#f6f9fe",
+    "--mf-panel-bg": dark ? "rgba(15,23,42,.90)" : "#ffffff",
+    "--mf-panel-solid": dark ? "#0f172a" : "#ffffff",
+    "--mf-surface": dark ? "rgba(2,6,23,.36)" : "#f8fafd",
+    "--mf-surface-strong": dark ? "rgba(2,6,23,.58)" : "#f3f6fb",
+    "--mf-field-bg": dark ? "rgba(255,255,255,.04)" : "#ffffff",
+    "--mf-hover": dark ? "rgba(14,165,233,.10)" : "#f2f7ff",
+    "--mf-text": dark ? "#f8fafc" : "#172033",
+    "--mf-text-secondary": dark ? "rgba(248,250,252,.70)" : "#55627a",
+    "--mf-text-muted": dark ? "rgba(248,250,252,.48)" : "#8a96aa",
+    "--mf-border": dark ? "rgba(255,255,255,.08)" : "#e5ebf4",
+    "--mf-border-strong": dark ? "rgba(255,255,255,.16)" : "#d6e0ee",
+    "--mf-shadow": dark
+      ? "0 16px 36px rgba(2,6,23,.28)"
+      : "0 4px 16px rgba(39,71,117,.055)",
+
+    // PackFlow-inspired light accent system
+    "--mf-primary": dark ? "#0ea5e9" : "#3b82f6",
+    "--mf-primary-hover": dark ? "#0284c7" : "#2563eb",
+    "--mf-primary-soft": dark ? "rgba(14,165,233,.13)" : "#edf4ff",
+    "--mf-primary-border": dark ? "rgba(14,165,233,.24)" : "#d7e6ff",
+    "--mf-primary-text": dark ? "#7dd3fc" : "#2f6fed",
+    "--mf-success-text": dark ? "#4ade80" : "#16834a",
+    "--mf-success-soft": dark ? "rgba(34,197,94,.13)" : "#eaf8f0",
+    "--mf-success-border": dark ? "rgba(34,197,94,.24)" : "#ccefd9",
+    "--mf-warning-text": dark ? "#fbbf24" : "#b56a08",
+    "--mf-warning-soft": dark ? "rgba(245,158,11,.13)" : "#fff7e8",
+    "--mf-warning-border": dark ? "rgba(245,158,11,.24)" : "#f8dfae",
+    "--mf-danger-text": dark ? "#fca5a5" : "#c33f45",
+    "--mf-danger-soft": dark ? "rgba(239,68,68,.13)" : "#fff0f1",
+    "--mf-danger-border": dark ? "rgba(239,68,68,.24)" : "#f6d2d5",
+    "--mf-purple-text": dark ? "#c4b5fd" : "#7356c9",
+    "--mf-purple-soft": dark ? "rgba(139,92,246,.13)" : "#f3efff",
+    "--mf-purple-border": dark ? "rgba(139,92,246,.24)" : "#e1d8ff",
+
     "--mf-sidebar-bg": dark
       ? "linear-gradient(180deg,#06111f,#081629)"
-      : "linear-gradient(180deg,#ffffff,#edf3fa)",
+      : "#ffffff",
     "--mf-header-bg": dark
       ? "linear-gradient(180deg,rgba(6,17,31,.98),rgba(8,22,41,.96))"
-      : "linear-gradient(180deg,rgba(255,255,255,.98),rgba(245,248,252,.97))",
+      : "rgba(255,255,255,.96)",
     "--mf-hero-bg": dark
       ? "radial-gradient(circle at top left,rgba(14,165,233,.20),transparent 34%),linear-gradient(180deg,rgba(15,23,42,.94),rgba(15,23,42,.80))"
-      : "radial-gradient(circle at top left,rgba(37,99,235,.13),transparent 36%),linear-gradient(180deg,#fff,#f1f5f9)",
+      : "linear-gradient(180deg,#ffffff 0%,#fbfdff 100%)",
+    "--mf-table-head": dark ? "rgba(2,6,23,.58)" : "#f7f9fc",
+    "--mf-table-row": dark ? "rgba(15,23,42,.90)" : "#ffffff",
+    "--mf-table-hover": dark ? "rgba(14,165,233,.10)" : "#f7faff",
   };
 };
 
-const buildTheme = (mode) =>
-  createTheme({
+const buildTheme = (mode) => {
+  const dark = mode === "dark";
+  return createTheme({
     palette: {
       mode,
-      primary: { main: mode === "dark" ? "#60a5fa" : "#2563eb" },
-      secondary: { main: mode === "dark" ? "#a78bfa" : "#7c3aed" },
+      primary: { main: dark ? "#60a5fa" : "#3b82f6" },
+      secondary: { main: dark ? "#a78bfa" : "#8b5cf6" },
       background: {
-        default: mode === "dark" ? "#07111f" : "#f3f6fb",
-        paper: mode === "dark" ? "#0f172a" : "#fff",
+        default: dark ? "#07111f" : "#f6f9fe",
+        paper: dark ? "#0f172a" : "#ffffff",
       },
+      text: {
+        primary: dark ? "#f8fafc" : "#172033",
+        secondary: dark ? "rgba(248,250,252,.70)" : "#667085",
+      },
+      divider: dark ? "rgba(255,255,255,.08)" : "#e5ebf4",
       success: { main: "#16a34a" },
       warning: { main: "#f59e0b" },
       error: { main: "#dc2626" },
-      info: { main: "#0284c7" },
+      info: { main: "#3b82f6" },
     },
     typography: {
-      fontFamily: "Inter, Roboto, Arial, sans-serif",
+      fontFamily: 'Inter, "Segoe UI", Roboto, Arial, sans-serif',
       button: { textTransform: "none", fontWeight: 800 },
     },
     shape: { borderRadius: 12 },
     components: {
-      MuiCard: { styleOverrides: { root: { backgroundImage: "none" } } },
-      MuiPaper: { styleOverrides: { root: { backgroundImage: "none" } } },
-      MuiButton: { defaultProps: { disableElevation: true } },
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: { backgroundColor: dark ? "#07111f" : "#f6f9fe" },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            ...(dark ? {} : { borderColor: "#e5ebf4" }),
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: { backgroundImage: "none" },
+        },
+      },
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: dark ? {} : {
+            backgroundColor: "#ffffff",
+            "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#cbd8ea" },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#3b82f6" },
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: dark ? {} : { color: "#7b879b" },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: dark ? {} : {
+            border: "1px solid #e5ebf4",
+            boxShadow: "0 12px 30px rgba(39,71,117,.12)",
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: dark ? {} : {
+            border: "1px solid #e5ebf4",
+            boxShadow: "0 24px 60px rgba(39,71,117,.16)",
+          },
+        },
+      },
     },
   });
+};
 
 export function MatFlowThemeProvider({ children }) {
   const [mode, setMode] = useState(readMode);
@@ -359,31 +440,39 @@ const danger = new Set(["REJECTED", "RETURNED", "CANCELLED", "FAILED"]);
 const purple = new Set(["SUPERSEDED", "IN_TRANSIT", "IN_PROCESSING", "PRODUCTION_STARTED"]);
 
 export function MatFlowStatusChip({ status }) {
+  const { isDark } = useMatFlowTheme();
   const value = normalize(status) || "UNKNOWN";
   let tone = {
-    color: "#7dd3fc",
-    background: "rgba(14,165,233,.13)",
-    border: "1px solid rgba(14,165,233,.24)",
+    color: "var(--mf-primary-text)",
+    background: "var(--mf-primary-soft)",
+    border: "1px solid var(--mf-primary-border)",
   };
   if (success.has(value)) {
-    tone = { color: "#4ade80", background: "rgba(34,197,94,.13)", border: "1px solid rgba(34,197,94,.24)" };
+    tone = { color: "var(--mf-success-text)", background: "var(--mf-success-soft)", border: "1px solid var(--mf-success-border)" };
   } else if (danger.has(value)) {
-    tone = { color: "#fca5a5", background: "rgba(239,68,68,.13)", border: "1px solid rgba(239,68,68,.24)" };
+    tone = { color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)", border: "1px solid var(--mf-danger-border)" };
   } else if (purple.has(value)) {
-    tone = { color: "#c4b5fd", background: "rgba(139,92,246,.13)", border: "1px solid rgba(139,92,246,.24)" };
+    tone = { color: "var(--mf-purple-text)", background: "var(--mf-purple-soft)", border: "1px solid var(--mf-purple-border)" };
   } else if (
     value === "DRAFT" || value === "SUBMITTED" || value === "SUBMITTED_TO_STORE" ||
     value === "STORE_REVIEW_IN_PROGRESS" || value === "SHORTAGE_PENDING" ||
     value === "QC_PENDING" || value.startsWith("PARTIALLY_") || value.startsWith("PENDING_")
   ) {
-    tone = { color: "#fbbf24", background: "rgba(245,158,11,.13)", border: "1px solid rgba(245,158,11,.24)" };
+    tone = { color: "var(--mf-warning-text)", background: "var(--mf-warning-soft)", border: "1px solid var(--mf-warning-border)" };
   }
 
   return (
     <Chip
       label={readable(value) || "Unknown"}
       size="small"
-      sx={{ height: 24, borderRadius: 999, fontSize: 10, fontWeight: 900, ...tone }}
+      sx={{
+        height: isDark ? 24 : 23,
+        borderRadius: 999,
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: ".01em",
+        ...tone,
+      }}
     />
   );
 }
@@ -420,50 +509,210 @@ export function Detail({ label, value }) {
     </Box>
   );
 }
-export function SummaryCard({ label, value, helper }) {
+const LIGHT_SUMMARY_TONES = Object.freeze({
+  blue: { from: "#4f86f7", to: "#5f9dfb", soft: "#eef4ff", accent: "#4f86f7" },
+  purple: { from: "#8a5cf6", to: "#a46ee8", soft: "#f4efff", accent: "#8b5cf6" },
+  orange: { from: "#ff8a4c", to: "#ffb449", soft: "#fff4ea", accent: "#fb923c" },
+  pink: { from: "#e94f8f", to: "#f36fa6", soft: "#fff0f6", accent: "#ec4899" },
+  green: { from: "#28b77a", to: "#55c9b0", soft: "#ecfbf5", accent: "#10b981" },
+  indigo: { from: "#6667e8", to: "#8a6ae8", soft: "#f1f0ff", accent: "#6366f1" },
+  sky: { from: "#48aaf7", to: "#65c4f4", soft: "#edf8ff", accent: "#38bdf8" },
+  amber: { from: "#f39a33", to: "#f7bc4a", soft: "#fff8e9", accent: "#f59e0b" },
+});
+const SUMMARY_TONE_KEYS = Object.keys(LIGHT_SUMMARY_TONES);
+const summaryToneFor = (label, requestedTone) => {
+  if (requestedTone && LIGHT_SUMMARY_TONES[requestedTone]) return LIGHT_SUMMARY_TONES[requestedTone];
+  const score = Array.from(String(label || "")).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return LIGHT_SUMMARY_TONES[SUMMARY_TONE_KEYS[score % SUMMARY_TONE_KEYS.length]];
+};
+
+export function SummaryCard({ label, value, helper, tone, colorful = false }) {
+  const { isDark } = useMatFlowTheme();
+  const meta = summaryToneFor(label, tone);
+  const lightColorful = !isDark && colorful;
+
   return (
-    <Card sx={panelSx}>
-      <Typography sx={detailLabelSx}>{label}</Typography>
-      <Box sx={{ mt: .75, fontSize: 19, fontWeight: 950, color: "var(--mf-text)" }}>{value ?? "-"}</Box>
-      {helper && <Typography sx={subTextSx}>{helper}</Typography>}
+    <Card
+      sx={{
+        ...panelSx,
+        position: "relative",
+        overflow: "hidden",
+        minHeight: lightColorful ? 104 : undefined,
+        ...(isDark ? {} : lightColorful ? {
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,.34)",
+          background: `linear-gradient(135deg,${meta.from},${meta.to})`,
+          boxShadow: "0 10px 22px rgba(50,92,160,.12)",
+        } : {
+          borderTop: `3px solid ${meta.accent}`,
+          background: "#ffffff",
+        }),
+      }}
+    >
+      <Typography sx={{ ...detailLabelSx, color: lightColorful ? "rgba(255,255,255,.82)" : detailLabelSx.color }}>{label}</Typography>
+      <Box sx={{ mt: .75, fontSize: lightColorful ? 24 : 19, fontWeight: 950, color: lightColorful ? "#fff" : "var(--mf-text)", lineHeight: 1.1 }}>{value ?? "-"}</Box>
+      {helper && <Typography sx={{ ...subTextSx, color: lightColorful ? "rgba(255,255,255,.84)" : subTextSx.color }}>{helper}</Typography>}
+      {lightColorful && <Box sx={{ position: "absolute", width: 92, height: 92, borderRadius: "50%", right: -34, bottom: -46, background: "rgba(255,255,255,.12)" }} />}
     </Card>
   );
 }
 
-export const pageSx = { width: "100%", display: "flex", flexDirection: "column", gap: "14px", color: "var(--mf-text)" };
-export const heroSx = { p: { xs: "16px", md: "20px" }, borderRadius: "14px", background: "var(--mf-hero-bg)", border: "1px solid var(--mf-border)", boxShadow: "var(--mf-shadow)" };
-export const heroBadgeSx = { height: 26, borderRadius: 999, background: "rgba(14,165,233,.12)", color: "#38bdf8", border: "1px solid rgba(14,165,233,.25)", fontWeight: 900, fontSize: 10, letterSpacing: ".08em" };
-export const heroTitleSx = { mt: 1.15, color: "var(--mf-text)", fontSize: { xs: 24, md: 31 }, fontWeight: 950, lineHeight: 1.08, letterSpacing: "-.04em" };
-export const heroSubSx = { mt: .75, color: "var(--mf-text-secondary)", fontSize: 12, fontWeight: 650, lineHeight: 1.55, maxWidth: 900 };
-export const panelSx = { p: 1.9, borderRadius: "12px", color: "var(--mf-text)", background: "var(--mf-panel-bg)", border: "1px solid var(--mf-border)", boxShadow: "var(--mf-shadow)", backgroundImage: "none" };
+export const pageSx = {
+  width: "100%",
+  display: "flex",
+  flexDirection: "column",
+  gap: "14px",
+  color: "var(--mf-text)",
+};
+export const heroSx = {
+  p: { xs: "16px", md: "19px 20px" },
+  borderRadius: "14px",
+  background: "var(--mf-hero-bg)",
+  border: "1px solid var(--mf-border)",
+  boxShadow: "var(--mf-shadow)",
+};
+export const heroBadgeSx = {
+  height: 24,
+  borderRadius: 999,
+  background: "var(--mf-primary-soft)",
+  color: "var(--mf-primary-text)",
+  border: "1px solid var(--mf-primary-border)",
+  fontWeight: 900,
+  fontSize: 9.5,
+  letterSpacing: ".08em",
+};
+export const heroTitleSx = {
+  mt: 1.05,
+  color: "var(--mf-text)",
+  fontSize: { xs: 23, md: 29 },
+  fontWeight: 950,
+  lineHeight: 1.08,
+  letterSpacing: "-.035em",
+};
+export const heroSubSx = {
+  mt: .65,
+  color: "var(--mf-text-secondary)",
+  fontSize: 11.5,
+  fontWeight: 650,
+  lineHeight: 1.55,
+  maxWidth: 920,
+};
+export const panelSx = {
+  p: 1.8,
+  borderRadius: "12px",
+  color: "var(--mf-text)",
+  background: "var(--mf-panel-bg)",
+  border: "1px solid var(--mf-border)",
+  boxShadow: "var(--mf-shadow)",
+  backgroundImage: "none",
+};
 export const panelTitleSx = { color: "var(--mf-text)", fontSize: 17, fontWeight: 950 };
 export const sectionTitleSx = panelTitleSx;
 export const sectionSubSx = { mt: .35, color: "var(--mf-text-muted)", fontSize: 11, fontWeight: 700 };
 export const mainTextSx = { color: "var(--mf-text)", fontSize: 12, fontWeight: 850 };
 export const subTextSx = { mt: .25, color: "var(--mf-text-muted)", fontSize: 10, fontWeight: 650 };
-export const detailBoxSx = { p: 1.35, borderRadius: "9px", background: "var(--mf-surface)", border: "1px solid var(--mf-border)" };
-export const detailLabelSx = { color: "var(--mf-text-muted)", fontSize: 9.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".07em" };
-export const detailValueSx = { mt: .6, color: "var(--mf-text)", fontSize: 12, fontWeight: 850, wordBreak: "break-word" };
-export const errorBoxSx = { p: "11px 13px", borderRadius: "9px", color: "#fca5a5", background: "rgba(239,68,68,.10)", border: "1px solid rgba(239,68,68,.24)", fontSize: 12, fontWeight: 750 };
+export const detailBoxSx = {
+  p: 1.3,
+  borderRadius: "9px",
+  background: "var(--mf-surface)",
+  border: "1px solid var(--mf-border)",
+};
+export const detailLabelSx = {
+  color: "var(--mf-text-muted)",
+  fontSize: 9.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".07em",
+};
+export const detailValueSx = { mt: .55, color: "var(--mf-text)", fontSize: 12, fontWeight: 850, wordBreak: "break-word" };
+export const errorBoxSx = {
+  p: "11px 13px",
+  borderRadius: "9px",
+  color: "var(--mf-danger-text)",
+  background: "var(--mf-danger-soft)",
+  border: "1px solid var(--mf-danger-border)",
+  fontSize: 12,
+  fontWeight: 750,
+};
 export const fieldSx = {
   "& .MuiInputLabel-root": { color: "var(--mf-text-muted)", fontSize: 12, fontWeight: 750 },
   "& .MuiOutlinedInput-root": {
-    minHeight: 44, color: "var(--mf-text)", background: "var(--mf-field-bg)", borderRadius: "9px", fontSize: 12, fontWeight: 700,
+    minHeight: 42,
+    color: "var(--mf-text)",
+    background: "var(--mf-field-bg)",
+    borderRadius: "9px",
+    fontSize: 12,
+    fontWeight: 700,
     "& fieldset": { borderColor: "var(--mf-border)" },
     "&:hover fieldset": { borderColor: "var(--mf-border-strong)" },
+    "&.Mui-focused fieldset": { borderColor: "var(--mf-primary)" },
   },
 };
-export const primaryBtnSx = { minHeight: 38, borderRadius: "9px", textTransform: "none", fontWeight: 900, color: "#fff", background: "linear-gradient(135deg,#0284c7,#0ea5e9)", "&:hover": { background: "linear-gradient(135deg,#0369a1,#0284c7)" } };
-export const secondaryBtnSx = { minHeight: 38, borderRadius: "9px", textTransform: "none", fontWeight: 850, color: "var(--mf-text)", background: "var(--mf-surface)", border: "1px solid var(--mf-border)", "&:hover": { background: "var(--mf-hover)", borderColor: "var(--mf-border-strong)" } };
-export const tableShellSx = { width: "100%", overflowX: "auto", borderRadius: "10px", border: "1px solid var(--mf-border)", background: "var(--mf-panel-solid)" };
-export const tableHeaderSx = { minWidth: 980, display: "grid", alignItems: "center", background: "var(--mf-surface-strong)", color: "var(--mf-text-muted)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".07em" };
-export const tableRowSx = { minWidth: 980, display: "grid", alignItems: "center", borderTop: "1px solid var(--mf-border)", background: "var(--mf-panel-bg)", color: "var(--mf-text-secondary)", "&:hover": { background: "var(--mf-hover)" } };
-export const tableCellSx = { p: "11px 12px", color: "var(--mf-text-secondary)", fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+export const primaryBtnSx = {
+  minHeight: 36,
+  borderRadius: "8px",
+  px: 1.6,
+  textTransform: "none",
+  fontWeight: 900,
+  color: "#fff",
+  background: "var(--mf-primary)",
+  boxShadow: "none",
+  "&:hover": { background: "var(--mf-primary-hover)", boxShadow: "none" },
+};
+export const secondaryBtnSx = {
+  minHeight: 36,
+  borderRadius: "8px",
+  px: 1.35,
+  textTransform: "none",
+  fontWeight: 850,
+  color: "var(--mf-text)",
+  background: "var(--mf-panel-solid)",
+  border: "1px solid var(--mf-border)",
+  boxShadow: "none",
+  "&:hover": { background: "var(--mf-hover)", borderColor: "var(--mf-border-strong)", boxShadow: "none" },
+};
+export const tableShellSx = {
+  width: "100%",
+  overflowX: "auto",
+  borderRadius: "10px",
+  border: "1px solid var(--mf-border)",
+  background: "var(--mf-panel-solid)",
+};
+export const tableHeaderSx = {
+  minWidth: 980,
+  display: "grid",
+  alignItems: "center",
+  background: "var(--mf-table-head)",
+  color: "var(--mf-text-muted)",
+  fontSize: 9.5,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".065em",
+};
+export const tableRowSx = {
+  minWidth: 980,
+  display: "grid",
+  alignItems: "center",
+  borderTop: "1px solid var(--mf-border)",
+  background: "var(--mf-table-row)",
+  color: "var(--mf-text-secondary)",
+  transition: "background .14s ease",
+  "&:hover": { background: "var(--mf-table-hover)" },
+};
+export const tableCellSx = {
+  p: "10px 11px",
+  color: "var(--mf-text-secondary)",
+  fontSize: 11.5,
+  fontWeight: 700,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
 export const emptySx = { minHeight: 160, display: "grid", placeItems: "center", textAlign: "center", p: 2.5, color: "var(--mf-text-muted)", fontSize: 12, fontWeight: 750 };
-export const dialogPaperSx = { borderRadius: "14px", backgroundImage: "none" };
-export const dialogTitleSx = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5, fontWeight: 950, borderBottom: "1px solid", borderColor: "divider" };
-export const dialogContentSx = { pt: "18px !important" };
-export const dialogActionsSx = { p: "14px 24px 20px", borderTop: "1px solid", borderColor: "divider" };
+export const dialogPaperSx = { borderRadius: "14px", background: "var(--mf-panel-solid)", backgroundImage: "none", border: "1px solid var(--mf-border)" };
+export const dialogTitleSx = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5, fontWeight: 950, color: "var(--mf-text)", borderBottom: "1px solid var(--mf-border)" };
+export const dialogContentSx = { pt: "18px !important", background: "var(--mf-panel-solid)" };
+export const dialogActionsSx = { p: "14px 24px 20px", borderTop: "1px solid var(--mf-border)", background: "var(--mf-panel-solid)" };
 
 export const MATFLOW_MATERIAL_CATEGORIES = Object.freeze([
   ["METAL", "Metal", "#60a5fa"], ["WOOD", "Wood", "#8b5cf6"], ["HARDWARE", "Hardware", "#f59e0b"],

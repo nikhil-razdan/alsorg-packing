@@ -1588,7 +1588,8 @@ public class MatFlowMovementService {
                         return switch (transfer.status) {
 
                                 case PLANNED ->
-                                        "PREVIOUS_ROUTE_STAGE";
+                                        plannedResponsibleDepartment(
+                                                        transfer);
 
                                 case READY ->
                                         departmentForLocation(
@@ -1693,7 +1694,8 @@ public class MatFlowMovementService {
                         return switch (transfer.status) {
 
                                 case PLANNED ->
-                                        "AWAIT_PREDECESSOR";
+                                        plannedNextAction(
+                                                        transfer);
 
                                 case READY ->
                                         "DISPATCH";
@@ -1729,14 +1731,6 @@ public class MatFlowMovementService {
 
                                 case RECEIVED -> {
 
-                                        boolean hasSuccessor = transferRepository
-                                                        .existsByPredecessorTransferId(
-                                                                        transfer.getId());
-
-                                        if (hasSuccessor) {
-                                                yield "CONTINUE_APPROVED_ROUTE";
-                                        }
-
                                         if (transfer.toLocation == null ||
                                                         transfer.toLocation
                                                                         .getLocationType() == null) {
@@ -1747,20 +1741,31 @@ public class MatFlowMovementService {
                                         LocationType destinationType = transfer.toLocation
                                                         .getLocationType();
 
-                                        if (destinationType == LocationType.PRODUCTION) {
-
-                                                yield "ISSUE_TO_PRODUCTION";
-                                        }
-
+                                        /*
+                                         * A fully received QC/Processing leg still has a
+                                         * department-owned gate before its successor may run.
+                                         * Show that real gate instead of the generic
+                                         * CONTINUE_APPROVED_ROUTE message.
+                                         */
                                         if (destinationType == LocationType.QC) {
-
                                                 yield "INSPECT_MATERIAL";
                                         }
 
                                         if (destinationType == LocationType.PROCESSING ||
                                                         destinationType == LocationType.EXTERNAL_PROCESSOR) {
-
                                                 yield "COMPLETE_PROCESSING";
+                                        }
+
+                                        if (destinationType == LocationType.PRODUCTION) {
+                                                yield "ISSUE_TO_PRODUCTION";
+                                        }
+
+                                        boolean hasSuccessor = transferRepository
+                                                        .existsByPredecessorTransferId(
+                                                                        transfer.getId());
+
+                                        if (hasSuccessor) {
+                                                yield "CONTINUE_APPROVED_ROUTE";
                                         }
 
                                         yield "COMPLETED";
@@ -1772,6 +1777,95 @@ public class MatFlowMovementService {
                                 default ->
                                         "UNKNOWN";
                         };
+                }
+
+                private MatFlowTransferOrder predecessorFor(
+                                MatFlowTransferOrder transfer) {
+
+                        if (transfer == null ||
+                                        transfer.predecessorTransferId == null) {
+                                return null;
+                        }
+
+                        return transferRepository
+                                        .findById(transfer.predecessorTransferId)
+                                        .map(value -> (MatFlowTransferOrder) Hibernate.unproxy(value))
+                                        .orElse(null);
+                }
+
+                /**
+                 * Human/desk ownership for a downstream PLANNED transfer.
+                 *
+                 * PLANNED does not always mean "the predecessor still needs receipt".
+                 * A predecessor can already be RECEIVED at QC/Processing while the
+                 * downstream transfer correctly waits for that department's decision.
+                 */
+                private String plannedResponsibleDepartment(
+                                MatFlowTransferOrder transfer) {
+
+                        MatFlowTransferOrder predecessor = predecessorFor(transfer);
+
+                        if (predecessor == null) {
+                                return departmentForLocation(
+                                                transfer == null ? null : transfer.fromLocation);
+                        }
+
+                        if (predecessor.status != TransferStatus.RECEIVED) {
+                                return departmentForLocation(
+                                                predecessor.toLocation);
+                        }
+
+                        if (predecessor.toLocation == null ||
+                                        predecessor.toLocation.getLocationType() == null) {
+                                return departmentForLocation(
+                                                transfer == null ? null : transfer.fromLocation);
+                        }
+
+                        LocationType gateType = predecessor.toLocation.getLocationType();
+
+                        if (gateType == LocationType.QC) {
+                                return "QC";
+                        }
+
+                        if (gateType == LocationType.PROCESSING ||
+                                        gateType == LocationType.EXTERNAL_PROCESSOR) {
+                                return "PROCESSING";
+                        }
+
+                        return departmentForLocation(
+                                        transfer == null ? null : transfer.fromLocation);
+                }
+
+                private String plannedNextAction(
+                                MatFlowTransferOrder transfer) {
+
+                        MatFlowTransferOrder predecessor = predecessorFor(transfer);
+
+                        if (predecessor == null) {
+                                return "AWAIT_ROUTE_RELEASE";
+                        }
+
+                        if (predecessor.status != TransferStatus.RECEIVED) {
+                                return "RECEIVE_PREVIOUS_ROUTE_TRANSFER";
+                        }
+
+                        if (predecessor.toLocation == null ||
+                                        predecessor.toLocation.getLocationType() == null) {
+                                return "AWAIT_ROUTE_RELEASE";
+                        }
+
+                        LocationType gateType = predecessor.toLocation.getLocationType();
+
+                        if (gateType == LocationType.QC) {
+                                return "INSPECT_MATERIAL";
+                        }
+
+                        if (gateType == LocationType.PROCESSING ||
+                                        gateType == LocationType.EXTERNAL_PROCESSOR) {
+                                return "COMPLETE_PROCESSING";
+                        }
+
+                        return "AWAIT_ROUTE_RELEASE";
                 }
 
                 private boolean hasPendingDispatch(

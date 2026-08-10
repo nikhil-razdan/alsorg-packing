@@ -88,33 +88,33 @@ const trackerHealth = (row) => {
 };
 
 const healthSx = (tone) => ({
-    px: 1.1,
-    py: .45,
+    px: 1.05,
+    py: .4,
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: 900,
-    letterSpacing: .35,
+    letterSpacing: .25,
     border: tone === "danger"
-        ? "1px solid rgba(248,113,113,.45)"
+        ? "1px solid var(--mf-danger-border)"
         : tone === "warning"
-            ? "1px solid rgba(251,191,36,.4)"
+            ? "1px solid var(--mf-warning-border)"
             : tone === "muted"
-                ? "1px solid rgba(148,163,184,.3)"
-                : "1px solid rgba(52,211,153,.35)",
+                ? "1px solid var(--mf-border)"
+                : "1px solid var(--mf-success-border)",
     color: tone === "danger"
-        ? "#fca5a5"
+        ? "var(--mf-danger-text)"
         : tone === "warning"
-            ? "#fcd34d"
+            ? "var(--mf-warning-text)"
             : tone === "muted"
-                ? "#94a3b8"
-                : "#6ee7b7",
+                ? "var(--mf-text-muted)"
+                : "var(--mf-success-text)",
     background: tone === "danger"
-        ? "rgba(127,29,29,.16)"
+        ? "var(--mf-danger-soft)"
         : tone === "warning"
-            ? "rgba(120,53,15,.16)"
+            ? "var(--mf-warning-soft)"
             : tone === "muted"
-                ? "rgba(51,65,85,.18)"
-                : "rgba(6,78,59,.16)",
+                ? "var(--mf-surface)"
+                : "var(--mf-success-soft)",
 });
 
 const trackerNextAction = (row) => {
@@ -180,7 +180,7 @@ export function MatFlowDashboardPage() {
     const cards = [
         ["Active Projects", totals.activeProjects], ["Effective BOMs", totals.effectiveBoms], ["Open Requisitions", totals.openRequisitions], ["Shortage Requisitions", totals.shortageRequisitions], ["Ready Transfers", totals.readyOutboundTransfers], ["Pending QC", totals.pendingQcInspections], ["Processing Jobs", totals.activeProcessingJobs], ["Open Purchase Orders", totals.openPurchaseOrders]
     ];
-    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Engineering BOM → Production approval → requisition → Store → Purchase/QC → Processing → Production completion, with one stock ledger and audit trail." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
+    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Engineering BOM → Production approval → requisition → Store → Purchase/QC → Processing → Production completion, with one stock ledger and audit trail." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
 }
 
 export function MatFlowTrackerPage() {
@@ -238,12 +238,12 @@ export function MatFlowTrackerPage() {
         </Box>
 
         <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-            <Box sx={{ px: 1.8, pt: 1.6, pb: 1.2, borderBottom: "1px solid rgba(148,163,184,.16)" }}>
+            <Box sx={{ px: 1.8, pt: 1.6, pb: 1.2, borderBottom: "1px solid var(--mf-border)" }}>
                 <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Flow Pipeline</Typography>
                 <Typography sx={subTextSx}>Where every active requisition currently sits in the material lifecycle.</Typography>
             </Box>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(6,minmax(0,1fr))" } }}>
-                {pipeline.map((lane, index) => <Box key={lane.key} sx={{ px: 1.5, py: 1.45, borderRight: { xs: "none", md: index < pipeline.length - 1 ? "1px solid rgba(148,163,184,.12)" : "none" }, borderBottom: { xs: "1px solid rgba(148,163,184,.1)", md: "none" } }}>
+                {pipeline.map((lane, index) => <Box key={lane.key} sx={{ px: 1.5, py: 1.45, borderRight: { xs: "none", md: index < pipeline.length - 1 ? "1px solid var(--mf-border)" : "none" }, borderBottom: { xs: "1px solid var(--mf-border)", md: "none" } }}>
                     <Typography sx={{ ...subTextSx, fontSize: 10 }}>0{index + 1} · {lane.label.toUpperCase()}</Typography>
                     <Typography sx={{ fontSize: 24, fontWeight: 950, lineHeight: 1.15, mt: .35 }}>{lane.count}</Typography>
                     <Typography sx={{ ...subTextSx, mt: .2 }}>{lane.caption}</Typography>
@@ -268,7 +268,7 @@ export function MatFlowTrackerPage() {
                 const progress = Math.max(0, Math.min(100, Number(row.progressPercent || 0)));
 
                 return <Card key={id} sx={{ ...panelSx, p: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 390 }}>
-                    <Box sx={{ px: 1.7, py: 1.5, background: "linear-gradient(105deg, rgba(14,165,233,.12), rgba(15,23,42,.08) 55%, rgba(59,130,246,.06))", borderBottom: "1px solid rgba(148,163,184,.16)" }}>
+                    <Box sx={{ px: 1.7, py: 1.5, background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-panel-solid) 56%,var(--mf-surface))", borderBottom: "1px solid var(--mf-border)" }}>
                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
                             <Box>
                                 <Typography sx={{ ...subTextSx, fontSize: 10, letterSpacing: .55 }}>PROJECT / DRAWING</Typography>
@@ -292,8 +292,8 @@ export function MatFlowTrackerPage() {
                             {TRACKER_FLOW.map((lane, laneIndex) => {
                                 const state = trackerLaneState(row, laneIndex);
                                 return <Box key={lane.key} sx={{ minWidth: 78, flex: 1, position: "relative" }}>
-                                    <Box sx={{ height: 5, borderRadius: 999, background: state === "DONE" ? "rgba(52,211,153,.75)" : state === "CURRENT" ? "rgba(56,189,248,.9)" : state === "SKIPPED" ? "rgba(100,116,139,.22)" : "rgba(51,65,85,.55)" }} />
-                                    <Typography sx={{ fontSize: 10.5, fontWeight: state === "CURRENT" ? 950 : 800, mt: .6, color: state === "CURRENT" ? "#7dd3fc" : state === "DONE" ? "#a7f3d0" : "text.secondary" }}>{lane.label}</Typography>
+                                    <Box sx={{ height: 5, borderRadius: 999, background: state === "DONE" ? "var(--mf-success-text)" : state === "CURRENT" ? "var(--mf-primary)" : state === "SKIPPED" ? "var(--mf-border)" : "var(--mf-border-strong)" }} />
+                                    <Typography sx={{ fontSize: 10.5, fontWeight: state === "CURRENT" ? 950 : 800, mt: .6, color: state === "CURRENT" ? "var(--mf-primary-text)" : state === "DONE" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }}>{lane.label}</Typography>
                                     <Typography sx={{ ...subTextSx, fontSize: 9 }}>{state === "SKIPPED" ? "Not required" : state === "DONE" ? "Done" : state === "CURRENT" ? "Current" : "Next"}</Typography>
                                 </Box>;
                             })}
@@ -306,7 +306,7 @@ export function MatFlowTrackerPage() {
                                 ["Shortage", row.shortageQty],
                                 ["Issued", row.issuedQty],
                                 ["Consumed", row.consumedQty],
-                            ].map(([label, value]) => <Box key={label} sx={{ p: .9, border: "1px solid rgba(148,163,184,.14)", borderRadius: 1.5, minWidth: 0 }}>
+                            ].map(([label, value]) => <Box key={label} sx={{ p: .9, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 0 }}>
                                 <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>{label}</Typography>
                                 <Typography sx={{ fontSize: 16, fontWeight: 950, mt: .2 }}>{formatQty(value)}</Typography>
                             </Box>)}
@@ -324,7 +324,7 @@ export function MatFlowTrackerPage() {
                             <LinearProgress variant="determinate" value={progress} sx={{ mt: .8, height: 7, borderRadius: 999 }} />
                         </Box>
 
-                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" }, gap: 1, mt: 1.35, alignItems: "center", p: 1.1, borderRadius: 1.5, border: "1px solid rgba(56,189,248,.16)", background: "rgba(14,165,233,.045)" }}>
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" }, gap: 1, mt: 1.35, alignItems: "center", p: 1.1, borderRadius: 1.5, border: "1px solid var(--mf-primary-border)", background: "var(--mf-primary-soft)" }}>
                             <Box>
                                 <Typography sx={{ ...subTextSx, fontSize: 10 }}>NEXT OPERATIONAL ACTION</Typography>
                                 <Typography sx={{ ...mainTextSx, mt: .25 }}>{trackerNextAction(row)}</Typography>
@@ -333,7 +333,7 @@ export function MatFlowTrackerPage() {
                         </Box>
                     </Box>
 
-                    <Box sx={{ mt: "auto", px: 1.7, py: 1.1, borderTop: "1px solid rgba(148,163,184,.12)", display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(4,minmax(0,1fr))" }, gap: .8 }}>
+                    <Box sx={{ mt: "auto", px: 1.7, py: 1.1, borderTop: "1px solid var(--mf-border)", display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(4,minmax(0,1fr))" }, gap: .8 }}>
                         <Box><Typography sx={subTextSx}>Reservations</Typography><Typography sx={mainTextSx}>{row.reservationCount ?? 0}</Typography></Box>
                         <Box><Typography sx={subTextSx}>Open Indents</Typography><Typography sx={mainTextSx}>{row.openIndentCount ?? 0}</Typography></Box>
                         <Box><Typography sx={subTextSx}>Open Transfers</Typography><Typography sx={mainTextSx}>{row.openTransferCount ?? 0}</Typography></Box>

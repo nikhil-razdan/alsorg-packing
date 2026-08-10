@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.Hibernate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -620,22 +621,125 @@ public class MatFlowQcService {
                                 BigDecimal accepted,
                                 BigDecimal rejected,
                                 String actor) {
+
+                        if (inspection == null ||
+                                        inspection.sourceLineId == null ||
+                                        inspection.material == null ||
+                                        inspection.location == null) {
+                                throw conflict(
+                                                "Transfer-receipt QC inspection is incomplete");
+                        }
+
+                        /*
+                         * IMPORTANT — always resolve the transfer from its authoritative
+                         * repository before reading public entity fields.
+                         *
+                         * MatFlowTransferLine.transferOrder is LAZY. Reading a public field
+                         * such as sourceLine.transferOrder.status directly from a Hibernate
+                         * proxy can bypass proxy getter interception and can therefore look
+                         * null/stale even when mf_transfer_orders.status is RECEIVED.
+                         *
+                         * The Stage-5 Movement service already applies the same rule for the
+                         * requisition aggregate. QC must follow the same boundary.
+                         */
                         MatFlowTransferLine sourceLine = transferLineRepository
                                         .findById(
                                                         inspection.sourceLineId)
                                         .orElseThrow(() -> notFound(
                                                         "Transfer line not found"));
 
-                        MatFlowTransferOrder sourceTransfer = sourceLine.transferOrder;
-
-                        if (sourceTransfer.status != TransferStatus.RECEIVED) {
+                        if (sourceLine.transferOrder == null ||
+                                        sourceLine.transferOrder.getId() == null) {
                                 throw conflict(
-                                                "Transfer must be completely received before QC decision");
+                                                "QC inspection is not linked to a valid transfer order");
                         }
 
-                        MatFlowReservation reservation = sourceTransfer.reservation;
+                        UUID sourceTransferId = sourceLine.transferOrder.getId();
 
-                        MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
+                        MatFlowTransferOrder sourceTransfer = (MatFlowTransferOrder) Hibernate.unproxy(
+                                        transferRepository
+                                                        .lockById(sourceTransferId)
+                                                        .orElseThrow(() -> notFound(
+                                                                        "Source transfer not found")));
+
+                        if (inspection.sourceId != null &&
+                                        !inspection.sourceId.equals(sourceTransfer.getId())) {
+                                throw conflict(
+                                                "QC inspection source does not match its transfer order");
+                        }
+
+                        if (sourceLine.material == null ||
+                                        !sourceLine.material.getId()
+                                                        .equals(inspection.material.getId())) {
+                                throw conflict(
+                                                "QC inspection material does not match the source transfer line");
+                        }
+
+                        if (sourceTransfer.toLocation == null ||
+                                        !sourceTransfer.toLocation.getId()
+                                                        .equals(inspection.location.getId())) {
+                                throw conflict(
+                                                "QC inspection location does not match the transfer destination");
+                        }
+
+                        /*
+                         * Do not trust status alone. QC is allowed only after the complete
+                         * physical quantity reached the QC location. This also protects a
+                         * future partial-receipt case from being inspected prematurely.
+                         */
+                        BigDecimal plannedQty = scale(sourceLine.plannedQty);
+                        BigDecimal dispatchedQty = scale(sourceLine.dispatchedQty);
+                        BigDecimal receivedQty = scale(sourceLine.receivedQty);
+
+                        if (plannedQty.compareTo(BigDecimal.ZERO) <= 0) {
+                                throw conflict(
+                                                "Source transfer has no valid planned quantity");
+                        }
+
+                        boolean quantitiesFullyReceived = dispatchedQty.compareTo(plannedQty) >= 0 &&
+                                        receivedQty.compareTo(plannedQty) >= 0;
+
+                        if (!quantitiesFullyReceived ||
+                                        sourceTransfer.status != TransferStatus.RECEIVED) {
+                                throw conflict(
+                                                "Transfer must be completely received before QC decision. " +
+                                                                "Persisted status=" + sourceTransfer.status +
+                                                                ", planned=" + plannedQty.toPlainString() +
+                                                                ", dispatched=" + dispatchedQty.toPlainString() +
+                                                                ", received=" + receivedQty.toPlainString());
+                        }
+
+                        if (sourceTransfer.reservation == null ||
+                                        sourceTransfer.reservation.getId() == null) {
+                                throw conflict(
+                                                "Source transfer has no reservation");
+                        }
+
+                        MatFlowReservation reservation = (MatFlowReservation) Hibernate.unproxy(
+                                        reservationRepository
+                                                        .findById(sourceTransfer.reservation.getId())
+                                                        .orElseThrow(() -> notFound(
+                                                                        "Transfer reservation not found")));
+
+                        if (reservation.requisitionLine == null ||
+                                        reservation.requisitionLine.getId() == null) {
+                                throw conflict(
+                                                "Transfer reservation has no requisition line");
+                        }
+
+                        MatFlowRequisitionLine requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                        requisitionLineRepository
+                                                        .findById(reservation.requisitionLine.getId())
+                                                        .orElseThrow(() -> notFound(
+                                                                        "Requisition line not found")));
+
+                        if (requisitionLine.requisition == null ||
+                                        requisitionLine.requisition.getId() == null) {
+                                throw conflict(
+                                                "Requisition line has no requisition");
+                        }
+
+                        UUID requisitionId = requisitionLine.requisition.getId();
 
                         /*
                          * Once QC has received the transfer, the surviving reservation
@@ -652,50 +756,74 @@ public class MatFlowQcService {
                                                         : ReservationStatus.CANCELLED;
 
                         reservation.setUpdatedBy(actor);
-
-                        reservationRepository.save(
-                                        reservation);
+                        reservationRepository.save(reservation);
 
                         if (rejected.compareTo(
                                         BigDecimal.ZERO) > 0) {
                                 requisitionLine.reservedQty = scale(
-                                                requisitionLine.reservedQty
-                                                                .subtract(rejected)
-                                                                .max(BigDecimal.ZERO));
+                                                requisitionLine.reservedQty)
+                                                .subtract(rejected)
+                                                .max(BigDecimal.ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
 
                                 requisitionLine.shortageQty = scale(
-                                                requisitionLine.shortageQty
-                                                                .add(rejected));
-
+                                                requisitionLine.shortageQty)
+                                                .add(rejected)
+                                                .setScale(3, RoundingMode.HALF_UP);
                         }
 
                         requisitionLine.setUpdatedBy(actor);
-
-                        requisitionLineRepository.save(
-                                        requisitionLine);
-
-                        requisitionService.refreshState(
-                                        requisitionLine.requisition.getId(),
-                                        actor);
+                        requisitionLineRepository.save(requisitionLine);
 
                         MatFlowTransferOrder successor = transferRepository
                                         .findByPredecessorTransferId(
                                                         sourceTransfer.getId())
+                                        .map(value -> (MatFlowTransferOrder) Hibernate.unproxy(value))
                                         .orElse(null);
 
+                        if (accepted.compareTo(BigDecimal.ZERO) > 0 &&
+                                        successor == null) {
+                                throw conflict(
+                                                "Accepted QC material has no downstream approved route transfer");
+                        }
+
                         if (successor != null) {
+                                if (successor.fromLocation == null ||
+                                                !successor.fromLocation.getId()
+                                                                .equals(inspection.location.getId())) {
+                                        throw conflict(
+                                                        "Downstream transfer does not start from the QC location");
+                                }
+
                                 MatFlowTransferLine successorLine = transferLineRepository
                                                 .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
                                                                 successor.getId())
                                                 .orElseThrow(() -> conflict(
                                                                 "Successor transfer line not found"));
 
-                                successorLine.plannedQty = accepted;
+                                BigDecimal successorDispatched = scale(
+                                                successorLine.dispatchedQty);
+                                BigDecimal successorReceived = scale(
+                                                successorLine.receivedQty);
 
+                                if (successorDispatched.compareTo(BigDecimal.ZERO) > 0 ||
+                                                successorReceived.compareTo(BigDecimal.ZERO) > 0) {
+                                        throw conflict(
+                                                        "Downstream transfer already has physical execution and cannot be resized by QC");
+                                }
+
+                                if (accepted.compareTo(BigDecimal.ZERO) > 0 &&
+                                                successor.status != TransferStatus.PLANNED &&
+                                                successor.status != TransferStatus.READY) {
+                                        throw conflict(
+                                                        "Downstream transfer is not waiting for QC release. Current status: "
+                                                                        +
+                                                                        successor.status);
+                                }
+
+                                successorLine.plannedQty = scale(accepted);
                                 successorLine.setUpdatedBy(actor);
-
-                                transferLineRepository.save(
-                                                successorLine);
+                                transferLineRepository.save(successorLine);
 
                                 successor.status = accepted.compareTo(
                                                 BigDecimal.ZERO) > 0
@@ -703,9 +831,35 @@ public class MatFlowQcService {
                                                                 : TransferStatus.CANCELLED;
 
                                 successor.setUpdatedBy(actor);
+                                successor = transferRepository.save(successor);
 
-                                transferRepository.save(successor);
+                                auditService.record(
+                                                "TRANSFER",
+                                                successor.getId(),
+                                                accepted.compareTo(BigDecimal.ZERO) > 0
+                                                                ? "TRANSFER_READY_AFTER_QC"
+                                                                : "TRANSFER_CANCELLED_AFTER_QC",
+                                                successor.fromLocation == null
+                                                                ? inspection.location.getPlantCode()
+                                                                : successor.fromLocation.getPlantCode(),
+                                                null,
+                                                null,
+                                                auditService.details(
+                                                                "sourceTransferId", sourceTransfer.getId(),
+                                                                "sourceTransferNumber", sourceTransfer.transferNumber,
+                                                                "successorTransferNumber", successor.transferNumber,
+                                                                "acceptedQty", accepted,
+                                                                "rejectedQty", rejected,
+                                                                "successorStatus", successor.status));
                         }
+
+                        /*
+                         * Refresh only after the downstream route has been released/cancelled
+                         * so the requisition state is derived from the final transaction state.
+                         */
+                        requisitionService.refreshState(
+                                        requisitionId,
+                                        actor);
 
                         return accepted;
                 }
