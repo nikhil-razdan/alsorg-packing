@@ -1968,21 +1968,85 @@ public class MatFlowRequisitionService {
         private TransferResponse
 
                         toTransferResponse(
-                                        MatFlowTransferOrder transfer) {
+                                        MatFlowTransferOrder rawTransfer) {
 
-                if (transfer == null ||
-                                transfer.requisition == null ||
-                                transfer.requisition.projectDrawing == null ||
-                                transfer.requisition.bom == null ||
-                                transfer.reservation == null ||
+                if (rawTransfer == null ||
+                                rawTransfer.getId() == null) {
+
+                        throw conflict(
+                                        "Transfer order is required");
+                }
+
+                /*
+                 * Planning snapshots are built in the same transaction as Store Issue.
+                 * A transfer already present in the persistence context may therefore be
+                 * represented by a Hibernate proxy. Because MatFlow entities expose public
+                 * JPA backing fields, reading rawTransfer.requisition.projectDrawing (or
+                 * other public association fields) directly from that proxy can falsely
+                 * look null even though the database foreign keys are valid.
+                 *
+                 * Unwrap the transfer first, then resolve the authoritative requisition
+                 * aggregate through requireRequisition(...). This is the same defensive
+                 * hydration rule used by the Store-Issue and requisition-line response
+                 * fixes and prevents a successful Issue from rolling back while the
+                 * PlanningResponse is being serialized.
+                 */
+                MatFlowTransferOrder transfer = (MatFlowTransferOrder) Hibernate.unproxy(
+                                rawTransfer);
+
+                if (transfer.requisition == null ||
+                                transfer.requisition.getId() == null) {
+
+                        throw conflict(
+                                        "Transfer requisition link is missing for transfer: " +
+                                                        transfer.getId());
+                }
+
+                MatFlowMaterialRequisition requisition = requireRequisition(
+                                transfer.requisition.getId());
+
+                /*
+                 * Align the managed transfer with the fully hydrated requisition so all
+                 * downstream helper methods observe the same authoritative aggregate.
+                 */
+                transfer.requisition = requisition;
+
+                if (transfer.reservation != null) {
+                        transfer.reservation = (MatFlowReservation) Hibernate.unproxy(
+                                        transfer.reservation);
+                }
+
+                if (transfer.fromLocation != null) {
+                        transfer.fromLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        transfer.fromLocation);
+                }
+
+                if (transfer.toLocation != null) {
+                        transfer.toLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        transfer.toLocation);
+                }
+
+                if (transfer.reservation == null ||
                                 transfer.fromLocation == null ||
                                 transfer.toLocation == null) {
 
                         throw conflict(
-                                        "Transfer order is incomplete");
+                                        "Transfer order " +
+                                                        safeLabel(
+                                                                        transfer.transferNumber,
+                                                                        transfer.getId())
+                                                        +
+                                                        " is incomplete " +
+                                                        "[reservationMissing=" +
+                                                        (transfer.reservation == null) +
+                                                        ", fromLocationMissing=" +
+                                                        (transfer.fromLocation == null) +
+                                                        ", toLocationMissing=" +
+                                                        (transfer.toLocation == null) +
+                                                        "]");
                 }
 
-                MatFlowTransferLine line = transferLineRepository
+                MatFlowTransferLine rawLine = transferLineRepository
                                 .findByTransferOrder_IdOrderByCreatedAtAsc(
                                                 transfer.getId())
                                 .stream()
@@ -1990,12 +2054,21 @@ public class MatFlowRequisitionService {
                                 .orElseThrow(() -> conflict(
                                                 "Transfer order has no material line"));
 
-                if (line.material == null) {
-                        throw conflict(
-                                        "Transfer order material is missing");
+                MatFlowTransferLine line = (MatFlowTransferLine) Hibernate.unproxy(
+                                rawLine);
+
+                if (line.material != null) {
+                        line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                        line.material);
                 }
 
-                MatFlowMaterialRequisition requisition = transfer.requisition;
+                if (line.material == null) {
+                        throw conflict(
+                                        "Transfer order material is missing for transfer: " +
+                                                        safeLabel(
+                                                                        transfer.transferNumber,
+                                                                        transfer.getId()));
+                }
 
                 MatFlowProjectDrawing project = requisition.projectDrawing;
 

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.Hibernate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -119,23 +120,44 @@ public class MatFlowProductionService {
         public void startProduction(UUID requisitionId, RequisitionActionRequest request) {
                 accessService.requireProductionRequest();
 
+                if (requisitionId == null) {
+                        throw badRequest("Requisition ID is required");
+                }
+
                 MatFlowMaterialRequisition requisition = requisitionRepository
                                 .lockById(requisitionId)
                                 .orElseThrow(() -> notFound("Requisition not found"));
 
-                accessService.requirePlantAccess(requisition.destinationLocation.getPlantCode());
-                assertVersion(request == null ? null : request.rowVersion(), requisition.getRowVersion(),
+                /*
+                 * lockById(...) can resolve to an already-managed Hibernate proxy.
+                 * MatFlow entities expose public JPA backing fields, so workflow-critical
+                 * associations must be unwrapped before direct field access.
+                 */
+                requisition = hydrateProductionRequisition(
+                                requisition,
+                                "Production start");
+
+                accessService.requirePlantAccess(
+                                requisition.destinationLocation.getPlantCode());
+
+                assertVersion(
+                                request == null ? null : request.rowVersion(),
+                                requisition.getRowVersion(),
                                 "Requisition");
 
                 if (requisition.status != RequisitionStatus.ISSUED_TO_PRODUCTION) {
-                        throw conflict("Production can start only after the complete requisition is issued to Production");
+                        throw conflict(
+                                        "Production can start only after the complete requisition is issued to Production");
                 }
 
                 String actor = accessService.actor();
+
                 requisition.status = RequisitionStatus.PRODUCTION_STARTED;
+
                 if (request != null && clean(request.remarks()) != null) {
                         requisition.remarks = clean(request.remarks());
                 }
+
                 requisition.setUpdatedBy(actor);
                 requisitionRepository.save(requisition);
 
@@ -146,7 +168,9 @@ public class MatFlowProductionService {
                                 requisition.destinationLocation.getPlantCode(),
                                 requisition.projectDrawing.getProjectCode(),
                                 requisition.projectDrawing.getDrawingNo(),
-                                auditService.details("requisitionNumber", requisition.requisitionNumber));
+                                auditService.details(
+                                                "requisitionNumber",
+                                                requisition.requisitionNumber));
         }
 
         @Transactional(readOnly = true)
@@ -163,20 +187,37 @@ public class MatFlowProductionService {
         public void completeProduction(UUID requisitionId, RequisitionActionRequest request) {
                 accessService.requireProductionRequest();
 
+                if (requisitionId == null) {
+                        throw badRequest("Requisition ID is required");
+                }
+
                 MatFlowMaterialRequisition requisition = requisitionRepository
                                 .lockById(requisitionId)
                                 .orElseThrow(() -> notFound("Requisition not found"));
 
-                accessService.requirePlantAccess(requisition.destinationLocation.getPlantCode());
-                assertVersion(request == null ? null : request.rowVersion(), requisition.getRowVersion(),
+                requisition = hydrateProductionRequisition(
+                                requisition,
+                                "Production completion");
+
+                accessService.requirePlantAccess(
+                                requisition.destinationLocation.getPlantCode());
+
+                assertVersion(
+                                request == null ? null : request.rowVersion(),
+                                requisition.getRowVersion(),
                                 "Requisition");
 
                 if (requisition.status != RequisitionStatus.PRODUCTION_STARTED) {
-                        throw conflict("Only an in-progress Production requisition can be completed");
+                        throw conflict(
+                                        "Only an in-progress Production requisition can be completed");
                 }
 
                 List<MatFlowRequisitionLine> lines = requisitionLineRepository
-                                .findByRequisition_IdOrderByLineNoAsc(requisition.getId());
+                                .findByRequisition_IdOrderByLineNoAsc(
+                                                requisition.getId())
+                                .stream()
+                                .map(line -> (MatFlowRequisitionLine) Hibernate.unproxy(line))
+                                .toList();
 
                 if (lines.isEmpty()) {
                         throw conflict("Requisition has no material lines");
@@ -185,8 +226,11 @@ public class MatFlowProductionService {
                 boolean fullyAccounted = lines.stream().allMatch(line -> {
                         BigDecimal requested = zero(line.requestedQty);
                         BigDecimal issued = zero(line.issuedQty);
-                        BigDecimal accounted = zero(line.consumedQty).add(zero(line.returnedQty));
-                        return issued.compareTo(requested) >= 0 && accounted.compareTo(issued) >= 0;
+                        BigDecimal accounted = zero(line.consumedQty)
+                                        .add(zero(line.returnedQty));
+
+                        return issued.compareTo(requested) >= 0 &&
+                                        accounted.compareTo(issued) >= 0;
                 });
 
                 if (!fullyAccounted) {
@@ -195,10 +239,13 @@ public class MatFlowProductionService {
                 }
 
                 String actor = accessService.actor();
+
                 requisition.status = RequisitionStatus.PRODUCTION_COMPLETED;
+
                 if (request != null && clean(request.remarks()) != null) {
                         requisition.remarks = clean(request.remarks());
                 }
+
                 requisition.setUpdatedBy(actor);
                 requisitionRepository.save(requisition);
 
@@ -209,7 +256,63 @@ public class MatFlowProductionService {
                                 requisition.destinationLocation.getPlantCode(),
                                 requisition.projectDrawing.getProjectCode(),
                                 requisition.projectDrawing.getDrawingNo(),
-                                auditService.details("requisitionNumber", requisition.requisitionNumber));
+                                auditService.details(
+                                                "requisitionNumber",
+                                                requisition.requisitionNumber));
+        }
+
+        /**
+         * Returns the real managed requisition aggregate before Production lifecycle
+         * code reads public association fields. This does not change workflow state;
+         * it only prevents a Hibernate proxy from making valid foreign-key-backed
+         * associations appear null.
+         */
+        private MatFlowMaterialRequisition hydrateProductionRequisition(
+                        MatFlowMaterialRequisition raw,
+                        String operation) {
+
+                if (raw == null || raw.getId() == null) {
+                        throw conflict(
+                                        (operation == null ? "Production" : operation) +
+                                                        " requires a valid requisition");
+                }
+
+                MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(raw);
+
+                if (requisition.destinationLocation != null) {
+                        requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        requisition.destinationLocation);
+                }
+
+                if (requisition.projectDrawing != null) {
+                        requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
+                                        requisition.projectDrawing);
+                }
+
+                if (requisition.bom != null) {
+                        requisition.bom = (MatFlowBom) Hibernate.unproxy(
+                                        requisition.bom);
+                }
+
+                if (requisition.destinationLocation == null) {
+                        throw conflict(
+                                        (operation == null ? "Production" : operation) +
+                                                        " requisition has no Production destination");
+                }
+
+                if (requisition.projectDrawing == null) {
+                        throw conflict(
+                                        (operation == null ? "Production" : operation) +
+                                                        " requisition has no Project/Drawing");
+                }
+
+                if (requisition.destinationLocation.getLocationType() != LocationType.PRODUCTION) {
+                        throw conflict(
+                                        (operation == null ? "Production" : operation) +
+                                                        " requisition destination is not a Production location");
+                }
+
+                return requisition;
         }
 
         private BigDecimal zero(BigDecimal value) {
@@ -1164,11 +1267,37 @@ public class MatFlowProductionService {
                                         .orElseThrow(() -> notFound(
                                                         "Requisition not found"));
 
+                        requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                        requisition);
+
+                        if (requisition.destinationLocation != null) {
+                                requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                requisition.destinationLocation);
+                        }
+
+                        if (requisition.projectDrawing != null) {
+                                requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
+                                                requisition.projectDrawing);
+                        }
+
+                        if (requisition.destinationLocation == null) {
+                                throw conflict(
+                                                "Production consumption requisition has no Production destination");
+                        }
+
+                        if (requisition.projectDrawing == null) {
+                                throw conflict(
+                                                "Production consumption requisition has no Project/Drawing");
+                        }
+
                         MatFlowLocation productionLocation = locationRepository
                                         .findById(
                                                         request.productionLocationId())
                                         .orElseThrow(() -> notFound(
                                                         "Production location not found"));
+
+                        productionLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        productionLocation);
 
                         accessService.requirePlantAccess(
                                         productionLocation.getPlantCode());
@@ -1234,6 +1363,16 @@ public class MatFlowProductionService {
                                                 .orElseThrow(() -> notFound(
                                                                 "Requisition line not found"));
 
+                                requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                requisitionLine);
+
+                                if (requisitionLine.requisition == null ||
+                                                requisitionLine.requisition.getId() == null) {
+                                        throw conflict(
+                                                        "Production consumption line is not linked to a requisition: " +
+                                                                        requisitionLine.getId());
+                                }
+
                                 if (!requisitionLine.requisition
                                                 .getId()
                                                 .equals(
@@ -1242,26 +1381,43 @@ public class MatFlowProductionService {
                                                         "Requisition line does not belong to the selected requisition");
                                 }
 
+                                if (requisitionLine.issuedMaterial != null) {
+                                        requisitionLine.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
+                                                        requisitionLine.issuedMaterial);
+                                }
+
+                                if (requisitionLine.material != null) {
+                                        requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                        requisitionLine.material);
+                                }
+
                                 /*
                                  * The BOM material may be raw material while the
                                  * issued material may be its processed output.
-                                 *
-                                 * Example:
-                                 * Raw veneer BOM line → processed veneer issued.
                                  */
                                 MatFlowMaterial consumptionMaterial = requisitionLine.issuedMaterial != null
                                                 ? requisitionLine.issuedMaterial
                                                 : requisitionLine.material;
 
+                                if (consumptionMaterial == null) {
+                                        throw conflict(
+                                                        "Production consumption material is missing for requisition line: "
+                                                                        +
+                                                                        requisitionLine.getId());
+                                }
+
                                 BigDecimal quantity = positive(
                                                 lineRequest.quantity(),
                                                 "Consumption quantity");
 
-                                BigDecimal outstandingIssued = requisitionLine.issuedQty
+                                BigDecimal outstandingIssued = scale(
+                                                requisitionLine.issuedQty)
                                                 .subtract(
-                                                                requisitionLine.consumedQty)
+                                                                scale(
+                                                                                requisitionLine.consumedQty))
                                                 .subtract(
-                                                                requisitionLine.returnedQty);
+                                                                scale(
+                                                                                requisitionLine.returnedQty));
 
                                 if (outstandingIssued.compareTo(
                                                 BigDecimal.ZERO) <= 0) {
