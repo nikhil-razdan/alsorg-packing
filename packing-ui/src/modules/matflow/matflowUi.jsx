@@ -731,3 +731,57 @@ export const getMatFlowCategoryMeta = (value) => {
 export function ActionButton({ children, secondary = false, ...props }) {
   return <Button sx={secondary ? secondaryBtnSx : primaryBtnSx} {...props}>{children}</Button>;
 }
+
+
+/* ============================================================
+ * PROFESSIONAL TRACKER TIMING HELPERS
+ * ============================================================ */
+export const formatDurationMinutes = (value) => {
+  const minutes = Math.max(0, Math.round(Number(value || 0)));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours < 24) return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const hourRest = hours % 24;
+  return hourRest ? `${days}d ${hourRest}h` : `${days}d`;
+};
+
+export const durationMinutesBetween = (start, end = new Date()) => {
+  if (!start) return 0;
+  const from = new Date(start).getTime();
+  const to = end ? new Date(end).getTime() : Date.now();
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return 0;
+  return Math.max(0, Math.round((to - from) / 60000));
+};
+
+export function TimingHealthChip({ health }) {
+  const value = normalize(health || "NOT_STARTED");
+  const danger = ["BREACHED", "COMPLETED_LATE"].includes(value);
+  const warning = value === "WATCH";
+  const success = ["ON_TRACK", "COMPLETED"].includes(value);
+  const label = readable(value);
+  return <Chip
+    size="small"
+    label={label}
+    sx={{
+      height: 24,
+      fontSize: 10,
+      fontWeight: 900,
+      border: danger ? "1px solid var(--mf-danger-border)" : warning ? "1px solid var(--mf-warning-border)" : success ? "1px solid var(--mf-success-border)" : "1px solid var(--mf-border)",
+      color: danger ? "var(--mf-danger-text)" : warning ? "var(--mf-warning-text)" : success ? "var(--mf-success-text)" : "var(--mf-text-muted)",
+      background: danger ? "var(--mf-danger-soft)" : warning ? "var(--mf-warning-soft)" : success ? "var(--mf-success-soft)" : "var(--mf-surface)",
+    }}
+  />;
+}
+
+export function TrackerTimingStrip({ startAt, endAt, durationMinutes, targetMinutes, health, department, location }) {
+  const elapsed = durationMinutes != null ? Number(durationMinutes) : durationMinutesBetween(startAt, endAt || new Date());
+  return <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(5,minmax(0,1fr))" }, gap: .75 }}>
+    <Detail label="Department" value={department || "-"} />
+    <Detail label="Location" value={location || "-"} />
+    <Detail label="Started" value={startAt ? formatDate(startAt) : "Not started"} />
+    <Detail label="Elapsed" value={formatDurationMinutes(elapsed)} />
+    <Detail label="Timing" value={<Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}><TimingHealthChip health={health} />{Number(targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(targetMinutes)}</Typography>}</Box>} />
+  </Box>;
+}

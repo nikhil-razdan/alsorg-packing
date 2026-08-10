@@ -8,6 +8,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.ProjectTra
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.ShortageAgeingRow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowReportingDtos.StockLedgerRow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowTrackerDtos.TrackerResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowTrackerDtos.TrackerDetailResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 import com.alsorg.packing.service.matflow.MatFlowInsightService;
 
@@ -113,6 +114,15 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String plantCode,
             @RequestParam(required = false) String stage) {
         return service.tracker(search, plantCode, stage);
+    }
+
+    /**
+     * Full requisition/project/material control-tower timeline.
+     */
+    @GetMapping("/tracker/requisitions/{requisitionId}")
+    public TrackerDetailResponse trackerDetail(
+            @PathVariable UUID requisitionId) {
+        return service.trackerDetail(requisitionId);
     }
 
     /* -------------------- Integrity -------------------- */

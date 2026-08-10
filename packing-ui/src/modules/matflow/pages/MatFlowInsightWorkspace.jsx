@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
@@ -24,6 +24,9 @@ import {
     fieldSx,
     formatDate,
     formatQty,
+    formatDurationMinutes,
+    TimingHealthChip,
+    TrackerTimingStrip,
     mainTextSx,
     normalize,
     pageSx,
@@ -80,7 +83,10 @@ const trackerHealth = (row) => {
     const currentStage = normalize(row?.currentStage);
     if (currentStage === "PRODUCTION_COMPLETED") return { label: "Completed", tone: "success" };
     if (currentStage === "CANCELLED") return { label: "Cancelled", tone: "muted" };
-
+    const timing = normalize(row?.timingHealth);
+    if (["BREACHED", "COMPLETED_LATE"].includes(timing)) return { label: readable(timing), tone: "danger" };
+    if (timing === "WATCH") return { label: "SLA Watch", tone: "warning" };
+    if (timing === "ON_TRACK") return { label: "On Track", tone: "success" };
     const age = Math.max(0, Number(row?.ageHours || 0));
     if (age >= 72) return { label: "Ageing 72h+", tone: "danger" };
     if (age >= 24) return { label: "Ageing 24h+", tone: "warning" };
@@ -265,7 +271,7 @@ export function MatFlowTrackerPage() {
                 const id = row.requisitionId || row.id;
                 const health = trackerHealth(row);
                 const action = trackerActionTarget(row);
-                const progress = Math.max(0, Math.min(100, Number(row.progressPercent || 0)));
+                const progress = Math.max(0, Math.min(100, Number(row.actualProgressPercent ?? row.progressPercent ?? 0)));
 
                 return <Card key={id} sx={{ ...panelSx, p: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 390 }}>
                     <Box sx={{ px: 1.7, py: 1.5, background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-panel-solid) 56%,var(--mf-surface))", borderBottom: "1px solid var(--mf-border)" }}>
@@ -312,6 +318,21 @@ export function MatFlowTrackerPage() {
                             </Box>)}
                         </Box>
 
+                        <Box sx={{ mt: 1.35, p: 1.05, borderRadius: 1.5, border: "1px solid var(--mf-primary-border)", background: "var(--mf-primary-soft)" }}>
+                            <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>NOW · MATERIAL / PROJECT POSITION</Typography>
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3,minmax(0,1fr))" }, gap: .75, mt: .6 }}>
+                                <Box><Typography sx={subTextSx}>Department</Typography><Typography sx={mainTextSx}>{row.currentDepartment || row.responsibleDesk || "-"}</Typography></Box>
+                                <Box><Typography sx={subTextSx}>Location</Typography><Typography sx={mainTextSx}>{row.currentLocationCode || row.currentLocationName || "-"}</Typography></Box>
+                                <Box><Typography sx={subTextSx}>Stage Time</Typography><Typography sx={mainTextSx}>{formatDurationMinutes(row.stageDurationMinutes || 0)}</Typography><Typography sx={subTextSx}>{row.stageStartedAt ? `Since ${formatDate(row.stageStartedAt)}` : "Timing begins when stage starts"}</Typography></Box>
+                            </Box>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: .7, mt: .7, flexWrap: "wrap" }}>
+                                <TimingHealthChip health={row.timingHealth} />
+                                {Number(row.targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(row.targetMinutes)}</Typography>}
+                                <Typography sx={subTextSx}>· Total lead {formatDurationMinutes(row.totalLeadTimeMinutes || 0)}</Typography>
+                                {row.nextDepartment && <Typography sx={subTextSx}>· Next → {row.nextDepartment}{row.nextLocationCode ? ` / ${row.nextLocationCode}` : ""}</Typography>}
+                            </Box>
+                        </Box>
+
                         <Box sx={{ mt: 1.4 }}>
                             <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
                                 <Box>
@@ -329,7 +350,10 @@ export function MatFlowTrackerPage() {
                                 <Typography sx={{ ...subTextSx, fontSize: 10 }}>NEXT OPERATIONAL ACTION</Typography>
                                 <Typography sx={{ ...mainTextSx, mt: .25 }}>{trackerNextAction(row)}</Typography>
                             </Box>
-                            <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>{action.label}</Button>
+                            <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                <Button onClick={() => navigate(`/matflow/tracker/${id}`)} sx={secondaryBtnSx}>Open Tracker</Button>
+                                <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>{action.label}</Button>
+                            </Box>
                         </Box>
                     </Box>
 
@@ -344,6 +368,145 @@ export function MatFlowTrackerPage() {
         </Box>}
     </Box>;
 }
+
+
+export function MatFlowTrackerDetailPage() {
+    const { requisitionId } = useParams();
+    const navigate = useNavigate();
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    const load = useCallback(async () => {
+        if (!requisitionId) return;
+        setLoading(true); setError("");
+        try { setData((await matflowApi.getTrackerDetail(requisitionId))?.data || null); }
+        catch (e) { setError(readMatFlowError(e, "Unable to load professional tracker detail.")); }
+        finally { setLoading(false); }
+    }, [requisitionId]);
+    useEffect(() => { load(); }, [load]);
+
+    if (loading) return <LoadingBlock />;
+    const summary = data?.summary || {};
+    const cycle = data?.cycle || {};
+    const stages = Array.isArray(data?.stages) ? data.stages : [];
+    const operations = Array.isArray(data?.operations) ? data.operations : [];
+    const materials = Array.isArray(data?.materials) ? data.materials : [];
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const action = trackerActionTarget(summary);
+
+    return <Box sx={pageSx}>
+        <PageHero
+            badge="PROJECT + MATERIAL CONTROL TOWER"
+            title={`${summary.projectCode || "Project"} · ${summary.drawingNo || "-"}`}
+            subtitle={`${summary.requisitionNumber || "-"} · ${summary.bomNumber || "-"} Rev ${summary.bomRevisionNo ?? "-"}`}
+            actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>Back to Tracker</Button><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>{action.label}</Button></>}
+        />
+        <ErrorBox>{error}</ErrorBox>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>
+            <SummaryCard label="Current Department" value={summary.currentDepartment || summary.responsibleDesk || "-"} />
+            <SummaryCard label="Current Location" value={summary.currentLocationCode || summary.currentLocationName || "-"} />
+            <SummaryCard label="Stage Time" value={formatDurationMinutes(summary.stageDurationMinutes || 0)} />
+            <SummaryCard label="Total Lead Time" value={formatDurationMinutes(summary.totalLeadTimeMinutes || 0)} />
+            <SummaryCard label="Progress" value={`${summary.actualProgressPercent ?? summary.progressPercent ?? 0}%`} />
+            <SummaryCard label="SLA Breaches" value={cycle.slaBreachedStageCount ?? 0} />
+        </Box>
+
+        <Card sx={panelSx}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1.2 }}>
+                <Box><Typography sx={{ fontSize: 17, fontWeight: 950 }}>Live Control Point</Typography><Typography sx={subTextSx}>Exact owner, custody location, elapsed time and next hand-off.</Typography></Box>
+                <TimingHealthChip health={summary.timingHealth} />
+            </Box>
+            <TrackerTimingStrip startAt={summary.stageStartedAt} endAt={summary.stageEndedAt} durationMinutes={summary.stageDurationMinutes} targetMinutes={summary.targetMinutes} health={summary.timingHealth} department={summary.currentDepartment} location={summary.currentLocationCode || summary.currentLocationName} />
+            <Box sx={{ mt: 1, p: 1, borderRadius: 1.5, border: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                <Box><Typography sx={subTextSx}>NEXT DEPARTMENT / LOCATION</Typography><Typography sx={mainTextSx}>{summary.nextDepartment || "-"}{summary.nextLocationCode ? ` · ${summary.nextLocationCode}` : ""}</Typography></Box>
+                <Box><Typography sx={subTextSx}>BOTTLENECK SIGNAL</Typography><Typography sx={mainTextSx}>{summary.bottleneckHint || cycle.bottleneckStage || "No active breach"}</Typography></Box>
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Stage Cycle Timeline</Typography>
+            <Typography sx={{ ...subTextSx, mb: 1.2 }}>Start, finish, cycle time, operational target and responsible department for each major project/material stage.</Typography>
+            <Box sx={{ display: "grid", gap: .8 }}>
+                {stages.map((s, index) => <Box key={`${s.key}-${index}`} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "42px minmax(180px,1.3fr) minmax(130px,.8fr) minmax(180px,1fr) 120px 120px" }, gap: .8, alignItems: "center", p: 1, border: "1px solid var(--mf-border)", borderRadius: 1.5, background: normalize(s.state) === "CURRENT" ? "var(--mf-primary-soft)" : "var(--mf-surface)" }}>
+                    <Box sx={{ width: 30, height: 30, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 950, border: "1px solid var(--mf-border-strong)" }}>{index + 1}</Box>
+                    <Box><Typography sx={mainTextSx}>{s.label}</Typography><Typography sx={subTextSx}>{s.department}{s.locationCode ? ` · ${s.locationCode}` : ""} · {readable(s.state)}</Typography></Box>
+                    <Box><Typography sx={subTextSx}>OWNER</Typography><Typography sx={mainTextSx}>{s.actor || s.department || "-"}</Typography></Box>
+                    <Box><Typography sx={subTextSx}>START → END</Typography><Typography sx={mainTextSx}>{s.startedAt ? formatDate(s.startedAt) : "Not started"}</Typography><Typography sx={subTextSx}>{s.endedAt ? `End ${formatDate(s.endedAt)}` : s.startedAt ? "Running" : "Waiting"}</Typography></Box>
+                    <Box><Typography sx={subTextSx}>CYCLE TIME</Typography><Typography sx={mainTextSx}>{formatDurationMinutes(s.durationMinutes || 0)}</Typography>{Number(s.targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(s.targetMinutes)}</Typography>}</Box>
+                    <TimingHealthChip health={s.timingHealth} />
+                </Box>)}
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Material Position Board</Typography>
+            <Typography sx={{ ...subTextSx, mb: 1 }}>Every reserved or shortage quantity shows its actual department/location, movement state and next hand-off.</Typography>
+            <Box sx={tableShellSx}>
+                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 95px 120px 170px 170px 145px 160px" }}>{["Material", "Tracked Qty", "State", "Current Department / Location", "Next", "Last Movement", "Reference"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                {materials.length === 0 ? <EmptyState>No material positions are available.</EmptyState> : materials.map((m, index) => <Box key={`${m.requisitionLineId}-${m.reservationId || index}`} sx={{ ...tableRowSx, gridTemplateColumns: "180px 95px 120px 170px 170px 145px 160px" }}>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{m.currentMaterialCode || m.bomMaterialCode || "-"}</Typography><Typography sx={subTextSx}>{m.materialName || "-"}</Typography></Box>
+                    <Box sx={tableCellSx}>{formatQty(m.trackedQty)} {m.uom || ""}</Box>
+                    <Box sx={tableCellSx}><MatFlowStatusChip status={m.movementState} /></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{m.currentDepartment || "-"}</Typography><Typography sx={subTextSx}>{m.currentLocationCode || m.currentLocationName || "-"}</Typography></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{m.nextDepartment || "-"}</Typography><Typography sx={subTextSx}>{m.nextLocationCode || "-"}</Typography></Box>
+                    <Box sx={tableCellSx}>{m.lastMovedAt ? formatDate(m.lastMovedAt) : "-"}</Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(m.activeReferenceType)}</Typography><Typography sx={subTextSx}>{m.activeReferenceNumber || "-"}</Typography></Box>
+                </Box>)}
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Operational Timing Detail</Typography>
+            <Typography sx={{ ...subTextSx, mb: 1 }}>Transfer legs, QC gates, processing jobs, procurement events and Store issue timing.</Typography>
+            <Box sx={tableShellSx}>
+                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "190px 150px 160px 160px 110px 125px 180px" }}>{["Operation", "Department / Location", "Started", "Ended", "Duration", "Timing", "Reference"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                {operations.length === 0 ? <EmptyState>No detailed operations recorded.</EmptyState> : operations.map((op, index) => <Box key={`${op.referenceId || op.key}-${index}`} sx={{ ...tableRowSx, gridTemplateColumns: "190px 150px 160px 160px 110px 125px 180px" }}>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{op.label}</Typography><Typography sx={subTextSx}>{readable(op.state)}</Typography></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{op.department || "-"}</Typography><Typography sx={subTextSx}>{op.locationCode || "-"}</Typography></Box>
+                    <Box sx={tableCellSx}>{op.startedAt ? formatDate(op.startedAt) : "-"}</Box>
+                    <Box sx={tableCellSx}>{op.endedAt ? formatDate(op.endedAt) : normalize(op.state) === "CURRENT" ? "Running" : "-"}</Box>
+                    <Box sx={tableCellSx}>{formatDurationMinutes(op.durationMinutes || 0)}</Box>
+                    <Box sx={tableCellSx}><TimingHealthChip health={op.timingHealth} /></Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{op.referenceNumber || "-"}</Typography><Typography sx={subTextSx}>{op.actor ? `By ${op.actor}` : readable(op.referenceType)}</Typography></Box>
+                </Box>)}
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", mb: 1 }}>
+                <Box><Typography sx={{ fontSize: 17, fontWeight: 950 }}>Cycle & Bottleneck Analysis</Typography><Typography sx={subTextSx}>Executive lead-time view generated from real workflow timestamps.</Typography></Box>
+                <MatFlowStatusChip status={cycle.completed ? "COMPLETED" : summary.currentStage} />
+            </Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: .8 }}>
+                <SummaryCard label="Project Lead" value={formatDurationMinutes(cycle.totalProjectLeadTimeMinutes || 0)} />
+                <SummaryCard label="Requisition Lead" value={formatDurationMinutes(cycle.requisitionLeadTimeMinutes || 0)} />
+                <SummaryCard label="Avg Completed Stage" value={formatDurationMinutes(cycle.averageCompletedStageMinutes || 0)} />
+                <SummaryCard label="Completed Stages" value={`${cycle.completedStageCount || 0}/${cycle.applicableStageCount || 0}`} />
+                <SummaryCard label="Longest Stage" value={cycle.bottleneckStage || "-"} />
+                <SummaryCard label="Longest Duration" value={formatDurationMinutes(cycle.bottleneckMinutes || 0)} />
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Immutable Workflow Event Log</Typography>
+            <Typography sx={{ ...subTextSx, mb: 1 }}>Audit events are the traceability proof behind the tracker timing.</Typography>
+            <Box sx={tableShellSx}>
+                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 150px 160px minmax(240px,1fr)" }}>{["Time", "Action", "Actor", "Entity", "Details"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                {events.length === 0 ? <EmptyState>No audit events were found for this workflow.</EmptyState> : [...events].reverse().map((event) => <Box key={event.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 160px minmax(240px,1fr)" }}>
+                    <Box sx={tableCellSx}>{formatDate(event.actionAt)}</Box>
+                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(event.action)}</Typography></Box>
+                    <Box sx={tableCellSx}>{event.actor || "-"}</Box>
+                    <Box sx={tableCellSx}>{readable(event.entityType)}</Box>
+                    <Box sx={{ ...tableCellSx, whiteSpace: "normal", wordBreak: "break-word" }}>{event.detailsJson || "-"}</Box>
+                </Box>)}
+            </Box>
+        </Card>
+    </Box>;
+}
+
+
 
 export function MatFlowLedgerPage() {
     const { selectedPlantParam } = useMatFlow();

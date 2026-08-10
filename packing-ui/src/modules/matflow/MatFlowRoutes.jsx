@@ -13,6 +13,7 @@ import {
 import {
 	MatFlowDashboardPage,
 	MatFlowTrackerPage,
+	MatFlowTrackerDetailPage,
 	MatFlowReportsPage,
 	MatFlowLedgerPage,
 } from "./pages/MatFlowInsightWorkspace";
@@ -106,6 +107,7 @@ export default function MatFlowRoutes() {
 						<Route index element={<HomeRedirect />} />
 						<Route path="dashboard" element={guarded("dashboard", <MatFlowDashboardPage />)} />
 						<Route path="tracker" element={guarded("tracking", <MatFlowTrackerPage />)} />
+						<Route path="tracker/:requisitionId" element={guarded("tracking", <MatFlowTrackerDetailPage />)} />
 
 						<Route path="projects" element={guarded("projects", <MatFlowProjectsPage />)} />
 						<Route path="materials" element={guarded("materials", <MatFlowMaterialsPage />)} />
