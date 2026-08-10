@@ -3,6 +3,7 @@ import {
     Box,
     Button,
     Card,
+    Collapse,
     LinearProgress,
     MenuItem,
     TextField,
@@ -10,6 +11,8 @@ import {
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
@@ -211,9 +214,23 @@ export function MatFlowTrackerPage() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [health, setHealth] = useState("");
+    const [expandedProjects, setExpandedProjects] = useState({});
     const [expandedProducts, setExpandedProducts] = useState({});
     const [materialDetails, setMaterialDetails] = useState({});
     const [materialLoading, setMaterialLoading] = useState({});
+
+    const isProjectExpanded = useCallback(
+        (projectId) => expandedProjects[String(projectId)] !== false,
+        [expandedProjects]
+    );
+
+    const toggleProject = useCallback((projectId) => {
+        const key = String(projectId);
+        setExpandedProjects((current) => ({
+            ...current,
+            [key]: current[key] === false,
+        }));
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -424,6 +441,7 @@ export function MatFlowTrackerPage() {
                 const healthTone = projectHealth === "COMPLETED" || projectHealth === "ON_TRACK"
                     ? "success"
                     : ["SHORTAGE_RISK", "OVERDUE"].includes(projectHealth) ? "danger" : "warning";
+                const projectExpanded = isProjectExpanded(project.id);
 
                 return <Card key={project.id} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
                     <Box sx={{ px: 1.8, py: 1.55, background: "linear-gradient(105deg,var(--mf-primary-soft),var(--mf-panel-solid) 58%,var(--mf-surface))", borderBottom: "1px solid var(--mf-border)" }}>
@@ -436,94 +454,116 @@ export function MatFlowTrackerPage() {
                             <Box><Typography sx={subTextSx}>PLANT</Typography><Typography sx={mainTextSx}>{project.plantCode || "-"}</Typography></Box>
                             <Box><Typography sx={subTextSx}>PRODUCTS</Typography><Typography sx={mainTextSx}>{project.completedProductCount || 0}/{project.productCount || 0} complete</Typography></Box>
                             <Box><Typography sx={subTextSx}>CURRENT DEPARTMENT</Typography><Typography sx={mainTextSx}>{project.currentDepartment || "-"}</Typography></Box>
-                            <Box sx={{ display: "flex", justifyContent: "flex-end" }}><Box sx={healthSx(healthTone)}>{readable(project.health)}</Box></Box>
-                        </Box>
-                        <Box sx={{ mt: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr auto" }, gap: 1, alignItems: "center" }}>
-                            <Box>
-                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Typography sx={subTextSx}>Project completion</Typography><Typography sx={mainTextSx}>{projectProgress}%</Typography></Box>
-                                <LinearProgress variant="determinate" value={projectProgress} sx={{ mt: .45, height: 7, borderRadius: 999 }} />
+                            <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: .7, flexWrap: "wrap" }}>
+                                <Box sx={healthSx(healthTone)}>{readable(project.health)}</Box>
+                                <Button
+                                    onClick={() => toggleProject(project.id)}
+                                    endIcon={projectExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                    aria-expanded={projectExpanded}
+                                    aria-controls={`matflow-project-${project.id}`}
+                                    sx={{
+                                        ...secondaryBtnSx,
+                                        minWidth: 126,
+                                        whiteSpace: "nowrap",
+                                    }}
+                                >
+                                    {projectExpanded ? "Collapse" : "Expand"}
+                                </Button>
                             </Box>
-                            <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-                                <Typography sx={subTextSx}>Material coverage {formatQty(project.materialCoveragePercent)}%</Typography>
-                                <Typography sx={subTextSx}>· Required {project.requiredDate || "Not set"}</Typography>
-                                <Typography sx={subTextSx}>· Priority {readable(project.priority || "NORMAL")}</Typography>
-                            </Box>
                         </Box>
+                        <Collapse in={projectExpanded} timeout="auto" unmountOnExit>
+                            <Box sx={{ mt: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr auto" }, gap: 1, alignItems: "center" }}>
+                                <Box>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Typography sx={subTextSx}>Project completion</Typography><Typography sx={mainTextSx}>{projectProgress}%</Typography></Box>
+                                    <LinearProgress variant="determinate" value={projectProgress} sx={{ mt: .45, height: 7, borderRadius: 999 }} />
+                                </Box>
+                                <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                                    <Typography sx={subTextSx}>Material coverage {formatQty(project.materialCoveragePercent)}%</Typography>
+                                    <Typography sx={subTextSx}>· Required {project.requiredDate || "Not set"}</Typography>
+                                    <Typography sx={subTextSx}>· Priority {readable(project.priority || "NORMAL")}</Typography>
+                                </Box>
+                            </Box>
+                        </Collapse>
                     </Box>
 
-                    <Box sx={{ p: 1.35, display: "grid", gap: 1 }}>
-                        {productRows.length === 0 ? <EmptyState>No Products/Items have been added to this Project.</EmptyState> : productRows.map((product) => {
-                            const key = String(product.id);
-                            const productTrackerRows = trackerRowsByProduct.get(key) || [];
-                            const live = trackerByProduct.get(key);
-                            const detail = materialDetails[key];
-                            const materials = Array.isArray(detail?.materials) ? detail.materials : [];
-                            const requisitionCount = productTrackerRows.length || (product.latestRequisitionId ? 1 : 0);
-                            const stageProgress = live ? Math.max(0, Math.min(100, Number(live.actualProgressPercent ?? live.progressPercent ?? 0))) : normalize(product.requisitionStatus) === "PRODUCTION_COMPLETED" ? 100 : 0;
-                            const action = live ? trackerActionTarget(live) : null;
+                    <Collapse in={projectExpanded} timeout="auto" unmountOnExit>
+                        <Box
+                            id={`matflow-project-${project.id}`}
+                            sx={{ p: 1.35, display: "grid", gap: 1 }}
+                        >
+                            {productRows.length === 0 ? <EmptyState>No Products/Items have been added to this Project.</EmptyState> : productRows.map((product) => {
+                                const key = String(product.id);
+                                const productTrackerRows = trackerRowsByProduct.get(key) || [];
+                                const live = trackerByProduct.get(key);
+                                const detail = materialDetails[key];
+                                const materials = Array.isArray(detail?.materials) ? detail.materials : [];
+                                const requisitionCount = productTrackerRows.length || (product.latestRequisitionId ? 1 : 0);
+                                const stageProgress = live ? Math.max(0, Math.min(100, Number(live.actualProgressPercent ?? live.progressPercent ?? 0))) : normalize(product.requisitionStatus) === "PRODUCTION_COMPLETED" ? 100 : 0;
+                                const action = live ? trackerActionTarget(live) : null;
 
-                            return <Box key={product.id} sx={{ border: "1px solid var(--mf-border)", borderRadius: 2, overflow: "hidden", background: "var(--mf-panel-solid)" }}>
-                                <Box sx={{ p: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(220px,1.1fr) 150px 160px minmax(190px,.8fr) 130px auto" }, gap: 1, alignItems: "center" }}>
-                                    <Box>
-                                        <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>PRODUCT / ITEM · DRAWING</Typography>
-                                        <Typography sx={{ fontSize: 16, fontWeight: 950 }}>{product.productName || "-"}</Typography>
-                                        <Typography sx={subTextSx}>{product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}</Typography>
-                                    </Box>
-                                    <Box><Typography sx={subTextSx}>PRODUCT APPROVAL</Typography><MatFlowStatusChip status={product.approvalStatus} /></Box>
-                                    <Box><Typography sx={subTextSx}>BOM</Typography><Typography sx={mainTextSx}>{product.latestBomNumber || "Not created"}</Typography><Typography sx={subTextSx}>{product.latestBomStatus ? `${readable(product.latestBomStatus)} · Rev ${product.latestBomRevision ?? "-"}` : "Engineering pending"}</Typography></Box>
-                                    <Box>
-                                        <Typography sx={subTextSx}>LIVE CONTROL POINT</Typography>
-                                        <Typography sx={mainTextSx}>{live?.currentDepartment || product.currentDepartment || "ENGINEERING / BOM"}</Typography>
-                                        <Typography sx={subTextSx}>{live?.currentLocationCode || live?.currentLocationName || (live ? "Location pending" : "No material requisition yet")}</Typography>
-                                    </Box>
-                                    <Box><Typography sx={subTextSx}>STATUS</Typography><MatFlowStatusChip status={live?.currentStage || live?.requisitionStatus || product.requisitionStatus || product.latestBomStatus || product.approvalStatus} /></Box>
-                                    <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: { xs: "flex-start", xl: "flex-end" } }}>
-                                        {requisitionCount > 0 && <Button onClick={() => loadMaterialDetail(product)} sx={secondaryBtnSx}>{expandedProducts[key] ? "Hide Materials" : `Materials (${requisitionCount} req.)`}</Button>}
-                                        {product.latestRequisitionId && <Button onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)} sx={secondaryBtnSx}>Latest Trace</Button>}
-                                        {action && <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>Act</Button>}
-                                    </Box>
-                                </Box>
-
-                                <Box sx={{ px: 1.2, pb: 1.15 }}>
-                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(6,minmax(0,1fr))" }, gap: .65 }}>
-                                        {[["Requested", product.requestedQty], ["Reserved", product.reservedQty], ["Shortage", product.shortageQty], ["Issued", product.issuedQty], ["Consumed", product.consumedQty], ["Progress", `${stageProgress}%`]].map(([label, value]) => <Box key={label} sx={{ p: .75, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}><Typography sx={{ ...subTextSx, fontSize: 9 }}>{label}</Typography><Typography sx={{ fontSize: 14, fontWeight: 950 }}>{typeof value === "string" ? value : formatQty(value)}</Typography></Box>)}
-                                    </Box>
-                                    {live && <Box sx={{ mt: .75, display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap" }}>
-                                        <TimingHealthChip health={live.timingHealth} />
-                                        <Typography sx={subTextSx}>Stage {formatDurationMinutes(live.stageDurationMinutes || 0)}</Typography>
-                                        <Typography sx={subTextSx}>· Total lead {formatDurationMinutes(live.totalLeadTimeMinutes || 0)}</Typography>
-                                        {live.bottleneckHint && <Typography sx={subTextSx}>· {live.bottleneckHint}</Typography>}
-                                        {live.nextDepartment && <Typography sx={subTextSx}>· Next → {live.nextDepartment}{live.nextLocationCode ? ` / ${live.nextLocationCode}` : ""}</Typography>}
-                                    </Box>}
-                                </Box>
-
-                                {expandedProducts[key] && <Box sx={{ borderTop: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
-                                    {materialLoading[key] ? <LoadingBlock /> : !detail ? <Box sx={{ p: 1.2 }}><Typography sx={subTextSx}>Material trace could not be loaded.</Typography></Box> : <>
-                                        <Box sx={{ px: 1.2, py: 1, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                                            <Box><Typography sx={{ fontSize: 14, fontWeight: 950 }}>Material Position Board</Typography><Typography sx={subTextSx}>Exact material custody and next destination across every active/non-cancelled requisition currently returned for this Product.</Typography></Box>
-                                            <Typography sx={subTextSx}>{materials.length} tracked material position(s) · {detail?.requisitionCount || requisitionCount} requisition(s)</Typography>
+                                return <Box key={product.id} sx={{ border: "1px solid var(--mf-border)", borderRadius: 2, overflow: "hidden", background: "var(--mf-panel-solid)" }}>
+                                    <Box sx={{ p: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(220px,1.1fr) 150px 160px minmax(190px,.8fr) 130px auto" }, gap: 1, alignItems: "center" }}>
+                                        <Box>
+                                            <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>PRODUCT / ITEM · DRAWING</Typography>
+                                            <Typography sx={{ fontSize: 16, fontWeight: 950 }}>{product.productName || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}</Typography>
                                         </Box>
-                                        <Box sx={tableShellSx}>
-                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
-                                                {["Requisition", "Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                        <Box><Typography sx={subTextSx}>PRODUCT APPROVAL</Typography><MatFlowStatusChip status={product.approvalStatus} /></Box>
+                                        <Box><Typography sx={subTextSx}>BOM</Typography><Typography sx={mainTextSx}>{product.latestBomNumber || "Not created"}</Typography><Typography sx={subTextSx}>{product.latestBomStatus ? `${readable(product.latestBomStatus)} · Rev ${product.latestBomRevision ?? "-"}` : "Engineering pending"}</Typography></Box>
+                                        <Box>
+                                            <Typography sx={subTextSx}>LIVE CONTROL POINT</Typography>
+                                            <Typography sx={mainTextSx}>{live?.currentDepartment || product.currentDepartment || "ENGINEERING / BOM"}</Typography>
+                                            <Typography sx={subTextSx}>{live?.currentLocationCode || live?.currentLocationName || (live ? "Location pending" : "No material requisition yet")}</Typography>
+                                        </Box>
+                                        <Box><Typography sx={subTextSx}>STATUS</Typography><MatFlowStatusChip status={live?.currentStage || live?.requisitionStatus || product.requisitionStatus || product.latestBomStatus || product.approvalStatus} /></Box>
+                                        <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: { xs: "flex-start", xl: "flex-end" } }}>
+                                            {requisitionCount > 0 && <Button onClick={() => loadMaterialDetail(product)} sx={secondaryBtnSx}>{expandedProducts[key] ? "Hide Materials" : `Materials (${requisitionCount} req.)`}</Button>}
+                                            {product.latestRequisitionId && <Button onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)} sx={secondaryBtnSx}>Latest Trace</Button>}
+                                            {action && <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>Act</Button>}
+                                        </Box>
+                                    </Box>
+
+                                    <Box sx={{ px: 1.2, pb: 1.15 }}>
+                                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(6,minmax(0,1fr))" }, gap: .65 }}>
+                                            {[["Requested", product.requestedQty], ["Reserved", product.reservedQty], ["Shortage", product.shortageQty], ["Issued", product.issuedQty], ["Consumed", product.consumedQty], ["Progress", `${stageProgress}%`]].map(([label, value]) => <Box key={label} sx={{ p: .75, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}><Typography sx={{ ...subTextSx, fontSize: 9 }}>{label}</Typography><Typography sx={{ fontSize: 14, fontWeight: 950 }}>{typeof value === "string" ? value : formatQty(value)}</Typography></Box>)}
+                                        </Box>
+                                        {live && <Box sx={{ mt: .75, display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap" }}>
+                                            <TimingHealthChip health={live.timingHealth} />
+                                            <Typography sx={subTextSx}>Stage {formatDurationMinutes(live.stageDurationMinutes || 0)}</Typography>
+                                            <Typography sx={subTextSx}>· Total lead {formatDurationMinutes(live.totalLeadTimeMinutes || 0)}</Typography>
+                                            {live.bottleneckHint && <Typography sx={subTextSx}>· {live.bottleneckHint}</Typography>}
+                                            {live.nextDepartment && <Typography sx={subTextSx}>· Next → {live.nextDepartment}{live.nextLocationCode ? ` / ${live.nextLocationCode}` : ""}</Typography>}
+                                        </Box>}
+                                    </Box>
+
+                                    {expandedProducts[key] && <Box sx={{ borderTop: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
+                                        {materialLoading[key] ? <LoadingBlock /> : !detail ? <Box sx={{ p: 1.2 }}><Typography sx={subTextSx}>Material trace could not be loaded.</Typography></Box> : <>
+                                            <Box sx={{ px: 1.2, py: 1, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                                <Box><Typography sx={{ fontSize: 14, fontWeight: 950 }}>Material Position Board</Typography><Typography sx={subTextSx}>Exact material custody and next destination across every active/non-cancelled requisition currently returned for this Product.</Typography></Box>
+                                                <Typography sx={subTextSx}>{materials.length} tracked material position(s) · {detail?.requisitionCount || requisitionCount} requisition(s)</Typography>
                                             </Box>
-                                            {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material, materialIndex) => <Box key={`${material.requisitionId || "req"}:${material.requisitionLineId || material.materialId || materialIndex}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.requisitionNumber || "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentMaterialCode || material.bomMaterialCode || "-"}</Typography><Typography sx={subTextSx}>{material.materialName || "-"}{material.materialCategory ? ` · ${readable(material.materialCategory)}` : ""} · {material.uom || ""}</Typography></Box>
-                                                <Box sx={tableCellSx}>{formatQty(material.requestedQty)}</Box>
-                                                <Box sx={tableCellSx}>{formatQty(material.reservedQty)}</Box>
-                                                <Box sx={tableCellSx}>{formatQty(material.shortageQty)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentDepartment || "-"}</Typography><Typography sx={subTextSx}>{material.activeReferenceNumber || material.activeReferenceType || ""}</Typography></Box>
-                                                <Box sx={tableCellSx}>{material.currentLocationCode || material.currentLocationName || "-"}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(material.movementState)}</Typography><Typography sx={subTextSx}>{material.lastMovedAt ? formatDate(material.lastMovedAt) : "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}>{material.nextDepartment || "-"}{material.nextLocationCode ? ` / ${material.nextLocationCode}` : ""}</Box>
-                                            </Box>)}
-                                        </Box>
-                                    </>}
-                                </Box>}
-                            </Box>;
-                        })}
-                    </Box>
+                                            <Box sx={tableShellSx}>
+                                                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
+                                                    {["Requisition", "Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                                </Box>
+                                                {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material, materialIndex) => <Box key={`${material.requisitionId || "req"}:${material.requisitionLineId || material.materialId || materialIndex}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
+                                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.requisitionNumber || "-"}</Typography></Box>
+                                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentMaterialCode || material.bomMaterialCode || "-"}</Typography><Typography sx={subTextSx}>{material.materialName || "-"}{material.materialCategory ? ` · ${readable(material.materialCategory)}` : ""} · {material.uom || ""}</Typography></Box>
+                                                    <Box sx={tableCellSx}>{formatQty(material.requestedQty)}</Box>
+                                                    <Box sx={tableCellSx}>{formatQty(material.reservedQty)}</Box>
+                                                    <Box sx={tableCellSx}>{formatQty(material.shortageQty)}</Box>
+                                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentDepartment || "-"}</Typography><Typography sx={subTextSx}>{material.activeReferenceNumber || material.activeReferenceType || ""}</Typography></Box>
+                                                    <Box sx={tableCellSx}>{material.currentLocationCode || material.currentLocationName || "-"}</Box>
+                                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(material.movementState)}</Typography><Typography sx={subTextSx}>{material.lastMovedAt ? formatDate(material.lastMovedAt) : "-"}</Typography></Box>
+                                                    <Box sx={tableCellSx}>{material.nextDepartment || "-"}{material.nextLocationCode ? ` / ${material.nextLocationCode}` : ""}</Box>
+                                                </Box>)}
+                                            </Box>
+                                        </>}
+                                    </Box>}
+                                </Box>;
+                            })}
+                        </Box>
+                    </Collapse>
                 </Card>;
             })}
         </Box>}
