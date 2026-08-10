@@ -1534,18 +1534,61 @@ public class MatFlowRequisitionService {
                                 .findByRequisition_IdOrderByLineNoAsc(
                                                 requisition.getId())
                                 .stream()
-                                .map(line -> {
+                                .map(rawLine -> {
 
-                                        if (line == null) {
+                                        if (rawLine == null) {
                                                 throw conflict(
                                                                 "Material requisition contains an empty line");
+                                        }
+
+                                        /*
+                                         * IMPORTANT:
+                                         * During Store Issue, lockById(...) may already have placed a
+                                         * MatFlowRequisitionLine Hibernate proxy in the current persistence
+                                         * context. A later repository query can return that same managed
+                                         * proxy. Because MatFlow entities expose public JPA backing fields,
+                                         * reading rawLine.material / rawLine.bomLine directly from the proxy
+                                         * can falsely look null even though the database foreign keys exist.
+                                         *
+                                         * Always unwrap the line before mapping the response. This mirrors
+                                         * the defensive hydration already used by IssueModule and
+                                         * toReservationResponse().
+                                         */
+                                        MatFlowRequisitionLine line = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                        rawLine);
+
+                                        /*
+                                         * Unwrap the associations too. For normal entities this is a no-op;
+                                         * for lazy Hibernate proxies it gives the mapper the authoritative
+                                         * entity instance before public-field data is read.
+                                         */
+                                        if (line.material != null) {
+                                                line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                                line.material);
+                                        }
+
+                                        if (line.bomLine != null) {
+                                                line.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                                line.bomLine);
+                                        }
+
+                                        if (line.issuedMaterial != null) {
+                                                line.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
+                                                                line.issuedMaterial);
                                         }
 
                                         if (line.material == null ||
                                                         line.bomLine == null) {
 
                                                 throw conflict(
-                                                                "Material requisition contains an incomplete line");
+                                                                "Material requisition line " +
+                                                                                line.getId() +
+                                                                                " is incomplete " +
+                                                                                "[materialMissing=" +
+                                                                                (line.material == null) +
+                                                                                ", bomLineMissing=" +
+                                                                                (line.bomLine == null) +
+                                                                                "]");
                                         }
 
                                         MatFlowMaterial issuedMaterial = line.issuedMaterial;
