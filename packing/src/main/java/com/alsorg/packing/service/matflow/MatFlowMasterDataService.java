@@ -79,1805 +79,1832 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MatFlowMasterDataService {
 
-    private static final List<String> MATFLOW_ROLES = List.of(
-            "ADMIN",
-            "MATFLOW_MANAGER",
-            "MATFLOW_ENGINEERING",
-            "MATFLOW_STORE",
-            "MATFLOW_PURCHASE",
-            "MATFLOW_PROCESSING",
-            "MATFLOW_PRODUCTION",
-            "MATFLOW_QC",
-            "MATFLOW_DIRECTOR");
+        private static final List<String> MATFLOW_ROLES = List.of(
+                        "ADMIN",
+                        "MATFLOW_MANAGER",
+                        "MATFLOW_ENGINEERING",
+                        "MATFLOW_STORE",
+                        "MATFLOW_PURCHASE",
+                        "MATFLOW_PROCESSING",
+                        "MATFLOW_PRODUCTION",
+                        "MATFLOW_QC",
+                        "MATFLOW_DIRECTOR");
 
-    private final MasterModule master;
-    private final InventoryModule inventory;
-    private final VendorModule vendors;
-    private final MatFlowAccessService accessService;
-
-    public MatFlowMasterDataService(
-            MatFlowMaterialRepository materialRepository,
-            MatFlowProjectDrawingRepository projectRepository,
-            MatFlowLocationRepository locationRepository,
-            MatFlowStockBalanceRepository balanceRepository,
-            MatFlowStockLedgerRepository ledgerRepository,
-            MatFlowVendorRepository vendorRepository,
-            MatFlowBomRepository bomRepository,
-            MatFlowAccessService accessService,
-            MatFlowAuditService auditService) {
-        this.accessService = accessService;
-        this.master = new MasterModule(
-                materialRepository,
-                projectRepository,
-                bomRepository,
-                accessService,
-                auditService);
-        this.inventory = new InventoryModule(
-                locationRepository, materialRepository, balanceRepository, ledgerRepository, accessService);
-        this.vendors = new VendorModule(vendorRepository, accessService);
-    }
-
-    @Transactional(readOnly = true)
-    public List<MaterialResponse> listMaterials(String search, Boolean active) {
-        return master.listMaterials(search, active);
-    }
-
-    @Transactional
-    public MaterialResponse createMaterial(MaterialRequest request) {
-        return master.createMaterial(request);
-    }
-
-    @Transactional
-    public MaterialResponse updateMaterial(UUID id, MaterialRequest request) {
-        return master.updateMaterial(id, request);
-    }
-
-    @Transactional(readOnly = true)
-    public List<ProjectDrawingResponse> listProjects(String search, Boolean active) {
-        return master.listProjects(search, active);
-    }
-
-    @Transactional
-    public ProjectDrawingResponse createProject(ProjectDrawingRequest request) {
-        return master.createProject(request);
-    }
-
-    @Transactional
-    public ProjectDrawingResponse updateProject(UUID id, ProjectDrawingRequest request) {
-        return master.updateProject(id, request);
-    }
-
-    @Transactional
-    public ProjectDrawingResponse approveProjectProduct(
-            UUID id,
-            ProjectProductApprovalRequest request) {
-        return master.approveProjectProduct(id, request);
-    }
-
-    @Transactional
-    public ProjectDrawingResponse returnProjectProduct(
-            UUID id,
-            ProjectProductApprovalRequest request) {
-        return master.returnProjectProduct(id, request);
-    }
-
-    @Transactional(readOnly = true)
-    public MatFlowMaterial requireMaterial(UUID id) {
-        return master.requireMaterial(id);
-    }
-
-    @Transactional(readOnly = true)
-    public MatFlowProjectDrawing requireProject(UUID id) {
-        return master.requireProject(id);
-    }
-
-    public ProjectDrawingResponse toProjectResponse(MatFlowProjectDrawing project) {
-        return master.toProjectResponse(project);
-    }
-
-    @Transactional(readOnly = true)
-    public List<LocationResponse> listLocations(String search, Boolean active) {
-        return inventory.listLocations(search, active);
-    }
-
-    @Transactional
-    public LocationResponse createLocation(LocationRequest request) {
-        return inventory.createLocation(request);
-    }
-
-    @Transactional
-    public LocationResponse updateLocation(UUID id, LocationRequest request) {
-        return inventory.updateLocation(id, request);
-    }
-
-    @Transactional(readOnly = true)
-    public List<StockBalanceResponse> listStock(UUID materialId, UUID locationId, String plantCode) {
-        return inventory.listStock(materialId, locationId, plantCode);
-    }
-
-    @Transactional
-    public StockBalanceResponse adjustStock(StockAdjustmentRequest request) {
-        return inventory.adjustStock(request);
-    }
-
-    public MatFlowLocation requireLocation(UUID id) {
-        return inventory.requireLocation(id);
-    }
-
-    @Transactional(readOnly = true)
-    public List<VendorResponse> listVendors(String search, Boolean active) {
-        return vendors.list(search, active);
-    }
-
-    @Transactional
-    public VendorResponse createVendor(VendorRequest request) {
-        return vendors.create(request);
-    }
-
-    @Transactional
-    public VendorResponse updateVendor(UUID id, VendorRequest request) {
-        return vendors.update(id, request);
-    }
-
-    @Transactional(readOnly = true)
-    public MetadataResponse metadata() {
-        accessService.requireRead();
-
-        Map<String, List<String>> enums = new LinkedHashMap<>();
-        enums.put(
-                "bomStatus",
-                namesExcluding(
-                        MatFlowBomStatus.class,
-                        Set.of("PRODUCTION_REVIEW_PENDING")));
-        enums.put("locationType", names(LocationType.class));
-        enums.put("routeStepType", names(RouteStepType.class));
-        enums.put(
-                "requisitionStatus",
-                namesExcluding(
-                        RequisitionStatus.class,
-                        Set.of("SUBMITTED", "PLANNED", "ISSUED", "COMPLETED")));
-        enums.put("reservationStatus", names(ReservationStatus.class));
-        enums.put("indentStatus", names(IndentStatus.class));
-        enums.put("purchaseOrderStatus", names(PurchaseOrderStatus.class));
-        enums.put("goodsReceiptStatus", names(GoodsReceiptStatus.class));
-        enums.put("transferStatus", names(TransferStatus.class));
-        enums.put("transferPurpose", names(TransferPurpose.class));
-        enums.put("qcInspectionStatus", names(QcInspectionStatus.class));
-        enums.put("qcSourceType", names(QcSourceType.class));
-        enums.put("qcDispositionType", names(QcDispositionType.class));
-        enums.put("qcDispositionStatus", names(QcDispositionStatus.class));
-        enums.put("processingJobStatus", names(ProcessingJobStatus.class));
-        enums.put("materialReturnStatus", names(MaterialReturnStatus.class));
-        enums.put("materialReturnReason", names(MaterialReturnReason.class));
-        enums.put("movementType", names(MovementType.class));
-        enums.put("projectProductApprovalStatus", names(ProjectProductApprovalStatus.class));
-        enums.put("partialAvailabilityDecision", names(PartialAvailabilityDecision.class));
-
-        return new MetadataResponse(
-                API_VERSION,
-                LocalDateTime.now(),
-                accessService.allowedPlants(),
-                MATFLOW_ROLES,
-                enums);
-    }
-
-    private List<String> names(Class<? extends Enum<?>> enumType) {
-        return Arrays.stream(enumType.getEnumConstants()).map(Enum::name).toList();
-    }
-
-    private List<String> namesExcluding(
-            Class<? extends Enum<?>> enumType,
-            Set<String> excludedNames) {
-        Set<String> excluded = excludedNames == null ? Set.of() : excludedNames;
-        return Arrays.stream(enumType.getEnumConstants())
-                .map(Enum::name)
-                .filter(name -> !excluded.contains(name))
-                .toList();
-    }
-
-    private static final class MasterModule {
-
-        private final MatFlowMaterialRepository materialRepository;
-        private final MatFlowProjectDrawingRepository projectRepository;
-        private final MatFlowBomRepository bomRepository;
+        private final MasterModule master;
+        private final InventoryModule inventory;
+        private final VendorModule vendors;
         private final MatFlowAccessService accessService;
-        private final MatFlowAuditService auditService;
 
-        MasterModule(
-                MatFlowMaterialRepository materialRepository,
-                MatFlowProjectDrawingRepository projectRepository,
-                MatFlowBomRepository bomRepository,
-                MatFlowAccessService accessService,
-                MatFlowAuditService auditService) {
-            this.materialRepository = materialRepository;
-            this.projectRepository = projectRepository;
-            this.bomRepository = bomRepository;
-            this.accessService = accessService;
-            this.auditService = auditService;
+        public MatFlowMasterDataService(
+                        MatFlowMaterialRepository materialRepository,
+                        MatFlowProjectDrawingRepository projectRepository,
+                        MatFlowLocationRepository locationRepository,
+                        MatFlowStockBalanceRepository balanceRepository,
+                        MatFlowStockLedgerRepository ledgerRepository,
+                        MatFlowVendorRepository vendorRepository,
+                        MatFlowBomRepository bomRepository,
+                        MatFlowAccessService accessService,
+                        MatFlowAuditService auditService) {
+                this.accessService = accessService;
+                this.master = new MasterModule(
+                                materialRepository,
+                                projectRepository,
+                                bomRepository,
+                                accessService,
+                                auditService);
+                this.inventory = new InventoryModule(
+                                locationRepository, materialRepository, balanceRepository, ledgerRepository,
+                                accessService, auditService);
+                this.vendors = new VendorModule(vendorRepository, accessService);
         }
 
         @Transactional(readOnly = true)
-        public List<MaterialResponse> listMaterials(
-                String search,
-                Boolean active) {
-            accessService.requireRead();
-
-            String query = normalizeSearch(search);
-
-            return materialRepository
-                    .findAll(
-                            Sort.by(
-                                    Sort.Direction.ASC,
-                                    "materialCode"))
-                    .stream()
-                    .filter(material -> active == null ||
-                            material.isActive() == active)
-                    .filter(material -> query.isBlank() ||
-                            contains(
-                                    material.getMaterialCode(),
-                                    query)
-                            ||
-                            contains(
-                                    material.getMaterialName(),
-                                    query)
-                            ||
-                            contains(
-                                    material.getCategory(),
-                                    query)
-                            ||
-                            contains(
-                                    material.getSpecification(),
-                                    query))
-                    .map(this::toMaterialResponse)
-                    .toList();
+        public List<MaterialResponse> listMaterials(String search, Boolean active) {
+                return master.listMaterials(search, active);
         }
 
         @Transactional
-        public MaterialResponse createMaterial(
-                MaterialRequest request) {
-            accessService
-                    .requireMaterialMasterWrite();
-
-            validateMaterialRequest(request);
-
-            String materialCode = upper(request.materialCode());
-
-            if (materialRepository
-                    .existsByMaterialCodeIgnoreCase(
-                            materialCode)) {
-                throw conflict(
-                        "Material code already exists: " +
-                                materialCode);
-            }
-
-            String actor = accessService.actor();
-
-            MatFlowMaterial material = new MatFlowMaterial();
-
-            applyMaterial(
-                    material,
-                    request);
-
-            material.setCreatedBy(actor);
-            material.setUpdatedBy(actor);
-
-            return toMaterialResponse(
-                    materialRepository.save(material));
+        public MaterialResponse createMaterial(MaterialRequest request) {
+                return master.createMaterial(request);
         }
 
         @Transactional
-        public MaterialResponse updateMaterial(
-                UUID id,
-                MaterialRequest request) {
-            accessService
-                    .requireMaterialMasterWrite();
-
-            validateMaterialRequest(request);
-
-            MatFlowMaterial material = requireMaterial(id);
-
-            assertVersion(
-                    request.rowVersion(),
-                    material.getRowVersion(),
-                    "Material");
-
-            String materialCode = upper(request.materialCode());
-
-            if (materialRepository
-                    .existsByMaterialCodeIgnoreCaseAndIdNot(
-                            materialCode,
-                            id)) {
-                throw conflict(
-                        "Material code already exists: " +
-                                materialCode);
-            }
-
-            applyMaterial(
-                    material,
-                    request);
-
-            material.setUpdatedBy(
-                    accessService.actor());
-
-            return toMaterialResponse(
-                    materialRepository.save(material));
+        public MaterialResponse updateMaterial(UUID id, MaterialRequest request) {
+                return master.updateMaterial(id, request);
         }
 
         @Transactional(readOnly = true)
-        public List<ProjectDrawingResponse> listProjects(
-                String search,
-                Boolean active) {
-            accessService.requireRead();
-
-            String query = normalizeSearch(search);
-
-            return projectRepository
-                    .findAll(
-                            Sort.by(
-                                    Sort.Direction.DESC,
-                                    "updatedAt"))
-                    .stream()
-                    .filter(project -> accessService.canAccessPlant(
-                            project.getPlantCode()))
-                    .filter(project -> active == null ||
-                            project.isActive() == active)
-                    .filter(project -> query.isBlank() ||
-                            contains(
-                                    project.getProjectCode(),
-                                    query)
-                            ||
-                            contains(
-                                    project.getProjectName(),
-                                    query)
-                            ||
-                            contains(
-                                    project.getClientName(),
-                                    query)
-                            ||
-                            contains(
-                                    project.getDrawingNo(),
-                                    query)
-                            ||
-                            contains(
-                                    project.getProductName(),
-                                    query))
-                    .map(this::toProjectResponse)
-                    .toList();
+        public List<ProjectDrawingResponse> listProjects(String search, Boolean active) {
+                return master.listProjects(search, active);
         }
 
         @Transactional
-        public ProjectDrawingResponse createProject(
-                ProjectDrawingRequest request) {
-            accessService.requireProjectWrite();
-
-            validateProjectRequest(request);
-
-            String plantCode = upper(request.plantCode());
-
-            accessService.requirePlantAccess(
-                    plantCode);
-
-            String projectCode = upper(request.projectCode());
-
-            String drawingNo = upper(request.drawingNo());
-
-            String drawingRevision = normalizedRevision(
-                    request.drawingRevision());
-
-            if (projectRepository.existsDuplicate(
-                    plantCode,
-                    projectCode,
-                    drawingNo,
-                    drawingRevision)) {
-                throw conflict(
-                        "Project drawing revision already exists");
-            }
-
-            String actor = accessService.actor();
-
-            MatFlowProjectDrawing project = new MatFlowProjectDrawing();
-
-            applyProject(
-                    project,
-                    request,
-                    plantCode);
-
-            resetProductApproval(project);
-
-            project.setCreatedBy(actor);
-            project.setUpdatedBy(actor);
-
-            project = projectRepository.save(project);
-
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    project.getId(),
-                    "PRODUCT_SUBMITTED_FOR_DIRECTOR_APPROVAL",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    project.getDrawingNo(),
-                    auditService.details(
-                            "projectName", project.getProjectName(),
-                            "productName", project.getProductName(),
-                            "drawingRevision", project.getDrawingRevision()));
-
-            return toProjectResponse(project);
+        public ProjectDrawingResponse createProject(ProjectDrawingRequest request) {
+                return master.createProject(request);
         }
 
         @Transactional
-        public ProjectDrawingResponse updateProject(
-                UUID id,
-                ProjectDrawingRequest request) {
-            accessService.requireProjectWrite();
-
-            validateProjectRequest(request);
-
-            MatFlowProjectDrawing project = requireProject(id);
-
-            accessService.requirePlantAccess(
-                    project.getPlantCode());
-
-            assertVersion(
-                    request.rowVersion(),
-                    project.getRowVersion(),
-                    "Project drawing");
-
-            String plantCode = upper(request.plantCode());
-
-            accessService.requirePlantAccess(
-                    plantCode);
-
-            String projectCode = upper(request.projectCode());
-
-            String drawingNo = upper(request.drawingNo());
-
-            String drawingRevision = normalizedRevision(
-                    request.drawingRevision());
-
-            if (projectRepository.existsDuplicateExcludingId(
-                    plantCode,
-                    projectCode,
-                    drawingNo,
-                    drawingRevision,
-                    id)) {
-                throw conflict(
-                        "Project drawing revision already exists");
-            }
-
-            boolean criticalChange = hasApprovalCriticalChange(
-                    project,
-                    request,
-                    plantCode);
-
-            if (criticalChange &&
-                    bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
-                throw conflict(
-                        "An approved/effective BOM already exists for this product/drawing. "
-                                + "Create a new Product/Drawing revision instead of changing approval-critical fields.");
-            }
-
-            applyProject(
-                    project,
-                    request,
-                    plantCode);
-
-            if (criticalChange ||
-                    project.getProductApprovalStatus() == ProjectProductApprovalStatus.RETURNED) {
-                resetProductApproval(project);
-            }
-
-            String actor = accessService.actor();
-            project.setUpdatedBy(actor);
-            project = projectRepository.save(project);
-
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    project.getId(),
-                    "PROJECT_PRODUCT_UPDATED",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    project.getDrawingNo(),
-                    auditService.details(
-                            "productName", project.getProductName(),
-                            "approvalReset", criticalChange,
-                            "approvalStatus", project.getProductApprovalStatus()));
-
-            return toProjectResponse(project);
+        public ProjectDrawingResponse updateProject(UUID id, ProjectDrawingRequest request) {
+                return master.updateProject(id, request);
         }
 
         @Transactional
         public ProjectDrawingResponse approveProjectProduct(
-                UUID id,
-                ProjectProductApprovalRequest request) {
-            accessService.requireProjectProductApproval();
-
-            MatFlowProjectDrawing project = requireProject(id);
-
-            assertVersion(
-                    request == null ? null : request.rowVersion(),
-                    project.getRowVersion(),
-                    "Project product");
-
-            if (!project.isActive()) {
-                throw conflict("Inactive product/drawing cannot be approved");
-            }
-
-            if (project.getProductApprovalStatus() == ProjectProductApprovalStatus.APPROVED) {
-                return toProjectResponse(project);
-            }
-
-            String actor = accessService.actor();
-            project.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
-            project.setProductApprovedBy(actor);
-            project.setProductApprovedAt(LocalDateTime.now());
-            project.setProductReturnedBy(null);
-            project.setProductReturnedAt(null);
-            project.setProductApprovalRemarks(
-                    request == null ? null : clean(request.remarks()));
-            project.setUpdatedBy(actor);
-
-            project = projectRepository.save(project);
-
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    project.getId(),
-                    "PRODUCT_APPROVED_BY_DIRECTOR",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    project.getDrawingNo(),
-                    auditService.details(
-                            "productName", project.getProductName(),
-                            "approvalRemarks", project.getProductApprovalRemarks()));
-
-            return toProjectResponse(project);
+                        UUID id,
+                        ProjectProductApprovalRequest request) {
+                return master.approveProjectProduct(id, request);
         }
 
         @Transactional
         public ProjectDrawingResponse returnProjectProduct(
-                UUID id,
-                ProjectProductApprovalRequest request) {
-            accessService.requireProjectProductApproval();
-
-            MatFlowProjectDrawing project = requireProject(id);
-
-            assertVersion(
-                    request == null ? null : request.rowVersion(),
-                    project.getRowVersion(),
-                    "Project product");
-
-            String remarks = clean(request == null ? null : request.remarks());
-            if (remarks == null) {
-                throw badRequest("Return remarks are required");
-            }
-
-            if (bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
-                throw conflict(
-                        "This product/drawing already has an effective approved BOM. Create a new Product/Drawing revision instead of returning the approved live product.");
-            }
-
-            String actor = accessService.actor();
-            project.setProductApprovalStatus(ProjectProductApprovalStatus.RETURNED);
-            project.setProductApprovedBy(null);
-            project.setProductApprovedAt(null);
-            project.setProductReturnedBy(actor);
-            project.setProductReturnedAt(LocalDateTime.now());
-            project.setProductApprovalRemarks(remarks);
-            project.setUpdatedBy(actor);
-
-            project = projectRepository.save(project);
-
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    project.getId(),
-                    "PRODUCT_RETURNED_BY_DIRECTOR",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    project.getDrawingNo(),
-                    auditService.details(
-                            "productName", project.getProductName(),
-                            "returnRemarks", remarks));
-
-            return toProjectResponse(project);
+                        UUID id,
+                        ProjectProductApprovalRequest request) {
+                return master.returnProjectProduct(id, request);
         }
 
         @Transactional(readOnly = true)
-        public MatFlowMaterial requireMaterial(
-                UUID id) {
-            return materialRepository
-                    .findById(id)
-                    .orElseThrow(() -> notFound(
-                            "Material not found"));
+        public MatFlowMaterial requireMaterial(UUID id) {
+                return master.requireMaterial(id);
         }
 
         @Transactional(readOnly = true)
-        public MatFlowProjectDrawing requireProject(
-                UUID id) {
-            MatFlowProjectDrawing project = projectRepository
-                    .findById(id)
-                    .orElseThrow(() -> notFound(
-                            "Project drawing not found"));
-
-            accessService.requirePlantAccess(
-                    project.getPlantCode());
-
-            return project;
+        public MatFlowProjectDrawing requireProject(UUID id) {
+                return master.requireProject(id);
         }
 
-        public ProjectDrawingResponse toProjectResponse(
-                MatFlowProjectDrawing project) {
-            return new ProjectDrawingResponse(
-                    project.getId(),
-                    project.getProjectCode(),
-                    project.getProjectName(),
-                    project.getClientName(),
-                    project.getDrawingNo(),
-                    project.getDrawingRevision(),
-                    project.getProductName(),
-                    project.getPlantCode(),
-                    project.getRequiredDate(),
-                    project.getRemarks(),
-                    project.isActive(),
-                    project.getProductApprovalStatus(),
-                    project.getProductApprovedBy(),
-                    project.getProductApprovedAt(),
-                    project.getProductReturnedBy(),
-                    project.getProductReturnedAt(),
-                    project.getProductApprovalRemarks(),
-                    project.getRowVersion(),
-                    project.getCreatedBy(),
-                    project.getCreatedAt(),
-                    project.getUpdatedBy(),
-                    project.getUpdatedAt());
-        }
-
-        private void applyMaterial(
-                MatFlowMaterial material,
-                MaterialRequest request) {
-            material.setMaterialCode(
-                    request.materialCode());
-
-            material.setMaterialName(
-                    request.materialName());
-
-            material.setCategory(
-                    request.category());
-
-            material.setSpecification(
-                    request.specification());
-
-            material.setUom(
-                    request.uom());
-
-            material.setPreferredSupplier(
-                    request.preferredSupplier());
-
-            material.setMinimumStock(
-                    nonNegative(
-                            request.minimumStock(),
-                            "Minimum stock"));
-
-            material.setReorderLevel(
-                    nonNegative(
-                            request.reorderLevel(),
-                            "Reorder level"));
-
-            if (request.active() != null) {
-                material.setActive(
-                        request.active());
-            }
-        }
-
-        private void applyProject(
-                MatFlowProjectDrawing project,
-                ProjectDrawingRequest request,
-                String plantCode) {
-            project.setProjectCode(
-                    request.projectCode());
-
-            project.setProjectName(
-                    request.projectName());
-
-            project.setClientName(
-                    request.clientName());
-
-            project.setDrawingNo(
-                    request.drawingNo());
-
-            project.setDrawingRevision(
-                    normalizedRevision(
-                            request.drawingRevision()));
-
-            project.setProductName(
-                    request.productName());
-
-            project.setPlantCode(plantCode);
-
-            project.setRequiredDate(
-                    request.requiredDate());
-
-            project.setRemarks(
-                    request.remarks());
-
-            if (request.active() != null) {
-                project.setActive(
-                        request.active());
-            }
-        }
-
-        private boolean hasApprovalCriticalChange(
-                MatFlowProjectDrawing project,
-                ProjectDrawingRequest request,
-                String plantCode) {
-            return !Objects.equals(upper(project.getProjectCode()), upper(request.projectCode()))
-                    || !Objects.equals(clean(project.getProjectName()), clean(request.projectName()))
-                    || !Objects.equals(clean(project.getClientName()), clean(request.clientName()))
-                    || !Objects.equals(upper(project.getDrawingNo()), upper(request.drawingNo()))
-                    || !Objects.equals(normalizedRevision(project.getDrawingRevision()),
-                            normalizedRevision(request.drawingRevision()))
-                    || !Objects.equals(clean(project.getProductName()), clean(request.productName()))
-                    || !Objects.equals(upper(project.getPlantCode()), upper(plantCode));
-        }
-
-        private void resetProductApproval(
-                MatFlowProjectDrawing project) {
-            project.setProductApprovalStatus(
-                    ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL);
-            project.setProductApprovedBy(null);
-            project.setProductApprovedAt(null);
-            project.setProductReturnedBy(null);
-            project.setProductReturnedAt(null);
-            project.setProductApprovalRemarks(null);
-        }
-
-        private void validateMaterialRequest(
-                MaterialRequest request) {
-            if (request == null) {
-                throw badRequest(
-                        "Material request is required");
-            }
-
-            required(
-                    request.materialCode(),
-                    "Material code");
-
-            required(
-                    request.materialName(),
-                    "Material name");
-
-            required(
-                    request.category(),
-                    "Material category");
-
-            required(
-                    request.uom(),
-                    "Material UOM");
-        }
-
-        private void validateProjectRequest(
-                ProjectDrawingRequest request) {
-            if (request == null) {
-                throw badRequest(
-                        "Project request is required");
-            }
-
-            required(
-                    request.projectCode(),
-                    "Project code");
-
-            required(
-                    request.projectName(),
-                    "Project name");
-
-            required(
-                    request.clientName(),
-                    "Client name");
-
-            required(
-                    request.drawingNo(),
-                    "Drawing number");
-
-            required(
-                    request.productName(),
-                    "Product name");
-
-            required(
-                    request.plantCode(),
-                    "Plant code");
-        }
-
-        private MaterialResponse toMaterialResponse(
-                MatFlowMaterial material) {
-            return new MaterialResponse(
-                    material.getId(),
-                    material.getMaterialCode(),
-                    material.getMaterialName(),
-                    material.getCategory(),
-                    material.getSpecification(),
-                    material.getUom(),
-                    material.getPreferredSupplier(),
-                    material.getMinimumStock(),
-                    material.getReorderLevel(),
-                    material.isActive(),
-                    material.getRowVersion(),
-                    material.getCreatedBy(),
-                    material.getCreatedAt(),
-                    material.getUpdatedBy(),
-                    material.getUpdatedAt());
-        }
-
-        private void assertVersion(
-                Long requested,
-                Long current,
-                String entityName) {
-            if (requested == null) {
-                throw badRequest(
-                        entityName +
-                                " rowVersion is required");
-            }
-
-            if (!requested.equals(current)) {
-                throw conflict(
-                        entityName +
-                                " was modified by another user. Refresh and try again.");
-            }
-        }
-
-        private BigDecimal nonNegative(
-                BigDecimal value,
-                String field) {
-            BigDecimal result = value == null
-                    ? BigDecimal.ZERO
-                    : value;
-
-            if (result.compareTo(
-                    BigDecimal.ZERO) < 0) {
-                throw badRequest(
-                        field +
-                                " cannot be negative");
-            }
-
-            return result;
-        }
-
-        private void required(
-                String value,
-                String field) {
-            if (value == null ||
-                    value.trim().isBlank()) {
-                throw badRequest(
-                        field + " is required");
-            }
-        }
-
-        private String normalizedRevision(
-                String value) {
-            return value == null ||
-                    value.trim().isBlank()
-                            ? "0"
-                            : value.trim()
-                                    .toUpperCase();
-        }
-
-        private String clean(String value) {
-            if (value == null) {
-                return null;
-            }
-            String result = value.trim();
-            return result.isBlank() ? null : result;
-        }
-
-        private String upper(String value) {
-            String result = clean(value);
-            return result == null ? null : result.toUpperCase(Locale.ROOT);
-        }
-
-        private String normalizeSearch(
-                String value) {
-            return value == null
-                    ? ""
-                    : value.trim()
-                            .toLowerCase(
-                                    Locale.ROOT);
-        }
-
-        private boolean contains(
-                String value,
-                String query) {
-            return value != null &&
-                    value.toLowerCase(
-                            Locale.ROOT).contains(query);
-        }
-
-        private ResponseStatusException badRequest(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    message);
-        }
-
-        private ResponseStatusException conflict(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    message);
-        }
-
-        private ResponseStatusException notFound(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    message);
-        }
-    }
-
-    private static final class InventoryModule {
-
-        private final MatFlowLocationRepository locationRepository;
-        private final MatFlowMaterialRepository materialRepository;
-        private final MatFlowStockBalanceRepository balanceRepository;
-        private final MatFlowStockLedgerRepository ledgerRepository;
-        private final MatFlowAccessService accessService;
-
-        InventoryModule(
-                MatFlowLocationRepository locationRepository,
-                MatFlowMaterialRepository materialRepository,
-                MatFlowStockBalanceRepository balanceRepository,
-                MatFlowStockLedgerRepository ledgerRepository,
-                MatFlowAccessService accessService) {
-            this.locationRepository = locationRepository;
-
-            this.materialRepository = materialRepository;
-
-            this.balanceRepository = balanceRepository;
-
-            this.ledgerRepository = ledgerRepository;
-
-            this.accessService = accessService;
+        public ProjectDrawingResponse toProjectResponse(MatFlowProjectDrawing project) {
+                return master.toProjectResponse(project);
         }
 
         @Transactional(readOnly = true)
-        public List<LocationResponse> listLocations(
-                String search,
-                Boolean active) {
-
-            accessService.requireRead();
-
-            String query = normalizeSearch(search);
-
-            return locationRepository
-                    .findByPlantCodeInOrderByLocationCodeAsc(
-                            accessService.allowedPlants())
-                    .stream()
-                    .filter(location -> active == null ||
-                            location.isActive() == active)
-                    .filter(location -> query.isBlank()
-                            ||
-                            contains(
-                                    location.getLocationCode(),
-                                    query)
-                            ||
-                            contains(
-                                    location.getLocationName(),
-                                    query)
-                            ||
-                            contains(
-                                    location.getPlantCode(),
-                                    query)
-                            ||
-                            contains(
-                                    location.getLocationType() == null
-                                            ? null
-                                            : location.getLocationType()
-                                                    .name(),
-                                    query)
-                            ||
-                            contains(
-                                    location.getOwnershipType() == null
-                                            ? null
-                                            : location.getOwnershipType()
-                                                    .name(),
-                                    query))
-                    .map(this::toLocationResponse)
-                    .toList();
+        public List<LocationResponse> listLocations(String search, Boolean active) {
+                return inventory.listLocations(search, active);
         }
 
         @Transactional
-        public LocationResponse createLocation(
-                LocationRequest request) {
-            accessService.requireLocationWrite();
-
-            validateLocation(request);
-
-            String code = upper(request.locationCode());
-
-            String plantCode = upper(request.plantCode());
-
-            accessService.requirePlantAccess(
-                    plantCode);
-
-            if (locationRepository
-                    .existsByLocationCodeIgnoreCase(
-                            code)) {
-                throw conflict(
-                        "Location code already exists: " +
-                                code);
-            }
-
-            MatFlowLocation location = new MatFlowLocation();
-
-            applyLocation(
-                    location,
-                    request,
-                    true);
-
-            String actor = accessService.actor();
-
-            location.setCreatedBy(actor);
-            location.setUpdatedBy(actor);
-
-            return toLocationResponse(
-                    locationRepository.save(location));
+        public LocationResponse createLocation(LocationRequest request) {
+                return inventory.createLocation(request);
         }
 
         @Transactional
-        public LocationResponse updateLocation(
-                UUID id,
-                LocationRequest request) {
-            accessService.requireLocationWrite();
-
-            validateLocation(request);
-
-            MatFlowLocation location = requireLocation(id);
-
-            assertVersion(
-                    request.rowVersion(),
-                    location.getRowVersion(),
-                    "Location");
-
-            String plantCode = upper(request.plantCode());
-
-            accessService.requirePlantAccess(
-                    plantCode);
-
-            String code = upper(request.locationCode());
-
-            if (locationRepository
-                    .existsByLocationCodeIgnoreCaseAndIdNot(
-                            code,
-                            id)) {
-                throw conflict(
-                        "Location code already exists: " +
-                                code);
-            }
-
-            applyLocation(
-                    location,
-                    request,
-                    false);
-
-            location.setUpdatedBy(
-                    accessService.actor());
-
-            return toLocationResponse(
-                    locationRepository.save(location));
+        public LocationResponse updateLocation(UUID id, LocationRequest request) {
+                return inventory.updateLocation(id, request);
         }
 
         @Transactional(readOnly = true)
-        public List<StockBalanceResponse> listStock(
-                UUID materialId,
-                UUID locationId,
-                String plantCode) {
-            accessService.requireRead();
-
-            String normalizedPlant = plantCode == null
-                    ? null
-                    : upper(plantCode);
-
-            if (normalizedPlant != null) {
-                accessService.requirePlantAccess(
-                        normalizedPlant);
-            }
-
-            return balanceRepository
-                    .findVisibleBalances(
-                            accessService.allowedPlants())
-                    .stream()
-                    .filter(balance -> materialId == null ||
-                            balance.material
-                                    .getId()
-                                    .equals(materialId))
-                    .filter(balance -> locationId == null ||
-                            balance.location
-                                    .getId()
-                                    .equals(locationId))
-                    .filter(balance -> normalizedPlant == null ||
-                            balance.location.getPlantCode()
-                                    .equalsIgnoreCase(
-                                            normalizedPlant))
-                    .map(this::toStockResponse)
-                    .toList();
+        public List<StockBalanceResponse> listStock(UUID materialId, UUID locationId, String plantCode) {
+                return inventory.listStock(materialId, locationId, plantCode);
         }
 
         @Transactional
-        public StockBalanceResponse adjustStock(
-                StockAdjustmentRequest request) {
-            accessService.requireStockWrite();
+        public StockBalanceResponse adjustStock(StockAdjustmentRequest request) {
+                return inventory.adjustStock(request);
+        }
 
-            if (request == null) {
-                throw badRequest(
-                        "Stock adjustment request is required");
-            }
+        public MatFlowLocation requireLocation(UUID id) {
+                return inventory.requireLocation(id);
+        }
 
-            if (request.materialId() == null) {
-                throw badRequest(
-                        "Material is required");
-            }
+        @Transactional(readOnly = true)
+        public List<VendorResponse> listVendors(String search, Boolean active) {
+                return vendors.list(search, active);
+        }
 
-            if (request.locationId() == null) {
-                throw badRequest(
-                        "Location is required");
-            }
+        @Transactional
+        public VendorResponse createVendor(VendorRequest request) {
+                return vendors.create(request);
+        }
 
-            BigDecimal adjustment = scale(request.adjustmentQty());
+        @Transactional
+        public VendorResponse updateVendor(UUID id, VendorRequest request) {
+                return vendors.update(id, request);
+        }
 
-            if (adjustment.compareTo(
-                    BigDecimal.ZERO) == 0) {
-                throw badRequest(
-                        "Adjustment quantity cannot be zero");
-            }
+        @Transactional(readOnly = true)
+        public MetadataResponse metadata() {
+                accessService.requireRead();
 
-            MatFlowMaterial material = materialRepository
-                    .findById(
-                            request.materialId())
-                    .orElseThrow(() -> notFound(
-                            "Material not found"));
+                Map<String, List<String>> enums = new LinkedHashMap<>();
+                enums.put(
+                                "bomStatus",
+                                namesExcluding(
+                                                MatFlowBomStatus.class,
+                                                Set.of("PRODUCTION_REVIEW_PENDING")));
+                enums.put("locationType", names(LocationType.class));
+                enums.put("routeStepType", names(RouteStepType.class));
+                enums.put(
+                                "requisitionStatus",
+                                namesExcluding(
+                                                RequisitionStatus.class,
+                                                Set.of("SUBMITTED", "PLANNED", "ISSUED", "COMPLETED")));
+                enums.put("reservationStatus", names(ReservationStatus.class));
+                enums.put("indentStatus", names(IndentStatus.class));
+                enums.put("purchaseOrderStatus", names(PurchaseOrderStatus.class));
+                enums.put("goodsReceiptStatus", names(GoodsReceiptStatus.class));
+                enums.put("transferStatus", names(TransferStatus.class));
+                enums.put("transferPurpose", names(TransferPurpose.class));
+                enums.put("qcInspectionStatus", names(QcInspectionStatus.class));
+                enums.put("qcSourceType", names(QcSourceType.class));
+                enums.put("qcDispositionType", names(QcDispositionType.class));
+                enums.put("qcDispositionStatus", names(QcDispositionStatus.class));
+                enums.put("processingJobStatus", names(ProcessingJobStatus.class));
+                enums.put("materialReturnStatus", names(MaterialReturnStatus.class));
+                enums.put("materialReturnReason", names(MaterialReturnReason.class));
+                enums.put("movementType", names(MovementType.class));
+                enums.put("projectProductApprovalStatus", names(ProjectProductApprovalStatus.class));
+                enums.put("partialAvailabilityDecision", names(PartialAvailabilityDecision.class));
 
-            MatFlowLocation location = requireLocation(
-                    request.locationId());
+                return new MetadataResponse(
+                                API_VERSION,
+                                LocalDateTime.now(),
+                                accessService.allowedPlants(),
+                                MATFLOW_ROLES,
+                                enums);
+        }
 
-            if (!location.isSupportsStock()) {
-                throw badRequest(
-                        "Selected location does not support stock");
-            }
+        private List<String> names(Class<? extends Enum<?>> enumType) {
+                return Arrays.stream(enumType.getEnumConstants()).map(Enum::name).toList();
+        }
 
-            MatFlowStockBalance balance = balanceRepository
-                    .lockBalance(
-                            material.getId(),
-                            location.getId())
-                    .orElse(null);
+        private List<String> namesExcluding(
+                        Class<? extends Enum<?>> enumType,
+                        Set<String> excludedNames) {
+                Set<String> excluded = excludedNames == null ? Set.of() : excludedNames;
+                return Arrays.stream(enumType.getEnumConstants())
+                                .map(Enum::name)
+                                .filter(name -> !excluded.contains(name))
+                                .toList();
+        }
 
-            boolean newBalance = balance == null;
+        private static final class MasterModule {
 
-            String actor = accessService.actor();
+                private final MatFlowMaterialRepository materialRepository;
+                private final MatFlowProjectDrawingRepository projectRepository;
+                private final MatFlowBomRepository bomRepository;
+                private final MatFlowAccessService accessService;
+                private final MatFlowAuditService auditService;
 
-            if (newBalance) {
-                if (adjustment.compareTo(
-                        BigDecimal.ZERO) < 0) {
-                    throw badRequest(
-                            "Opening stock cannot be negative");
+                MasterModule(
+                                MatFlowMaterialRepository materialRepository,
+                                MatFlowProjectDrawingRepository projectRepository,
+                                MatFlowBomRepository bomRepository,
+                                MatFlowAccessService accessService,
+                                MatFlowAuditService auditService) {
+                        this.materialRepository = materialRepository;
+                        this.projectRepository = projectRepository;
+                        this.bomRepository = bomRepository;
+                        this.accessService = accessService;
+                        this.auditService = auditService;
                 }
 
-                balance = new MatFlowStockBalance();
+                @Transactional(readOnly = true)
+                public List<MaterialResponse> listMaterials(
+                                String search,
+                                Boolean active) {
+                        accessService.requireRead();
 
-                balance.material = material;
-                balance.location = location;
-                balance.onHandQty = BigDecimal.ZERO;
-                balance.reservedQty = BigDecimal.ZERO;
-                balance.blockedQty = BigDecimal.ZERO;
-                balance.inTransitQty = BigDecimal.ZERO;
-                balance.setCreatedBy(actor);
-            } else {
-                assertVersion(
-                        request.rowVersion(),
-                        balance.getRowVersion(),
-                        "Stock balance");
-            }
+                        String query = normalizeSearch(search);
 
-            BigDecimal nextOnHand = balance.onHandQty
-                    .add(adjustment)
-                    .setScale(
-                            3,
-                            RoundingMode.HALF_UP);
+                        return materialRepository
+                                        .findAll(
+                                                        Sort.by(
+                                                                        Sort.Direction.ASC,
+                                                                        "materialCode"))
+                                        .stream()
+                                        .filter(material -> active == null ||
+                                                        material.isActive() == active)
+                                        .filter(material -> query.isBlank() ||
+                                                        contains(
+                                                                        material.getMaterialCode(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        material.getMaterialName(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        material.getCategory(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        material.getSpecification(),
+                                                                        query))
+                                        .map(this::toMaterialResponse)
+                                        .toList();
+                }
 
-            BigDecimal committed = balance.reservedQty
-                    .add(balance.blockedQty);
+                @Transactional
+                public MaterialResponse createMaterial(
+                                MaterialRequest request) {
+                        accessService
+                                        .requireMaterialMasterWrite();
 
-            if (nextOnHand.compareTo(
-                    committed) < 0) {
-                throw conflict(
-                        "Stock cannot be reduced below reserved and blocked quantity");
-            }
+                        validateMaterialRequest(request);
 
-            balance.onHandQty = nextOnHand;
+                        String materialCode = upper(request.materialCode());
 
-            balance.setUpdatedBy(actor);
+                        if (materialRepository
+                                        .existsByMaterialCodeIgnoreCase(
+                                                        materialCode)) {
+                                throw conflict(
+                                                "Material code already exists: " +
+                                                                materialCode);
+                        }
 
-            balance = balanceRepository.save(balance);
+                        String actor = accessService.actor();
 
-            MovementType movementType;
+                        MatFlowMaterial material = new MatFlowMaterial();
 
-            if (newBalance) {
-                movementType = MovementType.OPENING_BALANCE;
-            } else if (adjustment.compareTo(
-                    BigDecimal.ZERO) > 0) {
-                movementType = MovementType.ADJUSTMENT_IN;
-            } else {
-                movementType = MovementType.ADJUSTMENT_OUT;
-            }
+                        applyMaterial(
+                                        material,
+                                        request);
 
-            saveLedger(
-                    balance,
-                    movementType,
-                    adjustment,
-                    BigDecimal.ZERO,
-                    "MANUAL_STOCK_ADJUSTMENT",
-                    balance.getId(),
-                    null,
-                    request.batchNo(),
-                    request.remarks(),
-                    actor);
+                        material.setCreatedBy(actor);
+                        material.setUpdatedBy(actor);
 
-            return toStockResponse(balance);
+                        return toMaterialResponse(
+                                        materialRepository.save(material));
+                }
+
+                @Transactional
+                public MaterialResponse updateMaterial(
+                                UUID id,
+                                MaterialRequest request) {
+                        accessService
+                                        .requireMaterialMasterWrite();
+
+                        validateMaterialRequest(request);
+
+                        MatFlowMaterial material = requireMaterial(id);
+
+                        assertVersion(
+                                        request.rowVersion(),
+                                        material.getRowVersion(),
+                                        "Material");
+
+                        String materialCode = upper(request.materialCode());
+
+                        if (materialRepository
+                                        .existsByMaterialCodeIgnoreCaseAndIdNot(
+                                                        materialCode,
+                                                        id)) {
+                                throw conflict(
+                                                "Material code already exists: " +
+                                                                materialCode);
+                        }
+
+                        applyMaterial(
+                                        material,
+                                        request);
+
+                        material.setUpdatedBy(
+                                        accessService.actor());
+
+                        return toMaterialResponse(
+                                        materialRepository.save(material));
+                }
+
+                @Transactional(readOnly = true)
+                public List<ProjectDrawingResponse> listProjects(
+                                String search,
+                                Boolean active) {
+                        accessService.requireRead();
+
+                        String query = normalizeSearch(search);
+
+                        return projectRepository
+                                        .findAll(
+                                                        Sort.by(
+                                                                        Sort.Direction.DESC,
+                                                                        "updatedAt"))
+                                        .stream()
+                                        .filter(project -> accessService.canAccessPlant(
+                                                        project.getPlantCode()))
+                                        .filter(project -> active == null ||
+                                                        project.isActive() == active)
+                                        .filter(project -> query.isBlank() ||
+                                                        contains(
+                                                                        project.getProjectCode(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        project.getProjectName(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        project.getClientName(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        project.getDrawingNo(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        project.getProductName(),
+                                                                        query))
+                                        .map(this::toProjectResponse)
+                                        .toList();
+                }
+
+                @Transactional
+                public ProjectDrawingResponse createProject(
+                                ProjectDrawingRequest request) {
+                        accessService.requireProjectWrite();
+
+                        validateProjectRequest(request);
+
+                        String plantCode = upper(request.plantCode());
+
+                        accessService.requirePlantAccess(
+                                        plantCode);
+
+                        String projectCode = upper(request.projectCode());
+
+                        String drawingNo = upper(request.drawingNo());
+
+                        String drawingRevision = normalizedRevision(
+                                        request.drawingRevision());
+
+                        if (projectRepository.existsDuplicate(
+                                        plantCode,
+                                        projectCode,
+                                        drawingNo,
+                                        drawingRevision)) {
+                                throw conflict(
+                                                "Project drawing revision already exists");
+                        }
+
+                        String actor = accessService.actor();
+
+                        MatFlowProjectDrawing project = new MatFlowProjectDrawing();
+
+                        applyProject(
+                                        project,
+                                        request,
+                                        plantCode);
+
+                        resetProductApproval(project);
+
+                        project.setCreatedBy(actor);
+                        project.setUpdatedBy(actor);
+
+                        project = projectRepository.save(project);
+
+                        auditService.record(
+                                        "PROJECT_PRODUCT",
+                                        project.getId(),
+                                        "PRODUCT_SUBMITTED_FOR_DIRECTOR_APPROVAL",
+                                        project.getPlantCode(),
+                                        project.getProjectCode(),
+                                        project.getDrawingNo(),
+                                        auditService.details(
+                                                        "projectName", project.getProjectName(),
+                                                        "productName", project.getProductName(),
+                                                        "drawingRevision", project.getDrawingRevision()));
+
+                        return toProjectResponse(project);
+                }
+
+                @Transactional
+                public ProjectDrawingResponse updateProject(
+                                UUID id,
+                                ProjectDrawingRequest request) {
+                        accessService.requireProjectWrite();
+
+                        validateProjectRequest(request);
+
+                        MatFlowProjectDrawing project = requireProject(id);
+
+                        accessService.requirePlantAccess(
+                                        project.getPlantCode());
+
+                        assertVersion(
+                                        request.rowVersion(),
+                                        project.getRowVersion(),
+                                        "Project drawing");
+
+                        String plantCode = upper(request.plantCode());
+
+                        accessService.requirePlantAccess(
+                                        plantCode);
+
+                        String projectCode = upper(request.projectCode());
+
+                        String drawingNo = upper(request.drawingNo());
+
+                        String drawingRevision = normalizedRevision(
+                                        request.drawingRevision());
+
+                        if (projectRepository.existsDuplicateExcludingId(
+                                        plantCode,
+                                        projectCode,
+                                        drawingNo,
+                                        drawingRevision,
+                                        id)) {
+                                throw conflict(
+                                                "Project drawing revision already exists");
+                        }
+
+                        boolean criticalChange = hasApprovalCriticalChange(
+                                        project,
+                                        request,
+                                        plantCode);
+
+                        if (criticalChange &&
+                                        bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
+                                throw conflict(
+                                                "An approved/effective BOM already exists for this product/drawing. "
+                                                                + "Create a new Product/Drawing revision instead of changing approval-critical fields.");
+                        }
+
+                        applyProject(
+                                        project,
+                                        request,
+                                        plantCode);
+
+                        if (criticalChange ||
+                                        project.getProductApprovalStatus() == ProjectProductApprovalStatus.RETURNED) {
+                                resetProductApproval(project);
+                        }
+
+                        String actor = accessService.actor();
+                        project.setUpdatedBy(actor);
+                        project = projectRepository.save(project);
+
+                        auditService.record(
+                                        "PROJECT_PRODUCT",
+                                        project.getId(),
+                                        "PROJECT_PRODUCT_UPDATED",
+                                        project.getPlantCode(),
+                                        project.getProjectCode(),
+                                        project.getDrawingNo(),
+                                        auditService.details(
+                                                        "productName", project.getProductName(),
+                                                        "approvalReset", criticalChange,
+                                                        "approvalStatus", project.getProductApprovalStatus()));
+
+                        return toProjectResponse(project);
+                }
+
+                @Transactional
+                public ProjectDrawingResponse approveProjectProduct(
+                                UUID id,
+                                ProjectProductApprovalRequest request) {
+                        accessService.requireProjectProductApproval();
+
+                        MatFlowProjectDrawing project = requireProject(id);
+
+                        assertVersion(
+                                        request == null ? null : request.rowVersion(),
+                                        project.getRowVersion(),
+                                        "Project product");
+
+                        if (!project.isActive()) {
+                                throw conflict("Inactive product/drawing cannot be approved");
+                        }
+
+                        if (project.getProductApprovalStatus() == ProjectProductApprovalStatus.APPROVED) {
+                                return toProjectResponse(project);
+                        }
+
+                        String actor = accessService.actor();
+                        project.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
+                        project.setProductApprovedBy(actor);
+                        project.setProductApprovedAt(LocalDateTime.now());
+                        project.setProductReturnedBy(null);
+                        project.setProductReturnedAt(null);
+                        project.setProductApprovalRemarks(
+                                        request == null ? null : clean(request.remarks()));
+                        project.setUpdatedBy(actor);
+
+                        project = projectRepository.save(project);
+
+                        auditService.record(
+                                        "PROJECT_PRODUCT",
+                                        project.getId(),
+                                        "PRODUCT_APPROVED_BY_DIRECTOR",
+                                        project.getPlantCode(),
+                                        project.getProjectCode(),
+                                        project.getDrawingNo(),
+                                        auditService.details(
+                                                        "productName", project.getProductName(),
+                                                        "approvalRemarks", project.getProductApprovalRemarks()));
+
+                        return toProjectResponse(project);
+                }
+
+                @Transactional
+                public ProjectDrawingResponse returnProjectProduct(
+                                UUID id,
+                                ProjectProductApprovalRequest request) {
+                        accessService.requireProjectProductApproval();
+
+                        MatFlowProjectDrawing project = requireProject(id);
+
+                        assertVersion(
+                                        request == null ? null : request.rowVersion(),
+                                        project.getRowVersion(),
+                                        "Project product");
+
+                        String remarks = clean(request == null ? null : request.remarks());
+                        if (remarks == null) {
+                                throw badRequest("Return remarks are required");
+                        }
+
+                        if (bomRepository.existsByProjectDrawing_IdAndEffectiveTrue(id)) {
+                                throw conflict(
+                                                "This product/drawing already has an effective approved BOM. Create a new Product/Drawing revision instead of returning the approved live product.");
+                        }
+
+                        String actor = accessService.actor();
+                        project.setProductApprovalStatus(ProjectProductApprovalStatus.RETURNED);
+                        project.setProductApprovedBy(null);
+                        project.setProductApprovedAt(null);
+                        project.setProductReturnedBy(actor);
+                        project.setProductReturnedAt(LocalDateTime.now());
+                        project.setProductApprovalRemarks(remarks);
+                        project.setUpdatedBy(actor);
+
+                        project = projectRepository.save(project);
+
+                        auditService.record(
+                                        "PROJECT_PRODUCT",
+                                        project.getId(),
+                                        "PRODUCT_RETURNED_BY_DIRECTOR",
+                                        project.getPlantCode(),
+                                        project.getProjectCode(),
+                                        project.getDrawingNo(),
+                                        auditService.details(
+                                                        "productName", project.getProductName(),
+                                                        "returnRemarks", remarks));
+
+                        return toProjectResponse(project);
+                }
+
+                @Transactional(readOnly = true)
+                public MatFlowMaterial requireMaterial(
+                                UUID id) {
+                        return materialRepository
+                                        .findById(id)
+                                        .orElseThrow(() -> notFound(
+                                                        "Material not found"));
+                }
+
+                @Transactional(readOnly = true)
+                public MatFlowProjectDrawing requireProject(
+                                UUID id) {
+                        MatFlowProjectDrawing project = projectRepository
+                                        .findById(id)
+                                        .orElseThrow(() -> notFound(
+                                                        "Project drawing not found"));
+
+                        accessService.requirePlantAccess(
+                                        project.getPlantCode());
+
+                        return project;
+                }
+
+                public ProjectDrawingResponse toProjectResponse(
+                                MatFlowProjectDrawing project) {
+                        return new ProjectDrawingResponse(
+                                        project.getId(),
+                                        project.getProjectCode(),
+                                        project.getProjectName(),
+                                        project.getClientName(),
+                                        project.getDrawingNo(),
+                                        project.getDrawingRevision(),
+                                        project.getProductName(),
+                                        project.getPlantCode(),
+                                        project.getRequiredDate(),
+                                        project.getRemarks(),
+                                        project.isActive(),
+                                        project.getProductApprovalStatus(),
+                                        project.getProductApprovedBy(),
+                                        project.getProductApprovedAt(),
+                                        project.getProductReturnedBy(),
+                                        project.getProductReturnedAt(),
+                                        project.getProductApprovalRemarks(),
+                                        project.getRowVersion(),
+                                        project.getCreatedBy(),
+                                        project.getCreatedAt(),
+                                        project.getUpdatedBy(),
+                                        project.getUpdatedAt());
+                }
+
+                private void applyMaterial(
+                                MatFlowMaterial material,
+                                MaterialRequest request) {
+                        material.setMaterialCode(
+                                        request.materialCode());
+
+                        material.setMaterialName(
+                                        request.materialName());
+
+                        material.setCategory(
+                                        request.category());
+
+                        material.setSpecification(
+                                        request.specification());
+
+                        material.setUom(
+                                        request.uom());
+
+                        material.setPreferredSupplier(
+                                        request.preferredSupplier());
+
+                        material.setMinimumStock(
+                                        nonNegative(
+                                                        request.minimumStock(),
+                                                        "Minimum stock"));
+
+                        material.setReorderLevel(
+                                        nonNegative(
+                                                        request.reorderLevel(),
+                                                        "Reorder level"));
+
+                        if (request.active() != null) {
+                                material.setActive(
+                                                request.active());
+                        }
+                }
+
+                private void applyProject(
+                                MatFlowProjectDrawing project,
+                                ProjectDrawingRequest request,
+                                String plantCode) {
+                        project.setProjectCode(
+                                        request.projectCode());
+
+                        project.setProjectName(
+                                        request.projectName());
+
+                        project.setClientName(
+                                        request.clientName());
+
+                        project.setDrawingNo(
+                                        request.drawingNo());
+
+                        project.setDrawingRevision(
+                                        normalizedRevision(
+                                                        request.drawingRevision()));
+
+                        project.setProductName(
+                                        request.productName());
+
+                        project.setPlantCode(plantCode);
+
+                        project.setRequiredDate(
+                                        request.requiredDate());
+
+                        project.setRemarks(
+                                        request.remarks());
+
+                        if (request.active() != null) {
+                                project.setActive(
+                                                request.active());
+                        }
+                }
+
+                private boolean hasApprovalCriticalChange(
+                                MatFlowProjectDrawing project,
+                                ProjectDrawingRequest request,
+                                String plantCode) {
+                        return !Objects.equals(upper(project.getProjectCode()), upper(request.projectCode()))
+                                        || !Objects.equals(clean(project.getProjectName()),
+                                                        clean(request.projectName()))
+                                        || !Objects.equals(clean(project.getClientName()), clean(request.clientName()))
+                                        || !Objects.equals(upper(project.getDrawingNo()), upper(request.drawingNo()))
+                                        || !Objects.equals(normalizedRevision(project.getDrawingRevision()),
+                                                        normalizedRevision(request.drawingRevision()))
+                                        || !Objects.equals(clean(project.getProductName()),
+                                                        clean(request.productName()))
+                                        || !Objects.equals(upper(project.getPlantCode()), upper(plantCode));
+                }
+
+                private void resetProductApproval(
+                                MatFlowProjectDrawing project) {
+                        project.setProductApprovalStatus(
+                                        ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL);
+                        project.setProductApprovedBy(null);
+                        project.setProductApprovedAt(null);
+                        project.setProductReturnedBy(null);
+                        project.setProductReturnedAt(null);
+                        project.setProductApprovalRemarks(null);
+                }
+
+                private void validateMaterialRequest(
+                                MaterialRequest request) {
+                        if (request == null) {
+                                throw badRequest(
+                                                "Material request is required");
+                        }
+
+                        required(
+                                        request.materialCode(),
+                                        "Material code");
+
+                        required(
+                                        request.materialName(),
+                                        "Material name");
+
+                        required(
+                                        request.category(),
+                                        "Material category");
+
+                        required(
+                                        request.uom(),
+                                        "Material UOM");
+                }
+
+                private void validateProjectRequest(
+                                ProjectDrawingRequest request) {
+                        if (request == null) {
+                                throw badRequest(
+                                                "Project request is required");
+                        }
+
+                        required(
+                                        request.projectCode(),
+                                        "Project code");
+
+                        required(
+                                        request.projectName(),
+                                        "Project name");
+
+                        required(
+                                        request.clientName(),
+                                        "Client name");
+
+                        required(
+                                        request.drawingNo(),
+                                        "Drawing number");
+
+                        required(
+                                        request.productName(),
+                                        "Product name");
+
+                        required(
+                                        request.plantCode(),
+                                        "Plant code");
+                }
+
+                private MaterialResponse toMaterialResponse(
+                                MatFlowMaterial material) {
+                        return new MaterialResponse(
+                                        material.getId(),
+                                        material.getMaterialCode(),
+                                        material.getMaterialName(),
+                                        material.getCategory(),
+                                        material.getSpecification(),
+                                        material.getUom(),
+                                        material.getPreferredSupplier(),
+                                        material.getMinimumStock(),
+                                        material.getReorderLevel(),
+                                        material.isActive(),
+                                        material.getRowVersion(),
+                                        material.getCreatedBy(),
+                                        material.getCreatedAt(),
+                                        material.getUpdatedBy(),
+                                        material.getUpdatedAt());
+                }
+
+                private void assertVersion(
+                                Long requested,
+                                Long current,
+                                String entityName) {
+                        if (requested == null) {
+                                throw badRequest(
+                                                entityName +
+                                                                " rowVersion is required");
+                        }
+
+                        if (!requested.equals(current)) {
+                                throw conflict(
+                                                entityName +
+                                                                " was modified by another user. Refresh and try again.");
+                        }
+                }
+
+                private BigDecimal nonNegative(
+                                BigDecimal value,
+                                String field) {
+                        BigDecimal result = value == null
+                                        ? BigDecimal.ZERO
+                                        : value;
+
+                        if (result.compareTo(
+                                        BigDecimal.ZERO) < 0) {
+                                throw badRequest(
+                                                field +
+                                                                " cannot be negative");
+                        }
+
+                        return result;
+                }
+
+                private void required(
+                                String value,
+                                String field) {
+                        if (value == null ||
+                                        value.trim().isBlank()) {
+                                throw badRequest(
+                                                field + " is required");
+                        }
+                }
+
+                private String normalizedRevision(
+                                String value) {
+                        return value == null ||
+                                        value.trim().isBlank()
+                                                        ? "0"
+                                                        : value.trim()
+                                                                        .toUpperCase();
+                }
+
+                private String clean(String value) {
+                        if (value == null) {
+                                return null;
+                        }
+                        String result = value.trim();
+                        return result.isBlank() ? null : result;
+                }
+
+                private String upper(String value) {
+                        String result = clean(value);
+                        return result == null ? null : result.toUpperCase(Locale.ROOT);
+                }
+
+                private String normalizeSearch(
+                                String value) {
+                        return value == null
+                                        ? ""
+                                        : value.trim()
+                                                        .toLowerCase(
+                                                                        Locale.ROOT);
+                }
+
+                private boolean contains(
+                                String value,
+                                String query) {
+                        return value != null &&
+                                        value.toLowerCase(
+                                                        Locale.ROOT).contains(query);
+                }
+
+                private ResponseStatusException badRequest(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        message);
+                }
+
+                private ResponseStatusException conflict(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        message);
+                }
+
+                private ResponseStatusException notFound(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        message);
+                }
         }
 
-        public MatFlowLocation requireLocation(
-                UUID id) {
-            MatFlowLocation location = locationRepository
-                    .findById(id)
-                    .orElseThrow(() -> notFound(
-                            "Location not found"));
+        private static final class InventoryModule {
 
-            accessService.requirePlantAccess(
-                    location.getPlantCode());
+                private final MatFlowLocationRepository locationRepository;
+                private final MatFlowMaterialRepository materialRepository;
+                private final MatFlowStockBalanceRepository balanceRepository;
+                private final MatFlowStockLedgerRepository ledgerRepository;
+                private final MatFlowAccessService accessService;
+                private final MatFlowAuditService auditService;
 
-            return location;
+                InventoryModule(
+                                MatFlowLocationRepository locationRepository,
+                                MatFlowMaterialRepository materialRepository,
+                                MatFlowStockBalanceRepository balanceRepository,
+                                MatFlowStockLedgerRepository ledgerRepository,
+                                MatFlowAccessService accessService,
+                                MatFlowAuditService auditService) {
+                        this.locationRepository = locationRepository;
+
+                        this.materialRepository = materialRepository;
+
+                        this.balanceRepository = balanceRepository;
+
+                        this.ledgerRepository = ledgerRepository;
+
+                        this.accessService = accessService;
+
+                        this.auditService = auditService;
+                }
+
+                @Transactional(readOnly = true)
+                public List<LocationResponse> listLocations(
+                                String search,
+                                Boolean active) {
+
+                        accessService.requireRead();
+
+                        String query = normalizeSearch(search);
+
+                        return locationRepository
+                                        .findByPlantCodeInOrderByLocationCodeAsc(
+                                                        accessService.allowedPlants())
+                                        .stream()
+                                        .filter(location -> active == null ||
+                                                        location.isActive() == active)
+                                        .filter(location -> query.isBlank()
+                                                        ||
+                                                        contains(
+                                                                        location.getLocationCode(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        location.getLocationName(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        location.getPlantCode(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        location.getLocationType() == null
+                                                                                        ? null
+                                                                                        : location.getLocationType()
+                                                                                                        .name(),
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        location.getOwnershipType() == null
+                                                                                        ? null
+                                                                                        : location.getOwnershipType()
+                                                                                                        .name(),
+                                                                        query))
+                                        .map(this::toLocationResponse)
+                                        .toList();
+                }
+
+                @Transactional
+                public LocationResponse createLocation(
+                                LocationRequest request) {
+                        accessService.requireLocationWrite();
+
+                        validateLocation(request);
+
+                        String code = upper(request.locationCode());
+
+                        String plantCode = upper(request.plantCode());
+
+                        accessService.requirePlantAccess(
+                                        plantCode);
+
+                        if (locationRepository
+                                        .existsByLocationCodeIgnoreCase(
+                                                        code)) {
+                                throw conflict(
+                                                "Location code already exists: " +
+                                                                code);
+                        }
+
+                        MatFlowLocation location = new MatFlowLocation();
+
+                        applyLocation(
+                                        location,
+                                        request,
+                                        true);
+
+                        String actor = accessService.actor();
+
+                        location.setCreatedBy(actor);
+                        location.setUpdatedBy(actor);
+
+                        return toLocationResponse(
+                                        locationRepository.save(location));
+                }
+
+                @Transactional
+                public LocationResponse updateLocation(
+                                UUID id,
+                                LocationRequest request) {
+                        accessService.requireLocationWrite();
+
+                        validateLocation(request);
+
+                        MatFlowLocation location = requireLocation(id);
+
+                        assertVersion(
+                                        request.rowVersion(),
+                                        location.getRowVersion(),
+                                        "Location");
+
+                        String plantCode = upper(request.plantCode());
+
+                        accessService.requirePlantAccess(
+                                        plantCode);
+
+                        String code = upper(request.locationCode());
+
+                        if (locationRepository
+                                        .existsByLocationCodeIgnoreCaseAndIdNot(
+                                                        code,
+                                                        id)) {
+                                throw conflict(
+                                                "Location code already exists: " +
+                                                                code);
+                        }
+
+                        applyLocation(
+                                        location,
+                                        request,
+                                        false);
+
+                        location.setUpdatedBy(
+                                        accessService.actor());
+
+                        return toLocationResponse(
+                                        locationRepository.save(location));
+                }
+
+                @Transactional(readOnly = true)
+                public List<StockBalanceResponse> listStock(
+                                UUID materialId,
+                                UUID locationId,
+                                String plantCode) {
+                        accessService.requireRead();
+
+                        String normalizedPlant = plantCode == null
+                                        ? null
+                                        : upper(plantCode);
+
+                        if (normalizedPlant != null) {
+                                accessService.requirePlantAccess(
+                                                normalizedPlant);
+                        }
+
+                        return balanceRepository
+                                        .findVisibleBalances(
+                                                        accessService.allowedPlants())
+                                        .stream()
+                                        .filter(balance -> materialId == null ||
+                                                        balance.material
+                                                                        .getId()
+                                                                        .equals(materialId))
+                                        .filter(balance -> locationId == null ||
+                                                        balance.location
+                                                                        .getId()
+                                                                        .equals(locationId))
+                                        .filter(balance -> normalizedPlant == null ||
+                                                        balance.location.getPlantCode()
+                                                                        .equalsIgnoreCase(
+                                                                                        normalizedPlant))
+                                        .map(this::toStockResponse)
+                                        .toList();
+                }
+
+                @Transactional
+                public StockBalanceResponse adjustStock(
+                                StockAdjustmentRequest request) {
+                        accessService.requireStockWrite();
+
+                        if (request == null) {
+                                throw badRequest(
+                                                "Stock adjustment request is required");
+                        }
+
+                        if (request.materialId() == null) {
+                                throw badRequest(
+                                                "Material is required");
+                        }
+
+                        if (request.locationId() == null) {
+                                throw badRequest(
+                                                "Location is required");
+                        }
+
+                        BigDecimal adjustment = scale(request.adjustmentQty());
+
+                        if (adjustment.compareTo(
+                                        BigDecimal.ZERO) == 0) {
+                                throw badRequest(
+                                                "Adjustment quantity cannot be zero");
+                        }
+
+                        MatFlowMaterial material = materialRepository
+                                        .findById(
+                                                        request.materialId())
+                                        .orElseThrow(() -> notFound(
+                                                        "Material not found"));
+
+                        MatFlowLocation location = requireLocation(
+                                        request.locationId());
+
+                        if (!location.isSupportsStock()) {
+                                throw badRequest(
+                                                "Selected location does not support stock");
+                        }
+
+                        MatFlowStockBalance balance = balanceRepository
+                                        .lockBalance(
+                                                        material.getId(),
+                                                        location.getId())
+                                        .orElse(null);
+
+                        boolean newBalance = balance == null;
+
+                        String actor = accessService.actor();
+
+                        if (newBalance) {
+                                if (adjustment.compareTo(
+                                                BigDecimal.ZERO) < 0) {
+                                        throw badRequest(
+                                                        "Opening stock cannot be negative");
+                                }
+
+                                balance = new MatFlowStockBalance();
+
+                                balance.material = material;
+                                balance.location = location;
+                                balance.onHandQty = BigDecimal.ZERO;
+                                balance.reservedQty = BigDecimal.ZERO;
+                                balance.blockedQty = BigDecimal.ZERO;
+                                balance.inTransitQty = BigDecimal.ZERO;
+                                balance.setCreatedBy(actor);
+                        } else {
+                                assertVersion(
+                                                request.rowVersion(),
+                                                balance.getRowVersion(),
+                                                "Stock balance");
+                        }
+
+                        BigDecimal nextOnHand = balance.onHandQty
+                                        .add(adjustment)
+                                        .setScale(
+                                                        3,
+                                                        RoundingMode.HALF_UP);
+
+                        BigDecimal committed = balance.reservedQty
+                                        .add(balance.blockedQty);
+
+                        if (nextOnHand.compareTo(
+                                        committed) < 0) {
+                                throw conflict(
+                                                "Stock cannot be reduced below reserved and blocked quantity");
+                        }
+
+                        balance.onHandQty = nextOnHand;
+
+                        balance.setUpdatedBy(actor);
+
+                        balance = balanceRepository.save(balance);
+
+                        MovementType movementType;
+
+                        if (newBalance) {
+                                movementType = MovementType.OPENING_BALANCE;
+                        } else if (adjustment.compareTo(
+                                        BigDecimal.ZERO) > 0) {
+                                movementType = MovementType.ADJUSTMENT_IN;
+                        } else {
+                                movementType = MovementType.ADJUSTMENT_OUT;
+                        }
+
+                        saveLedger(
+                                        balance,
+                                        movementType,
+                                        adjustment,
+                                        BigDecimal.ZERO,
+                                        "MANUAL_STOCK_ADJUSTMENT",
+                                        balance.getId(),
+                                        null,
+                                        request.batchNo(),
+                                        request.remarks(),
+                                        actor);
+
+                        auditService.record(
+                                        "STOCK_BALANCE",
+                                        balance.getId(),
+                                        newBalance ? "OPENING_STOCK_POSTED" : "STOCK_ADJUSTED",
+                                        location.getPlantCode(),
+                                        null,
+                                        null,
+                                        auditService.details(
+                                                        "materialId", material.getId(),
+                                                        "materialCode", material.getMaterialCode(),
+                                                        "locationId", location.getId(),
+                                                        "locationCode", location.getLocationCode(),
+                                                        "movementType", movementType,
+                                                        "adjustmentQty", adjustment,
+                                                        "onHandAfter", balance.onHandQty,
+                                                        "reservedAfter", balance.reservedQty,
+                                                        "blockedAfter", balance.blockedQty,
+                                                        "batchNo", clean(request.batchNo()),
+                                                        "remarks", clean(request.remarks())));
+
+                        return toStockResponse(balance);
+                }
+
+                public MatFlowLocation requireLocation(
+                                UUID id) {
+                        MatFlowLocation location = locationRepository
+                                        .findById(id)
+                                        .orElseThrow(() -> notFound(
+                                                        "Location not found"));
+
+                        accessService.requirePlantAccess(
+                                        location.getPlantCode());
+
+                        return location;
+                }
+
+                private void applyLocation(
+                                MatFlowLocation location,
+                                LocationRequest request,
+                                boolean creating) {
+
+                        location.setLocationCode(
+                                        upper(
+                                                        request.locationCode()));
+
+                        location.setLocationName(
+                                        clean(
+                                                        request.locationName()));
+
+                        location.setPlantCode(
+                                        upper(
+                                                        request.plantCode()));
+
+                        location.setLocationType(
+                                        request.locationType());
+
+                        if (request.ownershipType() != null) {
+                                location.setOwnershipType(
+                                                request.ownershipType());
+
+                        } else if (creating) {
+                                location.setOwnershipType(
+                                                OwnershipType.INTERNAL);
+                        }
+
+                        if (request.supportsStock() != null) {
+                                location.setSupportsStock(
+                                                request.supportsStock());
+
+                        } else if (creating) {
+                                location.setSupportsStock(
+                                                true);
+                        }
+
+                        location.setAddress(
+                                        clean(
+                                                        request.address()));
+
+                        location.setContactPerson(
+                                        clean(
+                                                        request.contactPerson()));
+
+                        location.setContactPhone(
+                                        clean(
+                                                        request.contactPhone()));
+
+                        if (request.active() != null) {
+                                location.setActive(
+                                                request.active());
+
+                        } else if (creating) {
+                                location.setActive(
+                                                true);
+                        }
+                }
+
+                private void validateLocation(
+                                LocationRequest request) {
+                        if (request == null) {
+                                throw badRequest(
+                                                "Location request is required");
+                        }
+
+                        required(
+                                        request.locationCode(),
+                                        "Location code");
+
+                        required(
+                                        request.locationName(),
+                                        "Location name");
+
+                        required(
+                                        request.plantCode(),
+                                        "Plant code");
+
+                        if (request.locationType() == null) {
+                                throw badRequest(
+                                                "Location type is required");
+                        }
+                }
+
+                private void saveLedger(
+                                MatFlowStockBalance balance,
+                                MovementType movementType,
+                                BigDecimal quantityChange,
+                                BigDecimal reservedChange,
+                                String referenceType,
+                                UUID referenceId,
+                                String referenceNumber,
+                                String batchNo,
+                                String remarks,
+                                String actor) {
+                        MatFlowStockLedger ledger = new MatFlowStockLedger();
+
+                        ledger.material = balance.material;
+
+                        ledger.location = balance.location;
+
+                        ledger.movementType = movementType;
+
+                        ledger.quantityChange = scale(quantityChange);
+
+                        ledger.reservedChange = scale(reservedChange);
+
+                        ledger.blockedChange = BigDecimal.ZERO;
+
+                        ledger.inTransitChange = BigDecimal.ZERO;
+
+                        ledger.onHandAfter = balance.onHandQty;
+
+                        ledger.reservedAfter = balance.reservedQty;
+
+                        ledger.blockedAfter = balance.blockedQty;
+
+                        ledger.inTransitAfter = balance.inTransitQty;
+
+                        ledger.referenceType = referenceType;
+
+                        ledger.referenceId = referenceId;
+
+                        ledger.referenceNumber = referenceNumber;
+
+                        ledger.batchNo = clean(batchNo);
+
+                        ledger.remarks = clean(remarks);
+
+                        ledger.actor = actor;
+
+                        ledgerRepository.save(ledger);
+                }
+
+                private LocationResponse toLocationResponse(
+                                MatFlowLocation location) {
+
+                        return new LocationResponse(
+                                        location.getId(),
+                                        location.getLocationCode(),
+                                        location.getLocationName(),
+                                        location.getPlantCode(),
+                                        location.getLocationType(),
+                                        location.getOwnershipType(),
+                                        location.isSupportsStock(),
+                                        location.getAddress(),
+                                        location.getContactPerson(),
+                                        location.getContactPhone(),
+                                        location.isActive(),
+                                        location.getRowVersion());
+                }
+
+                private StockBalanceResponse toStockResponse(
+                                MatFlowStockBalance balance) {
+
+                        return new StockBalanceResponse(
+                                        balance.getId(),
+
+                                        balance.material
+                                                        .getId(),
+
+                                        balance.material
+                                                        .getMaterialCode(),
+
+                                        balance.material
+                                                        .getMaterialName(),
+
+                                        balance.material
+                                                        .getUom(),
+
+                                        balance.location
+                                                        .getId(),
+
+                                        balance.location
+                                                        .getLocationCode(),
+
+                                        balance.location
+                                                        .getLocationName(),
+
+                                        balance.location
+                                                        .getPlantCode(),
+
+                                        balance.location
+                                                        .getLocationType(),
+
+                                        zero(balance.onHandQty),
+                                        zero(balance.reservedQty),
+                                        zero(balance.blockedQty),
+                                        zero(balance.inTransitQty),
+
+                                        balance.availableQty(),
+
+                                        balance.getRowVersion());
+                }
+
+                private BigDecimal zero(
+                                BigDecimal value) {
+
+                        return value == null
+                                        ? BigDecimal.ZERO.setScale(
+                                                        3,
+                                                        RoundingMode.HALF_UP)
+                                        : value.setScale(
+                                                        3,
+                                                        RoundingMode.HALF_UP);
+                }
+
+                private void assertVersion(
+                                Long requested,
+                                Long current,
+                                String entity) {
+                        if (requested == null) {
+                                throw badRequest(
+                                                entity +
+                                                                " rowVersion is required");
+                        }
+
+                        if (!requested.equals(current)) {
+                                throw conflict(
+                                                entity +
+                                                                " was modified by another user. Refresh and retry.");
+                        }
+                }
+
+                private BigDecimal scale(
+                                BigDecimal value) {
+                        return value == null
+                                        ? BigDecimal.ZERO
+                                        : value.setScale(
+                                                        3,
+                                                        RoundingMode.HALF_UP);
+                }
+
+                private void required(
+                                String value,
+                                String field) {
+                        if (value == null ||
+                                        value.trim().isBlank()) {
+                                throw badRequest(
+                                                field + " is required");
+                        }
+                }
+
+                private String clean(String value) {
+                        if (value == null) {
+                                return null;
+                        }
+
+                        String result = value.trim();
+
+                        return result.isBlank()
+                                        ? null
+                                        : result;
+                }
+
+                private String upper(
+                                String value) {
+
+                        String result = clean(value);
+
+                        return result == null
+                                        ? null
+                                        : result.toUpperCase(
+                                                        Locale.ROOT);
+                }
+
+                private String normalizeSearch(
+                                String value) {
+                        return value == null
+                                        ? ""
+                                        : value.trim()
+                                                        .toLowerCase(
+                                                                        Locale.ROOT);
+                }
+
+                private boolean contains(
+                                String value,
+                                String query) {
+                        return value != null &&
+                                        value.toLowerCase(
+                                                        Locale.ROOT).contains(query);
+                }
+
+                private ResponseStatusException badRequest(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        message);
+                }
+
+                private ResponseStatusException conflict(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        message);
+                }
+
+                private ResponseStatusException notFound(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        message);
+                }
         }
 
-        private void applyLocation(
-                MatFlowLocation location,
-                LocationRequest request,
-                boolean creating) {
+        private static final class VendorModule {
 
-            location.setLocationCode(
-                    upper(
-                            request.locationCode()));
+                private final MatFlowVendorRepository vendorRepository;
+                private final MatFlowAccessService accessService;
 
-            location.setLocationName(
-                    clean(
-                            request.locationName()));
+                VendorModule(
+                                MatFlowVendorRepository vendorRepository,
+                                MatFlowAccessService accessService) {
+                        this.vendorRepository = vendorRepository;
 
-            location.setPlantCode(
-                    upper(
-                            request.plantCode()));
+                        this.accessService = accessService;
+                }
 
-            location.setLocationType(
-                    request.locationType());
+                @Transactional(readOnly = true)
+                public List<VendorResponse> list(
+                                String search,
+                                Boolean active) {
+                        accessService.requireIndentRead();
 
-            if (request.ownershipType() != null) {
-                location.setOwnershipType(
-                        request.ownershipType());
+                        String query = search == null
+                                        ? ""
+                                        : search.trim()
+                                                        .toLowerCase(Locale.ROOT);
 
-            } else if (creating) {
-                location.setOwnershipType(
-                        OwnershipType.INTERNAL);
-            }
+                        return vendorRepository
+                                        .findAll(
+                                                        Sort.by(
+                                                                        Sort.Direction.ASC,
+                                                                        "vendorName"))
+                                        .stream()
+                                        .filter(vendor -> active == null ||
+                                                        vendor.active == active)
+                                        .filter(vendor -> query.isBlank() ||
+                                                        contains(
+                                                                        vendor.vendorCode,
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        vendor.vendorName,
+                                                                        query)
+                                                        ||
+                                                        contains(
+                                                                        vendor.gstin,
+                                                                        query))
+                                        .map(this::toResponse)
+                                        .toList();
+                }
 
-            if (request.supportsStock() != null) {
-                location.setSupportsStock(
-                        request.supportsStock());
+                @Transactional
+                public VendorResponse create(
+                                VendorRequest request) {
+                        accessService.requireVendorWrite();
 
-            } else if (creating) {
-                location.setSupportsStock(
-                        true);
-            }
+                        validate(request);
 
-            location.setAddress(
-                    clean(
-                            request.address()));
+                        String code = upper(request.vendorCode());
 
-            location.setContactPerson(
-                    clean(
-                            request.contactPerson()));
+                        if (vendorRepository
+                                        .existsByVendorCodeIgnoreCase(
+                                                        code)) {
+                                throw conflict(
+                                                "Vendor code already exists: " +
+                                                                code);
+                        }
 
-            location.setContactPhone(
-                    clean(
-                            request.contactPhone()));
+                        String actor = accessService.actor();
 
-            if (request.active() != null) {
-                location.setActive(
-                        request.active());
+                        MatFlowVendor vendor = new MatFlowVendor();
 
-            } else if (creating) {
-                location.setActive(
-                        true);
-            }
+                        apply(vendor, request);
+
+                        vendor.setCreatedBy(actor);
+                        vendor.setUpdatedBy(actor);
+
+                        return toResponse(
+                                        vendorRepository.save(vendor));
+                }
+
+                @Transactional
+                public VendorResponse update(
+                                UUID id,
+                                VendorRequest request) {
+                        accessService.requireVendorWrite();
+
+                        validate(request);
+
+                        MatFlowVendor vendor = vendorRepository
+                                        .findById(id)
+                                        .orElseThrow(() -> notFound(
+                                                        "Vendor not found"));
+
+                        assertVersion(
+                                        request.rowVersion(),
+                                        vendor.getRowVersion());
+
+                        String code = upper(request.vendorCode());
+
+                        if (vendorRepository
+                                        .existsByVendorCodeIgnoreCaseAndIdNot(
+                                                        code,
+                                                        id)) {
+                                throw conflict(
+                                                "Vendor code already exists: " +
+                                                                code);
+                        }
+
+                        apply(vendor, request);
+
+                        vendor.setUpdatedBy(
+                                        accessService.actor());
+
+                        return toResponse(
+                                        vendorRepository.save(vendor));
+                }
+
+                private void apply(
+                                MatFlowVendor vendor,
+                                VendorRequest request) {
+                        vendor.vendorCode = upper(request.vendorCode());
+
+                        vendor.vendorName = clean(request.vendorName());
+
+                        vendor.gstin = upper(request.gstin());
+
+                        vendor.contactPerson = clean(request.contactPerson());
+
+                        vendor.phone = clean(request.phone());
+
+                        vendor.email = clean(request.email());
+
+                        vendor.address = clean(request.address());
+
+                        if (request.active() != null) {
+                                vendor.active = request.active();
+                        }
+                }
+
+                private void validate(
+                                VendorRequest request) {
+                        if (request == null) {
+                                throw badRequest(
+                                                "Vendor request is required");
+                        }
+
+                        required(
+                                        request.vendorCode(),
+                                        "Vendor code");
+
+                        required(
+                                        request.vendorName(),
+                                        "Vendor name");
+                }
+
+                private VendorResponse toResponse(
+                                MatFlowVendor vendor) {
+                        return new VendorResponse(
+                                        vendor.getId(),
+                                        vendor.vendorCode,
+                                        vendor.vendorName,
+                                        vendor.gstin,
+                                        vendor.contactPerson,
+                                        vendor.phone,
+                                        vendor.email,
+                                        vendor.address,
+                                        vendor.active,
+                                        vendor.getRowVersion());
+                }
+
+                private boolean contains(
+                                String value,
+                                String query) {
+                        return value != null &&
+                                        value.toLowerCase(
+                                                        Locale.ROOT).contains(query);
+                }
+
+                private void required(
+                                String value,
+                                String field) {
+                        if (value == null ||
+                                        value.trim().isBlank()) {
+                                throw badRequest(
+                                                field + " is required");
+                        }
+                }
+
+                private void assertVersion(
+                                Long requested,
+                                Long current) {
+                        if (requested == null) {
+                                throw badRequest(
+                                                "Vendor rowVersion is required");
+                        }
+
+                        if (!requested.equals(current)) {
+                                throw conflict(
+                                                "Vendor was modified by another user");
+                        }
+                }
+
+                private String clean(String value) {
+                        if (value == null) {
+                                return null;
+                        }
+
+                        String result = value.trim();
+
+                        return result.isBlank()
+                                        ? null
+                                        : result;
+                }
+
+                private String upper(String value) {
+                        String result = clean(value);
+
+                        return result == null
+                                        ? null
+                                        : result.toUpperCase();
+                }
+
+                private ResponseStatusException badRequest(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        message);
+                }
+
+                private ResponseStatusException conflict(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        message);
+                }
+
+                private ResponseStatusException notFound(
+                                String message) {
+                        return new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        message);
+                }
         }
-
-        private void validateLocation(
-                LocationRequest request) {
-            if (request == null) {
-                throw badRequest(
-                        "Location request is required");
-            }
-
-            required(
-                    request.locationCode(),
-                    "Location code");
-
-            required(
-                    request.locationName(),
-                    "Location name");
-
-            required(
-                    request.plantCode(),
-                    "Plant code");
-
-            if (request.locationType() == null) {
-                throw badRequest(
-                        "Location type is required");
-            }
-        }
-
-        private void saveLedger(
-                MatFlowStockBalance balance,
-                MovementType movementType,
-                BigDecimal quantityChange,
-                BigDecimal reservedChange,
-                String referenceType,
-                UUID referenceId,
-                String referenceNumber,
-                String batchNo,
-                String remarks,
-                String actor) {
-            MatFlowStockLedger ledger = new MatFlowStockLedger();
-
-            ledger.material = balance.material;
-
-            ledger.location = balance.location;
-
-            ledger.movementType = movementType;
-
-            ledger.quantityChange = scale(quantityChange);
-
-            ledger.reservedChange = scale(reservedChange);
-
-            ledger.blockedChange = BigDecimal.ZERO;
-
-            ledger.inTransitChange = BigDecimal.ZERO;
-
-            ledger.onHandAfter = balance.onHandQty;
-
-            ledger.reservedAfter = balance.reservedQty;
-
-            ledger.blockedAfter = balance.blockedQty;
-
-            ledger.inTransitAfter = balance.inTransitQty;
-
-            ledger.referenceType = referenceType;
-
-            ledger.referenceId = referenceId;
-
-            ledger.referenceNumber = referenceNumber;
-
-            ledger.batchNo = clean(batchNo);
-
-            ledger.remarks = clean(remarks);
-
-            ledger.actor = actor;
-
-            ledgerRepository.save(ledger);
-        }
-
-        private LocationResponse toLocationResponse(
-                MatFlowLocation location) {
-
-            return new LocationResponse(
-                    location.getId(),
-                    location.getLocationCode(),
-                    location.getLocationName(),
-                    location.getPlantCode(),
-                    location.getLocationType(),
-                    location.getOwnershipType(),
-                    location.isSupportsStock(),
-                    location.getAddress(),
-                    location.getContactPerson(),
-                    location.getContactPhone(),
-                    location.isActive(),
-                    location.getRowVersion());
-        }
-
-        private StockBalanceResponse toStockResponse(
-                MatFlowStockBalance balance) {
-
-            return new StockBalanceResponse(
-                    balance.getId(),
-
-                    balance.material
-                            .getId(),
-
-                    balance.material
-                            .getMaterialCode(),
-
-                    balance.material
-                            .getMaterialName(),
-
-                    balance.material
-                            .getUom(),
-
-                    balance.location
-                            .getId(),
-
-                    balance.location
-                            .getLocationCode(),
-
-                    balance.location
-                            .getLocationName(),
-
-                    balance.location
-                            .getPlantCode(),
-
-                    balance.location
-                            .getLocationType(),
-
-                    zero(balance.onHandQty),
-                    zero(balance.reservedQty),
-                    zero(balance.blockedQty),
-                    zero(balance.inTransitQty),
-
-                    balance.availableQty(),
-
-                    balance.getRowVersion());
-        }
-
-        private BigDecimal zero(
-                BigDecimal value) {
-
-            return value == null
-                    ? BigDecimal.ZERO.setScale(
-                            3,
-                            RoundingMode.HALF_UP)
-                    : value.setScale(
-                            3,
-                            RoundingMode.HALF_UP);
-        }
-
-        private void assertVersion(
-                Long requested,
-                Long current,
-                String entity) {
-            if (requested == null) {
-                throw badRequest(
-                        entity +
-                                " rowVersion is required");
-            }
-
-            if (!requested.equals(current)) {
-                throw conflict(
-                        entity +
-                                " was modified by another user. Refresh and retry.");
-            }
-        }
-
-        private BigDecimal scale(
-                BigDecimal value) {
-            return value == null
-                    ? BigDecimal.ZERO
-                    : value.setScale(
-                            3,
-                            RoundingMode.HALF_UP);
-        }
-
-        private void required(
-                String value,
-                String field) {
-            if (value == null ||
-                    value.trim().isBlank()) {
-                throw badRequest(
-                        field + " is required");
-            }
-        }
-
-        private String clean(String value) {
-            if (value == null) {
-                return null;
-            }
-
-            String result = value.trim();
-
-            return result.isBlank()
-                    ? null
-                    : result;
-        }
-
-        private String upper(
-                String value) {
-
-            String result = clean(value);
-
-            return result == null
-                    ? null
-                    : result.toUpperCase(
-                            Locale.ROOT);
-        }
-
-        private String normalizeSearch(
-                String value) {
-            return value == null
-                    ? ""
-                    : value.trim()
-                            .toLowerCase(
-                                    Locale.ROOT);
-        }
-
-        private boolean contains(
-                String value,
-                String query) {
-            return value != null &&
-                    value.toLowerCase(
-                            Locale.ROOT).contains(query);
-        }
-
-        private ResponseStatusException badRequest(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    message);
-        }
-
-        private ResponseStatusException conflict(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    message);
-        }
-
-        private ResponseStatusException notFound(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    message);
-        }
-    }
-
-    private static final class VendorModule {
-
-        private final MatFlowVendorRepository vendorRepository;
-        private final MatFlowAccessService accessService;
-
-        VendorModule(
-                MatFlowVendorRepository vendorRepository,
-                MatFlowAccessService accessService) {
-            this.vendorRepository = vendorRepository;
-
-            this.accessService = accessService;
-        }
-
-        @Transactional(readOnly = true)
-        public List<VendorResponse> list(
-                String search,
-                Boolean active) {
-            accessService.requireIndentRead();
-
-            String query = search == null
-                    ? ""
-                    : search.trim()
-                            .toLowerCase(Locale.ROOT);
-
-            return vendorRepository
-                    .findAll(
-                            Sort.by(
-                                    Sort.Direction.ASC,
-                                    "vendorName"))
-                    .stream()
-                    .filter(vendor -> active == null ||
-                            vendor.active == active)
-                    .filter(vendor -> query.isBlank() ||
-                            contains(
-                                    vendor.vendorCode,
-                                    query)
-                            ||
-                            contains(
-                                    vendor.vendorName,
-                                    query)
-                            ||
-                            contains(
-                                    vendor.gstin,
-                                    query))
-                    .map(this::toResponse)
-                    .toList();
-        }
-
-        @Transactional
-        public VendorResponse create(
-                VendorRequest request) {
-            accessService.requireVendorWrite();
-
-            validate(request);
-
-            String code = upper(request.vendorCode());
-
-            if (vendorRepository
-                    .existsByVendorCodeIgnoreCase(
-                            code)) {
-                throw conflict(
-                        "Vendor code already exists: " +
-                                code);
-            }
-
-            String actor = accessService.actor();
-
-            MatFlowVendor vendor = new MatFlowVendor();
-
-            apply(vendor, request);
-
-            vendor.setCreatedBy(actor);
-            vendor.setUpdatedBy(actor);
-
-            return toResponse(
-                    vendorRepository.save(vendor));
-        }
-
-        @Transactional
-        public VendorResponse update(
-                UUID id,
-                VendorRequest request) {
-            accessService.requireVendorWrite();
-
-            validate(request);
-
-            MatFlowVendor vendor = vendorRepository
-                    .findById(id)
-                    .orElseThrow(() -> notFound(
-                            "Vendor not found"));
-
-            assertVersion(
-                    request.rowVersion(),
-                    vendor.getRowVersion());
-
-            String code = upper(request.vendorCode());
-
-            if (vendorRepository
-                    .existsByVendorCodeIgnoreCaseAndIdNot(
-                            code,
-                            id)) {
-                throw conflict(
-                        "Vendor code already exists: " +
-                                code);
-            }
-
-            apply(vendor, request);
-
-            vendor.setUpdatedBy(
-                    accessService.actor());
-
-            return toResponse(
-                    vendorRepository.save(vendor));
-        }
-
-        private void apply(
-                MatFlowVendor vendor,
-                VendorRequest request) {
-            vendor.vendorCode = upper(request.vendorCode());
-
-            vendor.vendorName = clean(request.vendorName());
-
-            vendor.gstin = upper(request.gstin());
-
-            vendor.contactPerson = clean(request.contactPerson());
-
-            vendor.phone = clean(request.phone());
-
-            vendor.email = clean(request.email());
-
-            vendor.address = clean(request.address());
-
-            if (request.active() != null) {
-                vendor.active = request.active();
-            }
-        }
-
-        private void validate(
-                VendorRequest request) {
-            if (request == null) {
-                throw badRequest(
-                        "Vendor request is required");
-            }
-
-            required(
-                    request.vendorCode(),
-                    "Vendor code");
-
-            required(
-                    request.vendorName(),
-                    "Vendor name");
-        }
-
-        private VendorResponse toResponse(
-                MatFlowVendor vendor) {
-            return new VendorResponse(
-                    vendor.getId(),
-                    vendor.vendorCode,
-                    vendor.vendorName,
-                    vendor.gstin,
-                    vendor.contactPerson,
-                    vendor.phone,
-                    vendor.email,
-                    vendor.address,
-                    vendor.active,
-                    vendor.getRowVersion());
-        }
-
-        private boolean contains(
-                String value,
-                String query) {
-            return value != null &&
-                    value.toLowerCase(
-                            Locale.ROOT).contains(query);
-        }
-
-        private void required(
-                String value,
-                String field) {
-            if (value == null ||
-                    value.trim().isBlank()) {
-                throw badRequest(
-                        field + " is required");
-            }
-        }
-
-        private void assertVersion(
-                Long requested,
-                Long current) {
-            if (requested == null) {
-                throw badRequest(
-                        "Vendor rowVersion is required");
-            }
-
-            if (!requested.equals(current)) {
-                throw conflict(
-                        "Vendor was modified by another user");
-            }
-        }
-
-        private String clean(String value) {
-            if (value == null) {
-                return null;
-            }
-
-            String result = value.trim();
-
-            return result.isBlank()
-                    ? null
-                    : result;
-        }
-
-        private String upper(String value) {
-            String result = clean(value);
-
-            return result == null
-                    ? null
-                    : result.toUpperCase();
-        }
-
-        private ResponseStatusException badRequest(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    message);
-        }
-
-        private ResponseStatusException conflict(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    message);
-        }
-
-        private ResponseStatusException notFound(
-                String message) {
-            return new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    message);
-        }
-    }
 }

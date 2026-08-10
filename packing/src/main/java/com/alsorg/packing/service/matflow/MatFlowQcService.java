@@ -43,6 +43,8 @@ public class MatFlowQcService {
                         MatFlowStockLedgerRepository ledgerRepository,
                         MatFlowReservationRepository reservationRepository,
                         MatFlowRequisitionLineRepository requisitionLineRepository,
+                        MatFlowIndentRepository indentRepository,
+                        MatFlowIndentLineRepository indentLineRepository,
                         MatFlowTransferOrderRepository transferRepository,
                         MatFlowTransferLineRepository transferLineRepository,
                         MatFlowVendorReturnRepository vendorReturnRepository,
@@ -61,6 +63,8 @@ public class MatFlowQcService {
                                 ledgerRepository,
                                 reservationRepository,
                                 requisitionLineRepository,
+                                indentRepository,
+                                indentLineRepository,
                                 transferRepository,
                                 transferLineRepository,
                                 vendorReturnRepository,
@@ -76,6 +80,8 @@ public class MatFlowQcService {
                                 transferLineRepository,
                                 reservationRepository,
                                 requisitionLineRepository,
+                                indentRepository,
+                                indentLineRepository,
                                 locationRepository,
                                 stockRepository,
                                 ledgerRepository,
@@ -117,6 +123,8 @@ public class MatFlowQcService {
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowReservationRepository reservationRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
+                private final MatFlowIndentRepository indentRepository;
+                private final MatFlowIndentLineRepository indentLineRepository;
                 private final MatFlowTransferOrderRepository transferRepository;
                 private final MatFlowTransferLineRepository transferLineRepository;
                 private final MatFlowVendorReturnRepository vendorReturnRepository;
@@ -133,6 +141,8 @@ public class MatFlowQcService {
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowReservationRepository reservationRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
+                                MatFlowIndentRepository indentRepository,
+                                MatFlowIndentLineRepository indentLineRepository,
                                 MatFlowTransferOrderRepository transferRepository,
                                 MatFlowTransferLineRepository transferLineRepository,
                                 MatFlowVendorReturnRepository vendorReturnRepository,
@@ -153,6 +163,10 @@ public class MatFlowQcService {
                         this.reservationRepository = reservationRepository;
 
                         this.requisitionLineRepository = requisitionLineRepository;
+
+                        this.indentRepository = indentRepository;
+
+                        this.indentLineRepository = indentLineRepository;
 
                         this.transferRepository = transferRepository;
 
@@ -183,7 +197,7 @@ public class MatFlowQcService {
                         return inspections
                                         .stream()
                                         .filter(inspection -> accessService.canAccessPlant(
-                                                        inspection.location.plantCode))
+                                                        inspection.location.getPlantCode()))
                                         .map(this::toResponse)
                                         .toList();
                 }
@@ -317,7 +331,7 @@ public class MatFlowQcService {
                                         "QC_INSPECTION",
                                         inspection.getId(),
                                         "QC_COMPLETED",
-                                        inspection.location.plantCode,
+                                        inspection.location.getPlantCode(),
                                         null,
                                         null,
                                         auditService.details(
@@ -480,85 +494,125 @@ public class MatFlowQcService {
                                 BigDecimal accepted,
                                 String actor) {
                         MatFlowGoodsReceiptLine receiptLine = receiptLineRepository
-                                        .findById(
-                                                        inspection.sourceLineId)
+                                        .findById(inspection.sourceLineId)
                                         .orElseThrow(() -> notFound(
                                                         "GRN line not found"));
 
+                        BigDecimal rejected = scale(
+                                        inspection.inspectionQty
+                                                        .subtract(accepted));
+
                         receiptLine.acceptedQty = accepted;
-
-                        receiptLine.rejectedQty = inspection.inspectionQty
-                                        .subtract(accepted);
-
+                        receiptLine.rejectedQty = rejected;
                         receiptLine.setUpdatedBy(actor);
+                        receiptLineRepository.save(receiptLine);
 
-                        receiptLineRepository.save(
-                                        receiptLine);
+                        if (receiptLine.purchaseOrderLine == null ||
+                                        receiptLine.purchaseOrderLine.indentLine == null ||
+                                        receiptLine.purchaseOrderLine.indentLine.requisitionLine == null) {
+                                throw conflict(
+                                                "GRN line is not linked to a valid shortage indent/requisition line");
+                        }
+
+                        MatFlowIndentLine indentLine = receiptLine.purchaseOrderLine.indentLine;
+                        MatFlowRequisitionLine requisitionLine = indentLine.requisitionLine;
+                        MatFlowMaterialRequisition requisition = requisitionLine.requisition;
+
+                        if (requisition == null || requisition.destinationLocation == null) {
+                                throw conflict(
+                                                "Purchased material is not linked to a valid requisition destination");
+                        }
+
+                        /*
+                         * Only the still-open project shortage is reserved against the
+                         * requisition. Any accepted PO overage stays as free QC stock
+                         * and can be used by a later Store review without corrupting
+                         * this requisition's requested/reserved quantities.
+                         */
+                        BigDecimal outstandingDemand = scale(
+                                        requisitionLine.shortageQty)
+                                        .max(BigDecimal.ZERO);
+
+                        BigDecimal allocatedToDemand = accepted
+                                        .min(outstandingDemand)
+                                        .setScale(3, RoundingMode.HALF_UP);
+
+                        /*
+                         * Indent receivedQty means QC-accepted usable quantity, not
+                         * physical GRN receipt. Rejected quantity reopens the effective
+                         * ordered balance so Purchase can raise a replacement PO.
+                         */
+                        BigDecimal indentRemaining = scale(indentLine.requiredQty)
+                                        .subtract(scale(indentLine.receivedQty))
+                                        .max(BigDecimal.ZERO);
+
+                        BigDecimal acceptedForIndent = accepted
+                                        .min(indentRemaining)
+                                        .setScale(3, RoundingMode.HALF_UP);
+
+                        indentLine.receivedQty = scale(indentLine.receivedQty)
+                                        .add(acceptedForIndent)
+                                        .setScale(3, RoundingMode.HALF_UP);
+
+                        indentLine.orderedQty = scale(indentLine.orderedQty)
+                                        .subtract(rejected)
+                                        .max(indentLine.receivedQty)
+                                        .setScale(3, RoundingMode.HALF_UP);
+
+                        indentLine.setUpdatedBy(actor);
+                        indentLineRepository.save(indentLine);
+                        refreshIndentStatus(indentLine.indent, actor);
 
                         refreshGoodsReceiptStatus(
                                         receiptLine.goodsReceipt,
                                         actor);
 
-                        if (accepted.compareTo(
-                                        BigDecimal.ZERO) <= 0) {
+                        if (allocatedToDemand.compareTo(BigDecimal.ZERO) <= 0) {
+                                requisitionService.refreshState(
+                                                requisition.getId(),
+                                                actor);
                                 return BigDecimal.ZERO;
                         }
 
-                        MatFlowRequisitionLine requisitionLine = receiptLine.purchaseOrderLine.indentLine.requisitionLine;
-
-                        MatFlowMaterialRequisition requisition = requisitionLine.requisition;
-
                         MatFlowReservation reservation = new MatFlowReservation();
-
                         reservation.requisitionLine = requisitionLine;
-
                         reservation.material = inspection.material;
-
                         reservation.sourceLocation = inspection.location;
-
                         reservation.firstDestinationLocation = inspection.location;
-
-                        reservation.demandPlantCode = requisition.destinationLocation.plantCode;
-
-                        reservation.reservedQty = accepted;
-
+                        reservation.demandPlantCode = requisition.destinationLocation.getPlantCode();
+                        reservation.reservedQty = allocatedToDemand;
                         reservation.status = ReservationStatus.ACTIVE;
-
                         reservation.routeSnapshotJson = "[]";
-
                         reservation.setCreatedBy(actor);
                         reservation.setUpdatedBy(actor);
-
-                        reservation = reservationRepository.save(
-                                        reservation);
+                        reservation = reservationRepository.save(reservation);
 
                         requisitionLine.reservedQty = scale(
-                                        requisitionLine.reservedQty
-                                                        .add(accepted));
+                                        requisitionLine.reservedQty)
+                                        .add(allocatedToDemand)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
-                        requisitionLine.shortageQty = scale(
-                                        requisitionLine.shortageQty
-                                                        .subtract(accepted)
-                                                        .max(BigDecimal.ZERO));
+                        requisitionLine.shortageQty = outstandingDemand
+                                        .subtract(allocatedToDemand)
+                                        .max(BigDecimal.ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
                         requisitionLine.setUpdatedBy(actor);
-
-                        requisitionLineRepository.save(
-                                        requisitionLine);
+                        requisitionLineRepository.save(requisitionLine);
 
                         createRemainingTransferChain(
                                         reservation,
                                         requisition,
                                         requisitionLine,
                                         inspection.location,
-                                        accepted,
+                                        allocatedToDemand,
                                         actor);
 
                         requisitionService.refreshState(
                                         requisition.getId(),
                                         actor);
 
-                        return accepted;
+                        return allocatedToDemand;
                 }
 
                 private BigDecimal completeTransferQc(
@@ -583,6 +637,12 @@ public class MatFlowQcService {
 
                         MatFlowRequisitionLine requisitionLine = reservation.requisitionLine;
 
+                        /*
+                         * Once QC has received the transfer, the surviving reservation
+                         * physically lives at the QC location. Keeping sourceLocation on
+                         * the original Store would make later release/reconciliation hit
+                         * the wrong stock balance.
+                         */
                         reservation.sourceLocation = inspection.location;
                         reservation.reservedQty = accepted;
 
@@ -650,6 +710,42 @@ public class MatFlowQcService {
                         return accepted;
                 }
 
+                private void refreshIndentStatus(
+                                MatFlowIndent indent,
+                                String actor) {
+                        if (indent == null) {
+                                return;
+                        }
+
+                        List<MatFlowIndentLine> lines = indentLineRepository
+                                        .findByIndent_IdOrderByCreatedAtAsc(indent.getId());
+
+                        boolean allAccepted = !lines.isEmpty() && lines.stream()
+                                        .allMatch(line -> scale(line.receivedQty)
+                                                        .compareTo(scale(line.requiredQty)) >= 0);
+
+                        boolean anyAccepted = lines.stream()
+                                        .anyMatch(line -> scale(line.receivedQty)
+                                                        .compareTo(BigDecimal.ZERO) > 0);
+
+                        boolean anyEffectiveOrder = lines.stream()
+                                        .anyMatch(line -> scale(line.orderedQty)
+                                                        .compareTo(BigDecimal.ZERO) > 0);
+
+                        if (allAccepted) {
+                                indent.status = IndentStatus.RECEIVED;
+                        } else if (anyAccepted) {
+                                indent.status = IndentStatus.PARTIALLY_RECEIVED;
+                        } else if (anyEffectiveOrder) {
+                                indent.status = IndentStatus.PURCHASE_IN_PROGRESS;
+                        } else {
+                                indent.status = IndentStatus.SUBMITTED_TO_PURCHASE;
+                        }
+
+                        indent.setUpdatedBy(actor);
+                        indentRepository.save(indent);
+                }
+
                 private void createRemainingTransferChain(
                                 MatFlowReservation reservation,
                                 MatFlowMaterialRequisition requisition,
@@ -701,8 +797,18 @@ public class MatFlowQcService {
                         UUID predecessor = null;
                         int sequence = 10;
 
-                        boolean processingCurrent = currentLocation.locationType == LocationType.PROCESSING ||
-                                        currentLocation.locationType == LocationType.EXTERNAL_PROCESSOR;
+                        boolean processingCurrent = currentLocation.getLocationType() == LocationType.PROCESSING ||
+                                        currentLocation.getLocationType() == LocationType.EXTERNAL_PROCESSOR;
+
+                        /*
+                         * A Production HOLD decision must also hold newly QC-accepted
+                         * purchased quantities while any requisition shortage remains.
+                         * Once shortage reaches zero, RequisitionService.refreshState()
+                         * activates all predecessor-free deferred route transfers.
+                         */
+                        boolean deferInitialTransfer = scale(requisitionLine.shortageQty)
+                                        .compareTo(BigDecimal.ZERO) > 0 &&
+                                        requisition.partialAvailabilityDecision != PartialAvailabilityDecision.ISSUE_AVAILABLE_NOW;
 
                         for (MatFlowLocation destination : remaining) {
                                 if (from.getId()
@@ -731,7 +837,8 @@ public class MatFlowQcService {
                                                 destination);
 
                                 transfer.status = predecessor == null &&
-                                                !processingCurrent
+                                                !processingCurrent &&
+                                                !deferInitialTransfer
                                                                 ? TransferStatus.READY
                                                                 : TransferStatus.PLANNED;
 
@@ -774,27 +881,27 @@ public class MatFlowQcService {
                 private TransferPurpose determinePurpose(
                                 MatFlowLocation from,
                                 MatFlowLocation to) {
-                        if (!from.plantCode.equalsIgnoreCase(
-                                        to.plantCode)) {
+                        if (!from.getPlantCode().equalsIgnoreCase(
+                                        to.getPlantCode())) {
                                 return TransferPurpose.INTER_PLANT;
                         }
 
-                        if (to.locationType == LocationType.QC) {
+                        if (to.getLocationType() == LocationType.QC) {
                                 return TransferPurpose.QC_TRANSFER;
                         }
 
-                        boolean fromProcessing = from.locationType == LocationType.PROCESSING ||
-                                        from.locationType == LocationType.EXTERNAL_PROCESSOR;
+                        boolean fromProcessing = from.getLocationType() == LocationType.PROCESSING ||
+                                        from.getLocationType() == LocationType.EXTERNAL_PROCESSOR;
 
-                        boolean toProcessing = to.locationType == LocationType.PROCESSING ||
-                                        to.locationType == LocationType.EXTERNAL_PROCESSOR;
+                        boolean toProcessing = to.getLocationType() == LocationType.PROCESSING ||
+                                        to.getLocationType() == LocationType.EXTERNAL_PROCESSOR;
 
                         if (fromProcessing && toProcessing) {
                                 return TransferPurpose.PROCESSING_TO_PROCESSING;
                         }
 
                         if (fromProcessing &&
-                                        to.locationType == LocationType.PRODUCTION) {
+                                        to.getLocationType() == LocationType.PRODUCTION) {
                                 return TransferPurpose.PROCESSING_TO_PRODUCTION;
                         }
 
@@ -865,7 +972,7 @@ public class MatFlowQcService {
                                                         "QC inspection not found"));
 
                         accessService.requirePlantAccess(
-                                        inspection.location.plantCode);
+                                        inspection.location.getPlantCode());
 
                         return inspection;
                 }
@@ -885,7 +992,7 @@ public class MatFlowQcService {
                                                         .getMaterialName(),
                                         inspection.location.getId(),
                                         inspection.location.locationCode,
-                                        inspection.location.plantCode,
+                                        inspection.location.getPlantCode(),
                                         inspection.inspectionQty,
                                         inspection.acceptedQty,
                                         inspection.rejectedQty,
@@ -1064,6 +1171,8 @@ public class MatFlowQcService {
                 private final MatFlowTransferLineRepository transferLineRepository;
                 private final MatFlowReservationRepository reservationRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
+                private final MatFlowIndentRepository indentRepository;
+                private final MatFlowIndentLineRepository indentLineRepository;
                 private final MatFlowLocationRepository locationRepository;
                 private final MatFlowStockBalanceRepository stockRepository;
                 private final MatFlowStockLedgerRepository ledgerRepository;
@@ -1077,6 +1186,8 @@ public class MatFlowQcService {
                                 MatFlowTransferLineRepository transferLineRepository,
                                 MatFlowReservationRepository reservationRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
+                                MatFlowIndentRepository indentRepository,
+                                MatFlowIndentLineRepository indentLineRepository,
                                 MatFlowLocationRepository locationRepository,
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
@@ -1093,6 +1204,10 @@ public class MatFlowQcService {
                         this.reservationRepository = reservationRepository;
 
                         this.requisitionLineRepository = requisitionLineRepository;
+
+                        this.indentRepository = indentRepository;
+
+                        this.indentLineRepository = indentLineRepository;
 
                         this.locationRepository = locationRepository;
 
@@ -1113,7 +1228,7 @@ public class MatFlowQcService {
                                         .findAllByOrderByCreatedAtDesc()
                                         .stream()
                                         .filter(disposition -> accessService.canAccessPlant(
-                                                        disposition.qcInspection.location.plantCode))
+                                                        disposition.qcInspection.location.getPlantCode()))
                                         .map(this::toResponse)
                                         .toList();
                 }
@@ -1136,7 +1251,7 @@ public class MatFlowQcService {
                                                         "QC inspection not found"));
 
                         accessService.requirePlantAccess(
-                                        inspection.location.plantCode);
+                                        inspection.location.getPlantCode());
 
                         if (inspection.sourceType != QcSourceType.TRANSFER_RECEIPT) {
                                 throw conflict(
@@ -1269,6 +1384,18 @@ public class MatFlowQcService {
                                                 disposition,
                                                 actor);
 
+                                /*
+                                 * Only irrecoverable rejected stock becomes a Purchase
+                                 * replacement requirement. HOLD/REWORK/RETURN_TO_SOURCE
+                                 * must not create a market indent because the material may
+                                 * still be recovered internally.
+                                 */
+                                ensureReplacementIndentForScrap(
+                                                sourceTransfer.reservation.requisitionLine,
+                                                quantity,
+                                                inspection.location,
+                                                actor);
+
                                 auditDisposition(
                                                 disposition,
                                                 sourceTransfer);
@@ -1304,7 +1431,7 @@ public class MatFlowQcService {
 
                         reservation.firstDestinationLocation = targetLocation;
 
-                        reservation.demandPlantCode = requisitionLine.requisition.destinationLocation.plantCode;
+                        reservation.demandPlantCode = requisitionLine.requisition.destinationLocation.getPlantCode();
 
                         reservation.reservedQty = quantity;
 
@@ -1410,6 +1537,78 @@ public class MatFlowQcService {
                         return toResponse(disposition);
                 }
 
+                private void ensureReplacementIndentForScrap(
+                                MatFlowRequisitionLine requisitionLine,
+                                BigDecimal shortageQty,
+                                MatFlowLocation qcLocation,
+                                String actor) {
+                        if (requisitionLine == null ||
+                                        requisitionLine.requisition == null ||
+                                        requisitionLine.material == null ||
+                                        qcLocation == null ||
+                                        shortageQty == null ||
+                                        shortageQty.compareTo(BigDecimal.ZERO) <= 0) {
+                                return;
+                        }
+
+                        MatFlowMaterialRequisition requisition = requisitionLine.requisition;
+
+                        MatFlowIndent indent = indentRepository
+                                        .findByRequisition_Id(requisition.getId())
+                                        .stream()
+                                        .filter(existing -> existing.status == IndentStatus.AUTO_CREATED ||
+                                                        existing.status == IndentStatus.DRAFT ||
+                                                        existing.status == IndentStatus.RETURNED)
+                                        .filter(existing -> existing.deliverToLocation != null &&
+                                                        existing.deliverToLocation.getId().equals(qcLocation.getId()))
+                                        .findFirst()
+                                        .orElse(null);
+
+                        if (indent == null) {
+                                indent = new MatFlowIndent();
+                                indent.indentNumber = generateNumber("MFI");
+                                indent.requisition = requisition;
+                                indent.projectDrawing = requisition.projectDrawing;
+                                indent.bom = requisition.bom;
+                                indent.deliverToLocation = qcLocation;
+                                indent.status = IndentStatus.AUTO_CREATED;
+                                indent.autoGenerated = true;
+                                indent.remarks = "Replacement shortage created after QC scrap";
+                                indent.setCreatedBy(actor);
+                                indent.setUpdatedBy(actor);
+                                indent = indentRepository.save(indent);
+                        }
+
+                        MatFlowIndentLine indentLine = indentLineRepository
+                                        .findByIndent_IdOrderByCreatedAtAsc(indent.getId())
+                                        .stream()
+                                        .filter(existing -> existing.requisitionLine != null &&
+                                                        existing.requisitionLine.getId()
+                                                                        .equals(requisitionLine.getId()))
+                                        .findFirst()
+                                        .orElse(null);
+
+                        if (indentLine == null) {
+                                indentLine = new MatFlowIndentLine();
+                                indentLine.indent = indent;
+                                indentLine.requisitionLine = requisitionLine;
+                                indentLine.material = requisitionLine.material;
+                                indentLine.requiredQty = scale(shortageQty);
+                                indentLine.orderedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                                indentLine.receivedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                                indentLine.uom = requisitionLine.material.getUom();
+                                indentLine.remarks = "Replacement required for QC-scrapped material";
+                                indentLine.setCreatedBy(actor);
+                        } else {
+                                indentLine.requiredQty = scale(indentLine.requiredQty)
+                                                .add(shortageQty)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                        }
+
+                        indentLine.setUpdatedBy(actor);
+                        indentLineRepository.save(indentLine);
+                }
+
                 private void auditDisposition(
                                 MatFlowQcDisposition disposition,
                                 MatFlowTransferOrder sourceTransfer) {
@@ -1429,7 +1628,7 @@ public class MatFlowQcService {
                                         "QC_DISPOSITION",
                                         disposition.getId(),
                                         "QC_DISPOSITION_DECIDED",
-                                        disposition.qcInspection.location.plantCode,
+                                        disposition.qcInspection.location.getPlantCode(),
                                         projectCode,
                                         drawingNo,
                                         auditService.details(
@@ -1470,11 +1669,12 @@ public class MatFlowQcService {
                                                         "Target location not found"));
 
                         accessService.requirePlantAccess(
-                                        target.plantCode);
+                                        target.getPlantCode());
 
-                        boolean processingLocation = target.locationType == MatFlowPlanningTypes.LocationType.PROCESSING
+                        boolean processingLocation = target
+                                        .getLocationType() == MatFlowPlanningTypes.LocationType.PROCESSING
                                         ||
-                                        target.locationType == MatFlowPlanningTypes.LocationType.EXTERNAL_PROCESSOR;
+                                        target.getLocationType() == MatFlowPlanningTypes.LocationType.EXTERNAL_PROCESSOR;
 
                         if (!processingLocation) {
                                 throw badRequest(

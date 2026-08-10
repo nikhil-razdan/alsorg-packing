@@ -120,7 +120,7 @@ public class MatFlowProcurementService {
                                 .findAllByOrderByUpdatedAtDesc()
                                 .stream()
                                 .filter(order -> accessService.canAccessPlant(
-                                                order.deliveryLocation.plantCode))
+                                                order.deliveryLocation.getPlantCode()))
                                 .map(this::toPurchaseOrderResponse)
                                 .toList();
         }
@@ -144,10 +144,16 @@ public class MatFlowProcurementService {
                                 .orElseThrow(() -> notFound(
                                                 "Indent not found"));
 
-                if (indent.status == IndentStatus.CANCELLED ||
-                                indent.status == IndentStatus.RECEIVED) {
+                boolean purchaseReadyIndent = indent.status == IndentStatus.SUBMITTED_TO_PURCHASE ||
+                                indent.status == IndentStatus.PURCHASE_IN_PROGRESS ||
+                                indent.status == IndentStatus.PO_CREATED ||
+                                indent.status == IndentStatus.PARTIALLY_RECEIVED;
+
+                if (!purchaseReadyIndent) {
                         throw conflict(
-                                        "Selected indent is not open for ordering");
+                                        "Purchase Orders can be created only after Store submits the shortage indent to Purchase. Current indent status: "
+                                                        +
+                                                        indent.status);
                 }
 
                 MatFlowVendor vendor = vendorRepository
@@ -330,7 +336,7 @@ public class MatFlowProcurementService {
                                 "PURCHASE_ORDER",
                                 order.getId(),
                                 "PURCHASE_ORDER_APPROVED",
-                                order.deliveryLocation == null ? null : order.deliveryLocation.plantCode,
+                                order.deliveryLocation == null ? null : order.deliveryLocation.getPlantCode(),
                                 order.indent == null || order.indent.projectDrawing == null
                                                 ? null
                                                 : order.indent.projectDrawing.getProjectCode(),
@@ -367,7 +373,7 @@ public class MatFlowProcurementService {
                                 .findAllByOrderByReceivedAtDesc()
                                 .stream()
                                 .filter(receipt -> accessService.canAccessPlant(
-                                                receipt.receiptLocation.plantCode))
+                                                receipt.receiptLocation.getPlantCode()))
                                 .map(this::toGoodsReceiptResponse)
                                 .toList();
         }
@@ -399,7 +405,7 @@ public class MatFlowProcurementService {
                                         "GRN location must match the PO delivery location");
                 }
 
-                if (!receiptLocation.supportsStock) {
+                if (!receiptLocation.isSupportsStock()) {
                         throw badRequest(
                                         "GRN location does not support stock");
                 }
@@ -488,16 +494,13 @@ public class MatFlowProcurementService {
                         purchaseOrderLineRepository.save(
                                         poLine);
 
-                        MatFlowIndentLine indentLine = poLine.indentLine;
-
-                        indentLine.receivedQty = scale(
-                                        indentLine.receivedQty
-                                                        .add(receivedQty));
-
-                        indentLine.setUpdatedBy(actor);
-
-                        indentLineRepository.save(
-                                        indentLine);
+                        /*
+                         * PO-line receivedQty is physical GRN receipt. Do NOT mark
+                         * the shortage indent as fulfilled here. The indent's
+                         * receivedQty represents QC-accepted usable quantity and
+                         * is advanced only by MatFlowQcService. This is what keeps
+                         * rejected vendor material open for replacement purchase.
+                         */
 
                         MatFlowStockBalance balance = lockOrCreateBalance(
                                         poLine.material,
@@ -564,15 +567,11 @@ public class MatFlowProcurementService {
                                 order,
                                 actor);
 
-                refreshIndentReceiptStatus(
-                                order.indent,
-                                actor);
-
                 auditService.record(
                                 "GOODS_RECEIPT",
                                 receipt.getId(),
                                 "GRN_POSTED",
-                                receipt.receiptLocation.plantCode,
+                                receipt.receiptLocation.getPlantCode(),
                                 order.indent.projectDrawing
                                                 .getProjectCode(),
                                 order.indent.projectDrawing
@@ -605,7 +604,18 @@ public class MatFlowProcurementService {
                                                                 .equals(excludedOrderId))
                                 .filter(line -> line.purchaseOrder.status != PurchaseOrderStatus.DRAFT &&
                                                 line.purchaseOrder.status != PurchaseOrderStatus.CANCELLED)
-                                .map(line -> line.orderedQty)
+                                .map(line -> {
+                                        BigDecimal rejected = receiptLineRepository
+                                                        .findByPurchaseOrderLine_IdOrderByCreatedAtAsc(line.getId())
+                                                        .stream()
+                                                        .map(receiptLine -> scale(receiptLine.rejectedQty))
+                                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                                        return scale(line.orderedQty)
+                                                        .subtract(rejected)
+                                                        .max(BigDecimal.ZERO)
+                                                        .setScale(3, RoundingMode.HALF_UP);
+                                })
                                 .reduce(
                                                 BigDecimal.ZERO,
                                                 BigDecimal::add);
@@ -662,35 +672,6 @@ public class MatFlowProcurementService {
                 purchaseOrderRepository.save(order);
         }
 
-        private void refreshIndentReceiptStatus(
-                        MatFlowIndent indent,
-                        String actor) {
-                List<MatFlowIndentLine> lines = indentLineRepository
-                                .findByIndent_IdOrderByCreatedAtAsc(
-                                                indent.getId());
-
-                boolean allReceived = !lines.isEmpty() &&
-                                lines.stream()
-                                                .allMatch(line -> line.receivedQty
-                                                                .compareTo(
-                                                                                line.requiredQty) >= 0);
-
-                boolean anyReceived = lines.stream()
-                                .anyMatch(line -> line.receivedQty
-                                                .compareTo(
-                                                                BigDecimal.ZERO) > 0);
-
-                if (allReceived) {
-                        indent.status = IndentStatus.RECEIVED;
-                } else if (anyReceived) {
-                        indent.status = IndentStatus.PARTIALLY_RECEIVED;
-                }
-
-                indent.setUpdatedBy(actor);
-
-                indentRepository.save(indent);
-        }
-
         private MatFlowStockBalance lockOrCreateBalance(
                         com.alsorg.packing.domain.matflow.MatFlowMaterial material,
                         MatFlowLocation location,
@@ -729,7 +710,7 @@ public class MatFlowProcurementService {
                                                 "Purchase order not found"));
 
                 accessService.requirePlantAccess(
-                                order.deliveryLocation.plantCode);
+                                order.deliveryLocation.getPlantCode());
 
                 return order;
         }
@@ -742,9 +723,9 @@ public class MatFlowProcurementService {
                                                 "Location not found"));
 
                 accessService.requirePlantAccess(
-                                location.plantCode);
+                                location.getPlantCode());
 
-                if (!location.active) {
+                if (!location.isActive()) {
                         throw badRequest(
                                         "Inactive location cannot be selected");
                 }
@@ -830,8 +811,8 @@ public class MatFlowProcurementService {
                                 order.indent.getId(),
                                 order.indent.indentNumber,
                                 order.deliveryLocation.getId(),
-                                order.deliveryLocation.locationCode,
-                                order.deliveryLocation.plantCode,
+                                order.deliveryLocation.getLocationCode(),
+                                order.deliveryLocation.getPlantCode(),
                                 order.status,
                                 order.approvedBy,
                                 order.approvedAt,
@@ -872,8 +853,8 @@ public class MatFlowProcurementService {
                                 receipt.purchaseOrder.getId(),
                                 receipt.purchaseOrder.poNumber,
                                 receipt.receiptLocation.getId(),
-                                receipt.receiptLocation.locationCode,
-                                receipt.receiptLocation.plantCode,
+                                receipt.receiptLocation.getLocationCode(),
+                                receipt.receiptLocation.getPlantCode(),
                                 receipt.vendorChallanNo,
                                 receipt.vendorInvoiceNo,
                                 receipt.status,

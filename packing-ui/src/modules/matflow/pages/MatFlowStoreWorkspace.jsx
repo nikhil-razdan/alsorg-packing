@@ -3,6 +3,11 @@ import {
     Box,
     Button,
     Card,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    MenuItem,
     TextField,
     Typography,
 } from "@mui/material";
@@ -11,9 +16,10 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import OutputOutlinedIcon from "@mui/icons-material/OutputOutlined";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMatFlow } from "../matflowUi";
-import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
     Detail,
     EmptyState,
@@ -23,6 +29,10 @@ import {
     PageHero,
     SummaryCard,
     clean,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogPaperSx,
+    dialogTitleSx,
     fieldSx,
     formatDate,
     formatQty,
@@ -53,13 +63,45 @@ export function MatFlowStoreQueuePage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [stockRows, setStockRows] = useState([]);
+    const [materials, setMaterials] = useState([]);
+    const [stockLocations, setStockLocations] = useState([]);
+    const [stockDialog, setStockDialog] = useState(false);
+    const [stockWorking, setStockWorking] = useState(false);
+    const [stockForm, setStockForm] = useState({ materialId: "", locationId: "", adjustmentQty: "", batchNo: "", remarks: "" });
 
     const load = useCallback(async () => {
         setLoading(true); setError("");
         try {
-            const response = await matflowApi.listStoreQueue({ plantCode: selectedPlantParam });
-            setRows((Array.isArray(response?.data) ? response.data : []).filter((row) => QUEUE_STATUSES.has(normalize(row.status))));
-        } catch (requestError) { setRows([]); setError(readMatFlowError(requestError, "Unable to load Store material queue.")); }
+            const [queueResponse, stockResponse, materialResponse, locationResponse] = await Promise.all([
+                matflowApi.listStoreQueue({ plantCode: selectedPlantParam }),
+                matflowApi.listStock({ plantCode: selectedPlantParam }),
+                matflowApi.listMaterials({ active: true }),
+                matflowApi.listLocations({ active: true }),
+            ]);
+
+            setRows((Array.isArray(queueResponse?.data) ? queueResponse.data : [])
+                .filter((row) => QUEUE_STATUSES.has(normalize(row.status))));
+
+            const allLocations = extractMatFlowPage(locationResponse?.data).rows;
+            const storeLocations = allLocations.filter((location) =>
+                location?.active !== false &&
+                location?.supportsStock !== false &&
+                normalize(location?.locationType) === "STORE" &&
+                (!selectedPlantParam || String(location?.plantCode || "").toUpperCase() === String(selectedPlantParam).toUpperCase())
+            );
+
+            setStockLocations(storeLocations);
+            setMaterials(extractMatFlowPage(materialResponse?.data).rows.filter((material) => material?.active !== false));
+
+            const locationIds = new Set(storeLocations.map((location) => String(location.id)));
+            setStockRows((Array.isArray(stockResponse?.data) ? stockResponse.data : [])
+                .filter((balance) => locationIds.has(String(balance.locationId))));
+        } catch (requestError) {
+            setRows([]);
+            setStockRows([]);
+            setError(readMatFlowError(requestError, "Unable to load Store queue / inventory."));
+        }
         finally { setLoading(false); }
     }, [selectedPlantParam]);
     useEffect(() => { load(); }, [load]);
@@ -76,15 +118,90 @@ export function MatFlowStoreQueuePage() {
         issue: rows.filter((row) => ["READY_TO_ISSUE", "PARTIALLY_ISSUED"].includes(normalize(row.status))).length,
     }), [rows]);
 
+    const storeStockRows = useMemo(() => {
+        const locationIds = new Set(stockLocations.map((location) => String(location.id)));
+        return stockRows.filter((row) => locationIds.has(String(row.locationId)));
+    }, [stockRows, stockLocations]);
+
+    const openStockAdjustment = () => {
+        setStockForm({
+            materialId: "",
+            locationId: stockLocations.length === 1 ? stockLocations[0].id : "",
+            adjustmentQty: "",
+            batchNo: "",
+            remarks: "",
+        });
+        setStockDialog(true);
+        setError("");
+    };
+
+    const saveStockAdjustment = async () => {
+        const qty = Number(stockForm.adjustmentQty);
+        if (!stockForm.materialId || !stockForm.locationId || !Number.isFinite(qty) || Math.abs(qty) < 0.0005) {
+            setError("Material, Store location and a non-zero adjustment quantity are required.");
+            return;
+        }
+
+        const existing = stockRows.find((row) =>
+            String(row.materialId) === String(stockForm.materialId) &&
+            String(row.locationId) === String(stockForm.locationId)
+        );
+
+        if (!existing && qty < 0) {
+            setError("Opening stock must be positive. Negative adjustments are allowed only after a stock balance exists.");
+            return;
+        }
+
+        setStockWorking(true);
+        setError("");
+        try {
+            await matflowApi.adjustStock({
+                materialId: stockForm.materialId,
+                locationId: stockForm.locationId,
+                adjustmentQty: qty,
+                batchNo: clean(stockForm.batchNo) || null,
+                remarks: clean(stockForm.remarks) || (existing ? "Store stock adjustment" : "Opening Store stock"),
+                rowVersion: existing?.rowVersion ?? null,
+            });
+            setStockDialog(false);
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to adjust Store stock."));
+        } finally {
+            setStockWorking(false);
+        }
+    };
+
     return <Box sx={pageSx}>
-        <PageHero badge="STORE MATERIAL CONTROL" title="Store Review & Reservation" subtitle="Review Production demand, reserve recorded stock, create shortage indents and issue route-complete material to Production." actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} />
+        <PageHero badge="STORE MATERIAL CONTROL" title="Store Review & Reservation" subtitle="Review Production demand, maintain real Store stock, reserve available quantity, create shortage indents and issue route-complete material to Production." actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddOutlinedIcon />} onClick={openStockAdjustment} disabled={stockLocations.length === 0} sx={primaryBtnSx}>Adjust Stock</Button></>} />
         <ErrorBox>{error}</ErrorBox>
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Awaiting Store Review" value={counts.review} /><SummaryCard label="Shortage Pending" value={counts.shortage} /><SummaryCard label="Ready / Partial Issue" value={counts.issue} /></Box>
+        <Card sx={panelSx}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
+                <Box><Typography sx={{ fontSize: 17, fontWeight: 950 }}>Store Inventory</Typography><Typography sx={subTextSx}>On-hand stock is operational inventory. Material Master Minimum/Reorder values are thresholds only and do not create stock.</Typography></Box>
+                <Button startIcon={<AddOutlinedIcon />} onClick={openStockAdjustment} disabled={stockLocations.length === 0} sx={secondaryBtnSx}>Opening / Adjustment</Button>
+            </Box>
+            <Box sx={tableShellSx}>
+                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}>{["Material", "Store", "On Hand", "Reserved", "Blocked", "Available"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                {storeStockRows.length === 0 ? <EmptyState>No Store stock balances are recorded for this plant. Use Opening / Adjustment to enter the verified physical opening stock before Store review.</EmptyState> : storeStockRows.map((row) => <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography><Typography sx={subTextSx}>{row.materialName || "-"}</Typography></Box><Box sx={tableCellSx}>{row.locationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box></Box>)}
+            </Box>
+        </Card>
         <Card sx={panelSx}><TextField label="Search Queue" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Requisition, project, drawing or BOM" sx={{ ...fieldSx, minWidth: 340 }} /></Card>
         <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}>{["Requisition", "Project / Drawing", "BOM", "Destination", "Status", "Updated", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
             {filtered.length === 0 ? <EmptyState /> : filtered.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography></Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={tableCellSx}>{formatDate(row.plannedAt || row.submittedAt || row.requestedAt)}</Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}
         </Box>}</Card>
+        <Dialog open={stockDialog} onClose={() => !stockWorking && setStockDialog(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}>Store Opening / Stock Adjustment</DialogTitle>
+            <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>
+                <TextField select label="Material *" value={stockForm.materialId} onChange={(e) => setStockForm((c) => ({ ...c, materialId: e.target.value }))} sx={fieldSx}>{materials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialCode} · {material.materialName} · {material.uom}</MenuItem>)}</TextField>
+                <TextField select label="Store Location *" value={stockForm.locationId} onChange={(e) => setStockForm((c) => ({ ...c, locationId: e.target.value }))} sx={fieldSx}>{stockLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {location.plantCode}</MenuItem>)}</TextField>
+                <TextField type="number" label="Adjustment Qty *" helperText="Positive adds stock; negative reduces existing free stock. Opening stock must be positive." value={stockForm.adjustmentQty} onChange={(e) => setStockForm((c) => ({ ...c, adjustmentQty: e.target.value }))} sx={fieldSx} />
+                <TextField label="Batch No." value={stockForm.batchNo} onChange={(e) => setStockForm((c) => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} />
+                <TextField multiline minRows={2} label="Remarks" value={stockForm.remarks} onChange={(e) => setStockForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
+            </Box></DialogContent>
+            <DialogActions sx={dialogActionsSx}><Button onClick={() => setStockDialog(false)} disabled={stockWorking} sx={secondaryBtnSx}>Cancel</Button><Button onClick={saveStockAdjustment} disabled={stockWorking} sx={primaryBtnSx}>{stockWorking ? "Saving..." : "Post Adjustment"}</Button></DialogActions>
+        </Dialog>
     </Box>;
 }
 
